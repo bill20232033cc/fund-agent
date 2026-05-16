@@ -31,14 +31,18 @@
 ### 1.3 当前 Gate 与基线裁决（2026-05-17）
 
 - 当前分支：`chore/reconcile-baseline`
-- 当前 gate：`baseline reconciliation`
-- 下一 gate：`P1 plan`
+- 当前 gate：`plan accepted`
+- 下一 gate：`P1-S1 implementation + review`
 - 当前裁决：
   - P0 维持 `done`。已验证 `dayu` 依赖可导入、`fund-agent` 处于 editable install、`fund-analysis --help` 可用、样本基金 `110011` 年报可下载、`pdfplumber` 可提取全文文本和表格。
   - P1 调整为 `in progress`。`fund_agent/fund/pdf/downloader.py` 与 `fund_agent/fund/pdf/parser.py` 已有原型实现，但章节定位尚不稳定，12 项结构化提取、缓存层和测试尚未落地。
 - 下一 entry point：
-  - 先产出 P1 的 code-generation-ready plan。
-  - 首个 implementation slice 以章节定位加固和数据提取契约定义为先。
+  - 已接受 P1 的 code-generation-ready plan，先进入 `P1-S1 文档访问契约收口`。
+  - `P1-S1` 完成后，按 review gate 进入 `P1-S2 章节定位修复与 §3 冻结`。
+- 当前 artifact：
+  - plan: `docs/reviews/p1-plan-2026-05-17.md`
+  - plan review: `docs/reviews/p1-plan-review-2026-05-17.md`
+  - baseline commit: `9956c45`
 
 ---
 
@@ -333,3 +337,4 @@ P0（环境搭建）
 | 2026-05-16 | 全部 | 创建 | 初始版本 |
 | 2026-05-17 | P0 | ✅ done | 全部退出条件满足；项目更名为 fund-agent；数据源改用 akshare + eastmoney |
 | 2026-05-17 | P1 | 🟡 in progress | 完成 Git 基线初始化与 baseline reconciliation；下一 gate 为 P1 plan |
+| 2026-05-17 | P1 | 🟡 in progress | P1 计划通过 re-review；accepted artifacts 为 `docs/reviews/p1-plan-2026-05-17.md`、`docs/reviews/p1-plan-review-2026-05-17.md`；下一 gate 为 `P1-S1 implementation + review` |
