@@ -1,0 +1,39 @@
+[project]
+name = "fund-agent"
+version = "0.1.0"
+description = "基金行为教练 Agent — 买入前专业级基金体检报告"
+requires-python = ">=3.11"
+dependencies = [
+    "dayu-agent @ https://github.com/noho/dayu-agent/releases/download/v0.1.4/dayu_agent-0.1.4-py3-none-any.whl",
+    "pdfplumber>=0.11",
+    "httpx>=0.28",
+    "akshare>=1.15",
+    "sqlite-utils>=3.37",
+    "typer>=0.12",
+    "rich>=13",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8",
+    "pytest-asyncio>=0.24",
+    "ruff>=0.5",
+]
+
+[project.scripts]
+fund-analysis = "fund_agent.ui.cli:app"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.metadata]
+allow-direct-references = true
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
