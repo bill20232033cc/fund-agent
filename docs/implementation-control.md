@@ -31,8 +31,8 @@
 ### 1.3 当前 Gate 与基线裁决（2026-05-17）
 
 - 当前分支：`chore/reconcile-baseline`
-- 当前 gate：`P2-S1 implementation + review`
-- 下一 gate：`P2-S1 implementation + review`
+- 当前 gate：`P2-S9 implementation + review`
+- 下一 gate：`P2-S9 code review`
 - 当前裁决：
   - P0 维持 `done`。已验证 `dayu` 依赖可导入、`fund-agent` 处于 editable install、`fund-analysis --help` 可用、样本基金 `110011` 年报可下载、`pdfplumber` 可提取全文文本和表格。
   - P1 已完成并通过 aggregate review。
@@ -74,9 +74,60 @@
     - `fund_agent/fund/data/nav_data.py` 已落地 `FundNavDataAdapter` 与 `nav_cache`
     - 3 只样本基金 12 项矩阵达到 `36/36`
     - P1 全量测试当前通过
+  - `P2-S1 R=A+B-C 计算模块` 已完成：
+    - `fund_agent/fund/analysis/r_abc.py` 已落地 `RabcInput`、`RabcAttribution`、`calculate_r_abc(...)`、`calculate_r_abc_series(...)` 与 `calculate_r_abc_from_bundle(...)`
+    - 计算公式按 `docs/design.md` 第 4.1 节实现：`B=业绩比较基准收益率×股票仓位`，`A=R-B`，`C=管理费+托管费+换手率×0.3%`，`净超额=A-C`
+    - 当前只消费 P1 `StructuredFundDataBundle`，不直接读取 PDF、文档仓库或文件系统
+    - P1 尚未稳定抽取股票仓位，当前要求调用方显式传入 `equity_position`；缺失时返回 `missing`，不静默假设
+    - 单元测试已覆盖手工公式闭合、P1 字段解析、证据锚点传递、关键字段缺失和子字段缺失
+  - `P2-S2 超额收益性质判断` 已完成：
+    - `fund_agent/fund/analysis/alpha_judge.py` 已落地 `AlphaObservation`、`AlphaJudgmentRule`、`AlphaJudgment`、`judge_alpha_nature(...)` 与 `observations_from_attributions(...)`
+    - 默认规则按 MVP 规则引擎实现：多年度为正、牛熊环境都为正、来源可解释
+    - 输出 `structural / partial_structural / cyclical / not_applicable / insufficient_data`
+    - 市场环境与来源解释强度必须由调用方显式提供，模块不从收益结果中反推
+    - 单元测试已覆盖结构性、部分结构性、阶段性、不适用、样本不足和缺少显式环境输入
+  - `P2-S3 言行一致性检验` 已完成：
+    - `fund_agent/fund/analysis/consistency_check.py` 已落地 `ConsistencyRule`、`ConsistencyDimensionResult`、`ConsistencyCheckResult` 与 `check_consistency(...)`
+    - 已输出投资风格、行业偏好、仓位管理、换手水平 4 维度信号
+    - 实际持仓风格和股票仓位必须由调用方显式传入，缺失时返回 `insufficient_data`
+    - 行业偏好只在 §4 行业宣称和 §8 行业分布都存在时判断
+    - `fund_agent/fund/analysis/_ratios.py` 已收口 P2 分析模块内重复比例解析逻辑
+    - 单元测试已覆盖 4 维度一致、风格/行业不一致、缺少显式实际证据、高换手冲突和行业分布缺失
+  - `P2-S4 投资者获得感分析` 已完成：
+    - `fund_agent/fund/analysis/investor_return.py` 已落地 `BehaviorGapResult`、`FundFlowResult`、`InvestorExperienceResult`、`analyze_investor_experience(...)`、`calculate_behavior_gap(...)` 与 `judge_fund_flow(...)`
+    - 行为损益按 `投资者实际收益率 - 基金产品收益率` 计算
+    - 资金流向基于 §10 份额净变动和产品收益方向输出 `chasing_performance / bottom_fishing / outflow / normal / missing`
+    - 投资者收益率缺失时返回 `missing`，不在分析层静默估算
+    - 单元测试已覆盖行为损益、投资者收益缺失、追涨/抄底资金流向、获得感负向和份额字段缺失
+  - `P2-S5 否决项检查` 已完成：
+    - `fund_agent/fund/analysis/risk_check.py` 已落地 `RiskCheckRule`、`RiskCheckItem`、`RiskCheckResult` 与 `run_risk_checks(...)`
+    - 已执行 5 项否决检查：清盘风险、基金经理任期、严重风格漂移、费率远超同类、指数基金跟踪误差
+    - 基金经理任期、同类费率中位数和跟踪误差必须由调用方显式提供，缺失时返回 `insufficient_data`
+    - 单元测试已覆盖安全路径、5 项否决触发和显式输入缺失路径
+  - `P2-S6 压力测试` 已完成：
+    - `fund_agent/fund/analysis/risk_check.py` 已落地 `StressTestRule`、`StressScenarioResult`、`StressTestResult` 与 `run_stress_test(...)`
+    - 固定模拟 `-20% / -40% / -60%` 三个场景
+    - 按基金类型应用模板第 6 章 `preferred_lens` 压力阈值
+    - 最大可承受亏损比例必须显式提供；缺失时只输出浮亏，不猜测用户承受能力
+    - 单元测试已覆盖主动基金、债券基金、缺少承受能力、非法输入和自定义阈值配置
+    - controller code review 已通过；MiMo/GLM 外部 review 因 Claude hook/思考状态卡住未产出 artifact，不能作为独立 review 依据
+  - `P2-S7 检查清单引擎` 已完成：
+    - `fund_agent/fund/analysis/checklist.py` 已落地 `ChecklistRule`、`ChecklistItem`、`ChecklistResult` 与 `run_checklist(...)`
+    - 已输出 7 问题 `green / yellow / red / gray` 与 `pass / watch / block / insufficient_data`
+    - 检查清单消费 R=A+B-C、§9 利益一致性披露、投资者获得感、言行一致性、否决项检查、估值状态和用户资金期限
+    - 估值和资金期限必须由调用方显式提供；缺失时输出灰灯，不默认通过
+    - 单元测试已覆盖全绿、红灯阻断、灰灯缺失、黄灯跟踪、资金年限阈值配置、异常否决项输入和 7 问题顺序
+    - controller code review 已通过
+  - `P2-S8 程序审计` 已完成：
+    - `fund_agent/fund/audit/audit_programmatic.py` 已落地 `ProgrammaticAuditInput`、`AuditIssue`、`ProgrammaticAuditResult` 与 `run_programmatic_audit(...)`
+    - 已执行 P1/P2/P3/L1/R1/R2 程序审计
+    - P1/P2/P3 消费报告 Markdown，L1/R1/R2 消费结构化 P2 结果和显式最终判断
+    - 缺少报告、R=A+B-C 结构化结果、检查清单或最终判断时返回失败，不把未执行规则伪装成通过
+    - 单元测试已覆盖必需输入缺失、章节缺失、内容过短、证据缺失、R=A+B-C 不闭合、检查清单规则错误和最终判断冲突
+    - controller code review 已通过
 - 下一 entry point：
-  - 进入 `P2-S1 implementation + review`
-  - 优先目标是实现 R=A+B-C 计算模块
+  - 进入 `P2-S9 implementation + review`
+  - 优先目标是实现模板渲染器，输出 8 章报告 Markdown，并接入程序审计输入
 - 当前 artifact：
   - plan: `docs/reviews/p1-plan-2026-05-17.md`
   - plan review: `docs/reviews/p1-plan-review-2026-05-17.md`
@@ -151,6 +202,38 @@
       - `docs/reviews/p1-s8-code-review-controller-judgment-2026-05-17.md`
     - accepted slice commit: `d398bc2`
   - `P1 aggregate review`: `docs/reviews/p1-aggregate-review-2026-05-17.md`
+  - `P2-S1`:
+    - implementation: `docs/reviews/p2-s1-implementation-2026-05-17.md`
+    - code review:
+      - `docs/reviews/p2-s1-code-review-controller-judgment-2026-05-17.md`
+  - `P2-S2`:
+    - implementation: `docs/reviews/p2-s2-implementation-2026-05-17.md`
+    - code review:
+      - `docs/reviews/p2-s2-code-review-controller-judgment-2026-05-17.md`
+  - `P2-S3`:
+    - implementation: `docs/reviews/p2-s3-implementation-2026-05-17.md`
+    - code review:
+      - `docs/reviews/p2-s3-code-review-controller-judgment-2026-05-17.md`
+  - `P2-S4`:
+    - implementation: `docs/reviews/p2-s4-implementation-2026-05-17.md`
+    - code review:
+      - `docs/reviews/p2-s4-code-review-controller-judgment-2026-05-17.md`
+  - `P2-S5`:
+    - implementation: `docs/reviews/p2-s5-implementation-2026-05-17.md`
+    - code review:
+      - `docs/reviews/p2-s5-code-review-controller-judgment-2026-05-17.md`
+  - `P2-S6`:
+    - implementation: `docs/reviews/p2-s6-implementation-2026-05-17.md`
+    - code review:
+      - `docs/reviews/p2-s6-code-review-controller-judgment-2026-05-17.md`
+  - `P2-S7`:
+    - implementation: `docs/reviews/p2-s7-implementation-2026-05-17.md`
+    - code review:
+      - `docs/reviews/p2-s7-code-review-controller-judgment-2026-05-17.md`
+  - `P2-S8`:
+    - implementation: `docs/reviews/p2-s8-implementation-2026-05-17.md`
+    - code review:
+      - `docs/reviews/p2-s8-code-review-controller-judgment-2026-05-18.md`
   - baseline commit: `9956c45`
 
 ---
@@ -439,13 +522,13 @@
 
 **退出条件**
 
-- [ ] `fund/analysis/r_abc.py` 能计算近 1/3/5 年 R=A+B-C 归因
-- [ ] `fund/analysis/alpha_judge.py` 能区分结构性 vs 阶段性超额
-- [ ] `fund/analysis/consistency_check.py` 能输出言行一致性 4 维度信号
-- [ ] `fund/analysis/investor_return.py` 能计算行为损益
-- [ ] `fund/analysis/risk_check.py` 能执行 5 项否决检查 + 压力测试
-- [ ] `fund/analysis/checklist.py` 能输出 7 问题红/黄/绿灯
-- [ ] `fund/audit/audit_programmatic.py` 能执行 P1/P2/P3/L1/R1/R2 规则检查
+- [x] `fund/analysis/r_abc.py` 能计算近 1/3/5 年 R=A+B-C 归因
+- [x] `fund/analysis/alpha_judge.py` 能区分结构性 vs 阶段性超额
+- [x] `fund/analysis/consistency_check.py` 能输出言行一致性 4 维度信号
+- [x] `fund/analysis/investor_return.py` 能计算行为损益
+- [x] `fund/analysis/risk_check.py` 能执行 5 项否决检查 + 压力测试
+- [x] `fund/analysis/checklist.py` 能输出 7 问题红/黄/绿灯
+- [x] `fund/audit/audit_programmatic.py` 能执行 P1/P2/P3/L1/R1/R2 规则检查
 - [ ] `fund/template/renderer.py` 能将数据填充到定性模板 v2
 
 **任务切片**
@@ -472,6 +555,157 @@
   - R=A+B-C 计算不闭合（L1）
   - 检查清单信号与规则不一致（R1）
 - 模板渲染输出包含 8 章完整内容
+
+**P2-S1 当前状态（2026-05-17）**
+
+- `P2-S1 实现 R=A+B-C 计算模块`：✅ completed
+- 当前完成内容：
+  - `fund_agent/fund/analysis/r_abc.py` 已提供纯计算入口 `calculate_r_abc(...)` 与多周期入口 `calculate_r_abc_series(...)`
+  - `calculate_r_abc_from_bundle(...)` 已支持从 P1 `StructuredFundDataBundle` 适配计算
+  - `RabcAttribution` 已输出 `R/B/A/C/turnover_cost/net_excess_return` 与参与计算字段的 `EvidenceAnchor`
+  - 缺少股票仓位、关键字段或关键子字段时返回 `missing`，不使用默认仓位或间接假设
+  - `tests/fund/analysis/test_r_abc.py` 已覆盖公式闭合、P1 字段解析、证据锚点和缺失路径
+  - 验证命令 `.venv/bin/python -m pytest tests/fund/analysis/test_r_abc.py -q` 当前通过（`6 passed`）
+- 当前 residual risks：
+  - `P2-S2` owner：当前只输出数值归因，不判断结构性/阶段性超额
+  - `P2-S8` owner：L1 公式审计尚未接入
+  - 后续 extractor refinement owner：股票仓位仍需显式输入，尚未由 P1 稳定抽取
+
+**P2-S2 当前状态（2026-05-17）**
+
+- `P2-S2 实现超额收益性质判断`：✅ completed
+- 当前完成内容：
+  - `fund_agent/fund/analysis/alpha_judge.py` 已提供 `judge_alpha_nature(...)`
+  - `observations_from_attributions(...)` 已支持从 P2-S1 `RabcAttribution` 适配判断样本
+  - `AlphaJudgment` 已输出性质判断、正 Alpha 期数、环境覆盖、来源解释计数、判断依据和风险
+  - 纯指数基金返回 `not_applicable`
+  - 样本不足返回 `insufficient_data`，不强行判断结构性或阶段性
+  - 市场环境和来源解释强度必须显式传入，缺失时报错
+  - `tests/fund/analysis/test_alpha_judge.py` 已覆盖核心判断路径
+  - 验证命令 `.venv/bin/python -m pytest tests/fund/analysis/test_alpha_judge.py -q` 当前通过（`7 passed`）
+- 当前 residual risks：
+  - `P2-S3` owner：来源解释强度后续应由言行一致性和持仓行为检查提供更强证据
+  - `P3-S2 or later market-state adapter` owner：市场环境标签后续应由温度计或市场状态模块显式传入
+  - `P2-S8` owner：性质判断与报告文字一致性审计尚未接入
+
+**P2-S3 当前状态（2026-05-17）**
+
+- `P2-S3 实现言行一致性检验`：✅ completed
+- 当前完成内容：
+  - `fund_agent/fund/analysis/consistency_check.py` 已提供 `check_consistency(...)`
+  - 4 维度输出：
+    - 投资风格：§4 风格宣称 vs 显式实际持仓风格
+    - 行业偏好：§4 行业宣称 vs §8 行业分布
+    - 仓位管理：§4 仓位策略 vs 显式实际股票仓位
+    - 换手水平：§4 持有周期/换手宣称 vs §8 换手率
+  - `ConsistencyCheckResult` 已输出整体状态和信号
+  - 缺少实际风格或股票仓位时返回 `insufficient_data`，不使用默认假设
+  - `tests/fund/analysis/test_consistency_check.py` 已覆盖核心信号路径
+  - 验证命令 `.venv/bin/python -m pytest tests/fund/analysis/test_consistency_check.py -q` 当前通过（`5 passed`）
+- 当前 residual risks：
+  - 后续 extractor refinement owner：实际持仓风格和股票仓位仍需显式输入，尚未由 P1 稳定抽取
+  - 后续 multi-period behavior analysis owner：跨期风格稳定性尚未实现
+  - `P2-S8` owner：言行一致性信号与报告文字一致性审计尚未接入
+
+**P2-S4 当前状态（2026-05-17）**
+
+- `P2-S4 实现投资者获得感分析`：✅ completed
+- 当前完成内容：
+  - `fund_agent/fund/analysis/investor_return.py` 已提供 `analyze_investor_experience(...)`
+  - `calculate_behavior_gap(...)` 已计算行为损益：投资者实际收益率减基金产品收益率
+  - `judge_fund_flow(...)` 已基于 §10 份额净变动和产品收益方向判断资金流向
+  - `InvestorExperienceResult` 已输出获得感状态、行为损益和资金流向
+  - 投资者收益率缺失时返回 `missing`，不静默估算
+  - 份额变动子字段缺失时资金流向返回 `missing`
+  - `tests/fund/analysis/test_investor_return.py` 已覆盖核心路径
+  - 验证命令 `.venv/bin/python -m pytest tests/fund/analysis/test_investor_return.py -q` 当前通过（`6 passed`）
+- 当前 residual risks：
+  - 后续 investor_return fallback refinement owner：投资者收益率缺失 fallback 尚未实现
+  - later monthly flow adapter owner：高点/低点追涨抄底无法仅凭年度份额净变动精细定位
+  - `P2-S8` owner：行为损益和报告文字一致性审计尚未接入
+
+**P2-S5 当前状态（2026-05-17）**
+
+- `P2-S5 实现否决项检查`：✅ completed
+- 当前完成内容：
+  - `fund_agent/fund/analysis/risk_check.py` 已提供 `run_risk_checks(...)`
+  - 5 项否决检查已覆盖：
+    - 清盘风险：基金规模 `< 5000 万元`
+    - 基金经理任期：管理本基金 `< 6 个月`
+    - 严重风格漂移：言行一致性检验红灯
+    - 费率远超同类：总费率 `> 同类中位数 × 2`
+    - 跟踪误差过大：指数基金跟踪误差 `> 2%`
+  - `RiskCheckResult` 已输出汇总状态、否决项、跟踪项和下一步最小验证问题
+  - 缺少经理任期、同类费率中位数或跟踪误差时返回 `insufficient_data`，不强行判安全
+  - `tests/fund/analysis/test_risk_check.py` 已覆盖核心否决路径和缺失输入路径
+  - 验证命令 `.venv/bin/python -m pytest tests/fund/analysis/test_risk_check.py -q` 当前通过（`10 passed`）
+- 当前 residual risks：
+  - `P2-S6` owner：压力测试需在同一风险模块内接入
+  - later external metrics adapter owner：经理任期、同类费率中位数和跟踪误差仍由调用方显式提供
+  - `P2-S8` owner：否决项与报告结论一致性审计尚未接入
+
+**P2-S6 当前状态（2026-05-17）**
+
+- `P2-S6 实现压力测试`：✅ completed
+- 当前完成内容：
+  - `fund_agent/fund/analysis/risk_check.py` 已提供 `run_stress_test(...)`
+  - 固定模拟 `-20% / -40% / -60%` 三个场景，符合 `docs/design.md` 第 4.5 节
+  - `StressTestRule` 已配置模板第 6 章 `preferred_lens` 的基金类型阈值
+  - `StressScenarioResult` 已输出账户余额、浮亏金额、压力等级、承受能力状态和判断依据
+  - 最大可承受亏损比例缺失时返回 `not_provided`，不猜测用户能否承受
+  - `tests/fund/analysis/test_risk_check.py` 已覆盖固定场景、主动/债券基金阈值、缺失承受能力、非法输入和自定义阈值配置
+  - 验证命令 `.venv/bin/python -m pytest tests/fund/analysis/test_risk_check.py -q` 当前通过（`10 passed`）
+  - controller code review artifact：`docs/reviews/p2-s6-code-review-controller-judgment-2026-05-17.md`
+- 当前 residual risks：
+  - `P2-S9/P3` owner：压力测试输出尚未进入最终报告渲染或端到端用户流程
+  - `P2-S8` owner：压力测试和报告文字一致性审计尚未接入
+  - later user-profile input owner：投入金额和最大可承受亏损比例当前由调用方显式提供
+  - `P2 aggregate review` owner：本 slice 外部 reviewer 未产出可采纳 artifact，aggregate review 前需重新取得两份独立 review 或记录用户接受单 reviewer 风险
+
+**P2-S7 当前状态（2026-05-17）**
+
+- `P2-S7 实现检查清单引擎`：✅ completed
+- 当前完成内容：
+  - `fund_agent/fund/analysis/checklist.py` 已提供 `run_checklist(...)`
+  - 检查清单已覆盖 `docs/design.md` 第 4.6 节 7 个问题：
+    - 超额收益能覆盖成本吗？
+    - 基金经理跟我一条心吗？
+    - 投资者真的赚到钱了吗？
+    - 说的和做的一样吗？
+    - 这只基金不死吗？
+    - 当前估值处于什么位置？
+    - 这笔钱 3-4 年内不会用吗？
+  - `ChecklistResult` 已输出 7 项结果、红/黄/灰分组、汇总信号和下一步最小验证问题
+  - 估值状态和用户资金期限必须由调用方显式提供；缺失时返回灰灯
+  - `tests/fund/analysis/test_checklist.py` 已覆盖核心规则路径
+  - 验证命令 `.venv/bin/python -m pytest tests/fund/analysis -q` 当前通过（`40 passed`）
+  - controller code review artifact：`docs/reviews/p2-s7-code-review-controller-judgment-2026-05-17.md`
+- 当前 residual risks：
+  - `P2-S8` owner：R1/R2 审计尚未验证检查清单信号与规则一致性
+  - later thermometer adapter owner：估值状态当前由调用方显式传入，尚未接入温度计
+  - later user-profile input owner：资金期限当前由调用方显式传入，尚未接入用户问答或画像
+
+**P2-S8 当前状态（2026-05-18）**
+
+- `P2-S8 实现程序审计（P1/P2/P3/L1/R1/R2）`：✅ completed
+- 当前完成内容：
+  - `fund_agent/fund/audit/audit_programmatic.py` 已提供 `run_programmatic_audit(...)`
+  - 已覆盖 MVP 程序审计规则：
+    - `P1`：报告章节结构不匹配
+    - `P2`：章节内容过短
+    - `P3`：缺少证据与出处或证据锚点
+    - `L1`：R=A+B-C 数值计算不闭合
+    - `R1`：检查清单信号与规则不一致
+    - `R2`：最终判断与检查清单信号矛盾
+  - `ProgrammaticAuditInput` 明确区分报告 Markdown、R=A+B-C 结构化结果、检查清单结果和最终判断
+  - 缺少报告、R=A+B-C 结构化结果、检查清单或最终判断时返回失败，不把未执行规则伪装成通过
+  - `tests/fund/audit/test_audit_programmatic.py` 已覆盖必需输入缺失、故意注入错误和未知检查清单信号防御
+  - 验证命令 `.venv/bin/python -m pytest tests/fund/analysis tests/fund/audit -q` 当前通过（`49 passed`）
+  - controller code review artifact：`docs/reviews/p2-s8-code-review-controller-judgment-2026-05-18.md`
+- 当前 residual risks：
+  - `P2-S9` owner：模板渲染器尚未接入程序审计输入
+  - `P3-S4` owner：端到端报告通过程序审计尚未验证
+  - v2 audit owner：E1/E2/E3/C1/C2 和 LLM/证据复核层尚未实现
 
 **风险与追踪**
 
@@ -614,3 +848,14 @@ P0（环境搭建）
 | 2026-05-17 | P1 | 🟡 in progress | `P1-S8` 已接受，accepted commit 为 `d398bc2`；下一 gate 为 `P1 aggregate review` |
 | 2026-05-17 | P1 | ✅ done | P1 aggregate review 通过，artifact 为 `docs/reviews/p1-aggregate-review-2026-05-17.md`；下一 gate 为 `P2-S1 implementation + review` |
 | 2026-05-17 | P2 | 🟡 in progress | 进入 `P2-S1 implementation + review`，优先实现 R=A+B-C 计算模块 |
+| 2026-05-17 | P2 | 🟡 in progress | `P2-S1` implementation 与 controller review 已通过；下一 gate 为 `P2-S2 implementation + review` |
+| 2026-05-17 | P2 | 🟡 in progress | `P2-S2` implementation 与 controller review 已通过；下一 gate 为 `P2-S3 implementation + review` |
+| 2026-05-17 | P2 | 🟡 in progress | `P2-S3` implementation 与 controller review 已通过；下一 gate 为 `P2-S4 implementation + review` |
+| 2026-05-17 | P2 | 🟡 in progress | `P2-S4` implementation 与 controller review 已通过；下一 gate 为 `P2-S5 implementation + review` |
+| 2026-05-17 | P2 | 🟡 in progress | `P2-S5` implementation 与 controller review 已通过；下一 gate 为 `P2-S6 implementation + review` |
+| 2026-05-17 | P2 | 🟡 in progress | `P2-S6` implementation 已完成，压力测试固定场景与基金类型阈值已落地；当前 gate 为 `P2-S6 code review` |
+| 2026-05-17 | P2 | 🟡 in progress | `P2-S6` controller review 已通过；外部 reviewer 未产出可采纳 artifact，风险追踪到 `P2 aggregate review`；下一 gate 为 `P2-S7 implementation + review` |
+| 2026-05-17 | P2 | 🟡 in progress | `P2-S7` implementation 已完成，7 问题检查清单引擎与测试已落地；当前 gate 为 `P2-S7 code review` |
+| 2026-05-17 | P2 | 🟡 in progress | `P2-S7` controller review 已通过；下一 gate 为 `P2-S8 implementation + review` |
+| 2026-05-17 | P2 | 🟡 in progress | `P2-S8` implementation 已完成，P1/P2/P3/L1/R1/R2 程序审计与测试已落地；当前 gate 为 `P2-S8 code review` |
+| 2026-05-18 | P2 | 🟡 in progress | `P2-S8` controller review 已通过并修复缺少必需输入时静默通过的问题；下一 gate 为 `P2-S9 implementation + review` |
