@@ -98,7 +98,7 @@
     - re-review:
       - `docs/reviews/p1-s4-rereview-glm-2026-05-17.md`
       - `docs/reviews/p1-s4-rereview-controller-2026-05-17.md`
-    - accepted slice commit: `PENDING`
+    - accepted slice commit: `22a1a7a`
   - baseline commit: `9956c45`
 
 ---
