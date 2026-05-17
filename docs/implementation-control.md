@@ -31,8 +31,8 @@
 ### 1.3 当前 Gate 与基线裁决（2026-05-17）
 
 - 当前分支：`chore/reconcile-baseline`
-- 当前 gate：`P1-S6 implementation + review`
-- 下一 gate：`P1-S6 implementation + review`
+- 当前 gate：`P1-S7 implementation + review`
+- 下一 gate：`P1-S7 implementation + review`
 - 当前裁决：
   - P0 维持 `done`。已验证 `dayu` 依赖可导入、`fund-agent` 处于 editable install、`fund-analysis --help` 可用、样本基金 `110011` 年报可下载、`pdfplumber` 可提取全文文本和表格。
   - P1 维持 `in progress`。
@@ -58,9 +58,14 @@
     - `§3` 直接披露与估算披露命中均带 `EvidenceAnchor`
     - 未披露路径不再静默返回空字符串，而是显式标记 `missing`
     - `nav_benchmark_performance` 在部分命中时不再伪装成完整 `direct`
+  - `P1-S6 管理人文本、换手率、利益一致性与持有人结构` 已完成：
+    - `fund_agent/fund/extractors/manager_ownership.py` 已落地 `manager_strategy_text`、`turnover_rate`、`manager_alignment`、`holder_structure`
+    - `§4/§8/§9` 命中字段均带 `EvidenceAnchor`
+    - `manager_alignment` 仅输出原始披露，未引入利益一致性判断
+    - 未披露路径显式标记 `missing`
 - 下一 entry point：
-  - 进入 `P1-S6 implementation + review`
-  - 优先目标是落地 `manager_strategy_text`、`turnover_rate`、`manager_alignment`、`holder_structure`
+  - 进入 `P1-S7 implementation + review`
+  - 优先目标是落地 `holdings_snapshot` 与 `share_change`
 - 当前 artifact：
   - plan: `docs/reviews/p1-plan-2026-05-17.md`
   - plan review: `docs/reviews/p1-plan-review-2026-05-17.md`
@@ -116,6 +121,12 @@
     - re-review:
       - `docs/reviews/p1-s5-rereview-controller-2026-05-17.md`
     - accepted slice commit: `8102944`
+  - `P1-S6`:
+    - baseline reconciliation: `docs/reviews/p1-s6-baseline-reconciliation-2026-05-17.md`
+    - implementation: `docs/reviews/p1-s6-implementation-2026-05-17.md`
+    - code review:
+      - `docs/reviews/p1-s6-code-review-controller-judgment-2026-05-17.md`
+    - accepted slice commit: pending
   - baseline commit: `9956c45`
 
 ---
@@ -329,6 +340,29 @@
   - 后续集成测试 owner：`§3` 整体缺失路径仍需在真实样本矩阵或单独 fixture 中补强
   - 后续样本回归 owner：当前以最小文本夹具锁定三态输出，真实样本覆盖仍需在 `P1-S8` 验收矩阵阶段继续扩展
 
+**P1-S6 当前状态（2026-05-17）**
+
+- `P1-S6 管理人文本、换手率、利益一致性与持有人结构`：✅ completed
+- 当前完成内容：
+  - `fund_agent/fund/extractors/models.py` 已补充 `ManagerOwnershipExtractionResult`
+  - `fund_agent/fund/extractors/manager_ownership.py` 已落地：
+    - `manager_strategy_text`
+    - `turnover_rate`
+    - `manager_alignment`
+    - `holder_structure`
+  - `manager_alignment.value["judgment"]` 当前固定为 `None`，确保 P1 只输出原始披露
+  - `tests/fund/extractors/test_manager_ownership.py` 已覆盖：
+    - 完整披露路径
+    - 未披露 `missing` 路径
+    - 部分披露路径
+    - 换手率口径命中但数值缺失路径
+    - 换手率与持有人信息 anchor
+  - `tests/fixtures/fund/extractors/manager_ownership/` 已固定最小 `§4/§8/§9` 文本夹具
+  - 验证命令 `.venv/bin/python -m pytest tests/fund/extractors/test_manager_ownership.py -q` 当前通过（`4 passed`）
+- 当前 residual risks：
+  - 后续样本回归 owner：真实年报 `§4/§8/§9` 可能使用表格或不同字段名称，需在 `P1-S8` 验收矩阵阶段继续扩展
+  - 后续估算 owner：换手率未披露时的同类中位数估算尚未接入，当前只能显式返回 `missing`
+
 ---
 
 ### P2: 分析引擎（R=A+B-C + 检验 + 审计）
@@ -508,3 +542,5 @@ P0（环境搭建）
 | 2026-05-17 | P1 | 🟡 in progress | 完成 Git 基线初始化与 baseline reconciliation；下一 gate 为 P1 plan |
 | 2026-05-17 | P1 | 🟡 in progress | P1 计划通过 re-review；accepted artifacts 为 `docs/reviews/p1-plan-2026-05-17.md`、`docs/reviews/p1-plan-review-2026-05-17.md`；下一 gate 为 `P1-S1 implementation + review` |
 | 2026-05-17 | P1 | 🟡 in progress | `P1-S5` code review / fix / re-review 已收口，accepted slice commit=`8102944`；下一 gate 为 `P1-S6 implementation + review` |
+| 2026-05-17 | P1 | 🟡 in progress | `P1-S6` implementation 已完成，`§4/§8/§9` 管理人/持有人 extractor 与测试已落地；当前 gate 维持 `P1-S6 implementation + review` |
+| 2026-05-17 | P1 | 🟡 in progress | `P1-S6` controller review 已通过；下一 gate 为 `P1-S7 implementation + review` |
