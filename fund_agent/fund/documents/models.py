@@ -26,6 +26,46 @@ class DocumentKey:
     year: int
     document_kind: Literal["annual_report"] = ANNUAL_REPORT_DOCUMENT_KIND
 
+    def to_dict(self) -> dict[str, object]:
+        """把文档主键序列化为 JSON 兼容字典。
+
+        Args:
+            无。
+
+        Returns:
+            可直接写入 JSON 的字典结构。
+
+        Raises:
+            无显式抛出。
+        """
+
+        return {
+            "fund_code": self.fund_code,
+            "year": self.year,
+            "document_kind": self.document_kind,
+        }
+
+    @classmethod
+    def from_dict(cls, payload: dict[str, object]) -> "DocumentKey":
+        """从字典反序列化文档主键。
+
+        Args:
+            payload: JSON 兼容字典。
+
+        Returns:
+            反序列化后的文档主键对象。
+
+        Raises:
+            KeyError: 缺少必需字段时抛出。
+            ValueError: 字段值无法转换时抛出。
+        """
+
+        return cls(
+            fund_code=str(payload["fund_code"]),
+            year=int(payload["year"]),
+            document_kind=str(payload.get("document_kind", ANNUAL_REPORT_DOCUMENT_KIND)),
+        )
+
 
 @dataclass(frozen=True, slots=True)
 class ReportSection:
@@ -47,6 +87,52 @@ class ReportSection:
     matched_rule: str
     confidence: float
 
+    def to_dict(self) -> dict[str, object]:
+        """把章节索引序列化为 JSON 兼容字典。
+
+        Args:
+            无。
+
+        Returns:
+            可直接写入 JSON 的字典结构。
+
+        Raises:
+            无显式抛出。
+        """
+
+        return {
+            "section_id": self.section_id,
+            "title": self.title,
+            "start_offset": self.start_offset,
+            "end_offset": self.end_offset,
+            "matched_rule": self.matched_rule,
+            "confidence": self.confidence,
+        }
+
+    @classmethod
+    def from_dict(cls, payload: dict[str, object]) -> "ReportSection":
+        """从字典反序列化章节索引。
+
+        Args:
+            payload: JSON 兼容字典。
+
+        Returns:
+            反序列化后的章节索引对象。
+
+        Raises:
+            KeyError: 缺少必需字段时抛出。
+            ValueError: 字段值无法转换时抛出。
+        """
+
+        return cls(
+            section_id=str(payload["section_id"]),
+            title=str(payload["title"]),
+            start_offset=int(payload["start_offset"]),
+            end_offset=int(payload["end_offset"]),
+            matched_rule=str(payload["matched_rule"]),
+            confidence=float(payload["confidence"]),
+        )
+
 
 @dataclass(frozen=True, slots=True)
 class ParsedTable:
@@ -64,6 +150,51 @@ class ParsedTable:
     headers: tuple[str, ...]
     rows: tuple[tuple[str, ...], ...]
 
+    def to_dict(self) -> dict[str, object]:
+        """把表格对象序列化为 JSON 兼容字典。
+
+        Args:
+            无。
+
+        Returns:
+            可直接写入 JSON 的字典结构。
+
+        Raises:
+            无显式抛出。
+        """
+
+        return {
+            "page_number": self.page_number,
+            "table_index": self.table_index,
+            "headers": list(self.headers),
+            "rows": [list(row) for row in self.rows],
+        }
+
+    @classmethod
+    def from_dict(cls, payload: dict[str, object]) -> "ParsedTable":
+        """从字典反序列化表格对象。
+
+        Args:
+            payload: JSON 兼容字典。
+
+        Returns:
+            反序列化后的表格对象。
+
+        Raises:
+            KeyError: 缺少必需字段时抛出。
+            ValueError: 字段值无法转换时抛出。
+        """
+
+        return cls(
+            page_number=int(payload["page_number"]),
+            table_index=int(payload["table_index"]),
+            headers=tuple(str(value) for value in payload.get("headers", [])),
+            rows=tuple(
+                tuple(str(cell) for cell in row)
+                for row in payload.get("rows", [])
+            ),
+        )
+
 
 @dataclass(frozen=True, slots=True)
 class ParsedAnnualReport:
@@ -80,6 +211,59 @@ class ParsedAnnualReport:
     raw_text: str
     sections: dict[str, ReportSection]
     tables: tuple[ParsedTable, ...]
+
+    def to_dict(self) -> dict[str, object]:
+        """把已解析年报序列化为 JSON 兼容字典。
+
+        Args:
+            无。
+
+        Returns:
+            可直接写入 JSON 的字典结构。
+
+        Raises:
+            无显式抛出。
+        """
+
+        return {
+            "key": self.key.to_dict(),
+            "raw_text": self.raw_text,
+            "sections": {
+                section_id: section.to_dict()
+                for section_id, section in self.sections.items()
+            },
+            "tables": [table.to_dict() for table in self.tables],
+        }
+
+    @classmethod
+    def from_dict(cls, payload: dict[str, object]) -> "ParsedAnnualReport":
+        """从字典反序列化已解析年报。
+
+        Args:
+            payload: JSON 兼容字典。
+
+        Returns:
+            反序列化后的年报对象。
+
+        Raises:
+            KeyError: 缺少必需字段时抛出。
+            ValueError: 字段值无法转换时抛出。
+        """
+
+        raw_sections = payload.get("sections", {})
+        raw_tables = payload.get("tables", [])
+        return cls(
+            key=DocumentKey.from_dict(dict(payload["key"])),
+            raw_text=str(payload["raw_text"]),
+            sections={
+                str(section_id): ReportSection.from_dict(dict(section_payload))
+                for section_id, section_payload in dict(raw_sections).items()
+            },
+            tables=tuple(
+                ParsedTable.from_dict(dict(table_payload))
+                for table_payload in raw_tables
+            ),
+        )
 
     def get_section_text(self, section_id: str) -> str | None:
         """按章节编号返回正文片段。

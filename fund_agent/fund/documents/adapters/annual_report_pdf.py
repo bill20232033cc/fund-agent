@@ -199,6 +199,65 @@ class AnnualReportPdfAdapter:
         self._table_extractor = table_extractor
         self._section_locator = section_locator
 
+    async def fetch_pdf_path(
+        self,
+        fund_code: str,
+        year: int,
+        *,
+        force_refresh: bool = False,
+    ) -> Path:
+        """确保原始 PDF 已下载到本地并返回其路径。
+
+        Args:
+            fund_code: 基金代码。
+            year: 年报年份。
+            force_refresh: 是否强制刷新底层 PDF 缓存。
+
+        Returns:
+            本地 PDF 文件路径。
+
+        Raises:
+            FileNotFoundError: 未找到对应年报时抛出。
+            Exception: 允许底层下载异常直接传播。
+        """
+
+        return await self._downloader(
+            fund_code,
+            year,
+            force_refresh=force_refresh,
+        )
+
+    async def parse_pdf(
+        self,
+        pdf_path: Path,
+        fund_code: str,
+        year: int,
+    ) -> ParsedAnnualReport:
+        """基于本地 PDF 路径解析统一年报对象。
+
+        Args:
+            pdf_path: 本地 PDF 路径。
+            fund_code: 基金代码。
+            year: 年报年份。
+
+        Returns:
+            统一的年报解析对象。
+
+        Raises:
+            Exception: 允许底层文本提取、表格提取或章节定位异常直接传播。
+        """
+
+        # parser 仍是同步实现，P1-S1 fix 只在适配层把阻塞调用隔离到线程。
+        raw_text = await asyncio.to_thread(self._text_extractor, pdf_path)
+        raw_tables = await asyncio.to_thread(self._table_extractor, pdf_path)
+        section_offsets = await asyncio.to_thread(self._section_locator, raw_text)
+        return ParsedAnnualReport(
+            key=DocumentKey(fund_code=fund_code, year=year),
+            raw_text=raw_text,
+            sections=_build_sections(raw_text, section_offsets),
+            tables=_build_tables(raw_tables),
+        )
+
     async def load_annual_report(
         self,
         fund_code: str,
@@ -221,18 +280,13 @@ class AnnualReportPdfAdapter:
             Exception: 允许底层下载、文本提取、表格提取或章节定位异常直接传播。
         """
 
-        pdf_path = await self._downloader(
+        pdf_path = await self.fetch_pdf_path(
             fund_code,
             year,
             force_refresh=force_refresh,
         )
-        # parser 仍是同步实现，P1-S1 fix 只在适配层把阻塞调用隔离到线程。
-        raw_text = await asyncio.to_thread(self._text_extractor, pdf_path)
-        raw_tables = await asyncio.to_thread(self._table_extractor, pdf_path)
-        section_offsets = await asyncio.to_thread(self._section_locator, raw_text)
-        return ParsedAnnualReport(
-            key=DocumentKey(fund_code=fund_code, year=year),
-            raw_text=raw_text,
-            sections=_build_sections(raw_text, section_offsets),
-            tables=_build_tables(raw_tables),
+        return await self.parse_pdf(
+            pdf_path,
+            fund_code,
+            year,
         )

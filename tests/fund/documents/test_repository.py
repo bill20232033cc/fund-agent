@@ -6,7 +6,9 @@ from unittest.mock import AsyncMock, Mock
 import pytest
 
 import fund_agent.fund.documents.adapters.annual_report_pdf as annual_report_pdf_module
+import fund_agent.fund.documents.repository as repository_module
 from fund_agent.fund.documents.adapters.annual_report_pdf import AnnualReportPdfAdapter
+from fund_agent.fund.documents.cache import AnnualReportDocumentCache
 from fund_agent.fund.documents.models import DocumentKey, ParsedAnnualReport
 from fund_agent.fund.documents.repository import FundDocumentRepository
 
@@ -261,3 +263,159 @@ async def test_annual_report_pdf_adapter_runs_sync_helpers_via_to_thread(
         (table_extractor, (pdf_path,)),
         (section_locator, (raw_text,)),
     ]
+
+
+class _FakeCacheAwareLoader:
+    """仓库缓存测试使用的假加载器。"""
+
+    def __init__(self, pdf_path: Path, reports: list[ParsedAnnualReport]) -> None:
+        """初始化假加载器。
+
+        Args:
+            pdf_path: 伪造的原始 PDF 路径。
+            reports: 顺序返回的解析结果。
+
+        Returns:
+            无返回值。
+
+        Raises:
+            无显式抛出。
+        """
+
+        self.fetch_pdf_path = AsyncMock(return_value=pdf_path)
+        self.parse_pdf = AsyncMock(side_effect=reports)
+        self.load_annual_report = AsyncMock(side_effect=AssertionError("不应走直接加载路径"))
+
+
+def _install_temp_cache(monkeypatch: pytest.MonkeyPatch, cache_root: Path) -> None:
+    """把仓库默认缓存替换为测试临时目录。
+
+    Args:
+        monkeypatch: pytest 提供的运行时打补丁工具。
+        cache_root: 测试缓存根目录。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        无显式抛出。
+    """
+
+    monkeypatch.setattr(
+        repository_module,
+        "_create_default_cache",
+        lambda: AnnualReportDocumentCache(cache_root),
+    )
+
+
+@pytest.mark.asyncio
+async def test_repository_reuses_parsed_report_cache_without_reparsing(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """验证仓库命中 parsed report 缓存后不会重复下载或重复解析。
+
+    Args:
+        tmp_path: pytest 提供的临时目录。
+        monkeypatch: pytest 提供的运行时打补丁工具。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当缓存命中后仍重复下载或解析时抛出。
+    """
+
+    cache_root = tmp_path / "documents-cache"
+    pdf_path = tmp_path / "110011_2024_annual_report.pdf"
+    pdf_path.write_bytes(b"pdf")
+    report = _build_stub_report("110011", 2024)
+    loader = _FakeCacheAwareLoader(pdf_path, [report])
+    _install_temp_cache(monkeypatch, cache_root)
+    repository = FundDocumentRepository(loader)
+
+    first_report = await repository.load_annual_report("110011", 2024)
+    second_report = await repository.load_annual_report("110011", 2024)
+
+    assert first_report == report
+    assert second_report == report
+    loader.fetch_pdf_path.assert_awaited_once_with("110011", 2024, force_refresh=False)
+    loader.parse_pdf.assert_awaited_once_with(pdf_path, "110011", 2024)
+
+
+@pytest.mark.asyncio
+async def test_repository_force_refresh_bypasses_cached_pdf_and_parsed_report(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """验证 `force_refresh=True` 会穿透 raw PDF 与 parsed report 缓存。
+
+    Args:
+        tmp_path: pytest 提供的临时目录。
+        monkeypatch: pytest 提供的运行时打补丁工具。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当强制刷新仍命中旧缓存时抛出。
+    """
+
+    cache_root = tmp_path / "documents-cache"
+    pdf_path = tmp_path / "110011_2024_annual_report.pdf"
+    pdf_path.write_bytes(b"pdf")
+    stale_report = _build_stub_report("110011", 2024)
+    fresh_report = ParsedAnnualReport(
+        key=DocumentKey(fund_code="110011", year=2024),
+        raw_text="§1 基金简介\n刷新后的正文",
+        sections={},
+        tables=(),
+    )
+    loader = _FakeCacheAwareLoader(pdf_path, [stale_report, fresh_report])
+    _install_temp_cache(monkeypatch, cache_root)
+    repository = FundDocumentRepository(loader)
+
+    first_report = await repository.load_annual_report("110011", 2024)
+    refreshed_report = await repository.load_annual_report("110011", 2024, force_refresh=True)
+
+    assert first_report == stale_report
+    assert refreshed_report == fresh_report
+    assert loader.fetch_pdf_path.await_count == 2
+    assert loader.parse_pdf.await_count == 2
+    loader.fetch_pdf_path.assert_any_await("110011", 2024, force_refresh=False)
+    loader.fetch_pdf_path.assert_any_await("110011", 2024, force_refresh=True)
+
+
+@pytest.mark.asyncio
+async def test_repository_reuses_cached_pdf_metadata_when_parsed_cache_missing(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """验证 parsed report 缓存缺失时，仓库会复用 documents 中记录的 PDF 路径。
+
+    Args:
+        tmp_path: pytest 提供的临时目录。
+        monkeypatch: pytest 提供的运行时打补丁工具。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当仓库未复用缓存 PDF 路径时抛出。
+    """
+
+    cache_root = tmp_path / "documents-cache"
+    pdf_path = tmp_path / "110011_2024_annual_report.pdf"
+    pdf_path.write_bytes(b"pdf")
+    report = _build_stub_report("110011", 2024)
+    loader = _FakeCacheAwareLoader(pdf_path, [report])
+    _install_temp_cache(monkeypatch, cache_root)
+    repository = FundDocumentRepository(loader)
+    document_key = DocumentKey(fund_code="110011", year=2024)
+
+    await repository._cache.record_pdf_path(document_key, pdf_path)
+    loaded_report = await repository.load_annual_report("110011", 2024)
+
+    assert loaded_report == report
+    loader.fetch_pdf_path.assert_not_awaited()
+    loader.parse_pdf.assert_awaited_once_with(pdf_path, "110011", 2024)

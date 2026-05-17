@@ -31,8 +31,8 @@
 ### 1.3 当前 Gate 与基线裁决（2026-05-17）
 
 - 当前分支：`chore/reconcile-baseline`
-- 当前 gate：`P1-S3 implementation + review`
-- 下一 gate：`P1-S3 implementation + review`
+- 当前 gate：`P1-S4 implementation + review`
+- 下一 gate：`P1-S4 implementation + review`
 - 当前裁决：
   - P0 维持 `done`。已验证 `dayu` 依赖可导入、`fund-agent` 处于 editable install、`fund-analysis --help` 可用、样本基金 `110011` 年报可下载、`pdfplumber` 可提取全文文本和表格。
   - P1 维持 `in progress`。
@@ -42,9 +42,14 @@
     - 章节规则已迁出到 `fund_agent/fund/pdf/section_catalog.py`
     - 目录过滤已从单一 `"..."` 升级为可复用规则表
     - `110011/2024` 的正文 `§3` 已由 fixture + test 稳定覆盖
+  - `P1-S3 两级缓存与仓库内解析物化` 已完成：
+    - raw PDF 元信息缓存与 parsed report 物化缓存均已落在 `documents` 层内部
+    - repository 已优先命中缓存，避免重复下载 / 重复全文解析
+    - `force_refresh=True` 已正确穿透 parsed report 与已记录的 PDF 路径
+    - 本 slice 未创建 `structured_data` 表，也未冻结其 schema
 - 下一 entry point：
-  - 进入 `P1-S3 implementation + review`
-  - 优先目标是把 raw PDF / parsed report 的仓库内缓存与物化落地，但不提前冻结 `structured_data`
+  - 进入 `P1-S4 implementation + review`
+  - 优先目标是落地 `basic_identity`、`product_profile`、`benchmark`、`fee_schedule`，并把 `classified_fund_type` 作为稳定输出引入
 - 当前 artifact：
   - plan: `docs/reviews/p1-plan-2026-05-17.md`
   - plan review: `docs/reviews/p1-plan-review-2026-05-17.md`
@@ -69,6 +74,14 @@
       - `docs/reviews/p1-s2-code-review-glm-2026-05-17.md`
       - controller judgment: `docs/reviews/p1-s2-code-review-controller-judgment-2026-05-17.md`
     - accepted slice commit: `c3bd264`
+  - `P1-S3`:
+    - baseline reconciliation: `docs/reviews/p1-s3-baseline-reconciliation-2026-05-17.md`
+    - implementation: `docs/reviews/p1-s3-implementation-2026-05-17.md`
+    - code review:
+      - `docs/reviews/p1-s3-code-review-mimo-2026-05-17.md`
+      - `docs/reviews/p1-s3-code-review-glm-2026-05-17.md`
+      - controller judgment: `docs/reviews/p1-s3-code-review-controller-judgment-2026-05-17.md`
+    - accepted slice commit: `pending local commit`
   - baseline commit: `9956c45`
 
 ---
@@ -217,6 +230,24 @@
   - `P1-S3` owner：负向/边界测试仍偏少，可在缓存阶段一并补强
   - 后续样本回归 owner：`§5` 当前规则已存在，但 fixture 尚未覆盖
   - 后续样本回归 owner：`§3` 模式仍使用 `.*` 贪婪通配，需由更多样本决定是否收窄
+
+**P1-S3 当前状态（2026-05-17）**
+
+- `P1-S3 两级缓存与仓库内解析物化`：✅ completed
+- 当前完成内容：
+  - `fund_agent/fund/documents/cache.py` 已提供 `AnnualReportDocumentCache`
+  - `documents` 表与 `parsed_reports` 表已在 `documents` 层内部落地
+  - parsed report 已物化到 `cache/documents/parsed_reports/*.json`
+  - repository 已支持：
+    - parsed report 缓存命中
+    - 已记录 PDF 路径复用
+    - `force_refresh=True` 穿透 parsed report 与 PDF 路径缓存
+  - `tests/fund/documents/test_cache.py` 与 `tests/fund/documents/test_repository.py` 已覆盖缓存最小闭环
+  - 验证命令 `.venv/bin/python -m pytest tests/fund/documents -q` 当前通过（`10 passed`）
+- 当前 residual risks：
+  - 后续性能优化 owner：缓存 `initialize()` 每次操作都会重复执行，当前正确但不够高效
+  - 后续性能优化 owner：默认缓存实例不做复用，当前单仓库场景无正确性风险
+  - 后续缓存治理 owner：缓存根目录仍使用相对路径，后续若要统一根路径策略再单独裁决
 
 ---
 
