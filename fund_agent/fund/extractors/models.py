@@ -95,3 +95,16 @@ class ManagerOwnershipExtractionResult:
     turnover_rate: ExtractedField[dict[str, object]]
     manager_alignment: ExtractedField[dict[str, object]]
     holder_structure: ExtractedField[dict[str, object]]
+
+
+@dataclass(frozen=True, slots=True)
+class HoldingsShareChangeExtractionResult:
+    """`§8/§10` 持仓快照与份额变动抽取结果。
+
+    Attributes:
+        holdings_snapshot: 前十大重仓与行业分布原始披露。
+        share_change: 期初份额、期末份额和净变动原始披露。
+    """
+
+    holdings_snapshot: ExtractedField[dict[str, object]]
+    share_change: ExtractedField[dict[str, object]]

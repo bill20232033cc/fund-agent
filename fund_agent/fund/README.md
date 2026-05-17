@@ -9,6 +9,7 @@
 ```python
 from fund_agent.fund.documents import FundDocumentRepository
 from fund_agent.fund.extractors import (
+    extract_holdings_share_change,
     extract_manager_ownership,
     extract_performance,
     extract_profile,
@@ -19,6 +20,7 @@ report = await repository.load_annual_report("110011", 2024)
 profile = extract_profile(report)
 performance = extract_performance(report)
 manager_ownership = extract_manager_ownership(report)
+holdings_share_change = extract_holdings_share_change(report)
 ```
 
 `load_annual_report()` 返回 `ParsedAnnualReport`，包含：
@@ -50,6 +52,11 @@ manager_ownership = extract_manager_ownership(report)
 - `manager_alignment`：`§9` 中的基金经理/从业人员持有原始披露，当前不输出好坏判断
 - `holder_structure`：`§9` 中的机构/个人持有人结构
 
+`extract_holdings_share_change()` 返回 `HoldingsShareChangeExtractionResult`，当前覆盖模板第 3 章“实际投资行为”和第 4 章“投资者获得感”的最小数据底座：
+
+- `holdings_snapshot`：`§8` 表格中的前十大重仓，以及已披露的行业分布
+- `share_change`：`§10` 表格中的期初份额、期末份额、净变动
+
 所有关键字段都通过 `EvidenceAnchor` 记录 `document_year`、`section_id`、`row_locator` 和命中原文，供后续证据锚点渲染使用。
 
 仓库层位于 `fund_agent/fund/documents/`：
@@ -60,11 +67,12 @@ manager_ownership = extract_manager_ownership(report)
 
 基础画像 extractor 位于 `fund_agent/fund/extractors/`：
 
-- `models.py`：`EvidenceAnchor`、`ExtractedField`、`ProfileExtractionResult`、`PerformanceExtractionResult`、`ManagerOwnershipExtractionResult`
+- `models.py`：`EvidenceAnchor`、`ExtractedField`、`ProfileExtractionResult`、`PerformanceExtractionResult`、`ManagerOwnershipExtractionResult`、`HoldingsShareChangeExtractionResult`
 - `profile.py`：`§1/§2` 的基础画像抽取
 - `performance.py`：`§3` 的净值表现与投资者收益率抽取
 - `manager_ownership.py`：`§4/§8/§9` 的管理人文本、换手率、持有披露与持有人结构抽取
-- `__init__.py`：当前公开导出 `extract_profile`、`extract_performance`、`extract_manager_ownership`
+- `holdings_share_change.py`：`§8/§10` 的持仓快照与份额变动表格抽取
+- `__init__.py`：当前公开导出 `extract_profile`、`extract_performance`、`extract_manager_ownership`、`extract_holdings_share_change`
 
 基金类型识别位于 `fund_agent/fund/fund_type.py`：
 
@@ -78,15 +86,16 @@ manager_ownership = extract_manager_ownership(report)
 - 业务调用方只通过 `FundDocumentRepository.load_annual_report(...)` 读取年报。
 - 业务调用方若需要基础画像，只消费 `extract_profile(report)` 的结构化结果，不直接复用正则规则。
 - `fund_agent/fund/pdf/*` 只作为仓库内部 helper / adapter，允许返回本地 `Path`，但这不是上层公共契约。
-- `ParsedAnnualReport` 是后续各章节 extractor 的统一输入；当前稳定 extractor 已扩展到 `§1/§2/§3/§4/§8/§9`。
+- `ParsedAnnualReport` 是后续各章节 extractor 的统一输入；当前稳定 extractor 已扩展到 `§1/§2/§3/§4/§8/§9/§10`。
 - `extract_profile()` 当前不应用 `preferred_lens`，也不输出任何投资结论。
 - `extract_performance()` 当前不跨章节做复杂 fallback，不引入 `§10`、净值序列或任何 P2 分析公式。
 - `extract_manager_ownership()` 当前只抽原始披露，不输出言行一致性、利益一致性或成本判断。
+- `extract_holdings_share_change()` 当前只抽表格原始披露，不输出持仓集中度、资金流向或投资者收益 fallback。
 
 ## 内部分层
 
 - `documents/`：公共契约与仓库实现。上层应通过这里读取基金文档。
-- `extractors/`：章节级结构化提取能力。当前已落地基础画像、`§3` 表现、管理人/持有人 extractor。
+- `extractors/`：章节级结构化提取能力。当前已落地基础画像、`§3` 表现、管理人/持有人、持仓/份额 extractor。
 - `fund_type.py`：基金类型识别规则，供 extractor 先行消费。
 - `pdf/`：底层 PDF helper。当前包含：
   - `downloader.py`：仅供仓库内部使用的 PDF 下载 helper，会写入本地缓存
@@ -96,9 +105,10 @@ manager_ownership = extract_manager_ownership(report)
 ## 当前边界
 
 - 当前只支持 `annual_report`。
-- 当前稳定 extractor 边界是 `§1/§2/§3/§4/§8/§9`；`§10` 提取仍在后续 slice。
+- 当前稳定 extractor 边界是 `§1/§2/§3/§4/§8/§9/§10`。
 - 当前基础画像只覆盖 `basic_identity`、`product_profile`、`benchmark`、`fee_schedule` 四类输出。
 - 当前 `§3` 表现只覆盖 `nav_benchmark_performance` 与 `investor_return` 两类输出。
 - 当前管理人/持有人 extractor 只覆盖 `manager_strategy_text`、`turnover_rate`、`manager_alignment`、`holder_structure` 四类输出。
+- 当前持仓/份额 extractor 只覆盖 `holdings_snapshot` 与 `share_change` 两类输出。
 - `data_extractor.py` façade 仍未接入；当前不提前冻结 `structured_data` 缓存。
 - `parser.py` 已具备 `§3` 定位修复，但真实样本扩展和更多章节/表格抽取仍在后续 slice 完成。

@@ -31,8 +31,8 @@
 ### 1.3 当前 Gate 与基线裁决（2026-05-17）
 
 - 当前分支：`chore/reconcile-baseline`
-- 当前 gate：`P1-S7 implementation + review`
-- 下一 gate：`P1-S7 implementation + review`
+- 当前 gate：`P1-S8 implementation + review`
+- 下一 gate：`P1-S8 implementation + review`
 - 当前裁决：
   - P0 维持 `done`。已验证 `dayu` 依赖可导入、`fund-agent` 处于 editable install、`fund-analysis --help` 可用、样本基金 `110011` 年报可下载、`pdfplumber` 可提取全文文本和表格。
   - P1 维持 `in progress`。
@@ -63,9 +63,14 @@
     - `§4/§8/§9` 命中字段均带 `EvidenceAnchor`
     - `manager_alignment` 仅输出原始披露，未引入利益一致性判断
     - 未披露路径显式标记 `missing`
+  - `P1-S7 持仓快照与份额变动` 已完成：
+    - `fund_agent/fund/extractors/holdings_share_change.py` 已落地 `holdings_snapshot` 与 `share_change`
+    - 前十大重仓与份额变动可结构化输出
+    - 行业分布未披露时显式标记 `missing`
+    - 表格命中路径均带页码、表 ID 和行定位
 - 下一 entry point：
-  - 进入 `P1-S7 implementation + review`
-  - 优先目标是落地 `holdings_snapshot` 与 `share_change`
+  - 进入 `P1-S8 implementation + review`
+  - 优先目标是 façade 集成、净值数据适配器与 P1 验收矩阵
 - 当前 artifact：
   - plan: `docs/reviews/p1-plan-2026-05-17.md`
   - plan review: `docs/reviews/p1-plan-review-2026-05-17.md`
@@ -127,6 +132,12 @@
     - code review:
       - `docs/reviews/p1-s6-code-review-controller-judgment-2026-05-17.md`
     - accepted slice commit: `18566f9`
+  - `P1-S7`:
+    - baseline reconciliation: `docs/reviews/p1-s7-baseline-reconciliation-2026-05-17.md`
+    - implementation: `docs/reviews/p1-s7-implementation-2026-05-17.md`
+    - code review:
+      - `docs/reviews/p1-s7-code-review-controller-judgment-2026-05-17.md`
+    - accepted slice commit: pending
   - baseline commit: `9956c45`
 
 ---
@@ -363,6 +374,25 @@
   - 后续样本回归 owner：真实年报 `§4/§8/§9` 可能使用表格或不同字段名称，需在 `P1-S8` 验收矩阵阶段继续扩展
   - 后续估算 owner：换手率未披露时的同类中位数估算尚未接入，当前只能显式返回 `missing`
 
+**P1-S7 当前状态（2026-05-17）**
+
+- `P1-S7 持仓快照与份额变动`：✅ completed
+- 当前完成内容：
+  - `fund_agent/fund/extractors/models.py` 已补充 `HoldingsShareChangeExtractionResult`
+  - `fund_agent/fund/extractors/holdings_share_change.py` 已落地：
+    - `holdings_snapshot`
+    - `share_change`
+  - `tests/fund/extractors/test_holdings_share_change.py` 已覆盖：
+    - 前十大重仓表
+    - 行业分布表
+    - 份额变动表
+    - 行业分布缺失路径
+    - 表格整体缺失路径
+  - 验证命令 `.venv/bin/python -m pytest tests/fund/extractors/test_holdings_share_change.py -q` 当前通过（`3 passed`）
+- 当前 residual risks：
+  - 后续样本回归 owner：真实年报表头差异仍需在 `P1-S8` 验收矩阵阶段继续扩展
+  - 后续 schema owner：当前表格行按原表头输出，最终标准字段名需在 façade 集成前裁决
+
 ---
 
 ### P2: 分析引擎（R=A+B-C + 检验 + 审计）
@@ -545,3 +575,5 @@ P0（环境搭建）
 | 2026-05-17 | P1 | 🟡 in progress | `P1-S6` implementation 已完成，`§4/§8/§9` 管理人/持有人 extractor 与测试已落地；当前 gate 维持 `P1-S6 implementation + review` |
 | 2026-05-17 | P1 | 🟡 in progress | `P1-S6` controller review 已通过；下一 gate 为 `P1-S7 implementation + review` |
 | 2026-05-17 | P1 | 🟡 in progress | `P1-S6` 已接受，accepted commit 为 `18566f9`；下一 gate 为 `P1-S7 implementation + review` |
+| 2026-05-17 | P1 | 🟡 in progress | `P1-S7` implementation 已完成，`§8/§10` 持仓/份额 extractor 与测试已落地；当前 gate 维持 `P1-S7 implementation + review` |
+| 2026-05-17 | P1 | 🟡 in progress | `P1-S7` controller review 已通过；下一 gate 为 `P1-S8 implementation + review` |

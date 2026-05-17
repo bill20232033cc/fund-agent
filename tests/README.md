@@ -11,6 +11,7 @@
 - `tests/fund/extractors/test_profile.py`：基础画像 extractor 测试，覆盖分类先行、`classified_fund_type` / `classification_basis` 稳定输出，以及费率/基准/规模/经理 anchor
 - `tests/fund/extractors/test_performance.py`：`§3` 表现 extractor 测试，覆盖净值增长率/基准收益率 anchor，以及投资者收益率 `direct / estimated / missing` 三态
 - `tests/fund/extractors/test_manager_ownership.py`：`§4/§8/§9` 管理人/持有人 extractor 测试，覆盖策略文本、换手率、持有披露、持有人结构和 `missing` 路径
+- `tests/fund/extractors/test_holdings_share_change.py`：`§8/§10` 持仓/份额 extractor 测试，覆盖前十大重仓、行业分布、份额变动和表格型 anchor
 - `tests/fixtures/fund/extractors/profile/*.txt`：基础画像最小文本夹具，当前覆盖主动权益、增强指数、债券三类样本
 - `tests/fixtures/fund/extractors/performance/*.txt`：`§3` 最小文本夹具，当前覆盖直接披露、估算披露、未披露三类投资者收益率路径
 - `tests/fixtures/fund/extractors/manager_ownership/*.txt`：`§4/§8/§9` 最小文本夹具，当前覆盖完整披露、部分披露、未披露、换手率口径-only 路径
@@ -25,12 +26,13 @@ pytest tests/fund/pdf/test_parser.py -q
 pytest tests/fund/extractors/test_profile.py -q
 pytest tests/fund/extractors/test_performance.py -q
 pytest tests/fund/extractors/test_manager_ownership.py -q
+pytest tests/fund/extractors/test_holdings_share_change.py -q
 ```
 
 如果只验证当前 extractor worktree，可运行：
 
 ```bash
-.venv/bin/python -m pytest tests/fund/extractors/test_profile.py tests/fund/extractors/test_performance.py tests/fund/extractors/test_manager_ownership.py -q
+.venv/bin/python -m pytest tests/fund/extractors/test_profile.py tests/fund/extractors/test_performance.py tests/fund/extractors/test_manager_ownership.py tests/fund/extractors/test_holdings_share_change.py -q
 ```
 
 ## 维护约定
@@ -41,4 +43,5 @@ pytest tests/fund/extractors/test_manager_ownership.py -q
 - extractor 测试必须优先锁定章节边界、证据锚点和 `missing/direct/estimated` 状态，不把后续 P2 的分析结论混入 P1 数据层测试。
 - `§3` 表现相关测试当前只允许依赖 `ParsedAnnualReport.get_section_text("§3")`，不要在 P1 阶段把 `§10` fallback 或净值序列计算混进同一组测试。
 - `§4/§8/§9` 管理人/持有人测试当前只锁定原始披露抽取，不写言行一致性、利益一致性或成本判断断言。
+- `§8/§10` 持仓/份额测试必须优先锁定表格型 anchor，不把资金流向判断或投资者收益 fallback 混进 P1 数据层测试。
 - 新增基金类型或章节 extractor 时，先补 fixture，再补测试，再扩实现；不要只靠真实年报手工回归。
