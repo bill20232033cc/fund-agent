@@ -126,7 +126,7 @@
     - implementation: `docs/reviews/p1-s6-implementation-2026-05-17.md`
     - code review:
       - `docs/reviews/p1-s6-code-review-controller-judgment-2026-05-17.md`
-    - accepted slice commit: pending
+    - accepted slice commit: `18566f9`
   - baseline commit: `9956c45`
 
 ---
@@ -544,3 +544,4 @@ P0（环境搭建）
 | 2026-05-17 | P1 | 🟡 in progress | `P1-S5` code review / fix / re-review 已收口，accepted slice commit=`8102944`；下一 gate 为 `P1-S6 implementation + review` |
 | 2026-05-17 | P1 | 🟡 in progress | `P1-S6` implementation 已完成，`§4/§8/§9` 管理人/持有人 extractor 与测试已落地；当前 gate 维持 `P1-S6 implementation + review` |
 | 2026-05-17 | P1 | 🟡 in progress | `P1-S6` controller review 已通过；下一 gate 为 `P1-S7 implementation + review` |
+| 2026-05-17 | P1 | 🟡 in progress | `P1-S6` 已接受，accepted commit 为 `18566f9`；下一 gate 为 `P1-S7 implementation + review` |
