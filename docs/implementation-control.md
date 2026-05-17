@@ -15,8 +15,8 @@
 | Phase | 名称 | 周期 | 状态 | 依赖 |
 |-------|------|------|------|------|
 | P0 | 环境搭建与架构骨架 | Week 1 | ✅ done | 无 |
-| P1 | 数据层（PDF 下载 + 解析 + 提取） | Week 2-3 | 🟡 in progress | P0 |
-| P2 | 分析引擎（R=A+B-C + 检验 + 审计） | Week 3-4 | ⬜ pending | P1 |
+| P1 | 数据层（PDF 下载 + 解析 + 提取） | Week 2-3 | ✅ done | P0 |
+| P2 | 分析引擎（R=A+B-C + 检验 + 审计） | Week 3-4 | 🟡 in progress | P1 |
 | P3 | CLI 入口 + 整合测试 + 验证 | Week 4-5 | ⬜ pending | P2 |
 
 ### 1.2 里程碑
@@ -31,11 +31,12 @@
 ### 1.3 当前 Gate 与基线裁决（2026-05-17）
 
 - 当前分支：`chore/reconcile-baseline`
-- 当前 gate：`P1 aggregate review`
-- 下一 gate：`P1 aggregate review`
+- 当前 gate：`P2-S1 implementation + review`
+- 下一 gate：`P2-S1 implementation + review`
 - 当前裁决：
   - P0 维持 `done`。已验证 `dayu` 依赖可导入、`fund-agent` 处于 editable install、`fund-analysis --help` 可用、样本基金 `110011` 年报可下载、`pdfplumber` 可提取全文文本和表格。
-  - P1 维持 `in progress`。
+  - P1 已完成并通过 aggregate review。
+  - P2 进入 `in progress`。
   - `P1-S1 文档访问契约收口` 已完成：对外唯一仓库入口收口为 `FundDocumentRepository.load_annual_report(...) -> ParsedAnnualReport`，公共契约已迁入 `fund_agent/fund/documents/*`，`fund_agent/fund/pdf/*` 降为仓库内部 helper / adapter。
   - `P1-S2 章节定位修复与 §3 冻结` 已完成：
     - `§3` root cause 已直接关闭，不是基金代码特判
@@ -74,8 +75,8 @@
     - 3 只样本基金 12 项矩阵达到 `36/36`
     - P1 全量测试当前通过
 - 下一 entry point：
-  - 进入 `P1 aggregate review`
-  - 优先目标是对 P1 数据层做整体 review，并裁决是否可进入 P2
+  - 进入 `P2-S1 implementation + review`
+  - 优先目标是实现 R=A+B-C 计算模块
 - 当前 artifact：
   - plan: `docs/reviews/p1-plan-2026-05-17.md`
   - plan review: `docs/reviews/p1-plan-review-2026-05-17.md`
@@ -149,6 +150,7 @@
     - code review:
       - `docs/reviews/p1-s8-code-review-controller-judgment-2026-05-17.md`
     - accepted slice commit: `d398bc2`
+  - `P1 aggregate review`: `docs/reviews/p1-aggregate-review-2026-05-17.md`
   - baseline commit: `9956c45`
 
 ---
@@ -550,7 +552,7 @@ P0（环境搭建）
 | ID | 问题 | 影响 Phase | 状态 | 决议 |
 |----|------|-----------|------|------|
 | BQ-1 | 巨潮网反爬策略未知 | P0/P1 | ✅ closed | 已改用 akshare + eastmoney PDF，无需直接访问巨潮 |
-| BQ-2 | 2026 新规"投资者收益率"披露时间表 | P1/P2 | ⬜ open | 先用份额变动估算 |
+| BQ-2 | 2026 新规"投资者收益率"披露时间表 | P2 | ⬜ open | P1 已提供 `investor_return` 三态和 `share_change` 输入，P2 再实现行为损益 |
 | BQ-3 | 有知有行温度数据页面结构 | P3 | ⬜ open | P3-S2 验证后关闭 |
 | BQ-4 | akshare 基金净值 API 稳定性 | P1/P3 | 🟡 partially closed | P1-S8 已封装可注入 fetcher 与 `nav_cache`，真实网络验证移交 P3 |
 | BQ-5 | 当前章节定位规则无法稳定识别 `§3` 正文 | P1 | ✅ closed | 已由 P1-S2 章节定位修复与 `§3` 冻结关闭 |
@@ -610,3 +612,5 @@ P0（环境搭建）
 | 2026-05-17 | P1 | 🟡 in progress | `P1-S8` implementation 已完成，façade、净值适配器与 `36/36` 样本矩阵已落地；当前 gate 维持 `P1-S8 implementation + review` |
 | 2026-05-17 | P1 | 🟡 in progress | `P1-S8` controller review 已通过；下一 gate 为 `P1 aggregate review` |
 | 2026-05-17 | P1 | 🟡 in progress | `P1-S8` 已接受，accepted commit 为 `d398bc2`；下一 gate 为 `P1 aggregate review` |
+| 2026-05-17 | P1 | ✅ done | P1 aggregate review 通过，artifact 为 `docs/reviews/p1-aggregate-review-2026-05-17.md`；下一 gate 为 `P2-S1 implementation + review` |
+| 2026-05-17 | P2 | 🟡 in progress | 进入 `P2-S1 implementation + review`，优先实现 R=A+B-C 计算模块 |
