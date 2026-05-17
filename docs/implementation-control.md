@@ -31,18 +31,33 @@
 ### 1.3 当前 Gate 与基线裁决（2026-05-17）
 
 - 当前分支：`chore/reconcile-baseline`
-- 当前 gate：`plan accepted`
-- 下一 gate：`P1-S1 implementation + review`
+- 当前 gate：`P1-S2 implementation + review`
+- 下一 gate：`P1-S2 implementation + review`
 - 当前裁决：
   - P0 维持 `done`。已验证 `dayu` 依赖可导入、`fund-agent` 处于 editable install、`fund-analysis --help` 可用、样本基金 `110011` 年报可下载、`pdfplumber` 可提取全文文本和表格。
-  - P1 调整为 `in progress`。`fund_agent/fund/pdf/downloader.py` 与 `fund_agent/fund/pdf/parser.py` 已有原型实现，但章节定位尚不稳定，12 项结构化提取、缓存层和测试尚未落地。
+  - P1 维持 `in progress`。`P1-S1 文档访问契约收口` 已完成：对外唯一仓库入口收口为 `FundDocumentRepository.load_annual_report(...) -> ParsedAnnualReport`，公共契约已迁入 `fund_agent/fund/documents/*`，`fund_agent/fund/pdf/*` 降为仓库内部 helper / adapter。
+  - `P1-S1` code review 中接受的两个 finding 已在 fix 中闭环：
+    - async 调用链中的同步 I/O 已通过 `asyncio.to_thread(...)` 隔离
+    - 目标年份缺失时不再静默回退到其它年份年报，而是统一抛出 `FileNotFoundError`
 - 下一 entry point：
-  - 已接受 P1 的 code-generation-ready plan，先进入 `P1-S1 文档访问契约收口`。
-  - `P1-S1` 完成后，按 review gate 进入 `P1-S2 章节定位修复与 §3 冻结`。
+  - 进入 `P1-S2 章节定位修复与 §3 冻结`。
+  - 优先目标是关闭 `BQ-5`：样本基金 `110011` 的 2024 年报必须稳定定位出 `§3`，并把章节规则从硬编码逻辑收口为可测试、可配置的目录表。
 - 当前 artifact：
   - plan: `docs/reviews/p1-plan-2026-05-17.md`
   - plan review: `docs/reviews/p1-plan-review-2026-05-17.md`
+  - baseline reconciliation: `docs/reviews/p1-s1-baseline-reconciliation-2026-05-17.md`
+  - implementation: `docs/reviews/p1-s1-implementation-2026-05-17.md`
+  - code review:
+    - `docs/reviews/p1-s1-code-review-mimo-2026-05-17.md`
+    - `docs/reviews/p1-s1-code-review-glm-2026-05-17.md`
+    - controller judgment: `docs/reviews/p1-s1-code-review-controller-judgment-2026-05-17.md`
+  - fix: `docs/reviews/p1-s1-fix-2026-05-17.md`
+  - re-review:
+    - `docs/reviews/p1-s1-rereview-mimo-2026-05-17.md`
+    - `docs/reviews/p1-s1-rereview-glm-2026-05-17.md`
+    - controller confirmation: `docs/reviews/p1-s1-rereview-controller-2026-05-17.md`
   - baseline commit: `9956c45`
+  - accepted slice commit: `pending local commit`
 
 ---
 
@@ -159,6 +174,20 @@
 - 已有 `fund_agent/fund/pdf/parser.py` 原型，可提取全文文本、表格，并提供 `locate_sections()` / `extract_section()` 的初版章节定位能力。
 - 当前章节定位尚不稳定：在样本基金 `110011` 上仅定位到 `§1/§2/§4/§5/§8/§9/§10`，漏掉 `§3`，还不能支撑后续 12 项结构化提取。
 - 结构化数据提取模块、SQLite 缓存层和测试套件尚未落地。
+
+**P1-S1 当前状态（2026-05-17）**
+
+- `P1-S1 文档访问契约收口`：✅ completed
+- 当前完成内容：
+  - `fund_agent/fund/documents/*` 已承载稳定公共契约与唯一仓库入口
+  - `FundDocumentRepository.load_annual_report(...)` 不再向上层暴露本地 `Path`
+  - `fund_agent/fund/pdf/downloader.py` 已明确降级为内部 helper，并去除目标年份缺失时的 silent fallback
+  - downloader / adapter 中的同步阻塞调用已通过 `asyncio.to_thread(...)` 隔离
+  - 相关测试命令 ` .venv/bin/python -m pytest tests/fund/documents/test_repository.py tests/fund/pdf/test_downloader.py ` 当前通过（`11 passed`）
+- 当前 residual risks：
+  - `P1-S2` owner：`parser.py` 章节定位原型仍未稳定，`§3` 漏识别尚未关闭
+  - `P1-S3` owner：缓存根路径策略与 SQLite 物化尚未落地
+  - 后续 phase owner：当前只支持 `annual_report`，未扩展到其它文档类型
 
 ---
 
