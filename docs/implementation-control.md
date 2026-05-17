@@ -148,7 +148,7 @@
     - implementation: `docs/reviews/p1-s8-implementation-2026-05-17.md`
     - code review:
       - `docs/reviews/p1-s8-code-review-controller-judgment-2026-05-17.md`
-    - accepted slice commit: pending
+    - accepted slice commit: `d398bc2`
   - baseline commit: `9956c45`
 
 ---
@@ -552,7 +552,7 @@ P0（环境搭建）
 | BQ-1 | 巨潮网反爬策略未知 | P0/P1 | ✅ closed | 已改用 akshare + eastmoney PDF，无需直接访问巨潮 |
 | BQ-2 | 2026 新规"投资者收益率"披露时间表 | P1/P2 | ⬜ open | 先用份额变动估算 |
 | BQ-3 | 有知有行温度数据页面结构 | P3 | ⬜ open | P3-S2 验证后关闭 |
-| BQ-4 | akshare 基金净值 API 稳定性 | P1 | ⬜ open | P1-S8 验证后关闭 |
+| BQ-4 | akshare 基金净值 API 稳定性 | P1/P3 | 🟡 partially closed | P1-S8 已封装可注入 fetcher 与 `nav_cache`，真实网络验证移交 P3 |
 | BQ-5 | 当前章节定位规则无法稳定识别 `§3` 正文 | P1 | ✅ closed | 已由 P1-S2 章节定位修复与 `§3` 冻结关闭 |
 
 ---
@@ -609,3 +609,4 @@ P0（环境搭建）
 | 2026-05-17 | P1 | 🟡 in progress | `P1-S7` 已接受，accepted commit 为 `3167754`；下一 gate 为 `P1-S8 implementation + review` |
 | 2026-05-17 | P1 | 🟡 in progress | `P1-S8` implementation 已完成，façade、净值适配器与 `36/36` 样本矩阵已落地；当前 gate 维持 `P1-S8 implementation + review` |
 | 2026-05-17 | P1 | 🟡 in progress | `P1-S8` controller review 已通过；下一 gate 为 `P1 aggregate review` |
+| 2026-05-17 | P1 | 🟡 in progress | `P1-S8` 已接受，accepted commit 为 `d398bc2`；下一 gate 为 `P1 aggregate review` |
