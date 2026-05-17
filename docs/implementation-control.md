@@ -81,7 +81,7 @@
       - `docs/reviews/p1-s3-code-review-mimo-2026-05-17.md`
       - `docs/reviews/p1-s3-code-review-glm-2026-05-17.md`
       - controller judgment: `docs/reviews/p1-s3-code-review-controller-judgment-2026-05-17.md`
-    - accepted slice commit: `pending local commit`
+    - accepted slice commit: `d92eef7`
   - baseline commit: `9956c45`
 
 ---
