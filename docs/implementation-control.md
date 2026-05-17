@@ -57,7 +57,7 @@
     - `docs/reviews/p1-s1-rereview-glm-2026-05-17.md`
     - controller confirmation: `docs/reviews/p1-s1-rereview-controller-2026-05-17.md`
   - baseline commit: `9956c45`
-  - accepted slice commit: `pending local commit`
+  - accepted slice commit: `e772dae`
 
 ---
 
