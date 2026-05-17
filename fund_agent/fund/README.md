@@ -14,6 +14,7 @@ from fund_agent.fund.extractors import (
     extract_performance,
     extract_profile,
 )
+from fund_agent.fund.data_extractor import FundDataExtractor
 
 repository = FundDocumentRepository()
 report = await repository.load_annual_report("110011", 2024)
@@ -21,6 +22,9 @@ profile = extract_profile(report)
 performance = extract_performance(report)
 manager_ownership = extract_manager_ownership(report)
 holdings_share_change = extract_holdings_share_change(report)
+
+data_extractor = FundDataExtractor()
+bundle = await data_extractor.extract("110011", 2024)
 ```
 
 `load_annual_report()` 返回 `ParsedAnnualReport`，包含：
@@ -56,6 +60,8 @@ holdings_share_change = extract_holdings_share_change(report)
 
 - `holdings_snapshot`：`§8` 表格中的前十大重仓，以及已披露的行业分布
 - `share_change`：`§10` 表格中的期初份额、期末份额、净变动
+
+`FundDataExtractor.extract()` 返回 `StructuredFundDataBundle`，当前聚合 P1 已接受的 12 项结构化数据，并附带净值数据读取结果。它只做 orchestration，不直接读文件、不直接写缓存。
 
 所有关键字段都通过 `EvidenceAnchor` 记录 `document_year`、`section_id`、`row_locator` 和命中原文，供后续证据锚点渲染使用。
 
@@ -95,7 +101,9 @@ holdings_share_change = extract_holdings_share_change(report)
 ## 内部分层
 
 - `documents/`：公共契约与仓库实现。上层应通过这里读取基金文档。
+- `data/`：外部数据适配器。当前包含 `FundNavDataAdapter` 与自身 `nav_cache`。
 - `extractors/`：章节级结构化提取能力。当前已落地基础画像、`§3` 表现、管理人/持有人、持仓/份额 extractor。
+- `data_extractor.py`：P1 façade，聚合文档仓库、净值适配器和章节 extractor。
 - `fund_type.py`：基金类型识别规则，供 extractor 先行消费。
 - `pdf/`：底层 PDF helper。当前包含：
   - `downloader.py`：仅供仓库内部使用的 PDF 下载 helper，会写入本地缓存
@@ -110,5 +118,5 @@ holdings_share_change = extract_holdings_share_change(report)
 - 当前 `§3` 表现只覆盖 `nav_benchmark_performance` 与 `investor_return` 两类输出。
 - 当前管理人/持有人 extractor 只覆盖 `manager_strategy_text`、`turnover_rate`、`manager_alignment`、`holder_structure` 四类输出。
 - 当前持仓/份额 extractor 只覆盖 `holdings_snapshot` 与 `share_change` 两类输出。
-- `data_extractor.py` façade 仍未接入；当前不提前冻结 `structured_data` 缓存。
+- `data_extractor.py` façade 已接入当前 12 项结构化数据；`structured_data` 当前以 `StructuredFundDataBundle` dataclass 表达，不额外物化 SQLite 表。
 - `parser.py` 已具备 `§3` 定位修复，但真实样本扩展和更多章节/表格抽取仍在后续 slice 完成。

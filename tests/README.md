@@ -12,6 +12,8 @@
 - `tests/fund/extractors/test_performance.py`：`§3` 表现 extractor 测试，覆盖净值增长率/基准收益率 anchor，以及投资者收益率 `direct / estimated / missing` 三态
 - `tests/fund/extractors/test_manager_ownership.py`：`§4/§8/§9` 管理人/持有人 extractor 测试，覆盖策略文本、换手率、持有披露、持有人结构和 `missing` 路径
 - `tests/fund/extractors/test_holdings_share_change.py`：`§8/§10` 持仓/份额 extractor 测试，覆盖前十大重仓、行业分布、份额变动和表格型 anchor
+- `tests/fund/data/test_nav_data.py`：净值数据适配器测试，覆盖 `nav_cache` 命中和强制刷新
+- `tests/fund/integration/test_p1_sample_matrix.py`：P1 样本矩阵测试，验证 3 只样本基金 12 项结构化数据达到 `36/36`
 - `tests/fixtures/fund/extractors/profile/*.txt`：基础画像最小文本夹具，当前覆盖主动权益、增强指数、债券三类样本
 - `tests/fixtures/fund/extractors/performance/*.txt`：`§3` 最小文本夹具，当前覆盖直接披露、估算披露、未披露三类投资者收益率路径
 - `tests/fixtures/fund/extractors/manager_ownership/*.txt`：`§4/§8/§9` 最小文本夹具，当前覆盖完整披露、部分披露、未披露、换手率口径-only 路径
@@ -27,12 +29,14 @@ pytest tests/fund/extractors/test_profile.py -q
 pytest tests/fund/extractors/test_performance.py -q
 pytest tests/fund/extractors/test_manager_ownership.py -q
 pytest tests/fund/extractors/test_holdings_share_change.py -q
+pytest tests/fund/data/test_nav_data.py -q
+pytest tests/fund/integration/test_p1_sample_matrix.py -q
 ```
 
 如果只验证当前 extractor worktree，可运行：
 
 ```bash
-.venv/bin/python -m pytest tests/fund/extractors/test_profile.py tests/fund/extractors/test_performance.py tests/fund/extractors/test_manager_ownership.py tests/fund/extractors/test_holdings_share_change.py -q
+.venv/bin/python -m pytest tests/fund/extractors tests/fund/data/test_nav_data.py tests/fund/integration/test_p1_sample_matrix.py -q
 ```
 
 ## 维护约定

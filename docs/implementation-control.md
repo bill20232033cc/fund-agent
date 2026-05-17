@@ -31,8 +31,8 @@
 ### 1.3 当前 Gate 与基线裁决（2026-05-17）
 
 - 当前分支：`chore/reconcile-baseline`
-- 当前 gate：`P1-S8 implementation + review`
-- 下一 gate：`P1-S8 implementation + review`
+- 当前 gate：`P1 aggregate review`
+- 下一 gate：`P1 aggregate review`
 - 当前裁决：
   - P0 维持 `done`。已验证 `dayu` 依赖可导入、`fund-agent` 处于 editable install、`fund-analysis --help` 可用、样本基金 `110011` 年报可下载、`pdfplumber` 可提取全文文本和表格。
   - P1 维持 `in progress`。
@@ -68,9 +68,14 @@
     - 前十大重仓与份额变动可结构化输出
     - 行业分布未披露时显式标记 `missing`
     - 表格命中路径均带页码、表 ID 和行定位
+  - `P1-S8 façade 集成、净值数据适配器与 P1 验收矩阵` 已完成：
+    - `fund_agent/fund/data_extractor.py` 已落地 `FundDataExtractor` 与 `StructuredFundDataBundle`
+    - `fund_agent/fund/data/nav_data.py` 已落地 `FundNavDataAdapter` 与 `nav_cache`
+    - 3 只样本基金 12 项矩阵达到 `36/36`
+    - P1 全量测试当前通过
 - 下一 entry point：
-  - 进入 `P1-S8 implementation + review`
-  - 优先目标是 façade 集成、净值数据适配器与 P1 验收矩阵
+  - 进入 `P1 aggregate review`
+  - 优先目标是对 P1 数据层做整体 review，并裁决是否可进入 P2
 - 当前 artifact：
   - plan: `docs/reviews/p1-plan-2026-05-17.md`
   - plan review: `docs/reviews/p1-plan-review-2026-05-17.md`
@@ -138,6 +143,12 @@
     - code review:
       - `docs/reviews/p1-s7-code-review-controller-judgment-2026-05-17.md`
     - accepted slice commit: `3167754`
+  - `P1-S8`:
+    - baseline reconciliation: `docs/reviews/p1-s8-baseline-reconciliation-2026-05-17.md`
+    - implementation: `docs/reviews/p1-s8-implementation-2026-05-17.md`
+    - code review:
+      - `docs/reviews/p1-s8-code-review-controller-judgment-2026-05-17.md`
+    - accepted slice commit: pending
   - baseline commit: `9956c45`
 
 ---
@@ -393,6 +404,24 @@
   - 后续样本回归 owner：真实年报表头差异仍需在 `P1-S8` 验收矩阵阶段继续扩展
   - 后续 schema owner：当前表格行按原表头输出，最终标准字段名需在 façade 集成前裁决
 
+**P1-S8 当前状态（2026-05-17）**
+
+- `P1-S8 façade 集成、净值数据适配器与 P1 验收矩阵`：✅ completed
+- 当前完成内容：
+  - `fund_agent/fund/data_extractor.py` 已落地：
+    - `StructuredFundDataBundle`
+    - `FundDataExtractor`
+  - `fund_agent/fund/data/nav_data.py` 已落地：
+    - `FundNavDataAdapter`
+    - `NavDataResult`
+    - `nav_cache` SQLite 表
+  - `tests/fund/integration/test_p1_sample_matrix.py` 已覆盖 3 只样本基金 12 项矩阵，当前结果 `36/36`
+  - `tests/fund/data/test_nav_data.py` 已覆盖净值缓存命中和强制刷新
+  - 验证命令 `.venv/bin/python -m pytest tests/fund/documents tests/fund/pdf/test_parser.py tests/fund/extractors tests/fund/data/test_nav_data.py tests/fund/integration/test_p1_sample_matrix.py -q` 当前通过（`32 passed`）
+- 当前 residual risks：
+  - 后续端到端 owner：当前 P1 矩阵使用 fake repository 和 fixture report，真实 PDF 样本矩阵需在端到端验证中继续扩展
+  - 后续网络验证 owner：默认 akshare fetcher 已封装，本轮测试未访问真实网络
+
 ---
 
 ### P2: 分析引擎（R=A+B-C + 检验 + 审计）
@@ -578,3 +607,5 @@ P0（环境搭建）
 | 2026-05-17 | P1 | 🟡 in progress | `P1-S7` implementation 已完成，`§8/§10` 持仓/份额 extractor 与测试已落地；当前 gate 维持 `P1-S7 implementation + review` |
 | 2026-05-17 | P1 | 🟡 in progress | `P1-S7` controller review 已通过；下一 gate 为 `P1-S8 implementation + review` |
 | 2026-05-17 | P1 | 🟡 in progress | `P1-S7` 已接受，accepted commit 为 `3167754`；下一 gate 为 `P1-S8 implementation + review` |
+| 2026-05-17 | P1 | 🟡 in progress | `P1-S8` implementation 已完成，façade、净值适配器与 `36/36` 样本矩阵已落地；当前 gate 维持 `P1-S8 implementation + review` |
+| 2026-05-17 | P1 | 🟡 in progress | `P1-S8` controller review 已通过；下一 gate 为 `P1 aggregate review` |
