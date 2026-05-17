@@ -137,7 +137,7 @@
     - implementation: `docs/reviews/p1-s7-implementation-2026-05-17.md`
     - code review:
       - `docs/reviews/p1-s7-code-review-controller-judgment-2026-05-17.md`
-    - accepted slice commit: pending
+    - accepted slice commit: `3167754`
   - baseline commit: `9956c45`
 
 ---
@@ -577,3 +577,4 @@ P0（环境搭建）
 | 2026-05-17 | P1 | 🟡 in progress | `P1-S6` 已接受，accepted commit 为 `18566f9`；下一 gate 为 `P1-S7 implementation + review` |
 | 2026-05-17 | P1 | 🟡 in progress | `P1-S7` implementation 已完成，`§8/§10` 持仓/份额 extractor 与测试已落地；当前 gate 维持 `P1-S7 implementation + review` |
 | 2026-05-17 | P1 | 🟡 in progress | `P1-S7` controller review 已通过；下一 gate 为 `P1-S8 implementation + review` |
+| 2026-05-17 | P1 | 🟡 in progress | `P1-S7` 已接受，accepted commit 为 `3167754`；下一 gate 为 `P1-S8 implementation + review` |
