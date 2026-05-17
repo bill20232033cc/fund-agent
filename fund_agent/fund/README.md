@@ -8,11 +8,12 @@
 
 ```python
 from fund_agent.fund.documents import FundDocumentRepository
-from fund_agent.fund.extractors import extract_profile
+from fund_agent.fund.extractors import extract_performance, extract_profile
 
 repository = FundDocumentRepository()
 report = await repository.load_annual_report("110011", 2024)
 profile = extract_profile(report)
+performance = extract_performance(report)
 ```
 
 `load_annual_report()` 返回 `ParsedAnnualReport`，包含：
@@ -29,6 +30,14 @@ profile = extract_profile(report)
 - `benchmark`：`§2` 中的业绩比较基准文本
 - `fee_schedule`：`§2` 中的管理费、托管费
 
+`extract_performance()` 返回 `PerformanceExtractionResult`，当前覆盖模板第 2 章“R=A+B-C 收益归因”和第 4 章“投资者获得感”的最小数据底座：
+
+- `nav_benchmark_performance`：`§3` 中的 `nav_growth_rate`、`benchmark_return_rate`
+- `investor_return`：`§3` 中的投资者收益率三态输出
+  - `direct`：直接披露
+  - `estimated`：`§3` 明确标注为估算口径披露
+  - `missing`：当前未披露，显式保留后续 fallback 入口
+
 所有关键字段都通过 `EvidenceAnchor` 记录 `document_year`、`section_id`、`row_locator` 和命中原文，供后续证据锚点渲染使用。
 
 仓库层位于 `fund_agent/fund/documents/`：
@@ -39,9 +48,10 @@ profile = extract_profile(report)
 
 基础画像 extractor 位于 `fund_agent/fund/extractors/`：
 
-- `models.py`：`EvidenceAnchor`、`ExtractedField`、`ProfileExtractionResult`
+- `models.py`：`EvidenceAnchor`、`ExtractedField`、`ProfileExtractionResult`、`PerformanceExtractionResult`
 - `profile.py`：`§1/§2` 的基础画像抽取
-- `__init__.py`：当前公开导出 `extract_profile`
+- `performance.py`：`§3` 的净值表现与投资者收益率抽取
+- `__init__.py`：当前公开导出 `extract_profile`、`extract_performance`
 
 基金类型识别位于 `fund_agent/fund/fund_type.py`：
 
@@ -55,13 +65,14 @@ profile = extract_profile(report)
 - 业务调用方只通过 `FundDocumentRepository.load_annual_report(...)` 读取年报。
 - 业务调用方若需要基础画像，只消费 `extract_profile(report)` 的结构化结果，不直接复用正则规则。
 - `fund_agent/fund/pdf/*` 只作为仓库内部 helper / adapter，允许返回本地 `Path`，但这不是上层公共契约。
-- `ParsedAnnualReport` 是后续各章节 extractor 的统一输入；当前 slice 只扩展到 `§1/§2` 的基础画像。
+- `ParsedAnnualReport` 是后续各章节 extractor 的统一输入；当前稳定 extractor 已扩展到 `§1/§2/§3`。
 - `extract_profile()` 当前不应用 `preferred_lens`，也不输出任何投资结论。
+- `extract_performance()` 当前不跨章节做复杂 fallback，不引入 `§10`、净值序列或任何 P2 分析公式。
 
 ## 内部分层
 
 - `documents/`：公共契约与仓库实现。上层应通过这里读取基金文档。
-- `extractors/`：章节级结构化提取能力。当前只落地基础画像 extractor。
+- `extractors/`：章节级结构化提取能力。当前已落地基础画像与 `§3` 表现 extractor。
 - `fund_type.py`：基金类型识别规则，供 extractor 先行消费。
 - `pdf/`：底层 PDF helper。当前包含：
   - `downloader.py`：仅供仓库内部使用的 PDF 下载 helper，会写入本地缓存
@@ -71,7 +82,8 @@ profile = extract_profile(report)
 ## 当前边界
 
 - 当前只支持 `annual_report`。
-- 当前 only-once 接受的 extractor 边界是 `§1/§2`；`§3/§4/§8/§9/§10` 提取仍在后续 slice。
+- 当前稳定 extractor 边界是 `§1/§2/§3`；`§4/§8/§9/§10` 提取仍在后续 slice。
 - 当前基础画像只覆盖 `basic_identity`、`product_profile`、`benchmark`、`fee_schedule` 四类输出。
+- 当前 `§3` 表现只覆盖 `nav_benchmark_performance` 与 `investor_return` 两类输出。
 - `data_extractor.py` façade 仍未接入；当前不提前冻结 `structured_data` 缓存。
 - `parser.py` 已具备 `§3` 定位修复，但真实样本扩展和更多章节/表格抽取仍在后续 slice 完成。

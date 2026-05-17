@@ -9,7 +9,9 @@
 - `tests/fund/pdf/test_downloader.py`：PDF 下载 helper 测试，验证内部缓存命中、强制刷新下载和年报 URL 组装
 - `tests/fund/pdf/test_parser.py`：章节定位测试，覆盖 `§3` 正文命中、目录误判回归和偏移单调递增
 - `tests/fund/extractors/test_profile.py`：基础画像 extractor 测试，覆盖分类先行、`classified_fund_type` / `classification_basis` 稳定输出，以及费率/基准/规模/经理 anchor
+- `tests/fund/extractors/test_performance.py`：`§3` 表现 extractor 测试，覆盖净值增长率/基准收益率 anchor，以及投资者收益率 `direct / estimated / missing` 三态
 - `tests/fixtures/fund/extractors/profile/*.txt`：基础画像最小文本夹具，当前覆盖主动权益、增强指数、债券三类样本
+- `tests/fixtures/fund/extractors/performance/*.txt`：`§3` 最小文本夹具，当前覆盖直接披露、估算披露、未披露三类投资者收益率路径
 
 ## 运行方式
 
@@ -19,12 +21,13 @@
 pytest tests/fund/documents -q
 pytest tests/fund/pdf/test_parser.py -q
 pytest tests/fund/extractors/test_profile.py -q
+pytest tests/fund/extractors/test_performance.py -q
 ```
 
-如果只验证 P1-S4 当前 worktree，可运行：
+如果只验证当前 extractor worktree，可运行：
 
 ```bash
-.venv/bin/python -m pytest tests/fund/extractors/test_profile.py -q
+.venv/bin/python -m pytest tests/fund/extractors/test_profile.py tests/fund/extractors/test_performance.py -q
 ```
 
 ## 维护约定
@@ -33,4 +36,5 @@ pytest tests/fund/extractors/test_profile.py -q
 - 文档仓库相关测试应围绕公共契约断言，不直接把 `pdf/*` helper 当成上层接口。
 - `pdf/*` 目录下的测试允许直接覆盖内部 helper，但 README、示例和业务代码不应把它们当成稳定入口。
 - extractor 测试必须优先锁定章节边界、证据锚点和 `missing/direct/estimated` 状态，不把后续 P2 的分析结论混入 P1 数据层测试。
+- `§3` 表现相关测试当前只允许依赖 `ParsedAnnualReport.get_section_text("§3")`，不要在 P1 阶段把 `§10` fallback 或净值序列计算混进同一组测试。
 - 新增基金类型或章节 extractor 时，先补 fixture，再补测试，再扩实现；不要只靠真实年报手工回归。

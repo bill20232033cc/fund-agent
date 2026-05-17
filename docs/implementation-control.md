@@ -52,9 +52,14 @@
     - `fund_agent/fund/extractors/profile.py` 已落地 `basic_identity`、`product_profile`、`benchmark`、`fee_schedule`
     - 基金类型识别已显式先于通用字段构造执行，并由测试锁定
     - 费率、基准、规模、经理信息均已带 `EvidenceAnchor`
+  - `P1-S5 §3 表现提取与投资者收益 fallback` 已完成 implementation，当前进入 review：
+    - `fund_agent/fund/extractors/performance.py` 已落地 `nav_benchmark_performance` 与 `investor_return`
+    - `investor_return` 已稳定区分 `direct / estimated / missing`
+    - `§3` 直接披露与估算披露命中均带 `EvidenceAnchor`
+    - 未披露路径不再静默返回空字符串，而是显式标记 `missing`
 - 下一 entry point：
-  - 进入 `P1-S5 implementation + review`
-  - 优先目标是落地 `nav_benchmark_performance` 与 `investor_return`，并明确 `direct / estimated / missing` 三态输出
+  - 保持在 `P1-S5 implementation + review`
+  - 当前实现已完成，下一步是完成 reviewer judgment；若无 blocker，再推进到 `P1-S6 implementation + review`
 - 当前 artifact：
   - plan: `docs/reviews/p1-plan-2026-05-17.md`
   - plan review: `docs/reviews/p1-plan-review-2026-05-17.md`
@@ -99,6 +104,9 @@
       - `docs/reviews/p1-s4-rereview-glm-2026-05-17.md`
       - `docs/reviews/p1-s4-rereview-controller-2026-05-17.md`
     - accepted slice commit: `22a1a7a`
+  - `P1-S5`:
+    - baseline reconciliation: `docs/reviews/p1-s5-baseline-reconciliation-2026-05-17.md`
+    - implementation: `docs/reviews/p1-s5-implementation-2026-05-17.md`
   - baseline commit: `9956c45`
 
 ---
@@ -287,6 +295,31 @@
   - 后续样本回归 owner：`index_fund` / `qdii_fund` / `fof_fund` 仍缺 fixture 与测试覆盖
   - 后续可维护性优化 owner：`_build_basic_identity()` 当前使用列表索引映射字段，后续若继续扩字段建议改为按名字组织
 
+**P1-S5 当前状态（2026-05-17）**
+
+- `P1-S5 §3 表现提取与投资者收益 fallback`：🟡 implementation completed / review pending
+- 当前完成内容：
+  - `fund_agent/fund/extractors/models.py` 已补充 `PerformanceExtractionResult`
+  - `fund_agent/fund/extractors/performance.py` 已落地：
+    - `nav_benchmark_performance`
+    - `investor_return`
+  - `investor_return` 当前已稳定区分：
+    - `direct`
+    - `estimated`
+    - `missing`
+  - `tests/fund/extractors/test_performance.py` 已覆盖：
+    - 净值增长率 / 基准收益率提取与 anchor
+    - 投资者收益率直接披露路径
+    - 投资者收益率估算披露路径
+    - 投资者收益率未披露时显式 `missing`
+    - `nav_benchmark_performance` 部分命中时显式保留 `missing`
+  - `tests/fixtures/fund/extractors/performance/` 已固定最小 `§3` 文本夹具
+  - 验证命令 `.venv/bin/python -m pytest tests/fund/extractors/test_performance.py -q` 当前通过（`5 passed`）
+- 当前 residual risks：
+  - 后续 fallback owner：当前 `estimated` 仅覆盖 `§3` 中显式标记“估算”的披露，不包含依赖 `§10` 或净值序列的后续 fallback
+  - 后续集成测试 owner：`§3` 整体缺失路径仍需在真实样本矩阵或单独 fixture 中补强
+  - 后续样本回归 owner：当前以最小文本夹具锁定三态输出，真实样本覆盖仍需在 `P1-S8` 验收矩阵阶段继续扩展
+
 ---
 
 ### P2: 分析引擎（R=A+B-C + 检验 + 审计）
@@ -465,3 +498,4 @@ P0（环境搭建）
 | 2026-05-17 | P0 | ✅ done | 全部退出条件满足；项目更名为 fund-agent；数据源改用 akshare + eastmoney |
 | 2026-05-17 | P1 | 🟡 in progress | 完成 Git 基线初始化与 baseline reconciliation；下一 gate 为 P1 plan |
 | 2026-05-17 | P1 | 🟡 in progress | P1 计划通过 re-review；accepted artifacts 为 `docs/reviews/p1-plan-2026-05-17.md`、`docs/reviews/p1-plan-review-2026-05-17.md`；下一 gate 为 `P1-S1 implementation + review` |
+| 2026-05-17 | P1 | 🟡 in progress | `P1-S5` implementation 已完成，`§3` 表现 extractor 与投资者收益三态测试已落地；当前 gate 维持 `P1-S5 implementation + review` |

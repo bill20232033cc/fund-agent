@@ -1,4 +1,4 @@
-"""基础画像 extractor 数据模型。"""
+"""基金 extractor 数据模型。"""
 
 from __future__ import annotations
 
@@ -65,3 +65,16 @@ class ProfileExtractionResult:
     product_profile: ExtractedField[dict[str, object]]
     benchmark: ExtractedField[dict[str, object]]
     fee_schedule: ExtractedField[dict[str, object]]
+
+
+@dataclass(frozen=True, slots=True)
+class PerformanceExtractionResult:
+    """`§3` 表现抽取结果。
+
+    Attributes:
+        nav_benchmark_performance: 净值增长率与业绩基准收益率。
+        investor_return: 投资者收益率披露或 fallback 状态。
+    """
+
+    nav_benchmark_performance: ExtractedField[dict[str, object]]
+    investor_return: ExtractedField[dict[str, object]]
