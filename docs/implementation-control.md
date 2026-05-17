@@ -31,33 +31,45 @@
 ### 1.3 当前 Gate 与基线裁决（2026-05-17）
 
 - 当前分支：`chore/reconcile-baseline`
-- 当前 gate：`P1-S2 implementation + review`
-- 下一 gate：`P1-S2 implementation + review`
+- 当前 gate：`P1-S3 implementation + review`
+- 下一 gate：`P1-S3 implementation + review`
 - 当前裁决：
   - P0 维持 `done`。已验证 `dayu` 依赖可导入、`fund-agent` 处于 editable install、`fund-analysis --help` 可用、样本基金 `110011` 年报可下载、`pdfplumber` 可提取全文文本和表格。
-  - P1 维持 `in progress`。`P1-S1 文档访问契约收口` 已完成：对外唯一仓库入口收口为 `FundDocumentRepository.load_annual_report(...) -> ParsedAnnualReport`，公共契约已迁入 `fund_agent/fund/documents/*`，`fund_agent/fund/pdf/*` 降为仓库内部 helper / adapter。
-  - `P1-S1` code review 中接受的两个 finding 已在 fix 中闭环：
-    - async 调用链中的同步 I/O 已通过 `asyncio.to_thread(...)` 隔离
-    - 目标年份缺失时不再静默回退到其它年份年报，而是统一抛出 `FileNotFoundError`
+  - P1 维持 `in progress`。
+  - `P1-S1 文档访问契约收口` 已完成：对外唯一仓库入口收口为 `FundDocumentRepository.load_annual_report(...) -> ParsedAnnualReport`，公共契约已迁入 `fund_agent/fund/documents/*`，`fund_agent/fund/pdf/*` 降为仓库内部 helper / adapter。
+  - `P1-S2 章节定位修复与 §3 冻结` 已完成：
+    - `§3` root cause 已直接关闭，不是基金代码特判
+    - 章节规则已迁出到 `fund_agent/fund/pdf/section_catalog.py`
+    - 目录过滤已从单一 `"..."` 升级为可复用规则表
+    - `110011/2024` 的正文 `§3` 已由 fixture + test 稳定覆盖
 - 下一 entry point：
-  - 进入 `P1-S2 章节定位修复与 §3 冻结`。
-  - 优先目标是关闭 `BQ-5`：样本基金 `110011` 的 2024 年报必须稳定定位出 `§3`，并把章节规则从硬编码逻辑收口为可测试、可配置的目录表。
+  - 进入 `P1-S3 implementation + review`
+  - 优先目标是把 raw PDF / parsed report 的仓库内缓存与物化落地，但不提前冻结 `structured_data`
 - 当前 artifact：
   - plan: `docs/reviews/p1-plan-2026-05-17.md`
   - plan review: `docs/reviews/p1-plan-review-2026-05-17.md`
-  - baseline reconciliation: `docs/reviews/p1-s1-baseline-reconciliation-2026-05-17.md`
-  - implementation: `docs/reviews/p1-s1-implementation-2026-05-17.md`
-  - code review:
-    - `docs/reviews/p1-s1-code-review-mimo-2026-05-17.md`
-    - `docs/reviews/p1-s1-code-review-glm-2026-05-17.md`
-    - controller judgment: `docs/reviews/p1-s1-code-review-controller-judgment-2026-05-17.md`
-  - fix: `docs/reviews/p1-s1-fix-2026-05-17.md`
-  - re-review:
-    - `docs/reviews/p1-s1-rereview-mimo-2026-05-17.md`
-    - `docs/reviews/p1-s1-rereview-glm-2026-05-17.md`
-    - controller confirmation: `docs/reviews/p1-s1-rereview-controller-2026-05-17.md`
+  - `P1-S1`:
+    - baseline reconciliation: `docs/reviews/p1-s1-baseline-reconciliation-2026-05-17.md`
+    - implementation: `docs/reviews/p1-s1-implementation-2026-05-17.md`
+    - code review:
+      - `docs/reviews/p1-s1-code-review-mimo-2026-05-17.md`
+      - `docs/reviews/p1-s1-code-review-glm-2026-05-17.md`
+      - controller judgment: `docs/reviews/p1-s1-code-review-controller-judgment-2026-05-17.md`
+    - fix: `docs/reviews/p1-s1-fix-2026-05-17.md`
+    - re-review:
+      - `docs/reviews/p1-s1-rereview-mimo-2026-05-17.md`
+      - `docs/reviews/p1-s1-rereview-glm-2026-05-17.md`
+      - controller confirmation: `docs/reviews/p1-s1-rereview-controller-2026-05-17.md`
+    - accepted slice commit: `e772dae`
+  - `P1-S2`:
+    - baseline reconciliation: `docs/reviews/p1-s2-baseline-reconciliation-2026-05-17.md`
+    - implementation: `docs/reviews/p1-s2-implementation-2026-05-17.md`
+    - code review:
+      - `docs/reviews/p1-s2-code-review-mimo-2026-05-17.md`
+      - `docs/reviews/p1-s2-code-review-glm-2026-05-17.md`
+      - controller judgment: `docs/reviews/p1-s2-code-review-controller-judgment-2026-05-17.md`
+    - accepted slice commit: `pending local commit`
   - baseline commit: `9956c45`
-  - accepted slice commit: `e772dae`
 
 ---
 
@@ -188,6 +200,23 @@
   - `P1-S2` owner：`parser.py` 章节定位原型仍未稳定，`§3` 漏识别尚未关闭
   - `P1-S3` owner：缓存根路径策略与 SQLite 物化尚未落地
   - 后续 phase owner：当前只支持 `annual_report`，未扩展到其它文档类型
+
+**P1-S2 当前状态（2026-05-17）**
+
+- `P1-S2 章节定位修复与 §3 冻结`：✅ completed
+- 当前完成内容：
+  - `fund_agent/fund/pdf/section_catalog.py` 已承载 `§1/§2/§3/§4/§5/§8/§9/§10` 的标题规则和目录信号规则
+  - `fund_agent/fund/pdf/parser.py` 已从硬编码字典改为消费配置化 catalog
+  - `tests/fixtures/fund/pdf_sections/110011_2024_excerpt.txt` 已固定“目录行 + 正文行同名”的 `§3` 事实
+  - `tests/fund/pdf/test_parser.py` 已覆盖：
+    - 正文 `§3` 命中
+    - 目录误判回归
+    - `§1/§2/§3/§4/§8/§9/§10` 偏移单调递增
+  - 验证命令 `.venv/bin/python -m pytest tests/fund/pdf/test_parser.py -q` 当前通过（`3 passed`）
+- 当前 residual risks：
+  - `P1-S3` owner：负向/边界测试仍偏少，可在缓存阶段一并补强
+  - 后续样本回归 owner：`§5` 当前规则已存在，但 fixture 尚未覆盖
+  - 后续样本回归 owner：`§3` 模式仍使用 `.*` 贪婪通配，需由更多样本决定是否收窄
 
 ---
 
