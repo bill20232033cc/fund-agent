@@ -28,7 +28,7 @@
 | M3: 分析引擎可用 | Week 4 中 | P2 | R=A+B-C 计算正确，言行一致性检验输出信号 |
 | M4: MVP 交付 | Week 5 结束 | P3 | `fund-analysis <code>` 输出完整 8 章报告 |
 
-### 1.3 当前 Gate 与基线裁决（2026-05-17）
+### 1.3 当前 Gate 与基线裁决（2026-05-18）
 
 - 当前分支：`chore/reconcile-baseline`
 - 当前 gate：`P2-S9 implementation + review`
@@ -37,6 +37,7 @@
   - P0 维持 `done`。已验证 `dayu` 依赖可导入、`fund-agent` 处于 editable install、`fund-analysis --help` 可用、样本基金 `110011` 年报可下载、`pdfplumber` 可提取全文文本和表格。
   - P1 已完成并通过 aggregate review。
   - P2 进入 `in progress`。
+  - `P2-S1` 至 `P2-S8` 已收口为 accepted baseline commit `a6b1516`。收口范围仅包含 P2 analysis/audit 实现、测试、README 同步与 review artifact；本地运行辅助文件 `launchd/`、`scripts/` 和旧 P1 review artifact 未纳入该基线。
   - `P1-S1 文档访问契约收口` 已完成：对外唯一仓库入口收口为 `FundDocumentRepository.load_annual_report(...) -> ParsedAnnualReport`，公共契约已迁入 `fund_agent/fund/documents/*`，`fund_agent/fund/pdf/*` 降为仓库内部 helper / adapter。
   - `P1-S2 章节定位修复与 §3 冻结` 已完成：
     - `§3` root cause 已直接关闭，不是基金代码特判
@@ -234,7 +235,8 @@
     - implementation: `docs/reviews/p2-s8-implementation-2026-05-17.md`
     - code review:
       - `docs/reviews/p2-s8-code-review-controller-judgment-2026-05-18.md`
-  - baseline commit: `9956c45`
+  - P2 baseline risk review: `docs/reviews/code-review-20260518-0547.md`
+  - P2-S1 至 P2-S8 accepted baseline commit: `a6b1516`
 
 ---
 
@@ -859,3 +861,4 @@ P0（环境搭建）
 | 2026-05-17 | P2 | 🟡 in progress | `P2-S7` controller review 已通过；下一 gate 为 `P2-S8 implementation + review` |
 | 2026-05-17 | P2 | 🟡 in progress | `P2-S8` implementation 已完成，P1/P2/P3/L1/R1/R2 程序审计与测试已落地；当前 gate 为 `P2-S8 code review` |
 | 2026-05-18 | P2 | 🟡 in progress | `P2-S8` controller review 已通过并修复缺少必需输入时静默通过的问题；下一 gate 为 `P2-S9 implementation + review` |
+| 2026-05-18 | P2 | 🟡 in progress | `P2-S1` 至 `P2-S8` 已收口为 accepted baseline commit `a6b1516`；`launchd/`、`scripts/` 和旧 P1 review artifact 保持在 P2 基线外；当前 gate 维持 `P2-S9 implementation + review` |
