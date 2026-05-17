@@ -31,8 +31,8 @@
 ### 1.3 当前 Gate 与基线裁决（2026-05-17）
 
 - 当前分支：`chore/reconcile-baseline`
-- 当前 gate：`P1-S4 implementation + review`
-- 下一 gate：`P1-S4 implementation + review`
+- 当前 gate：`P1-S5 implementation + review`
+- 下一 gate：`P1-S5 implementation + review`
 - 当前裁决：
   - P0 维持 `done`。已验证 `dayu` 依赖可导入、`fund-agent` 处于 editable install、`fund-analysis --help` 可用、样本基金 `110011` 年报可下载、`pdfplumber` 可提取全文文本和表格。
   - P1 维持 `in progress`。
@@ -47,9 +47,14 @@
     - repository 已优先命中缓存，避免重复下载 / 重复全文解析
     - `force_refresh=True` 已正确穿透 parsed report 与已记录的 PDF 路径
     - 本 slice 未创建 `structured_data` 表，也未冻结其 schema
+  - `P1-S4 基础画像与基金类型识别` 已完成：
+    - `fund_agent/fund/fund_type.py` 已承载稳定的基金类型识别输出 `classified_fund_type` / `classification_basis`
+    - `fund_agent/fund/extractors/profile.py` 已落地 `basic_identity`、`product_profile`、`benchmark`、`fee_schedule`
+    - 基金类型识别已显式先于通用字段构造执行，并由测试锁定
+    - 费率、基准、规模、经理信息均已带 `EvidenceAnchor`
 - 下一 entry point：
-  - 进入 `P1-S4 implementation + review`
-  - 优先目标是落地 `basic_identity`、`product_profile`、`benchmark`、`fee_schedule`，并把 `classified_fund_type` 作为稳定输出引入
+  - 进入 `P1-S5 implementation + review`
+  - 优先目标是落地 `nav_benchmark_performance` 与 `investor_return`，并明确 `direct / estimated / missing` 三态输出
 - 当前 artifact：
   - plan: `docs/reviews/p1-plan-2026-05-17.md`
   - plan review: `docs/reviews/p1-plan-review-2026-05-17.md`
@@ -82,6 +87,18 @@
       - `docs/reviews/p1-s3-code-review-glm-2026-05-17.md`
       - controller judgment: `docs/reviews/p1-s3-code-review-controller-judgment-2026-05-17.md`
     - accepted slice commit: `d92eef7`
+  - `P1-S4`:
+    - baseline reconciliation: `docs/reviews/p1-s4-baseline-reconciliation-2026-05-17.md`
+    - implementation: `docs/reviews/p1-s4-implementation-2026-05-17.md`
+    - code review:
+      - `docs/reviews/p1-s4-code-review-mimo-2026-05-17.md`
+      - `docs/reviews/p1-s4-code-review-glm-2026-05-17.md`
+      - `docs/reviews/p1-s4-code-review-controller-judgment-2026-05-17.md`
+    - fix: `docs/reviews/p1-s4-fix-2026-05-17.md`
+    - re-review:
+      - `docs/reviews/p1-s4-rereview-glm-2026-05-17.md`
+      - `docs/reviews/p1-s4-rereview-controller-2026-05-17.md`
+    - accepted slice commit: `PENDING`
   - baseline commit: `9956c45`
 
 ---
@@ -166,18 +183,14 @@
 
 | Slice | 任务 | 验证方式 |
 |-------|------|---------|
-| P1-S1 | 完善 PDF 下载（错误处理 + 重试 + 缓存） | 下载 5 只基金年报，成功率 > 95% |
-| P1-S2 | 实现年报章节定位（§1-§10 关键字匹配） | 对样本基金正确定位所有章节 |
-| P1-S3 | 实现基本信息提取（§1/§2：名称、类型、规模、经理、费率） | 与人工核对 3 只基金 |
-| P1-S4 | 实现净值与基准提取（§3：净值增长率、基准收益率） | 与人工核对 |
-| P1-S5 | 实现投资者收益率提取（§3 新规） | 与人工核对（如已披露） |
-| P1-S6 | 实现换手率提取（§8） | 与人工核对 |
-| P1-S7 | 实现自购数据提取（§9） | 与人工核对 |
-| P1-S8 | 实现投资策略文本提取（§4） | 提取基金经理策略描述文本 |
-| P1-S9 | 实现持仓明细提取（§8：前十大重仓 + 行业分布） | 与人工核对 |
-| P1-S10 | 实现份额变动提取（§10） | 与人工核对 |
-| P1-S11 | 实现 SQLite 缓存层 | 重复提取不走 PDF |
-| P1-S12 | 实现净值数据获取（天天基金 API / akshare） | 能获取任意基金历史净值 |
+| P1-S1 | 文档访问契约收口 | `FundDocumentRepository.load_annual_report(...)` 成为唯一公开入口 |
+| P1-S2 | 章节定位修复与 `§3` 冻结 | `110011/2024` 年报稳定命中 `§3` 正文 |
+| P1-S3 | 两级缓存与仓库内解析物化 | 重复加载同一年报不重复下载/不重复全文解析 |
+| P1-S4 | 基础画像与基金类型识别 | 3 只样本都输出 `classified_fund_type` 与 `classification_basis` |
+| P1-S5 | `§3` 表现提取与投资者收益 fallback | 净值增长率、基准收益率、投资者收益三态输出 |
+| P1-S6 | 管理人文本、换手率、利益一致性与持有人结构 | `§4/§8/§9` 直接披露字段可结构化提取 |
+| P1-S7 | 持仓快照与份额变动 | 前十大重仓、份额期初/期末/净变动可回归 |
+| P1-S8 | façade 集成、净值数据适配器与 P1 验收矩阵 | 3 只样本 36 格矩阵至少 `33/36` 通过 |
 
 **验证要求**
 
@@ -248,6 +261,31 @@
   - 后续性能优化 owner：缓存 `initialize()` 每次操作都会重复执行，当前正确但不够高效
   - 后续性能优化 owner：默认缓存实例不做复用，当前单仓库场景无正确性风险
   - 后续缓存治理 owner：缓存根目录仍使用相对路径，后续若要统一根路径策略再单独裁决
+
+**P1-S4 当前状态（2026-05-17）**
+
+- `P1-S4 基础画像与基金类型识别`：✅ completed
+- 当前完成内容：
+  - `fund_agent/fund/fund_type.py` 已提供 6 类标准基金类型标签和 `FundTypeClassification`
+  - `fund_agent/fund/extractors/models.py` 已提供 `EvidenceAnchor`、`ExtractedField`、`ProfileExtractionResult`
+  - `fund_agent/fund/extractors/profile.py` 已落地：
+    - `basic_identity`
+    - `product_profile`
+    - `benchmark`
+    - `fee_schedule`
+  - `extract_profile(report)` 已显式先调用 `classify_fund_type(report)`，再构造通用画像字段
+  - `basic_identity.value` 已稳定包含：
+    - `classified_fund_type`
+    - `classification_basis`
+  - `tests/fund/extractors/test_profile.py` 已覆盖：
+    - 分类先于通用字段构造
+    - 主动权益 / 增强指数 / 债券三类样本识别
+    - 费率、基准、规模、经理 anchor 存在
+  - 验证命令 `.venv/bin/python -m pytest tests/fund/extractors/test_profile.py -q` 当前通过（`4 passed`）
+- 当前 residual risks：
+  - 后续 extractor refactor owner：`fund_type.py` 与 `profile.py` 之间仍有部分字段 pattern 重复定义
+  - 后续样本回归 owner：`index_fund` / `qdii_fund` / `fof_fund` 仍缺 fixture 与测试覆盖
+  - 后续可维护性优化 owner：`_build_basic_identity()` 当前使用列表索引映射字段，后续若继续扩字段建议改为按名字组织
 
 ---
 
@@ -367,7 +405,7 @@ P0（环境搭建）
 ```
 
 - 所有 Phase 串行执行，无并行 Phase
-- P1 内部的 Slice 可部分并行（P1-S1~S3 与 P1-S8~S12 可并行）
+- P1 内部的 Slice 可部分并行（P1-S4~P1-S7 在 P1-S3 被接受后可并行）
 - P2 内部的 Slice 可部分并行（P2-S1~S7 与 P2-S8~S10 可并行）
 
 ---
@@ -379,8 +417,8 @@ P0（环境搭建）
 | BQ-1 | 巨潮网反爬策略未知 | P0/P1 | ✅ closed | 已改用 akshare + eastmoney PDF，无需直接访问巨潮 |
 | BQ-2 | 2026 新规"投资者收益率"披露时间表 | P1/P2 | ⬜ open | 先用份额变动估算 |
 | BQ-3 | 有知有行温度数据页面结构 | P3 | ⬜ open | P3-S2 验证后关闭 |
-| BQ-4 | akshare 基金净值 API 稳定性 | P1 | ⬜ open | P1-S12 验证后关闭 |
-| BQ-5 | 当前章节定位规则无法稳定识别 `§3` 正文 | P1 | ⬜ open | 作为 P1-S2 的首要修复项 |
+| BQ-4 | akshare 基金净值 API 稳定性 | P1 | ⬜ open | P1-S8 验证后关闭 |
+| BQ-5 | 当前章节定位规则无法稳定识别 `§3` 正文 | P1 | ✅ closed | 已由 P1-S2 章节定位修复与 `§3` 冻结关闭 |
 
 ---
 
