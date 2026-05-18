@@ -298,6 +298,7 @@
     - fix: `docs/reviews/p3-s1-fix-2026-05-18.md`
     - re-review:
       - `docs/reviews/p3-s1-rereview-glm-2026-05-18.md`
+    - accepted slice commit: `c5a240c`
 
 ---
 
@@ -934,6 +935,7 @@
     - `docs/reviews/p3-s1-code-review-controller-judgment-2026-05-18.md`
     - `docs/reviews/p3-s1-fix-2026-05-18.md`
     - `docs/reviews/p3-s1-rereview-glm-2026-05-18.md`
+  - accepted slice commit：`c5a240c`
 - 当前 residual risks：
   - `P3-S2` owner：Service 当前没有市场环境和来源解释输入，`judge_alpha_nature(())` 会显式返回 `insufficient_data`
   - `P3-S3` owner：真实 PDF/网络路径和 3 只样本基金 CLI 端到端矩阵尚未验证
@@ -1044,4 +1046,4 @@ P0（环境搭建）
 | 2026-05-18 | P3 | ⬜ pending | P2 退出条件已满足；下一步需用户授权 draft PR gate 后 push 并创建 draft PR，随后再进入 P3 实施 |
 | 2026-05-18 | P2 | ✅ done | Draft PR #1 已创建并通过 PR review/fix/re-review；accepted PR review commit=`8f5029c` 已 push；当前 gate 为 `draft-PR-pass` |
 | 2026-05-18 | P3 | 🟡 in progress | `P3-S1 implementation + review` 已进入实现；当前代码入口为 Typer，因此 P3-S1 按 current-code alignment 保留 `fund-analysis analyze FUND_CODE` 子命令并通过 Service 层编排 Capability。 |
-| 2026-05-18 | P3 | 🟡 in progress | `P3-S1` implementation / code review / fix / re-review 已通过；CLI 通过 Service 层输出 8 章 Markdown，当前验证 `68 passed`；下一 gate 为 `P3-S2 implementation + review` |
+| 2026-05-18 | P3 | 🟡 in progress | `P3-S1` implementation / code review / fix / re-review 已通过；CLI 通过 Service 层输出 8 章 Markdown，当前验证 `68 passed`；accepted commit=`c5a240c`；下一 gate 为 `P3-S2 implementation + review` |
