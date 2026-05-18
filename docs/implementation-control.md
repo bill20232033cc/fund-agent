@@ -965,7 +965,7 @@
     - `docs/reviews/p3-s2-fix-2026-05-18.md`
     - `docs/reviews/p3-s2-rereview-glm-2026-05-18.md`
     - `docs/reviews/p3-s2-rereview-mimo-2026-05-18.md`
-  - accepted slice commit：待记录
+  - accepted slice commit：`1747aaf`
 - 当前 residual risks：
   - `P3-S3/P3-S4` owner：温度计 adapter 尚未接入 Service/CLI/checklist valuation_state
   - `P3-S3/P3-S4` owner：有知有行页面结构仍可能变化，后续集成测试和运行监控需覆盖 unavailable/stale 输出
@@ -1078,4 +1078,4 @@ P0（环境搭建）
 | 2026-05-18 | P3 | 🟡 in progress | `P3-S1 implementation + review` 已进入实现；当前代码入口为 Typer，因此 P3-S1 按 current-code alignment 保留 `fund-analysis analyze FUND_CODE` 子命令并通过 Service 层编排 Capability。 |
 | 2026-05-18 | P3 | 🟡 in progress | `P3-S1` implementation / code review / fix / re-review 已通过；CLI 通过 Service 层输出 8 章 Markdown，当前验证 `68 passed`；accepted commit=`c5a240c`；下一 gate 为 `P3-S2 implementation + review` |
 | 2026-05-18 | P3 | 🟡 in progress | `P3-S2 implementation + review` 已进入实现；温度计 adapter 目标为读取有知有行 `/data` 与 `/data/macro`，提供 24h fresh cache、7 天 stale fallback 和 unavailable 状态，暂不接入 CLI/Service。 |
-| 2026-05-18 | P3 | 🟡 in progress | `P3-S2` implementation / code review / controller fix 已通过；温度计 adapter 当前验证 `60 passed` 且真实响应 smoke 可解析全市场、指数、债市与 10 年期国债到期收益率；下一 gate 为 `P3-S3 implementation + review` |
+| 2026-05-18 | P3 | 🟡 in progress | `P3-S2` implementation / code review / controller fix 已通过；温度计 adapter 当前验证 `60 passed` 且真实响应 smoke 可解析全市场、指数、债市与 10 年期国债到期收益率；accepted commit=`1747aaf`；下一 gate 为 `P3-S3 implementation + review` |
