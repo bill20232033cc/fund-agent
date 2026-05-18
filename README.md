@@ -21,29 +21,46 @@ pip install -e .
 # 查看 CLI 帮助
 fund-analysis --help
 
-# 当前可执行的占位命令
-fund-analysis analyze 110011
-fund-analysis checklist 110011
+# 输出完整 8 章 Markdown 报告
+fund-analysis analyze 110011 --report-year 2024
 ```
 
 当前代码状态：
 
-- 已有 CLI 入口，`fund-analysis --help` 可用。
-- 已有年报 PDF 下载与解析原型，可下载样本基金年报并提取文本、表格。
-- 完整的 8 章分析报告、结构化数据提取、审计和端到端工作流仍在开发中。
+- CLI 使用 Typer，`fund-analysis --help` 可用，项目脚本入口为 `fund_agent.ui.cli:app`。
+- `fund-analysis analyze FUND_CODE` 会通过 Service 层编排结构化抽取、P2 分析、模板渲染和程序审计，并把完整 Markdown 报告输出到 stdout。
+- `fund-analysis checklist FUND_CODE` 独立命令尚未接入 Service，会以非零状态提示使用 `analyze`。
+
+常用显式参数：
+
+```bash
+fund-analysis analyze 110011 \
+  --report-year 2024 \
+  --equity-position 80% \
+  --actual-style 均衡 \
+  --actual-equity-position 70% \
+  --manager-tenure-months 24 \
+  --peer-fee-median 1.00% \
+  --investment-amount 10000 \
+  --max-tolerable-loss-rate 50% \
+  --valuation-state low \
+  --user-money-horizon-years 4 \
+  --final-judgment worth_holding
+```
 
 ## 当前能力边界
 
 - 已实现：
   - 样本基金基线记录：见 `docs/sample-funds.md`
-  - 年报下载原型：`fund_agent/fund/pdf/downloader.py`
-  - PDF 文本和表格提取原型：`fund_agent/fund/pdf/parser.py`
-  - CLI 命令骨架：`fund-analysis analyze`、`fund-analysis checklist`
+  - 文档仓库入口：`FundDocumentRepository.load_annual_report(...)`
+  - P1 结构化抽取 façade：`FundDataExtractor.extract(...)`
+  - P2 分析能力：R=A+B-C、超额性质、言行一致性、投资者获得感、风险检查、压力测试、7 问题检查清单
+  - 8 章 Markdown 模板渲染与程序审计
+  - CLI 分析入口：`fund-analysis analyze`
 - 尚未实现：
-  - 12 项关键数据结构化提取
-  - SQLite 缓存层
-  - 8 章报告生成
-  - 程序审计与证据锚点闭环
+  - 温度计数据接入
+  - 3 只样本基金端到端 CLI 矩阵
+  - 独立 `fund-analysis checklist` Service 命令
 
 ## 分析框架
 
@@ -67,17 +84,15 @@ fund-agent/
 ├── fund_agent/                    # 核心代码包
 │   ├── ui/                        # CLI 入口
 │   │   └── cli.py
-│   ├── services/                  # Service 层占位目录
+│   ├── services/                  # Service 层编排
 │   ├── fund/                      # Capability 层（基金领域知识）
-│   │   ├── tools/                 # 工具目录占位
-│   │   ├── analysis/              # 分析目录占位
-│   │   ├── audit/                 # 审计目录占位
-│   │   ├── pdf/                   # PDF 下载与解析
-│   │   │   ├── downloader.py
-│   │   │   ├── parser.py
-│   │   ├── data/                  # 数据目录占位
-│   │   └── template/              # 模板目录占位
-│   └── config/                    # 配置目录占位
+│   │   ├── documents/             # 年报仓库入口
+│   │   ├── extractors/            # P1 章节抽取
+│   │   ├── analysis/              # P2 分析能力
+│   │   ├── audit/                 # 程序审计
+│   │   ├── data/                  # 净值数据适配
+│   │   └── template/              # 8 章模板渲染
+│   └── config/                    # 配置
 ├── tests/                         # 测试
 ├── docs/                          # 设计文档
 │   ├── design.md

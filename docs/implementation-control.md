@@ -17,7 +17,7 @@
 | P0 | 环境搭建与架构骨架 | Week 1 | ✅ done | 无 |
 | P1 | 数据层（PDF 下载 + 解析 + 提取） | Week 2-3 | ✅ done | P0 |
 | P2 | 分析引擎（R=A+B-C + 检验 + 审计） | Week 3-4 | ✅ done | P1 |
-| P3 | CLI 入口 + 整合测试 + 验证 | Week 4-5 | ⬜ pending | P2 |
+| P3 | CLI 入口 + 整合测试 + 验证 | Week 4-5 | 🟡 in progress | P2 |
 
 ### 1.2 里程碑
 
@@ -30,14 +30,15 @@
 
 ### 1.3 当前 Gate 与基线裁决（2026-05-18）
 
-- 当前分支：`chore/reconcile-baseline`
-- 当前 gate：`draft-PR-pass`
-- 下一 gate：`P3-S1 implementation + review`
+- 当前分支：`feat/p3-cli-integration`
+- 当前 gate：`P3-S2 implementation + review`
+- 下一 gate：`P3-S2 implementation + review`
 - 当前裁决：
   - P0 维持 `done`。已验证 `dayu` 依赖可导入、`fund-agent` 处于 editable install、`fund-analysis --help` 可用、样本基金 `110011` 年报可下载、`pdfplumber` 可提取全文文本和表格。
   - P1 已完成并通过 aggregate review。
   - P2 已完成并通过 aggregate deepreview。
-  - P3 仍为 `pending`；draft PR gate 已完成，后续进入 P3 实施前需基于 PR 合并策略明确新的工作基线。
+  - P3 已进入 `in progress`。
+  - `P3-S1 CLI 入口封装` 已完成，通过 Typer CLI 和 Service 层输出单只基金 8 章 Markdown 报告；下一 gate 为 `P3-S2 implementation + review`。
   - `P2-S1` 至 `P2-S8` 已收口为 accepted baseline commit `a6b1516`。收口范围仅包含 P2 analysis/audit 实现、测试、README 同步与 review artifact；本地运行辅助文件 `launchd/`、`scripts/` 和旧 P1 review artifact 未纳入该基线。
   - `P1-S1 文档访问契约收口` 已完成：对外唯一仓库入口收口为 `FundDocumentRepository.load_annual_report(...) -> ParsedAnnualReport`，公共契约已迁入 `fund_agent/fund/documents/*`，`fund_agent/fund/pdf/*` 降为仓库内部 helper / adapter。
   - `P1-S2 章节定位修复与 §3 冻结` 已完成：
@@ -289,6 +290,14 @@
     - PR fix: `docs/reviews/pr-1-fix-2026-05-18.md`
     - PR re-review: `docs/reviews/pr-1-rereview-glm-2026-05-18.md`
     - accepted PR review commit: `8f5029c`
+  - `P3-S1`:
+    - implementation: `docs/reviews/p3-s1-implementation-2026-05-18.md`
+    - code review:
+      - `docs/reviews/p3-s1-code-review-glm-2026-05-18.md`
+      - controller judgment: `docs/reviews/p3-s1-code-review-controller-judgment-2026-05-18.md`
+    - fix: `docs/reviews/p3-s1-fix-2026-05-18.md`
+    - re-review:
+      - `docs/reviews/p3-s1-rereview-glm-2026-05-18.md`
 
 ---
 
@@ -869,23 +878,23 @@
 **进入条件**
 
 - [x] P2 退出条件全部满足
-- [ ] 单只基金分析可本地运行
+- [x] 单只基金分析可本地运行
 
 **退出条件**
 
-- [ ] `fund-analysis <fund_code>` 命令可用
-- [ ] 输出完整 8 章分析报告（Markdown 格式）
+- [x] `fund-analysis analyze <fund_code>` 命令可用
+- [x] 输出完整 8 章分析报告（Markdown 格式）
 - [ ] 报告通过程序审计
 - [ ] 3 只样本基金端到端测试通过
 - [ ] 单只基金分析时间 < 30 秒（不含 PDF 下载）
-- [ ] 包含 README.md（安装 + 使用说明）
+- [x] 包含 README.md（安装 + 使用说明）
 - [ ] 单元测试覆盖率 > 50%
 
 **任务切片**
 
 | Slice | 任务 | 验证方式 |
 |-------|------|---------|
-| P3-S1 | CLI 入口封装（argparse） | `fund-analysis 110011` 输出报告 |
+| P3-S1 | CLI 入口封装（Typer，与当前 `pyproject.toml` 入口对齐） | `fund-analysis analyze 110011` 输出报告 |
 | P3-S2 | 温度计数据爬取（有知有行） | 能获取全市场和指数温度 |
 | P3-S3 | 端到端整合测试 | 3 只样本基金完整流程 |
 | P3-S4 | 程序审计集成 | 报告通过 P1/P2/P3/L1/R1/R2 |
@@ -907,6 +916,28 @@
 |------|------|---------|---------|
 | 有知有行页面结构变更 | 中 | 异常处理 + 24h 缓存 | ⬜ 待验证 |
 | 整合测试发现数据层 bug | 高 | 预留 2 天 buffer | ⬜ 待验证 |
+
+**P3-S1 当前状态（2026-05-18）**
+
+- `P3-S1 CLI 入口封装`：✅ completed
+- 当前完成内容：
+  - `fund_agent/services/fund_analysis_service.py` 新增 `FundAnalysisService`、`FundAnalysisRequest` 和 `FundAnalysisResult`
+  - Service 通过显式请求字段编排 `FundDataExtractor.extract(...)`、P2 分析、8 章模板渲染和程序审计
+  - UI 层 `fund_agent/ui/cli.py` 保持 Typer，与当前 `pyproject.toml` 脚本入口一致
+  - `fund-analysis analyze FUND_CODE` 输出完整 Markdown 到 stdout，失败时输出 `分析失败：...` 并非零退出
+  - `fund-analysis checklist FUND_CODE` 不再输出误导性成功文本，当前非零退出并提示使用 `analyze`
+  - `README.md` 和 `tests/README.md` 已同步当前 CLI 和测试边界
+  - 验证命令 `.venv/bin/python -m pytest tests/services tests/ui tests/fund/template tests/fund/audit tests/fund/analysis -q` 当前通过（`68 passed`）
+  - `git diff --check` 当前通过
+  - code review artifacts：
+    - `docs/reviews/p3-s1-code-review-glm-2026-05-18.md`
+    - `docs/reviews/p3-s1-code-review-controller-judgment-2026-05-18.md`
+    - `docs/reviews/p3-s1-fix-2026-05-18.md`
+    - `docs/reviews/p3-s1-rereview-glm-2026-05-18.md`
+- 当前 residual risks：
+  - `P3-S2` owner：Service 当前没有市场环境和来源解释输入，`judge_alpha_nature(())` 会显式返回 `insufficient_data`
+  - `P3-S3` owner：真实 PDF/网络路径和 3 只样本基金 CLI 端到端矩阵尚未验证
+  - later CLI UX owner：程序审计失败信息当前直接透出审计消息，MVP 可接受但后续可优化用户文案
 
 ---
 
@@ -948,6 +979,7 @@ P0（环境搭建）
 | RR-5 | `dayu-agent` wheel 下载受 GitHub 可达性影响 | P0/P1 | 当前虚拟环境已安装，可继续开发；新环境安装待镜像化或替代分发方案 | 否 |
 | RR-6 | 模板禁用交易措辞使用 substring 匹配，未来合法短语可能误报 | P3/v2 | P2 当前输出已测试通过；P3 若调整模板措辞需同步审查 | 否 |
 | RR-7 | 缺证附录当前为章节级，不是 item 级证据确认 | v2 | MVP 先保证章节级可追溯，Evidence Confirm 层后续细化 | 否 |
+| RR-8 | CLI 端到端真实 PDF/网络路径尚未覆盖 | P3 | P3-S3 用 3 只样本基金端到端矩阵验证 | 否 |
 
 ---
 
@@ -1011,3 +1043,5 @@ P0（环境搭建）
 | 2026-05-18 | P2 | ✅ done | `P2 aggregate deepreview` 已通过，MiMo/GLM 均 PASS；已修复 P2 exit checkbox 文档同步问题；accepted deepreview commit=`07fe0d0`；当前 gate 为 `ready-to-open-draft-PR` |
 | 2026-05-18 | P3 | ⬜ pending | P2 退出条件已满足；下一步需用户授权 draft PR gate 后 push 并创建 draft PR，随后再进入 P3 实施 |
 | 2026-05-18 | P2 | ✅ done | Draft PR #1 已创建并通过 PR review/fix/re-review；accepted PR review commit=`8f5029c` 已 push；当前 gate 为 `draft-PR-pass` |
+| 2026-05-18 | P3 | 🟡 in progress | `P3-S1 implementation + review` 已进入实现；当前代码入口为 Typer，因此 P3-S1 按 current-code alignment 保留 `fund-analysis analyze FUND_CODE` 子命令并通过 Service 层编排 Capability。 |
+| 2026-05-18 | P3 | 🟡 in progress | `P3-S1` implementation / code review / fix / re-review 已通过；CLI 通过 Service 层输出 8 章 Markdown，当前验证 `68 passed`；下一 gate 为 `P3-S2 implementation + review` |
