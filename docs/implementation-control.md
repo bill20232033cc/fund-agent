@@ -1079,6 +1079,7 @@
   - artifacts：
     - `docs/reviews/p3-s8-implementation-2026-05-18.md`
     - `docs/reviews/p3-s8-code-review-controller-judgment-2026-05-18.md`
+  - accepted slice commit：`7845add`
 - 当前 residual risks：
   - 该 gate 不覆盖真实 PDF 下载、PDF 解析、网络波动或冷缓存墙钟时间
 
@@ -1203,4 +1204,4 @@ P0（环境搭建）
 | 2026-05-18 | P3 | 🟡 in progress | `P3-S7 implementation` 已完成；dev 依赖和测试手册新增覆盖率 gate，当前 `fund_agent` 总覆盖率 `90.07%`，超过 50% 目标；当前验证 `115 passed`；下一 gate 为 `P3-S7 code review` |
 | 2026-05-18 | P3 | 🟡 in progress | `P3-S7` implementation / controller code review 已通过；dev 依赖和测试手册新增覆盖率 gate，当前 `fund_agent` 总覆盖率 `90.07%`，超过 50% 目标；当前验证 `115 passed`；accepted commit=`d1d506b`；下一 gate 为 `P3-S8 implementation + review` |
 | 2026-05-18 | P3 | 🟡 in progress | `P3-S8 implementation` 已完成；Service 层新增不含 PDF 下载的单只基金分析性能 gate，验证完整编排低于 30 秒；当前验证 `3 passed`；下一 gate 为 `P3-S8 code review` |
-| 2026-05-18 | P3 | 🟡 in progress | `P3-S8` implementation / controller code review 已通过；Service 层新增不含 PDF 下载的单只基金分析性能 gate，验证完整编排低于 30 秒；当前验证 `3 passed`；下一 gate 为 `P3 aggregate deepreview` |
+| 2026-05-18 | P3 | 🟡 in progress | `P3-S8` implementation / controller code review 已通过；Service 层新增不含 PDF 下载的单只基金分析性能 gate，验证完整编排低于 30 秒；当前验证 `3 passed`；accepted commit=`7845add`；下一 gate 为 `P3 aggregate deepreview` |
