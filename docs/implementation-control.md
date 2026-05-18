@@ -31,8 +31,8 @@
 ### 1.3 当前 Gate 与基线裁决（2026-05-18）
 
 - 当前分支：`chore/reconcile-baseline`
-- 当前 gate：`P2-S9 implementation + review`
-- 下一 gate：`P2-S9 code review`
+- 当前 gate：`P2-S10 implementation + review`
+- 下一 gate：`P2-S10 code review`
 - 当前裁决：
   - P0 维持 `done`。已验证 `dayu` 依赖可导入、`fund-agent` 处于 editable install、`fund-analysis --help` 可用、样本基金 `110011` 年报可下载、`pdfplumber` 可提取全文文本和表格。
   - P1 已完成并通过 aggregate review。
@@ -126,9 +126,18 @@
     - 缺少报告、R=A+B-C 结构化结果、检查清单或最终判断时返回失败，不把未执行规则伪装成通过
     - 单元测试已覆盖必需输入缺失、章节缺失、内容过短、证据缺失、R=A+B-C 不闭合、检查清单规则错误和最终判断冲突
     - controller code review 已通过
+  - `P2-S9 模板渲染器` 已完成：
+    - `fund_agent/fund/template/renderer.py` 已落地 `TemplateRenderInput`、`TemplateRenderResult`、`render_template_report(...)` 与 `build_programmatic_audit_input(...)`
+    - 渲染器固定输出 `docs/design.md` 第 3.1 节 0-7 共 8 章 Markdown，并附带 `证据与出处`
+    - 渲染器只消费 P1/P2 结构化结果与显式输入，不读取年报、PDF、缓存、文档仓库、UI、Service、Runtime 或 Engine
+    - `TemplateRenderResult.audit_input` 可直接传给 `run_programmatic_audit(...)`，携带报告 Markdown、R=A+B-C 结果、检查清单和最终判断
+    - 缺失数据显式渲染为“未披露”或“数据不足”
+    - 最终判断限制为 `worth_holding / needs_attention / suggest_replace`，报告不输出买入、卖出、收益预测或仓位比例
+    - code review 接受并修复了 `dict_values(...)` 可见输出、重复句号和 README 过期条目问题
+    - 验证命令 `.venv/bin/python -m pytest tests/fund/template tests/fund/audit -q` 当前通过（`18 passed`），`.venv/bin/python -m pytest tests/fund/analysis -q` 当前通过（`40 passed`）
 - 下一 entry point：
-  - 进入 `P2-S9 implementation + review`
-  - 优先目标是实现模板渲染器，输出 8 章报告 Markdown，并接入程序审计输入
+  - 进入 `P2-S10 implementation + review`
+  - 优先目标是收口证据锚点标注，确保报告正文和附录证据格式满足项目规范
 - 当前 artifact：
   - plan: `docs/reviews/p1-plan-2026-05-17.md`
   - plan review: `docs/reviews/p1-plan-review-2026-05-17.md`
@@ -237,6 +246,15 @@
       - `docs/reviews/p2-s8-code-review-controller-judgment-2026-05-18.md`
   - P2 baseline risk review: `docs/reviews/code-review-20260518-0547.md`
   - P2-S1 至 P2-S8 accepted baseline commit: `a6b1516`
+  - `P2-S9`:
+    - implementation: `docs/reviews/p2-s9-implementation-2026-05-18.md`
+    - code review:
+      - `docs/reviews/p2-s9-code-review-mimo-2026-05-18.md`
+      - `docs/reviews/p2-s9-code-review-glm-2026-05-18.md`
+      - controller judgment: `docs/reviews/p2-s9-code-review-controller-judgment-2026-05-18.md`
+    - fix: `docs/reviews/p2-s9-fix-2026-05-18.md`
+    - re-review:
+      - `docs/reviews/p2-s9-rereview-glm-2026-05-18.md`
 
 ---
 
@@ -659,7 +677,7 @@
   - 验证命令 `.venv/bin/python -m pytest tests/fund/analysis/test_risk_check.py -q` 当前通过（`10 passed`）
   - controller code review artifact：`docs/reviews/p2-s6-code-review-controller-judgment-2026-05-17.md`
 - 当前 residual risks：
-  - `P2-S9/P3` owner：压力测试输出尚未进入最终报告渲染或端到端用户流程
+  - `P3` owner：压力测试输出已进入 P2-S9 模板渲染，端到端用户流程尚未验证
   - `P2-S8` owner：压力测试和报告文字一致性审计尚未接入
   - later user-profile input owner：投入金额和最大可承受亏损比例当前由调用方显式提供
   - `P2 aggregate review` owner：本 slice 外部 reviewer 未产出可采纳 artifact，aggregate review 前需重新取得两份独立 review 或记录用户接受单 reviewer 风险
@@ -705,9 +723,34 @@
   - 验证命令 `.venv/bin/python -m pytest tests/fund/analysis tests/fund/audit -q` 当前通过（`49 passed`）
   - controller code review artifact：`docs/reviews/p2-s8-code-review-controller-judgment-2026-05-18.md`
 - 当前 residual risks：
-  - `P2-S9` owner：模板渲染器尚未接入程序审计输入
+  - `P2-S9` owner：模板渲染器已接入程序审计输入
   - `P3-S4` owner：端到端报告通过程序审计尚未验证
   - v2 audit owner：E1/E2/E3/C1/C2 和 LLM/证据复核层尚未实现
+
+**P2-S9 当前状态（2026-05-18）**
+
+- `P2-S9 实现模板渲染器`：✅ completed
+- 当前完成内容：
+  - `fund_agent/fund/template/renderer.py` 已提供 8 章 Markdown 模板渲染器
+  - `TemplateRenderInput` 显式聚合 P1 `StructuredFundDataBundle`、P2 分析结果、检查清单、压力测试、最终判断和可选当前阶段说明
+  - `TemplateRenderResult` 输出 `report_markdown`、`audit_input` 和去重后的 `evidence_anchors`
+  - `audit_input` 可直接用于 `run_programmatic_audit(...)`
+  - 章节内证据行使用 `> 📎 证据：年报§...`，附录输出 `## 证据与出处`
+  - 缺失数据显式输出“未披露”或“数据不足”
+  - 最终判断限制为 `worth_holding / needs_attention / suggest_replace`
+  - 已修复 code review 发现的 `dict_values(...)` 泄漏、重复句号和 README 过期条目
+  - `tests/fund/template/test_renderer.py` 已覆盖 8 章完整性、证据锚点格式、审计兼容、缺失路径、禁用交易措辞和 review 回归
+  - 验证命令 `.venv/bin/python -m pytest tests/fund/template tests/fund/audit -q` 当前通过（`18 passed`）
+  - 验证命令 `.venv/bin/python -m pytest tests/fund/analysis -q` 当前通过（`40 passed`）
+  - code review artifacts：
+    - `docs/reviews/p2-s9-code-review-mimo-2026-05-18.md`
+    - `docs/reviews/p2-s9-code-review-glm-2026-05-18.md`
+    - `docs/reviews/p2-s9-code-review-controller-judgment-2026-05-18.md`
+    - `docs/reviews/p2-s9-rereview-glm-2026-05-18.md`
+- 当前 residual risks：
+  - `P2-S10` owner：证据锚点已可渲染，但还需对正文和附录格式做专项收口
+  - `P3-S4` owner：端到端 CLI 报告通过程序审计尚未验证
+  - later template refinement owner：`_validate_report_wording()` 使用 substring 匹配禁用词，未来模板若引入合法分析短语“买入前检查清单”可能误报
 
 **风险与追踪**
 
@@ -862,3 +905,4 @@ P0（环境搭建）
 | 2026-05-17 | P2 | 🟡 in progress | `P2-S8` implementation 已完成，P1/P2/P3/L1/R1/R2 程序审计与测试已落地；当前 gate 为 `P2-S8 code review` |
 | 2026-05-18 | P2 | 🟡 in progress | `P2-S8` controller review 已通过并修复缺少必需输入时静默通过的问题；下一 gate 为 `P2-S9 implementation + review` |
 | 2026-05-18 | P2 | 🟡 in progress | `P2-S1` 至 `P2-S8` 已收口为 accepted baseline commit `a6b1516`；`launchd/`、`scripts/` 和旧 P1 review artifact 保持在 P2 基线外；当前 gate 维持 `P2-S9 implementation + review` |
+| 2026-05-18 | P2 | 🟡 in progress | `P2-S9` implementation / review / fix / re-review 已通过，8 章模板渲染器和程序审计输入已落地；下一 gate 为 `P2-S10 implementation + review` |
