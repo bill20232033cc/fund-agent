@@ -16,7 +16,7 @@
 |-------|------|------|------|------|
 | P0 | 环境搭建与架构骨架 | Week 1 | ✅ done | 无 |
 | P1 | 数据层（PDF 下载 + 解析 + 提取） | Week 2-3 | ✅ done | P0 |
-| P2 | 分析引擎（R=A+B-C + 检验 + 审计） | Week 3-4 | 🟡 in progress | P1 |
+| P2 | 分析引擎（R=A+B-C + 检验 + 审计） | Week 3-4 | ✅ done | P1 |
 | P3 | CLI 入口 + 整合测试 + 验证 | Week 4-5 | ⬜ pending | P2 |
 
 ### 1.2 里程碑
@@ -28,15 +28,17 @@
 | M3: 分析引擎可用 | Week 4 中 | P2 | R=A+B-C 计算正确，言行一致性检验输出信号 |
 | M4: MVP 交付 | Week 5 结束 | P3 | `fund-analysis <code>` 输出完整 8 章报告 |
 
-### 1.3 当前 Gate 与基线裁决（2026-05-17）
+### 1.3 当前 Gate 与基线裁决（2026-05-18）
 
 - 当前分支：`chore/reconcile-baseline`
-- 当前 gate：`P2-S9 implementation + review`
-- 下一 gate：`P2-S9 code review`
+- 当前 gate：`draft-PR-pass`
+- 下一 gate：`P3-S1 implementation + review`
 - 当前裁决：
   - P0 维持 `done`。已验证 `dayu` 依赖可导入、`fund-agent` 处于 editable install、`fund-analysis --help` 可用、样本基金 `110011` 年报可下载、`pdfplumber` 可提取全文文本和表格。
   - P1 已完成并通过 aggregate review。
-  - P2 进入 `in progress`。
+  - P2 已完成并通过 aggregate deepreview。
+  - P3 仍为 `pending`；draft PR gate 已完成，后续进入 P3 实施前需基于 PR 合并策略明确新的工作基线。
+  - `P2-S1` 至 `P2-S8` 已收口为 accepted baseline commit `a6b1516`。收口范围仅包含 P2 analysis/audit 实现、测试、README 同步与 review artifact；本地运行辅助文件 `launchd/`、`scripts/` 和旧 P1 review artifact 未纳入该基线。
   - `P1-S1 文档访问契约收口` 已完成：对外唯一仓库入口收口为 `FundDocumentRepository.load_annual_report(...) -> ParsedAnnualReport`，公共契约已迁入 `fund_agent/fund/documents/*`，`fund_agent/fund/pdf/*` 降为仓库内部 helper / adapter。
   - `P1-S2 章节定位修复与 §3 冻结` 已完成：
     - `§3` root cause 已直接关闭，不是基金代码特判
@@ -125,9 +127,26 @@
     - 缺少报告、R=A+B-C 结构化结果、检查清单或最终判断时返回失败，不把未执行规则伪装成通过
     - 单元测试已覆盖必需输入缺失、章节缺失、内容过短、证据缺失、R=A+B-C 不闭合、检查清单规则错误和最终判断冲突
     - controller code review 已通过
+  - `P2-S9 模板渲染器` 已完成：
+    - `fund_agent/fund/template/renderer.py` 已落地 `TemplateRenderInput`、`TemplateRenderResult`、`render_template_report(...)` 与 `build_programmatic_audit_input(...)`
+    - 渲染器固定输出 `docs/design.md` 第 3.1 节 0-7 共 8 章 Markdown，并附带 `证据与出处`
+    - 渲染器只消费 P1/P2 结构化结果与显式输入，不读取年报、PDF、缓存、文档仓库、UI、Service、Runtime 或 Engine
+    - `TemplateRenderResult.audit_input` 可直接传给 `run_programmatic_audit(...)`，携带报告 Markdown、R=A+B-C 结果、检查清单和最终判断
+    - 缺失数据显式渲染为“未披露”或“数据不足”
+    - 最终判断限制为 `worth_holding / needs_attention / suggest_replace`，报告不输出买入、卖出、收益预测或仓位比例
+    - code review 接受并修复了 `dict_values(...)` 可见输出、重复句号和 README 过期条目问题
+    - 验证命令 `.venv/bin/python -m pytest tests/fund/template tests/fund/audit -q` 当前通过（`18 passed`），`.venv/bin/python -m pytest tests/fund/analysis -q` 当前通过（`40 passed`）
+  - `P2-S10 证据锚点标注` 已完成：
+    - 正文证据行已按年报年份、章节和描述输出；非年报来源显式标注来源类型
+    - 附录年报锚点按 `年报{年份}§{章节}表{编号}行{行号}` 输出
+    - 表格、行定位、章节缺失时显式降级为 `未定位`，不静默丢失年份或章节
+    - 页码作为附加位置元数据保留
+    - 缺少章节证据时，正文和附录均显式输出数据不足
+    - `ProgrammaticAuditInput` 兼容性保持不变
+    - 验证命令 `.venv/bin/python -m pytest tests/fund/template tests/fund/audit -q` 当前通过（`23 passed`），`.venv/bin/python -m pytest tests/fund/analysis -q` 当前通过（`40 passed`）
 - 下一 entry point：
-  - 进入 `P2-S9 implementation + review`
-  - 优先目标是实现模板渲染器，输出 8 章报告 Markdown，并接入程序审计输入
+  - 进入 `P2 aggregate deepreview`
+  - 优先目标是对 P2-S1 至 P2-S10 的完整 P2 diff 做 aggregate review，确认分析、审计、模板和证据锚点组合后无跨 slice 回归
 - 当前 artifact：
   - plan: `docs/reviews/p1-plan-2026-05-17.md`
   - plan review: `docs/reviews/p1-plan-review-2026-05-17.md`
@@ -234,7 +253,42 @@
     - implementation: `docs/reviews/p2-s8-implementation-2026-05-17.md`
     - code review:
       - `docs/reviews/p2-s8-code-review-controller-judgment-2026-05-18.md`
-  - baseline commit: `9956c45`
+  - P2 baseline risk review: `docs/reviews/code-review-20260518-0547.md`
+  - P2-S1 至 P2-S8 accepted baseline commit: `a6b1516`
+  - `P2-S9`:
+    - implementation: `docs/reviews/p2-s9-implementation-2026-05-18.md`
+    - code review:
+      - `docs/reviews/p2-s9-code-review-mimo-2026-05-18.md`
+      - `docs/reviews/p2-s9-code-review-glm-2026-05-18.md`
+      - controller judgment: `docs/reviews/p2-s9-code-review-controller-judgment-2026-05-18.md`
+    - fix: `docs/reviews/p2-s9-fix-2026-05-18.md`
+    - re-review:
+      - `docs/reviews/p2-s9-rereview-glm-2026-05-18.md`
+    - accepted slice commit: `bf64b0f`
+  - `P2-S10`:
+    - implementation: `docs/reviews/p2-s10-implementation-2026-05-18.md`
+    - code review:
+      - `docs/reviews/p2-s10-code-review-mimo-2026-05-18.md`
+      - `docs/reviews/p2-s10-code-review-glm-2026-05-18.md`
+      - controller judgment: `docs/reviews/p2-s10-code-review-controller-judgment-2026-05-18.md`
+    - accepted slice commit: `2d041ae`
+  - `P2 aggregate deepreview`:
+    - review:
+      - `docs/reviews/p2-aggregate-review-mimo-2026-05-18.md`
+      - `docs/reviews/p2-aggregate-review-glm-2026-05-18.md`
+      - controller judgment: `docs/reviews/p2-aggregate-review-controller-judgment-2026-05-18.md`
+    - fix: `docs/reviews/p2-aggregate-fix-2026-05-18.md`
+    - accepted deepreview commit: `07fe0d0`
+  - `Draft PR #1`:
+    - URL: `https://github.com/bill20232033cc/fund-agent/pull/1`
+    - base: `main` (`a6b1516`)
+    - head: `chore/reconcile-baseline`
+    - PR review:
+      - `docs/reviews/pr-1-review-glm-2026-05-18.md`
+      - controller judgment: `docs/reviews/pr-1-review-controller-judgment-2026-05-18.md`
+    - PR fix: `docs/reviews/pr-1-fix-2026-05-18.md`
+    - PR re-review: `docs/reviews/pr-1-rereview-glm-2026-05-18.md`
+    - accepted PR review commit: `8f5029c`
 
 ---
 
@@ -517,8 +571,8 @@
 
 **进入条件**
 
-- [ ] P1 退出条件全部满足
-- [ ] 12 项关键数据可从缓存获取
+- [x] P1 退出条件全部满足
+- [x] 12 项关键数据可从缓存获取
 
 **退出条件**
 
@@ -529,7 +583,7 @@
 - [x] `fund/analysis/risk_check.py` 能执行 5 项否决检查 + 压力测试
 - [x] `fund/analysis/checklist.py` 能输出 7 问题红/黄/绿灯
 - [x] `fund/audit/audit_programmatic.py` 能执行 P1/P2/P3/L1/R1/R2 规则检查
-- [ ] `fund/template/renderer.py` 能将数据填充到定性模板 v2
+- [x] `fund/template/renderer.py` 能将数据填充到定性模板 v2
 
 **任务切片**
 
@@ -657,7 +711,7 @@
   - 验证命令 `.venv/bin/python -m pytest tests/fund/analysis/test_risk_check.py -q` 当前通过（`10 passed`）
   - controller code review artifact：`docs/reviews/p2-s6-code-review-controller-judgment-2026-05-17.md`
 - 当前 residual risks：
-  - `P2-S9/P3` owner：压力测试输出尚未进入最终报告渲染或端到端用户流程
+  - `P3` owner：压力测试输出已进入 P2-S9 模板渲染，端到端用户流程尚未验证
   - `P2-S8` owner：压力测试和报告文字一致性审计尚未接入
   - later user-profile input owner：投入金额和最大可承受亏损比例当前由调用方显式提供
   - `P2 aggregate review` owner：本 slice 外部 reviewer 未产出可采纳 artifact，aggregate review 前需重新取得两份独立 review 或记录用户接受单 reviewer 风险
@@ -703,9 +757,99 @@
   - 验证命令 `.venv/bin/python -m pytest tests/fund/analysis tests/fund/audit -q` 当前通过（`49 passed`）
   - controller code review artifact：`docs/reviews/p2-s8-code-review-controller-judgment-2026-05-18.md`
 - 当前 residual risks：
-  - `P2-S9` owner：模板渲染器尚未接入程序审计输入
+  - `P2-S9` owner：模板渲染器已接入程序审计输入
   - `P3-S4` owner：端到端报告通过程序审计尚未验证
   - v2 audit owner：E1/E2/E3/C1/C2 和 LLM/证据复核层尚未实现
+
+**P2-S9 当前状态（2026-05-18）**
+
+- `P2-S9 实现模板渲染器`：✅ completed
+- 当前完成内容：
+  - `fund_agent/fund/template/renderer.py` 已提供 8 章 Markdown 模板渲染器
+  - `TemplateRenderInput` 显式聚合 P1 `StructuredFundDataBundle`、P2 分析结果、检查清单、压力测试、最终判断和可选当前阶段说明
+  - `TemplateRenderResult` 输出 `report_markdown`、`audit_input` 和去重后的 `evidence_anchors`
+  - `audit_input` 可直接用于 `run_programmatic_audit(...)`
+  - 章节内证据行使用 `> 📎 证据：年报§...`，附录输出 `## 证据与出处`
+  - 缺失数据显式输出“未披露”或“数据不足”
+  - 最终判断限制为 `worth_holding / needs_attention / suggest_replace`
+  - 已修复 code review 发现的 `dict_values(...)` 泄漏、重复句号和 README 过期条目
+  - `tests/fund/template/test_renderer.py` 已覆盖 8 章完整性、证据锚点格式、审计兼容、缺失路径、禁用交易措辞和 review 回归
+  - 验证命令 `.venv/bin/python -m pytest tests/fund/template tests/fund/audit -q` 当前通过（`18 passed`）
+  - 验证命令 `.venv/bin/python -m pytest tests/fund/analysis -q` 当前通过（`40 passed`）
+  - code review artifacts：
+    - `docs/reviews/p2-s9-code-review-mimo-2026-05-18.md`
+    - `docs/reviews/p2-s9-code-review-glm-2026-05-18.md`
+    - `docs/reviews/p2-s9-code-review-controller-judgment-2026-05-18.md`
+    - `docs/reviews/p2-s9-rereview-glm-2026-05-18.md`
+- 当前 residual risks：
+  - `P2-S10` owner：证据锚点正文和附录格式已专项收口
+  - `P3-S4` owner：端到端 CLI 报告通过程序审计尚未验证
+  - later template refinement owner：`_validate_report_wording()` 使用 substring 匹配禁用词，未来模板若引入合法分析短语“买入前检查清单”可能误报
+
+**P2-S10 当前状态（2026-05-18）**
+
+- `P2-S10 实现证据锚点标注`：✅ completed
+- 当前完成内容：
+  - 正文证据行对年报来源输出年份、章节和证据描述
+  - 附录年报锚点按 `年报{年份}§{章节}表{编号}行{行号}` 输出
+  - 表格、行定位、章节缺失时显式写 `未定位`
+  - 页码以附加位置元数据保留
+  - 非年报来源输出 `外部数据(external_api)`、`计算(derived)` 或未知来源标签，不伪装成年报
+  - 缺少章节证据时，正文输出数据不足证据行，附录输出章节级缺证条目
+  - `tests/fund/template/test_renderer.py` 已覆盖正文证据格式、附录表格/行定位、缺失定位降级、页码保留、非年报来源、缺证章节和审计兼容
+  - 验证命令 `.venv/bin/python -m pytest tests/fund/template tests/fund/audit -q` 当前通过（`23 passed`）
+  - 验证命令 `.venv/bin/python -m pytest tests/fund/analysis -q` 当前通过（`40 passed`）
+  - code review artifacts：
+    - `docs/reviews/p2-s10-code-review-mimo-2026-05-18.md`
+    - `docs/reviews/p2-s10-code-review-glm-2026-05-18.md`
+    - `docs/reviews/p2-s10-code-review-controller-judgment-2026-05-18.md`
+- 当前 residual risks：
+  - `P2 aggregate deepreview` owner：已验证 P2-S1 至 P2-S10 组合后无跨 slice 回归
+  - `P3-S4` owner：端到端 CLI 报告通过程序审计尚未验证
+  - later evidence confirm owner：缺证附录当前为章节级，不是 item 级证据确认
+  - later template refinement owner：`_validate_report_wording()` 使用 substring 匹配禁用词，未来模板若引入合法分析短语“买入前检查清单”可能误报
+
+**P2 aggregate deepreview 当前状态（2026-05-18）**
+
+- `P2 aggregate deepreview`：✅ completed
+- 当前完成内容：
+  - 审查范围为 `a6b1516...HEAD`，覆盖 `P2-S9` 模板渲染器、`P2-S10` 证据锚点标注、相关测试、README 与 gate artifact
+  - AgentMiMo aggregate review 结论为 PASS，无 blocking finding
+  - AgentGLM aggregate review 结论为 PASS，无 blocking finding；接受 1 个 doc-sync info finding：P2 退出条件中模板渲染器 checkbox 未勾选
+  - 已完成 doc-sync fix，将 P2 进入条件、退出条件、phase 状态和下一 gate 同步到当前真实状态
+  - 验证命令 `.venv/bin/python -m pytest tests/fund/template tests/fund/audit tests/fund/analysis -q` 当前通过（`63 passed`）
+  - aggregate review artifacts：
+    - `docs/reviews/p2-aggregate-review-mimo-2026-05-18.md`
+    - `docs/reviews/p2-aggregate-review-glm-2026-05-18.md`
+    - `docs/reviews/p2-aggregate-fix-2026-05-18.md`
+    - `docs/reviews/p2-aggregate-review-controller-judgment-2026-05-18.md`
+  - accepted deepreview commit：`07fe0d0`
+- 当前 residual risks：
+  - `P3-S4` owner：端到端 CLI 报告通过程序审计尚未验证
+  - later evidence confirm owner：缺证附录当前为章节级，不是 item 级证据确认
+  - later template refinement owner：`_validate_report_wording()` 使用 substring 匹配禁用词，未来模板若引入合法分析短语“买入前检查清单”可能误报
+  - v2 audit owner：`_EVIDENCE_MARKER_PATTERN` 和审计章节标题匹配依赖当前模板措辞，未来模板措辞调整时需同步测试
+
+**Draft PR gate 当前状态（2026-05-18）**
+
+- `Draft PR #1`：✅ draft-PR-pass
+- 当前完成内容：
+  - 已将 `a6b1516` 推送为远端 `main`
+  - 已将 `chore/reconcile-baseline` 推送到远端并创建 draft PR：`https://github.com/bill20232033cc/fund-agent/pull/1`
+  - PR review 接受 1 个 info finding：aggregate review artifact 存在 trailing whitespace
+  - 已移除 trailing whitespace，并记录修复 artifact
+  - AgentGLM re-review 结论为 PASS
+  - accepted PR review commit：`8f5029c`
+  - follow-up push 已完成
+- 当前验证：
+  - `.venv/bin/python -m pytest tests/fund/template tests/fund/audit tests/fund/analysis -q`：`63 passed`
+  - `git diff --check`：通过
+  - PR merge state：`CLEAN`
+- 未执行动作：
+  - 未 merge PR
+  - 未 mark ready for review
+  - 未 request reviewers
+  - 未 delete branch
 
 **风险与追踪**
 
@@ -724,7 +868,7 @@
 
 **进入条件**
 
-- [ ] P2 退出条件全部满足
+- [x] P2 退出条件全部满足
 - [ ] 单只基金分析可本地运行
 
 **退出条件**
@@ -802,6 +946,8 @@ P0（环境搭建）
 | RR-3 | 审计规则过严导致频繁阻断 | P2 | MVP 仅启用程序审计 | 否 |
 | RR-4 | 温度计爬虫被封锁 | P3 | 24h 缓存 + 异常处理 | 是（如被封锁需人工确认） |
 | RR-5 | `dayu-agent` wheel 下载受 GitHub 可达性影响 | P0/P1 | 当前虚拟环境已安装，可继续开发；新环境安装待镜像化或替代分发方案 | 否 |
+| RR-6 | 模板禁用交易措辞使用 substring 匹配，未来合法短语可能误报 | P3/v2 | P2 当前输出已测试通过；P3 若调整模板措辞需同步审查 | 否 |
+| RR-7 | 缺证附录当前为章节级，不是 item 级证据确认 | v2 | MVP 先保证章节级可追溯，Evidence Confirm 层后续细化 | 否 |
 
 ---
 
@@ -859,3 +1005,9 @@ P0（环境搭建）
 | 2026-05-17 | P2 | 🟡 in progress | `P2-S7` controller review 已通过；下一 gate 为 `P2-S8 implementation + review` |
 | 2026-05-17 | P2 | 🟡 in progress | `P2-S8` implementation 已完成，P1/P2/P3/L1/R1/R2 程序审计与测试已落地；当前 gate 为 `P2-S8 code review` |
 | 2026-05-18 | P2 | 🟡 in progress | `P2-S8` controller review 已通过并修复缺少必需输入时静默通过的问题；下一 gate 为 `P2-S9 implementation + review` |
+| 2026-05-18 | P2 | 🟡 in progress | `P2-S1` 至 `P2-S8` 已收口为 accepted baseline commit `a6b1516`；`launchd/`、`scripts/` 和旧 P1 review artifact 保持在 P2 基线外；当前 gate 维持 `P2-S9 implementation + review` |
+| 2026-05-18 | P2 | 🟡 in progress | `P2-S9` implementation / review / fix / re-review 已通过，8 章模板渲染器和程序审计输入已落地，accepted commit=`bf64b0f`；下一 gate 为 `P2-S10 implementation + review` |
+| 2026-05-18 | P2 | 🟡 in progress | `P2-S10` implementation / code review 已通过，证据锚点正文和附录格式已收口，accepted commit=`2d041ae`；下一 gate 为 `P2 aggregate deepreview` |
+| 2026-05-18 | P2 | ✅ done | `P2 aggregate deepreview` 已通过，MiMo/GLM 均 PASS；已修复 P2 exit checkbox 文档同步问题；accepted deepreview commit=`07fe0d0`；当前 gate 为 `ready-to-open-draft-PR` |
+| 2026-05-18 | P3 | ⬜ pending | P2 退出条件已满足；下一步需用户授权 draft PR gate 后 push 并创建 draft PR，随后再进入 P3 实施 |
+| 2026-05-18 | P2 | ✅ done | Draft PR #1 已创建并通过 PR review/fix/re-review；accepted PR review commit=`8f5029c` 已 push；当前 gate 为 `draft-PR-pass` |
