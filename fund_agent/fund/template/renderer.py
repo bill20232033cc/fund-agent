@@ -42,6 +42,12 @@ _FINAL_JUDGMENT_TEXT: Final[dict[TemplateFinalJudgment, str]] = {
 _FORBIDDEN_TERMS: Final[tuple[str, ...]] = ("买入", "卖出", "仓位比例", "收益预测")
 _MISSING_TEXT: Final[str] = "未披露"
 _INSUFFICIENT_TEXT: Final[str] = "数据不足"
+_UNLOCATED_TEXT: Final[str] = "未定位"
+_SOURCE_KIND_LABELS: Final[dict[str, str]] = {
+    "annual_report": "年报",
+    "external_api": "外部数据(external_api)",
+    "derived": "计算(derived)",
+}
 
 
 @dataclass(frozen=True, slots=True)
@@ -103,6 +109,7 @@ def render_template_report(input_data: TemplateRenderInput) -> TemplateRenderRes
 
     _validate_final_judgment(input_data.final_judgment)
     evidence_anchors = _collect_evidence_anchors(input_data)
+    chapter_evidence_groups = _collect_chapter_evidence_groups(input_data)
     sections = (
         _render_chapter_0(input_data),
         _render_chapter_1(input_data),
@@ -112,7 +119,7 @@ def render_template_report(input_data: TemplateRenderInput) -> TemplateRenderRes
         _render_chapter_5(input_data),
         _render_chapter_6(input_data),
         _render_chapter_7(input_data),
-        _render_evidence_section(evidence_anchors, input_data.structured_data.report_year),
+        _render_evidence_section(evidence_anchors, input_data.structured_data.report_year, chapter_evidence_groups),
     )
     report_markdown = "\n\n".join(sections).strip() + "\n"
     _validate_report_wording(report_markdown)
@@ -390,12 +397,17 @@ def _render_chapter_7(input_data: TemplateRenderInput) -> str:
     return "\n".join(lines)
 
 
-def _render_evidence_section(anchors: tuple[EvidenceAnchor, ...], report_year: int) -> str:
+def _render_evidence_section(
+    anchors: tuple[EvidenceAnchor, ...],
+    report_year: int,
+    chapter_evidence_groups: tuple[tuple[EvidenceAnchor, ...], ...],
+) -> str:
     """渲染证据与出处附录。
 
     Args:
         anchors: 去重证据锚点。
         report_year: 报告年份，用于无锚点时仍输出可审计年份。
+        chapter_evidence_groups: 按模板第 0-7 章分组的证据锚点，用于显式标注缺证章节。
 
     Returns:
         证据与出处 Markdown。
@@ -405,11 +417,12 @@ def _render_evidence_section(anchors: tuple[EvidenceAnchor, ...], report_year: i
     """
 
     lines = ["## 证据与出处"]
-    if not anchors:
-        lines.append(f"- 年报{report_year}§未定位：{_INSUFFICIENT_TEXT}，当前结构化输入未携带证据锚点。")
-        return "\n".join(lines)
     for index, anchor in enumerate(anchors, start=1):
         lines.append(f"- [{index}] {_anchor_reference(anchor)}")
+    for chapter_index, chapter_anchors in enumerate(chapter_evidence_groups):
+        if chapter_anchors:
+            continue
+        lines.append(f"- [M{chapter_index}] {_missing_anchor_reference(report_year, chapter_index)}")
     return "\n".join(lines)
 
 
@@ -427,10 +440,31 @@ def _evidence_line(anchors: tuple[EvidenceAnchor, ...]) -> str:
     """
 
     if not anchors:
-        return f"> 📎 证据：{_INSUFFICIENT_TEXT}，当前输入未携带证据锚点"
-    first_anchor = anchors[0]
-    description = first_anchor.row_locator or first_anchor.note or "结构化字段"
-    return f"> 📎 证据：年报§{_section_text(first_anchor.section_id)} {description}"
+        return f"> 📎 证据：{_INSUFFICIENT_TEXT}，当前章节未携带证据锚点"
+    return f"> 📎 证据：{_body_anchor_reference(anchors[0])}"
+
+
+def _body_anchor_reference(anchor: EvidenceAnchor) -> str:
+    """渲染正文证据锚点引用。
+
+    Args:
+        anchor: 证据锚点。
+
+    Returns:
+        正文证据锚点文本；年报来源必须包含年份和章节，非年报来源必须显式标注来源类型。
+
+    Raises:
+        无显式抛出。
+    """
+
+    description = _anchor_description(anchor)
+    page_part = _page_metadata_text(anchor.page_number)
+    if anchor.source_kind == "annual_report":
+        year = anchor.document_year if anchor.document_year is not None else "未知年份"
+        return f"年报{year}§{_section_text(anchor.section_id)}{page_part} {description}"
+    source_label = _source_kind_label(anchor.source_kind)
+    location = _non_annual_location_text(anchor)
+    return f"{source_label}{location}{page_part} {description}"
 
 
 def _anchor_reference(anchor: EvidenceAnchor) -> str:
@@ -446,12 +480,133 @@ def _anchor_reference(anchor: EvidenceAnchor) -> str:
         无显式抛出。
     """
 
+    if anchor.source_kind != "annual_report":
+        return _non_annual_anchor_reference(anchor)
     year = anchor.document_year if anchor.document_year is not None else "未知年份"
     section = _section_text(anchor.section_id)
-    table_part = f"表{anchor.table_id}" if anchor.table_id else ""
-    row_part = f"行{anchor.row_locator}" if anchor.row_locator else ""
+    table_part = f"表{anchor.table_id or _UNLOCATED_TEXT}"
+    row_part = f"行{anchor.row_locator or _UNLOCATED_TEXT}"
+    page_part = _page_metadata_text(anchor.page_number)
     note_part = f"：{anchor.note}" if anchor.note else ""
-    return f"年报{year}§{section}{table_part}{row_part}{note_part}"
+    return f"年报{year}§{section}{table_part}{row_part}{page_part}{note_part}"
+
+
+def _non_annual_anchor_reference(anchor: EvidenceAnchor) -> str:
+    """渲染非年报证据锚点引用。
+
+    Args:
+        anchor: 非年报证据锚点。
+
+    Returns:
+        附录格式的非年报证据引用，显式保留来源类型。
+
+    Raises:
+        无显式抛出。
+    """
+
+    source_label = _source_kind_label(anchor.source_kind)
+    location = _non_annual_location_text(anchor)
+    page_part = _page_metadata_text(anchor.page_number)
+    note_part = f"：{anchor.note}" if anchor.note else ""
+    return f"{source_label}{location}{page_part}{note_part}"
+
+
+def _missing_anchor_reference(report_year: int, chapter_index: int) -> str:
+    """渲染缺失证据锚点的附录条目。
+
+    Args:
+        report_year: 报告年份。
+        chapter_index: 模板章节编号。
+
+    Returns:
+        附录中的显式缺证条目。
+
+    Raises:
+        无显式抛出。
+    """
+
+    chapter_title = _CHAPTER_TITLES[chapter_index]
+    return (
+        f"年报{report_year}§{_UNLOCATED_TEXT}表{_UNLOCATED_TEXT}行{_UNLOCATED_TEXT}："
+        f"{_INSUFFICIENT_TEXT}，模板第{chapter_index}章《{chapter_title}》当前输入未携带证据锚点。"
+    )
+
+
+def _source_kind_label(source_kind: str) -> str:
+    """渲染证据来源类型标签。
+
+    Args:
+        source_kind: 证据来源类型。
+
+    Returns:
+        人类可读且保留原始枚举的来源标签。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return _SOURCE_KIND_LABELS.get(source_kind, f"未知来源({source_kind})")
+
+
+def _non_annual_location_text(anchor: EvidenceAnchor) -> str:
+    """渲染非年报锚点位置文本。
+
+    Args:
+        anchor: 非年报证据锚点。
+
+    Returns:
+        非年报位置文本，优先保留年份、章节、表格和行定位。
+
+    Raises:
+        无显式抛出。
+    """
+
+    parts: list[str] = []
+    if anchor.document_year is not None:
+        parts.append(f"年份{anchor.document_year}")
+    if anchor.section_id:
+        parts.append(f"§{_section_text(anchor.section_id)}")
+    if anchor.table_id:
+        parts.append(f"表{anchor.table_id}")
+    if anchor.row_locator:
+        parts.append(f"行{anchor.row_locator}")
+    if not parts:
+        return f"位置{_UNLOCATED_TEXT}"
+    return "".join(parts)
+
+
+def _page_metadata_text(page_number: int | None) -> str:
+    """渲染页码位置元数据。
+
+    Args:
+        page_number: 页码。
+
+    Returns:
+        页码元数据文本；缺失时返回空字符串。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if page_number is None:
+        return ""
+    return f"（第{page_number}页）"
+
+
+def _anchor_description(anchor: EvidenceAnchor) -> str:
+    """选择正文证据描述文本。
+
+    Args:
+        anchor: 证据锚点。
+
+    Returns:
+        正文证据描述，优先使用行定位，其次使用附注。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return anchor.row_locator or anchor.note or "结构化字段"
 
 
 def _section_text(section_id: str | None) -> str:
@@ -507,6 +662,38 @@ def _collect_evidence_anchors(input_data: TemplateRenderInput) -> tuple[Evidence
             *_collect_checklist_anchors(input_data.checklist_result),
             *input_data.stress_test_result.anchors,
         ),
+    )
+
+
+def _collect_chapter_evidence_groups(input_data: TemplateRenderInput) -> tuple[tuple[EvidenceAnchor, ...], ...]:
+    """按模板章节收集证据锚点。
+
+    Args:
+        input_data: 模板渲染输入。
+
+    Returns:
+        第 0-7 章各自使用的证据锚点分组。
+
+    Raises:
+        无显式抛出。
+    """
+
+    behavior_gap = input_data.investor_experience.behavior_gap
+    fund_flow = input_data.investor_experience.fund_flow
+    return (
+        _dedupe_anchors(input_data.structured_data.basic_identity.anchors),
+        _merge_anchors(
+            input_data.structured_data.basic_identity,
+            input_data.structured_data.product_profile,
+            input_data.structured_data.benchmark,
+            input_data.structured_data.fee_schedule,
+        ),
+        _collect_rabc_anchors(input_data.rabc_attributions),
+        _collect_consistency_anchors(input_data),
+        _dedupe_anchors((*behavior_gap.anchors, *fund_flow.anchors)),
+        _merge_anchors(input_data.structured_data.nav_benchmark_performance),
+        _collect_risk_anchors(input_data),
+        _collect_checklist_anchors(input_data.checklist_result),
     )
 
 

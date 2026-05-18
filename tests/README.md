@@ -20,7 +20,7 @@
 - `tests/fund/analysis/test_risk_check.py`：否决项检查与压力测试，覆盖清盘风险、基金经理任期、风格漂移、费率远超同类、指数跟踪误差、显式输入缺失、`-20%/-40%/-60%` 场景和基金类型阈值
 - `tests/fund/analysis/test_checklist.py`：买入前检查清单测试，覆盖 7 问题顺序、红黄绿灰汇总、缺失显式输入、估值状态、资金期限阈值和异常否决项输入
 - `tests/fund/audit/test_audit_programmatic.py`：程序审计测试，覆盖 P1/P2/P3/L1/R1/R2 规则、必需输入缺失、故意注入错误和未知检查清单信号
-- `tests/fund/template/test_renderer.py`：模板渲染器测试，覆盖 8 章完整性、证据锚点格式、程序审计输入兼容、缺失数据显式渲染、最终判断边界、禁用交易措辞和 README 同步
+- `tests/fund/template/test_renderer.py`：模板渲染器测试，覆盖 8 章完整性、正文与附录证据锚点格式、缺证章节显式输出、页码保留、非年报来源标注、程序审计输入兼容、缺失数据显式渲染、最终判断边界、禁用交易措辞和 README 同步
 - `tests/fund/integration/test_p1_sample_matrix.py`：P1 样本矩阵测试，验证 3 只样本基金 12 项结构化数据达到 `36/36`
 - `tests/fixtures/fund/extractors/profile/*.txt`：基础画像最小文本夹具，当前覆盖主动权益、增强指数、债券三类样本
 - `tests/fixtures/fund/extractors/performance/*.txt`：`§3` 最小文本夹具，当前覆盖直接披露、估算披露、未披露三类投资者收益率路径
@@ -72,5 +72,5 @@ pytest tests/fund/integration/test_p1_sample_matrix.py -q
 - 压力测试必须覆盖固定场景、基金类型阈值和缺少最大可承受亏损比例路径；不要在分析层猜测用户承受能力。
 - 检查清单测试必须覆盖 7 问题完整性和红黄绿灰规则；估值、资金期限等用户/外部输入缺失时必须返回灰灯，不允许默认通过。
 - 程序审计测试必须覆盖必需输入缺失和故意注入错误；P1/P2/P3 只审报告结构，L1/R1/R2 必须消费结构化结果，不靠报告文字间接判断，也不能把缺失输入伪装成规则通过。
-- 模板渲染测试必须覆盖 8 章结构、证据锚点格式、缺失数据显式文本、程序审计输入兼容和禁用交易建议措辞；不得只做字符串存在性 smoke test。
+- 模板渲染测试必须覆盖 8 章结构、证据锚点格式、缺证章节显式文本、页码保留、非年报来源标注、程序审计输入兼容和禁用交易建议措辞；不得只做字符串存在性 smoke test。
 - 新增基金类型或章节 extractor 时，先补 fixture，再补测试，再扩实现；不要只靠真实年报手工回归。

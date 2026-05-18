@@ -31,8 +31,8 @@
 ### 1.3 当前 Gate 与基线裁决（2026-05-18）
 
 - 当前分支：`chore/reconcile-baseline`
-- 当前 gate：`P2-S10 implementation + review`
-- 下一 gate：`P2-S10 code review`
+- 当前 gate：`P2 aggregate deepreview`
+- 下一 gate：`P2 aggregate deepreview`
 - 当前裁决：
   - P0 维持 `done`。已验证 `dayu` 依赖可导入、`fund-agent` 处于 editable install、`fund-analysis --help` 可用、样本基金 `110011` 年报可下载、`pdfplumber` 可提取全文文本和表格。
   - P1 已完成并通过 aggregate review。
@@ -135,9 +135,17 @@
     - 最终判断限制为 `worth_holding / needs_attention / suggest_replace`，报告不输出买入、卖出、收益预测或仓位比例
     - code review 接受并修复了 `dict_values(...)` 可见输出、重复句号和 README 过期条目问题
     - 验证命令 `.venv/bin/python -m pytest tests/fund/template tests/fund/audit -q` 当前通过（`18 passed`），`.venv/bin/python -m pytest tests/fund/analysis -q` 当前通过（`40 passed`）
+  - `P2-S10 证据锚点标注` 已完成：
+    - 正文证据行已按年报年份、章节和描述输出；非年报来源显式标注来源类型
+    - 附录年报锚点按 `年报{年份}§{章节}表{编号}行{行号}` 输出
+    - 表格、行定位、章节缺失时显式降级为 `未定位`，不静默丢失年份或章节
+    - 页码作为附加位置元数据保留
+    - 缺少章节证据时，正文和附录均显式输出数据不足
+    - `ProgrammaticAuditInput` 兼容性保持不变
+    - 验证命令 `.venv/bin/python -m pytest tests/fund/template tests/fund/audit -q` 当前通过（`23 passed`），`.venv/bin/python -m pytest tests/fund/analysis -q` 当前通过（`40 passed`）
 - 下一 entry point：
-  - 进入 `P2-S10 implementation + review`
-  - 优先目标是收口证据锚点标注，确保报告正文和附录证据格式满足项目规范
+  - 进入 `P2 aggregate deepreview`
+  - 优先目标是对 P2-S1 至 P2-S10 的完整 P2 diff 做 aggregate review，确认分析、审计、模板和证据锚点组合后无跨 slice 回归
 - 当前 artifact：
   - plan: `docs/reviews/p1-plan-2026-05-17.md`
   - plan review: `docs/reviews/p1-plan-review-2026-05-17.md`
@@ -256,6 +264,12 @@
     - re-review:
       - `docs/reviews/p2-s9-rereview-glm-2026-05-18.md`
     - accepted slice commit: `bf64b0f`
+  - `P2-S10`:
+    - implementation: `docs/reviews/p2-s10-implementation-2026-05-18.md`
+    - code review:
+      - `docs/reviews/p2-s10-code-review-mimo-2026-05-18.md`
+      - `docs/reviews/p2-s10-code-review-glm-2026-05-18.md`
+      - controller judgment: `docs/reviews/p2-s10-code-review-controller-judgment-2026-05-18.md`
 
 ---
 
@@ -749,8 +763,31 @@
     - `docs/reviews/p2-s9-code-review-controller-judgment-2026-05-18.md`
     - `docs/reviews/p2-s9-rereview-glm-2026-05-18.md`
 - 当前 residual risks：
-  - `P2-S10` owner：证据锚点已可渲染，但还需对正文和附录格式做专项收口
+  - `P2-S10` owner：证据锚点正文和附录格式已专项收口
   - `P3-S4` owner：端到端 CLI 报告通过程序审计尚未验证
+  - later template refinement owner：`_validate_report_wording()` 使用 substring 匹配禁用词，未来模板若引入合法分析短语“买入前检查清单”可能误报
+
+**P2-S10 当前状态（2026-05-18）**
+
+- `P2-S10 实现证据锚点标注`：✅ completed
+- 当前完成内容：
+  - 正文证据行对年报来源输出年份、章节和证据描述
+  - 附录年报锚点按 `年报{年份}§{章节}表{编号}行{行号}` 输出
+  - 表格、行定位、章节缺失时显式写 `未定位`
+  - 页码以附加位置元数据保留
+  - 非年报来源输出 `外部数据(external_api)`、`计算(derived)` 或未知来源标签，不伪装成年报
+  - 缺少章节证据时，正文输出数据不足证据行，附录输出章节级缺证条目
+  - `tests/fund/template/test_renderer.py` 已覆盖正文证据格式、附录表格/行定位、缺失定位降级、页码保留、非年报来源、缺证章节和审计兼容
+  - 验证命令 `.venv/bin/python -m pytest tests/fund/template tests/fund/audit -q` 当前通过（`23 passed`）
+  - 验证命令 `.venv/bin/python -m pytest tests/fund/analysis -q` 当前通过（`40 passed`）
+  - code review artifacts：
+    - `docs/reviews/p2-s10-code-review-mimo-2026-05-18.md`
+    - `docs/reviews/p2-s10-code-review-glm-2026-05-18.md`
+    - `docs/reviews/p2-s10-code-review-controller-judgment-2026-05-18.md`
+- 当前 residual risks：
+  - `P2 aggregate deepreview` owner：需要验证 P2-S1 至 P2-S10 组合后无跨 slice 回归
+  - `P3-S4` owner：端到端 CLI 报告通过程序审计尚未验证
+  - later evidence confirm owner：缺证附录当前为章节级，不是 item 级证据确认
   - later template refinement owner：`_validate_report_wording()` 使用 substring 匹配禁用词，未来模板若引入合法分析短语“买入前检查清单”可能误报
 
 **风险与追踪**
@@ -907,3 +944,4 @@ P0（环境搭建）
 | 2026-05-18 | P2 | 🟡 in progress | `P2-S8` controller review 已通过并修复缺少必需输入时静默通过的问题；下一 gate 为 `P2-S9 implementation + review` |
 | 2026-05-18 | P2 | 🟡 in progress | `P2-S1` 至 `P2-S8` 已收口为 accepted baseline commit `a6b1516`；`launchd/`、`scripts/` 和旧 P1 review artifact 保持在 P2 基线外；当前 gate 维持 `P2-S9 implementation + review` |
 | 2026-05-18 | P2 | 🟡 in progress | `P2-S9` implementation / review / fix / re-review 已通过，8 章模板渲染器和程序审计输入已落地，accepted commit=`bf64b0f`；下一 gate 为 `P2-S10 implementation + review` |
+| 2026-05-18 | P2 | 🟡 in progress | `P2-S10` implementation / code review 已通过，证据锚点正文和附录格式已收口；下一 gate 为 `P2 aggregate deepreview` |

@@ -36,13 +36,24 @@ from fund_agent.fund.template import (
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 
 
-def _anchor(section_id: str, row_locator: str | None, *, table_id: str | None = None) -> EvidenceAnchor:
+def _anchor(
+    section_id: str,
+    row_locator: str | None,
+    *,
+    table_id: str | None = None,
+    page_number: int | None = None,
+    source_kind: str = "annual_report",
+    document_year: int | None = 2024,
+) -> EvidenceAnchor:
     """构造测试证据锚点。
 
     Args:
         section_id: 年报章节编号。
         row_locator: 行定位说明。
         table_id: 表格编号。
+        page_number: 页码。
+        source_kind: 证据来源类型。
+        document_year: 文档年份。
 
     Returns:
         证据锚点。
@@ -52,10 +63,10 @@ def _anchor(section_id: str, row_locator: str | None, *, table_id: str | None = 
     """
 
     return EvidenceAnchor(
-        source_kind="annual_report",
-        document_year=2024,
+        source_kind=source_kind,  # type: ignore[arg-type]
+        document_year=document_year,
         section_id=section_id,
-        page_number=None,
+        page_number=page_number,
         table_id=table_id,
         row_locator=row_locator,
         note=f"{row_locator or section_id}: fixture",
@@ -520,7 +531,7 @@ def test_render_template_report_contains_exact_eight_design_chapters() -> None:
 
 
 def test_render_template_report_formats_evidence_anchors_with_year_section_and_optional_row() -> None:
-    """验证证据锚点格式包含年份章节，缺少行定位时不丢失章节。
+    """验证正文证据锚点格式包含年份、章节和描述。
 
     Args:
         无。
@@ -534,10 +545,121 @@ def test_render_template_report_formats_evidence_anchors_with_year_section_and_o
 
     result = render_template_report(_render_input())
 
-    assert "> 📎 证据：年报§1" in result.report_markdown
+    assert "> 📎 证据：年报2024§1 §1: fixture" in result.report_markdown
+    assert "> 📎 证据：年报§1" not in result.report_markdown
+
+
+def test_render_template_report_formats_appendix_anchor_with_table_and_row_exactly() -> None:
+    """验证附录年报锚点精确输出年份、章节、表格和行定位。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当附录格式偏离设计规范时抛出。
+    """
+
+    result = render_template_report(_render_input())
+
     assert "## 证据与出处" in result.report_markdown
-    assert "年报2024§1" in result.report_markdown
-    assert "年报2024§8表T1行industry_distribution" in result.report_markdown
+    assert "年报2024§8表T1行industry_distribution：industry_distribution: fixture" in result.report_markdown
+
+
+def test_render_template_report_formats_missing_row_fallback_without_dropping_year_or_section() -> None:
+    """验证附录缺少表格或行定位时显式降级且不丢年份章节。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当缺失定位被静默省略时抛出。
+    """
+
+    result = render_template_report(_render_input())
+
+    assert "- [1] 年报2024§1表未定位行未定位：§1: fixture" in result.report_markdown
+
+
+def test_render_template_report_retains_page_number_as_location_metadata() -> None:
+    """验证页码作为附加位置元数据保留。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当页码丢失时抛出。
+    """
+
+    input_data = _render_input()
+    paged_anchor = _anchor("§1", "basic_identity", page_number=18)
+    basic_identity = replace(input_data.structured_data.basic_identity, anchors=(paged_anchor,))
+    structured_data = replace(input_data.structured_data, basic_identity=basic_identity)
+    result = render_template_report(replace(input_data, structured_data=structured_data))
+
+    assert "> 📎 证据：年报2024§1（第18页） basic_identity" in result.report_markdown
+    assert "年报2024§1表未定位行basic_identity（第18页）：basic_identity: fixture" in result.report_markdown
+
+
+def test_render_template_report_renders_non_annual_source_kind_explicitly() -> None:
+    """验证非年报来源不会被伪装成年报。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当非年报来源被错误标成年报时抛出。
+    """
+
+    input_data = _render_input()
+    api_anchor = _anchor(
+        "nav_return",
+        "2024-12-31",
+        source_kind="external_api",
+        document_year=None,
+        page_number=1,
+    )
+    basic_identity = replace(input_data.structured_data.basic_identity, anchors=(api_anchor,))
+    structured_data = replace(input_data.structured_data, basic_identity=basic_identity)
+    result = render_template_report(replace(input_data, structured_data=structured_data))
+
+    assert "> 📎 证据：外部数据(external_api)§nav_return行2024-12-31（第1页） 2024-12-31" in result.report_markdown
+    assert "外部数据(external_api)§nav_return行2024-12-31（第1页）：2024-12-31: fixture" in result.report_markdown
+    assert "年报2024§nav_return" not in result.report_markdown
+
+
+def test_render_template_report_emits_missing_evidence_line_and_appendix_entry_per_chapter() -> None:
+    """验证缺少章节证据时正文和附录都显式输出数据不足。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当缺证章节被静默省略时抛出。
+    """
+
+    input_data = _render_input()
+    result = render_template_report(replace(input_data, rabc_attributions=()))
+
+    assert "> 📎 证据：数据不足，当前章节未携带证据锚点" in result.report_markdown
+    assert (
+        "- [M2] 年报2024§未定位表未定位行未定位："
+        "数据不足，模板第2章《R=A+B-C 收益归因》当前输入未携带证据锚点。"
+    ) in result.report_markdown
 
 
 def test_render_template_report_formats_manager_alignment_and_reason_punctuation() -> None:
