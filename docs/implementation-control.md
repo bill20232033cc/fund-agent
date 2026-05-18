@@ -31,8 +31,8 @@
 ### 1.3 当前 Gate 与基线裁决（2026-05-18）
 
 - 当前分支：`feat/p3-cli-integration`
-- 当前 gate：`P3 aggregate deepreview`
-- 下一 gate：`P3 aggregate deepreview`
+- 当前 gate：`ready-to-open-draft-PR`
+- 下一 gate：`ready-to-open-draft-PR`
 - 当前裁决：
   - P0 维持 `done`。已验证 `dayu` 依赖可导入、`fund-agent` 处于 editable install、`fund-analysis --help` 可用、样本基金 `110011` 年报可下载、`pdfplumber` 可提取全文文本和表格。
   - P1 已完成并通过 aggregate review。
@@ -45,7 +45,8 @@
   - `P3-S5 证据锚点集成` 已完成实现与 controller code review：P3 CLI 端到端矩阵现在逐份报告断言 8 章正文证据行、附录年报章节/表格/行定位和无缺证占位；下一 gate 为 `P3-S6 implementation + review`。
   - `P3-S6 编写 README.md` 已完成实现与 controller code review：根 README 已按当前 CLI 成功路径更新为用户手册，并移除过期的端到端矩阵未实现表述；下一 gate 为 `P3-S7 implementation + review`。
   - `P3-S7 编写单元测试` 已完成实现与 controller code review：dev 依赖和测试手册新增覆盖率 gate，当前 `fund_agent` 总覆盖率 90.07%，超过 50% 目标；下一 gate 为 `P3-S8 implementation + review`。
-  - `P3-S8 性能优化` 已完成实现与 controller code review：Service 层新增不含 PDF 下载的单只基金分析性能 gate，验证完整编排低于 30 秒；下一 gate 为 `P3 aggregate deepreview`。
+  - `P3-S8 性能优化` 已完成实现与 controller code review：Service 层新增不含 PDF 下载的单只基金分析性能 gate，验证完整编排低于 30 秒。
+  - `P3 aggregate deepreview` 已通过 controller deepreview：未发现 blocking finding；当前验证 `27 passed`、覆盖率矩阵 `116 passed / 90.07%`、`git diff --check` 通过；下一 gate 为 `ready-to-open-draft-PR`。
   - `P2-S1` 至 `P2-S8` 已收口为 accepted baseline commit `a6b1516`。收口范围仅包含 P2 analysis/audit 实现、测试、README 同步与 review artifact；本地运行辅助文件 `launchd/`、`scripts/` 和旧 P1 review artifact 未纳入该基线。
   - `P1-S1 文档访问契约收口` 已完成：对外唯一仓库入口收口为 `FundDocumentRepository.load_annual_report(...) -> ParsedAnnualReport`，公共契约已迁入 `fund_agent/fund/documents/*`，`fund_agent/fund/pdf/*` 降为仓库内部 helper / adapter。
   - `P1-S2 章节定位修复与 §3 冻结` 已完成：
@@ -1083,6 +1084,24 @@
 - 当前 residual risks：
   - 该 gate 不覆盖真实 PDF 下载、PDF 解析、网络波动或冷缓存墙钟时间
 
+**P3 Aggregate Deepreview 当前状态（2026-05-18）**
+
+- `P3 aggregate deepreview`：✅ completed
+- 当前完成内容：
+  - controller aggregate deepreview artifact：`docs/reviews/code-review-20260518-2223.md`
+  - review scope：`main..feat/p3-cli-integration`
+  - 结论：PASS，无 blocking finding
+  - 验证命令 `.venv/bin/python -m pytest tests/fund/integration/test_p3_cli_e2e_matrix.py tests/services/test_fund_analysis_service.py tests/fund/template/test_renderer.py tests/fund/audit/test_audit_programmatic.py -q` 当前通过（`27 passed`）
+  - 覆盖率命令 `.venv/bin/python -m pytest tests/fund/data tests/fund/documents tests/fund/extractors tests/fund/integration tests/fund/template tests/fund/audit tests/fund/analysis tests/services tests/ui --cov=fund_agent --cov-report=term-missing --cov-fail-under=50 -q` 当前通过（`116 passed`，总覆盖率 `90.07%`）
+  - `git diff --check` 当前通过
+- reviewer availability：
+  - 本轮 aggregate review 未取得可用 MiMo/GLM 独立新 artifact：MiMo pane 被用户 `.tmux.conf` 输入污染，GLM pane 保留旧的长运行 review context
+  - controller 已在 aggregate artifact 中记录该风险；如进入 draft PR gate 前仍需要双外部 reviewer，可重新清 pane 后派发
+- 当前 residual risks：
+  - 真实 PDF/network smoke 仍未自动化，owner：ready-to-open-draft-PR gate 或后续 PR review
+  - 温度计 adapter 尚未接入 CLI/Service 报告，owner：后续 phase / issue
+  - 基金简称 QDII 标识可作为独立分类字段继续清理，owner：后续 classifier cleanup
+
 ---
 
 ## 3. 依赖关系
@@ -1123,7 +1142,7 @@ P0（环境搭建）
 | RR-5 | `dayu-agent` wheel 下载受 GitHub 可达性影响 | P0/P1 | 当前虚拟环境已安装，可继续开发；新环境安装待镜像化或替代分发方案 | 否 |
 | RR-6 | 模板禁用交易措辞使用 substring 匹配，未来合法短语可能误报 | P3/v2 | P2 当前输出已测试通过；P3 若调整模板措辞需同步审查 | 否 |
 | RR-7 | 缺证附录当前为章节级，不是 item 级证据确认 | v2 | MVP 先保证章节级可追溯，Evidence Confirm 层后续细化 | 否 |
-| RR-8 | CLI 端到端真实 PDF/网络路径尚未覆盖 | P3 | P3-S3 用 3 只样本基金端到端矩阵验证 | 否 |
+| RR-8 | CLI 端到端真实 PDF/网络路径尚未覆盖 | P3 | P3-S3 用 3 只样本基金 deterministic 端到端矩阵验证 Service/CLI/Capability 主链路；真实 PDF/network smoke 仍留到 ready-to-open-draft-PR gate 或 PR review | 否 |
 | RR-9 | 真实 `§2` 字段主要位于表格而非冒号文本行 | P3 | P3-S3 已让 profile extractor / fund type classifier 读取键值型表头与数据行，并以 3 只样本基金矩阵覆盖 | 否 |
 | RR-10 | 历史低质量 parsed report 缓存污染真实端到端输出 | P3 | P3-S3 已在 parsed report 缓存命中前检查正文长度与关键章节集合，不合格缓存回退为未命中 | 否 |
 
@@ -1205,3 +1224,4 @@ P0（环境搭建）
 | 2026-05-18 | P3 | 🟡 in progress | `P3-S7` implementation / controller code review 已通过；dev 依赖和测试手册新增覆盖率 gate，当前 `fund_agent` 总覆盖率 `90.07%`，超过 50% 目标；当前验证 `115 passed`；accepted commit=`d1d506b`；下一 gate 为 `P3-S8 implementation + review` |
 | 2026-05-18 | P3 | 🟡 in progress | `P3-S8 implementation` 已完成；Service 层新增不含 PDF 下载的单只基金分析性能 gate，验证完整编排低于 30 秒；当前验证 `3 passed`；下一 gate 为 `P3-S8 code review` |
 | 2026-05-18 | P3 | 🟡 in progress | `P3-S8` implementation / controller code review 已通过；Service 层新增不含 PDF 下载的单只基金分析性能 gate，验证完整编排低于 30 秒；当前验证 `3 passed`；accepted commit=`7845add`；下一 gate 为 `P3 aggregate deepreview` |
+| 2026-05-18 | P3 | 🟡 in progress | `P3 aggregate deepreview` 已通过 controller review，无 blocking finding；当前验证 `27 passed`、覆盖率矩阵 `116 passed / 90.07%` 且 `git diff --check` 通过；review artifact=`docs/reviews/code-review-20260518-2223.md`；下一 gate 为 `ready-to-open-draft-PR` |
