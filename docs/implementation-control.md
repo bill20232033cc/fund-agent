@@ -1025,6 +1025,7 @@
   - artifacts：
     - `docs/reviews/p3-s5-implementation-2026-05-18.md`
     - `docs/reviews/p3-s5-code-review-controller-judgment-2026-05-18.md`
+  - accepted slice commit：`46432c0`
 - 当前 residual risks：
   - P3-S5 当前验证的是 deterministic fake repository 输出的报告证据契约，不替代真实 PDF/network smoke
 
@@ -1143,4 +1144,4 @@ P0（环境搭建）
 | 2026-05-18 | P3 | 🟡 in progress | `P3-S4 implementation` 已完成；P3 CLI 端到端矩阵现在显式记录真实 Service 返回值，并断言 P1/P2/P3/L1/R1/R2 全部程序审计规则执行通过；当前验证 `26 passed`；下一 gate 为 `P3-S4 code review` |
 | 2026-05-18 | P3 | 🟡 in progress | `P3-S4` implementation / controller code review 已通过；P3 CLI 端到端矩阵已验证 3 只样本基金的 `audit_result.passed`、`checked_rules == P1/P2/P3/L1/R1/R2` 和空 issues；当前验证 `115 passed` 且 `git diff --check` 通过；accepted implementation commit=`caf5b31`；下一 gate 为 `P3-S5 implementation + review` |
 | 2026-05-18 | P3 | 🟡 in progress | `P3-S5 implementation` 已完成；P3 CLI 端到端矩阵现在断言每份报告 8 章正文证据行、关键附录来源锚点和无缺证占位；当前验证 `1 passed`；下一 gate 为 `P3-S5 code review` |
-| 2026-05-18 | P3 | 🟡 in progress | `P3-S5` implementation / controller code review 已通过；P3 CLI 端到端矩阵已验证每份报告 8 章正文证据行、关键附录来源锚点和无缺证占位；当前验证 `24 passed` 且 `git diff --check` 通过；下一 gate 为 `P3-S6 implementation + review` |
+| 2026-05-18 | P3 | 🟡 in progress | `P3-S5` implementation / controller code review 已通过；P3 CLI 端到端矩阵已验证每份报告 8 章正文证据行、关键附录来源锚点和无缺证占位；当前验证 `24 passed` 且 `git diff --check` 通过；accepted commit=`46432c0`；下一 gate 为 `P3-S6 implementation + review` |
