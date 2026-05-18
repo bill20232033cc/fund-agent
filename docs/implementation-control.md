@@ -31,8 +31,8 @@
 ### 1.3 当前 Gate 与基线裁决（2026-05-18）
 
 - 当前分支：`feat/p3-cli-integration`
-- 当前 gate：`ready-to-open-draft-PR`
-- 下一 gate：`ready-to-open-draft-PR`
+- 当前 gate：`draft-PR-pass`
+- 下一 gate：`draft-PR-pass`
 - 当前裁决：
   - P0 维持 `done`。已验证 `dayu` 依赖可导入、`fund-agent` 处于 editable install、`fund-analysis --help` 可用、样本基金 `110011` 年报可下载、`pdfplumber` 可提取全文文本和表格。
   - P1 已完成并通过 aggregate review。
@@ -46,7 +46,8 @@
   - `P3-S6 编写 README.md` 已完成实现与 controller code review：根 README 已按当前 CLI 成功路径更新为用户手册，并移除过期的端到端矩阵未实现表述；下一 gate 为 `P3-S7 implementation + review`。
   - `P3-S7 编写单元测试` 已完成实现与 controller code review：dev 依赖和测试手册新增覆盖率 gate，当前 `fund_agent` 总覆盖率 90.07%，超过 50% 目标；下一 gate 为 `P3-S8 implementation + review`。
   - `P3-S8 性能优化` 已完成实现与 controller code review：Service 层新增不含 PDF 下载的单只基金分析性能 gate，验证完整编排低于 30 秒。
-  - `P3 aggregate deepreview` 已通过 controller deepreview：未发现 blocking finding；当前验证 `27 passed`、覆盖率矩阵 `116 passed / 90.07%`、`git diff --check` 通过；下一 gate 为 `ready-to-open-draft-PR`。
+  - `P3 aggregate deepreview` 已通过 controller deepreview：未发现 blocking finding；当前验证 `27 passed`、覆盖率矩阵 `116 passed / 90.07%`、`git diff --check` 通过。
+  - Draft PR 2 已创建：`https://github.com/bill20232033cc/fund-agent/pull/2`；GitHub 当前未报告 checks；下一 gate 为 `draft-PR-pass`。
   - `P2-S1` 至 `P2-S8` 已收口为 accepted baseline commit `a6b1516`。收口范围仅包含 P2 analysis/audit 实现、测试、README 同步与 review artifact；本地运行辅助文件 `launchd/`、`scripts/` 和旧 P1 review artifact 未纳入该基线。
   - `P1-S1 文档访问契约收口` 已完成：对外唯一仓库入口收口为 `FundDocumentRepository.load_annual_report(...) -> ParsedAnnualReport`，公共契约已迁入 `fund_agent/fund/documents/*`，`fund_agent/fund/pdf/*` 降为仓库内部 helper / adapter。
   - `P1-S2 章节定位修复与 §3 冻结` 已完成：
@@ -1102,6 +1103,18 @@
   - 温度计 adapter 尚未接入 CLI/Service 报告，owner：后续 phase / issue
   - 基金简称 QDII 标识可作为独立分类字段继续清理，owner：后续 classifier cleanup
 
+**P3 Draft PR 当前状态（2026-05-18）**
+
+- `draft PR gate`：✅ completed
+- PR：`https://github.com/bill20232033cc/fund-agent/pull/2`
+- PR 状态：OPEN / draft
+- base：`main`
+- head：`feat/p3-cli-integration`
+- checks：GitHub 当前返回 no checks reported
+- 当前 residual risks：
+  - PR 仍为 draft，mark ready / merge 需要用户额外授权
+  - 真实 PDF/network smoke 未自动化，owner：PR review 或后续独立 smoke
+
 ---
 
 ## 3. 依赖关系
@@ -1225,3 +1238,4 @@ P0（环境搭建）
 | 2026-05-18 | P3 | 🟡 in progress | `P3-S8 implementation` 已完成；Service 层新增不含 PDF 下载的单只基金分析性能 gate，验证完整编排低于 30 秒；当前验证 `3 passed`；下一 gate 为 `P3-S8 code review` |
 | 2026-05-18 | P3 | 🟡 in progress | `P3-S8` implementation / controller code review 已通过；Service 层新增不含 PDF 下载的单只基金分析性能 gate，验证完整编排低于 30 秒；当前验证 `3 passed`；accepted commit=`7845add`；下一 gate 为 `P3 aggregate deepreview` |
 | 2026-05-18 | P3 | 🟡 in progress | `P3 aggregate deepreview` 已通过 controller review，无 blocking finding；当前验证 `27 passed`、覆盖率矩阵 `116 passed / 90.07%` 且 `git diff --check` 通过；review artifact=`docs/reviews/code-review-20260518-2223.md`；下一 gate 为 `ready-to-open-draft-PR` |
+| 2026-05-18 | P3 | 🟡 in progress | Draft PR 2 已创建并保持 draft 状态；URL=`https://github.com/bill20232033cc/fund-agent/pull/2`；GitHub 当前 no checks reported；当前 gate 为 `draft-PR-pass` |
