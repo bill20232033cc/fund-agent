@@ -1061,6 +1061,7 @@
   - artifacts：
     - `docs/reviews/p3-s7-implementation-2026-05-18.md`
     - `docs/reviews/p3-s7-code-review-controller-judgment-2026-05-18.md`
+  - accepted slice commit：`d1d506b`
 - 当前 residual risks：
   - 覆盖率是广度信号，不替代语义 review；真实 PDF/network smoke 仍需独立验证
 
@@ -1183,4 +1184,4 @@ P0（环境搭建）
 | 2026-05-18 | P3 | 🟡 in progress | `P3-S6 implementation` 已完成；根 README 已按当前 CLI 成功路径更新为用户手册，并移除过期端到端矩阵状态；当前验证 `fund-analysis --help`、`fund-analysis analyze --help` 和 `git diff --check` 通过；下一 gate 为 `P3-S6 code review` |
 | 2026-05-18 | P3 | 🟡 in progress | `P3-S6` implementation / controller code review 已通过；根 README 已按当前 CLI 成功路径更新为用户手册，文档导航均指向真实文件；当前验证 `fund-analysis --help`、`fund-analysis analyze --help` 和 `git diff --check` 通过；accepted commit=`8904588`；下一 gate 为 `P3-S7 implementation + review` |
 | 2026-05-18 | P3 | 🟡 in progress | `P3-S7 implementation` 已完成；dev 依赖和测试手册新增覆盖率 gate，当前 `fund_agent` 总覆盖率 `90.07%`，超过 50% 目标；当前验证 `115 passed`；下一 gate 为 `P3-S7 code review` |
-| 2026-05-18 | P3 | 🟡 in progress | `P3-S7` implementation / controller code review 已通过；dev 依赖和测试手册新增覆盖率 gate，当前 `fund_agent` 总覆盖率 `90.07%`，超过 50% 目标；当前验证 `115 passed`；下一 gate 为 `P3-S8 implementation + review` |
+| 2026-05-18 | P3 | 🟡 in progress | `P3-S7` implementation / controller code review 已通过；dev 依赖和测试手册新增覆盖率 gate，当前 `fund_agent` 总覆盖率 `90.07%`，超过 50% 目标；当前验证 `115 passed`；accepted commit=`d1d506b`；下一 gate 为 `P3-S8 implementation + review` |
