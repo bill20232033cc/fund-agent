@@ -255,6 +255,7 @@
     - fix: `docs/reviews/p2-s9-fix-2026-05-18.md`
     - re-review:
       - `docs/reviews/p2-s9-rereview-glm-2026-05-18.md`
+    - accepted slice commit: `bf64b0f`
 
 ---
 
@@ -905,4 +906,4 @@ P0（环境搭建）
 | 2026-05-17 | P2 | 🟡 in progress | `P2-S8` implementation 已完成，P1/P2/P3/L1/R1/R2 程序审计与测试已落地；当前 gate 为 `P2-S8 code review` |
 | 2026-05-18 | P2 | 🟡 in progress | `P2-S8` controller review 已通过并修复缺少必需输入时静默通过的问题；下一 gate 为 `P2-S9 implementation + review` |
 | 2026-05-18 | P2 | 🟡 in progress | `P2-S1` 至 `P2-S8` 已收口为 accepted baseline commit `a6b1516`；`launchd/`、`scripts/` 和旧 P1 review artifact 保持在 P2 基线外；当前 gate 维持 `P2-S9 implementation + review` |
-| 2026-05-18 | P2 | 🟡 in progress | `P2-S9` implementation / review / fix / re-review 已通过，8 章模板渲染器和程序审计输入已落地；下一 gate 为 `P2-S10 implementation + review` |
+| 2026-05-18 | P2 | 🟡 in progress | `P2-S9` implementation / review / fix / re-review 已通过，8 章模板渲染器和程序审计输入已落地，accepted commit=`bf64b0f`；下一 gate 为 `P2-S10 implementation + review` |
