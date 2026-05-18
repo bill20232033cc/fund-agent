@@ -31,7 +31,7 @@
 ### 1.3 当前 Gate 与基线裁决（2026-05-18）
 
 - 当前分支：`feat/p3-cli-integration`
-- 当前 gate：`P3-S3 accepted commit`
+- 当前 gate：`P3-S4 implementation + review`
 - 下一 gate：`P3-S4 implementation + review`
 - 当前裁决：
   - P0 维持 `done`。已验证 `dayu` 依赖可导入、`fund-agent` 处于 editable install、`fund-analysis --help` 可用、样本基金 `110011` 年报可下载、`pdfplumber` 可提取全文文本和表格。
@@ -1083,4 +1083,4 @@ P0（环境搭建）
 | 2026-05-18 | P3 | 🟡 in progress | `P3-S2 implementation + review` 已进入实现；温度计 adapter 目标为读取有知有行 `/data` 与 `/data/macro`，提供 24h fresh cache、7 天 stale fallback 和 unavailable 状态，暂不接入 CLI/Service。 |
 | 2026-05-18 | P3 | 🟡 in progress | `P3-S2` implementation / code review / controller fix 已通过；温度计 adapter 当前验证 `60 passed` 且真实响应 smoke 可解析全市场、指数、债市与 10 年期国债到期收益率；accepted commit=`1747aaf`；下一 gate 为 `P3-S3 implementation + review` |
 | 2026-05-18 | P3 | 🟡 in progress | `P3-S3 implementation` 已完成；新增 3 只样本基金 CLI 端到端矩阵并修复真实表格抽取、低质量 parsed cache 复用和模板基准字段契约错配；当前验证 `33 passed`；下一 gate 为 `P3-S3 code review` |
-| 2026-05-18 | P3 | 🟡 in progress | `P3-S3 code review` 已由 controller judgment PASS；GLM/MiMo review pane 未在 gate 时间内产出 artifact，已记录为 INFO 流程风险；当前验证 `115 passed` 且 `git diff --check` 通过；下一 gate 为 `P3-S3 accepted commit` |
+| 2026-05-18 | P3 | 🟡 in progress | `P3-S3` implementation / controller code review 已通过；新增 3 只样本基金 CLI 端到端矩阵并修复真实表格抽取、低质量 parsed cache 复用和模板基准字段契约错配；当前验证 `115 passed` 且 `git diff --check` 通过；accepted commit=`e0b1b93`；下一 gate 为 `P3-S4 implementation + review` |
