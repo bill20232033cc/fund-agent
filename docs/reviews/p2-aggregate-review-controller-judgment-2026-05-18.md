@@ -1,10 +1,10 @@
 # P2 Aggregate Review Controller Judgment
 
-> 日期：2026-05-18  
-> Gate：`P2 aggregate deepreview`  
-> 设计真源：`docs/design.md`  
-> 实施总控：`docs/implementation-control.md`  
-> Base：`a6b1516`（P2-S1 至 P2-S8 accepted baseline）  
+> 日期：2026-05-18
+> Gate：`P2 aggregate deepreview`
+> 设计真源：`docs/design.md`
+> 实施总控：`docs/implementation-control.md`
+> Base：`a6b1516`（P2-S1 至 P2-S8 accepted baseline）
 > Head：当前 `HEAD` + aggregate review artifact + doc-sync fix
 
 ## 1. 审查范围

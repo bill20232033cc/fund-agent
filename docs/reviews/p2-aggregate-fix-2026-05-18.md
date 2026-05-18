@@ -1,8 +1,8 @@
 # P2 Aggregate Fix
 
-> 日期：2026-05-18  
-> Gate：`P2 aggregate deepreview`  
-> 触发来源：AgentGLM aggregate review F8  
+> 日期：2026-05-18
+> Gate：`P2 aggregate deepreview`
+> 触发来源：AgentGLM aggregate review F8
 > 结论：已修复，仅涉及总控文档同步
 
 ## 1. 修复项
