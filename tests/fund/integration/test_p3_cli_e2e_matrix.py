@@ -293,6 +293,20 @@ _SAMPLE_CASES: tuple[_SampleFundCase, ...] = (
     ),
 )
 
+_EXPECTED_APPENDIX_EVIDENCE_FRAGMENTS: tuple[str, ...] = (
+    "年报2024§2表page-5-table-0行fund_name",
+    "年报2024§2表page-5-table-1行investment_objective",
+    "年报2024§2表page-5-table-1行investment_scope",
+    "年报2024§2表page-5-table-1行benchmark",
+    "年报2024§3表未定位行nav_growth_rate",
+    "年报2024§3表未定位行investor_return_rate",
+    "年报2024§4表未定位行strategy_summary",
+    "年报2024§8表page-42-table-0行top_holdings",
+    "年报2024§8表page-43-table-1行industry_distribution",
+    "年报2024§9表未定位行manager_holding",
+    "年报2024§10表page-58-table-0行share_change",
+)
+
 
 def _build_report(case: _SampleFundCase) -> ParsedAnnualReport:
     """构造覆盖 P3 CLI 端到端路径的 fake 年报。
@@ -450,6 +464,66 @@ def _product_table(case: _SampleFundCase) -> ParsedTable:
     )
 
 
+def _body_evidence_lines(report_markdown: str) -> tuple[str, ...]:
+    """提取报告正文证据行。
+
+    Args:
+        report_markdown: CLI 输出的 Markdown 报告。
+
+    Returns:
+        正文中以统一证据标记开头的行。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return tuple(line for line in report_markdown.splitlines() if line.startswith("> 📎 证据："))
+
+
+def _appendix_evidence_lines(report_markdown: str) -> tuple[str, ...]:
+    """提取证据附录条目。
+
+    Args:
+        report_markdown: CLI 输出的 Markdown 报告。
+
+    Returns:
+        `## 证据与出处` 之后的附录证据条目。
+
+    Raises:
+        AssertionError: 当报告缺少证据附录标题时抛出。
+    """
+
+    lines = report_markdown.splitlines()
+    evidence_heading_index = lines.index("## 证据与出处")
+    return tuple(line for line in lines[evidence_heading_index + 1 :] if line.startswith("- ["))
+
+
+def _assert_complete_evidence_contract(report_markdown: str) -> None:
+    """断言 P3-S5 端到端证据锚点契约。
+
+    Args:
+        report_markdown: CLI 输出的 Markdown 报告。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当正文章节证据或附录来源定位不完整时抛出。
+    """
+
+    body_evidence_lines = _body_evidence_lines(report_markdown)
+    appendix_evidence_lines = _appendix_evidence_lines(report_markdown)
+    appendix_text = "\n".join(appendix_evidence_lines)
+
+    assert len(body_evidence_lines) == 8
+    assert all("年报2024§" in line for line in body_evidence_lines)
+    assert all("当前章节未携带证据锚点" not in line for line in body_evidence_lines)
+    assert len(appendix_evidence_lines) >= len(_EXPECTED_APPENDIX_EVIDENCE_FRAGMENTS)
+    assert not any(line.startswith("- [M") for line in appendix_evidence_lines)
+    for fragment in _EXPECTED_APPENDIX_EVIDENCE_FRAGMENTS:
+        assert fragment in appendix_text
+
+
 def test_p3_cli_outputs_complete_reports_for_three_sample_funds(monkeypatch) -> None:  # type: ignore[no-untyped-def]
     """验证 3 只样本基金可经 CLI 跑通完整 8 章报告。
 
@@ -488,6 +562,7 @@ def test_p3_cli_outputs_complete_reports_for_three_sample_funds(monkeypatch) -> 
         assert "业绩基准 未披露" not in result.output
         assert "表page-5-table-0" in result.output
         assert "表page-5-table-1" in result.output
+        _assert_complete_evidence_contract(result.output)
 
     assert set(outputs) == {"110011", "510300", "000171"}
     assert len(recording_service.results) == 3

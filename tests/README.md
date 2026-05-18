@@ -25,7 +25,7 @@
 - `tests/services/test_fund_analysis_service.py`：Service 编排测试，使用 fake extractor 避免网络/PDF 下载，覆盖结构化抽取到渲染和程序审计的完整调用路径
 - `tests/ui/test_cli.py`：Typer CLI 测试，覆盖 `analyze` 调用 Service 并输出 Markdown、失败非零退出，以及 `checklist` 不输出误导性成功文本
 - `tests/fund/integration/test_p1_sample_matrix.py`：P1 样本矩阵测试，验证 3 只样本基金 12 项结构化数据达到 `36/36`
-- `tests/fund/integration/test_p3_cli_e2e_matrix.py`：P3 CLI 端到端矩阵测试，验证 3 只样本基金经 Typer CLI、Service、P1/P2 Capability、模板渲染和程序审计输出完整 8 章报告，并显式断言 P1/P2/P3/L1/R1/R2 全部审计规则执行通过
+- `tests/fund/integration/test_p3_cli_e2e_matrix.py`：P3 CLI 端到端矩阵测试，验证 3 只样本基金经 Typer CLI、Service、P1/P2 Capability、模板渲染和程序审计输出完整 8 章报告，并显式断言 P1/P2/P3/L1/R1/R2 全部审计规则执行通过、每章正文证据行和附录来源锚点完整
 - `tests/fixtures/fund/extractors/profile/*.txt`：基础画像最小文本夹具，当前覆盖主动权益、增强指数、债券三类样本
 - `tests/fixtures/fund/extractors/performance/*.txt`：`§3` 最小文本夹具，当前覆盖直接披露、估算披露、未披露三类投资者收益率路径
 - `tests/fixtures/fund/extractors/manager_ownership/*.txt`：`§4/§8/§9` 最小文本夹具，当前覆盖完整披露、部分披露、未披露、换手率口径-only 路径
@@ -84,5 +84,5 @@ pytest tests/fund/integration/test_p3_cli_e2e_matrix.py -q
 - 模板渲染测试必须覆盖 8 章结构、证据锚点格式、缺证章节显式文本、页码保留、非年报来源标注、程序审计输入兼容和禁用交易建议措辞；不得只做字符串存在性 smoke test。
 - Service 测试必须通过 fake extractor 隔离网络、PDF 下载和文档仓库副作用，只断言 Service 对 Capability 模块的编排契约。
 - UI CLI 测试只验证参数解析、Service 调用、stdout/stderr 和退出码；不得在 UI 层直接断言基金分析规则。
-- P3 CLI 端到端矩阵可通过 fake repository 和 fake nav provider 隔离网络/PDF 副作用，但必须经过真实 CLI 参数解析、Service 编排、模板渲染和程序审计，并断言 `ProgrammaticAuditResult.checked_rules` 覆盖 P1/P2/P3/L1/R1/R2。
+- P3 CLI 端到端矩阵可通过 fake repository 和 fake nav provider 隔离网络/PDF 副作用，但必须经过真实 CLI 参数解析、Service 编排、模板渲染和程序审计，并断言 `ProgrammaticAuditResult.checked_rules` 覆盖 P1/P2/P3/L1/R1/R2，同时验证 8 章正文证据行、附录年报章节/表格/行定位和无缺证占位。
 - 新增基金类型或章节 extractor 时，先补 fixture，再补测试，再扩实现；不要只靠真实年报手工回归。
