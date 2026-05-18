@@ -9,7 +9,7 @@ from typer.testing import CliRunner
 from fund_agent.fund.data.nav_data import NavDataResult
 from fund_agent.fund.data_extractor import FundDataExtractor
 from fund_agent.fund.documents.models import DocumentKey, ParsedAnnualReport, ParsedTable, ReportSection
-from fund_agent.services import FundAnalysisService
+from fund_agent.services import FundAnalysisRequest, FundAnalysisResult, FundAnalysisService
 from fund_agent.ui import cli
 
 
@@ -129,6 +129,43 @@ class _FakeNavProvider:
             source="p3-cli-fixture",
             cached=False,
         )
+
+
+class _RecordingService:
+    """P3 CLI 测试用 Service 代理，记录真实 Service 返回值。"""
+
+    def __init__(self, service: FundAnalysisService) -> None:
+        """初始化记录代理。
+
+        Args:
+            service: 真实基金分析 Service。
+
+        Returns:
+            无返回值。
+
+        Raises:
+            无显式抛出。
+        """
+
+        self._service = service
+        self.results: list[FundAnalysisResult] = []
+
+    async def analyze(self, request: FundAnalysisRequest) -> FundAnalysisResult:
+        """调用真实 Service 并记录结果。
+
+        Args:
+            request: CLI 组装出的显式分析请求。
+
+        Returns:
+            真实 Service 返回值。
+
+        Raises:
+            Exception: 允许真实 Service 传播分析或审计异常。
+        """
+
+        result = await self._service.analyze(request)
+        self.results.append(result)
+        return result
 
 
 _SAMPLE_CASES: tuple[_SampleFundCase, ...] = (
@@ -432,7 +469,8 @@ def test_p3_cli_outputs_complete_reports_for_three_sample_funds(monkeypatch) -> 
     service = FundAnalysisService(
         extractor=FundDataExtractor(repository=repository, nav_provider=nav_provider),
     )
-    monkeypatch.setattr(cli, "FundAnalysisService", lambda: service)
+    recording_service = _RecordingService(service)
+    monkeypatch.setattr(cli, "FundAnalysisService", lambda: recording_service)
     runner = CliRunner()
 
     outputs: dict[str, str] = {}
@@ -452,5 +490,10 @@ def test_p3_cli_outputs_complete_reports_for_three_sample_funds(monkeypatch) -> 
         assert "表page-5-table-1" in result.output
 
     assert set(outputs) == {"110011", "510300", "000171"}
+    assert len(recording_service.results) == 3
+    for result in recording_service.results:
+        assert result.audit_result.passed
+        assert result.audit_result.checked_rules == ("P1", "P2", "P3", "L1", "R1", "R2")
+        assert result.audit_result.issues == ()
     assert repository.calls == [(case.fund_code, 2024, True) for case in _SAMPLE_CASES]
     assert nav_provider.calls == [(case.fund_code, True) for case in _SAMPLE_CASES]
