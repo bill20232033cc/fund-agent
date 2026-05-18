@@ -31,8 +31,8 @@
 ### 1.3 当前 Gate 与基线裁决（2026-05-18）
 
 - 当前分支：`feat/p3-cli-integration`
-- 当前 gate：`P3-S3 implementation + review`
-- 下一 gate：`P3-S3 implementation + review`
+- 当前 gate：`P3-S3 accepted commit`
+- 下一 gate：`P3-S4 implementation + review`
 - 当前裁决：
   - P0 维持 `done`。已验证 `dayu` 依赖可导入、`fund-agent` 处于 editable install、`fund-analysis --help` 可用、样本基金 `110011` 年报可下载、`pdfplumber` 可提取全文文本和表格。
   - P1 已完成并通过 aggregate review。
@@ -40,6 +40,7 @@
   - P3 已进入 `in progress`。
   - `P3-S1 CLI 入口封装` 已完成，通过 Typer CLI 和 Service 层输出单只基金 8 章 Markdown 报告；下一 gate 为 `P3-S2 implementation + review`。
   - `P3-S2 温度计数据爬取` 已完成并通过 GLM/MiMo code review；当前实现范围仅限 Capability data adapter，不接入 CLI/Service。
+  - `P3-S3 端到端整合测试` 已完成实现与 controller code review：新增 3 只样本基金 CLI 端到端矩阵，闭合真实 `§2` 表格字段抽取、parsed report 低质量缓存门槛和模板 `benchmark_text` 契约错配；下一 gate 为 accepted commit 后进入 `P3-S4 implementation + review`。
   - `P2-S1` 至 `P2-S8` 已收口为 accepted baseline commit `a6b1516`。收口范围仅包含 P2 analysis/audit 实现、测试、README 同步与 review artifact；本地运行辅助文件 `launchd/`、`scripts/` 和旧 P1 review artifact 未纳入该基线。
   - `P1-S1 文档访问契约收口` 已完成：对外唯一仓库入口收口为 `FundDocumentRepository.load_annual_report(...) -> ParsedAnnualReport`，公共契约已迁入 `fund_agent/fund/documents/*`，`fund_agent/fund/pdf/*` 降为仓库内部 helper / adapter。
   - `P1-S2 章节定位修复与 §3 冻结` 已完成：
@@ -886,8 +887,8 @@
 
 - [x] `fund-analysis analyze <fund_code>` 命令可用
 - [x] 输出完整 8 章分析报告（Markdown 格式）
-- [ ] 报告通过程序审计
-- [ ] 3 只样本基金端到端测试通过
+- [x] 报告通过程序审计
+- [x] 3 只样本基金端到端测试通过
 - [ ] 单只基金分析时间 < 30 秒（不含 PDF 下载）
 - [x] 包含 README.md（安装 + 使用说明）
 - [ ] 单元测试覆盖率 > 50%
@@ -1012,6 +1013,8 @@ P0（环境搭建）
 | RR-6 | 模板禁用交易措辞使用 substring 匹配，未来合法短语可能误报 | P3/v2 | P2 当前输出已测试通过；P3 若调整模板措辞需同步审查 | 否 |
 | RR-7 | 缺证附录当前为章节级，不是 item 级证据确认 | v2 | MVP 先保证章节级可追溯，Evidence Confirm 层后续细化 | 否 |
 | RR-8 | CLI 端到端真实 PDF/网络路径尚未覆盖 | P3 | P3-S3 用 3 只样本基金端到端矩阵验证 | 否 |
+| RR-9 | 真实 `§2` 字段主要位于表格而非冒号文本行 | P3 | P3-S3 已让 profile extractor / fund type classifier 读取键值型表头与数据行，并以 3 只样本基金矩阵覆盖 | 否 |
+| RR-10 | 历史低质量 parsed report 缓存污染真实端到端输出 | P3 | P3-S3 已在 parsed report 缓存命中前检查正文长度与关键章节集合，不合格缓存回退为未命中 | 否 |
 
 ---
 
@@ -1079,3 +1082,5 @@ P0（环境搭建）
 | 2026-05-18 | P3 | 🟡 in progress | `P3-S1` implementation / code review / fix / re-review 已通过；CLI 通过 Service 层输出 8 章 Markdown，当前验证 `68 passed`；accepted commit=`c5a240c`；下一 gate 为 `P3-S2 implementation + review` |
 | 2026-05-18 | P3 | 🟡 in progress | `P3-S2 implementation + review` 已进入实现；温度计 adapter 目标为读取有知有行 `/data` 与 `/data/macro`，提供 24h fresh cache、7 天 stale fallback 和 unavailable 状态，暂不接入 CLI/Service。 |
 | 2026-05-18 | P3 | 🟡 in progress | `P3-S2` implementation / code review / controller fix 已通过；温度计 adapter 当前验证 `60 passed` 且真实响应 smoke 可解析全市场、指数、债市与 10 年期国债到期收益率；accepted commit=`1747aaf`；下一 gate 为 `P3-S3 implementation + review` |
+| 2026-05-18 | P3 | 🟡 in progress | `P3-S3 implementation` 已完成；新增 3 只样本基金 CLI 端到端矩阵并修复真实表格抽取、低质量 parsed cache 复用和模板基准字段契约错配；当前验证 `33 passed`；下一 gate 为 `P3-S3 code review` |
+| 2026-05-18 | P3 | 🟡 in progress | `P3-S3 code review` 已由 controller judgment PASS；GLM/MiMo review pane 未在 gate 时间内产出 artifact，已记录为 INFO 流程风险；当前验证 `115 passed` 且 `git diff --check` 通过；下一 gate 为 `P3-S3 accepted commit` |

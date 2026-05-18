@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 import fund_agent.fund.extractors.profile as profile_module
-from fund_agent.fund.documents.models import DocumentKey, ParsedAnnualReport, ReportSection
+from fund_agent.fund.documents.models import DocumentKey, ParsedAnnualReport, ParsedTable, ReportSection
 from fund_agent.fund.extractors.models import ExtractedField, ProfileExtractionResult
 from fund_agent.fund.extractors.profile import extract_profile
 from fund_agent.fund.fund_type import FundTypeClassification
@@ -71,6 +71,54 @@ def _build_report_from_fixture(filename: str, fund_code: str) -> ParsedAnnualRep
             ),
         },
         tables=(),
+    )
+
+
+def _build_table_profile_report(fund_code: str, profile_table: ParsedTable, product_table: ParsedTable) -> ParsedAnnualReport:
+    """构造真实年报 `§2` 表格式基础画像测试对象。
+
+    Args:
+        fund_code: 基金代码。
+        profile_table: 基金身份键值表。
+        product_table: 产品本质键值表。
+
+    Returns:
+        带 `§2` 表格的年报对象。
+
+    Raises:
+        ValueError: 章节标题缺失时抛出。
+    """
+
+    raw_text = "\n".join(
+        (
+            "§1 基金简介",
+            "§2 基金简介",
+            "本章字段主要位于表格。",
+        )
+    )
+    section_two_start = raw_text.index("§2")
+    return ParsedAnnualReport(
+        key=DocumentKey(fund_code=fund_code, year=2024),
+        raw_text=raw_text,
+        sections={
+            "§1": ReportSection(
+                section_id="§1",
+                title="§1 基金简介",
+                start_offset=0,
+                end_offset=section_two_start,
+                matched_rule="fixture",
+                confidence=1.0,
+            ),
+            "§2": ReportSection(
+                section_id="§2",
+                title="§2 基金简介",
+                start_offset=section_two_start,
+                end_offset=len(raw_text),
+                matched_rule="fixture",
+                confidence=1.0,
+            ),
+        },
+        tables=(profile_table, product_table),
     )
 
 
@@ -206,3 +254,138 @@ def test_extract_profile_classifies_multiple_fund_types_without_code_special_cas
     assert result.basic_identity.value is not None
     assert result.basic_identity.value["classified_fund_type"] == expected_type
     assert result.basic_identity.value["classification_basis"]
+
+
+def test_extract_profile_reads_real_section_two_key_value_tables() -> None:
+    """验证基础画像能读取真实年报 `§2` 键值表的表头与数据行。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当表格字段未被正确提取时抛出。
+    """
+
+    report = _build_table_profile_report(
+        "510300",
+        ParsedTable(
+            page_number=5,
+            table_index=0,
+            headers=("基金名称", "华泰柏瑞沪深300交易型开放式指数证券投资基金"),
+            rows=(
+                ("基金简称", "华泰柏瑞沪深300ETF"),
+                ("基金主代码", "510300"),
+                ("报告期末基金份额总额", "8,900,000,000.00份"),
+                ("基金管理人", "华泰柏瑞基金管理有限公司"),
+            ),
+        ),
+        ParsedTable(
+            page_number=5,
+            table_index=1,
+            headers=("投资目标", "紧密跟踪标的指数表现。"),
+            rows=(
+                ("投资范围", "投资于沪深300指数成份股。"),
+                ("投资策略", "采用完全复制法。"),
+                ("业绩比较基准", "沪深300指数"),
+                ("管理费率", "0.50%"),
+                ("托管费率", "0.10%"),
+            ),
+        ),
+    )
+
+    result = extract_profile(report)
+
+    assert result.basic_identity.value is not None
+    assert result.basic_identity.value["fund_name"] == "华泰柏瑞沪深300交易型开放式指数证券投资基金"
+    assert result.basic_identity.value["fund_code"] == "510300"
+    assert result.basic_identity.value["classified_fund_type"] == "index_fund"
+    assert result.product_profile.value == {
+        "investment_objective": "紧密跟踪标的指数表现。",
+        "investment_scope": "投资于沪深300指数成份股。",
+        "investment_strategy": "采用完全复制法。",
+    }
+    assert result.benchmark.value == {"benchmark_text": "沪深300指数"}
+    assert result.fee_schedule.value == {
+        "management_fee": "0.50%",
+        "custody_fee": "0.10%",
+    }
+    anchor_table_ids = {anchor.table_id for anchor in result.basic_identity.anchors}
+    assert "page-5-table-0" in anchor_table_ids
+    assert result.product_profile.anchors[0].table_id == "page-5-table-1"
+
+
+def test_extract_profile_prefers_bond_name_before_mixed_index_benchmark() -> None:
+    """验证债券基金不会因基准含股票指数而误判为指数基金。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当债券基金分类错误时抛出。
+    """
+
+    report = _build_table_profile_report(
+        "000171",
+        ParsedTable(
+            page_number=5,
+            table_index=0,
+            headers=("基金名称", "易方达裕丰回报债券型证券投资基金"),
+            rows=(("基金简称", "易方达裕丰回报债券A"), ("基金主代码", "000171")),
+        ),
+        ParsedTable(
+            page_number=5,
+            table_index=1,
+            headers=("投资目标", "本基金主要投资于债券资产。"),
+            rows=(
+                ("投资范围", "本基金主要投资于债券资产，可少量投资股票。"),
+                ("业绩比较基准", "中债新综合财富指数收益率*90%+沪深300指数收益率*10%"),
+            ),
+        ),
+    )
+
+    result = extract_profile(report)
+
+    assert result.basic_identity.value is not None
+    assert result.basic_identity.value["classified_fund_type"] == "bond_fund"
+
+
+def test_extract_profile_uses_table_short_name_for_qdii_classification() -> None:
+    """验证基金简称中的 QDII 标识可参与基金类型判断。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 QDII 基金分类错误时抛出。
+    """
+
+    report = _build_table_profile_report(
+        "110011",
+        ParsedTable(
+            page_number=5,
+            table_index=0,
+            headers=("基金名称", "易方达优质精选混合型证券投资基金"),
+            rows=(("基金简称", "易方达优质精选混合（QDII）"), ("基金主代码", "110011")),
+        ),
+        ParsedTable(
+            page_number=5,
+            table_index=1,
+            headers=("投资目标", "精选优质企业。"),
+            rows=(("业绩比较基准", "沪深300指数收益率×50%+中证香港300指数收益率×30%"),),
+        ),
+    )
+
+    result = extract_profile(report)
+
+    assert result.basic_identity.value is not None
+    assert result.basic_identity.value["fund_name"] == "易方达优质精选混合型证券投资基金"
+    assert result.basic_identity.value["classified_fund_type"] == "qdii_fund"

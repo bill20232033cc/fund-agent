@@ -6,7 +6,7 @@ import re
 from dataclasses import dataclass
 from typing import Final
 
-from fund_agent.fund.documents.models import ParsedAnnualReport
+from fund_agent.fund.documents.models import ParsedAnnualReport, ParsedTable
 from fund_agent.fund.extractors.models import EvidenceAnchor, ExtractedField, ProfileExtractionResult
 from fund_agent.fund.fund_type import FundTypeClassification, classify_fund_type
 
@@ -50,6 +50,20 @@ _FIELD_PATTERNS: Final[dict[str, tuple[tuple[str, tuple[str, ...]], ...]]] = {
         ("§2", (r"托管费(?:率)?\s*[：:]\s*(.+)",)),
     ),
 }
+_TABLE_FIELD_LABELS: Final[dict[str, tuple[str, ...]]] = {
+    "fund_name": ("基金名称", "基金简称"),
+    "fund_code": ("基金主代码", "基金代码"),
+    "fund_category": ("基金类型", "基金类别"),
+    "fund_scale": ("报告期末基金份额总额", "基金份额总额", "基金规模"),
+    "fund_manager": ("基金管理人", "基金经理"),
+    "investment_objective": ("投资目标",),
+    "investment_scope": ("投资范围",),
+    "investment_strategy": ("投资策略",),
+    "benchmark": ("业绩比较基准",),
+    "management_fee": ("管理费率", "管理费"),
+    "custody_fee": ("托管费率", "托管费"),
+}
+_SECTION_TWO_TABLE_MIN_PAGE: Final[int] = 1
 
 
 @dataclass(frozen=True, slots=True)
@@ -67,6 +81,8 @@ class _MatchedField:
     value: str
     section_id: str
     matched_line: str
+    page_number: int | None = None
+    table_id: str | None = None
 
 
 def _extract_field(report: ParsedAnnualReport, field_name: str) -> _MatchedField | None:
@@ -99,7 +115,133 @@ def _extract_field(report: ParsedAnnualReport, field_name: str) -> _MatchedField
                         section_id=section_id,
                         matched_line=normalized_line,
                     )
+    return _extract_field_from_section_two_tables(report, field_name)
+
+
+def _extract_field_from_section_two_tables(report: ParsedAnnualReport, field_name: str) -> _MatchedField | None:
+    """从 `§2` 键值型表格提取单个字段，见模板第 1 章产品本质。
+
+    Args:
+        report: 已解析年报对象。
+        field_name: 目标字段名。
+
+    Returns:
+        命中时返回字段命中结果，否则返回 `None`。
+
+    Raises:
+        KeyError: 请求未知字段时抛出。
+    """
+
+    labels = _TABLE_FIELD_LABELS[field_name]
+    for table in report.tables:
+        for row in _iter_key_value_rows(table):
+            matched_value = _match_key_value_row(row, labels)
+            if matched_value is None:
+                continue
+            label, value = matched_value
+            return _MatchedField(
+                field_name=field_name,
+                value=value,
+                section_id="§2",
+                matched_line=f"{label}：{value}",
+                page_number=table.page_number if table.page_number >= _SECTION_TWO_TABLE_MIN_PAGE else None,
+                table_id=_table_id(table),
+            )
     return None
+
+
+def _iter_key_value_rows(table: ParsedTable) -> tuple[tuple[str, ...], ...]:
+    """返回可按键值行解释的表头与表格行。
+
+    Args:
+        table: 年报解析出的表格。
+
+    Returns:
+        先包含表头、再包含数据行的元组，便于处理真实年报中把首个键值对放入表头的情况。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return (table.headers, *table.rows)
+
+
+def _match_key_value_row(row: tuple[str, ...], labels: tuple[str, ...]) -> tuple[str, str] | None:
+    """在一行表格中识别字段名和值。
+
+    Args:
+        row: 表格行。
+        labels: 允许匹配的字段标签。
+
+    Returns:
+        命中时返回 `(标签, 值)`，否则返回 `None`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    cells = tuple(cell.strip() for cell in row)
+    for index, cell in enumerate(cells):
+        normalized_cell = _normalize_label(cell)
+        for label in labels:
+            if _normalize_label(label) != normalized_cell:
+                continue
+            value = _first_non_empty_after(cells, index)
+            if value:
+                return label, value
+    return None
+
+
+def _first_non_empty_after(cells: tuple[str, ...], start_index: int) -> str | None:
+    """读取字段名单元格之后第一个非空值。
+
+    Args:
+        cells: 当前表格行的单元格。
+        start_index: 字段名单元格下标。
+
+    Returns:
+        第一个非空值；不存在时返回 `None`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    for cell in cells[start_index + 1:]:
+        if cell.strip():
+            return cell.strip()
+    return None
+
+
+def _normalize_label(value: str) -> str:
+    """规范化表格字段标签。
+
+    Args:
+        value: 原始标签。
+
+    Returns:
+        去除空白和常见分隔符后的标签文本。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return re.sub(r"[\s：:]+", "", value)
+
+
+def _table_id(table: ParsedTable) -> str:
+    """构造表格证据 ID。
+
+    Args:
+        table: 表格对象。
+
+    Returns:
+        可读表格 ID。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return f"page-{table.page_number}-table-{table.table_index}"
 
 
 def _build_anchor(report: ParsedAnnualReport, matched_field: _MatchedField) -> EvidenceAnchor:
@@ -120,8 +262,8 @@ def _build_anchor(report: ParsedAnnualReport, matched_field: _MatchedField) -> E
         source_kind="annual_report",
         document_year=report.key.year,
         section_id=matched_field.section_id,
-        page_number=None,
-        table_id=None,
+        page_number=matched_field.page_number,
+        table_id=matched_field.table_id,
         row_locator=matched_field.field_name,
         note=matched_field.matched_line,
     )
