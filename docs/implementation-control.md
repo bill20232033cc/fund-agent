@@ -31,13 +31,13 @@
 ### 1.3 当前 Gate 与基线裁决（2026-05-18）
 
 - 当前分支：`chore/reconcile-baseline`
-- 当前 gate：`ready-to-open-draft-PR`
-- 下一 gate：`draft PR gate`
+- 当前 gate：`draft-PR-pass`
+- 下一 gate：`P3-S1 implementation + review`
 - 当前裁决：
   - P0 维持 `done`。已验证 `dayu` 依赖可导入、`fund-agent` 处于 editable install、`fund-analysis --help` 可用、样本基金 `110011` 年报可下载、`pdfplumber` 可提取全文文本和表格。
   - P1 已完成并通过 aggregate review。
   - P2 已完成并通过 aggregate deepreview。
-  - P3 仍为 `pending`；draft PR gate 需用户授权后才能 push / 创建 draft PR。
+  - P3 仍为 `pending`；draft PR gate 已完成，后续进入 P3 实施前需基于 PR 合并策略明确新的工作基线。
   - `P2-S1` 至 `P2-S8` 已收口为 accepted baseline commit `a6b1516`。收口范围仅包含 P2 analysis/audit 实现、测试、README 同步与 review artifact；本地运行辅助文件 `launchd/`、`scripts/` 和旧 P1 review artifact 未纳入该基线。
   - `P1-S1 文档访问契约收口` 已完成：对外唯一仓库入口收口为 `FundDocumentRepository.load_annual_report(...) -> ParsedAnnualReport`，公共契约已迁入 `fund_agent/fund/documents/*`，`fund_agent/fund/pdf/*` 降为仓库内部 helper / adapter。
   - `P1-S2 章节定位修复与 §3 冻结` 已完成：
@@ -279,6 +279,16 @@
       - controller judgment: `docs/reviews/p2-aggregate-review-controller-judgment-2026-05-18.md`
     - fix: `docs/reviews/p2-aggregate-fix-2026-05-18.md`
     - accepted deepreview commit: `07fe0d0`
+  - `Draft PR #1`:
+    - URL: `https://github.com/bill20232033cc/fund-agent/pull/1`
+    - base: `main` (`a6b1516`)
+    - head: `chore/reconcile-baseline`
+    - PR review:
+      - `docs/reviews/pr-1-review-glm-2026-05-18.md`
+      - controller judgment: `docs/reviews/pr-1-review-controller-judgment-2026-05-18.md`
+    - PR fix: `docs/reviews/pr-1-fix-2026-05-18.md`
+    - PR re-review: `docs/reviews/pr-1-rereview-glm-2026-05-18.md`
+    - accepted PR review commit: `8f5029c`
 
 ---
 
@@ -820,6 +830,27 @@
   - later template refinement owner：`_validate_report_wording()` 使用 substring 匹配禁用词，未来模板若引入合法分析短语“买入前检查清单”可能误报
   - v2 audit owner：`_EVIDENCE_MARKER_PATTERN` 和审计章节标题匹配依赖当前模板措辞，未来模板措辞调整时需同步测试
 
+**Draft PR gate 当前状态（2026-05-18）**
+
+- `Draft PR #1`：✅ draft-PR-pass
+- 当前完成内容：
+  - 已将 `a6b1516` 推送为远端 `main`
+  - 已将 `chore/reconcile-baseline` 推送到远端并创建 draft PR：`https://github.com/bill20232033cc/fund-agent/pull/1`
+  - PR review 接受 1 个 info finding：aggregate review artifact 存在 trailing whitespace
+  - 已移除 trailing whitespace，并记录修复 artifact
+  - AgentGLM re-review 结论为 PASS
+  - accepted PR review commit：`8f5029c`
+  - follow-up push 已完成
+- 当前验证：
+  - `.venv/bin/python -m pytest tests/fund/template tests/fund/audit tests/fund/analysis -q`：`63 passed`
+  - `git diff --check`：通过
+  - PR merge state：`CLEAN`
+- 未执行动作：
+  - 未 merge PR
+  - 未 mark ready for review
+  - 未 request reviewers
+  - 未 delete branch
+
 **风险与追踪**
 
 | 风险 | 概率 | 缓解措施 | 追踪状态 |
@@ -979,3 +1010,4 @@ P0（环境搭建）
 | 2026-05-18 | P2 | 🟡 in progress | `P2-S10` implementation / code review 已通过，证据锚点正文和附录格式已收口，accepted commit=`2d041ae`；下一 gate 为 `P2 aggregate deepreview` |
 | 2026-05-18 | P2 | ✅ done | `P2 aggregate deepreview` 已通过，MiMo/GLM 均 PASS；已修复 P2 exit checkbox 文档同步问题；accepted deepreview commit=`07fe0d0`；当前 gate 为 `ready-to-open-draft-PR` |
 | 2026-05-18 | P3 | ⬜ pending | P2 退出条件已满足；下一步需用户授权 draft PR gate 后 push 并创建 draft PR，随后再进入 P3 实施 |
+| 2026-05-18 | P2 | ✅ done | Draft PR #1 已创建并通过 PR review/fix/re-review；accepted PR review commit=`8f5029c` 已 push；当前 gate 为 `draft-PR-pass` |
