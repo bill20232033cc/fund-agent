@@ -1045,6 +1045,7 @@
   - artifacts：
     - `docs/reviews/p3-s6-implementation-2026-05-18.md`
     - `docs/reviews/p3-s6-code-review-controller-judgment-2026-05-18.md`
+  - accepted slice commit：`8904588`
 - 当前 residual risks：
   - README 示例命令未在本 slice 执行真实 PDF/network smoke，后续仍需独立验证真实数据路径
 
@@ -1165,4 +1166,4 @@ P0（环境搭建）
 | 2026-05-18 | P3 | 🟡 in progress | `P3-S5 implementation` 已完成；P3 CLI 端到端矩阵现在断言每份报告 8 章正文证据行、关键附录来源锚点和无缺证占位；当前验证 `1 passed`；下一 gate 为 `P3-S5 code review` |
 | 2026-05-18 | P3 | 🟡 in progress | `P3-S5` implementation / controller code review 已通过；P3 CLI 端到端矩阵已验证每份报告 8 章正文证据行、关键附录来源锚点和无缺证占位；当前验证 `24 passed` 且 `git diff --check` 通过；accepted commit=`46432c0`；下一 gate 为 `P3-S6 implementation + review` |
 | 2026-05-18 | P3 | 🟡 in progress | `P3-S6 implementation` 已完成；根 README 已按当前 CLI 成功路径更新为用户手册，并移除过期端到端矩阵状态；当前验证 `fund-analysis --help`、`fund-analysis analyze --help` 和 `git diff --check` 通过；下一 gate 为 `P3-S6 code review` |
-| 2026-05-18 | P3 | 🟡 in progress | `P3-S6` implementation / controller code review 已通过；根 README 已按当前 CLI 成功路径更新为用户手册，文档导航均指向真实文件；当前验证 `fund-analysis --help`、`fund-analysis analyze --help` 和 `git diff --check` 通过；下一 gate 为 `P3-S7 implementation + review` |
+| 2026-05-18 | P3 | 🟡 in progress | `P3-S6` implementation / controller code review 已通过；根 README 已按当前 CLI 成功路径更新为用户手册，文档导航均指向真实文件；当前验证 `fund-analysis --help`、`fund-analysis analyze --help` 和 `git diff --check` 通过；accepted commit=`8904588`；下一 gate 为 `P3-S7 implementation + review` |
