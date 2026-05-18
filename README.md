@@ -55,10 +55,11 @@ fund-analysis analyze 110011 \
   - 文档仓库入口：`FundDocumentRepository.load_annual_report(...)`
   - P1 结构化抽取 façade：`FundDataExtractor.extract(...)`
   - P2 分析能力：R=A+B-C、超额性质、言行一致性、投资者获得感、风险检查、压力测试、7 问题检查清单
+  - 有知有行温度计 data adapter：读取公开数据页、解析全市场/指数/宏观温度，并维护 24h 缓存和 7 天 stale fallback
   - 8 章 Markdown 模板渲染与程序审计
   - CLI 分析入口：`fund-analysis analyze`
 - 尚未实现：
-  - 温度计数据接入
+  - 温度计数据接入 CLI/Service 分析流程
   - 3 只样本基金端到端 CLI 矩阵
   - 独立 `fund-analysis checklist` Service 命令
 

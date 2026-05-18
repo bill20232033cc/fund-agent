@@ -31,14 +31,15 @@
 ### 1.3 当前 Gate 与基线裁决（2026-05-18）
 
 - 当前分支：`feat/p3-cli-integration`
-- 当前 gate：`P3-S2 implementation + review`
-- 下一 gate：`P3-S2 implementation + review`
+- 当前 gate：`P3-S3 implementation + review`
+- 下一 gate：`P3-S3 implementation + review`
 - 当前裁决：
   - P0 维持 `done`。已验证 `dayu` 依赖可导入、`fund-agent` 处于 editable install、`fund-analysis --help` 可用、样本基金 `110011` 年报可下载、`pdfplumber` 可提取全文文本和表格。
   - P1 已完成并通过 aggregate review。
   - P2 已完成并通过 aggregate deepreview。
   - P3 已进入 `in progress`。
   - `P3-S1 CLI 入口封装` 已完成，通过 Typer CLI 和 Service 层输出单只基金 8 章 Markdown 报告；下一 gate 为 `P3-S2 implementation + review`。
+  - `P3-S2 温度计数据爬取` 已完成并通过 GLM/MiMo code review；当前实现范围仅限 Capability data adapter，不接入 CLI/Service。
   - `P2-S1` 至 `P2-S8` 已收口为 accepted baseline commit `a6b1516`。收口范围仅包含 P2 analysis/audit 实现、测试、README 同步与 review artifact；本地运行辅助文件 `launchd/`、`scripts/` 和旧 P1 review artifact 未纳入该基线。
   - `P1-S1 文档访问契约收口` 已完成：对外唯一仓库入口收口为 `FundDocumentRepository.load_annual_report(...) -> ParsedAnnualReport`，公共契约已迁入 `fund_agent/fund/documents/*`，`fund_agent/fund/pdf/*` 降为仓库内部 helper / adapter。
   - `P1-S2 章节定位修复与 §3 冻结` 已完成：
@@ -941,6 +942,35 @@
   - `P3-S3` owner：真实 PDF/网络路径和 3 只样本基金 CLI 端到端矩阵尚未验证
   - later CLI UX owner：程序审计失败信息当前直接透出审计消息，MVP 可接受但后续可优化用户文案
 
+**P3-S2 当前状态（2026-05-18）**
+
+- `P3-S2 温度计数据爬取（有知有行）`：✅ completed
+- 当前完成内容：
+  - `fund_agent/fund/data/thermometer.py` 新增 `FundThermometerAdapter`
+  - 输出 `ThermometerSnapshot`、`MarketTemperature`、`IndexTemperature`、`MacroTemperature`
+  - 默认读取 `https://youzhiyouxing.cn/data` 与 `https://youzhiyouxing.cn/data/macro`
+  - 支持 24h fresh cache、7 天 stale fallback、无缓存失败 `unavailable=True`
+  - 支持当前真实页面布局：全市场 `70°`/`70℃`、指数代码位于名称单元格、前置非指数表跳过、`10年期国债到期收益率`
+  - 缓存写入失败不阻断已成功抓取和解析的数据
+  - 当前只提供 Capability data adapter，尚未接入 Service、CLI 或检查清单估值状态
+  - live-response smoke 验证可解析全市场温度、11 行指数数据、沪深300温度/内在收益率/股息率、债市温度和 10 年期国债到期收益率
+  - 验证命令 `.venv/bin/python -m pytest tests/fund/data/test_thermometer.py -q` 当前通过（`13 passed`）
+  - 验证命令 `.venv/bin/python -m pytest tests/fund/data tests/fund/analysis tests/services tests/ui -q` 当前通过（`60 passed`）
+  - `git diff --check` 当前通过
+  - code review artifacts：
+    - `docs/reviews/p3-s2-implementation-2026-05-18.md`
+    - `docs/reviews/p3-s2-code-review-glm-2026-05-18.md`
+    - `docs/reviews/p3-s2-code-review-mimo-2026-05-18.md`
+    - `docs/reviews/p3-s2-code-review-controller-judgment-2026-05-18.md`
+    - `docs/reviews/p3-s2-fix-2026-05-18.md`
+    - `docs/reviews/p3-s2-rereview-glm-2026-05-18.md`
+    - `docs/reviews/p3-s2-rereview-mimo-2026-05-18.md`
+  - accepted slice commit：待记录
+- 当前 residual risks：
+  - `P3-S3/P3-S4` owner：温度计 adapter 尚未接入 Service/CLI/checklist valuation_state
+  - `P3-S3/P3-S4` owner：有知有行页面结构仍可能变化，后续集成测试和运行监控需覆盖 unavailable/stale 输出
+  - later integration owner：Service/CLI 接入时应显式传入运行期 cache root，避免依赖进程 cwd
+
 ---
 
 ## 3. 依赖关系
@@ -964,7 +994,7 @@ P0（环境搭建）
 |----|------|-----------|------|------|
 | BQ-1 | 巨潮网反爬策略未知 | P0/P1 | ✅ closed | 已改用 akshare + eastmoney PDF，无需直接访问巨潮 |
 | BQ-2 | 2026 新规"投资者收益率"披露时间表 | P2 | ⬜ open | P1 已提供 `investor_return` 三态和 `share_change` 输入，P2 再实现行为损益 |
-| BQ-3 | 有知有行温度数据页面结构 | P3 | ⬜ open | P3-S2 验证后关闭 |
+| BQ-3 | 有知有行温度数据页面结构 | P3 | ✅ closed | P3-S2 已用真实响应 smoke 验证 `/data` 与 `/data/macro` 当前布局，并以 fake HTML 单测锁定关键解析路径 |
 | BQ-4 | akshare 基金净值 API 稳定性 | P1/P3 | 🟡 partially closed | P1-S8 已封装可注入 fetcher 与 `nav_cache`，真实网络验证移交 P3 |
 | BQ-5 | 当前章节定位规则无法稳定识别 `§3` 正文 | P1 | ✅ closed | 已由 P1-S2 章节定位修复与 `§3` 冻结关闭 |
 
@@ -977,7 +1007,7 @@ P0（环境搭建）
 | RR-1 | PDF 格式不统一导致解析失败 | P1 | 已设计兜底策略 | 否 |
 | RR-2 | 超额收益性质判断主观性强 | P2 | MVP 用规则引擎 | 否 |
 | RR-3 | 审计规则过严导致频繁阻断 | P2 | MVP 仅启用程序审计 | 否 |
-| RR-4 | 温度计爬虫被封锁 | P3 | 24h 缓存 + 异常处理 | 是（如被封锁需人工确认） |
+| RR-4 | 温度计爬虫被封锁 | P3 | 24h 缓存 + 7 天 stale fallback + `unavailable=True`；Service/CLI 接入仍在 P3 后续 slice | 是（如被封锁且无可用缓存需人工确认） |
 | RR-5 | `dayu-agent` wheel 下载受 GitHub 可达性影响 | P0/P1 | 当前虚拟环境已安装，可继续开发；新环境安装待镜像化或替代分发方案 | 否 |
 | RR-6 | 模板禁用交易措辞使用 substring 匹配，未来合法短语可能误报 | P3/v2 | P2 当前输出已测试通过；P3 若调整模板措辞需同步审查 | 否 |
 | RR-7 | 缺证附录当前为章节级，不是 item 级证据确认 | v2 | MVP 先保证章节级可追溯，Evidence Confirm 层后续细化 | 否 |
@@ -1047,3 +1077,5 @@ P0（环境搭建）
 | 2026-05-18 | P2 | ✅ done | Draft PR #1 已创建并通过 PR review/fix/re-review；accepted PR review commit=`8f5029c` 已 push；当前 gate 为 `draft-PR-pass` |
 | 2026-05-18 | P3 | 🟡 in progress | `P3-S1 implementation + review` 已进入实现；当前代码入口为 Typer，因此 P3-S1 按 current-code alignment 保留 `fund-analysis analyze FUND_CODE` 子命令并通过 Service 层编排 Capability。 |
 | 2026-05-18 | P3 | 🟡 in progress | `P3-S1` implementation / code review / fix / re-review 已通过；CLI 通过 Service 层输出 8 章 Markdown，当前验证 `68 passed`；accepted commit=`c5a240c`；下一 gate 为 `P3-S2 implementation + review` |
+| 2026-05-18 | P3 | 🟡 in progress | `P3-S2 implementation + review` 已进入实现；温度计 adapter 目标为读取有知有行 `/data` 与 `/data/macro`，提供 24h fresh cache、7 天 stale fallback 和 unavailable 状态，暂不接入 CLI/Service。 |
+| 2026-05-18 | P3 | 🟡 in progress | `P3-S2` implementation / code review / controller fix 已通过；温度计 adapter 当前验证 `60 passed` 且真实响应 smoke 可解析全市场、指数、债市与 10 年期国债到期收益率；下一 gate 为 `P3-S3 implementation + review` |

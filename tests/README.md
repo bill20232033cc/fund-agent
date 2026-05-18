@@ -13,6 +13,7 @@
 - `tests/fund/extractors/test_manager_ownership.py`：`§4/§8/§9` 管理人/持有人 extractor 测试，覆盖策略文本、换手率、持有披露、持有人结构和 `missing` 路径
 - `tests/fund/extractors/test_holdings_share_change.py`：`§8/§10` 持仓/份额 extractor 测试，覆盖前十大重仓、行业分布、份额变动和表格型 anchor
 - `tests/fund/data/test_nav_data.py`：净值数据适配器测试，覆盖 `nav_cache` 命中和强制刷新
+- `tests/fund/data/test_thermometer.py`：有知有行温度计适配器测试，覆盖全市场/指数/宏观解析、24h 缓存复用、强制刷新、抓取失败 stale fallback、无缓存 unavailable 和 malformed HTML
 - `tests/fund/analysis/test_r_abc.py`：R=A+B-C 收益归因测试，覆盖公式闭合、P1 字段解析、证据锚点传递和缺失输入路径
 - `tests/fund/analysis/test_alpha_judge.py`：超额收益性质判断测试，覆盖结构性、部分结构性、阶段性、不适用、样本不足和显式环境输入要求
 - `tests/fund/analysis/test_consistency_check.py`：言行一致性检验测试，覆盖 4 维度信号、红灯冲突和显式实际风格/仓位输入要求
@@ -40,6 +41,7 @@ pytest tests/fund/extractors/test_performance.py -q
 pytest tests/fund/extractors/test_manager_ownership.py -q
 pytest tests/fund/extractors/test_holdings_share_change.py -q
 pytest tests/fund/data/test_nav_data.py -q
+pytest tests/fund/data/test_thermometer.py -q
 pytest tests/fund/analysis/test_r_abc.py -q
 pytest tests/fund/analysis/test_alpha_judge.py -q
 pytest tests/fund/analysis/test_consistency_check.py -q
@@ -68,6 +70,7 @@ pytest tests/fund/integration/test_p1_sample_matrix.py -q
 - `§3` 表现相关测试当前只允许依赖 `ParsedAnnualReport.get_section_text("§3")`，不要在 P1 阶段把 `§10` fallback 或净值序列计算混进同一组测试。
 - `§4/§8/§9` 管理人/持有人测试当前只锁定原始披露抽取，不写言行一致性、利益一致性或成本判断断言。
 - `§8/§10` 持仓/份额测试必须优先锁定表格型 anchor，不把资金流向判断或投资者收益 fallback 混进 P1 数据层测试。
+- 温度计测试必须使用 fake fetcher 和 HTML snippet，覆盖缓存新鲜度、stale fallback 和 unavailable 状态；不要依赖实时有知有行页面。
 - R=A+B-C 测试必须锁定公式闭合与缺失输入状态；股票仓位在 P1 未稳定抽取前必须作为显式输入，不允许在测试中隐藏默认假设。
 - 超额收益性质判断测试必须显式提供市场环境和来源解释强度；不要从收益结果中反推牛熊环境或基金经理能力。
 - 言行一致性测试必须显式提供实际持仓风格和股票仓位；不要从重仓名称或行业分布中猜测风格。
