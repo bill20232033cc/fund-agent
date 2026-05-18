@@ -209,7 +209,7 @@ def _render_chapter_1(input_data: TemplateRenderInput) -> str:
     content = [
         f"# 1. {_CHAPTER_TITLES[1]}",
         f"- 产品本质：{_value_text(profile, 'investment_objective')}；投资范围：{_value_text(profile, 'investment_scope')}。",
-        f"- 收益来源假设：围绕基金类别 {_value_text(identity, 'fund_category')} 和业绩基准 {_value_text(benchmark, 'benchmark')} 观察。",
+        f"- 收益来源假设：围绕基金类别 {_value_text(identity, 'fund_category')} 和业绩基准 {_value_text(benchmark, 'benchmark_text')} 观察。",
         f"- 成本底座：管理费 {_value_text(fee, 'management_fee')}，托管费 {_value_text(fee, 'custody_fee')}。",
         f"- 基金类型识别依据：{_join_values(identity.get('classification_basis'))}。",
         _evidence_line(anchors),

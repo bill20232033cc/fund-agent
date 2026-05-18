@@ -17,7 +17,7 @@
 | P0 | 环境搭建与架构骨架 | Week 1 | ✅ done | 无 |
 | P1 | 数据层（PDF 下载 + 解析 + 提取） | Week 2-3 | ✅ done | P0 |
 | P2 | 分析引擎（R=A+B-C + 检验 + 审计） | Week 3-4 | ✅ done | P1 |
-| P3 | CLI 入口 + 整合测试 + 验证 | Week 4-5 | ⬜ pending | P2 |
+| P3 | CLI 入口 + 整合测试 + 验证 | Week 4-5 | 🟡 in progress | P2 |
 
 ### 1.2 里程碑
 
@@ -30,14 +30,24 @@
 
 ### 1.3 当前 Gate 与基线裁决（2026-05-18）
 
-- 当前分支：`chore/reconcile-baseline`
-- 当前 gate：`draft-PR-pass`
-- 下一 gate：`P3-S1 implementation + review`
+- 当前分支：`feat/p3-cli-integration`
+- 当前 gate：`ready-for-review`
+- 下一 gate：`ready-for-review`
 - 当前裁决：
   - P0 维持 `done`。已验证 `dayu` 依赖可导入、`fund-agent` 处于 editable install、`fund-analysis --help` 可用、样本基金 `110011` 年报可下载、`pdfplumber` 可提取全文文本和表格。
   - P1 已完成并通过 aggregate review。
   - P2 已完成并通过 aggregate deepreview。
-  - P3 仍为 `pending`；draft PR gate 已完成，后续进入 P3 实施前需基于 PR 合并策略明确新的工作基线。
+  - P3 已进入 `in progress`。
+  - `P3-S1 CLI 入口封装` 已完成，通过 Typer CLI 和 Service 层输出单只基金 8 章 Markdown 报告；下一 gate 为 `P3-S2 implementation + review`。
+  - `P3-S2 温度计数据爬取` 已完成并通过 GLM/MiMo code review；当前实现范围仅限 Capability data adapter，不接入 CLI/Service。
+  - `P3-S3 端到端整合测试` 已完成实现与 GLM/MiMo/controller code review：新增 3 只样本基金 CLI 端到端矩阵，闭合真实 `§2` 表格字段抽取、parsed report 低质量缓存门槛和模板 `benchmark_text` 契约错配。
+  - `P3-S4 程序审计集成` 已完成实现与 controller code review：P3 CLI 端到端矩阵现在记录真实 Service 返回值，并断言 P1/P2/P3/L1/R1/R2 全部程序审计规则执行通过；下一 gate 为 `P3-S5 implementation + review`。
+  - `P3-S5 证据锚点集成` 已完成实现与 controller code review：P3 CLI 端到端矩阵现在逐份报告断言 8 章正文证据行、附录年报章节/表格/行定位和无缺证占位；下一 gate 为 `P3-S6 implementation + review`。
+  - `P3-S6 编写 README.md` 已完成实现与 controller code review：根 README 已按当前 CLI 成功路径更新为用户手册，并移除过期的端到端矩阵未实现表述；下一 gate 为 `P3-S7 implementation + review`。
+  - `P3-S7 编写单元测试` 已完成实现与 controller code review：dev 依赖和测试手册新增覆盖率 gate，当前 `fund_agent` 总覆盖率 90.07%，超过 50% 目标；下一 gate 为 `P3-S8 implementation + review`。
+  - `P3-S8 性能优化` 已完成实现与 controller code review：Service 层新增不含 PDF 下载的单只基金分析性能 gate，验证完整编排低于 30 秒。
+  - `P3 aggregate deepreview` 已通过 controller deepreview：未发现 blocking finding；当前验证 `27 passed`、覆盖率矩阵 `116 passed / 90.07%`、`git diff --check` 通过。
+  - PR 2 已从 draft 标记为 ready for review：`https://github.com/bill20232033cc/fund-agent/pull/2`；GitHub 当前未报告 checks，PR mergeable；下一 gate 为用户授权 merge。
   - `P2-S1` 至 `P2-S8` 已收口为 accepted baseline commit `a6b1516`。收口范围仅包含 P2 analysis/audit 实现、测试、README 同步与 review artifact；本地运行辅助文件 `launchd/`、`scripts/` 和旧 P1 review artifact 未纳入该基线。
   - `P1-S1 文档访问契约收口` 已完成：对外唯一仓库入口收口为 `FundDocumentRepository.load_annual_report(...) -> ParsedAnnualReport`，公共契约已迁入 `fund_agent/fund/documents/*`，`fund_agent/fund/pdf/*` 降为仓库内部 helper / adapter。
   - `P1-S2 章节定位修复与 §3 冻结` 已完成：
@@ -289,6 +299,15 @@
     - PR fix: `docs/reviews/pr-1-fix-2026-05-18.md`
     - PR re-review: `docs/reviews/pr-1-rereview-glm-2026-05-18.md`
     - accepted PR review commit: `8f5029c`
+  - `P3-S1`:
+    - implementation: `docs/reviews/p3-s1-implementation-2026-05-18.md`
+    - code review:
+      - `docs/reviews/p3-s1-code-review-glm-2026-05-18.md`
+      - controller judgment: `docs/reviews/p3-s1-code-review-controller-judgment-2026-05-18.md`
+    - fix: `docs/reviews/p3-s1-fix-2026-05-18.md`
+    - re-review:
+      - `docs/reviews/p3-s1-rereview-glm-2026-05-18.md`
+    - accepted slice commit: `c5a240c`
 
 ---
 
@@ -869,23 +888,23 @@
 **进入条件**
 
 - [x] P2 退出条件全部满足
-- [ ] 单只基金分析可本地运行
+- [x] 单只基金分析可本地运行
 
 **退出条件**
 
-- [ ] `fund-analysis <fund_code>` 命令可用
-- [ ] 输出完整 8 章分析报告（Markdown 格式）
-- [ ] 报告通过程序审计
-- [ ] 3 只样本基金端到端测试通过
-- [ ] 单只基金分析时间 < 30 秒（不含 PDF 下载）
-- [ ] 包含 README.md（安装 + 使用说明）
-- [ ] 单元测试覆盖率 > 50%
+- [x] `fund-analysis analyze <fund_code>` 命令可用
+- [x] 输出完整 8 章分析报告（Markdown 格式）
+- [x] 报告通过程序审计
+- [x] 3 只样本基金端到端测试通过
+- [x] 单只基金分析时间 < 30 秒（不含 PDF 下载）
+- [x] 包含 README.md（安装 + 使用说明）
+- [x] 单元测试覆盖率 > 50%
 
 **任务切片**
 
 | Slice | 任务 | 验证方式 |
 |-------|------|---------|
-| P3-S1 | CLI 入口封装（argparse） | `fund-analysis 110011` 输出报告 |
+| P3-S1 | CLI 入口封装（Typer，与当前 `pyproject.toml` 入口对齐） | `fund-analysis analyze 110011` 输出报告 |
 | P3-S2 | 温度计数据爬取（有知有行） | 能获取全市场和指数温度 |
 | P3-S3 | 端到端整合测试 | 3 只样本基金完整流程 |
 | P3-S4 | 程序审计集成 | 报告通过 P1/P2/P3/L1/R1/R2 |
@@ -907,6 +926,201 @@
 |------|------|---------|---------|
 | 有知有行页面结构变更 | 中 | 异常处理 + 24h 缓存 | ⬜ 待验证 |
 | 整合测试发现数据层 bug | 高 | 预留 2 天 buffer | ⬜ 待验证 |
+
+**P3-S1 当前状态（2026-05-18）**
+
+- `P3-S1 CLI 入口封装`：✅ completed
+- 当前完成内容：
+  - `fund_agent/services/fund_analysis_service.py` 新增 `FundAnalysisService`、`FundAnalysisRequest` 和 `FundAnalysisResult`
+  - Service 通过显式请求字段编排 `FundDataExtractor.extract(...)`、P2 分析、8 章模板渲染和程序审计
+  - UI 层 `fund_agent/ui/cli.py` 保持 Typer，与当前 `pyproject.toml` 脚本入口一致
+  - `fund-analysis analyze FUND_CODE` 输出完整 Markdown 到 stdout，失败时输出 `分析失败：...` 并非零退出
+  - `fund-analysis checklist FUND_CODE` 不再输出误导性成功文本，当前非零退出并提示使用 `analyze`
+  - `README.md` 和 `tests/README.md` 已同步当前 CLI 和测试边界
+  - 验证命令 `.venv/bin/python -m pytest tests/services tests/ui tests/fund/template tests/fund/audit tests/fund/analysis -q` 当前通过（`68 passed`）
+  - `git diff --check` 当前通过
+  - code review artifacts：
+    - `docs/reviews/p3-s1-code-review-glm-2026-05-18.md`
+    - `docs/reviews/p3-s1-code-review-controller-judgment-2026-05-18.md`
+    - `docs/reviews/p3-s1-fix-2026-05-18.md`
+    - `docs/reviews/p3-s1-rereview-glm-2026-05-18.md`
+  - accepted slice commit：`c5a240c`
+- 当前 residual risks：
+  - `P3-S2` owner：Service 当前没有市场环境和来源解释输入，`judge_alpha_nature(())` 会显式返回 `insufficient_data`
+  - `P3-S3` owner：真实 PDF/网络路径和 3 只样本基金 CLI 端到端矩阵尚未验证
+  - later CLI UX owner：程序审计失败信息当前直接透出审计消息，MVP 可接受但后续可优化用户文案
+
+**P3-S2 当前状态（2026-05-18）**
+
+- `P3-S2 温度计数据爬取（有知有行）`：✅ completed
+- 当前完成内容：
+  - `fund_agent/fund/data/thermometer.py` 新增 `FundThermometerAdapter`
+  - 输出 `ThermometerSnapshot`、`MarketTemperature`、`IndexTemperature`、`MacroTemperature`
+  - 默认读取 `https://youzhiyouxing.cn/data` 与 `https://youzhiyouxing.cn/data/macro`
+  - 支持 24h fresh cache、7 天 stale fallback、无缓存失败 `unavailable=True`
+  - 支持当前真实页面布局：全市场 `70°`/`70℃`、指数代码位于名称单元格、前置非指数表跳过、`10年期国债到期收益率`
+  - 缓存写入失败不阻断已成功抓取和解析的数据
+  - 当前只提供 Capability data adapter，尚未接入 Service、CLI 或检查清单估值状态
+  - live-response smoke 验证可解析全市场温度、11 行指数数据、沪深300温度/内在收益率/股息率、债市温度和 10 年期国债到期收益率
+  - 验证命令 `.venv/bin/python -m pytest tests/fund/data/test_thermometer.py -q` 当前通过（`13 passed`）
+  - 验证命令 `.venv/bin/python -m pytest tests/fund/data tests/fund/analysis tests/services tests/ui -q` 当前通过（`60 passed`）
+  - `git diff --check` 当前通过
+  - code review artifacts：
+    - `docs/reviews/p3-s2-implementation-2026-05-18.md`
+    - `docs/reviews/p3-s2-code-review-glm-2026-05-18.md`
+    - `docs/reviews/p3-s2-code-review-mimo-2026-05-18.md`
+    - `docs/reviews/p3-s2-code-review-controller-judgment-2026-05-18.md`
+    - `docs/reviews/p3-s2-fix-2026-05-18.md`
+    - `docs/reviews/p3-s2-rereview-glm-2026-05-18.md`
+    - `docs/reviews/p3-s2-rereview-mimo-2026-05-18.md`
+  - accepted slice commit：`1747aaf`
+- 当前 residual risks：
+  - `P3-S3/P3-S4` owner：温度计 adapter 尚未接入 Service/CLI/checklist valuation_state
+  - `P3-S3/P3-S4` owner：有知有行页面结构仍可能变化，后续集成测试和运行监控需覆盖 unavailable/stale 输出
+  - later integration owner：Service/CLI 接入时应显式传入运行期 cache root，避免依赖进程 cwd
+
+**P3-S3 当前状态（2026-05-18）**
+
+- `P3-S3 端到端整合测试`：✅ completed
+- 当前完成内容：
+  - `tests/fund/integration/test_p3_cli_e2e_matrix.py` 新增 3 只样本基金 CLI 端到端矩阵
+  - 矩阵覆盖 `110011 -> qdii_fund`、`510300 -> index_fund`、`000171 -> bond_fund`
+  - CLI 矩阵通过 fake repository / fake nav provider 隔离网络与 PDF 副作用，但仍经过真实 Typer CLI、Service、`FundDataExtractor`、extractors、P2 analysis、模板渲染和程序审计
+  - 修复真实 `§2` 表格键值字段抽取、低质量 parsed report cache 复用和模板 `benchmark_text` 契约错配
+  - 验证命令 `.venv/bin/python -m pytest tests/fund/data tests/fund/documents tests/fund/extractors tests/fund/integration tests/fund/template tests/fund/audit tests/fund/analysis tests/services tests/ui -q` 当前通过（`115 passed`）
+  - `git diff --check` 当前通过
+  - code review artifacts：
+    - `docs/reviews/p3-s3-code-review-controller-judgment-2026-05-18.md`
+    - `docs/reviews/p3-s3-code-review-glm-2026-05-18.md`
+    - `docs/reviews/p3-s3-code-review-mimo-2026-05-18.md`
+  - accepted slice commit：`e0b1b93`
+- 当前 residual risks：
+  - classifier cleanup owner：基金简称中的 QDII 标识仍建议后续作为独立字段参与分类，避免仅依赖 investment_scope 的理论漏判
+  - later integration owner：真实 PDF/网络路径仍应保留人工 smoke 或独立运行监控
+
+**P3-S4 当前状态（2026-05-18）**
+
+- `P3-S4 程序审计集成`：✅ completed
+- 当前完成内容：
+  - P3 CLI 端到端矩阵新增 `_RecordingService` 测试代理，记录真实 `FundAnalysisService.analyze(...)` 返回值
+  - 对 3 只样本基金逐一断言 `audit_result.passed`
+  - 对 3 只样本基金逐一断言 `audit_result.checked_rules == ("P1", "P2", "P3", "L1", "R1", "R2")`
+  - 对 3 只样本基金逐一断言 `audit_result.issues == ()`
+  - 验证命令 `.venv/bin/python -m pytest tests/fund/integration/test_p3_cli_e2e_matrix.py tests/services/test_fund_analysis_service.py tests/fund/audit/test_audit_programmatic.py tests/fund/template/test_renderer.py -q` 当前通过（`26 passed`）
+  - 验证命令 `.venv/bin/python -m pytest tests/fund/data tests/fund/documents tests/fund/extractors tests/fund/integration tests/fund/template tests/fund/audit tests/fund/analysis tests/services tests/ui -q` 当前通过（`115 passed`）
+  - `git diff --check` 当前通过
+  - artifacts：
+    - `docs/reviews/p3-s4-implementation-2026-05-18.md`
+    - `docs/reviews/p3-s4-code-review-controller-judgment-2026-05-18.md`
+  - accepted implementation commit：`caf5b31`
+- 当前 residual risks：
+  - P3-S4 使用 fake repository / fake nav provider 隔离网络与 PDF，不替代真实运行 smoke
+
+**P3-S5 当前状态（2026-05-18）**
+
+- `P3-S5 证据锚点集成`：✅ completed
+- 当前完成内容：
+  - `tests/fund/integration/test_p3_cli_e2e_matrix.py` 新增 `_body_evidence_lines(...)`、`_appendix_evidence_lines(...)` 和 `_assert_complete_evidence_contract(...)`
+  - 3 只样本基金每份 CLI 报告均断言正文 `> 📎 证据：` 行数量为 8，覆盖模板 0-7 章
+  - 3 只样本基金每份 CLI 报告均断言正文证据行包含 `年报2024§`，且不出现“当前章节未携带证据锚点”
+  - 3 只样本基金每份 CLI 报告均断言附录不出现 `- [M...]` 缺证占位
+  - 附录断言覆盖关键数据来源：`§2` 基金身份/产品/基准、`§3` 净值与投资者收益、`§4` 管理人策略、`§8` 重仓和行业、`§9` 基金经理持有、`§10` 份额变动
+  - 验证命令 `.venv/bin/python -m pytest tests/fund/integration/test_p3_cli_e2e_matrix.py tests/fund/template/test_renderer.py tests/fund/audit/test_audit_programmatic.py -q` 当前通过（`24 passed`）
+  - `git diff --check` 当前通过
+  - artifacts：
+    - `docs/reviews/p3-s5-implementation-2026-05-18.md`
+    - `docs/reviews/p3-s5-code-review-controller-judgment-2026-05-18.md`
+  - accepted slice commit：`46432c0`
+- 当前 residual risks：
+  - P3-S5 当前验证的是 deterministic fake repository 输出的报告证据契约，不替代真实 PDF/network smoke
+
+**P3-S6 当前状态（2026-05-18）**
+
+- `P3-S6 编写 README.md`：✅ completed
+- 当前完成内容：
+  - 根目录 `README.md` 已重写为用户手册，覆盖安装、5 分钟跑通、常用命令、常用参数、报告输出、当前能力、本地验证和文档导航
+  - README 当前命令与 Typer CLI 对齐：`fund-analysis --help`、`fund-analysis analyze --help`、`fund-analysis analyze FUND_CODE`
+  - README 明确 `fund-analysis checklist` 仍是占位命令，避免误导用户认为独立检查清单已接入
+  - README 已移除“3 只样本基金端到端 CLI 矩阵尚未实现”的过期表述
+  - README 文档导航仅保留当前仓库真实存在的文档路径
+  - 验证命令 `.venv/bin/fund-analysis --help` 当前通过
+  - 验证命令 `.venv/bin/fund-analysis analyze --help` 当前通过
+  - `git diff --check` 当前通过
+  - artifacts：
+    - `docs/reviews/p3-s6-implementation-2026-05-18.md`
+    - `docs/reviews/p3-s6-code-review-controller-judgment-2026-05-18.md`
+  - accepted slice commit：`8904588`
+- 当前 residual risks：
+  - README 示例命令未在本 slice 执行真实 PDF/network smoke，后续仍需独立验证真实数据路径
+
+**P3-S7 当前状态（2026-05-18）**
+
+- `P3-S7 编写单元测试`：✅ completed
+- 当前完成内容：
+  - `pyproject.toml` 的 dev 依赖新增 `pytest-cov>=7.1`
+  - `tests/README.md` 新增覆盖率 gate 命令和 P3-S7 覆盖率目标说明
+  - 验证命令 `.venv/bin/python -m pytest tests/fund/data tests/fund/documents tests/fund/extractors tests/fund/integration tests/fund/template tests/fund/audit tests/fund/analysis tests/services tests/ui --cov=fund_agent --cov-report=term-missing --cov-fail-under=50 -q` 当前通过
+  - 当前结果：`115 passed`，`Required test coverage of 50% reached. Total coverage: 90.07%`
+  - artifacts：
+    - `docs/reviews/p3-s7-implementation-2026-05-18.md`
+    - `docs/reviews/p3-s7-code-review-controller-judgment-2026-05-18.md`
+  - accepted slice commit：`d1d506b`
+- 当前 residual risks：
+  - 覆盖率是广度信号，不替代语义 review；真实 PDF/network smoke 仍需独立验证
+
+**P3-S8 当前状态（2026-05-18）**
+
+- `P3-S8 性能优化`：✅ completed
+- 当前完成内容：
+  - `tests/services/test_fund_analysis_service.py` 新增 `test_fund_analysis_service_completes_single_fund_under_p3_s8_limit_without_pdf_download`
+  - 测试使用 `_FakeExtractor` 排除网络和 PDF 下载，符合 P3 退出条件“不含 PDF 下载”
+  - 测试仍经过真实 Service 编排、P2 分析、8 章模板渲染和程序审计
+  - 显式阈值 `_P3_S8_MAX_ANALYSIS_SECONDS = 30.0`
+  - `tests/README.md` 新增性能 gate 说明
+  - 验证命令 `.venv/bin/python -m pytest tests/services/test_fund_analysis_service.py -q` 当前通过（`3 passed`）
+  - artifacts：
+    - `docs/reviews/p3-s8-implementation-2026-05-18.md`
+    - `docs/reviews/p3-s8-code-review-controller-judgment-2026-05-18.md`
+  - accepted slice commit：`7845add`
+- 当前 residual risks：
+  - 该 gate 不覆盖真实 PDF 下载、PDF 解析、网络波动或冷缓存墙钟时间
+
+**P3 Aggregate Deepreview 当前状态（2026-05-18）**
+
+- `P3 aggregate deepreview`：✅ completed
+- 当前完成内容：
+  - controller aggregate deepreview artifact：`docs/reviews/code-review-20260518-2223.md`
+  - review scope：`main..feat/p3-cli-integration`
+  - 结论：PASS，无 blocking finding
+  - 验证命令 `.venv/bin/python -m pytest tests/fund/integration/test_p3_cli_e2e_matrix.py tests/services/test_fund_analysis_service.py tests/fund/template/test_renderer.py tests/fund/audit/test_audit_programmatic.py -q` 当前通过（`27 passed`）
+  - 覆盖率命令 `.venv/bin/python -m pytest tests/fund/data tests/fund/documents tests/fund/extractors tests/fund/integration tests/fund/template tests/fund/audit tests/fund/analysis tests/services tests/ui --cov=fund_agent --cov-report=term-missing --cov-fail-under=50 -q` 当前通过（`116 passed`，总覆盖率 `90.07%`）
+  - `git diff --check` 当前通过
+- reviewer availability：
+  - 本轮 aggregate review 未取得可用 MiMo/GLM 独立新 artifact：MiMo pane 被用户 `.tmux.conf` 输入污染，GLM pane 保留旧的长运行 review context
+  - controller 已在 aggregate artifact 中记录该风险；如进入 draft PR gate 前仍需要双外部 reviewer，可重新清 pane 后派发
+- 当前 residual risks：
+  - 真实 PDF/network smoke 仍未自动化，owner：ready-to-open-draft-PR gate 或后续 PR review
+  - 温度计 adapter 尚未接入 CLI/Service 报告，owner：后续 phase / issue
+  - 基金简称 QDII 标识可作为独立分类字段继续清理，owner：后续 classifier cleanup
+
+**P3 Draft PR 当前状态（2026-05-18）**
+
+- `draft PR gate`：✅ completed
+- PR：`https://github.com/bill20232033cc/fund-agent/pull/2`
+- PR 状态：OPEN / ready for review
+- base：`main`
+- head：`feat/p3-cli-integration`
+- checks：GitHub 当前返回 no checks reported
+- mergeable：MERGEABLE
+- PR-level deepreview：✅ PASS
+- PR review artifact：`docs/reviews/pr-2-review-20260518-2307.md`
+- PR review validation：
+  - `.venv/bin/python -m pytest tests/fund/integration/test_p3_cli_e2e_matrix.py tests/services/test_fund_analysis_service.py tests/fund/template/test_renderer.py tests/fund/audit/test_audit_programmatic.py -q`：`27 passed`
+  - coverage matrix：`116 passed`，总覆盖率 `90.07%`
+  - `git diff --check main..HEAD`：passed
+- 当前 residual risks：
+  - merge 需要用户额外授权
+  - 真实 PDF/network smoke 未自动化，owner：PR review 或后续独立 smoke
 
 ---
 
@@ -931,7 +1145,7 @@ P0（环境搭建）
 |----|------|-----------|------|------|
 | BQ-1 | 巨潮网反爬策略未知 | P0/P1 | ✅ closed | 已改用 akshare + eastmoney PDF，无需直接访问巨潮 |
 | BQ-2 | 2026 新规"投资者收益率"披露时间表 | P2 | ⬜ open | P1 已提供 `investor_return` 三态和 `share_change` 输入，P2 再实现行为损益 |
-| BQ-3 | 有知有行温度数据页面结构 | P3 | ⬜ open | P3-S2 验证后关闭 |
+| BQ-3 | 有知有行温度数据页面结构 | P3 | ✅ closed | P3-S2 已用真实响应 smoke 验证 `/data` 与 `/data/macro` 当前布局，并以 fake HTML 单测锁定关键解析路径 |
 | BQ-4 | akshare 基金净值 API 稳定性 | P1/P3 | 🟡 partially closed | P1-S8 已封装可注入 fetcher 与 `nav_cache`，真实网络验证移交 P3 |
 | BQ-5 | 当前章节定位规则无法稳定识别 `§3` 正文 | P1 | ✅ closed | 已由 P1-S2 章节定位修复与 `§3` 冻结关闭 |
 
@@ -944,10 +1158,13 @@ P0（环境搭建）
 | RR-1 | PDF 格式不统一导致解析失败 | P1 | 已设计兜底策略 | 否 |
 | RR-2 | 超额收益性质判断主观性强 | P2 | MVP 用规则引擎 | 否 |
 | RR-3 | 审计规则过严导致频繁阻断 | P2 | MVP 仅启用程序审计 | 否 |
-| RR-4 | 温度计爬虫被封锁 | P3 | 24h 缓存 + 异常处理 | 是（如被封锁需人工确认） |
+| RR-4 | 温度计爬虫被封锁 | P3 | 24h 缓存 + 7 天 stale fallback + `unavailable=True`；Service/CLI 接入仍在 P3 后续 slice | 是（如被封锁且无可用缓存需人工确认） |
 | RR-5 | `dayu-agent` wheel 下载受 GitHub 可达性影响 | P0/P1 | 当前虚拟环境已安装，可继续开发；新环境安装待镜像化或替代分发方案 | 否 |
 | RR-6 | 模板禁用交易措辞使用 substring 匹配，未来合法短语可能误报 | P3/v2 | P2 当前输出已测试通过；P3 若调整模板措辞需同步审查 | 否 |
 | RR-7 | 缺证附录当前为章节级，不是 item 级证据确认 | v2 | MVP 先保证章节级可追溯，Evidence Confirm 层后续细化 | 否 |
+| RR-8 | CLI 端到端真实 PDF/网络路径尚未覆盖 | P3 | P3-S3 用 3 只样本基金 deterministic 端到端矩阵验证 Service/CLI/Capability 主链路；真实 PDF/network smoke 仍留到 ready-to-open-draft-PR gate 或 PR review | 否 |
+| RR-9 | 真实 `§2` 字段主要位于表格而非冒号文本行 | P3 | P3-S3 已让 profile extractor / fund type classifier 读取键值型表头与数据行，并以 3 只样本基金矩阵覆盖 | 否 |
+| RR-10 | 历史低质量 parsed report 缓存污染真实端到端输出 | P3 | P3-S3 已在 parsed report 缓存命中前检查正文长度与关键章节集合，不合格缓存回退为未命中 | 否 |
 
 ---
 
@@ -1011,3 +1228,23 @@ P0（环境搭建）
 | 2026-05-18 | P2 | ✅ done | `P2 aggregate deepreview` 已通过，MiMo/GLM 均 PASS；已修复 P2 exit checkbox 文档同步问题；accepted deepreview commit=`07fe0d0`；当前 gate 为 `ready-to-open-draft-PR` |
 | 2026-05-18 | P3 | ⬜ pending | P2 退出条件已满足；下一步需用户授权 draft PR gate 后 push 并创建 draft PR，随后再进入 P3 实施 |
 | 2026-05-18 | P2 | ✅ done | Draft PR #1 已创建并通过 PR review/fix/re-review；accepted PR review commit=`8f5029c` 已 push；当前 gate 为 `draft-PR-pass` |
+| 2026-05-18 | P3 | 🟡 in progress | `P3-S1 implementation + review` 已进入实现；当前代码入口为 Typer，因此 P3-S1 按 current-code alignment 保留 `fund-analysis analyze FUND_CODE` 子命令并通过 Service 层编排 Capability。 |
+| 2026-05-18 | P3 | 🟡 in progress | `P3-S1` implementation / code review / fix / re-review 已通过；CLI 通过 Service 层输出 8 章 Markdown，当前验证 `68 passed`；accepted commit=`c5a240c`；下一 gate 为 `P3-S2 implementation + review` |
+| 2026-05-18 | P3 | 🟡 in progress | `P3-S2 implementation + review` 已进入实现；温度计 adapter 目标为读取有知有行 `/data` 与 `/data/macro`，提供 24h fresh cache、7 天 stale fallback 和 unavailable 状态，暂不接入 CLI/Service。 |
+| 2026-05-18 | P3 | 🟡 in progress | `P3-S2` implementation / code review / controller fix 已通过；温度计 adapter 当前验证 `60 passed` 且真实响应 smoke 可解析全市场、指数、债市与 10 年期国债到期收益率；accepted commit=`1747aaf`；下一 gate 为 `P3-S3 implementation + review` |
+| 2026-05-18 | P3 | 🟡 in progress | `P3-S3 implementation` 已完成；新增 3 只样本基金 CLI 端到端矩阵并修复真实表格抽取、低质量 parsed cache 复用和模板基准字段契约错配；当前验证 `33 passed`；下一 gate 为 `P3-S3 code review` |
+| 2026-05-18 | P3 | 🟡 in progress | `P3-S3` implementation / controller code review 已通过；新增 3 只样本基金 CLI 端到端矩阵并修复真实表格抽取、低质量 parsed cache 复用和模板基准字段契约错配；当前验证 `115 passed` 且 `git diff --check` 通过；accepted commit=`e0b1b93`；下一 gate 为 `P3-S4 implementation + review` |
+| 2026-05-18 | P3 | 🟡 in progress | `P3-S4 implementation` 已完成；P3 CLI 端到端矩阵现在显式记录真实 Service 返回值，并断言 P1/P2/P3/L1/R1/R2 全部程序审计规则执行通过；当前验证 `26 passed`；下一 gate 为 `P3-S4 code review` |
+| 2026-05-18 | P3 | 🟡 in progress | `P3-S4` implementation / controller code review 已通过；P3 CLI 端到端矩阵已验证 3 只样本基金的 `audit_result.passed`、`checked_rules == P1/P2/P3/L1/R1/R2` 和空 issues；当前验证 `115 passed` 且 `git diff --check` 通过；accepted implementation commit=`caf5b31`；下一 gate 为 `P3-S5 implementation + review` |
+| 2026-05-18 | P3 | 🟡 in progress | `P3-S5 implementation` 已完成；P3 CLI 端到端矩阵现在断言每份报告 8 章正文证据行、关键附录来源锚点和无缺证占位；当前验证 `1 passed`；下一 gate 为 `P3-S5 code review` |
+| 2026-05-18 | P3 | 🟡 in progress | `P3-S5` implementation / controller code review 已通过；P3 CLI 端到端矩阵已验证每份报告 8 章正文证据行、关键附录来源锚点和无缺证占位；当前验证 `24 passed` 且 `git diff --check` 通过；accepted commit=`46432c0`；下一 gate 为 `P3-S6 implementation + review` |
+| 2026-05-18 | P3 | 🟡 in progress | `P3-S6 implementation` 已完成；根 README 已按当前 CLI 成功路径更新为用户手册，并移除过期端到端矩阵状态；当前验证 `fund-analysis --help`、`fund-analysis analyze --help` 和 `git diff --check` 通过；下一 gate 为 `P3-S6 code review` |
+| 2026-05-18 | P3 | 🟡 in progress | `P3-S6` implementation / controller code review 已通过；根 README 已按当前 CLI 成功路径更新为用户手册，文档导航均指向真实文件；当前验证 `fund-analysis --help`、`fund-analysis analyze --help` 和 `git diff --check` 通过；accepted commit=`8904588`；下一 gate 为 `P3-S7 implementation + review` |
+| 2026-05-18 | P3 | 🟡 in progress | `P3-S7 implementation` 已完成；dev 依赖和测试手册新增覆盖率 gate，当前 `fund_agent` 总覆盖率 `90.07%`，超过 50% 目标；当前验证 `115 passed`；下一 gate 为 `P3-S7 code review` |
+| 2026-05-18 | P3 | 🟡 in progress | `P3-S7` implementation / controller code review 已通过；dev 依赖和测试手册新增覆盖率 gate，当前 `fund_agent` 总覆盖率 `90.07%`，超过 50% 目标；当前验证 `115 passed`；accepted commit=`d1d506b`；下一 gate 为 `P3-S8 implementation + review` |
+| 2026-05-18 | P3 | 🟡 in progress | `P3-S8 implementation` 已完成；Service 层新增不含 PDF 下载的单只基金分析性能 gate，验证完整编排低于 30 秒；当前验证 `3 passed`；下一 gate 为 `P3-S8 code review` |
+| 2026-05-18 | P3 | 🟡 in progress | `P3-S8` implementation / controller code review 已通过；Service 层新增不含 PDF 下载的单只基金分析性能 gate，验证完整编排低于 30 秒；当前验证 `3 passed`；accepted commit=`7845add`；下一 gate 为 `P3 aggregate deepreview` |
+| 2026-05-18 | P3 | 🟡 in progress | `P3 aggregate deepreview` 已通过 controller review，无 blocking finding；当前验证 `27 passed`、覆盖率矩阵 `116 passed / 90.07%` 且 `git diff --check` 通过；review artifact=`docs/reviews/code-review-20260518-2223.md`；下一 gate 为 `ready-to-open-draft-PR` |
+| 2026-05-18 | P3 | 🟡 in progress | Draft PR 2 已创建并保持 draft 状态；URL=`https://github.com/bill20232033cc/fund-agent/pull/2`；GitHub 当前 no checks reported；当前 gate 为 `draft-PR-pass` |
+| 2026-05-18 | P3 | 🟡 in progress | PR 2 level deepreview 已通过，无 blocking finding；review artifact=`docs/reviews/pr-2-review-20260518-2307.md`；当前验证 `27 passed`、覆盖率矩阵 `116 passed / 90.07%` 且 `git diff --check main..HEAD` 通过；PR 仍为 draft，mark ready / merge 需用户额外授权 |
+| 2026-05-18 | P3 | 🟡 in progress | PR 2 已标记 ready for review；PR 状态 OPEN / ready，mergeable=`MERGEABLE`，GitHub 当前 no checks reported；merge 需用户额外授权 |

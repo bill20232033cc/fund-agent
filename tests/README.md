@@ -13,6 +13,7 @@
 - `tests/fund/extractors/test_manager_ownership.py`：`§4/§8/§9` 管理人/持有人 extractor 测试，覆盖策略文本、换手率、持有披露、持有人结构和 `missing` 路径
 - `tests/fund/extractors/test_holdings_share_change.py`：`§8/§10` 持仓/份额 extractor 测试，覆盖前十大重仓、行业分布、份额变动和表格型 anchor
 - `tests/fund/data/test_nav_data.py`：净值数据适配器测试，覆盖 `nav_cache` 命中和强制刷新
+- `tests/fund/data/test_thermometer.py`：有知有行温度计适配器测试，覆盖全市场/指数/宏观解析、24h 缓存复用、强制刷新、抓取失败 stale fallback、无缓存 unavailable 和 malformed HTML
 - `tests/fund/analysis/test_r_abc.py`：R=A+B-C 收益归因测试，覆盖公式闭合、P1 字段解析、证据锚点传递和缺失输入路径
 - `tests/fund/analysis/test_alpha_judge.py`：超额收益性质判断测试，覆盖结构性、部分结构性、阶段性、不适用、样本不足和显式环境输入要求
 - `tests/fund/analysis/test_consistency_check.py`：言行一致性检验测试，覆盖 4 维度信号、红灯冲突和显式实际风格/仓位输入要求
@@ -21,7 +22,10 @@
 - `tests/fund/analysis/test_checklist.py`：买入前检查清单测试，覆盖 7 问题顺序、红黄绿灰汇总、缺失显式输入、估值状态、资金期限阈值和异常否决项输入
 - `tests/fund/audit/test_audit_programmatic.py`：程序审计测试，覆盖 P1/P2/P3/L1/R1/R2 规则、必需输入缺失、故意注入错误和未知检查清单信号
 - `tests/fund/template/test_renderer.py`：模板渲染器测试，覆盖 8 章完整性、正文与附录证据锚点格式、缺证章节显式输出、页码保留、非年报来源标注、程序审计输入兼容、缺失数据显式渲染、最终判断边界、禁用交易措辞和 README 同步
+- `tests/services/test_fund_analysis_service.py`：Service 编排测试，使用 fake extractor 避免网络/PDF 下载，覆盖结构化抽取到渲染和程序审计的完整调用路径，并验证不含 PDF 下载的单只基金分析低于 30 秒
+- `tests/ui/test_cli.py`：Typer CLI 测试，覆盖 `analyze` 调用 Service 并输出 Markdown、失败非零退出，以及 `checklist` 不输出误导性成功文本
 - `tests/fund/integration/test_p1_sample_matrix.py`：P1 样本矩阵测试，验证 3 只样本基金 12 项结构化数据达到 `36/36`
+- `tests/fund/integration/test_p3_cli_e2e_matrix.py`：P3 CLI 端到端矩阵测试，验证 3 只样本基金经 Typer CLI、Service、P1/P2 Capability、模板渲染和程序审计输出完整 8 章报告，并显式断言 P1/P2/P3/L1/R1/R2 全部审计规则执行通过、每章正文证据行和附录来源锚点完整
 - `tests/fixtures/fund/extractors/profile/*.txt`：基础画像最小文本夹具，当前覆盖主动权益、增强指数、债券三类样本
 - `tests/fixtures/fund/extractors/performance/*.txt`：`§3` 最小文本夹具，当前覆盖直接披露、估算披露、未披露三类投资者收益率路径
 - `tests/fixtures/fund/extractors/manager_ownership/*.txt`：`§4/§8/§9` 最小文本夹具，当前覆盖完整披露、部分披露、未披露、换手率口径-only 路径
@@ -38,6 +42,7 @@ pytest tests/fund/extractors/test_performance.py -q
 pytest tests/fund/extractors/test_manager_ownership.py -q
 pytest tests/fund/extractors/test_holdings_share_change.py -q
 pytest tests/fund/data/test_nav_data.py -q
+pytest tests/fund/data/test_thermometer.py -q
 pytest tests/fund/analysis/test_r_abc.py -q
 pytest tests/fund/analysis/test_alpha_judge.py -q
 pytest tests/fund/analysis/test_consistency_check.py -q
@@ -46,7 +51,10 @@ pytest tests/fund/analysis/test_risk_check.py -q
 pytest tests/fund/analysis/test_checklist.py -q
 pytest tests/fund/audit/test_audit_programmatic.py -q
 pytest tests/fund/template/test_renderer.py -q
+pytest tests/services -q
+pytest tests/ui -q
 pytest tests/fund/integration/test_p1_sample_matrix.py -q
+pytest tests/fund/integration/test_p3_cli_e2e_matrix.py -q
 ```
 
 如果只验证当前 extractor worktree，可运行：
@@ -54,6 +62,22 @@ pytest tests/fund/integration/test_p1_sample_matrix.py -q
 ```bash
 .venv/bin/python -m pytest tests/fund/extractors tests/fund/data/test_nav_data.py tests/fund/integration/test_p1_sample_matrix.py -q
 ```
+
+覆盖率 gate：
+
+```bash
+pytest tests/fund/data tests/fund/documents tests/fund/extractors tests/fund/integration tests/fund/template tests/fund/audit tests/fund/analysis tests/services tests/ui --cov=fund_agent --cov-report=term-missing --cov-fail-under=50 -q
+```
+
+该命令要求安装 dev 依赖中的 `pytest-cov`。当前 P3-S7 gate 要求总覆盖率不低于 50%。
+
+性能 gate：
+
+```bash
+pytest tests/services/test_fund_analysis_service.py -q
+```
+
+Service 性能测试使用 fake extractor 排除网络和 PDF 下载，只验证结构化数据已就绪后的单只基金分析、模板渲染和程序审计低于 30 秒。
 
 ## 维护约定
 
@@ -64,6 +88,7 @@ pytest tests/fund/integration/test_p1_sample_matrix.py -q
 - `§3` 表现相关测试当前只允许依赖 `ParsedAnnualReport.get_section_text("§3")`，不要在 P1 阶段把 `§10` fallback 或净值序列计算混进同一组测试。
 - `§4/§8/§9` 管理人/持有人测试当前只锁定原始披露抽取，不写言行一致性、利益一致性或成本判断断言。
 - `§8/§10` 持仓/份额测试必须优先锁定表格型 anchor，不把资金流向判断或投资者收益 fallback 混进 P1 数据层测试。
+- 温度计测试必须使用 fake fetcher 和 HTML snippet，覆盖缓存新鲜度、stale fallback 和 unavailable 状态；不要依赖实时有知有行页面。
 - R=A+B-C 测试必须锁定公式闭合与缺失输入状态；股票仓位在 P1 未稳定抽取前必须作为显式输入，不允许在测试中隐藏默认假设。
 - 超额收益性质判断测试必须显式提供市场环境和来源解释强度；不要从收益结果中反推牛熊环境或基金经理能力。
 - 言行一致性测试必须显式提供实际持仓风格和股票仓位；不要从重仓名称或行业分布中猜测风格。
@@ -73,4 +98,7 @@ pytest tests/fund/integration/test_p1_sample_matrix.py -q
 - 检查清单测试必须覆盖 7 问题完整性和红黄绿灰规则；估值、资金期限等用户/外部输入缺失时必须返回灰灯，不允许默认通过。
 - 程序审计测试必须覆盖必需输入缺失和故意注入错误；P1/P2/P3 只审报告结构，L1/R1/R2 必须消费结构化结果，不靠报告文字间接判断，也不能把缺失输入伪装成规则通过。
 - 模板渲染测试必须覆盖 8 章结构、证据锚点格式、缺证章节显式文本、页码保留、非年报来源标注、程序审计输入兼容和禁用交易建议措辞；不得只做字符串存在性 smoke test。
+- Service 测试必须通过 fake extractor 隔离网络、PDF 下载和文档仓库副作用，只断言 Service 对 Capability 模块的编排契约。
+- UI CLI 测试只验证参数解析、Service 调用、stdout/stderr 和退出码；不得在 UI 层直接断言基金分析规则。
+- P3 CLI 端到端矩阵可通过 fake repository 和 fake nav provider 隔离网络/PDF 副作用，但必须经过真实 CLI 参数解析、Service 编排、模板渲染和程序审计，并断言 `ProgrammaticAuditResult.checked_rules` 覆盖 P1/P2/P3/L1/R1/R2，同时验证 8 章正文证据行、附录年报章节/表格/行定位和无缺证占位。
 - 新增基金类型或章节 extractor 时，先补 fixture，再补测试，再扩实现；不要只靠真实年报手工回归。

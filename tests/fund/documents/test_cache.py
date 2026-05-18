@@ -11,11 +11,11 @@ from fund_agent.fund.documents.cache import (
     AnnualReportDocumentCache,
     PARSED_REPORT_SCHEMA_VERSION,
 )
-from fund_agent.fund.documents.models import DocumentKey, ParsedAnnualReport
+from fund_agent.fund.documents.models import DocumentKey, ParsedAnnualReport, ReportSection
 
 
 def _build_stub_report(fund_code: str, year: int) -> ParsedAnnualReport:
-    """构造缓存测试使用的最小年报对象。
+    """构造缓存测试使用的可用年报对象。
 
     Args:
         fund_code: 基金代码。
@@ -28,9 +28,59 @@ def _build_stub_report(fund_code: str, year: int) -> ParsedAnnualReport:
         无显式抛出。
     """
 
+    raw_text = "\n".join(
+        (
+            "§2 基金简介",
+            "基金名称：缓存样本基金",
+            "§3 主要财务指标、基金净值表现及利润分配情况",
+            "净值表现正文",
+            "§4 管理人报告",
+            "管理人报告正文",
+            "§8 投资组合报告",
+            "投资组合正文",
+            "§9 基金份额持有人信息",
+            "持有人正文",
+            "§10 基金份额变动",
+            "份额变动正文",
+            "缓存正文" * 300,
+        )
+    )
+    section_ids = ("§2", "§3", "§4", "§8", "§9", "§10")
     return ParsedAnnualReport(
         key=DocumentKey(fund_code=fund_code, year=year),
-        raw_text="§1 基金简介\n缓存正文",
+        raw_text=raw_text,
+        sections={
+            section_id: ReportSection(
+                section_id=section_id,
+                title=section_id,
+                start_offset=raw_text.index(section_id),
+                end_offset=raw_text.index(section_ids[index + 1]) if index + 1 < len(section_ids) else len(raw_text),
+                matched_rule="fixture",
+                confidence=1.0,
+            )
+            for index, section_id in enumerate(section_ids)
+        },
+        tables=(),
+    )
+
+
+def _build_unusable_report(fund_code: str, year: int) -> ParsedAnnualReport:
+    """构造低质量缓存年报对象。
+
+    Args:
+        fund_code: 基金代码。
+        year: 年报年份。
+
+    Returns:
+        不满足真实年报缓存门槛的年报对象。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return ParsedAnnualReport(
+        key=DocumentKey(fund_code=fund_code, year=year),
+        raw_text="§1 基金简介\n测试正文",
         sections={},
         tables=(),
     )
@@ -122,5 +172,28 @@ async def test_cache_returns_none_for_missing_or_stale_payload(tmp_path: Path) -
             ),
         )
         connection.commit()
+
+    assert await cache.load_parsed_report(document_key) is None
+
+
+@pytest.mark.asyncio
+async def test_cache_rejects_unusable_parsed_report_payload(tmp_path: Path) -> None:
+    """验证低质量 parsed report 缓存不会被误用为真实年报。
+
+    Args:
+        tmp_path: pytest 提供的临时目录。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当低质量缓存仍被返回时抛出。
+    """
+
+    cache = AnnualReportDocumentCache(tmp_path / "documents-cache")
+    document_key = DocumentKey(fund_code="110011", year=2024)
+    report = _build_unusable_report("110011", 2024)
+
+    await cache.save_parsed_report(report, pdf_path=None)
 
     assert await cache.load_parsed_report(document_key) is None

@@ -19,6 +19,10 @@ DOCUMENT_CACHE_ROOT: Final[Path] = Path("cache/documents")
 PARSED_REPORT_CACHE_DIRNAME: Final[str] = "parsed_reports"
 SQLITE_CACHE_FILENAME: Final[str] = "documents.sqlite3"
 PARSED_REPORT_SCHEMA_VERSION: Final[int] = 1
+MIN_PARSED_REPORT_RAW_TEXT_LENGTH: Final[int] = 1_000
+REQUIRED_PARSED_REPORT_SECTION_IDS: Final[frozenset[str]] = frozenset(
+    {"§2", "§3", "§4", "§8", "§9", "§10"}
+)
 
 
 def _document_cache_key(key: DocumentKey) -> str:
@@ -51,6 +55,24 @@ def _utc_timestamp() -> str:
     """
 
     return datetime.now(timezone.utc).isoformat()
+
+
+def is_parsed_annual_report_cache_usable(report: ParsedAnnualReport) -> bool:
+    """判断 parsed report 缓存是否达到真实年报的最低质量门槛。
+
+    Args:
+        report: 从缓存反序列化或刚解析得到的年报对象。
+
+    Returns:
+        缓存足以支撑模板第 1-7 章核心抽取时返回 `True`，否则返回 `False`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if len(report.raw_text.strip()) < MIN_PARSED_REPORT_RAW_TEXT_LENGTH:
+        return False
+    return REQUIRED_PARSED_REPORT_SECTION_IDS <= set(report.sections)
 
 
 class AnnualReportDocumentCache:
@@ -290,7 +312,10 @@ class AnnualReportDocumentCache:
         if not payload_path.exists():
             return None
         payload = json.loads(payload_path.read_text(encoding="utf-8"))
-        return ParsedAnnualReport.from_dict(payload)
+        report = ParsedAnnualReport.from_dict(payload)
+        if not is_parsed_annual_report_cache_usable(report):
+            return None
+        return report
 
     async def save_parsed_report(
         self,

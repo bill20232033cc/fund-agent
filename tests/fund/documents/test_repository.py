@@ -9,7 +9,7 @@ import fund_agent.fund.documents.adapters.annual_report_pdf as annual_report_pdf
 import fund_agent.fund.documents.repository as repository_module
 from fund_agent.fund.documents.adapters.annual_report_pdf import AnnualReportPdfAdapter
 from fund_agent.fund.documents.cache import AnnualReportDocumentCache
-from fund_agent.fund.documents.models import DocumentKey, ParsedAnnualReport
+from fund_agent.fund.documents.models import DocumentKey, ParsedAnnualReport, ReportSection
 from fund_agent.fund.documents.repository import FundDocumentRepository
 
 
@@ -73,24 +73,54 @@ async def test_repository_returns_parsed_annual_report_without_path_exposure() -
     section_locator.assert_called_once_with(raw_text)
 
 
-def _build_stub_report(fund_code: str, year: int) -> ParsedAnnualReport:
-    """构造仓库测试使用的最小年报对象。
+def _build_stub_report(fund_code: str, year: int, marker: str = "仓库样本基金") -> ParsedAnnualReport:
+    """构造仓库测试使用的可缓存年报对象。
 
     Args:
         fund_code: 基金代码。
         year: 年报年份。
+        marker: 用于区分不同解析结果的正文标记。
 
     Returns:
-        最小可用的 ``ParsedAnnualReport`` 对象。
+        满足 parsed report 缓存质量门槛的 ``ParsedAnnualReport`` 对象。
 
     Raises:
         无显式抛出。
     """
 
+    raw_text = "\n".join(
+        (
+            "§2 基金简介",
+            f"基金名称：{marker}",
+            "§3 主要财务指标、基金净值表现及利润分配情况",
+            "净值表现正文",
+            "§4 管理人报告",
+            "管理人报告正文",
+            "§8 投资组合报告",
+            "投资组合正文",
+            "§9 基金份额持有人信息",
+            "持有人正文",
+            "§10 基金份额变动",
+            "份额变动正文",
+            "仓库缓存正文" * 160,
+        )
+    )
+    section_ids = ("§2", "§3", "§4", "§8", "§9", "§10")
+    sections = {
+        section_id: ReportSection(
+            section_id=section_id,
+            title=section_id,
+            start_offset=raw_text.index(section_id),
+            end_offset=raw_text.index(section_ids[index + 1]) if index + 1 < len(section_ids) else len(raw_text),
+            matched_rule="fixture",
+            confidence=1.0,
+        )
+        for index, section_id in enumerate(section_ids)
+    }
     return ParsedAnnualReport(
         key=DocumentKey(fund_code=fund_code, year=year),
-        raw_text="§1 基金简介\n测试正文",
-        sections={},
+        raw_text=raw_text,
+        sections=sections,
         tables=(),
     )
 
@@ -365,12 +395,7 @@ async def test_repository_force_refresh_bypasses_cached_pdf_and_parsed_report(
     pdf_path = tmp_path / "110011_2024_annual_report.pdf"
     pdf_path.write_bytes(b"pdf")
     stale_report = _build_stub_report("110011", 2024)
-    fresh_report = ParsedAnnualReport(
-        key=DocumentKey(fund_code="110011", year=2024),
-        raw_text="§1 基金简介\n刷新后的正文",
-        sections={},
-        tables=(),
-    )
+    fresh_report = _build_stub_report("110011", 2024, marker="刷新后的仓库样本基金")
     loader = _FakeCacheAwareLoader(pdf_path, [stale_report, fresh_report])
     _install_temp_cache(monkeypatch, cache_root)
     repository = FundDocumentRepository(loader)
