@@ -278,6 +278,7 @@
       - `docs/reviews/p2-aggregate-review-glm-2026-05-18.md`
       - controller judgment: `docs/reviews/p2-aggregate-review-controller-judgment-2026-05-18.md`
     - fix: `docs/reviews/p2-aggregate-fix-2026-05-18.md`
+    - accepted deepreview commit: `07fe0d0`
 
 ---
 
@@ -812,6 +813,7 @@
     - `docs/reviews/p2-aggregate-review-glm-2026-05-18.md`
     - `docs/reviews/p2-aggregate-fix-2026-05-18.md`
     - `docs/reviews/p2-aggregate-review-controller-judgment-2026-05-18.md`
+  - accepted deepreview commit：`07fe0d0`
 - 当前 residual risks：
   - `P3-S4` owner：端到端 CLI 报告通过程序审计尚未验证
   - later evidence confirm owner：缺证附录当前为章节级，不是 item 级证据确认
@@ -975,5 +977,5 @@ P0（环境搭建）
 | 2026-05-18 | P2 | 🟡 in progress | `P2-S1` 至 `P2-S8` 已收口为 accepted baseline commit `a6b1516`；`launchd/`、`scripts/` 和旧 P1 review artifact 保持在 P2 基线外；当前 gate 维持 `P2-S9 implementation + review` |
 | 2026-05-18 | P2 | 🟡 in progress | `P2-S9` implementation / review / fix / re-review 已通过，8 章模板渲染器和程序审计输入已落地，accepted commit=`bf64b0f`；下一 gate 为 `P2-S10 implementation + review` |
 | 2026-05-18 | P2 | 🟡 in progress | `P2-S10` implementation / code review 已通过，证据锚点正文和附录格式已收口，accepted commit=`2d041ae`；下一 gate 为 `P2 aggregate deepreview` |
-| 2026-05-18 | P2 | ✅ done | `P2 aggregate deepreview` 已通过，MiMo/GLM 均 PASS；已修复 P2 exit checkbox 文档同步问题；当前 gate 为 `ready-to-open-draft-PR` |
+| 2026-05-18 | P2 | ✅ done | `P2 aggregate deepreview` 已通过，MiMo/GLM 均 PASS；已修复 P2 exit checkbox 文档同步问题；accepted deepreview commit=`07fe0d0`；当前 gate 为 `ready-to-open-draft-PR` |
 | 2026-05-18 | P3 | ⬜ pending | P2 退出条件已满足；下一步需用户授权 draft PR gate 后 push 并创建 draft PR，随后再进入 P3 实施 |
