@@ -1111,6 +1111,12 @@
 - base：`main`
 - head：`feat/p3-cli-integration`
 - checks：GitHub 当前返回 no checks reported
+- PR-level deepreview：✅ PASS
+- PR review artifact：`docs/reviews/pr-2-review-20260518-2307.md`
+- PR review validation：
+  - `.venv/bin/python -m pytest tests/fund/integration/test_p3_cli_e2e_matrix.py tests/services/test_fund_analysis_service.py tests/fund/template/test_renderer.py tests/fund/audit/test_audit_programmatic.py -q`：`27 passed`
+  - coverage matrix：`116 passed`，总覆盖率 `90.07%`
+  - `git diff --check main..HEAD`：passed
 - 当前 residual risks：
   - PR 仍为 draft，mark ready / merge 需要用户额外授权
   - 真实 PDF/network smoke 未自动化，owner：PR review 或后续独立 smoke
@@ -1239,3 +1245,4 @@ P0（环境搭建）
 | 2026-05-18 | P3 | 🟡 in progress | `P3-S8` implementation / controller code review 已通过；Service 层新增不含 PDF 下载的单只基金分析性能 gate，验证完整编排低于 30 秒；当前验证 `3 passed`；accepted commit=`7845add`；下一 gate 为 `P3 aggregate deepreview` |
 | 2026-05-18 | P3 | 🟡 in progress | `P3 aggregate deepreview` 已通过 controller review，无 blocking finding；当前验证 `27 passed`、覆盖率矩阵 `116 passed / 90.07%` 且 `git diff --check` 通过；review artifact=`docs/reviews/code-review-20260518-2223.md`；下一 gate 为 `ready-to-open-draft-PR` |
 | 2026-05-18 | P3 | 🟡 in progress | Draft PR 2 已创建并保持 draft 状态；URL=`https://github.com/bill20232033cc/fund-agent/pull/2`；GitHub 当前 no checks reported；当前 gate 为 `draft-PR-pass` |
+| 2026-05-18 | P3 | 🟡 in progress | PR 2 level deepreview 已通过，无 blocking finding；review artifact=`docs/reviews/pr-2-review-20260518-2307.md`；当前验证 `27 passed`、覆盖率矩阵 `116 passed / 90.07%` 且 `git diff --check main..HEAD` 通过；PR 仍为 draft，mark ready / merge 需用户额外授权 |
