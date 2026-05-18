@@ -63,6 +63,14 @@ pytest tests/fund/integration/test_p3_cli_e2e_matrix.py -q
 .venv/bin/python -m pytest tests/fund/extractors tests/fund/data/test_nav_data.py tests/fund/integration/test_p1_sample_matrix.py -q
 ```
 
+覆盖率 gate：
+
+```bash
+pytest tests/fund/data tests/fund/documents tests/fund/extractors tests/fund/integration tests/fund/template tests/fund/audit tests/fund/analysis tests/services tests/ui --cov=fund_agent --cov-report=term-missing --cov-fail-under=50 -q
+```
+
+该命令要求安装 dev 依赖中的 `pytest-cov`。当前 P3-S7 gate 要求总覆盖率不低于 50%。
+
 ## 维护约定
 
 - 新增 Capability 测试时，优先使用 fixture、mock 或临时目录隔离网络和文件系统副作用。
