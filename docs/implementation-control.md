@@ -31,8 +31,8 @@
 ### 1.3 当前 Gate 与基线裁决（2026-05-18）
 
 - 当前分支：`feat/p3-cli-integration`
-- 当前 gate：`P3-S4 implementation + review`
-- 下一 gate：`P3-S4 implementation + review`
+- 当前 gate：`P3-S5 implementation + review`
+- 下一 gate：`P3-S5 implementation + review`
 - 当前裁决：
   - P0 维持 `done`。已验证 `dayu` 依赖可导入、`fund-agent` 处于 editable install、`fund-analysis --help` 可用、样本基金 `110011` 年报可下载、`pdfplumber` 可提取全文文本和表格。
   - P1 已完成并通过 aggregate review。
@@ -40,7 +40,8 @@
   - P3 已进入 `in progress`。
   - `P3-S1 CLI 入口封装` 已完成，通过 Typer CLI 和 Service 层输出单只基金 8 章 Markdown 报告；下一 gate 为 `P3-S2 implementation + review`。
   - `P3-S2 温度计数据爬取` 已完成并通过 GLM/MiMo code review；当前实现范围仅限 Capability data adapter，不接入 CLI/Service。
-  - `P3-S3 端到端整合测试` 已完成实现与 controller code review：新增 3 只样本基金 CLI 端到端矩阵，闭合真实 `§2` 表格字段抽取、parsed report 低质量缓存门槛和模板 `benchmark_text` 契约错配；下一 gate 为 accepted commit 后进入 `P3-S4 implementation + review`。
+  - `P3-S3 端到端整合测试` 已完成实现与 GLM/MiMo/controller code review：新增 3 只样本基金 CLI 端到端矩阵，闭合真实 `§2` 表格字段抽取、parsed report 低质量缓存门槛和模板 `benchmark_text` 契约错配。
+  - `P3-S4 程序审计集成` 已完成实现与 controller code review：P3 CLI 端到端矩阵现在记录真实 Service 返回值，并断言 P1/P2/P3/L1/R1/R2 全部程序审计规则执行通过；下一 gate 为 `P3-S5 implementation + review`。
   - `P2-S1` 至 `P2-S8` 已收口为 accepted baseline commit `a6b1516`。收口范围仅包含 P2 analysis/audit 实现、测试、README 同步与 review artifact；本地运行辅助文件 `launchd/`、`scripts/` 和旧 P1 review artifact 未纳入该基线。
   - `P1-S1 文档访问契约收口` 已完成：对外唯一仓库入口收口为 `FundDocumentRepository.load_annual_report(...) -> ParsedAnnualReport`，公共契约已迁入 `fund_agent/fund/documents/*`，`fund_agent/fund/pdf/*` 降为仓库内部 helper / adapter。
   - `P1-S2 章节定位修复与 §3 冻结` 已完成：
@@ -972,6 +973,43 @@
   - `P3-S3/P3-S4` owner：有知有行页面结构仍可能变化，后续集成测试和运行监控需覆盖 unavailable/stale 输出
   - later integration owner：Service/CLI 接入时应显式传入运行期 cache root，避免依赖进程 cwd
 
+**P3-S3 当前状态（2026-05-18）**
+
+- `P3-S3 端到端整合测试`：✅ completed
+- 当前完成内容：
+  - `tests/fund/integration/test_p3_cli_e2e_matrix.py` 新增 3 只样本基金 CLI 端到端矩阵
+  - 矩阵覆盖 `110011 -> qdii_fund`、`510300 -> index_fund`、`000171 -> bond_fund`
+  - CLI 矩阵通过 fake repository / fake nav provider 隔离网络与 PDF 副作用，但仍经过真实 Typer CLI、Service、`FundDataExtractor`、extractors、P2 analysis、模板渲染和程序审计
+  - 修复真实 `§2` 表格键值字段抽取、低质量 parsed report cache 复用和模板 `benchmark_text` 契约错配
+  - 验证命令 `.venv/bin/python -m pytest tests/fund/data tests/fund/documents tests/fund/extractors tests/fund/integration tests/fund/template tests/fund/audit tests/fund/analysis tests/services tests/ui -q` 当前通过（`115 passed`）
+  - `git diff --check` 当前通过
+  - code review artifacts：
+    - `docs/reviews/p3-s3-code-review-controller-judgment-2026-05-18.md`
+    - `docs/reviews/p3-s3-code-review-glm-2026-05-18.md`
+    - `docs/reviews/p3-s3-code-review-mimo-2026-05-18.md`
+  - accepted slice commit：`e0b1b93`
+- 当前 residual risks：
+  - classifier cleanup owner：基金简称中的 QDII 标识仍建议后续作为独立字段参与分类，避免仅依赖 investment_scope 的理论漏判
+  - later integration owner：真实 PDF/网络路径仍应保留人工 smoke 或独立运行监控
+
+**P3-S4 当前状态（2026-05-18）**
+
+- `P3-S4 程序审计集成`：✅ completed
+- 当前完成内容：
+  - P3 CLI 端到端矩阵新增 `_RecordingService` 测试代理，记录真实 `FundAnalysisService.analyze(...)` 返回值
+  - 对 3 只样本基金逐一断言 `audit_result.passed`
+  - 对 3 只样本基金逐一断言 `audit_result.checked_rules == ("P1", "P2", "P3", "L1", "R1", "R2")`
+  - 对 3 只样本基金逐一断言 `audit_result.issues == ()`
+  - 验证命令 `.venv/bin/python -m pytest tests/fund/integration/test_p3_cli_e2e_matrix.py tests/services/test_fund_analysis_service.py tests/fund/audit/test_audit_programmatic.py tests/fund/template/test_renderer.py -q` 当前通过（`26 passed`）
+  - 验证命令 `.venv/bin/python -m pytest tests/fund/data tests/fund/documents tests/fund/extractors tests/fund/integration tests/fund/template tests/fund/audit tests/fund/analysis tests/services tests/ui -q` 当前通过（`115 passed`）
+  - `git diff --check` 当前通过
+  - artifacts：
+    - `docs/reviews/p3-s4-implementation-2026-05-18.md`
+    - `docs/reviews/p3-s4-code-review-controller-judgment-2026-05-18.md`
+  - accepted implementation commit：`caf5b31`
+- 当前 residual risks：
+  - P3-S4 使用 fake repository / fake nav provider 隔离网络与 PDF，不替代真实运行 smoke
+
 ---
 
 ## 3. 依赖关系
@@ -1084,3 +1122,5 @@ P0（环境搭建）
 | 2026-05-18 | P3 | 🟡 in progress | `P3-S2` implementation / code review / controller fix 已通过；温度计 adapter 当前验证 `60 passed` 且真实响应 smoke 可解析全市场、指数、债市与 10 年期国债到期收益率；accepted commit=`1747aaf`；下一 gate 为 `P3-S3 implementation + review` |
 | 2026-05-18 | P3 | 🟡 in progress | `P3-S3 implementation` 已完成；新增 3 只样本基金 CLI 端到端矩阵并修复真实表格抽取、低质量 parsed cache 复用和模板基准字段契约错配；当前验证 `33 passed`；下一 gate 为 `P3-S3 code review` |
 | 2026-05-18 | P3 | 🟡 in progress | `P3-S3` implementation / controller code review 已通过；新增 3 只样本基金 CLI 端到端矩阵并修复真实表格抽取、低质量 parsed cache 复用和模板基准字段契约错配；当前验证 `115 passed` 且 `git diff --check` 通过；accepted commit=`e0b1b93`；下一 gate 为 `P3-S4 implementation + review` |
+| 2026-05-18 | P3 | 🟡 in progress | `P3-S4 implementation` 已完成；P3 CLI 端到端矩阵现在显式记录真实 Service 返回值，并断言 P1/P2/P3/L1/R1/R2 全部程序审计规则执行通过；当前验证 `26 passed`；下一 gate 为 `P3-S4 code review` |
+| 2026-05-18 | P3 | 🟡 in progress | `P3-S4` implementation / controller code review 已通过；P3 CLI 端到端矩阵已验证 3 只样本基金的 `audit_result.passed`、`checked_rules == P1/P2/P3/L1/R1/R2` 和空 issues；当前验证 `115 passed` 且 `git diff --check` 通过；accepted implementation commit=`caf5b31`；下一 gate 为 `P3-S5 implementation + review` |
