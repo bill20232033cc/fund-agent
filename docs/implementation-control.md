@@ -31,8 +31,8 @@
 ### 1.3 当前 Gate 与基线裁决（2026-05-18）
 
 - 当前分支：`feat/p3-cli-integration`
-- 当前 gate：`P3-S8 implementation + review`
-- 下一 gate：`P3-S8 implementation + review`
+- 当前 gate：`P3 aggregate deepreview`
+- 下一 gate：`P3 aggregate deepreview`
 - 当前裁决：
   - P0 维持 `done`。已验证 `dayu` 依赖可导入、`fund-agent` 处于 editable install、`fund-analysis --help` 可用、样本基金 `110011` 年报可下载、`pdfplumber` 可提取全文文本和表格。
   - P1 已完成并通过 aggregate review。
@@ -45,6 +45,7 @@
   - `P3-S5 证据锚点集成` 已完成实现与 controller code review：P3 CLI 端到端矩阵现在逐份报告断言 8 章正文证据行、附录年报章节/表格/行定位和无缺证占位；下一 gate 为 `P3-S6 implementation + review`。
   - `P3-S6 编写 README.md` 已完成实现与 controller code review：根 README 已按当前 CLI 成功路径更新为用户手册，并移除过期的端到端矩阵未实现表述；下一 gate 为 `P3-S7 implementation + review`。
   - `P3-S7 编写单元测试` 已完成实现与 controller code review：dev 依赖和测试手册新增覆盖率 gate，当前 `fund_agent` 总覆盖率 90.07%，超过 50% 目标；下一 gate 为 `P3-S8 implementation + review`。
+  - `P3-S8 性能优化` 已完成实现与 controller code review：Service 层新增不含 PDF 下载的单只基金分析性能 gate，验证完整编排低于 30 秒；下一 gate 为 `P3 aggregate deepreview`。
   - `P2-S1` 至 `P2-S8` 已收口为 accepted baseline commit `a6b1516`。收口范围仅包含 P2 analysis/audit 实现、测试、README 同步与 review artifact；本地运行辅助文件 `launchd/`、`scripts/` 和旧 P1 review artifact 未纳入该基线。
   - `P1-S1 文档访问契约收口` 已完成：对外唯一仓库入口收口为 `FundDocumentRepository.load_annual_report(...) -> ParsedAnnualReport`，公共契约已迁入 `fund_agent/fund/documents/*`，`fund_agent/fund/pdf/*` 降为仓库内部 helper / adapter。
   - `P1-S2 章节定位修复与 §3 冻结` 已完成：
@@ -1065,6 +1066,22 @@
 - 当前 residual risks：
   - 覆盖率是广度信号，不替代语义 review；真实 PDF/network smoke 仍需独立验证
 
+**P3-S8 当前状态（2026-05-18）**
+
+- `P3-S8 性能优化`：✅ completed
+- 当前完成内容：
+  - `tests/services/test_fund_analysis_service.py` 新增 `test_fund_analysis_service_completes_single_fund_under_p3_s8_limit_without_pdf_download`
+  - 测试使用 `_FakeExtractor` 排除网络和 PDF 下载，符合 P3 退出条件“不含 PDF 下载”
+  - 测试仍经过真实 Service 编排、P2 分析、8 章模板渲染和程序审计
+  - 显式阈值 `_P3_S8_MAX_ANALYSIS_SECONDS = 30.0`
+  - `tests/README.md` 新增性能 gate 说明
+  - 验证命令 `.venv/bin/python -m pytest tests/services/test_fund_analysis_service.py -q` 当前通过（`3 passed`）
+  - artifacts：
+    - `docs/reviews/p3-s8-implementation-2026-05-18.md`
+    - `docs/reviews/p3-s8-code-review-controller-judgment-2026-05-18.md`
+- 当前 residual risks：
+  - 该 gate 不覆盖真实 PDF 下载、PDF 解析、网络波动或冷缓存墙钟时间
+
 ---
 
 ## 3. 依赖关系
@@ -1185,3 +1202,5 @@ P0（环境搭建）
 | 2026-05-18 | P3 | 🟡 in progress | `P3-S6` implementation / controller code review 已通过；根 README 已按当前 CLI 成功路径更新为用户手册，文档导航均指向真实文件；当前验证 `fund-analysis --help`、`fund-analysis analyze --help` 和 `git diff --check` 通过；accepted commit=`8904588`；下一 gate 为 `P3-S7 implementation + review` |
 | 2026-05-18 | P3 | 🟡 in progress | `P3-S7 implementation` 已完成；dev 依赖和测试手册新增覆盖率 gate，当前 `fund_agent` 总覆盖率 `90.07%`，超过 50% 目标；当前验证 `115 passed`；下一 gate 为 `P3-S7 code review` |
 | 2026-05-18 | P3 | 🟡 in progress | `P3-S7` implementation / controller code review 已通过；dev 依赖和测试手册新增覆盖率 gate，当前 `fund_agent` 总覆盖率 `90.07%`，超过 50% 目标；当前验证 `115 passed`；accepted commit=`d1d506b`；下一 gate 为 `P3-S8 implementation + review` |
+| 2026-05-18 | P3 | 🟡 in progress | `P3-S8 implementation` 已完成；Service 层新增不含 PDF 下载的单只基金分析性能 gate，验证完整编排低于 30 秒；当前验证 `3 passed`；下一 gate 为 `P3-S8 code review` |
+| 2026-05-18 | P3 | 🟡 in progress | `P3-S8` implementation / controller code review 已通过；Service 层新增不含 PDF 下载的单只基金分析性能 gate，验证完整编排低于 30 秒；当前验证 `3 passed`；下一 gate 为 `P3 aggregate deepreview` |

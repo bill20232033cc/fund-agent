@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 from decimal import Decimal
+from time import perf_counter
 
 import pytest
 
@@ -11,6 +12,8 @@ from fund_agent.fund.data.nav_data import NavDataResult
 from fund_agent.fund.data_extractor import StructuredFundDataBundle
 from fund_agent.fund.extractors.models import EvidenceAnchor, ExtractedField
 from fund_agent.services import FundAnalysisRequest, FundAnalysisService
+
+_P3_S8_MAX_ANALYSIS_SECONDS = 30.0
 
 
 def _anchor(section_id: str, row_locator: str, *, table_id: str | None = None) -> EvidenceAnchor:
@@ -219,6 +222,47 @@ async def test_fund_analysis_service_builds_render_and_audit_path_with_fake_extr
     assert "# 0. 投资要点概览" in result.report_markdown
     assert "# 7. 是否值得持有——最终判断" in result.report_markdown
     assert "## 证据与出处" in result.report_markdown
+
+
+@pytest.mark.asyncio
+async def test_fund_analysis_service_completes_single_fund_under_p3_s8_limit_without_pdf_download() -> None:
+    """验证不含 PDF 下载的单只基金完整分析低于 P3-S8 性能阈值。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 Service 编排耗时超过 30 秒或报告未通过审计时抛出。
+    """
+
+    extractor = _FakeExtractor(_bundle())
+    service = FundAnalysisService(extractor=extractor)
+    request = FundAnalysisRequest(
+        fund_code="110011",
+        report_year=2024,
+        equity_position="80%",
+        actual_style="均衡",
+        actual_equity_position="70%",
+        manager_tenure_months=24,
+        peer_fee_median="1.00%",
+        investment_amount=Decimal("10000"),
+        max_tolerable_loss_rate="50%",
+        valuation_state="low",
+        user_money_horizon_years=4,
+        current_stage="规模稳定，继续观察结构性超额证据",
+        final_judgment="worth_holding",
+        force_refresh=True,
+    )
+
+    started_at = perf_counter()
+    result = await service.analyze(request)
+    elapsed_seconds = perf_counter() - started_at
+
+    assert result.audit_result.passed
+    assert elapsed_seconds < _P3_S8_MAX_ANALYSIS_SECONDS
 
 
 @pytest.mark.asyncio

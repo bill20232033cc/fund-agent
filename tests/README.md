@@ -22,7 +22,7 @@
 - `tests/fund/analysis/test_checklist.py`：买入前检查清单测试，覆盖 7 问题顺序、红黄绿灰汇总、缺失显式输入、估值状态、资金期限阈值和异常否决项输入
 - `tests/fund/audit/test_audit_programmatic.py`：程序审计测试，覆盖 P1/P2/P3/L1/R1/R2 规则、必需输入缺失、故意注入错误和未知检查清单信号
 - `tests/fund/template/test_renderer.py`：模板渲染器测试，覆盖 8 章完整性、正文与附录证据锚点格式、缺证章节显式输出、页码保留、非年报来源标注、程序审计输入兼容、缺失数据显式渲染、最终判断边界、禁用交易措辞和 README 同步
-- `tests/services/test_fund_analysis_service.py`：Service 编排测试，使用 fake extractor 避免网络/PDF 下载，覆盖结构化抽取到渲染和程序审计的完整调用路径
+- `tests/services/test_fund_analysis_service.py`：Service 编排测试，使用 fake extractor 避免网络/PDF 下载，覆盖结构化抽取到渲染和程序审计的完整调用路径，并验证不含 PDF 下载的单只基金分析低于 30 秒
 - `tests/ui/test_cli.py`：Typer CLI 测试，覆盖 `analyze` 调用 Service 并输出 Markdown、失败非零退出，以及 `checklist` 不输出误导性成功文本
 - `tests/fund/integration/test_p1_sample_matrix.py`：P1 样本矩阵测试，验证 3 只样本基金 12 项结构化数据达到 `36/36`
 - `tests/fund/integration/test_p3_cli_e2e_matrix.py`：P3 CLI 端到端矩阵测试，验证 3 只样本基金经 Typer CLI、Service、P1/P2 Capability、模板渲染和程序审计输出完整 8 章报告，并显式断言 P1/P2/P3/L1/R1/R2 全部审计规则执行通过、每章正文证据行和附录来源锚点完整
@@ -70,6 +70,14 @@ pytest tests/fund/data tests/fund/documents tests/fund/extractors tests/fund/int
 ```
 
 该命令要求安装 dev 依赖中的 `pytest-cov`。当前 P3-S7 gate 要求总覆盖率不低于 50%。
+
+性能 gate：
+
+```bash
+pytest tests/services/test_fund_analysis_service.py -q
+```
+
+Service 性能测试使用 fake extractor 排除网络和 PDF 下载，只验证结构化数据已就绪后的单只基金分析、模板渲染和程序审计低于 30 秒。
 
 ## 维护约定
 
