@@ -289,6 +289,7 @@ def test_extract_profile_reads_real_section_two_key_value_tables() -> None:
             rows=(
                 ("投资范围", "投资于沪深300指数成份股。"),
                 ("投资策略", "采用完全复制法。"),
+                ("风险收益特征", "被动指数型产品，跟踪沪深300指数。"),
                 ("业绩比较基准", "沪深300指数"),
                 ("管理费率", "0.50%"),
                 ("托管费率", "0.10%"),
@@ -304,6 +305,7 @@ def test_extract_profile_reads_real_section_two_key_value_tables() -> None:
     assert result.basic_identity.value["classified_fund_type"] == "index_fund"
     assert result.product_profile.value == {
         "investment_objective": "紧密跟踪标的指数表现。",
+        "style_positioning": "被动指数型产品，跟踪沪深300指数。",
         "investment_scope": "投资于沪深300指数成份股。",
         "investment_strategy": "采用完全复制法。",
     }
@@ -353,6 +355,88 @@ def test_extract_profile_prefers_bond_name_before_mixed_index_benchmark() -> Non
 
     assert result.basic_identity.value is not None
     assert result.basic_identity.value["classified_fund_type"] == "bond_fund"
+
+
+def test_extract_profile_classifies_004393_like_mixed_fund_as_active_not_index() -> None:
+    """验证 004393 风格混合基金不会因比较基准指数名称误判为指数基金。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当比较基准中的指数名称触发指数基金误判时抛出。
+    """
+
+    report = _build_table_profile_report(
+        "004393",
+        ParsedTable(
+            page_number=5,
+            table_index=0,
+            headers=("基金名称", "安信企业价值优选混合型证券投资基金"),
+            rows=(("基金简称", "安信企业价值优选混合A"), ("基金主代码", "004393")),
+        ),
+        ParsedTable(
+            page_number=5,
+            table_index=1,
+            headers=("投资目标", "在严格控制风险的前提下，追求基金资产的长期稳健增值。"),
+            rows=(
+                (
+                    "业绩比较基准",
+                    "沪深300指数收益率×60%+恒生指数收益率（经汇率调整后）×20%+中债综合（全价）指数收益率×20%",
+                ),
+            ),
+        ),
+    )
+
+    result = extract_profile(report)
+
+    assert result.basic_identity.value is not None
+    assert result.basic_identity.value["classified_fund_type"] == "active_fund"
+    assert result.basic_identity.value["classified_fund_type"] != "index_fund"
+
+
+def test_extract_profile_does_not_treat_tracking_market_dynamics_as_index() -> None:
+    """验证“紧密跟踪市场动态”不会被当作指数基金策略证据。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当泛化跟踪表述触发指数基金误判时抛出。
+    """
+
+    report = _build_table_profile_report(
+        "019999",
+        ParsedTable(
+            page_number=5,
+            table_index=0,
+            headers=("基金名称", "示例灵活配置混合型证券投资基金"),
+            rows=(("基金简称", "示例灵活配置混合A"), ("基金主代码", "019999")),
+        ),
+        ParsedTable(
+            page_number=5,
+            table_index=1,
+            headers=("投资目标", "紧密跟踪市场动态，灵活调整投资组合。"),
+            rows=(
+                (
+                    "业绩比较基准",
+                    "沪深300指数收益率×60%+中债综合指数收益率×40%",
+                ),
+            ),
+        ),
+    )
+
+    result = extract_profile(report)
+
+    assert result.basic_identity.value is not None
+    assert result.basic_identity.value["classified_fund_type"] == "active_fund"
+    assert result.basic_identity.value["classified_fund_type"] != "index_fund"
 
 
 def test_extract_profile_uses_table_short_name_for_qdii_classification() -> None:

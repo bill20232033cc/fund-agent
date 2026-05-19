@@ -119,6 +119,32 @@ def _share_change_table() -> ParsedTable:
     )
 
 
+def _share_change_table_with_subscription_and_redemption_rows() -> ParsedTable:
+    """构造申购/赎回拆分披露的份额变动表。
+
+    Args:
+        无。
+
+    Returns:
+        份额变动表格。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return ParsedTable(
+        page_number=64,
+        table_index=0,
+        headers=("项目", "A类份额", "C类份额"),
+        rows=(
+            ("本报告期期初基金份额总额", "1,000,000.00", "-"),
+            ("本报告期基金总申购份额", "200,000.00", "50,000.00"),
+            ("减：本报告期基金总赎回份额", "300,000.00", "25,000.00"),
+            ("本报告期期末基金份额总额", "900,000.00", "25,000.00"),
+        ),
+    )
+
+
 def test_extract_holdings_share_change_outputs_tables_with_table_anchors() -> None:
     """验证持仓快照和份额变动能输出表格型 anchor。
 
@@ -157,6 +183,72 @@ def test_extract_holdings_share_change_outputs_tables_with_table_anchors() -> No
     assert result.share_change.anchors[0].page_number == 58
     assert result.share_change.anchors[0].table_id == "page-58-table-0"
     assert result.share_change.anchors[0].row_locator == "share_change"
+
+
+def test_extract_holdings_share_change_outputs_share_change_from_subscription_redemption_table() -> None:
+    """验证申购/赎回拆分的 `§10` 表格可抽取份额变动。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当申购/赎回表识别或净变动计算失败时抛出。
+    """
+
+    report = _build_report((_share_change_table_with_subscription_and_redemption_rows(),))
+
+    result = extract_holdings_share_change(report)
+
+    assert result.share_change.extraction_mode == "direct"
+    assert result.share_change.value == {
+        "beginning_share": "1,000,000.00",
+        "ending_share": "900,000.00",
+        "net_change": "-100,000.00",
+    }
+    assert result.share_change.anchors[0].page_number == 64
+    assert result.share_change.anchors[0].table_id == "page-64-table-0"
+
+
+def test_extract_holdings_share_change_ignores_profit_change_table() -> None:
+    """验证利润分配变动表不会被误识别为基金份额变动。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当非份额表被误命中时抛出。
+    """
+
+    profit_table = ParsedTable(
+        page_number=35,
+        table_index=1,
+        headers=("项目", "已实现部分", "未实现部分", "未分配利润合计"),
+        rows=(
+            ("本期期初", "-", "-", "-"),
+            (
+                "本期基金份额交易产生的变动数",
+                "17,018,032.90",
+                "-4,617,878.47",
+                "12,400,154.43",
+            ),
+            ("其中：基金申购款", "38,799,313.90", "-8,896,172.47", "29,903,141.43"),
+            ("基金赎回款", "-21,781,281.00", "4,278,294.00", "-17,502,987.00"),
+            ("本期末", "14,035,524.09", "-3,106,403.66", "10,929,120.43"),
+        ),
+    )
+    report = _build_report((profit_table,))
+
+    result = extract_holdings_share_change(report)
+
+    assert result.share_change.extraction_mode == "missing"
+    assert result.share_change.value is None
+    assert result.share_change.anchors == ()
 
 
 def test_extract_holdings_share_change_marks_industry_distribution_missing() -> None:

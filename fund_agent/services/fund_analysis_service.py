@@ -33,6 +33,7 @@ from fund_agent.fund.template import TemplateFinalJudgment, TemplateRenderInput,
 
 ValuationState = Literal["low", "fair", "high", "unavailable"]
 MoneyHorizon = Literal["long_enough", "uncertain", "too_short"]
+FinalJudgment = TemplateFinalJudgment
 
 
 class _FundDataExtractor(Protocol):
@@ -198,6 +199,7 @@ class FundAnalysisService:
         )
         alpha_judgment = judge_alpha_nature((), fund_type=fund_type)
         consistency_result = check_consistency(
+            product_profile=structured_data.product_profile,
             manager_strategy_text=structured_data.manager_strategy_text,
             holdings_snapshot=structured_data.holdings_snapshot,
             turnover_rate=structured_data.turnover_rate,

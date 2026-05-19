@@ -52,6 +52,8 @@ UI（CLI）→ Service（业务理解）→ Host（托管执行）→ Agent/Engi
 | **Capability** | 基金领域知识、分析引擎、审计规则 | `fund_agent/fund/` | 🆕 自建 |
 
 > **关键决策**：Engine 层和 Host 层直接依赖 `dayu-agent` 包，不重复实现。基金 Agent 只负责 UI、Service、Capability 三层的业务逻辑。
+>
+> **MVP 实现边界（2026-05-19）**：当前 `main` 的 MVP 交付版尚未接入 `dayu.engine` / `dayu.host` / `dayu.prompting` 运行链路；CLI 直接通过 `FundAnalysisService` 编排 `fund_agent/fund` Capability。Dayu 仍作为 Host/Engine/审计/质量闭环的架构参考和 v2 接入候选，实际实现以当前代码与实施总控为准。
 
 ### 2.2 执行链路
 

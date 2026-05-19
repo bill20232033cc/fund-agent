@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from decimal import Decimal, InvalidOperation
 from dataclasses import dataclass
 from typing import Final
 
@@ -16,8 +17,9 @@ _SECTION_PORTFOLIO: Final[str] = "§8"
 _SECTION_SHARE_CHANGE: Final[str] = "§10"
 _TOP_HOLDINGS_TABLE_KEYWORDS: Final[tuple[str, ...]] = ("前十大", "重仓")
 _INDUSTRY_TABLE_KEYWORDS: Final[tuple[str, ...]] = ("行业", "占比")
-_SHARE_CHANGE_REQUIRED_KEYWORDS: Final[tuple[str, ...]] = ("期初", "期末")
+_SHARE_CHANGE_REQUIRED_KEYWORDS: Final[tuple[str, ...]] = ("期初", "期末", "基金份额总额")
 _SHARE_CHANGE_NET_KEYWORDS: Final[tuple[str, ...]] = ("净变动", "本期申购赎回净额")
+_SHARE_CHANGE_FLOW_KEYWORDS: Final[tuple[str, ...]] = ("申购", "赎回")
 
 
 @dataclass(frozen=True, slots=True)
@@ -68,6 +70,22 @@ def _joined_table_text(table: ParsedTable) -> str:
     return " ".join(_normalize_cell(cell) for cell in cells)
 
 
+def _compact_text(value: str) -> str:
+    """压缩文本内部空白用于语义匹配。
+
+    Args:
+        value: 原始文本。
+
+    Returns:
+        移除全部空白后的文本。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return "".join(value.split())
+
+
 def _table_contains_all(table: ParsedTable, keywords: tuple[str, ...]) -> bool:
     """判断表格是否包含全部关键词。
 
@@ -82,7 +100,7 @@ def _table_contains_all(table: ParsedTable, keywords: tuple[str, ...]) -> bool:
         无显式抛出。
     """
 
-    table_text = _joined_table_text(table)
+    table_text = _compact_text(_joined_table_text(table))
     return all(keyword in table_text for keyword in keywords)
 
 
@@ -93,16 +111,17 @@ def _is_share_change_table(table: ParsedTable) -> bool:
         table: 待检查的表格。
 
     Returns:
-        同时包含期初、期末和任一净变动关键词时返回 `True`。
+        同时包含期初、期末，并披露净变动或申购/赎回拆分时返回 `True`。
 
     Raises:
         无显式抛出。
     """
 
-    table_text = _joined_table_text(table)
+    table_text = _compact_text(_joined_table_text(table))
     has_required_keywords = all(keyword in table_text for keyword in _SHARE_CHANGE_REQUIRED_KEYWORDS)
     has_net_keyword = any(keyword in table_text for keyword in _SHARE_CHANGE_NET_KEYWORDS)
-    return has_required_keywords and has_net_keyword
+    has_flow_keywords = all(keyword in table_text for keyword in _SHARE_CHANGE_FLOW_KEYWORDS)
+    return has_required_keywords and (has_net_keyword or has_flow_keywords)
 
 
 def _table_id(table: ParsedTable) -> str:
@@ -275,14 +294,64 @@ def _extract_share_change(table: ParsedTable) -> dict[str, str | None]:
         "net_change": None,
     }
     for row in table.rows:
-        joined_row = " ".join(_normalize_cell(cell) for cell in row)
+        joined_row = _compact_text(" ".join(_normalize_cell(cell) for cell in row))
         if "期初" in joined_row:
-            value["beginning_share"] = _normalize_cell(row[-1])
+            value["beginning_share"] = _extract_share_value_from_row(row)
         elif "期末" in joined_row:
-            value["ending_share"] = _normalize_cell(row[-1])
+            value["ending_share"] = _extract_share_value_from_row(row)
         elif "净变动" in joined_row or "本期申购赎回净额" in joined_row:
-            value["net_change"] = _normalize_cell(row[-1])
+            value["net_change"] = _extract_share_value_from_row(row)
+    if value["net_change"] is None:
+        value["net_change"] = _calculate_net_change(
+            beginning_share=value["beginning_share"],
+            ending_share=value["ending_share"],
+        )
     return value
+
+
+def _extract_share_value_from_row(row: tuple[str, ...]) -> str | None:
+    """从份额变动表行中读取首个有效份额值。
+
+    Args:
+        row: 份额变动表数据行。
+
+    Returns:
+        行标签后的首个非空、非横杠值；不存在时返回 `None`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    for cell in row[1:]:
+        value = _normalize_cell(cell)
+        if value and value != "-":
+            return value
+    return None
+
+
+def _calculate_net_change(beginning_share: str | None, ending_share: str | None) -> str | None:
+    """用期末份额减期初份额计算净变动，见模板第 4 章“投资者获得感”。
+
+    Args:
+        beginning_share: 期初基金份额。
+        ending_share: 期末基金份额。
+
+    Returns:
+        两个输入均可解析时返回净变动字符串，否则返回 `None`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if beginning_share is None or ending_share is None:
+        return None
+    try:
+        beginning_value = Decimal(beginning_share.replace(",", ""))
+        ending_value = Decimal(ending_share.replace(",", ""))
+    except InvalidOperation:
+        return None
+    net_change = ending_value - beginning_value
+    return f"{net_change:,.2f}"
 
 
 def _build_holdings_snapshot(report: ParsedAnnualReport) -> ExtractedField[dict[str, object]]:

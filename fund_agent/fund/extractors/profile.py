@@ -7,7 +7,11 @@ from dataclasses import dataclass
 from typing import Final
 
 from fund_agent.fund.documents.models import ParsedAnnualReport, ParsedTable
-from fund_agent.fund.extractors.models import EvidenceAnchor, ExtractedField, ProfileExtractionResult
+from fund_agent.fund.extractors.models import (
+    EvidenceAnchor,
+    ExtractedField,
+    ProfileExtractionResult,
+)
 from fund_agent.fund.fund_type import FundTypeClassification, classify_fund_type
 
 _FIELD_PATTERNS: Final[dict[str, tuple[tuple[str, tuple[str, ...]], ...]]] = {
@@ -31,24 +35,22 @@ _FIELD_PATTERNS: Final[dict[str, tuple[tuple[str, tuple[str, ...]], ...]]] = {
         ("§1", (r"基金经理\s*[：:]\s*(.+)",)),
         ("§2", (r"基金经理\s*[：:]\s*(.+)",)),
     ),
-    "investment_objective": (
-        ("§2", (r"投资目标\s*[：:]\s*(.+)",)),
+    "investment_objective": (("§2", (r"投资目标\s*[：:]\s*(.+)",)),),
+    "investment_scope": (("§2", (r"投资范围\s*[：:]\s*(.+)",)),),
+    "investment_strategy": (("§2", (r"投资策略\s*[：:]\s*(.+)",)),),
+    "style_positioning": (
+        (
+            "§2",
+            (
+                r"风格定位\s*[：:]\s*(.+)",
+                r"风险收益特征\s*[：:]\s*(.+)",
+                r"产品定位\s*[：:]\s*(.+)",
+            ),
+        ),
     ),
-    "investment_scope": (
-        ("§2", (r"投资范围\s*[：:]\s*(.+)",)),
-    ),
-    "investment_strategy": (
-        ("§2", (r"投资策略\s*[：:]\s*(.+)",)),
-    ),
-    "benchmark": (
-        ("§2", (r"业绩比较基准\s*[：:]\s*(.+)",)),
-    ),
-    "management_fee": (
-        ("§2", (r"管理费(?:率)?\s*[：:]\s*(.+)",)),
-    ),
-    "custody_fee": (
-        ("§2", (r"托管费(?:率)?\s*[：:]\s*(.+)",)),
-    ),
+    "benchmark": (("§2", (r"业绩比较基准\s*[：:]\s*(.+)",)),),
+    "management_fee": (("§2", (r"管理费(?:率)?\s*[：:]\s*(.+)",)),),
+    "custody_fee": (("§2", (r"托管费(?:率)?\s*[：:]\s*(.+)",)),),
 }
 _TABLE_FIELD_LABELS: Final[dict[str, tuple[str, ...]]] = {
     "fund_name": ("基金名称", "基金简称"),
@@ -59,6 +61,7 @@ _TABLE_FIELD_LABELS: Final[dict[str, tuple[str, ...]]] = {
     "investment_objective": ("投资目标",),
     "investment_scope": ("投资范围",),
     "investment_strategy": ("投资策略",),
+    "style_positioning": ("风格定位", "风险收益特征", "产品定位"),
     "benchmark": ("业绩比较基准",),
     "management_fee": ("管理费率", "管理费"),
     "custody_fee": ("托管费率", "托管费"),
@@ -118,7 +121,9 @@ def _extract_field(report: ParsedAnnualReport, field_name: str) -> _MatchedField
     return _extract_field_from_section_two_tables(report, field_name)
 
 
-def _extract_field_from_section_two_tables(report: ParsedAnnualReport, field_name: str) -> _MatchedField | None:
+def _extract_field_from_section_two_tables(
+    report: ParsedAnnualReport, field_name: str
+) -> _MatchedField | None:
     """从 `§2` 键值型表格提取单个字段，见模板第 1 章产品本质。
 
     Args:
@@ -144,7 +149,9 @@ def _extract_field_from_section_two_tables(report: ParsedAnnualReport, field_nam
                 value=value,
                 section_id="§2",
                 matched_line=f"{label}：{value}",
-                page_number=table.page_number if table.page_number >= _SECTION_TWO_TABLE_MIN_PAGE else None,
+                page_number=table.page_number
+                if table.page_number >= _SECTION_TWO_TABLE_MIN_PAGE
+                else None,
                 table_id=_table_id(table),
             )
     return None
@@ -206,7 +213,7 @@ def _first_non_empty_after(cells: tuple[str, ...], start_index: int) -> str | No
         无显式抛出。
     """
 
-    for cell in cells[start_index + 1:]:
+    for cell in cells[start_index + 1 :]:
         if cell.strip():
             return cell.strip()
     return None
@@ -337,7 +344,7 @@ def _build_basic_identity(
 
 
 def _build_product_profile(report: ParsedAnnualReport) -> ExtractedField[dict[str, object]]:
-    """构造产品本质字段。
+    """构造产品本质字段，见模板第 1 章“这只基金到底是什么产品”。
 
     Args:
         report: 已解析年报对象。
@@ -352,9 +359,13 @@ def _build_product_profile(report: ParsedAnnualReport) -> ExtractedField[dict[st
     objective = _extract_field(report, "investment_objective")
     scope = _extract_field(report, "investment_scope")
     strategy = _extract_field(report, "investment_strategy")
+    explicit_style = _extract_field(report, "style_positioning")
+    style_positioning = (
+        explicit_style.value if explicit_style else _derive_style_positioning(objective)
+    )
     anchors = tuple(
         _build_anchor(report, matched_field)
-        for matched_field in (objective, scope, strategy)
+        for matched_field in (objective, scope, strategy, explicit_style)
         if matched_field is not None
     )
     if not anchors:
@@ -362,6 +373,7 @@ def _build_product_profile(report: ParsedAnnualReport) -> ExtractedField[dict[st
     return ExtractedField(
         value={
             "investment_objective": objective.value if objective else None,
+            "style_positioning": style_positioning,
             "investment_scope": scope.value if scope else None,
             "investment_strategy": strategy.value if strategy else None,
         },
@@ -369,6 +381,36 @@ def _build_product_profile(report: ParsedAnnualReport) -> ExtractedField[dict[st
         extraction_mode="direct",
         note=None,
     )
+
+
+def _derive_style_positioning(objective: _MatchedField | None) -> str | None:
+    """从投资目标中提炼产品定位短语。
+
+    Args:
+        objective: `§2` 投资目标命中结果。
+
+    Returns:
+        可作为 `product_profile.style_positioning` 的定位短语；无法可靠提炼时返回 `None`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if objective is None:
+        return None
+    normalized_value = re.sub(r"\s+", " ", objective.value).strip()
+    patterns: tuple[re.Pattern[str], ...] = (
+        re.compile(r"(?:力争实现|追求实现|争取实现|实现)(?P<style>.+)$"),
+        re.compile(r"(?:追求|力求获得|力求取得)(?P<style>.+)$"),
+    )
+    for pattern in patterns:
+        match = pattern.search(normalized_value)
+        if match is None:
+            continue
+        style_text = match.group("style").strip()
+        style_text = re.sub(r"^基金\s*", "", style_text)
+        return style_text or None
+    return None
 
 
 def _build_benchmark(report: ParsedAnnualReport) -> ExtractedField[dict[str, object]]:

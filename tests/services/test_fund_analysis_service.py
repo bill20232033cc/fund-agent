@@ -96,6 +96,7 @@ def _bundle() -> StructuredFundDataBundle:
         product_profile=_field(
             {
                 "investment_objective": "追求长期资本增值",
+                "style_positioning": "均衡",
                 "investment_scope": "主要投资股票和债券",
             },
             "§2",
@@ -116,11 +117,7 @@ def _bundle() -> StructuredFundDataBundle:
             "share_change",
         ),
         manager_alignment=_field({"manager_holding": "基金经理持有本基金"}, "§9", "manager_alignment"),
-        manager_strategy_text=_field(
-            {"strategy_summary": "长期均衡配置消费和制造行业", "style_positioning": "均衡"},
-            "§4",
-            "manager_strategy_text",
-        ),
+        manager_strategy_text=_field({"strategy_summary": "长期均衡配置消费和制造行业"}, "§4", "manager_strategy_text"),
         holdings_snapshot=ExtractedField(
             value={
                 "top_holdings": [{"股票名称": "测试股份"}],

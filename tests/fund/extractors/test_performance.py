@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from fund_agent.fund.documents.models import DocumentKey, ParsedAnnualReport, ReportSection
+from fund_agent.fund.documents.models import DocumentKey, ParsedAnnualReport, ParsedTable, ReportSection
 from fund_agent.fund.extractors.performance import extract_performance
 
 _FIXTURE_DIR = Path(__file__).resolve().parents[2] / "fixtures" / "fund" / "extractors" / "performance"
@@ -60,6 +60,38 @@ def _build_report_from_fixture(filename: str, fund_code: str) -> ParsedAnnualRep
     )
 
 
+def _build_report_with_tables(tables: tuple[ParsedTable, ...], fund_code: str) -> ParsedAnnualReport:
+    """构造带 `§3` 表格的最小年报对象。
+
+    Args:
+        tables: 表格元组。
+        fund_code: 基金代码。
+
+    Returns:
+        构造后的年报对象。
+
+    Raises:
+        无显式抛出。
+    """
+
+    raw_text = "§3 主要财务指标、基金净值表现及利润分配情况\n"
+    return ParsedAnnualReport(
+        key=DocumentKey(fund_code=fund_code, year=2024),
+        raw_text=raw_text,
+        sections={
+            "§3": ReportSection(
+                section_id="§3",
+                title="§3 主要财务指标、基金净值表现及利润分配情况",
+                start_offset=0,
+                end_offset=len(raw_text),
+                matched_rule="fixture",
+                confidence=1.0,
+            ),
+        },
+        tables=tables,
+    )
+
+
 def test_extract_performance_outputs_nav_and_benchmark_with_anchors() -> None:
     """验证 `§3` 能直接提取净值增长率与基准收益率，并带 anchor。
 
@@ -88,6 +120,77 @@ def test_extract_performance_outputs_nav_and_benchmark_with_anchors() -> None:
     assert all(anchor.note is not None for anchor in result.nav_benchmark_performance.anchors)
     anchor_labels = {anchor.row_locator for anchor in result.nav_benchmark_performance.anchors}
     assert {"nav_growth_rate", "benchmark_return_rate"} <= anchor_labels
+
+
+def test_extract_performance_outputs_nav_and_benchmark_from_annual_table() -> None:
+    """验证 `§3` 年度净值表现表可抽取净值增长率和基准收益率。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当表格抽取或 anchor 不正确时抛出。
+    """
+
+    table = ParsedTable(
+        page_number=8,
+        table_index=0,
+        headers=("阶段", "份额净值\n增长率①", "份额净值增\n长率标准差②", "业绩比较\n基准收益\n率③"),
+        rows=(
+            ("过去三个月", "3.01%", "1.20%", "2.00%"),
+            ("过去一年", "17.32%", "1.44%", "14.45%"),
+        ),
+    )
+    report = _build_report_with_tables((table,), "004393")
+
+    result = extract_performance(report)
+
+    assert result.nav_benchmark_performance.extraction_mode == "direct"
+    assert result.nav_benchmark_performance.value == {
+        "nav_growth_rate": "17.32%",
+        "benchmark_return_rate": "14.45%",
+    }
+    assert {anchor.page_number for anchor in result.nav_benchmark_performance.anchors} == {8}
+    assert {anchor.table_id for anchor in result.nav_benchmark_performance.anchors} == {
+        "page-8-table-0"
+    }
+    assert all(
+        anchor.note is not None and "过去一年" in anchor.note
+        for anchor in result.nav_benchmark_performance.anchors
+    )
+
+
+def test_extract_performance_ignores_standard_deviation_columns_when_order_changes() -> None:
+    """验证净值表现表列序变化时不会把标准差列误当收益率。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当表头语义匹配误中标准差列时抛出。
+    """
+
+    table = ParsedTable(
+        page_number=8,
+        table_index=0,
+        headers=("阶段", "份额净值增\n长率标准差②", "份额净值\n增长率①", "业绩比较基准收益率标准差④", "业绩比较\n基准收益\n率③"),
+        rows=(("过去一年", "1.44%", "17.32%", "1.22%", "14.45%"),),
+    )
+    report = _build_report_with_tables((table,), "004393")
+
+    result = extract_performance(report)
+
+    assert result.nav_benchmark_performance.extraction_mode == "direct"
+    assert result.nav_benchmark_performance.value == {
+        "nav_growth_rate": "17.32%",
+        "benchmark_return_rate": "14.45%",
+    }
 
 
 def test_extract_performance_outputs_direct_investor_return_when_disclosed() -> None:

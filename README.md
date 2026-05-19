@@ -18,7 +18,7 @@ fund-analysis --help
 5 分钟跑通一只基金：
 
 ```bash
-fund-analysis analyze 110011 \
+fund-analysis analyze 004393 \
   --report-year 2024 \
   --equity-position 80% \
   --actual-style 均衡 \
@@ -36,7 +36,7 @@ fund-analysis analyze 110011 \
 命令成功后会把完整 Markdown 报告写到 stdout。需要保存报告时可使用 shell 重定向：
 
 ```bash
-fund-analysis analyze 110011 --report-year 2024 > report-110011.md
+fund-analysis analyze 004393 --report-year 2024 > report-004393.md
 ```
 
 ## 常用命令
@@ -49,7 +49,31 @@ fund-analysis --help
 fund-analysis analyze --help
 
 # 强制刷新底层数据
-fund-analysis analyze 110011 --report-year 2024 --force-refresh
+fund-analysis analyze 004393 --report-year 2024 --force-refresh
+
+# 生成精选基金池字段级抽取快照
+fund-analysis extraction-snapshot \
+  --run-id p4-s1-004393 \
+  --fund-code 004393 \
+  --report-year 2024
+
+# 对已有 snapshot 生成字段级评分
+fund-analysis extraction-score \
+  --snapshot-path reports/extraction-snapshots/p4-s1-004393/snapshot.jsonl
+
+# 生成 correctness golden answer 预填底稿
+fund-analysis golden-prefill \
+  --template-path docs/golden-answer-template.md \
+  --output-path reports/golden-answers/golden-answer-prefill.md
+
+# 将人工审核后的 golden answer Markdown 转为 strict JSON
+fund-analysis golden-build \
+  --input-path reports/golden-answers/golden-answer-prefill.md \
+  --output-path reports/golden-answers/golden-answer.json
+
+# 基于 score.json 生成报告质量 gate
+fund-analysis quality-gate \
+  --score-path reports/extraction-snapshots/p4-s3b-004393-controller-final-score/score.json
 ```
 
 当前 `fund-analysis checklist FUND_CODE` 是占位命令，尚未接入 Service。请使用 `fund-analysis analyze FUND_CODE` 生成包含检查清单的完整报告。
@@ -102,6 +126,11 @@ fund-analysis analyze 110011 --report-year 2024 --force-refresh
 - 8 章 Markdown 模板渲染
 - 程序审计规则：P1/P2/P3/L1/R1/R2
 - 有知有行温度计 data adapter
+- 精选基金池字段级抽取快照：`snapshot.jsonl`、`summary.md`、`errors.jsonl`
+- 精选基金池字段级评分：`score.json`、`score.md`、`golden_set.json`
+- Correctness golden answer 预填底稿：`fund-analysis golden-prefill`
+- Correctness golden answer JSON 构建与 strict 校验：`fund-analysis golden-build`
+- 报告质量 gate 骨架：`fund-analysis quality-gate`
 - 3 只样本基金 CLI 端到端矩阵，覆盖报告完整性、程序审计和证据锚点
 
 尚未接入：
@@ -115,7 +144,91 @@ fund-analysis analyze 110011 --report-year 2024 --force-refresh
 ```bash
 pytest tests/fund/integration/test_p3_cli_e2e_matrix.py -q
 pytest tests/fund/template/test_renderer.py tests/fund/audit/test_audit_programmatic.py -q
+pytest tests/fund/test_extraction_snapshot.py tests/ui/test_cli.py -q
+pytest tests/scripts/test_selected_funds_smoke.py -q
 ```
+
+## 精选基金池抽取快照
+
+`fund-analysis extraction-snapshot` 会读取 `docs/code_20260519.csv`，通过 `FundDataExtractor.extract(...)` 生成字段级抽取状态，不直接读取 PDF 或缓存文件：
+
+```bash
+fund-analysis extraction-snapshot \
+  --run-id p4-s1-selected-1x \
+  --report-year 2024 \
+  --sample-per-category 1
+```
+
+默认输出到 `reports/extraction-snapshots/<run-id>/`，包含 `snapshot.jsonl`、`summary.md` 和 `errors.jsonl`。当前 CSV 中 `016492` 重复，summary 会标红但不阻断 P4-S1 快照。
+
+对已有 snapshot 生成字段级 coverage / traceability 评分：
+
+```bash
+fund-analysis extraction-score \
+  --snapshot-path reports/extraction-snapshots/p4-s1-selected-1x/snapshot.jsonl \
+  --golden-answer-path reports/golden-answers/golden-answer.json
+```
+
+默认输出到 snapshot 所在目录，包含 `score.json`、`score.md` 和 `golden_set.json`。`score.json` 同时包含字段级 `field_scores`、单基金 `fund_scores` 和 `correctness`。Correctness 只对 snapshot 显式暴露的可比 golden 字段做保守 normalize 后比较，skipped 和不可比记录不进入分母；未提供 `--golden-answer-path` 时只输出 `FQ0/info` 所需 skeleton。最小 golden set 固定包含 `004393`，并暂时排除货币基金类。
+
+生成 correctness golden answer 自动预填底稿：
+
+```bash
+fund-analysis golden-prefill \
+  --template-path docs/golden-answer-template.md \
+  --output-path reports/golden-answers/golden-answer-prefill.md \
+  --report-year 2024
+```
+
+该命令读取模板中的基金代码，通过 `FundDataExtractor.extract(...)` 自动填入当前 extractor 输出值、置信度和证据来源。输出是人工复核底稿，不能直接作为 correctness golden answer。
+
+人工审核底稿后，生成 strict JSON：
+
+```bash
+fund-analysis golden-build \
+  --input-path reports/golden-answers/golden-answer-prefill.md \
+  --output-path reports/golden-answers/golden-answer.json
+```
+
+`golden-build` 会校验每条有效行必须填写 `expected_value`、`confidence` 和 `source`，其中 `confidence` 只能是 `high / medium / low`，`source` 不能是 `manual_required`。校验通过后输出机器可读 JSON；该 JSON 是 correctness 自动比对的数据源。
+
+基于 `score.json` 生成报告质量 gate：
+
+```bash
+fund-analysis quality-gate \
+  --score-path reports/extraction-snapshots/p4-s3b-004393-controller-final-score/score.json
+```
+
+默认输出到 `score.json` 所在目录，包含 `quality_gate.json` 和 `quality_gate.md`。当前 gate 消费 coverage / traceability / correctness：字段级或单基金 P0 fail 会阻断，单基金 issue 会保留 `fund_code`；P1 fail 会警告；correctness 未接入时只记录 `FQ0/info`，strict golden answer 可用且出现明确 mismatch 时触发 `FQ1/block`。
+
+## 真实精选基金池 Smoke
+
+`docs/code_20260519.csv` 是当前手动维护的有知有行 App 精选基金池清单。默认 smoke 脚本只校验清单并打印计划，不触发网络或 PDF 下载：
+
+```bash
+.venv/bin/python scripts/selected_funds_smoke.py
+```
+
+先跑一只已知精选基金：
+
+```bash
+.venv/bin/python scripts/selected_funds_smoke.py \
+  --code 004393 \
+  --run \
+  --output-dir reports/smoke/004393
+```
+
+按类别各抽 1 只并继续记录所有失败：
+
+```bash
+.venv/bin/python scripts/selected_funds_smoke.py \
+  --sample-per-category 1 \
+  --run \
+  --continue-on-fail \
+  --output-dir reports/smoke/selected-1x
+```
+
+输出目录会包含每只基金的 Markdown 报告、stderr、`results.jsonl` 和 `summary.md`。当前 CSV 有 56 条记录、55 个唯一基金代码，`016492` 重复，需要人工确认后再启用 `--strict`。
 
 完整开发验证入口见 [tests/README.md](tests/README.md)。
 
@@ -125,7 +238,10 @@ pytest tests/fund/template/test_renderer.py tests/fund/audit/test_audit_programm
 |------|------|
 | [docs/design.md](docs/design.md) | 设计真源 |
 | [docs/implementation-control.md](docs/implementation-control.md) | Phase 与 gate 总控 |
+| [docs/implementation-control-p4.md](docs/implementation-control-p4.md) | P4 精选基金池质量闭环执行控制 |
+| [docs/post-mvp-p4-first-principles-plan.md](docs/post-mvp-p4-first-principles-plan.md) | P4 第一性原理行动计划 |
 | [docs/fund-analysis-template-draft.md](docs/fund-analysis-template-draft.md) | 8 章分析模板 |
 | [docs/sample-funds.md](docs/sample-funds.md) | 样本基金基线 |
+| [docs/code_20260519.csv](docs/code_20260519.csv) | 有知有行 App 精选基金池手动清单 |
 | [fund_agent/fund/README.md](fund_agent/fund/README.md) | Fund capability 说明 |
 | [tests/README.md](tests/README.md) | 测试说明 |
