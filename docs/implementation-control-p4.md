@@ -351,4 +351,4 @@ P4 遵循 phaseflow / gateflow 多 Agent 约定：
 | 2026-05-19 | P4-S1 implementation | 🟡 in progress | 下一步实现 Selected Fund Extraction Snapshot + Quality Gate MVP |
 | 2026-05-19 | P4-S1 implementation | 🟡 in progress | 已新增 `fund_agent/fund/extraction_snapshot.py` capability、薄 CLI 入口和 dry-run 单元测试；等待代码审查前验证 |
 | 2026-05-19 | P4-S1 code review | 🟡 in progress | Implementation artifact 已写入 `docs/reviews/p4-s1-implementation-20260519.md`；当前验证 `17 passed`、CLI help 与 dry-run smoke passed，等待 MiMo/GLM code review |
-| 2026-05-19 | P4-S1 review judgment | ✅ passed | MiMo/GLM code review 均 PASS；controller 裁决 `docs/reviews/p4-s1-code-review-controller-judgment-20260519.md`；P4-S1 accepted，下一 gate 为 P4-S2 |
+| 2026-05-19 | P4-S1 review judgment | ✅ passed | MiMo/GLM code review 均 PASS；controller 裁决 `docs/reviews/p4-s1-code-review-controller-judgment-20260519.md`；accepted commit=`c8a47f6`；P4-S1 accepted，下一 gate 为 P4-S2 |
