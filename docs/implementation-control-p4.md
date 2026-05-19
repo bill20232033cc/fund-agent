@@ -419,6 +419,21 @@ P4-S3b 验证：
 
 FQ6 跨 run snapshot diff 延后到 P4-S4 末尾或 P5，不作为 P4-S1/P4-S2 前置。
 
+### 7.3 标注前衔接产物
+
+在用户完成人工标注前，先收口 correctness golden answer 的输入链路：
+
+- `fund-analysis golden-prefill` 生成人工复核底稿，只作为 silver label。
+- 用户审核后保存在 Markdown 中，不能直接进入 correctness 评分。
+- `fund-analysis golden-build` 将人工审核后的 Markdown 转成 strict JSON。
+- `golden-build` 必须校验：
+  - 有效行 `expected_value` 非空。
+  - `confidence` 只能是 `high / medium / low`。
+  - `source` 必须是可复核来源，不能保留 `manual_required`。
+  - 明确跳过行继续保留为 skipped fields。
+
+该链路不读取 PDF/cache，不修改 extraction-score 的 correctness 状态；correctness 自动比对等用户审核后的 JSON 可用后再接入。
+
 ---
 
 ## 8. 风险追踪
@@ -470,3 +485,4 @@ P4 遵循 phaseflow / gateflow 多 Agent 约定：
 | 2026-05-19 | P4-S2 review judgment | ✅ passed | MiMo/GLM code review 均 PASS；controller 裁决 `docs/reviews/p4-s2-code-review-controller-judgment-20260519.md`；accepted commit=`47f2656`；P4-S2 accepted，下一 gate 为 P4-S3 |
 | 2026-05-19 | P4-S3a review judgment | ✅ passed | `004393` 类型误判已修复；MiMo/GLM review + targeted re-review 均 PASS；controller 裁决 `docs/reviews/p4-s3a-code-review-controller-judgment-20260519.md`；accepted commit=`0b3fbc6`；真实 snapshot 显示 `active_fund`；下一 gate 为 P4-S3b |
 | 2026-05-19 | P4-S3b review judgment | ✅ passed | `004393` 的 5 个高影响 extractor 缺口已修复；MiMo/GLM code review 与 targeted re-review 均 PASS，controller 接受并修复 2 个中风险泛化问题；裁决 `docs/reviews/p4-s3b-code-review-controller-judgment-20260519.md`；当前验证 `24 passed`、ruff passed、diff check passed；真实 snapshot/score 显示本 slice 5 字段 coverage / traceability 均为 `100.0%`；下一 gate 为 P4-S4 |
+| 2026-05-19 | P4-S4 pre-label handoff | ✅ passed | 新增 correctness golden answer 预填、人工审核 Markdown 转 strict JSON 与校验 CLI；当前验证 `11 passed`、ruff passed、CLI help passed、golden-build smoke passed；correctness 自动比对仍等待用户人工审核后的 JSON |

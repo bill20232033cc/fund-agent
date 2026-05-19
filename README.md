@@ -60,6 +60,16 @@ fund-analysis extraction-snapshot \
 # 对已有 snapshot 生成字段级评分
 fund-analysis extraction-score \
   --snapshot-path reports/extraction-snapshots/p4-s1-004393/snapshot.jsonl
+
+# 生成 correctness golden answer 预填底稿
+fund-analysis golden-prefill \
+  --template-path docs/golden-answer-template.md \
+  --output-path reports/golden-answers/golden-answer-prefill.md
+
+# 将人工审核后的 golden answer Markdown 转为 strict JSON
+fund-analysis golden-build \
+  --input-path reports/golden-answers/golden-answer-prefill.md \
+  --output-path reports/golden-answers/golden-answer.json
 ```
 
 当前 `fund-analysis checklist FUND_CODE` 是占位命令，尚未接入 Service。请使用 `fund-analysis analyze FUND_CODE` 生成包含检查清单的完整报告。
@@ -114,6 +124,8 @@ fund-analysis extraction-score \
 - 有知有行温度计 data adapter
 - 精选基金池字段级抽取快照：`snapshot.jsonl`、`summary.md`、`errors.jsonl`
 - 精选基金池字段级评分：`score.json`、`score.md`、`golden_set.json`
+- Correctness golden answer 预填底稿：`fund-analysis golden-prefill`
+- Correctness golden answer JSON 构建与 strict 校验：`fund-analysis golden-build`
 - 3 只样本基金 CLI 端到端矩阵，覆盖报告完整性、程序审计和证据锚点
 
 尚未接入：
@@ -152,6 +164,27 @@ fund-analysis extraction-score \
 ```
 
 默认输出到 snapshot 所在目录，包含 `score.json`、`score.md` 和 `golden_set.json`。当前评分不包含 correctness；最小 golden set 固定包含 `004393`，并暂时排除货币基金类。
+
+生成 correctness golden answer 自动预填底稿：
+
+```bash
+fund-analysis golden-prefill \
+  --template-path docs/golden-answer-template.md \
+  --output-path reports/golden-answers/golden-answer-prefill.md \
+  --report-year 2024
+```
+
+该命令读取模板中的基金代码，通过 `FundDataExtractor.extract(...)` 自动填入当前 extractor 输出值、置信度和证据来源。输出是人工复核底稿，不能直接作为 correctness golden answer。
+
+人工审核底稿后，生成 strict JSON：
+
+```bash
+fund-analysis golden-build \
+  --input-path reports/golden-answers/golden-answer-prefill.md \
+  --output-path reports/golden-answers/golden-answer.json
+```
+
+`golden-build` 会校验每条有效行必须填写 `expected_value`、`confidence` 和 `source`，其中 `confidence` 只能是 `high / medium / low`，`source` 不能是 `manual_required`。校验通过后输出机器可读 JSON；该 JSON 是后续 correctness 自动比对的数据源。
 
 ## 真实精选基金池 Smoke
 

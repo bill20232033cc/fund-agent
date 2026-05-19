@@ -21,12 +21,19 @@ from fund_agent.services import (
     FinalJudgment,
     FundAnalysisRequest,
     FundAnalysisService,
+    GoldenAnswerBuildRequest,
+    GoldenAnswerService,
+    GoldenPrefillRequest,
+    GoldenPrefillService,
     MoneyHorizon,
     ValuationState,
 )
 
 app = typer.Typer(help="基金行为教练 Agent — 买入前专业级基金体检报告")
 DEFAULT_SELECTED_FUNDS_CSV = Path("docs/code_20260519.csv")
+DEFAULT_GOLDEN_TEMPLATE = Path("docs/golden-answer-template.md")
+DEFAULT_GOLDEN_PREFILL_OUTPUT = Path("reports/golden-answers/golden-answer-prefill.md")
+DEFAULT_GOLDEN_ANSWER_OUTPUT = Path("reports/golden-answers/golden-answer.json")
 
 
 @app.command()
@@ -235,6 +242,94 @@ def extraction_score(
     typer.echo(f"score_json: {result.score_json_path}")
     typer.echo(f"score_md: {result.score_markdown_path}")
     typer.echo(f"golden_set: {result.golden_set_path}")
+
+
+@app.command("golden-prefill")
+def golden_prefill(
+    template_path: Annotated[
+        Path,
+        typer.Option("--template-path", help="golden answer Markdown 模板路径"),
+    ] = DEFAULT_GOLDEN_TEMPLATE,
+    output_path: Annotated[
+        Path,
+        typer.Option("--output-path", help="预填底稿输出路径"),
+    ] = DEFAULT_GOLDEN_PREFILL_OUTPUT,
+    report_year: Annotated[int, typer.Option("--report-year", help="年报年份")] = 2024,
+    force_refresh: Annotated[bool, typer.Option("--force-refresh", help="强制刷新底层数据")] = False,
+) -> None:
+    """生成 correctness golden answer 自动预填底稿。
+
+    Args:
+        template_path: golden answer Markdown 模板路径。
+        output_path: 预填底稿输出路径。
+        report_year: 年报年份。
+        force_refresh: 是否强制刷新底层数据。
+
+    Returns:
+        无返回值，产物写入输出路径并在 stdout 打印摘要。
+
+    Raises:
+        typer.Exit: 预填失败时以非零状态退出。
+    """
+
+    try:
+        result = asyncio.run(
+            GoldenPrefillService().run(
+                GoldenPrefillRequest(
+                    template_path=template_path,
+                    output_path=output_path,
+                    report_year=report_year,
+                    force_refresh=force_refresh,
+                )
+            )
+        )
+    except Exception as exc:
+        typer.echo(f"golden answer 预填失败：{exc}", err=True)
+        raise typer.Exit(code=1) from exc
+    typer.echo(f"prefill: {result.output_path}")
+    typer.echo(f"funds: {len(result.succeeded_fund_codes)}/{len(result.fund_codes)} succeeded")
+    if result.failed_fund_codes:
+        typer.echo(f"failed: {', '.join(result.failed_fund_codes)}")
+
+
+@app.command("golden-build")
+def golden_build(
+    input_path: Annotated[
+        Path,
+        typer.Option("--input-path", help="人工审核后的 golden answer Markdown 路径"),
+    ] = DEFAULT_GOLDEN_PREFILL_OUTPUT,
+    output_path: Annotated[
+        Path,
+        typer.Option("--output-path", help="strict golden answer JSON 输出路径"),
+    ] = DEFAULT_GOLDEN_ANSWER_OUTPUT,
+) -> None:
+    """把人工审核后的 golden answer Markdown 转换为 strict JSON。
+
+    Args:
+        input_path: 人工审核后的 Markdown 路径。
+        output_path: strict golden answer JSON 输出路径。
+
+    Returns:
+        无返回值，产物写入输出路径并在 stdout 打印摘要。
+
+    Raises:
+        typer.Exit: 转换或校验失败时以非零状态退出。
+    """
+
+    try:
+        result = GoldenAnswerService().build(
+            GoldenAnswerBuildRequest(
+                input_path=input_path,
+                output_path=output_path,
+            )
+        )
+    except Exception as exc:
+        typer.echo(f"golden answer 构建失败：{exc}", err=True)
+        raise typer.Exit(code=1) from exc
+    typer.echo(f"golden_answer: {result.output_path}")
+    typer.echo(f"funds: {result.fund_count}")
+    typer.echo(f"records: {result.record_count}")
+    typer.echo(f"skipped: {result.skipped_count}")
 
 
 def _valuation_state(value: str) -> ValuationState:

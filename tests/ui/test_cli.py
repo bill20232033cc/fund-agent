@@ -128,6 +128,80 @@ class _FakeExtractionScoreService:
         )
 
 
+@dataclass(frozen=True, slots=True)
+class _FakeGoldenPrefillResult:
+    """CLI 测试用 golden prefill 结果。"""
+
+    output_path: Path
+    fund_codes: tuple[str, ...]
+    succeeded_fund_codes: tuple[str, ...]
+    failed_fund_codes: tuple[str, ...]
+
+
+class _FakeGoldenPrefillService:
+    """CLI 测试用 golden prefill Service。"""
+
+    last_request = None
+
+    async def run(self, request):  # type: ignore[no-untyped-def]
+        """记录请求并返回固定路径。
+
+        Args:
+            request: CLI 构造的预填请求。
+
+        Returns:
+            fake 预填结果。
+
+        Raises:
+            无显式抛出。
+        """
+
+        type(self).last_request = request
+        return _FakeGoldenPrefillResult(
+            output_path=Path("prefill.md"),
+            fund_codes=("004393",),
+            succeeded_fund_codes=("004393",),
+            failed_fund_codes=(),
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class _FakeGoldenAnswerBuildResult:
+    """CLI 测试用 golden answer build 结果。"""
+
+    output_path: Path
+    fund_count: int
+    record_count: int
+    skipped_count: int
+
+
+class _FakeGoldenAnswerService:
+    """CLI 测试用 golden answer Service。"""
+
+    last_request = None
+
+    def build(self, request):  # type: ignore[no-untyped-def]
+        """记录请求并返回固定统计。
+
+        Args:
+            request: CLI 构造的 golden answer build 请求。
+
+        Returns:
+            fake 构建结果。
+
+        Raises:
+            无显式抛出。
+        """
+
+        type(self).last_request = request
+        return _FakeGoldenAnswerBuildResult(
+            output_path=Path("golden-answer.json"),
+            fund_count=1,
+            record_count=2,
+            skipped_count=1,
+        )
+
+
 def test_analyze_cli_calls_service_and_prints_report(monkeypatch) -> None:  # type: ignore[no-untyped-def]
     """验证 analyze 命令调用 Service 并输出 Markdown。
 
@@ -321,3 +395,84 @@ def test_extraction_score_cli_is_thin_service_entry(monkeypatch, tmp_path) -> No
     assert _FakeExtractionScoreService.last_request.snapshot_path == Path("reports/extraction-snapshots/unit/snapshot.jsonl")
     assert _FakeExtractionScoreService.last_request.source_csv == Path("docs/code_20260519.csv")
     assert _FakeExtractionScoreService.last_request.output_dir == tmp_path
+
+
+def test_golden_prefill_cli_is_thin_service_entry(monkeypatch, tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """验证 golden-prefill 命令只把显式参数转发给 Service。
+
+    Args:
+        monkeypatch: pytest monkeypatch fixture。
+        tmp_path: pytest 临时目录 fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 CLI 参数转发或输出路径不符合契约时抛出。
+    """
+
+    _FakeGoldenPrefillService.last_request = None
+    monkeypatch.setattr(cli, "GoldenPrefillService", _FakeGoldenPrefillService)
+    runner = CliRunner()
+    output_path = tmp_path / "prefill.md"
+
+    result = runner.invoke(
+        cli.app,
+        [
+            "golden-prefill",
+            "--template-path",
+            "docs/golden-answer-template.md",
+            "--output-path",
+            str(output_path),
+            "--report-year",
+            "2024",
+            "--force-refresh",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert "prefill:" in result.output
+    assert _FakeGoldenPrefillService.last_request is not None
+    assert _FakeGoldenPrefillService.last_request.template_path == Path("docs/golden-answer-template.md")
+    assert _FakeGoldenPrefillService.last_request.output_path == output_path
+    assert _FakeGoldenPrefillService.last_request.report_year == 2024
+    assert _FakeGoldenPrefillService.last_request.force_refresh is True
+
+
+def test_golden_build_cli_is_thin_service_entry(monkeypatch, tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """验证 golden-build 命令只把显式参数转发给 Service。
+
+    Args:
+        monkeypatch: pytest monkeypatch fixture。
+        tmp_path: pytest 临时目录 fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 CLI 参数转发或输出摘要不符合契约时抛出。
+    """
+
+    _FakeGoldenAnswerService.last_request = None
+    monkeypatch.setattr(cli, "GoldenAnswerService", _FakeGoldenAnswerService)
+    runner = CliRunner()
+    input_path = tmp_path / "reviewed.md"
+    output_path = tmp_path / "golden-answer.json"
+
+    result = runner.invoke(
+        cli.app,
+        [
+            "golden-build",
+            "--input-path",
+            str(input_path),
+            "--output-path",
+            str(output_path),
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert "golden_answer:" in result.output
+    assert "records: 2" in result.output
+    assert _FakeGoldenAnswerService.last_request is not None
+    assert _FakeGoldenAnswerService.last_request.input_path == input_path
+    assert _FakeGoldenAnswerService.last_request.output_path == output_path
