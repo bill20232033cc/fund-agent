@@ -33,7 +33,7 @@
 
 - 当前分支：`main`
 - 当前 gate：`draft-PR-pass`
-- 下一 gate：等待用户授权 mark ready / merge / 后续 phase
+- 下一 gate：等待用户授权 merge / 后续 phase
 - P4 执行控制文档：`docs/implementation-control-p4.md`
 - 当前裁决：
   - P0 维持 `done`。已验证 `dayu` 依赖可导入、`fund-agent` 处于 editable install、`fund-analysis --help` 可用、样本基金 `110011` 年报可下载、`pdfplumber` 可提取全文文本和表格。
@@ -158,7 +158,7 @@
     - `ProgrammaticAuditInput` 兼容性保持不变
     - 验证命令 `.venv/bin/python -m pytest tests/fund/template tests/fund/audit -q` 当前通过（`23 passed`），`.venv/bin/python -m pytest tests/fund/analysis -q` 当前通过（`40 passed`）
 - 下一 entry point：
-  - 等待用户授权 mark ready / merge / 后续 phase
+  - 等待用户授权 merge / 后续 phase
   - `004393` 类型误判已在 P4-S3a 修复为 `active_fund`
   - `004393` 的 `nav_benchmark_performance`、`manager_strategy_text`、`manager_alignment`、`holder_structure`、`share_change` 已在 P4-S3b 修复并由 snapshot/score 验证
   - P4-S4 的 `golden-prefill`、`golden-build` 与 `quality-gate` 骨架已由 control-doc reconciliation 接受；per-fund score / quality gate fix 已通过 aggregate re-review；`reports/golden-answers/golden-answer-prefill-reviewed.md` 已补全并构建 `reports/golden-answers/golden-answer.json`；P4-R10 已把 correctness 自动比对接入 score / quality gate 并通过 code review；P4 final aggregate deepreview、PR scope hygiene 与 PR-level review 均已接受
@@ -1295,4 +1295,4 @@ P0（环境搭建）
 | 2026-05-20 | P4 readiness reconciliation | ✅ accepted | controller 裁决 P4 功能态已可进入 final aggregate deepreview；P4-R8/R9/RR-15/RR-16 均有后续 owner，不阻断当前 P4 skeleton；artifact=`docs/reviews/p4-readiness-reconciliation-20260520.md`；下一 gate 为 `P4 final aggregate deepreview` |
 | 2026-05-20 | P4 final aggregate deepreview | ✅ accepted after cleanup | MiMo/GLM final aggregate deepreview 均接受 P4 功能态；MiMo blocking `ruff format` 与 GLM info `F541` 已修复；controller 裁决=`docs/reviews/p4-final-aggregate-deepreview-controller-judgment-20260520.md`；当前验证 targeted `73 passed`、full suite `171 passed`、ruff check passed、ruff format check passed、diff check passed；下一 gate 为 `P4 PR scope hygiene / inclusion-set reconciliation` |
 | 2026-05-20 | P4 PR scope hygiene | ✅ accepted | PR inclusion set 已裁决，artifact=`docs/reviews/p4-pr-scope-hygiene-reconciliation-20260520.md`；RR-17/P4-R11 范围不清关闭；`reports/golden-answers/*` 作为 curated correctness fixture 纳入，`reports/extraction-snapshots/**`、`scripts/**`、`launchd/**`、旧 P2/PR1 artifacts 排除；当前 gate 为 `ready-to-open-draft-PR` |
-| 2026-05-20 | P4 draft PR gate | ✅ draft-PR-pass | Draft PR 3 已创建：`https://github.com/bill20232033cc/fund-agent/pull/3`；MiMo/GLM PR-level review 均 PASS，controller 裁决=`docs/reviews/pr-3-review-controller-judgment-20260520.md`；PR body scope wording info 已修正；GitHub 当前 no checks reported，PR mergeable=`MERGEABLE`；PR 保持 draft，mark ready / merge 需用户额外授权 |
+| 2026-05-20 | P4 draft PR gate | ✅ draft-PR-pass | Draft PR 3 已创建：`https://github.com/bill20232033cc/fund-agent/pull/3`；MiMo/GLM PR-level review 均 PASS，controller 裁决=`docs/reviews/pr-3-review-controller-judgment-20260520.md`；PR body scope wording info 已修正；GitHub 当前 no checks reported，PR mergeable=`MERGEABLE`；PR 已标记 ready for review，merge 需用户额外授权 |

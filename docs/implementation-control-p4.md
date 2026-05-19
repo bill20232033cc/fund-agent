@@ -34,7 +34,7 @@ P4 必须优先解决三个底层问题：
 |---|---|
 | 当前 phase | P4 |
 | 当前 gate | `draft-PR-pass` |
-| 下一 gate | 等待用户授权 mark ready / merge / 后续 phase |
+| 下一 gate | 等待用户授权 merge / 后续 phase |
 | 当前分支 | `main` |
 | P4 输入池 | `docs/code_20260519.csv` |
 | 已知数据质量问题 | `016492` 重复；56 条记录、55 个唯一代码 |
@@ -488,7 +488,7 @@ P4 遵循 phaseflow / gateflow 多 Agent 约定：
 
 当前待审核：
 
-- 等待用户授权 mark ready / merge / 后续 phase。
+- 等待用户授权 merge / 后续 phase。
 
 预期 review artifact：
 
@@ -525,4 +525,4 @@ P4 遵循 phaseflow / gateflow 多 Agent 约定：
 | 2026-05-20 | P4 readiness reconciliation | ✅ accepted | controller 裁决 P4 功能态已可进入 final aggregate deepreview；P4-R8/R9/RR-15/RR-16 均有后续 owner，不阻断当前 P4 skeleton；artifact=`docs/reviews/p4-readiness-reconciliation-20260520.md`；下一 gate 为 `P4 final aggregate deepreview` |
 | 2026-05-20 | P4 final aggregate deepreview | ✅ accepted after cleanup | MiMo/GLM final aggregate deepreview 均接受 P4 功能态；MiMo blocking `ruff format` 与 GLM info `F541` 已修复；controller 裁决=`docs/reviews/p4-final-aggregate-deepreview-controller-judgment-20260520.md`；当前验证 `73 passed`、full suite `171 passed`、ruff check passed、ruff format check passed、diff check passed；下一 gate 为 `P4 PR scope hygiene / inclusion-set reconciliation` |
 | 2026-05-20 | P4 PR scope hygiene | ✅ accepted | PR inclusion set 已裁决，artifact=`docs/reviews/p4-pr-scope-hygiene-reconciliation-20260520.md`；P4-R11/RR-17 范围不清关闭；`reports/golden-answers/*` 作为 curated correctness fixture 纳入，`reports/extraction-snapshots/**`、`scripts/**`、`launchd/**`、旧 P2/PR1 artifacts 排除；当前 gate 为 `ready-to-open-draft-PR` |
-| 2026-05-20 | P4 draft PR gate | ✅ draft-PR-pass | Draft PR 3 已创建：`https://github.com/bill20232033cc/fund-agent/pull/3`；MiMo/GLM PR-level review 均 PASS，controller 裁决=`docs/reviews/pr-3-review-controller-judgment-20260520.md`；PR body scope wording info 已修正；GitHub 当前 no checks reported，PR mergeable=`MERGEABLE`；PR 保持 draft，mark ready / merge 需用户额外授权 |
+| 2026-05-20 | P4 draft PR gate | ✅ draft-PR-pass | Draft PR 3 已创建：`https://github.com/bill20232033cc/fund-agent/pull/3`；MiMo/GLM PR-level review 均 PASS，controller 裁决=`docs/reviews/pr-3-review-controller-judgment-20260520.md`；PR body scope wording info 已修正；GitHub 当前 no checks reported，PR mergeable=`MERGEABLE`；PR 已标记 ready for review，merge 需用户额外授权 |
