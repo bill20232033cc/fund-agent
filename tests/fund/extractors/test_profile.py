@@ -289,6 +289,7 @@ def test_extract_profile_reads_real_section_two_key_value_tables() -> None:
             rows=(
                 ("投资范围", "投资于沪深300指数成份股。"),
                 ("投资策略", "采用完全复制法。"),
+                ("风险收益特征", "被动指数型产品，跟踪沪深300指数。"),
                 ("业绩比较基准", "沪深300指数"),
                 ("管理费率", "0.50%"),
                 ("托管费率", "0.10%"),
@@ -304,6 +305,7 @@ def test_extract_profile_reads_real_section_two_key_value_tables() -> None:
     assert result.basic_identity.value["classified_fund_type"] == "index_fund"
     assert result.product_profile.value == {
         "investment_objective": "紧密跟踪标的指数表现。",
+        "style_positioning": "被动指数型产品，跟踪沪深300指数。",
         "investment_scope": "投资于沪深300指数成份股。",
         "investment_strategy": "采用完全复制法。",
     }

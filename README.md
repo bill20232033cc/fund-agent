@@ -165,10 +165,11 @@ fund-analysis extraction-snapshot \
 
 ```bash
 fund-analysis extraction-score \
-  --snapshot-path reports/extraction-snapshots/p4-s1-selected-1x/snapshot.jsonl
+  --snapshot-path reports/extraction-snapshots/p4-s1-selected-1x/snapshot.jsonl \
+  --golden-answer-path reports/golden-answers/golden-answer.json
 ```
 
-默认输出到 snapshot 所在目录，包含 `score.json`、`score.md` 和 `golden_set.json`。当前评分不包含 correctness；最小 golden set 固定包含 `004393`，并暂时排除货币基金类。
+默认输出到 snapshot 所在目录，包含 `score.json`、`score.md` 和 `golden_set.json`。`score.json` 同时包含字段级 `field_scores`、单基金 `fund_scores` 和 `correctness`。Correctness 只对 snapshot 显式暴露的可比 golden 字段做保守 normalize 后比较，skipped 和不可比记录不进入分母；未提供 `--golden-answer-path` 时只输出 `FQ0/info` 所需 skeleton。最小 golden set 固定包含 `004393`，并暂时排除货币基金类。
 
 生成 correctness golden answer 自动预填底稿：
 
@@ -189,7 +190,7 @@ fund-analysis golden-build \
   --output-path reports/golden-answers/golden-answer.json
 ```
 
-`golden-build` 会校验每条有效行必须填写 `expected_value`、`confidence` 和 `source`，其中 `confidence` 只能是 `high / medium / low`，`source` 不能是 `manual_required`。校验通过后输出机器可读 JSON；该 JSON 是后续 correctness 自动比对的数据源。
+`golden-build` 会校验每条有效行必须填写 `expected_value`、`confidence` 和 `source`，其中 `confidence` 只能是 `high / medium / low`，`source` 不能是 `manual_required`。校验通过后输出机器可读 JSON；该 JSON 是 correctness 自动比对的数据源。
 
 基于 `score.json` 生成报告质量 gate：
 
@@ -198,7 +199,7 @@ fund-analysis quality-gate \
   --score-path reports/extraction-snapshots/p4-s3b-004393-controller-final-score/score.json
 ```
 
-默认输出到 `score.json` 所在目录，包含 `quality_gate.json` 和 `quality_gate.md`。当前 gate 只消费 coverage / traceability：P0 字段 fail 会阻断，P1 字段 fail 会警告，correctness 未接入时只记录 info。
+默认输出到 `score.json` 所在目录，包含 `quality_gate.json` 和 `quality_gate.md`。当前 gate 消费 coverage / traceability / correctness：字段级或单基金 P0 fail 会阻断，单基金 issue 会保留 `fund_code`；P1 fail 会警告；correctness 未接入时只记录 `FQ0/info`，strict golden answer 可用且出现明确 mismatch 时触发 `FQ1/block`。
 
 ## 真实精选基金池 Smoke
 

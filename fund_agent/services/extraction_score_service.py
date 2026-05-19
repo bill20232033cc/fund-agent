@@ -9,7 +9,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from fund_agent.fund.extraction_score import ExtractionScoreResult, ScoreThresholds, run_extraction_score
+from fund_agent.fund.extraction_score import (
+    ExtractionScoreResult,
+    ScoreThresholds,
+    run_extraction_score,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -21,12 +25,14 @@ class ExtractionScoreRequest:
         source_csv: 精选基金池 CSV 路径。
         output_dir: 显式输出目录；为空时使用 snapshot 所在目录。
         thresholds: 显式评分阈值。
+        golden_answer_path: strict golden answer JSON 路径；为空时不执行 correctness。
     """
 
     snapshot_path: Path
     source_csv: Path
     output_dir: Path | None
     thresholds: ScoreThresholds = ScoreThresholds()
+    golden_answer_path: Path | None = None
 
 
 class ExtractionScoreService:
@@ -56,6 +62,7 @@ class ExtractionScoreService:
             source_csv=request.source_csv,
             output_dir=request.output_dir,
             thresholds=request.thresholds,
+            golden_answer_path=request.golden_answer_path,
         )
 
 
@@ -74,5 +81,11 @@ def _validate_request(request: ExtractionScoreRequest) -> None:
 
     if request.snapshot_path.suffix != ".jsonl":
         raise ValueError("snapshot_path 必须指向 .jsonl 文件")
-    if request.output_dir is not None and request.output_dir.exists() and not request.output_dir.is_dir():
+    if request.golden_answer_path is not None and request.golden_answer_path.suffix != ".json":
+        raise ValueError("golden_answer_path 必须指向 .json 文件")
+    if (
+        request.output_dir is not None
+        and request.output_dir.exists()
+        and not request.output_dir.is_dir()
+    ):
         raise ValueError("output_dir 必须是目录")

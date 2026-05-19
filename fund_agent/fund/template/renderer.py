@@ -119,7 +119,9 @@ def render_template_report(input_data: TemplateRenderInput) -> TemplateRenderRes
         _render_chapter_5(input_data),
         _render_chapter_6(input_data),
         _render_chapter_7(input_data),
-        _render_evidence_section(evidence_anchors, input_data.structured_data.report_year, chapter_evidence_groups),
+        _render_evidence_section(
+            evidence_anchors, input_data.structured_data.report_year, chapter_evidence_groups
+        ),
     )
     report_markdown = "\n\n".join(sections).strip() + "\n"
     _validate_report_wording(report_markdown)
@@ -269,11 +271,12 @@ def _render_chapter_3(input_data: TemplateRenderInput) -> str:
         无显式抛出。
     """
 
+    profile = input_data.structured_data.product_profile.value or {}
     strategy = input_data.structured_data.manager_strategy_text.value or {}
     manager_alignment = input_data.structured_data.manager_alignment.value or {}
     lines = [
         f"# 3. {_CHAPTER_TITLES[3]}",
-        f"- 管理人表述：{_value_text(strategy, 'strategy_summary')}；风格定位：{_value_text(strategy, 'style_positioning')}。",
+        f"- 管理人表述：{_value_text(strategy, 'strategy_summary')}；产品风格定位：{_value_text(profile, 'style_positioning')}。",
         f"- 利益一致性原始披露：{_join_values(manager_alignment.values()) if manager_alignment else _MISSING_TEXT}。",
         f"- 言行一致性汇总：{input_data.consistency_result.overall_signal} / {input_data.consistency_result.overall_status}。",
     ]
@@ -327,12 +330,16 @@ def _render_chapter_5(input_data: TemplateRenderInput) -> str:
     """
 
     nav_count = len(input_data.structured_data.nav_data.records)
-    stage_text = input_data.current_stage.strip() if input_data.current_stage and input_data.current_stage.strip() else _INSUFFICIENT_TEXT
+    stage_text = (
+        input_data.current_stage.strip()
+        if input_data.current_stage and input_data.current_stage.strip()
+        else _INSUFFICIENT_TEXT
+    )
     lines = [
         f"# 5. {_CHAPTER_TITLES[5]}",
         f"- 当前阶段：{stage_text}。",
         f"- 关键变化输入：净值记录 {nav_count} 条；跨期年报对比结论当前为 {_INSUFFICIENT_TEXT}。",
-        f"- 需要补证：若要判断阶段变化，应继续补充多期年报与同口径净值序列。",
+        "- 需要补证：若要判断阶段变化，应继续补充多期年报与同口径净值序列。",
         _evidence_line(_merge_anchors(input_data.structured_data.nav_benchmark_performance)),
     ]
     return "\n".join(lines)
@@ -387,7 +394,7 @@ def _render_chapter_7(input_data: TemplateRenderInput) -> str:
     lines = [
         f"# 7. {_CHAPTER_TITLES[7]}",
         f"- 最终判断：{_FINAL_JUDGMENT_TEXT[input_data.final_judgment]}。",
-        f"- 判断边界：本结论只在公开披露信息和显式输入范围内成立，不预测未来收益，不给出交易或配置指令。",
+        "- 判断边界：本结论只在公开披露信息和显式输入范围内成立，不预测未来收益，不给出交易或配置指令。",
         f"- 检查清单汇总：{input_data.checklist_result.overall_signal} / {input_data.checklist_result.overall_status}。",
     ]
     for item in input_data.checklist_result.items:
@@ -422,7 +429,9 @@ def _render_evidence_section(
     for chapter_index, chapter_anchors in enumerate(chapter_evidence_groups):
         if chapter_anchors:
             continue
-        lines.append(f"- [M{chapter_index}] {_missing_anchor_reference(report_year, chapter_index)}")
+        lines.append(
+            f"- [M{chapter_index}] {_missing_anchor_reference(report_year, chapter_index)}"
+        )
     return "\n".join(lines)
 
 
@@ -665,7 +674,9 @@ def _collect_evidence_anchors(input_data: TemplateRenderInput) -> tuple[Evidence
     )
 
 
-def _collect_chapter_evidence_groups(input_data: TemplateRenderInput) -> tuple[tuple[EvidenceAnchor, ...], ...]:
+def _collect_chapter_evidence_groups(
+    input_data: TemplateRenderInput,
+) -> tuple[tuple[EvidenceAnchor, ...], ...]:
     """按模板章节收集证据锚点。
 
     Args:
@@ -726,7 +737,9 @@ def _collect_consistency_anchors(input_data: TemplateRenderInput) -> tuple[Evide
         无显式抛出。
     """
 
-    anchors = tuple(anchor for item in input_data.consistency_result.dimensions for anchor in item.anchors)
+    anchors = tuple(
+        anchor for item in input_data.consistency_result.dimensions for anchor in item.anchors
+    )
     return _dedupe_anchors((*anchors, *input_data.structured_data.manager_alignment.anchors))
 
 
@@ -743,7 +756,9 @@ def _collect_risk_anchors(input_data: TemplateRenderInput) -> tuple[EvidenceAnch
         无显式抛出。
     """
 
-    risk_anchors = tuple(anchor for item in input_data.risk_check_result.items for anchor in item.anchors)
+    risk_anchors = tuple(
+        anchor for item in input_data.risk_check_result.items for anchor in item.anchors
+    )
     return _dedupe_anchors((*risk_anchors, *input_data.stress_test_result.anchors))
 
 
@@ -760,7 +775,9 @@ def _collect_checklist_anchors(checklist_result: ChecklistResult) -> tuple[Evide
         无显式抛出。
     """
 
-    return _dedupe_anchors(tuple(anchor for item in checklist_result.items for anchor in item.anchors))
+    return _dedupe_anchors(
+        tuple(anchor for item in checklist_result.items for anchor in item.anchors)
+    )
 
 
 def _merge_anchors(*fields: ExtractedField[dict[str, object]]) -> tuple[EvidenceAnchor, ...]:

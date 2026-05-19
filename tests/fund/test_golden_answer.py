@@ -9,6 +9,7 @@ import pytest
 from fund_agent.fund.golden_answer import (
     GoldenAnswerValidationError,
     build_golden_answer_json,
+    load_golden_answer_json,
     parse_golden_answer_markdown,
 )
 
@@ -129,3 +130,39 @@ def test_build_golden_answer_json_writes_machine_readable_payload(tmp_path) -> N
             "source": "年报2024 §2 page-5",
         }
     ]
+
+
+def test_load_golden_answer_json_reuses_strict_schema(tmp_path) -> None:
+    """验证 strict golden answer JSON 可被复用为 correctness 输入。
+
+    Args:
+        tmp_path: pytest 临时目录 fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 strict JSON loader 未恢复记录时抛出。
+    """
+
+    input_path = tmp_path / "reviewed.md"
+    output_path = tmp_path / "golden-answer.json"
+    input_path.write_text(
+        "\n".join(
+            (
+                "## 004393 测试基金（国内股票类）",
+                "",
+                "| field | sub_field | expected_value | confidence | source |",
+                "|---|---|---|---|---|",
+                "| classified_fund_type | fund_type | active_fund | high | 年报2024 §2 page-5 |",
+            )
+        ),
+        encoding="utf-8",
+    )
+    build_golden_answer_json(input_path=input_path, output_path=output_path)
+
+    funds = load_golden_answer_json(output_path)
+
+    assert len(funds) == 1
+    assert funds[0].records[0].field_name == "classified_fund_type"
+    assert funds[0].records[0].expected_value == "active_fund"

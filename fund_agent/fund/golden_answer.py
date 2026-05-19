@@ -1,7 +1,9 @@
-"""Correctness golden answer Markdown 转 JSON 与校验能力。
+"""Correctness golden answer Markdown 转 JSON、strict JSON 读取与校验能力。
 
 本模块属于 Capability 层，只处理人工审核后的 golden answer Markdown
-结构化与校验，不读取 PDF、cache 或底层解析文件，也不执行 correctness 评分。
+结构化、strict JSON 读取与校验，不读取 PDF、cache 或底层解析文件，也不执行
+correctness 评分。Correctness 比对见 `extraction_score.py`，对应模板字段质量
+闭环。
 """
 
 from __future__ import annotations
@@ -12,10 +14,14 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Final
 
-DEFAULT_GOLDEN_REVIEWED_MARKDOWN: Final[Path] = Path("reports/golden-answers/golden-answer-prefill.md")
+DEFAULT_GOLDEN_REVIEWED_MARKDOWN: Final[Path] = Path(
+    "reports/golden-answers/golden-answer-prefill.md"
+)
 DEFAULT_GOLDEN_ANSWER_JSON: Final[Path] = Path("reports/golden-answers/golden-answer.json")
 GOLDEN_ANSWER_SCHEMA_VERSION: Final[str] = "fund-agent.golden-answer.v1"
-_FUND_HEADING_PATTERN: Final[re.Pattern[str]] = re.compile(r"^##\s+(?P<code>\d{6})\s+(?P<title>.+?)\s*$")
+_FUND_HEADING_PATTERN: Final[re.Pattern[str]] = re.compile(
+    r"^##\s+(?P<code>\d{6})\s+(?P<title>.+?)\s*$"
+)
 _ALLOWED_CONFIDENCE: Final[frozenset[str]] = frozenset({"high", "medium", "low"})
 _SKIPPED_CELL: Final[str] = "—"
 
@@ -136,7 +142,9 @@ def build_golden_answer_json(
     funds = parse_golden_answer_markdown(markdown_text)
     payload = _json_payload(input_path=input_path, funds=funds)
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    output_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    output_path.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+    )
     return GoldenAnswerBuildResult(
         input_path=input_path,
         output_path=output_path,
@@ -144,6 +152,50 @@ def build_golden_answer_json(
         record_count=sum(len(fund.records) for fund in funds),
         skipped_count=sum(len(fund.skipped_fields) for fund in funds),
     )
+
+
+def load_golden_answer_json(golden_answer_path: Path) -> tuple[GoldenAnswerFund, ...]:
+    """读取并校验 strict golden answer JSON。
+
+    Args:
+        golden_answer_path: `golden-build` 产出的 strict JSON 路径。
+
+    Returns:
+        golden answer 基金记录元组。
+
+    Raises:
+        FileNotFoundError: JSON 文件不存在时抛出。
+        GoldenAnswerValidationError: JSON schema、字段类型或行内容非法时抛出。
+        json.JSONDecodeError: JSON 内容非法时抛出。
+    """
+
+    payload = json.loads(golden_answer_path.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        raise GoldenAnswerValidationError(("golden answer JSON 顶层必须是 object",))
+    errors: list[str] = []
+    schema_version = payload.get("schema_version")
+    if schema_version != GOLDEN_ANSWER_SCHEMA_VERSION:
+        errors.append(f"schema_version 必须是 {GOLDEN_ANSWER_SCHEMA_VERSION}")
+    raw_funds = payload.get("funds")
+    if not isinstance(raw_funds, list):
+        errors.append("funds 必须是 JSON array")
+        raw_funds = []
+
+    funds: list[GoldenAnswerFund] = []
+    seen_keys: set[tuple[str, str, str]] = set()
+    for fund_index, raw_fund in enumerate(raw_funds):
+        if not isinstance(raw_fund, dict):
+            errors.append(f"funds[{fund_index}] 必须是 JSON object")
+            continue
+        parsed_fund, fund_errors = _parse_golden_answer_json_fund(raw_fund, fund_index, seen_keys)
+        errors.extend(fund_errors)
+        if parsed_fund is not None:
+            funds.append(parsed_fund)
+    if errors:
+        raise GoldenAnswerValidationError(tuple(errors))
+    if not funds:
+        raise GoldenAnswerValidationError(("golden answer JSON 至少需要 1 只基金",))
+    return tuple(funds)
 
 
 def parse_golden_answer_markdown(markdown_text: str) -> tuple[GoldenAnswerFund, ...]:
@@ -192,7 +244,9 @@ def parse_golden_answer_markdown(markdown_text: str) -> tuple[GoldenAnswerFund, 
         if row is None:
             continue
         if len(row) != 5:
-            current_errors.append(f"line {line_number} fund {current_code}: Markdown 表格必须为 5 列")
+            current_errors.append(
+                f"line {line_number} fund {current_code}: Markdown 表格必须为 5 列"
+            )
             continue
         field, sub_field, expected_value, confidence, source = (cell.strip() for cell in row)
         if _is_header_or_separator(field, sub_field):
@@ -206,7 +260,9 @@ def parse_golden_answer_markdown(markdown_text: str) -> tuple[GoldenAnswerFund, 
             current_errors.append(f"{row_context}: 重复 golden answer 行")
             continue
         seen_keys.add(key)
-        row_errors = _validate_active_row(row_context, field, sub_field, expected_value, confidence, source)
+        row_errors = _validate_active_row(
+            row_context, field, sub_field, expected_value, confidence, source
+        )
         if row_errors:
             current_errors.extend(row_errors)
             continue
@@ -249,6 +305,147 @@ def parse_golden_answer_markdown(markdown_text: str) -> tuple[GoldenAnswerFund, 
     if errors:
         raise GoldenAnswerValidationError(tuple(errors))
     return tuple(funds)
+
+
+def _parse_golden_answer_json_fund(
+    raw_fund: dict[str, object],
+    fund_index: int,
+    seen_keys: set[tuple[str, str, str]],
+) -> tuple[GoldenAnswerFund | None, tuple[str, ...]]:
+    """解析 strict JSON 中的单只基金。
+
+    Args:
+        raw_fund: JSON 中的基金对象。
+        fund_index: 基金数组下标。
+        seen_keys: 全局已见 `(fund_code, field_name, sub_field)` 集合。
+
+    Returns:
+        解析后的基金对象；如果阻断字段非法则返回 `None` 和错误列表。
+
+    Raises:
+        无显式抛出。
+    """
+
+    errors: list[str] = []
+    fund_code = _json_required_text(raw_fund, "fund_code", f"funds[{fund_index}]", errors)
+    title = _json_required_text(raw_fund, "title", f"funds[{fund_index}]", errors)
+    raw_records = raw_fund.get("records")
+    if not isinstance(raw_records, list):
+        errors.append(f"funds[{fund_index}].records 必须是 JSON array")
+        raw_records = []
+    raw_skipped = raw_fund.get("skipped_fields", [])
+    if not isinstance(raw_skipped, list) or any(not isinstance(item, str) for item in raw_skipped):
+        errors.append(f"funds[{fund_index}].skipped_fields 必须是字符串数组")
+        raw_skipped = []
+
+    records: list[GoldenAnswerRecord] = []
+    if fund_code:
+        for record_index, raw_record in enumerate(raw_records):
+            context = f"funds[{fund_index}].records[{record_index}]"
+            if not isinstance(raw_record, dict):
+                errors.append(f"{context} 必须是 JSON object")
+                continue
+            parsed_record, record_errors = _parse_golden_answer_json_record(
+                raw_record, context, fund_code, seen_keys
+            )
+            errors.extend(record_errors)
+            if parsed_record is not None:
+                records.append(parsed_record)
+    if fund_code and not records:
+        errors.append(f"fund {fund_code}: 至少需要 1 条有效 golden answer 行")
+    if errors or not fund_code or not title:
+        return None, tuple(errors)
+    return (
+        GoldenAnswerFund(
+            fund_code=fund_code,
+            title=title,
+            records=tuple(records),
+            skipped_fields=tuple(str(item) for item in raw_skipped),
+        ),
+        tuple(errors),
+    )
+
+
+def _parse_golden_answer_json_record(
+    raw_record: dict[str, object],
+    context: str,
+    fund_code: str,
+    seen_keys: set[tuple[str, str, str]],
+) -> tuple[GoldenAnswerRecord | None, tuple[str, ...]]:
+    """解析 strict JSON 中的单条 golden answer 记录。
+
+    Args:
+        raw_record: JSON 中的记录对象。
+        context: 错误上下文。
+        fund_code: 所属基金代码。
+        seen_keys: 全局已见键集合。
+
+    Returns:
+        解析后的记录；字段非法时返回 `None` 和错误列表。
+
+    Raises:
+        无显式抛出。
+    """
+
+    errors: list[str] = []
+    record_fund_code = _json_required_text(raw_record, "fund_code", context, errors)
+    field_name = _json_required_text(raw_record, "field_name", context, errors)
+    sub_field = _json_required_text(raw_record, "sub_field", context, errors)
+    expected_value = _json_required_text(raw_record, "expected_value", context, errors)
+    confidence = _json_required_text(raw_record, "confidence", context, errors)
+    source = _json_required_text(raw_record, "source", context, errors)
+    if record_fund_code and record_fund_code != fund_code:
+        errors.append(f"{context}.fund_code 必须等于所属基金 {fund_code}")
+    if confidence and confidence not in _ALLOWED_CONFIDENCE:
+        errors.append(f"{context}.confidence 必须是 high / medium / low")
+    if source in {_SKIPPED_CELL, "manual_required"}:
+        errors.append(f"{context}.source 必须填写可复核来源，不能是 manual_required")
+    key = (fund_code, field_name, sub_field)
+    if all(key) and key in seen_keys:
+        errors.append(f"{context}: 重复 golden answer 行 {fund_code} {field_name}.{sub_field}")
+    elif all(key):
+        seen_keys.add(key)
+    if errors:
+        return None, tuple(errors)
+    return (
+        GoldenAnswerRecord(
+            fund_code=fund_code,
+            field_name=field_name,
+            sub_field=sub_field,
+            expected_value=expected_value,
+            confidence=confidence,
+            source=source,
+        ),
+        tuple(errors),
+    )
+
+
+def _json_required_text(
+    raw_object: dict[str, object],
+    key: str,
+    context: str,
+    errors: list[str],
+) -> str:
+    """读取 strict JSON object 中的必需文本字段。
+
+    Args:
+        raw_object: JSON object。
+        key: 字段名。
+        context: 错误上下文。
+        errors: 错误列表，会被原地追加。
+
+    Returns:
+        去空格后的文本；缺失或非法时返回空字符串。
+
+    Raises:
+        无显式抛出。
+    """
+
+    value = raw_object.get(key)
+    if not isinstance(value, str) or not value.strip():
+        errors.append(f"{context}.{key} 必须是非空字符串")
+        return ""
+    return value.strip()
 
 
 def _append_current_fund(

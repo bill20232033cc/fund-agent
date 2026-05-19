@@ -121,7 +121,7 @@ async def test_cache_persists_pdf_metadata_and_parsed_report(tmp_path: Path) -> 
         }
         parsed_report_row = connection.execute(
             "SELECT schema_version FROM parsed_reports WHERE document_key = ?",
-            (f"annual_report:110011:2024",),
+            ("annual_report:110011:2024",),
         ).fetchone()
 
     assert tables == {"documents", "parsed_reports"}

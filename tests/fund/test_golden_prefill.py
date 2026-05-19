@@ -54,7 +54,24 @@ class _FakeGoldenExtractor:
                 anchors=(anchor,),
                 extraction_mode="direct",
             ),
-            product_profile=missing_field,
+            product_profile=ExtractedField(
+                value={
+                    "investment_objective": "追求长期资本增值",
+                    "style_positioning": "价值成长均衡",
+                },
+                anchors=(
+                    EvidenceAnchor(
+                        source_kind="annual_report",
+                        document_year=report_year,
+                        section_id="§2",
+                        page_number=5,
+                        table_id="page-5-table-1",
+                        row_locator="style_positioning",
+                        note="风格定位：价值成长均衡",
+                    ),
+                ),
+                extraction_mode="direct",
+            ),
             benchmark=ExtractedField(
                 value={"benchmark_text": "测试基准"},
                 anchors=(
@@ -108,6 +125,7 @@ async def test_run_golden_prefill_writes_prefilled_markdown(tmp_path) -> None:
                 "| field | sub_field | expected_value | confidence | source |",
                 "|---|---|---|---|---|",
                 "| basic_identity | fund_name | | | |",
+                "| product_profile | style_positioning | | | |",
                 "| classified_fund_type | fund_type | | | |",
                 "| benchmark | benchmark_name | | | |",
                 "| fee_schedule | — | — | — | 当前 slice 不处理 |",
@@ -127,6 +145,7 @@ async def test_run_golden_prefill_writes_prefilled_markdown(tmp_path) -> None:
     assert result.succeeded_fund_codes == ("004393",)
     assert "自动预填底稿" in output
     assert "| basic_identity | fund_name | 测试基金 | high | 年报2024 §2 page-5 page-5-table-0 fund_name |" in output
+    assert "| product_profile | style_positioning | 价值成长均衡 | high | 年报2024 §2 page-5 page-5-table-1 style_positioning |" in output
     assert "| classified_fund_type | fund_type | active_fund | high | 年报2024 §2 page-5 page-5-table-0 fund_name |" in output
     assert "| benchmark | benchmark_name | 测试基准 | high | 年报2024 §2 page-5 page-5-table-1 benchmark |" in output
     assert "| fee_schedule | — | — | — | 当前 slice 不处理 |" in output

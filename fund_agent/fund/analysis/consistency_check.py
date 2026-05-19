@@ -113,6 +113,7 @@ class ConsistencyCheckResult:
 
 def check_consistency(
     *,
+    product_profile: ExtractedField[dict[str, object]],
     manager_strategy_text: ExtractedField[dict[str, object]],
     holdings_snapshot: ExtractedField[dict[str, object]],
     turnover_rate: ExtractedField[dict[str, object]],
@@ -123,7 +124,8 @@ def check_consistency(
     """执行言行一致性 4 维度检验，见模板第 3 章。
 
     Args:
-        manager_strategy_text: P1 从 §4 抽取的策略、风格和展望。
+        product_profile: P1 从 §2 抽取的产品本质、投资策略和风格定位。
+        manager_strategy_text: P1 从 §4 抽取的策略和展望。
         holdings_snapshot: P1 从 §8 抽取的持仓快照。
         turnover_rate: P1 从 §8 抽取的换手率。
         actual_style: 调用方显式提供的实际持仓风格；缺失时风格维度返回证据不足。
@@ -139,7 +141,7 @@ def check_consistency(
 
     active_rule = rule or ConsistencyRule()
     dimensions = (
-        _check_investment_style(manager_strategy_text, actual_style),
+        _check_investment_style(product_profile, manager_strategy_text, actual_style),
         _check_industry_preference(manager_strategy_text, holdings_snapshot),
         _check_position_management(manager_strategy_text, actual_equity_position, active_rule),
         _check_turnover_level(manager_strategy_text, turnover_rate, active_rule),
@@ -148,12 +150,14 @@ def check_consistency(
 
 
 def _check_investment_style(
+    product_profile: ExtractedField[dict[str, object]],
     manager_strategy_text: ExtractedField[dict[str, object]],
     actual_style: str | None,
 ) -> ConsistencyDimensionResult:
     """检查投资风格维度。
 
     Args:
+        product_profile: §2 产品画像字段。
         manager_strategy_text: §4 策略文本字段。
         actual_style: 显式实际持仓风格。
 
@@ -164,17 +168,19 @@ def _check_investment_style(
         无显式抛出。
     """
 
-    declared_text = _field_text(manager_strategy_text, ("style_positioning", "strategy_summary"))
+    declared_text = _field_text(product_profile, ("style_positioning", "investment_strategy", "investment_objective"))
+    if not declared_text:
+        declared_text = _field_text(manager_strategy_text, ("strategy_summary",))
     declared_style = _style_bucket(declared_text)
     actual_style_bucket = _style_bucket(actual_style)
-    anchors = manager_strategy_text.anchors
+    anchors = _merge_anchors(product_profile, manager_strategy_text)
     if declared_style is None or actual_style_bucket is None:
         return _insufficient_result(
             dimension="investment_style",
             declared=declared_text,
             actual=actual_style,
             anchors=anchors,
-            reason="缺少 §4 风格宣称或显式实际持仓风格，不能判断投资风格言行一致性。",
+            reason="缺少 §2 风格定位或显式实际持仓风格，不能判断投资风格言行一致性。",
         )
     if declared_style == actual_style_bucket:
         return _dimension_result(
@@ -184,7 +190,7 @@ def _check_investment_style(
             declared=declared_style,
             actual=actual_style_bucket,
             anchors=anchors,
-            reason="§4 宣称风格与显式实际持仓风格一致。",
+            reason="§2 宣称风格与显式实际持仓风格一致。",
         )
     return _dimension_result(
         dimension="investment_style",
@@ -193,7 +199,7 @@ def _check_investment_style(
         declared=declared_style,
         actual=actual_style_bucket,
         anchors=anchors,
-        reason="§4 宣称风格与显式实际持仓风格不一致。",
+        reason="§2 宣称风格与显式实际持仓风格不一致。",
     )
 
 
@@ -338,7 +344,7 @@ def _check_turnover_level(
         ValueError: 当换手率格式非法时抛出。
     """
 
-    declared_text = _field_text(manager_strategy_text, ("strategy_summary", "style_positioning"))
+    declared_text = _field_text(manager_strategy_text, ("strategy_summary",))
     declared_turnover = _turnover_declaration(declared_text)
     anchors = _merge_anchors(manager_strategy_text, turnover_rate)
     if turnover_rate.value is None or turnover_rate.value.get("turnover_rate") is None:

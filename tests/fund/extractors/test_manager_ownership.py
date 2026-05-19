@@ -148,7 +148,6 @@ def test_extract_manager_ownership_outputs_direct_fields_with_anchors() -> None:
     assert result.manager_strategy_text.extraction_mode == "direct"
     assert result.manager_strategy_text.value == {
         "strategy_summary": "本基金坚持自下而上选择具备长期竞争力的公司。",
-        "style_positioning": "均衡偏价值，重视安全边际。",
         "market_outlook": "将继续关注企业盈利质量和估值匹配度。",
     }
     assert {anchor.section_id for anchor in result.manager_strategy_text.anchors} == {"§4"}
@@ -213,7 +212,6 @@ def test_extract_manager_ownership_outputs_strategy_text_from_numbered_headings(
             "本基金坚持从企业价值出发，配置经营质量较高的公司。 报告期内组合保持主动选股思路。 "
             "14.68%，结束了连续3年的下跌态势。"
         ),
-        "style_positioning": None,
         "market_outlook": "未来将继续关注企业盈利质量与估值匹配度。",
     }
     assert {anchor.row_locator for anchor in result.manager_strategy_text.anchors} == {
@@ -427,7 +425,6 @@ def test_extract_manager_ownership_keeps_partial_direct_values_without_judgment(
     assert result.manager_strategy_text.extraction_mode == "direct"
     assert result.manager_strategy_text.value == {
         "strategy_summary": "本基金报告期内保持低估值行业配置。",
-        "style_positioning": None,
         "market_outlook": None,
     }
     assert result.turnover_rate.extraction_mode == "direct"

@@ -32,15 +32,15 @@
 ### 1.3 当前 Gate 与基线裁决（2026-05-18）
 
 - 当前分支：`main`
-- 当前 gate：`P4-S3b accepted`
-- 下一 gate：`P4-S4 implementation`
+- 当前 gate：`ready-to-open-draft-PR`
+- 下一 gate：`draft PR gate`（等待用户授权 push / create draft PR）
 - P4 执行控制文档：`docs/implementation-control-p4.md`
 - 当前裁决：
   - P0 维持 `done`。已验证 `dayu` 依赖可导入、`fund-agent` 处于 editable install、`fund-analysis --help` 可用、样本基金 `110011` 年报可下载、`pdfplumber` 可提取全文文本和表格。
   - P1 已完成并通过 aggregate review。
   - P2 已完成并通过 aggregate deepreview。
   - P3 已完成并合入 `main`。
-  - P4 已完成 P4-S1/P4-S2/P4-S3a/P4-S3b：当前目标不是继续扩功能，而是建立精选基金池真实年报提取质量闭环；`004393` 类型误判已修复为 `active_fund`，5 个高影响 extractor 缺口已由 snapshot/score 证明改善，下一步进入 P4-S4 报告质量审计与阻断。
+  - P4 已完成 P4-S1/P4-S2/P4-S3a/P4-S3b/P4-S4 骨架：当前目标不是继续扩功能，而是建立精选基金池真实年报提取质量闭环；`004393` 类型误判已修复为 `active_fund`，5 个高影响 extractor 缺口已由 snapshot/score 证明改善，P4-S4 已落地 golden answer 标注前链路与只消费 `score.json` 的质量 gate 骨架；P4 aggregate deepreview 的 per-fund blocking finding 已修复并通过 MiMo/GLM re-review；correctness golden answer 已补全并生成 strict JSON，P4-R10 最小 correctness 自动比对已实现并通过 MiMo/GLM code review；P4 final aggregate deepreview 已接受，PR inclusion set 已明确，当前可等待用户授权进入 draft PR gate。
   - `P3-S1 CLI 入口封装` 已完成，通过 Typer CLI 和 Service 层输出单只基金 8 章 Markdown 报告；下一 gate 为 `P3-S2 implementation + review`。
   - `P3-S2 温度计数据爬取` 已完成并通过 GLM/MiMo code review；当前实现范围仅限 Capability data adapter，不接入 CLI/Service。
   - `P3-S3 端到端整合测试` 已完成实现与 GLM/MiMo/controller code review：新增 3 只样本基金 CLI 端到端矩阵，闭合真实 `§2` 表格字段抽取、parsed report 低质量缓存门槛和模板 `benchmark_text` 契约错配。
@@ -158,10 +158,10 @@
     - `ProgrammaticAuditInput` 兼容性保持不变
     - 验证命令 `.venv/bin/python -m pytest tests/fund/template tests/fund/audit -q` 当前通过（`23 passed`），`.venv/bin/python -m pytest tests/fund/analysis -q` 当前通过（`40 passed`）
 - 下一 entry point：
-  - 进入 `P4-S4 implementation`
+  - 进入 `draft PR gate`（需用户授权 push / create draft PR）
   - `004393` 类型误判已在 P4-S3a 修复为 `active_fund`
   - `004393` 的 `nav_benchmark_performance`、`manager_strategy_text`、`manager_alignment`、`holder_structure`、`share_change` 已在 P4-S3b 修复并由 snapshot/score 验证
-  - 优先目标是把 P4 snapshot/score 质量信号接入报告质量 gate，标记或阻断低质量输入
+  - P4-S4 的 `golden-prefill`、`golden-build` 与 `quality-gate` 骨架已由 control-doc reconciliation 接受；per-fund score / quality gate fix 已通过 aggregate re-review；`reports/golden-answers/golden-answer-prefill-reviewed.md` 已补全并构建 `reports/golden-answers/golden-answer.json`；P4-R10 已把 correctness 自动比对接入 score / quality gate 并通过 code review；P4 final aggregate deepreview 与 PR scope hygiene 均已接受
 - 当前 artifact：
   - plan: `docs/reviews/p1-plan-2026-05-17.md`
   - plan review: `docs/reviews/p1-plan-review-2026-05-17.md`
@@ -1189,6 +1189,10 @@ P0（环境搭建）
 | RR-11 | 精选基金池真实年报提取质量不可量化 | P4 | 已创建 P4 第一性原理计划，P4-S1 将建立 extraction snapshot 与 quality gate MVP | 否 |
 | RR-12 | `004393` 被误判为 `index_fund` | P4 | 已作为 P4 known failure case 记录；P4-S3 需在 scoring 基线建立后修复并验证泛化 | 否 |
 | RR-13 | 精选基金池 CSV 中 `016492` 重复 | P4 | P4-S1 允许重复但必须在 summary 中标红；真实修正需用户核对 App 源数据 | 是 |
+| RR-14 | P4 quality gate 缺少 per-fund 阻断粒度 | P4 | 已关闭；P4 aggregate re-review MiMo/GLM 均 PASS，controller 裁决=`docs/reviews/p4-aggregate-rereview-controller-judgment-20260519.md` | 否 |
+| RR-15 | P4 quality gate 未接入 `analyze` 主链路 | P4/P5 | 当前 P4-S4 skeleton 明确不改变报告主链路；作为后续 `quality gate integration slice` owner 追踪 | 是 |
+| RR-16 | correctness 可比字段覆盖面窄 | P4/P5 | 当前 P4-R10 只比较 snapshot 显式暴露的字段，真实 smoke 仅 `classified_fund_type.fund_type` 进入分母；后续 snapshot sub-field exposure slice 负责扩大 coverage | 是 |
+| RR-17 | P4 draft PR 前工作树范围不清 | P4 | 已关闭；PR inclusion set 已在 `docs/reviews/p4-pr-scope-hygiene-reconciliation-20260520.md` 明确，draft PR 必须按 include / exclude 清单准备 | 否 |
 
 ---
 
@@ -1281,3 +1285,13 @@ P0（环境搭建）
 | 2026-05-19 | P4-S2 | ✅ accepted | MiMo/GLM code review 均 PASS；controller 裁决=`docs/reviews/p4-s2-code-review-controller-judgment-20260519.md`；accepted commit=`47f2656`；当前验证 `17 passed`、ruff passed、CLI help passed、diff check passed；下一 gate 为 `P4-S3 implementation` |
 | 2026-05-19 | P4-S3a | ✅ accepted | `004393` 类型误判已修复为 `active_fund`；MiMo/GLM code review 与 targeted re-review 均 PASS；controller 裁决=`docs/reviews/p4-s3a-code-review-controller-judgment-20260519.md`；accepted commit=`0b3fbc6`；当前验证 `15 passed`、ruff passed、diff check passed；下一 gate 为 `P4-S3b implementation` |
 | 2026-05-19 | P4-S3b | ✅ accepted | `004393` 的 5 个高影响 extractor 缺口已修复；MiMo/GLM code review 与 targeted re-review 均 PASS，controller 裁决=`docs/reviews/p4-s3b-code-review-controller-judgment-20260519.md`；当前验证 `24 passed`、ruff passed、diff check passed；真实 snapshot/score 显示本 slice 5 字段 coverage / traceability 均为 `100.0%`；下一 gate 为 `P4-S4 implementation` |
+| 2026-05-19 | P4-S4 | ✅ accepted by reconciliation | control-doc reconciliation 裁决 P4-S4 的 golden answer 标注前链路与 quality gate skeleton 已落地；裁决=`docs/reviews/p4-s4-control-doc-reconciliation-20260519.md`；下一 gate 为 `P4 aggregate deepreview` |
+| 2026-05-19 | P4 aggregate deepreview | ❌ failed | MiMo/Codex/DS 三份 aggregate deepreview 已完成；controller 裁决=`docs/reviews/p4-aggregate-deepreview-controller-judgment-20260519.md`；blocking finding 为 score / quality gate 仅按字段聚合，缺少 per-fund 阻断粒度；下一 gate 为 `P4 aggregate fix` |
+| 2026-05-19 | P4 aggregate fix | ✅ implemented | 已新增 `fund_scores` 单基金质量汇总与 quality gate 单基金 P0 阻断；新增测试覆盖“字段聚合 pass 但单基金 P0 fail 仍 block”；三方 reconciliation artifact=`docs/reviews/p4-design-control-code-reconciliation-20260519.md`；当前验证 `20 passed`、ruff passed、diff check passed；下一 gate 为 `P4 aggregate re-review` |
+| 2026-05-19 | P4 aggregate re-review | ✅ accepted | MiMo/GLM re-review 均 PASS；controller 裁决=`docs/reviews/p4-aggregate-rereview-controller-judgment-20260519.md`；P4-R7/RR-14 per-fund blocking 已关闭；下一 gate 为 `correctness golden answer completion` |
+| 2026-05-19 | correctness golden answer completion | ✅ accepted | 用户完成 004393 第一张表；AgentCodex 补全后续 5 张表；`reports/golden-answers/golden-answer-prefill-reviewed.md` 已通过 strict build，输出 `reports/golden-answers/golden-answer.json`；artifact=`docs/reviews/correctness-golden-answer-completion-20260519.md`；下一 gate 为 `correctness slice implementation` |
+| 2026-05-19 | correctness slice implementation | 🟡 completed | AgentCodex 已实现 P4-R10 最小 correctness 自动比对；strict `golden-answer.json` 通过显式 `--golden-answer-path` 接入 extraction-score，`score.json/score.md` 输出 correctness，quality gate 对明确 mismatch 触发 `FQ1/block`；artifact=`docs/reviews/correctness-slice-implementation-20260519.md`；当前验证 `28 passed`、ruff passed、diff check passed，真实 004393 smoke 中 `classified_fund_type.fund_type` match；下一 gate 为 `correctness slice code review` |
+| 2026-05-19 | correctness slice code review | ✅ accepted | MiMo/GLM code review 均 PASS；MiMo low finding `ruff format` 已修复；controller 裁决=`docs/reviews/correctness-slice-code-review-controller-judgment-20260519.md`；当前验证 `28 passed`、ruff check passed、ruff format check passed、diff check passed；P4-R10 关闭，下一 gate 为 `P4 readiness reconciliation` |
+| 2026-05-20 | P4 readiness reconciliation | ✅ accepted | controller 裁决 P4 功能态已可进入 final aggregate deepreview；P4-R8/R9/RR-15/RR-16 均有后续 owner，不阻断当前 P4 skeleton；artifact=`docs/reviews/p4-readiness-reconciliation-20260520.md`；下一 gate 为 `P4 final aggregate deepreview` |
+| 2026-05-20 | P4 final aggregate deepreview | ✅ accepted after cleanup | MiMo/GLM final aggregate deepreview 均接受 P4 功能态；MiMo blocking `ruff format` 与 GLM info `F541` 已修复；controller 裁决=`docs/reviews/p4-final-aggregate-deepreview-controller-judgment-20260520.md`；当前验证 targeted `73 passed`、full suite `171 passed`、ruff check passed、ruff format check passed、diff check passed；下一 gate 为 `P4 PR scope hygiene / inclusion-set reconciliation` |
+| 2026-05-20 | P4 PR scope hygiene | ✅ accepted | PR inclusion set 已裁决，artifact=`docs/reviews/p4-pr-scope-hygiene-reconciliation-20260520.md`；RR-17/P4-R11 范围不清关闭；`reports/golden-answers/*` 作为 curated correctness fixture 纳入，`reports/extraction-snapshots/**`、`scripts/**`、`launchd/**`、旧 P2/PR1 artifacts 排除；当前 gate 为 `ready-to-open-draft-PR` |

@@ -40,7 +40,9 @@ SNAPSHOT_FIELD_ORDER: Final[tuple[tuple[str, str], ...]] = (
 )
 _EXTRACTION_MODE_DIRECT: Final[str] = "direct"
 _EXTRACTION_MODE_MISSING: Final[str] = "missing"
-_KNOWN_FAILURE_004393_NOTE: Final[str] = "known_failure:P4-S1 当前记录 004393 被误判为 index_fund 的真实输出，不在本 slice 修正。"
+_KNOWN_FAILURE_004393_NOTE: Final[str] = (
+    "known_failure:P4-S1 当前记录 004393 被误判为 index_fund 的真实输出，不在本 slice 修正。"
+)
 
 
 class SnapshotExtractor(Protocol):
@@ -239,7 +241,9 @@ def load_selected_funds(source_csv: Path) -> list[SelectedFundRecord]:
     with source_csv.open(encoding="utf-8-sig", newline="") as file_obj:
         reader = csv.DictReader(file_obj)
         fieldnames = tuple(reader.fieldnames or ())
-        missing_columns = [column for column in REQUIRED_SELECTED_FUND_COLUMNS if column not in fieldnames]
+        missing_columns = [
+            column for column in REQUIRED_SELECTED_FUND_COLUMNS if column not in fieldnames
+        ]
         if missing_columns:
             raise ValueError(f"CSV 缺少必需列：{', '.join(missing_columns)}")
         return [
@@ -277,7 +281,9 @@ def validate_selected_fund_pool(funds: Sequence[SelectedFundRecord]) -> Selected
         if not _is_valid_fund_code(fund.fund_code)
     )
     code_counts = Counter(fund.fund_code for fund in funds)
-    duplicate_codes = tuple(sorted(code for code, count in code_counts.items() if code and count > 1))
+    duplicate_codes = tuple(
+        sorted(code for code, count in code_counts.items() if code and count > 1)
+    )
     return SelectedFundPoolValidation(
         missing_rows=missing_rows,
         bad_code_rows=bad_code_rows,
@@ -618,7 +624,11 @@ def write_snapshot_summary(
             )
             continue
         classified_type = fund_classification.get(fund.fund_code)
-        note = _KNOWN_FAILURE_004393_NOTE if fund.fund_code == "004393" and classified_type == "index_fund" else ""
+        note = (
+            _KNOWN_FAILURE_004393_NOTE
+            if fund.fund_code == "004393" and classified_type == "index_fund"
+            else ""
+        )
         lines.append(
             "| "
             f"{fund.fund_code} | {fund.fund_name} | {fund.app_category} | succeeded | "
@@ -653,7 +663,9 @@ def _is_valid_fund_code(code: str) -> bool:
     return len(code) == 6 and code.isdigit()
 
 
-def _select_by_category(funds: Sequence[SelectedFundRecord], sample_per_category: int) -> list[SelectedFundRecord]:
+def _select_by_category(
+    funds: Sequence[SelectedFundRecord], sample_per_category: int
+) -> list[SelectedFundRecord]:
     """按类别从文件顺序抽样。
 
     Args:
@@ -839,7 +851,9 @@ def _build_classification_record(
         classification_basis=classification_basis,
         field_group=field_group,
         field_name=field_name,
-        extraction_mode=_EXTRACTION_MODE_DIRECT if classified_fund_type else _EXTRACTION_MODE_MISSING,
+        extraction_mode=_EXTRACTION_MODE_DIRECT
+        if classified_fund_type
+        else _EXTRACTION_MODE_MISSING,
         value_present=bool(classified_fund_type),
         anchor=anchor,
         note=_record_note(selected_fund, classified_fund_type, field_name, None),
@@ -1043,7 +1057,11 @@ def _record_note(
     """
 
     notes = [note] if note else []
-    if selected_fund.fund_code == "004393" and classified_fund_type == "index_fund" and field_name == "classified_fund_type":
+    if (
+        selected_fund.fund_code == "004393"
+        and classified_fund_type == "index_fund"
+        and field_name == "classified_fund_type"
+    ):
         notes.append(_KNOWN_FAILURE_004393_NOTE)
     if not notes:
         return None

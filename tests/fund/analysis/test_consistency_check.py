@@ -54,16 +54,41 @@ def _field(value: dict[str, object] | None, section_id: str, row_locator: str) -
     )
 
 
+def _product_profile(
+    *,
+    style_positioning: str = "均衡偏价值，重视安全边际。",
+) -> ExtractedField[dict[str, object]]:
+    """构造 §2 产品画像字段。
+
+    Args:
+        style_positioning: 风格定位。
+
+    Returns:
+        产品画像字段。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return _field(
+        {
+            "investment_objective": "追求长期稳健增值。",
+            "style_positioning": style_positioning,
+            "investment_strategy": "均衡配置。",
+        },
+        "§2",
+        "product_profile",
+    )
+
+
 def _manager_strategy(
     *,
     strategy_summary: str = "坚持长期持有，均衡配置，关注消费和医药行业。",
-    style_positioning: str = "均衡偏价值，重视安全边际。",
 ) -> ExtractedField[dict[str, object]]:
     """构造 §4 策略文本字段。
 
     Args:
         strategy_summary: 策略摘要。
-        style_positioning: 风格定位。
 
     Returns:
         管理人策略文本字段。
@@ -75,7 +100,6 @@ def _manager_strategy(
     return _field(
         {
             "strategy_summary": strategy_summary,
-            "style_positioning": style_positioning,
             "market_outlook": "继续关注消费和医药。",
         },
         "§4",
@@ -160,6 +184,7 @@ def test_check_consistency_outputs_four_green_dimensions_when_evidence_matches()
     """
 
     result = check_consistency(
+        product_profile=_product_profile(),
         manager_strategy_text=_manager_strategy(),
         holdings_snapshot=_holdings_snapshot([{"行业": "消费", "占比": "45.00%"}]),
         turnover_rate=_turnover_rate("80%"),
@@ -191,10 +216,8 @@ def test_check_consistency_reports_red_for_style_and_industry_mismatch() -> None
     """
 
     result = check_consistency(
-        manager_strategy_text=_manager_strategy(
-            strategy_summary="坚持长期持有，关注消费行业。",
-            style_positioning="价值风格。",
-        ),
+        product_profile=_product_profile(style_positioning="价值风格。"),
+        manager_strategy_text=_manager_strategy(strategy_summary="坚持长期持有，关注消费行业。"),
         holdings_snapshot=_holdings_snapshot([{"行业": "科技", "占比": "60.00%"}]),
         turnover_rate=_turnover_rate("80%"),
         actual_style="成长风格",
@@ -222,6 +245,7 @@ def test_check_consistency_requires_explicit_actual_style_and_position() -> None
     """
 
     result = check_consistency(
+        product_profile=_product_profile(),
         manager_strategy_text=_manager_strategy(),
         holdings_snapshot=_holdings_snapshot([{"行业": "消费", "占比": "45.00%"}]),
         turnover_rate=_turnover_rate("80%"),
@@ -247,6 +271,7 @@ def test_check_consistency_detects_high_turnover_against_long_term_claim() -> No
     """
 
     result = check_consistency(
+        product_profile=_product_profile(),
         manager_strategy_text=_manager_strategy(strategy_summary="坚持长期持有，均衡配置。"),
         holdings_snapshot=_holdings_snapshot([{"行业": "消费", "占比": "45.00%"}]),
         turnover_rate=_turnover_rate("260%"),
@@ -275,6 +300,7 @@ def test_check_consistency_reports_insufficient_when_industry_distribution_missi
     """
 
     result = check_consistency(
+        product_profile=_product_profile(),
         manager_strategy_text=_manager_strategy(strategy_summary="关注消费行业，长期持有。"),
         holdings_snapshot=_holdings_snapshot(None),
         turnover_rate=_turnover_rate("80%"),

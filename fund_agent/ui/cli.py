@@ -36,15 +36,21 @@ DEFAULT_SELECTED_FUNDS_CSV = Path("docs/code_20260519.csv")
 DEFAULT_GOLDEN_TEMPLATE = Path("docs/golden-answer-template.md")
 DEFAULT_GOLDEN_PREFILL_OUTPUT = Path("reports/golden-answers/golden-answer-prefill.md")
 DEFAULT_GOLDEN_ANSWER_OUTPUT = Path("reports/golden-answers/golden-answer.json")
-DEFAULT_QUALITY_GATE_SCORE = Path("reports/extraction-snapshots/p4-s3b-004393-controller-final-score/score.json")
+DEFAULT_QUALITY_GATE_SCORE = Path(
+    "reports/extraction-snapshots/p4-s3b-004393-controller-final-score/score.json"
+)
 
 
 @app.command()
 def analyze(
     fund_code: Annotated[str, typer.Argument(help="基金代码，如 110011")],
     report_year: Annotated[int, typer.Option("--report-year", help="年报年份")] = 2024,
-    equity_position: Annotated[str | None, typer.Option("--equity-position", help="显式股票仓位，如 80%")] = None,
-    actual_style: Annotated[str | None, typer.Option("--actual-style", help="显式实际持仓风格")] = None,
+    equity_position: Annotated[
+        str | None, typer.Option("--equity-position", help="显式股票仓位，如 80%")
+    ] = None,
+    actual_style: Annotated[
+        str | None, typer.Option("--actual-style", help="显式实际持仓风格")
+    ] = None,
     actual_equity_position: Annotated[
         str | None,
         typer.Option("--actual-equity-position", help="显式实际股票仓位，如 80%"),
@@ -53,8 +59,12 @@ def analyze(
         int | None,
         typer.Option("--manager-tenure-months", help="基金经理管理本基金月数"),
     ] = None,
-    peer_fee_median: Annotated[str | None, typer.Option("--peer-fee-median", help="同类总费率中位数，如 1.2%")] = None,
-    tracking_error: Annotated[str | None, typer.Option("--tracking-error", help="指数基金跟踪误差，如 1.5%")] = None,
+    peer_fee_median: Annotated[
+        str | None, typer.Option("--peer-fee-median", help="同类总费率中位数，如 1.2%")
+    ] = None,
+    tracking_error: Annotated[
+        str | None, typer.Option("--tracking-error", help="指数基金跟踪误差，如 1.5%")
+    ] = None,
     investment_amount: Annotated[
         str,
         typer.Option("--investment-amount", help="压力测试投入金额，CLI 显式默认 10000 元"),
@@ -71,13 +81,21 @@ def analyze(
         str | None,
         typer.Option("--money-horizon", help="资金期限分类：long_enough/uncertain/too_short"),
     ] = None,
-    user_money_horizon_years: Annotated[str | None, typer.Option("--user-money-horizon-years", help="用户资金不用年限")] = None,
-    current_stage: Annotated[str | None, typer.Option("--current-stage", help="当前阶段与关键变化说明")] = None,
+    user_money_horizon_years: Annotated[
+        str | None, typer.Option("--user-money-horizon-years", help="用户资金不用年限")
+    ] = None,
+    current_stage: Annotated[
+        str | None, typer.Option("--current-stage", help="当前阶段与关键变化说明")
+    ] = None,
     final_judgment: Annotated[
         str,
-        typer.Option("--final-judgment", help="最终判断：worth_holding/needs_attention/suggest_replace"),
+        typer.Option(
+            "--final-judgment", help="最终判断：worth_holding/needs_attention/suggest_replace"
+        ),
     ] = "needs_attention",
-    force_refresh: Annotated[bool, typer.Option("--force-refresh", help="强制刷新底层数据")] = False,
+    force_refresh: Annotated[
+        bool, typer.Option("--force-refresh", help="强制刷新底层数据")
+    ] = False,
 ) -> None:
     """对指定基金执行完整分析，输出 8 章 Markdown 体检报告。
 
@@ -148,23 +166,33 @@ def checklist(
         typer.Exit: 始终以非零状态退出，提示用户使用 `analyze`。
     """
 
-    typer.echo(f"检查清单独立命令尚未接入 Service：{fund_code}。请先使用 analyze 生成完整报告。", err=True)
+    typer.echo(
+        f"检查清单独立命令尚未接入 Service：{fund_code}。请先使用 analyze 生成完整报告。", err=True
+    )
     raise typer.Exit(code=2)
 
 
 @app.command("extraction-snapshot")
 def extraction_snapshot(
-    run_id: Annotated[str, typer.Option("--run-id", help="本次快照运行 ID，如 p4-s1-20260519-004393")],
+    run_id: Annotated[
+        str, typer.Option("--run-id", help="本次快照运行 ID，如 p4-s1-20260519-004393")
+    ],
     report_year: Annotated[int, typer.Option("--report-year", help="年报年份")] = 2024,
-    fund_code: Annotated[str | None, typer.Option("--fund-code", help="指定单只基金代码；不传则按类别抽样")] = None,
+    fund_code: Annotated[
+        str | None, typer.Option("--fund-code", help="指定单只基金代码；不传则按类别抽样")
+    ] = None,
     source_csv: Annotated[
         Path,
         typer.Option("--source-csv", help="精选基金池 CSV 路径"),
     ] = DEFAULT_SELECTED_FUNDS_CSV,
     output_dir: Annotated[Path | None, typer.Option("--output-dir", help="显式输出目录")] = None,
-    sample_per_category: Annotated[int, typer.Option("--sample-per-category", help="未指定基金代码时每类抽样数量")] = 1,
+    sample_per_category: Annotated[
+        int, typer.Option("--sample-per-category", help="未指定基金代码时每类抽样数量")
+    ] = 1,
     limit: Annotated[int | None, typer.Option("--limit", help="最多抽取基金数量")] = None,
-    force_refresh: Annotated[bool, typer.Option("--force-refresh", help="强制刷新底层数据")] = False,
+    force_refresh: Annotated[
+        bool, typer.Option("--force-refresh", help="强制刷新底层数据")
+    ] = False,
 ) -> None:
     """生成精选基金池字段级抽取快照。
 
@@ -210,12 +238,21 @@ def extraction_snapshot(
 
 @app.command("extraction-score")
 def extraction_score(
-    snapshot_path: Annotated[Path, typer.Option("--snapshot-path", help="P4-S1 snapshot.jsonl 路径")],
+    snapshot_path: Annotated[
+        Path, typer.Option("--snapshot-path", help="P4-S1 snapshot.jsonl 路径")
+    ],
     source_csv: Annotated[
         Path,
         typer.Option("--source-csv", help="精选基金池 CSV 路径"),
     ] = DEFAULT_SELECTED_FUNDS_CSV,
     output_dir: Annotated[Path | None, typer.Option("--output-dir", help="显式输出目录")] = None,
+    golden_answer_path: Annotated[
+        Path | None,
+        typer.Option(
+            "--golden-answer-path",
+            help="strict golden answer JSON 路径；提供后执行 correctness 比对",
+        ),
+    ] = None,
 ) -> None:
     """对 P4-S1 snapshot 生成字段级 coverage / traceability 评分。
 
@@ -223,6 +260,7 @@ def extraction_score(
         snapshot_path: P4-S1 输出的 JSONL 快照路径。
         source_csv: 精选基金池 CSV 路径。
         output_dir: 显式输出目录。
+        golden_answer_path: strict golden answer JSON 路径；为空时只输出 FQ0 skeleton。
 
     Returns:
         无返回值，产物写入输出目录并在 stdout 打印路径。
@@ -237,6 +275,7 @@ def extraction_score(
                 snapshot_path=snapshot_path,
                 source_csv=source_csv,
                 output_dir=output_dir,
+                golden_answer_path=golden_answer_path,
             )
         )
     except Exception as exc:
@@ -258,7 +297,9 @@ def golden_prefill(
         typer.Option("--output-path", help="预填底稿输出路径"),
     ] = DEFAULT_GOLDEN_PREFILL_OUTPUT,
     report_year: Annotated[int, typer.Option("--report-year", help="年报年份")] = 2024,
-    force_refresh: Annotated[bool, typer.Option("--force-refresh", help="强制刷新底层数据")] = False,
+    force_refresh: Annotated[
+        bool, typer.Option("--force-refresh", help="强制刷新底层数据")
+    ] = False,
 ) -> None:
     """生成 correctness golden answer 自动预填底稿。
 
@@ -337,8 +378,12 @@ def golden_build(
 
 @app.command("quality-gate")
 def quality_gate(
-    score_path: Annotated[Path, typer.Option("--score-path", help="extraction-score 产出的 score.json 路径")] = DEFAULT_QUALITY_GATE_SCORE,
-    output_dir: Annotated[Path | None, typer.Option("--output-dir", help="质量 gate 输出目录")] = None,
+    score_path: Annotated[
+        Path, typer.Option("--score-path", help="extraction-score 产出的 score.json 路径")
+    ] = DEFAULT_QUALITY_GATE_SCORE,
+    output_dir: Annotated[
+        Path | None, typer.Option("--output-dir", help="质量 gate 输出目录")
+    ] = None,
 ) -> None:
     """基于 extraction-score 结果生成报告质量 gate。
 

@@ -423,15 +423,22 @@ def test_extraction_score_cli_is_thin_service_entry(monkeypatch, tmp_path) -> No
             "docs/code_20260519.csv",
             "--output-dir",
             str(tmp_path),
+            "--golden-answer-path",
+            "reports/golden-answers/golden-answer.json",
         ],
     )
 
     assert result.exit_code == 0
     assert "score_json:" in result.output
     assert _FakeExtractionScoreService.last_request is not None
-    assert _FakeExtractionScoreService.last_request.snapshot_path == Path("reports/extraction-snapshots/unit/snapshot.jsonl")
+    assert _FakeExtractionScoreService.last_request.snapshot_path == Path(
+        "reports/extraction-snapshots/unit/snapshot.jsonl"
+    )
     assert _FakeExtractionScoreService.last_request.source_csv == Path("docs/code_20260519.csv")
     assert _FakeExtractionScoreService.last_request.output_dir == tmp_path
+    assert _FakeExtractionScoreService.last_request.golden_answer_path == Path(
+        "reports/golden-answers/golden-answer.json"
+    )
 
 
 def test_golden_prefill_cli_is_thin_service_entry(monkeypatch, tmp_path) -> None:  # type: ignore[no-untyped-def]
@@ -470,7 +477,9 @@ def test_golden_prefill_cli_is_thin_service_entry(monkeypatch, tmp_path) -> None
     assert result.exit_code == 0
     assert "prefill:" in result.output
     assert _FakeGoldenPrefillService.last_request is not None
-    assert _FakeGoldenPrefillService.last_request.template_path == Path("docs/golden-answer-template.md")
+    assert _FakeGoldenPrefillService.last_request.template_path == Path(
+        "docs/golden-answer-template.md"
+    )
     assert _FakeGoldenPrefillService.last_request.output_path == output_path
     assert _FakeGoldenPrefillService.last_request.report_year == 2024
     assert _FakeGoldenPrefillService.last_request.force_refresh is True

@@ -7,6 +7,8 @@ from pathlib import Path
 import pytest
 
 from fund_agent.fund.extraction_score import (
+    CORRECTNESS_STATUS_UNAVAILABLE,
+    CorrectnessSummary,
     ExtractionScoreResult,
     GoldenSetSelection,
     ScoreThresholds,
@@ -53,6 +55,7 @@ def test_extraction_score_service_delegates_explicit_params(monkeypatch, tmp_pat
             score_markdown_path=tmp_path / "score.md",
             golden_set_path=tmp_path / "golden_set.json",
             field_scores=(),
+            fund_scores=(),
             golden_set=GoldenSetSelection(
                 source_csv=str(kwargs["source_csv"]),
                 records=(),
@@ -60,6 +63,19 @@ def test_extraction_score_service_delegates_explicit_params(monkeypatch, tmp_pat
                 exclusion_reason="fixture",
             ),
             thresholds=kwargs["thresholds"],
+            correctness=CorrectnessSummary(
+                status=CORRECTNESS_STATUS_UNAVAILABLE,
+                golden_answer_path=str(kwargs["golden_answer_path"]),
+                total_records=0,
+                comparable_records=0,
+                matched_records=0,
+                mismatched_records=0,
+                unavailable_records=0,
+                skipped_records=0,
+                accuracy_rate=None,
+                reason="fixture",
+                record_results=(),
+            ),
         )
 
     monkeypatch.setattr(extraction_score_service, "run_extraction_score", fake_run_extraction_score)
@@ -70,6 +86,7 @@ def test_extraction_score_service_delegates_explicit_params(monkeypatch, tmp_pat
         source_csv=Path("docs/code_20260519.csv"),
         output_dir=tmp_path,
         thresholds=thresholds,
+        golden_answer_path=tmp_path / "golden-answer.json",
     )
 
     result = service.run(request)
@@ -81,6 +98,7 @@ def test_extraction_score_service_delegates_explicit_params(monkeypatch, tmp_pat
         "source_csv": Path("docs/code_20260519.csv"),
         "output_dir": tmp_path,
         "thresholds": thresholds,
+        "golden_answer_path": tmp_path / "golden-answer.json",
     }
 
 

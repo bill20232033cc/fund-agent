@@ -1,8 +1,9 @@
-"""精选基金池字段级抽取评分能力。
+"""精选基金池字段级抽取评分与 correctness 比对能力。
 
 本模块位于 Capability 层，负责 P4-S2 前半段质量基线：
 只消费 P4-S1 `snapshot.jsonl` 字段级记录，计算 coverage / traceability，
-并从精选基金池 CSV 中选择最小 golden set。当前 slice 不实现 correctness 评分。
+并从精选基金池 CSV 中选择最小 golden set。P4-R10 起额外消费 strict
+golden answer JSON，对 snapshot 明确暴露的可比字段执行 correctness 比对。
 """
 
 from __future__ import annotations
@@ -19,6 +20,11 @@ from fund_agent.fund.extraction_snapshot import (
     SelectedFundRecord,
     load_selected_funds,
     validate_selected_fund_pool,
+)
+from fund_agent.fund.golden_answer import (
+    GoldenAnswerFund,
+    GoldenAnswerRecord,
+    load_golden_answer_json,
 )
 
 FIELD_PRIORITY_BY_NAME: Final[dict[str, str]] = {
@@ -58,6 +64,13 @@ REQUIRED_GOLDEN_CATEGORIES: Final[tuple[str, ...]] = (
 GOLDEN_OUTPUT_FILENAME: Final[str] = "golden_set.json"
 SCORE_JSON_FILENAME: Final[str] = "score.json"
 SCORE_MARKDOWN_FILENAME: Final[str] = "score.md"
+CORRECTNESS_STATUS_AVAILABLE: Final[str] = "available"
+CORRECTNESS_STATUS_UNAVAILABLE: Final[str] = "unavailable"
+CORRECTNESS_MATCH: Final[str] = "match"
+CORRECTNESS_MISMATCH: Final[str] = "mismatch"
+CORRECTNESS_UNAVAILABLE: Final[str] = "unavailable"
+CLASSIFIED_FUND_TYPE_FIELD: Final[str] = "classified_fund_type"
+CLASSIFIED_FUND_TYPE_SUB_FIELD: Final[str] = "fund_type"
 
 
 @dataclass(frozen=True, slots=True)
@@ -102,6 +115,95 @@ class FieldScoreRow:
     coverage_rate: float
     traceability_rate: float
     status: str
+
+
+@dataclass(frozen=True, slots=True)
+class FundScoreRow:
+    """单只基金的抽取质量汇总行。
+
+    Attributes:
+        fund_code: 基金代码。
+        fund_name: snapshot 中的基金名称。
+        app_category: App 类别。
+        records: 参与该基金评分的 snapshot 记录数。
+        p0_status: 该基金 P0 字段聚合状态。
+        p1_status: 该基金 P1 字段聚合状态。
+        status: 该基金整体状态，优先反映 P0/P1 阻断风险。
+        p0_failed_fields: 该基金 fail 的 P0 字段名。
+        p1_failed_fields: 该基金 fail 的 P1 字段名。
+    """
+
+    fund_code: str
+    fund_name: str | None
+    app_category: str | None
+    records: int
+    p0_status: str
+    p1_status: str
+    status: str
+    p0_failed_fields: tuple[str, ...]
+    p1_failed_fields: tuple[str, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class CorrectnessRecordResult:
+    """单条 golden answer correctness 比对结果。
+
+    Attributes:
+        fund_code: 基金代码。
+        field_name: golden answer 字段名。
+        sub_field: golden answer 子字段。
+        status: `match / mismatch / unavailable`。
+        expected_value: 人工审核真值。
+        actual_value: snapshot 明确暴露的可比值；不可比时为空。
+        normalized_expected: 保守 normalize 后的期望值。
+        normalized_actual: 保守 normalize 后的实际值。
+        reason: 状态说明。
+        confidence: golden answer 置信度。
+        source: golden answer 来源。
+    """
+
+    fund_code: str
+    field_name: str
+    sub_field: str
+    status: str
+    expected_value: str
+    actual_value: str | None
+    normalized_expected: str
+    normalized_actual: str | None
+    reason: str
+    confidence: str
+    source: str
+
+
+@dataclass(frozen=True, slots=True)
+class CorrectnessSummary:
+    """correctness 自动比对汇总。
+
+    Attributes:
+        status: `available / unavailable`。
+        golden_answer_path: strict golden answer JSON 路径；未提供时为空。
+        total_records: golden answer 有效记录数，不包含 skipped fields。
+        comparable_records: 可直接比对记录数，作为 correctness 分母。
+        matched_records: 匹配记录数。
+        mismatched_records: 明确冲突记录数。
+        unavailable_records: golden 有效但 snapshot 未暴露可比值的记录数。
+        skipped_records: golden 中明确 skipped 的记录数。
+        accuracy_rate: matched_records / comparable_records。
+        reason: 汇总说明。
+        record_results: 字段级 correctness 明细。
+    """
+
+    status: str
+    golden_answer_path: str | None
+    total_records: int
+    comparable_records: int
+    matched_records: int
+    mismatched_records: int
+    unavailable_records: int
+    skipped_records: int
+    accuracy_rate: float | None
+    reason: str
+    record_results: tuple[CorrectnessRecordResult, ...]
 
 
 @dataclass(frozen=True, slots=True)
@@ -152,8 +254,10 @@ class ExtractionScoreResult:
         score_markdown_path: Markdown 汇总路径。
         golden_set_path: 最小 golden set JSON 路径。
         field_scores: 字段级评分行。
+        fund_scores: 单只基金质量汇总行。
         golden_set: 最小 golden set 选择结果。
         thresholds: 本次评分阈值。
+        correctness: strict golden answer correctness 比对汇总。
     """
 
     snapshot_path: Path
@@ -163,8 +267,10 @@ class ExtractionScoreResult:
     score_markdown_path: Path
     golden_set_path: Path
     field_scores: tuple[FieldScoreRow, ...]
+    fund_scores: tuple[FundScoreRow, ...]
     golden_set: GoldenSetSelection
     thresholds: ScoreThresholds
+    correctness: CorrectnessSummary
 
 
 @dataclass(slots=True)
@@ -240,7 +346,38 @@ def score_snapshot_records(
         if _truthy_bool(record.get("anchor_present")):
             counter.traceable_records += 1
 
-    return tuple(_build_score_row(counter, thresholds=thresholds) for counter in _ordered_counters(counters))
+    return tuple(
+        _build_score_row(counter, thresholds=thresholds) for counter in _ordered_counters(counters)
+    )
+
+
+def score_fund_records(
+    records: Sequence[Mapping[str, object]],
+    *,
+    thresholds: ScoreThresholds = ScoreThresholds(),
+) -> tuple[FundScoreRow, ...]:
+    """从 snapshot 记录计算单只基金质量汇总。
+
+    Args:
+        records: P4-S1 `snapshot.jsonl` 解析后的字段级记录。
+        thresholds: 显式评分阈值。
+
+    Returns:
+        按基金代码排序的单基金质量汇总行。
+
+    Raises:
+        ValueError: 阈值非法或记录缺少 `fund_code` / `field_name` / `field_group` 时抛出。
+    """
+
+    _validate_thresholds(thresholds)
+    records_by_fund: dict[str, list[Mapping[str, object]]] = {}
+    for record in records:
+        fund_code = _required_text(record, "fund_code")
+        records_by_fund.setdefault(fund_code, []).append(record)
+    return tuple(
+        _build_fund_score_row(fund_code, fund_records, thresholds=thresholds)
+        for fund_code, fund_records in sorted(records_by_fund.items())
+    )
 
 
 def select_minimal_golden_set(source_csv: Path = DEFAULT_SELECTED_FUNDS_CSV) -> GoldenSetSelection:
@@ -307,6 +444,7 @@ def run_extraction_score(
     source_csv: Path = DEFAULT_SELECTED_FUNDS_CSV,
     output_dir: Path | None = None,
     thresholds: ScoreThresholds = ScoreThresholds(),
+    golden_answer_path: Path | None = None,
 ) -> ExtractionScoreResult:
     """读取 snapshot 并输出 P4-S2 字段级评分产物。
 
@@ -315,6 +453,7 @@ def run_extraction_score(
         source_csv: 精选基金池 CSV，用于选择最小 golden set。
         output_dir: 显式输出目录；为空时使用 snapshot 所在目录。
         thresholds: 显式评分阈值。
+        golden_answer_path: strict golden answer JSON 路径；为空时不执行 correctness。
 
     Returns:
         评分运行结果和输出路径。
@@ -327,7 +466,12 @@ def run_extraction_score(
 
     records = load_snapshot_records(snapshot_path)
     field_scores = score_snapshot_records(records, thresholds=thresholds)
+    fund_scores = score_fund_records(records, thresholds=thresholds)
     golden_set = select_minimal_golden_set(source_csv)
+    correctness = compare_snapshot_correctness(
+        records=records,
+        golden_answer_path=golden_answer_path,
+    )
     resolved_output_dir = output_dir or snapshot_path.parent
     resolved_output_dir.mkdir(parents=True, exist_ok=True)
     score_json_path = resolved_output_dir / SCORE_JSON_FILENAME
@@ -341,13 +485,84 @@ def run_extraction_score(
         score_markdown_path=score_markdown_path,
         golden_set_path=golden_set_path,
         field_scores=field_scores,
+        fund_scores=fund_scores,
         golden_set=golden_set,
         thresholds=thresholds,
+        correctness=correctness,
     )
-    score_json_path.write_text(json.dumps(_score_json_payload(result), ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    score_json_path.write_text(
+        json.dumps(_score_json_payload(result), ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
     score_markdown_path.write_text(_score_markdown(result), encoding="utf-8")
-    golden_set_path.write_text(json.dumps(asdict(golden_set), ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    golden_set_path.write_text(
+        json.dumps(asdict(golden_set), ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+    )
     return result
+
+
+def compare_snapshot_correctness(
+    *,
+    records: Sequence[Mapping[str, object]],
+    golden_answer_path: Path | None,
+) -> CorrectnessSummary:
+    """用 strict golden answer JSON 对 snapshot 明确字段做 correctness 比对。
+
+    当前 P4-R10 最小闭环只比较 snapshot 直接暴露的 `classified_fund_type.fund_type`。
+    其他 golden 有效记录标记为 `unavailable`，不进入 correctness 分母；skipped
+    golden 字段只计入 skipped 数，不进入分母。见模板第 1 章产品本质的基金类型识别约束。
+
+    Args:
+        records: P4-S1 `snapshot.jsonl` 解析后的字段级记录。
+        golden_answer_path: strict golden answer JSON 路径；为空时返回 unavailable。
+
+    Returns:
+        correctness 汇总。
+
+    Raises:
+        FileNotFoundError: golden answer JSON 路径存在但文件不存在时抛出。
+        GoldenAnswerValidationError: strict JSON 不合法时由 loader 抛出。
+        json.JSONDecodeError: strict JSON 非法时由 loader 抛出。
+        ValueError: snapshot 记录缺少必要字段时抛出。
+    """
+
+    if golden_answer_path is None:
+        return CorrectnessSummary(
+            status=CORRECTNESS_STATUS_UNAVAILABLE,
+            golden_answer_path=None,
+            total_records=0,
+            comparable_records=0,
+            matched_records=0,
+            mismatched_records=0,
+            unavailable_records=0,
+            skipped_records=0,
+            accuracy_rate=None,
+            reason="未提供 strict golden answer JSON；correctness 未接入。",
+            record_results=(),
+        )
+    golden_funds = load_golden_answer_json(golden_answer_path)
+    actual_index = _snapshot_actual_index(records)
+    record_results = _compare_golden_funds(golden_funds, actual_index)
+    comparable = [
+        row for row in record_results if row.status in {CORRECTNESS_MATCH, CORRECTNESS_MISMATCH}
+    ]
+    matched_records = sum(1 for row in comparable if row.status == CORRECTNESS_MATCH)
+    mismatched_records = sum(1 for row in comparable if row.status == CORRECTNESS_MISMATCH)
+    unavailable_records = sum(1 for row in record_results if row.status == CORRECTNESS_UNAVAILABLE)
+    skipped_records = sum(len(fund.skipped_fields) for fund in golden_funds)
+    return CorrectnessSummary(
+        status=CORRECTNESS_STATUS_AVAILABLE,
+        golden_answer_path=str(golden_answer_path),
+        total_records=sum(len(fund.records) for fund in golden_funds),
+        comparable_records=len(comparable),
+        matched_records=matched_records,
+        mismatched_records=mismatched_records,
+        unavailable_records=unavailable_records,
+        skipped_records=skipped_records,
+        accuracy_rate=_optional_rate(matched_records, len(comparable)),
+        reason="仅对 snapshot 显式暴露的可比字段做保守 normalize 后比对；不可比字段不进入分母。",
+        record_results=tuple(record_results),
+    )
 
 
 def _validate_thresholds(thresholds: ScoreThresholds) -> None:
@@ -420,7 +635,9 @@ def _truthy_bool(value: object) -> bool:
     return False
 
 
-def _ordered_counters(counters: Mapping[tuple[str, str], _FieldScoreCounter]) -> list[_FieldScoreCounter]:
+def _ordered_counters(
+    counters: Mapping[tuple[str, str], _FieldScoreCounter],
+) -> list[_FieldScoreCounter]:
     """按当前 snapshot 字段顺序排列评分计数器。
 
     Args:
@@ -470,6 +687,111 @@ def _build_score_row(counter: _FieldScoreCounter, *, thresholds: ScoreThresholds
     )
 
 
+def _build_fund_score_row(
+    fund_code: str,
+    records: Sequence[Mapping[str, object]],
+    *,
+    thresholds: ScoreThresholds,
+) -> FundScoreRow:
+    """构造单只基金的抽取质量汇总行。
+
+    Args:
+        fund_code: 基金代码。
+        records: 该基金对应的 snapshot 记录。
+        thresholds: 显式评分阈值。
+
+    Returns:
+        单基金质量汇总。
+
+    Raises:
+        ValueError: snapshot 记录缺少字段名或字段组时抛出。
+    """
+
+    field_scores = _score_records_for_single_fund(records, thresholds=thresholds)
+    p0_failed_fields = tuple(
+        row.field_name for row in field_scores if row.priority == "P0" and row.status == STATUS_FAIL
+    )
+    p1_failed_fields = tuple(
+        row.field_name for row in field_scores if row.priority == "P1" and row.status == STATUS_FAIL
+    )
+    p0_rows = [row for row in field_scores if row.priority == "P0"]
+    p1_rows = [row for row in field_scores if row.priority == "P1"]
+    p0_status = _aggregate_status(p0_rows)
+    p1_status = _aggregate_status(p1_rows)
+    return FundScoreRow(
+        fund_code=fund_code,
+        fund_name=_first_optional_text(records, "fund_name"),
+        app_category=_first_optional_text(records, "app_category"),
+        records=len(records),
+        p0_status=p0_status,
+        p1_status=p1_status,
+        status=_aggregate_status((*p0_rows, *p1_rows)),
+        p0_failed_fields=p0_failed_fields,
+        p1_failed_fields=p1_failed_fields,
+    )
+
+
+def _score_records_for_single_fund(
+    records: Sequence[Mapping[str, object]],
+    *,
+    thresholds: ScoreThresholds,
+) -> tuple[FieldScoreRow, ...]:
+    """计算单只基金内部的字段级评分。
+
+    Args:
+        records: 单只基金的 snapshot 记录。
+        thresholds: 显式评分阈值。
+
+    Returns:
+        字段级评分行。
+
+    Raises:
+        ValueError: 记录缺少 `field_name` / `field_group` 时抛出。
+    """
+
+    counters: dict[tuple[str, str], _FieldScoreCounter] = {}
+    for record in records:
+        field_group = _required_text(record, "field_group")
+        field_name = _required_text(record, "field_name")
+        key = (field_group, field_name)
+        counter = counters.setdefault(
+            key,
+            _FieldScoreCounter(field_group=field_group, field_name=field_name),
+        )
+        counter.records += 1
+        if _truthy_bool(record.get("value_present")):
+            counter.covered_records += 1
+        if _truthy_bool(record.get("anchor_present")):
+            counter.traceable_records += 1
+    return tuple(
+        _build_score_row(counter, thresholds=thresholds) for counter in _ordered_counters(counters)
+    )
+
+
+def _first_optional_text(records: Sequence[Mapping[str, object]], key: str) -> str | None:
+    """读取记录集合中的第一个非空文本。
+
+    Args:
+        records: snapshot 记录集合。
+        key: 字段名。
+
+    Returns:
+        第一个非空文本；不存在时返回 `None`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    for record in records:
+        value = record.get(key)
+        if value is None:
+            continue
+        text = str(value).strip()
+        if text:
+            return text
+    return None
+
+
 def _rate(numerator: int, denominator: int) -> float:
     """计算比例。
 
@@ -489,7 +811,199 @@ def _rate(numerator: int, denominator: int) -> float:
     return numerator / denominator
 
 
-def _score_status(coverage_rate: float, traceability_rate: float, *, thresholds: ScoreThresholds) -> str:
+def _optional_rate(numerator: int, denominator: int) -> float | None:
+    """计算可为空比例。
+
+    Args:
+        numerator: 分子。
+        denominator: 分母。
+
+    Returns:
+        分母为 0 时返回 `None`，否则返回 `numerator / denominator`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if denominator == 0:
+        return None
+    return numerator / denominator
+
+
+def _snapshot_actual_index(
+    records: Sequence[Mapping[str, object]],
+) -> dict[tuple[str, str, str], str | None]:
+    """构造 snapshot 可比字段索引。
+
+    Args:
+        records: P4-S1 snapshot 记录。
+
+    Returns:
+        `(fund_code, field_name, sub_field)` 到实际值的索引；值为 `None` 表示字段明确缺失。
+
+    Raises:
+        ValueError: snapshot 记录缺少 `fund_code` 或 `field_name` 时抛出。
+    """
+
+    actual_index: dict[tuple[str, str, str], str | None] = {}
+    for record in records:
+        fund_code = _required_text(record, "fund_code")
+        field_name = _required_text(record, "field_name")
+        if field_name != CLASSIFIED_FUND_TYPE_FIELD:
+            continue
+        actual_value = _optional_record_text(record, CLASSIFIED_FUND_TYPE_FIELD)
+        if not _truthy_bool(record.get("value_present")):
+            actual_value = None
+        actual_index[(fund_code, CLASSIFIED_FUND_TYPE_FIELD, CLASSIFIED_FUND_TYPE_SUB_FIELD)] = (
+            actual_value
+        )
+    return actual_index
+
+
+def _compare_golden_funds(
+    golden_funds: Sequence[GoldenAnswerFund],
+    actual_index: Mapping[tuple[str, str, str], str | None],
+) -> list[CorrectnessRecordResult]:
+    """对 golden answer 基金集合执行字段级 correctness 比对。
+
+    Args:
+        golden_funds: strict golden answer 基金集合。
+        actual_index: snapshot 可比字段索引。
+
+    Returns:
+        correctness 明细列表。
+
+    Raises:
+        无显式抛出。
+    """
+
+    results: list[CorrectnessRecordResult] = []
+    for fund in golden_funds:
+        for record in fund.records:
+            results.append(_compare_golden_record(record, actual_index))
+    return results
+
+
+def _compare_golden_record(
+    record: GoldenAnswerRecord,
+    actual_index: Mapping[tuple[str, str, str], str | None],
+) -> CorrectnessRecordResult:
+    """对单条 golden answer 记录执行 correctness 比对。
+
+    Args:
+        record: `GoldenAnswerRecord` 对象。
+        actual_index: snapshot 可比字段索引。
+
+    Returns:
+        单条 correctness 结果。
+
+    Raises:
+        无显式抛出。
+    """
+
+    fund_code = record.fund_code
+    field_name = record.field_name
+    sub_field = record.sub_field
+    expected_value = record.expected_value
+    confidence = record.confidence
+    source = record.source
+    normalized_expected = _normalize_comparable_value(expected_value)
+    key = (fund_code, field_name, sub_field)
+    if key not in actual_index:
+        return CorrectnessRecordResult(
+            fund_code=fund_code,
+            field_name=field_name,
+            sub_field=sub_field,
+            status=CORRECTNESS_UNAVAILABLE,
+            expected_value=expected_value,
+            actual_value=None,
+            normalized_expected=normalized_expected,
+            normalized_actual=None,
+            reason="snapshot 未显式暴露该 golden 子字段；不进入 correctness 分母。",
+            confidence=confidence,
+            source=source,
+        )
+    actual_value = actual_index[key]
+    if actual_value is None:
+        return CorrectnessRecordResult(
+            fund_code=fund_code,
+            field_name=field_name,
+            sub_field=sub_field,
+            status=CORRECTNESS_MISMATCH,
+            expected_value=expected_value,
+            actual_value=None,
+            normalized_expected=normalized_expected,
+            normalized_actual=None,
+            reason="golden 期望存在该字段，但 snapshot 明确标记为缺失。",
+            confidence=confidence,
+            source=source,
+        )
+    normalized_actual = _normalize_comparable_value(actual_value)
+    status = CORRECTNESS_MATCH if normalized_actual == normalized_expected else CORRECTNESS_MISMATCH
+    reason = (
+        "保守 normalize 后完全一致。"
+        if status == CORRECTNESS_MATCH
+        else "保守 normalize 后不一致。"
+    )
+    return CorrectnessRecordResult(
+        fund_code=fund_code,
+        field_name=field_name,
+        sub_field=sub_field,
+        status=status,
+        expected_value=expected_value,
+        actual_value=actual_value,
+        normalized_expected=normalized_expected,
+        normalized_actual=normalized_actual,
+        reason=reason,
+        confidence=confidence,
+        source=source,
+    )
+
+
+def _optional_record_text(record: Mapping[str, object], key: str) -> str | None:
+    """读取 snapshot 记录中的可选文本字段。
+
+    Args:
+        record: snapshot 记录。
+        key: 字段名。
+
+    Returns:
+        非空文本；缺失或空白时返回 `None`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    value = record.get(key)
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
+
+
+def _normalize_comparable_value(value: object) -> str:
+    """对可比字段执行保守 normalize。
+
+    该函数只做大小写、全角空白和连续空白归一化，不做同义词映射、不补值，
+    避免用间接证据或经验推断修正 correctness。
+
+    Args:
+        value: 原始值。
+
+    Returns:
+        归一化后的文本。
+
+    Raises:
+        无显式抛出。
+    """
+
+    text = str(value).strip().replace("\u3000", " ")
+    return " ".join(text.split()).casefold()
+
+
+def _score_status(
+    coverage_rate: float, traceability_rate: float, *, thresholds: ScoreThresholds
+) -> str:
     """根据 coverage / traceability 阈值计算状态。
 
     Args:
@@ -504,9 +1018,15 @@ def _score_status(coverage_rate: float, traceability_rate: float, *, thresholds:
         无显式抛出。
     """
 
-    if coverage_rate >= thresholds.pass_coverage and traceability_rate >= thresholds.pass_traceability:
+    if (
+        coverage_rate >= thresholds.pass_coverage
+        and traceability_rate >= thresholds.pass_traceability
+    ):
         return STATUS_PASS
-    if coverage_rate >= thresholds.watch_coverage and traceability_rate >= thresholds.watch_traceability:
+    if (
+        coverage_rate >= thresholds.watch_coverage
+        and traceability_rate >= thresholds.watch_traceability
+    ):
         return STATUS_WATCH
     return STATUS_FAIL
 
@@ -621,14 +1141,13 @@ def _score_json_payload(result: ExtractionScoreResult) -> dict[str, object]:
         "source_csv": str(result.source_csv),
         "thresholds": asdict(result.thresholds),
         "field_count": len(result.field_scores),
+        "fund_count": len(result.fund_scores),
         "status_counts": dict(sorted(status_counts.items())),
         "p0_status": _aggregate_status(p0_rows),
         "field_scores": [asdict(row) for row in result.field_scores],
+        "fund_scores": [asdict(row) for row in result.fund_scores],
         "golden_set": asdict(result.golden_set),
-        "correctness": {
-            "status": "not_implemented",
-            "reason": "P4-S2 前半段只实现 coverage / traceability；人工 golden answer 留到 P4-S2 后半段。",
-        },
+        "correctness": asdict(result.correctness),
     }
 
 
@@ -675,9 +1194,12 @@ def _score_markdown(result: ExtractionScoreResult) -> str:
         f"- snapshot_path: `{result.snapshot_path}`",
         f"- source_csv: `{result.source_csv}`",
         f"- field_count: {len(result.field_scores)}",
+        f"- fund_count: {len(result.fund_scores)}",
         f"- p0_status: `{_aggregate_status([row for row in result.field_scores if row.priority == 'P0'])}`",
         f"- thresholds: coverage pass `{result.thresholds.pass_coverage:.0%}` / watch `{result.thresholds.watch_coverage:.0%}`, traceability pass `{result.thresholds.pass_traceability:.0%}` / watch `{result.thresholds.watch_traceability:.0%}`",
-        "- correctness: `not_implemented`（P4-S2 后半段再引入人工 golden answer）",
+        f"- correctness: `{result.correctness.status}`",
+        f"- correctness_comparable_records: {result.correctness.comparable_records}",
+        f"- correctness_mismatched_records: {result.correctness.mismatched_records}",
         "",
         "## Status Counts",
         "",
@@ -686,6 +1208,60 @@ def _score_markdown(result: ExtractionScoreResult) -> str:
     ]
     for status in (STATUS_PASS, STATUS_WATCH, STATUS_FAIL):
         lines.append(f"| {status} | {status_counts.get(status, 0)} |")
+
+    lines.extend(
+        [
+            "",
+            "## Correctness",
+            "",
+            f"- golden_answer_path: `{result.correctness.golden_answer_path or ''}`",
+            f"- total_records: {result.correctness.total_records}",
+            f"- comparable_records: {result.correctness.comparable_records}",
+            f"- matched_records: {result.correctness.matched_records}",
+            f"- mismatched_records: {result.correctness.mismatched_records}",
+            f"- unavailable_records: {result.correctness.unavailable_records}",
+            f"- skipped_records: {result.correctness.skipped_records}",
+            f"- accuracy_rate: `{_format_optional_rate(result.correctness.accuracy_rate)}`",
+            f"- reason: {result.correctness.reason}",
+            "",
+            "| fund_code | field | sub_field | status | expected | actual | reason |",
+            "|---|---|---|---|---|---|---|",
+        ]
+    )
+    for row in result.correctness.record_results:
+        lines.append(
+            "| "
+            f"{row.fund_code} | "
+            f"{row.field_name} | "
+            f"{row.sub_field} | "
+            f"{row.status} | "
+            f"{_escape_markdown_cell(row.expected_value)} | "
+            f"{_escape_markdown_cell(row.actual_value or '')} | "
+            f"{_escape_markdown_cell(row.reason)} |"
+        )
+
+    lines.extend(
+        [
+            "",
+            "## Fund Scores",
+            "",
+            "| fund_code | fund_name | app_category | records | p0_status | p1_status | status | p0_failed_fields | p1_failed_fields |",
+            "|---|---|---|---:|---|---|---|---|---|",
+        ]
+    )
+    for row in result.fund_scores:
+        lines.append(
+            "| "
+            f"{row.fund_code} | "
+            f"{row.fund_name or ''} | "
+            f"{row.app_category or ''} | "
+            f"{row.records} | "
+            f"{row.p0_status} | "
+            f"{row.p1_status} | "
+            f"{row.status} | "
+            f"{', '.join(row.p0_failed_fields)} | "
+            f"{', '.join(row.p1_failed_fields)} |"
+        )
 
     lines.extend(
         [
@@ -735,3 +1311,37 @@ def _score_markdown(result: ExtractionScoreResult) -> str:
         ]
     )
     return "\n".join(lines) + "\n"
+
+
+def _format_optional_rate(value: float | None) -> str:
+    """格式化可为空比率。
+
+    Args:
+        value: 比率值。
+
+    Returns:
+        一位小数百分比；空值返回 `n/a`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if value is None:
+        return "n/a"
+    return f"{value:.1%}"
+
+
+def _escape_markdown_cell(value: str) -> str:
+    """转义 Markdown 表格单元格。
+
+    Args:
+        value: 原始文本。
+
+    Returns:
+        转义竖线并压平换行后的文本。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return value.replace("|", "\\|").replace("\n", " ")

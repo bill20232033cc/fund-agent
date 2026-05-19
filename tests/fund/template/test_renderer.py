@@ -135,6 +135,7 @@ def _bundle(*, missing: bool = False, anchor_without_row: bool = False) -> Struc
         if missing
         else {
             "investment_objective": "追求长期资本增值",
+            "style_positioning": "价值成长均衡",
             "investment_scope": "主要投资股票和债券",
             "investment_strategy": "均衡配置",
         },
@@ -161,7 +162,7 @@ def _bundle(*, missing: bool = False, anchor_without_row: bool = False) -> Struc
     )
     manager_alignment = _field({"manager_holding": "基金经理持有本基金"}, "§9", "manager_alignment")
     manager_strategy = _field(
-        {"strategy_summary": "坚持价值与成长均衡配置", "style_positioning": "价值成长均衡"},
+        {"strategy_summary": "坚持价值与成长均衡配置"},
         "§4",
         "manager_strategy_text",
     )
@@ -275,7 +276,7 @@ def _consistency() -> ConsistencyCheckResult:
             signal="green",
             declared="value",
             actual="value",
-            anchors=(_anchor("§4", "style_positioning"),),
+            anchors=(_anchor("§2", "style_positioning"),),
             reason="风格一致。",
         ),
         ConsistencyDimensionResult(

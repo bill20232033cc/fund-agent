@@ -22,6 +22,7 @@
 | basic_identity | inception_date | | | |
 | product_profile | investment_objective | | | |
 | product_profile | investment_scope | | | |
+| product_profile | style_positioning | | | |
 | benchmark | benchmark_name | | | |
 | fee_schedule | — | — | — | 当前 slice 不处理 |
 | classified_fund_type | fund_type | | | |
@@ -29,7 +30,6 @@
 | nav_benchmark_performance | benchmark_return_rate | | | |
 | investor_return | — | — | — | 当前 slice 不处理 |
 | manager_strategy_text | strategy_summary | | | |
-| manager_strategy_text | style_positioning | | | |
 | manager_strategy_text | market_outlook | | | |
 | turnover_rate | — | — | — | 当前 slice 不处理 |
 | manager_alignment | manager_holding | | | |
@@ -54,6 +54,7 @@
 | basic_identity | inception_date | | | |
 | product_profile | investment_objective | | | |
 | product_profile | investment_scope | | | |
+| product_profile | style_positioning | | | |
 | benchmark | benchmark_name | | | |
 | fee_schedule | — | — | — | 当前 slice 不处理 |
 | classified_fund_type | fund_type | | | |
@@ -61,7 +62,6 @@
 | nav_benchmark_performance | benchmark_return_rate | | | |
 | investor_return | — | — | — | 当前 slice 不处理 |
 | manager_strategy_text | strategy_summary | | | |
-| manager_strategy_text | style_positioning | | | |
 | manager_strategy_text | market_outlook | | | |
 | turnover_rate | — | — | — | 当前 slice 不处理 |
 | manager_alignment | manager_holding | | | |
@@ -86,6 +86,7 @@
 | basic_identity | inception_date | | | |
 | product_profile | investment_objective | | | |
 | product_profile | investment_scope | | | |
+| product_profile | style_positioning | | | |
 | benchmark | benchmark_name | | | |
 | fee_schedule | — | — | — | 当前 slice 不处理 |
 | classified_fund_type | fund_type | | | |
@@ -93,7 +94,6 @@
 | nav_benchmark_performance | benchmark_return_rate | | | |
 | investor_return | — | — | — | 当前 slice 不处理 |
 | manager_strategy_text | strategy_summary | | | |
-| manager_strategy_text | style_positioning | | | |
 | manager_strategy_text | market_outlook | | | |
 | turnover_rate | — | — | — | 当前 slice 不处理 |
 | manager_alignment | manager_holding | | | |
@@ -118,6 +118,7 @@
 | basic_identity | inception_date | | | |
 | product_profile | investment_objective | | | |
 | product_profile | investment_scope | | | |
+| product_profile | style_positioning | | | |
 | benchmark | benchmark_name | | | |
 | fee_schedule | — | — | — | 当前 slice 不处理 |
 | classified_fund_type | fund_type | | | |
@@ -125,7 +126,6 @@
 | nav_benchmark_performance | benchmark_return_rate | | | |
 | investor_return | — | — | — | 当前 slice 不处理 |
 | manager_strategy_text | strategy_summary | | | |
-| manager_strategy_text | style_positioning | | | |
 | manager_strategy_text | market_outlook | | | |
 | turnover_rate | — | — | — | 当前 slice 不处理 |
 | manager_alignment | manager_holding | | | |
@@ -150,6 +150,7 @@
 | basic_identity | inception_date | | | |
 | product_profile | investment_objective | | | |
 | product_profile | investment_scope | | | |
+| product_profile | style_positioning | | | |
 | benchmark | benchmark_name | | | |
 | fee_schedule | — | — | — | 当前 slice 不处理 |
 | classified_fund_type | fund_type | | | |
@@ -157,7 +158,6 @@
 | nav_benchmark_performance | benchmark_return_rate | | | |
 | investor_return | — | — | — | 当前 slice 不处理 |
 | manager_strategy_text | strategy_summary | | | |
-| manager_strategy_text | style_positioning | | | |
 | manager_strategy_text | market_outlook | | | |
 | turnover_rate | — | — | — | 当前 slice 不处理 |
 | manager_alignment | manager_holding | | | |
@@ -182,6 +182,7 @@
 | basic_identity | inception_date | | | |
 | product_profile | investment_objective | | | |
 | product_profile | investment_scope | | | |
+| product_profile | style_positioning | | | |
 | benchmark | benchmark_name | | | |
 | fee_schedule | — | — | — | 当前 slice 不处理 |
 | classified_fund_type | fund_type | | | |
@@ -189,7 +190,6 @@
 | nav_benchmark_performance | benchmark_return_rate | | | |
 | investor_return | — | — | — | 当前 slice 不处理 |
 | manager_strategy_text | strategy_summary | | | |
-| manager_strategy_text | style_positioning | | | |
 | manager_strategy_text | market_outlook | | | |
 | turnover_rate | — | — | — | 当前 slice 不处理 |
 | manager_alignment | manager_holding | | | |

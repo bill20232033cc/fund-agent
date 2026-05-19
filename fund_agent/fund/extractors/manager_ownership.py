@@ -35,9 +35,6 @@ _FIELD_PATTERNS: Final[dict[str, tuple[tuple[str, tuple[str, ...]], ...]]] = {
     "strategy_summary": (
         (_SECTION_MANAGER_REPORT, (r"投资策略\s*[：:]\s*(.+)", r"报告期内投资策略\s*[：:]\s*(.+)")),
     ),
-    "style_positioning": (
-        (_SECTION_MANAGER_REPORT, (r"风格定位\s*[：:]\s*(.+)", r"投资风格\s*[：:]\s*(.+)")),
-    ),
     "market_outlook": (
         (_SECTION_MANAGER_REPORT, (r"后市展望\s*[：:]\s*(.+)", r"对后市的看法\s*[：:]\s*(.+)")),
     ),
@@ -640,14 +637,13 @@ def _build_manager_strategy_text(report: ParsedAnnualReport) -> ExtractedField[d
         report: 已解析年报对象。
 
     Returns:
-        管理人报告中的策略、风格与后市展望原文。
+        管理人报告中的策略与后市展望原文。
 
     Raises:
         无显式抛出。
     """
 
     strategy_summary = _extract_field(report, "strategy_summary")
-    style_positioning = _extract_field(report, "style_positioning")
     market_outlook = _extract_field(report, "market_outlook")
     if strategy_summary is None:
         strategy_summary = _extract_heading_block(
@@ -663,13 +659,12 @@ def _build_manager_strategy_text(report: ParsedAnnualReport) -> ExtractedField[d
         )
     return _build_field_from_matches(
         report=report,
-        matched_fields=(strategy_summary, style_positioning, market_outlook),
+        matched_fields=(strategy_summary, market_outlook),
         value={
             "strategy_summary": strategy_summary.value if strategy_summary else None,
-            "style_positioning": style_positioning.value if style_positioning else None,
             "market_outlook": market_outlook.value if market_outlook else None,
         },
-        missing_note="§4 未披露可规则化抽取的投资策略/风格/后市展望",
+        missing_note="§4 未披露可规则化抽取的投资策略/后市展望",
     )
 
 

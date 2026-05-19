@@ -1,8 +1,8 @@
 """报告质量 gate 能力。
 
 本模块属于 Capability 层，只消费 `extraction-score` 产出的 `score.json`，
-根据 coverage / traceability 质量信号生成报告质量 gate 结果。它不读取
-PDF、cache 或基金文档，也不执行 correctness 比对。
+根据 coverage / traceability / correctness 质量信号生成报告质量 gate 结果。
+它不读取 PDF、cache 或基金文档，也不执行 LLM 审计。
 """
 
 from __future__ import annotations
@@ -23,6 +23,9 @@ SEVERITY_INFO: Final[str] = "info"
 PRIORITY_P0: Final[str] = "P0"
 PRIORITY_P1: Final[str] = "P1"
 STATUS_FAIL: Final[str] = "fail"
+CORRECTNESS_STATUS_AVAILABLE: Final[str] = "available"
+CORRECTNESS_STATUS_UNAVAILABLE: Final[str] = "unavailable"
+CORRECTNESS_MISMATCH: Final[str] = "mismatch"
 
 
 @dataclass(frozen=True, slots=True)
@@ -32,20 +35,26 @@ class QualityGateIssue:
     Attributes:
         rule_code: 质量规则码。
         severity: 严重级别，取值为 `block / warn / info`。
+        fund_code: 关联基金代码；字段聚合或全局 issue 可为空。
         field_name: 关联字段名；全局 issue 可为空。
         priority: 字段优先级；全局 issue 可为空。
         message: 人类可读说明。
         coverage_rate: 字段 coverage；全局 issue 可为空。
         traceability_rate: 字段 traceability；全局 issue 可为空。
+        expected_value: correctness 期望值；非 correctness issue 为空。
+        actual_value: correctness 实际值；非 correctness issue 为空。
     """
 
     rule_code: str
     severity: str
+    fund_code: str | None
     field_name: str | None
     priority: str | None
     message: str
     coverage_rate: float | None = None
     traceability_rate: float | None = None
+    expected_value: str | None = None
+    actual_value: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -153,18 +162,100 @@ def _evaluate_score_payload(score_payload: Mapping[str, object]) -> list[Quality
         if not isinstance(raw_row, dict):
             raise ValueError(f"field_scores[{index}] 必须是 JSON object")
         issues.extend(_evaluate_field_score(raw_row, index))
-    correctness = score_payload.get("correctness")
-    if isinstance(correctness, dict) and correctness.get("status") == "not_implemented":
-        issues.append(
+    fund_scores = score_payload.get("fund_scores")
+    if fund_scores is not None:
+        if not isinstance(fund_scores, list):
+            raise ValueError("score.json 的 fund_scores 必须是 JSON array")
+        for index, raw_row in enumerate(fund_scores):
+            if not isinstance(raw_row, dict):
+                raise ValueError(f"fund_scores[{index}] 必须是 JSON object")
+            issues.extend(_evaluate_fund_score(raw_row, index))
+    issues.extend(_evaluate_correctness(score_payload.get("correctness")))
+    return issues
+
+
+def _evaluate_correctness(correctness: object) -> list[QualityGateIssue]:
+    """评估 score.json 中的 correctness 结果。
+
+    Args:
+        correctness: score payload 的 `correctness` 字段。
+
+    Returns:
+        correctness 相关 gate issue。
+
+    Raises:
+        ValueError: correctness 结构非法时抛出。
+    """
+
+    if not isinstance(correctness, dict):
+        return [
             QualityGateIssue(
                 rule_code="FQ0",
                 severity=SEVERITY_INFO,
+                fund_code=None,
+                field_name=None,
+                priority=None,
+                message="score.json 未包含 correctness；等待 strict golden-answer.json 接入",
+            )
+        ]
+    status = correctness.get("status")
+    if status in {"not_implemented", CORRECTNESS_STATUS_UNAVAILABLE}:
+        return [
+            QualityGateIssue(
+                rule_code="FQ0",
+                severity=SEVERITY_INFO,
+                fund_code=None,
                 field_name=None,
                 priority=None,
                 message="correctness 尚未接入；等待人工审核后的 golden-answer.json",
             )
-        )
+        ]
+    if status != CORRECTNESS_STATUS_AVAILABLE:
+        raise ValueError("score.json correctness.status 必须是 available / unavailable")
+    record_results = correctness.get("record_results", [])
+    if not isinstance(record_results, list):
+        raise ValueError("score.json correctness.record_results 必须是 JSON array")
+    issues: list[QualityGateIssue] = []
+    for index, raw_row in enumerate(record_results):
+        if not isinstance(raw_row, dict):
+            raise ValueError(f"correctness.record_results[{index}] 必须是 JSON object")
+        if raw_row.get("status") == CORRECTNESS_MISMATCH:
+            issues.append(_correctness_mismatch_issue(raw_row, index))
     return issues
+
+
+def _correctness_mismatch_issue(row: Mapping[str, object], index: int) -> QualityGateIssue:
+    """把 correctness mismatch 明细转成 FQ1 issue。
+
+    Args:
+        row: correctness.record_results 中的单行。
+        index: 行号，用于错误信息。
+
+    Returns:
+        FQ1 阻断 issue。
+
+    Raises:
+        ValueError: mismatch 行缺少必要文本时抛出。
+    """
+
+    fund_code = _required_correctness_text(row, "fund_code", index)
+    field_name = _required_correctness_text(row, "field_name", index)
+    sub_field = _required_correctness_text(row, "sub_field", index)
+    expected_value = _required_correctness_text(row, "expected_value", index)
+    actual_value = _optional_correctness_text(row, "actual_value")
+    reason = _required_correctness_text(row, "reason", index)
+    return QualityGateIssue(
+        rule_code="FQ1",
+        severity=SEVERITY_BLOCK,
+        fund_code=fund_code,
+        field_name=field_name,
+        priority=None,
+        message=(
+            f"基金 `{fund_code}` 的 `{field_name}.{sub_field}` 与 golden answer 明显冲突；{reason}"
+        ),
+        expected_value=expected_value,
+        actual_value=actual_value,
+    )
 
 
 def _evaluate_field_score(row: Mapping[str, object], index: int) -> list[QualityGateIssue]:
@@ -192,6 +283,7 @@ def _evaluate_field_score(row: Mapping[str, object], index: int) -> list[Quality
             QualityGateIssue(
                 rule_code="FQ2",
                 severity=SEVERITY_BLOCK,
+                fund_code=None,
                 field_name=field_name,
                 priority=priority,
                 message=f"P0 必须字段 `{field_name}` coverage/traceability 未达标，阻断报告可用状态",
@@ -204,6 +296,7 @@ def _evaluate_field_score(row: Mapping[str, object], index: int) -> list[Quality
                 QualityGateIssue(
                     rule_code="FQ3",
                     severity=SEVERITY_BLOCK,
+                    fund_code=None,
                     field_name=field_name,
                     priority=priority,
                     message=f"P0 必须字段 `{field_name}` 证据锚点不足",
@@ -216,11 +309,60 @@ def _evaluate_field_score(row: Mapping[str, object], index: int) -> list[Quality
             QualityGateIssue(
                 rule_code="FQ2",
                 severity=SEVERITY_WARN,
+                fund_code=None,
                 field_name=field_name,
                 priority=priority,
                 message=f"P1 关键字段 `{field_name}` coverage/traceability 未达标，报告应提示数据不足",
                 coverage_rate=coverage_rate,
                 traceability_rate=traceability_rate,
+            )
+        )
+    return issues
+
+
+def _evaluate_fund_score(row: Mapping[str, object], index: int) -> list[QualityGateIssue]:
+    """评估单只基金质量汇总行。
+
+    Args:
+        row: `fund_scores` 中的单行。
+        index: 行号，用于错误信息。
+
+    Returns:
+        该基金触发的 issue 列表。
+
+    Raises:
+        ValueError: 基金评分行缺少必要键时抛出。
+    """
+
+    fund_code = _required_fund_text(row, "fund_code", index)
+    p0_status = _required_fund_text(row, "p0_status", index)
+    p1_status = _required_fund_text(row, "p1_status", index)
+    issues: list[QualityGateIssue] = []
+    p0_failed_fields = _optional_text_list(row, "p0_failed_fields", index)
+    p1_failed_fields = _optional_text_list(row, "p1_failed_fields", index)
+    if p0_status == STATUS_FAIL:
+        issues.append(
+            QualityGateIssue(
+                rule_code="FQ2F",
+                severity=SEVERITY_BLOCK,
+                fund_code=fund_code,
+                field_name=None,
+                priority=PRIORITY_P0,
+                message=(
+                    f"基金 `{fund_code}` 存在 P0 字段失败，阻断单基金报告可用状态；"
+                    f"失败字段：{_join_fields(p0_failed_fields)}"
+                ),
+            )
+        )
+    if p1_status == STATUS_FAIL:
+        issues.append(
+            QualityGateIssue(
+                rule_code="FQ2F",
+                severity=SEVERITY_WARN,
+                fund_code=fund_code,
+                field_name=None,
+                priority=PRIORITY_P1,
+                message=f"基金 `{fund_code}` 存在 P1 字段失败；失败字段：{_join_fields(p1_failed_fields)}",
             )
         )
     return issues
@@ -245,6 +387,109 @@ def _required_text(row: Mapping[str, object], key: str, index: int) -> str:
     if not isinstance(value, str) or not value:
         raise ValueError(f"field_scores[{index}].{key} 必须是非空字符串")
     return value
+
+
+def _required_fund_text(row: Mapping[str, object], key: str, index: int) -> str:
+    """读取基金评分行中的必需文本。
+
+    Args:
+        row: 基金评分行。
+        key: 字段名。
+        index: 行号。
+
+    Returns:
+        非空文本。
+
+    Raises:
+        ValueError: 缺少字段或字段非文本时抛出。
+    """
+
+    value = row.get(key)
+    if not isinstance(value, str) or not value:
+        raise ValueError(f"fund_scores[{index}].{key} 必须是非空字符串")
+    return value
+
+
+def _optional_text_list(row: Mapping[str, object], key: str, index: int) -> tuple[str, ...]:
+    """读取基金评分行中的可选文本列表。
+
+    Args:
+        row: 基金评分行。
+        key: 字段名。
+        index: 行号。
+
+    Returns:
+        文本元组；缺失时返回空元组。
+
+    Raises:
+        ValueError: 字段存在但不是文本列表时抛出。
+    """
+
+    value = row.get(key)
+    if value is None:
+        return ()
+    if not isinstance(value, list) or any(not isinstance(item, str) for item in value):
+        raise ValueError(f"fund_scores[{index}].{key} 必须是字符串数组")
+    return tuple(value)
+
+
+def _required_correctness_text(row: Mapping[str, object], key: str, index: int) -> str:
+    """读取 correctness 明细行中的必需文本。
+
+    Args:
+        row: correctness 明细行。
+        key: 字段名。
+        index: 行号。
+
+    Returns:
+        非空文本。
+
+    Raises:
+        ValueError: 缺少字段或字段非文本时抛出。
+    """
+
+    value = row.get(key)
+    if not isinstance(value, str) or not value:
+        raise ValueError(f"correctness.record_results[{index}].{key} 必须是非空字符串")
+    return value
+
+
+def _optional_correctness_text(row: Mapping[str, object], key: str) -> str | None:
+    """读取 correctness 明细行中的可选文本。
+
+    Args:
+        row: correctness 明细行。
+        key: 字段名。
+
+    Returns:
+        文本或 `None`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    value = row.get(key)
+    if value is None:
+        return None
+    return str(value)
+
+
+def _join_fields(fields: tuple[str, ...]) -> str:
+    """格式化失败字段列表。
+
+    Args:
+        fields: 失败字段名。
+
+    Returns:
+        逗号分隔字段；空列表返回 `unknown`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if not fields:
+        return "unknown"
+    return ", ".join(fields)
 
 
 def _required_number(row: Mapping[str, object], key: str, index: int) -> float:
@@ -332,18 +577,21 @@ def _markdown_payload(result: QualityGateResult) -> str:
         "",
         "## Issues",
         "",
-        "| rule | severity | field | priority | coverage | traceability | message |",
-        "|---|---|---|---|---:|---:|---|",
+        "| rule | severity | fund_code | field | priority | coverage | traceability | expected | actual | message |",
+        "|---|---|---|---|---|---:|---:|---|---|---|",
     ]
     for issue in result.issues:
         lines.append(
             "| "
             f"{issue.rule_code} | "
             f"{issue.severity} | "
+            f"{issue.fund_code or ''} | "
             f"{issue.field_name or ''} | "
             f"{issue.priority or ''} | "
             f"{_format_rate(issue.coverage_rate)} | "
             f"{_format_rate(issue.traceability_rate)} | "
+            f"{_escape_markdown_cell(issue.expected_value or '')} | "
+            f"{_escape_markdown_cell(issue.actual_value or '')} | "
             f"{issue.message} |"
         )
     return "\n".join(lines) + "\n"
@@ -365,3 +613,19 @@ def _format_rate(value: float | None) -> str:
     if value is None:
         return ""
     return f"{value:.1%}"
+
+
+def _escape_markdown_cell(value: str) -> str:
+    """转义 Markdown 表格单元格。
+
+    Args:
+        value: 原始文本。
+
+    Returns:
+        转义竖线并压平换行后的文本。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return value.replace("|", "\\|").replace("\n", " ")
