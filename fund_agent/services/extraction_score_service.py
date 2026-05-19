@@ -26,6 +26,7 @@ class ExtractionScoreRequest:
         output_dir: 显式输出目录；为空时使用 snapshot 所在目录。
         thresholds: 显式评分阈值。
         golden_answer_path: strict golden answer JSON 路径；为空时不执行 correctness。
+        errors_path: P4-S1 输出的 `errors.jsonl`；为空时不纳入失败基金 accounting。
     """
 
     snapshot_path: Path
@@ -33,6 +34,7 @@ class ExtractionScoreRequest:
     output_dir: Path | None
     thresholds: ScoreThresholds = ScoreThresholds()
     golden_answer_path: Path | None = None
+    errors_path: Path | None = None
 
 
 class ExtractionScoreService:
@@ -63,6 +65,7 @@ class ExtractionScoreService:
             output_dir=request.output_dir,
             thresholds=request.thresholds,
             golden_answer_path=request.golden_answer_path,
+            errors_path=request.errors_path,
         )
 
 
@@ -83,6 +86,8 @@ def _validate_request(request: ExtractionScoreRequest) -> None:
         raise ValueError("snapshot_path 必须指向 .jsonl 文件")
     if request.golden_answer_path is not None and request.golden_answer_path.suffix != ".json":
         raise ValueError("golden_answer_path 必须指向 .json 文件")
+    if request.errors_path is not None and request.errors_path.suffix != ".jsonl":
+        raise ValueError("errors_path 必须指向 .jsonl 文件")
     if (
         request.output_dir is not None
         and request.output_dir.exists()

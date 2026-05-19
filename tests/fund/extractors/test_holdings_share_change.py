@@ -6,7 +6,7 @@ from fund_agent.fund.documents.models import DocumentKey, ParsedAnnualReport, Pa
 from fund_agent.fund.extractors.holdings_share_change import extract_holdings_share_change
 
 
-def _build_report(tables: tuple[ParsedTable, ...]) -> ParsedAnnualReport:
+def _build_report(tables: tuple[ParsedTable, ...], *, fund_code: str = "110011") -> ParsedAnnualReport:
     """构造带表格的最小年报对象。
 
     Args:
@@ -22,7 +22,7 @@ def _build_report(tables: tuple[ParsedTable, ...]) -> ParsedAnnualReport:
     raw_text = "§8 投资组合报告\n§10 基金份额变动\n"
     section_ten_start = raw_text.index("§10 基金份额变动")
     return ParsedAnnualReport(
-        key=DocumentKey(fund_code="110011", year=2024),
+        key=DocumentKey(fund_code=fund_code, year=2024),
         raw_text=raw_text,
         sections={
             "§8": ReportSection(
@@ -145,6 +145,131 @@ def _share_change_table_with_subscription_and_redemption_rows() -> ParsedTable:
     )
 
 
+def _share_change_table_with_code_headers() -> ParsedTable:
+    """构造包含基金代码表头的多份额变动表。
+
+    Args:
+        无。
+
+    Returns:
+        份额变动表格。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return ParsedTable(
+        page_number=65,
+        table_index=0,
+        headers=("项目", "110010 A类份额", "110011 C类份额"),
+        rows=(
+            ("本报告期期初基金份额总额", "1,000,000.00", "10,000.00"),
+            ("本报告期期末基金份额总额", "900,000.00", "25,000.00"),
+            ("本期申购赎回净额", "-100,000.00", "15,000.00"),
+        ),
+    )
+
+
+def _ambiguous_share_change_table() -> ParsedTable:
+    """构造无法可靠选择份额列的多份额变动表。
+
+    Args:
+        无。
+
+    Returns:
+        份额变动表格。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return ParsedTable(
+        page_number=66,
+        table_index=0,
+        headers=("项目", "B类份额", "C类份额"),
+        rows=(
+            ("本报告期期初基金份额总额", "1,000,000.00", "10,000.00"),
+            ("本报告期期末基金份额总额", "900,000.00", "25,000.00"),
+            ("本期申购赎回净额", "-100,000.00", "15,000.00"),
+        ),
+    )
+
+
+def _share_change_table_with_total_and_classes() -> ParsedTable:
+    """构造总份额列与 A/C 份额列并存的份额变动表。
+
+    Args:
+        无。
+
+    Returns:
+        份额变动表格。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return ParsedTable(
+        page_number=67,
+        table_index=0,
+        headers=("项目", "基金份额总额", "A类份额", "C类份额"),
+        rows=(
+            ("本报告期期初基金份额总额", "1,010,000.00", "1,000,000.00", "10,000.00"),
+            ("本报告期期末基金份额总额", "925,000.00", "900,000.00", "25,000.00"),
+            ("本期申购赎回净额", "-85,000.00", "-100,000.00", "15,000.00"),
+        ),
+    )
+
+
+def _share_change_table_with_a_and_d_classes() -> ParsedTable:
+    """构造 A/D 份额列并存的份额变动表。
+
+    Args:
+        无。
+
+    Returns:
+        份额变动表格。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return ParsedTable(
+        page_number=68,
+        table_index=0,
+        headers=("项目", "A类份额", "D类份额"),
+        rows=(
+            ("本报告期期初基金份额总额", "1,000,000.00", "10,000.00"),
+            ("本报告期期末基金份额总额", "900,000.00", "25,000.00"),
+            ("本期申购赎回净额", "-100,000.00", "15,000.00"),
+        ),
+    )
+
+
+def _share_change_table_with_other_code_and_a_class() -> ParsedTable:
+    """构造包含非当前基金代码列和 A 类列的歧义表。
+
+    Args:
+        无。
+
+    Returns:
+        份额变动表格。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return ParsedTable(
+        page_number=68,
+        table_index=0,
+        headers=("项目", "110010 A类份额", "A类份额"),
+        rows=(
+            ("本报告期期初基金份额总额", "1,000,000.00", "10,000.00"),
+            ("本报告期期末基金份额总额", "900,000.00", "25,000.00"),
+            ("本期申购赎回净额", "-100,000.00", "15,000.00"),
+        ),
+    )
+
+
 def test_extract_holdings_share_change_outputs_tables_with_table_anchors() -> None:
     """验证持仓快照和份额变动能输出表格型 anchor。
 
@@ -178,6 +303,8 @@ def test_extract_holdings_share_change_outputs_tables_with_table_anchors() -> No
         "beginning_share": "1,000,000.00",
         "ending_share": "900,000.00",
         "net_change": "-100,000.00",
+        "share_class_column": "份额",
+        "share_class_selection_reason": "single_value_column",
     }
     assert result.share_change.anchors[0].section_id == "§10"
     assert result.share_change.anchors[0].page_number == 58
@@ -202,14 +329,121 @@ def test_extract_holdings_share_change_outputs_share_change_from_subscription_re
 
     result = extract_holdings_share_change(report)
 
+    assert result.share_change.extraction_mode == "missing"
+    assert result.share_change.value is None
+    assert "多个份额列" in (result.share_change.note or "")
+
+
+def test_extract_holdings_share_change_selects_exact_fund_code_column() -> None:
+    """验证份额变动优先选择表头精确包含当前基金代码的列。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当基金代码列未被优先选择时抛出。
+    """
+
+    report = _build_report((_share_change_table_with_code_headers(),))
+
+    result = extract_holdings_share_change(report)
+
     assert result.share_change.extraction_mode == "direct"
     assert result.share_change.value == {
-        "beginning_share": "1,000,000.00",
-        "ending_share": "900,000.00",
-        "net_change": "-100,000.00",
+        "beginning_share": "10,000.00",
+        "ending_share": "25,000.00",
+        "net_change": "15,000.00",
+        "share_class_column": "110011 C类份额",
+        "share_class_selection_reason": "fund_code_header_match",
     }
-    assert result.share_change.anchors[0].page_number == 64
-    assert result.share_change.anchors[0].table_id == "page-64-table-0"
+
+
+def test_extract_holdings_share_change_marks_ambiguous_multi_class_table_missing() -> None:
+    """验证无法可靠选择份额列时不再默认取第一列。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当歧义多列表未 fail closed 时抛出。
+    """
+
+    report = _build_report((_ambiguous_share_change_table(),))
+
+    result = extract_holdings_share_change(report)
+
+    assert result.share_change.extraction_mode == "missing"
+    assert result.share_change.value is None
+    assert "多个份额列" in (result.share_change.note or "")
+
+
+def test_extract_holdings_share_change_marks_total_and_classes_table_missing() -> None:
+    """验证总份额列与 A/C 列并存且无代码表头时 fail closed。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当总份额列被误选时抛出。
+    """
+
+    report = _build_report((_share_change_table_with_total_and_classes(),))
+
+    result = extract_holdings_share_change(report)
+
+    assert result.share_change.extraction_mode == "missing"
+    assert result.share_change.value is None
+
+
+def test_extract_holdings_share_change_does_not_default_to_a_class_for_non_a_fund() -> None:
+    """验证非 A 类基金在 A/D 多份额表中不会默认选择 A 类。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当非 A 类基金误选 A 类份额时抛出。
+    """
+
+    report = _build_report((_share_change_table_with_a_and_d_classes(),), fund_code="019264")
+
+    result = extract_holdings_share_change(report)
+
+    assert result.share_change.extraction_mode == "missing"
+    assert result.share_change.value is None
+
+
+def test_extract_holdings_share_change_does_not_fallback_when_other_code_header_exists() -> None:
+    """验证存在其他基金代码表头时不使用 A 类 fallback。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 code-specific 冲突列被忽略时抛出。
+    """
+
+    report = _build_report((_share_change_table_with_other_code_and_a_class(),))
+
+    result = extract_holdings_share_change(report)
+
+    assert result.share_change.extraction_mode == "missing"
+    assert result.share_change.value is None
 
 
 def test_extract_holdings_share_change_ignores_profit_change_table() -> None:

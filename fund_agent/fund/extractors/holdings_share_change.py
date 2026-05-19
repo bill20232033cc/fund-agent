@@ -20,6 +20,9 @@ _INDUSTRY_TABLE_KEYWORDS: Final[tuple[str, ...]] = ("行业", "占比")
 _SHARE_CHANGE_REQUIRED_KEYWORDS: Final[tuple[str, ...]] = ("期初", "期末", "基金份额总额")
 _SHARE_CHANGE_NET_KEYWORDS: Final[tuple[str, ...]] = ("净变动", "本期申购赎回净额")
 _SHARE_CHANGE_FLOW_KEYWORDS: Final[tuple[str, ...]] = ("申购", "赎回")
+_TOTAL_SHARE_HEADER_KEYWORDS: Final[tuple[str, ...]] = ("合计", "总计", "基金份额总额", "总份额")
+_REASON_SINGLE_VALUE_COLUMN: Final[str] = "single_value_column"
+_REASON_FUND_CODE_HEADER_MATCH: Final[str] = "fund_code_header_match"
 
 
 @dataclass(frozen=True, slots=True)
@@ -33,6 +36,21 @@ class _TableMatch:
 
     table: ParsedTable
     table_kind: str
+
+
+@dataclass(frozen=True, slots=True)
+class _ShareColumnSelection:
+    """份额变动表值列选择结果。
+
+    Attributes:
+        column_index: 表格列下标。
+        header: 选中列表头。
+        reason: 稳定选择原因。
+    """
+
+    column_index: int
+    header: str
+    reason: str
 
 
 def _normalize_cell(value: str) -> str:
@@ -275,32 +293,42 @@ def _extract_industry_distribution(table: ParsedTable) -> list[dict[str, str]]:
     return [_row_to_dict(table.headers, row) for row in table.rows]
 
 
-def _extract_share_change(table: ParsedTable) -> dict[str, str | None]:
+def _extract_share_change(
+    table: ParsedTable,
+    *,
+    fund_code: str,
+) -> dict[str, str | None] | None:
     """从份额变动表中提取期初、期末与净变动。
 
     Args:
         table: 份额变动表。
+        fund_code: 当前基金代码，用于精确匹配份额列表头。
 
     Returns:
-        份额变动结构化结果。
+        份额变动结构化结果；多值列无法消歧时返回 `None`。
 
     Raises:
         无显式抛出。
     """
 
+    selection = _select_share_change_value_column(table, fund_code=fund_code)
+    if selection is None:
+        return None
     value: dict[str, str | None] = {
         "beginning_share": None,
         "ending_share": None,
         "net_change": None,
+        "share_class_column": selection.header,
+        "share_class_selection_reason": selection.reason,
     }
     for row in table.rows:
         joined_row = _compact_text(" ".join(_normalize_cell(cell) for cell in row))
         if "期初" in joined_row:
-            value["beginning_share"] = _extract_share_value_from_row(row)
+            value["beginning_share"] = _extract_share_value_from_row(row, selection.column_index)
         elif "期末" in joined_row:
-            value["ending_share"] = _extract_share_value_from_row(row)
+            value["ending_share"] = _extract_share_value_from_row(row, selection.column_index)
         elif "净变动" in joined_row or "本期申购赎回净额" in joined_row:
-            value["net_change"] = _extract_share_value_from_row(row)
+            value["net_change"] = _extract_share_value_from_row(row, selection.column_index)
     if value["net_change"] is None:
         value["net_change"] = _calculate_net_change(
             beginning_share=value["beginning_share"],
@@ -309,23 +337,111 @@ def _extract_share_change(table: ParsedTable) -> dict[str, str | None]:
     return value
 
 
-def _extract_share_value_from_row(row: tuple[str, ...]) -> str | None:
-    """从份额变动表行中读取首个有效份额值。
+def _select_share_change_value_column(
+    table: ParsedTable,
+    *,
+    fund_code: str,
+) -> _ShareColumnSelection | None:
+    """选择份额变动表的值列。
 
     Args:
-        row: 份额变动表数据行。
+        table: 份额变动表。
+        fund_code: 当前基金代码。
 
     Returns:
-        行标签后的首个非空、非横杠值；不存在时返回 `None`。
+        选中的列与原因；多列无法消歧时返回 `None`。
 
     Raises:
         无显式抛出。
     """
 
-    for cell in row[1:]:
-        value = _normalize_cell(cell)
-        if value and value != "-":
-            return value
+    value_columns = [
+        (index, _normalize_cell(header))
+        for index, header in enumerate(table.headers)
+        if index > 0
+    ]
+    if len(value_columns) == 1:
+        index, header = value_columns[0]
+        return _ShareColumnSelection(
+            column_index=index,
+            header=header,
+            reason=_REASON_SINGLE_VALUE_COLUMN,
+        )
+    code_matches = [
+        (index, header)
+        for index, header in value_columns
+        if fund_code and fund_code in _compact_text(header)
+    ]
+    if len(code_matches) == 1:
+        index, header = code_matches[0]
+        return _ShareColumnSelection(
+            column_index=index,
+            header=header,
+            reason=_REASON_FUND_CODE_HEADER_MATCH,
+        )
+    if code_matches:
+        return None
+    if any(_contains_fund_code(header) for _, header in value_columns):
+        return None
+    return None
+
+
+def _contains_fund_code(header: str) -> bool:
+    """判断表头是否包含 6 位基金代码。
+
+    Args:
+        header: 表头文本。
+
+    Returns:
+        包含任意连续 6 位数字时返回 `True`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    compact_header = _compact_text(header)
+    return any(
+        compact_header[index : index + 6].isdigit()
+        for index in range(max(len(compact_header) - 5, 0))
+    )
+
+
+def _is_total_share_header(header: str) -> bool:
+    """判断表头是否为总份额列。
+
+    Args:
+        header: 表头文本。
+
+    Returns:
+        含总计/合计语义时返回 `True`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    compact_header = _compact_text(header)
+    return any(keyword in compact_header for keyword in _TOTAL_SHARE_HEADER_KEYWORDS)
+
+
+def _extract_share_value_from_row(row: tuple[str, ...], column_index: int) -> str | None:
+    """从份额变动表行的指定列读取份额值。
+
+    Args:
+        row: 份额变动表数据行。
+        column_index: 已选中的值列下标。
+
+    Returns:
+        非空、非横杠值；不存在时返回 `None`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if column_index >= len(row):
+        return None
+    value = _normalize_cell(row[column_index])
+    if value and value != "-":
+        return value
     return None
 
 
@@ -412,9 +528,12 @@ def _build_share_change(report: ParsedAnnualReport) -> ExtractedField[dict[str, 
     share_change_match = _find_share_change_table(report)
     if share_change_match is None:
         return _missing_field("§10 未披露可规则化抽取的份额变动表")
+    share_change = _extract_share_change(share_change_match.table, fund_code=report.key.fund_code)
+    if share_change is None:
+        return _missing_field("§10 份额变动表存在多个份额列，当前规则无法可靠选择对应份额类别")
 
     return ExtractedField(
-        value=_extract_share_change(share_change_match.table),
+        value=share_change,
         anchors=(
             _build_table_anchor(report, share_change_match.table, _SECTION_SHARE_CHANGE, "share_change"),
         ),

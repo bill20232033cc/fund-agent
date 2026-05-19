@@ -155,12 +155,33 @@ def test_build_snapshot_records_contains_required_schema_and_all_fields() -> Non
         "page",
         "table_id",
         "row_id",
+        "comparable_values",
         "note",
     }
+    records_by_name = {record.field_name: record for record in records}
     assert records[0].section_id == "§2"
     assert records[0].anchor_present is True
     assert records[-1].field_name == "nav_data"
     assert records[-1].anchor_present is False
+    assert records_by_name["basic_identity"].comparable_values == {
+        "fund_name": "安信企业价值优选混合A",
+        "fund_code": "110011",
+        "fund_category": "混合型",
+        "classified_fund_type": "active_fund",
+    }
+    assert records_by_name["benchmark"].comparable_values == {
+        "benchmark_name": "沪深300指数收益率",
+        "benchmark_text": "沪深300指数收益率",
+    }
+    assert records_by_name["nav_benchmark_performance"].comparable_values == {
+        "nav_growth_rate": "1%",
+        "benchmark_return_rate": "0.5%",
+    }
+    assert records_by_name["classified_fund_type"].comparable_values == {
+        "fund_type": "active_fund"
+    }
+    assert records_by_name["product_profile"].comparable_values == {}
+    assert records_by_name["fee_schedule"].comparable_values == {}
 
 
 @pytest.mark.asyncio

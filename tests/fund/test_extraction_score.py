@@ -18,6 +18,8 @@ from fund_agent.fund.extraction_score import (
     STATUS_FAIL,
     STATUS_PASS,
     STATUS_WATCH,
+    derive_fund_quality_records,
+    load_snapshot_error_records,
     run_extraction_score,
     compare_snapshot_correctness,
     score_fund_records,
@@ -138,6 +140,110 @@ def test_score_fund_records_exposes_single_fund_p0_failure_when_aggregate_can_pa
     assert rows_by_code["000001"].p0_status == STATUS_PASS
 
 
+def test_derive_fund_quality_records_outputs_category_lens_and_missing_rate() -> None:
+    """验证 fund_quality 输出类别匹配、preferred_lens 和缺失率。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 fund_quality 派生结果不符合契约时抛出。
+    """
+
+    records = [
+        _snapshot_record("profile", "basic_identity", value_present=True, anchor_present=True),
+        _snapshot_record(
+            "profile", "classified_fund_type", value_present=True, anchor_present=True
+        ),
+        _snapshot_record("profile", "benchmark", value_present=False, anchor_present=False),
+        _snapshot_record("manager", "turnover_rate", value_present=False, anchor_present=False),
+    ]
+
+    row = derive_fund_quality_records(records)[0]
+
+    assert row.app_category_status == "match"
+    assert row.preferred_lens_status == "match"
+    assert row.preferred_lens_key == "active_equity_fund"
+    assert row.missing_field_count == 2
+    assert row.total_field_count == 4
+    assert row.missing_field_rate == 0.5
+    assert row.missing_p0_fields == ("benchmark",)
+    assert row.missing_p1_fields == ("turnover_rate",)
+
+
+def test_derive_fund_quality_records_marks_conflicting_fund_type_without_first_row_fallback() -> None:
+    """验证同一基金多行基金类型冲突时不取第一行静默通过。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当冲突字段未进入 mismatch/unknown 时抛出。
+    """
+
+    records = [
+        _snapshot_record(
+            "profile",
+            "basic_identity",
+            value_present=True,
+            anchor_present=True,
+            classified_fund_type="active_fund",
+        ),
+        _snapshot_record(
+            "profile",
+            "classified_fund_type",
+            value_present=True,
+            anchor_present=True,
+            classified_fund_type="bond_fund",
+        ),
+    ]
+
+    row = derive_fund_quality_records(records)[0]
+
+    assert row.classified_fund_type is None
+    assert row.app_category_status == "unknown"
+    assert row.preferred_lens_status == "mismatch"
+    assert "classified_fund_type 存在冲突值" in row.reason
+
+
+def test_derive_fund_quality_records_marks_lens_mismatch_on_app_category_conflict() -> None:
+    """验证 App 类别冲突会让 preferred_lens 状态变为 mismatch。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当类别冲突未影响 lens 可解析性时抛出。
+    """
+
+    records = [
+        _snapshot_record(
+            "profile",
+            "classified_fund_type",
+            app_category="国内债券类",
+            classified_fund_type="active_fund",
+            value_present=True,
+            anchor_present=True,
+        )
+    ]
+
+    row = derive_fund_quality_records(records)[0]
+
+    assert row.app_category_status == "conflict"
+    assert row.preferred_lens_key == "active_equity_fund"
+    assert row.preferred_lens_status == "mismatch"
+    assert "明确冲突" in row.reason
+
+
 def test_run_extraction_score_writes_score_outputs(tmp_path: Path) -> None:
     """验证评分 API 从 snapshot.jsonl 写出 score.json、score.md 和 golden_set.json。
 
@@ -181,7 +287,10 @@ def test_run_extraction_score_writes_score_outputs(tmp_path: Path) -> None:
     assert result.score_markdown_path.exists()
     assert result.golden_set_path.exists()
     assert score_payload["fund_count"] == 1
+    assert score_payload["failed_funds"] == []
     assert score_payload["fund_scores"][0]["fund_code"] == "004393"
+    assert score_payload["fund_quality"][0]["preferred_lens_key"] == "active_equity_fund"
+    assert "## Fund Quality" in markdown
     assert score_payload["correctness"]["status"] == CORRECTNESS_STATUS_UNAVAILABLE
     assert score_payload["p0_status"] == STATUS_FAIL
     assert "## Correctness" in markdown
@@ -190,8 +299,96 @@ def test_run_extraction_score_writes_score_outputs(tmp_path: Path) -> None:
     assert MANDATORY_GOLDEN_CODE in {record["fund_code"] for record in golden_payload["records"]}
 
 
+def test_run_extraction_score_includes_failed_funds_from_errors_path(tmp_path: Path) -> None:
+    """验证 errors.jsonl 中的完全失败基金进入 score failed_funds。
+
+    Args:
+        tmp_path: pytest 临时目录 fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当失败基金 accounting 缺失时抛出。
+    """
+
+    snapshot_path = tmp_path / "snapshot.jsonl"
+    snapshot_path.write_text(
+        json.dumps(
+            _snapshot_record("profile", "basic_identity", value_present=True, anchor_present=True),
+            ensure_ascii=False,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    errors_path = tmp_path / "errors.jsonl"
+    errors_path.write_text(
+        json.dumps(
+            {
+                "fund_code": "000001",
+                "fund_name": "失败基金",
+                "app_category": "国内股票类",
+                "report_year": 2024,
+                "error_type": "RuntimeError",
+                "error_message": "fixture failure",
+            },
+            ensure_ascii=False,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    result = run_extraction_score(
+        snapshot_path=snapshot_path,
+        source_csv=Path("docs/code_20260519.csv"),
+        output_dir=tmp_path / "score-output",
+        errors_path=errors_path,
+    )
+
+    score_payload = json.loads(result.score_json_path.read_text(encoding="utf-8"))
+    markdown = result.score_markdown_path.read_text(encoding="utf-8")
+
+    assert len(result.failed_funds) == 1
+    assert score_payload["failed_funds"] == [
+        {
+            "fund_code": "000001",
+            "fund_name": "失败基金",
+            "app_category": "国内股票类",
+            "report_year": 2024,
+            "error_type": "RuntimeError",
+            "error_message": "fixture failure",
+        }
+    ]
+    assert "## Failed Funds" in markdown
+    assert "000001" in markdown
+
+
+def test_load_snapshot_error_records_rejects_malformed_rows(tmp_path: Path) -> None:
+    """验证 errors.jsonl 行级 schema 非法时 fail fast。
+
+    Args:
+        tmp_path: pytest 临时目录 fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当非法错误记录未被拒绝时抛出。
+    """
+
+    errors_path = tmp_path / "errors.jsonl"
+    errors_path.write_text(json.dumps({"error_type": "RuntimeError"}) + "\n", encoding="utf-8")
+
+    try:
+        load_snapshot_error_records(errors_path)
+    except ValueError as exc:
+        assert "fund_code" in str(exc)
+    else:
+        raise AssertionError("expected ValueError for missing fund_code")
+
+
 def test_compare_snapshot_correctness_perfect_match_and_skipped_denominator(tmp_path: Path) -> None:
-    """验证 correctness 可比字段 perfect match 且 skipped 不进入分母。
+    """验证 correctness 可比子字段 perfect match 且 skipped 不进入分母。
 
     Args:
         tmp_path: pytest 临时目录 fixture。
@@ -215,6 +412,14 @@ def test_compare_snapshot_correctness_perfect_match_and_skipped_denominator(tmp_
             value_present=True,
             anchor_present=True,
             classified_fund_type="active_fund",
+            comparable_values={"fund_type": "active_fund"},
+        ),
+        _snapshot_record(
+            "profile",
+            "basic_identity",
+            value_present=True,
+            anchor_present=True,
+            comparable_values={"fund_name": "测试基金"},
         )
     ]
 
@@ -222,15 +427,166 @@ def test_compare_snapshot_correctness_perfect_match_and_skipped_denominator(tmp_
 
     assert summary.status == CORRECTNESS_STATUS_AVAILABLE
     assert summary.total_records == 2
-    assert summary.comparable_records == 1
-    assert summary.matched_records == 1
+    assert summary.comparable_records == 2
+    assert summary.matched_records == 2
     assert summary.mismatched_records == 0
-    assert summary.unavailable_records == 1
+    assert summary.unavailable_records == 0
     assert summary.skipped_records == 1
     assert summary.accuracy_rate == 1.0
     statuses = {(row.field_name, row.sub_field): row.status for row in summary.record_results}
     assert statuses[("classified_fund_type", "fund_type")] == CORRECTNESS_MATCH
+    assert statuses[("basic_identity", "fund_name")] == CORRECTNESS_MATCH
+
+
+def test_compare_snapshot_correctness_keeps_legacy_classification_compatibility(
+    tmp_path: Path,
+) -> None:
+    """验证旧 snapshot 没有 comparable_values 时只兼容基金类型字段。
+
+    Args:
+        tmp_path: pytest 临时目录 fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当旧 snapshot 兼容路径不符合契约时抛出。
+    """
+
+    golden_path = _golden_answer_json(tmp_path, expected_fund_type="active_fund")
+    records = [
+        _snapshot_record(
+            "profile",
+            "classified_fund_type",
+            value_present=True,
+            anchor_present=True,
+            classified_fund_type="active_fund",
+        ),
+        _snapshot_record(
+            "profile",
+            "basic_identity",
+            value_present=False,
+            anchor_present=False,
+        )
+    ]
+
+    summary = compare_snapshot_correctness(records=records, golden_answer_path=golden_path)
+
+    assert summary.comparable_records == 1
+    assert summary.matched_records == 1
+    assert summary.unavailable_records == 1
+    statuses = {(row.field_name, row.sub_field): row.status for row in summary.record_results}
+    assert statuses[("classified_fund_type", "fund_type")] == CORRECTNESS_MATCH
     assert statuses[("basic_identity", "fund_name")] == CORRECTNESS_UNAVAILABLE
+
+
+def test_compare_snapshot_correctness_distinguishes_whitelist_missing_from_unavailable(
+    tmp_path: Path,
+) -> None:
+    """验证只有白名单子字段明确缺失会进入 mismatch。
+
+    Args:
+        tmp_path: pytest 临时目录 fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当白名单缺失和非白名单缺失语义不符合契约时抛出。
+    """
+
+    golden_path = _golden_answer_json_from_records(
+        tmp_path,
+        records=[
+            {
+                "fund_code": "004393",
+                "field_name": "basic_identity",
+                "sub_field": "fund_name",
+                "expected_value": "测试基金",
+                "confidence": "high",
+                "source": "年报2024 §2 page-5",
+            },
+            {
+                "fund_code": "004393",
+                "field_name": "fee_schedule",
+                "sub_field": "management_fee",
+                "expected_value": "1.20%",
+                "confidence": "high",
+                "source": "年报2024 §2 page-5",
+            },
+        ],
+    )
+    records = [
+        _snapshot_record(
+            "profile",
+            "basic_identity",
+            value_present=False,
+            anchor_present=False,
+            comparable_values={},
+        ),
+        _snapshot_record(
+            "profile",
+            "fee_schedule",
+            value_present=False,
+            anchor_present=False,
+            comparable_values={},
+        ),
+    ]
+
+    summary = compare_snapshot_correctness(records=records, golden_answer_path=golden_path)
+
+    assert summary.comparable_records == 1
+    assert summary.mismatched_records == 1
+    assert summary.unavailable_records == 1
+    statuses = {(row.field_name, row.sub_field): row.status for row in summary.record_results}
+    assert statuses[("basic_identity", "fund_name")] == CORRECTNESS_MISMATCH
+    assert statuses[("fee_schedule", "management_fee")] == CORRECTNESS_UNAVAILABLE
+
+
+def test_compare_snapshot_correctness_marks_missing_whitelist_subfield_as_mismatch(
+    tmp_path: Path,
+) -> None:
+    """验证新 snapshot 中白名单子字段省略时按明确缺失处理。
+
+    Args:
+        tmp_path: pytest 临时目录 fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当白名单子字段缺失被误记为 unavailable 时抛出。
+    """
+
+    golden_path = _golden_answer_json_from_records(
+        tmp_path,
+        records=[
+            {
+                "fund_code": "004393",
+                "field_name": "basic_identity",
+                "sub_field": "fund_name",
+                "expected_value": "测试基金",
+                "confidence": "high",
+                "source": "年报2024 §2 page-5",
+            },
+        ],
+    )
+    records = [
+        _snapshot_record(
+            "profile",
+            "basic_identity",
+            value_present=True,
+            anchor_present=True,
+            comparable_values={"fund_code": "004393"},
+        )
+    ]
+
+    summary = compare_snapshot_correctness(records=records, golden_answer_path=golden_path)
+
+    assert summary.comparable_records == 1
+    assert summary.mismatched_records == 1
+    assert summary.unavailable_records == 0
+    assert summary.record_results[0].status == CORRECTNESS_MISMATCH
 
 
 def test_run_extraction_score_writes_correctness_mismatch(tmp_path: Path) -> None:
@@ -316,9 +672,11 @@ def _snapshot_record(
     field_name: str,
     *,
     fund_code: str = "004393",
+    app_category: str = "国内股票类",
     value_present: bool,
     anchor_present: bool,
     classified_fund_type: str = "active_fund",
+    comparable_values: dict[str, str] | None = None,
 ) -> dict[str, object]:
     """构造测试用 snapshot 记录。
 
@@ -326,9 +684,11 @@ def _snapshot_record(
         field_group: 字段组。
         field_name: 字段名。
         fund_code: 基金代码。
+        app_category: App 类别。
         value_present: 是否存在字段值。
         anchor_present: 是否存在证据锚点。
         classified_fund_type: 系统识别基金类型。
+        comparable_values: correctness 可比子字段；为空时模拟旧 snapshot。
 
     Returns:
         符合评分最小输入契约的字典。
@@ -337,16 +697,19 @@ def _snapshot_record(
         无显式抛出。
     """
 
-    return {
+    record: dict[str, object] = {
         "fund_code": fund_code,
         "fund_name": f"测试基金{fund_code}",
-        "app_category": "国内股票类",
+        "app_category": app_category,
         "classified_fund_type": classified_fund_type,
         "field_group": field_group,
         "field_name": field_name,
         "value_present": value_present,
         "anchor_present": anchor_present,
     }
+    if comparable_values is not None:
+        record["comparable_values"] = comparable_values
+    return record
 
 
 def _golden_answer_json(
@@ -369,7 +732,6 @@ def _golden_answer_json(
         OSError: 写入失败时抛出。
     """
 
-    path = tmp_path / "golden-answer.json"
     records = [
         {
             "fund_code": "004393",
@@ -388,6 +750,30 @@ def _golden_answer_json(
             "source": "年报2024 §2 page-5",
         },
     ]
+    return _golden_answer_json_from_records(tmp_path, records=records, skipped_fields=skipped_fields)
+
+
+def _golden_answer_json_from_records(
+    tmp_path: Path,
+    *,
+    records: list[dict[str, str]],
+    skipped_fields: list[str] | None = None,
+) -> Path:
+    """按指定记录写入测试用 strict golden answer JSON。
+
+    Args:
+        tmp_path: pytest 临时目录 fixture。
+        records: golden answer 有效记录。
+        skipped_fields: 明确跳过字段。
+
+    Returns:
+        strict JSON 路径。
+
+    Raises:
+        OSError: 写入失败时抛出。
+    """
+
+    path = tmp_path / "golden-answer.json"
     path.write_text(
         json.dumps(
             {

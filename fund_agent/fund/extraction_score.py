@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Final, Mapping, Sequence
 
 from fund_agent.fund.extraction_snapshot import (
+    COMPARABLE_SUB_FIELDS_BY_FIELD,
     DEFAULT_SELECTED_FUNDS_CSV,
     SNAPSHOT_FIELD_ORDER,
     SelectedFundRecord,
@@ -44,6 +45,8 @@ FIELD_PRIORITY_BY_NAME: Final[dict[str, str]] = {
     "nav_data": "P2",
 }
 UNKNOWN_FIELD_PRIORITY: Final[str] = "UNMAPPED"
+PRIORITY_P0: Final[str] = "P0"
+PRIORITY_P1: Final[str] = "P1"
 STATUS_PASS: Final[str] = "pass"
 STATUS_WATCH: Final[str] = "watch"
 STATUS_FAIL: Final[str] = "fail"
@@ -71,6 +74,26 @@ CORRECTNESS_MISMATCH: Final[str] = "mismatch"
 CORRECTNESS_UNAVAILABLE: Final[str] = "unavailable"
 CLASSIFIED_FUND_TYPE_FIELD: Final[str] = "classified_fund_type"
 CLASSIFIED_FUND_TYPE_SUB_FIELD: Final[str] = "fund_type"
+APP_CATEGORY_STATUS_MATCH: Final[str] = "match"
+APP_CATEGORY_STATUS_CONFLICT: Final[str] = "conflict"
+APP_CATEGORY_STATUS_UNKNOWN: Final[str] = "unknown"
+PREFERRED_LENS_STATUS_MATCH: Final[str] = "match"
+PREFERRED_LENS_STATUS_MISMATCH: Final[str] = "mismatch"
+APP_CATEGORY_ALLOWED_FUND_TYPES: Final[dict[str, tuple[str, ...]]] = {
+    "国内股票类": ("active_fund", "index_fund", "enhanced_index"),
+    "国内债券类": ("bond_fund",),
+    "海外股票类": ("qdii_fund",),
+    "海外债券/稳健类": ("qdii_fund", "bond_fund", "fof_fund"),
+    "黄金类": ("qdii_fund", "fof_fund", "index_fund", "enhanced_index"),
+}
+PREFERRED_LENS_KEY_BY_FUND_TYPE: Final[dict[str, str]] = {
+    "index_fund": "index_fund",
+    "active_fund": "active_equity_fund",
+    "bond_fund": "bond_fund",
+    "enhanced_index": "enhanced_index",
+    "qdii_fund": "qdii_fund",
+    "fof_fund": "fof_fund",
+}
 
 
 @dataclass(frozen=True, slots=True)
@@ -142,6 +165,62 @@ class FundScoreRow:
     status: str
     p0_failed_fields: tuple[str, ...]
     p1_failed_fields: tuple[str, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class FundQualityRow:
+    """单只基金的质量派生判断行。
+
+    Attributes:
+        fund_code: 基金代码。
+        fund_name: 基金名称。
+        app_category: App 类别。
+        classified_fund_type: 系统识别基金类型。
+        app_category_status: App 类别与基金类型匹配状态。
+        preferred_lens_status: preferred_lens 可解析状态。
+        preferred_lens_key: 由基金类型解析出的 lens key。
+        missing_field_count: 缺失字段记录数。
+        total_field_count: 参与统计字段记录数。
+        missing_field_rate: 缺失字段比例。
+        missing_p0_fields: 缺失的 P0 字段。
+        missing_p1_fields: 缺失的 P1 字段。
+        reason: 人类可读原因。
+    """
+
+    fund_code: str
+    fund_name: str | None
+    app_category: str | None
+    classified_fund_type: str | None
+    app_category_status: str
+    preferred_lens_status: str
+    preferred_lens_key: str | None
+    missing_field_count: int
+    total_field_count: int
+    missing_field_rate: float
+    missing_p0_fields: tuple[str, ...]
+    missing_p1_fields: tuple[str, ...]
+    reason: str
+
+
+@dataclass(frozen=True, slots=True)
+class FailedFundRow:
+    """完全抽取失败的基金行。
+
+    Attributes:
+        fund_code: 基金代码。
+        fund_name: 基金名称；旧错误记录缺失时为空。
+        app_category: App 类别；旧错误记录缺失时为空。
+        report_year: 年报年份；旧错误记录缺失时为空。
+        error_type: 异常类型名；旧错误记录缺失时为空。
+        error_message: 异常信息；旧错误记录缺失时为空。
+    """
+
+    fund_code: str
+    fund_name: str | None
+    app_category: str | None
+    report_year: int | None
+    error_type: str | None
+    error_message: str | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -255,6 +334,8 @@ class ExtractionScoreResult:
         golden_set_path: 最小 golden set JSON 路径。
         field_scores: 字段级评分行。
         fund_scores: 单只基金质量汇总行。
+        fund_quality: 单只基金质量派生判断行。
+        failed_funds: 完全抽取失败的基金行。
         golden_set: 最小 golden set 选择结果。
         thresholds: 本次评分阈值。
         correctness: strict golden answer correctness 比对汇总。
@@ -268,6 +349,8 @@ class ExtractionScoreResult:
     golden_set_path: Path
     field_scores: tuple[FieldScoreRow, ...]
     fund_scores: tuple[FundScoreRow, ...]
+    fund_quality: tuple[FundQualityRow, ...]
+    failed_funds: tuple[FailedFundRow, ...]
     golden_set: GoldenSetSelection
     thresholds: ScoreThresholds
     correctness: CorrectnessSummary
@@ -310,6 +393,34 @@ def load_snapshot_records(snapshot_path: Path) -> list[dict[str, object]]:
                 raise ValueError(f"snapshot 第 {line_number} 行不是 JSON object")
             records.append(payload)
     return records
+
+
+def load_snapshot_error_records(errors_path: Path) -> tuple[FailedFundRow, ...]:
+    """读取 P4-S1 `errors.jsonl` 并转换为失败基金行。
+
+    Args:
+        errors_path: P4-S1 输出的 `errors.jsonl` 路径。
+
+    Returns:
+        完全抽取失败基金行元组；空行会被忽略。
+
+    Raises:
+        FileNotFoundError: errors 文件不存在时抛出。
+        ValueError: JSONL 行不是对象或缺少 `fund_code` 时抛出。
+        json.JSONDecodeError: JSONL 行内容非法时抛出。
+    """
+
+    failed_funds: list[FailedFundRow] = []
+    with errors_path.open(encoding="utf-8") as file_obj:
+        for line_number, line in enumerate(file_obj, start=1):
+            stripped = line.strip()
+            if not stripped:
+                continue
+            payload = json.loads(stripped)
+            if not isinstance(payload, dict):
+                raise ValueError(f"errors 第 {line_number} 行不是 JSON object")
+            failed_funds.append(_failed_fund_row(payload, line_number=line_number))
+    return tuple(failed_funds)
 
 
 def score_snapshot_records(
@@ -380,6 +491,29 @@ def score_fund_records(
     )
 
 
+def derive_fund_quality_records(records: Sequence[Mapping[str, object]]) -> tuple[FundQualityRow, ...]:
+    """从 snapshot 记录派生单基金质量判断。
+
+    Args:
+        records: P4-S1 `snapshot.jsonl` 解析后的字段级记录。
+
+    Returns:
+        按基金代码排序的质量派生行。
+
+    Raises:
+        ValueError: 记录缺少 `fund_code` / `field_name` 时抛出。
+    """
+
+    records_by_fund: dict[str, list[Mapping[str, object]]] = {}
+    for record in records:
+        fund_code = _required_text(record, "fund_code")
+        records_by_fund.setdefault(fund_code, []).append(record)
+    return tuple(
+        _build_fund_quality_row(fund_code, fund_records)
+        for fund_code, fund_records in sorted(records_by_fund.items())
+    )
+
+
 def select_minimal_golden_set(source_csv: Path = DEFAULT_SELECTED_FUNDS_CSV) -> GoldenSetSelection:
     """从精选基金池 CSV 选择 P4-S2 最小 golden set。
 
@@ -445,6 +579,7 @@ def run_extraction_score(
     output_dir: Path | None = None,
     thresholds: ScoreThresholds = ScoreThresholds(),
     golden_answer_path: Path | None = None,
+    errors_path: Path | None = None,
 ) -> ExtractionScoreResult:
     """读取 snapshot 并输出 P4-S2 字段级评分产物。
 
@@ -454,20 +589,72 @@ def run_extraction_score(
         output_dir: 显式输出目录；为空时使用 snapshot 所在目录。
         thresholds: 显式评分阈值。
         golden_answer_path: strict golden answer JSON 路径；为空时不执行 correctness。
+        errors_path: P4-S1 输出的 `errors.jsonl`；提供后纳入 failed_funds accounting。
 
     Returns:
         评分运行结果和输出路径。
 
     Raises:
-        FileNotFoundError: snapshot 或 CSV 不存在时抛出。
+        FileNotFoundError: snapshot、errors 或 CSV 不存在时抛出。
         ValueError: snapshot schema、阈值或 CSV 输入非法时抛出。
         OSError: 输出目录或文件写入失败时抛出。
     """
 
     records = load_snapshot_records(snapshot_path)
+    failed_funds = load_snapshot_error_records(errors_path) if errors_path is not None else ()
+    golden_set = select_minimal_golden_set(source_csv)
+    return write_extraction_score_records(
+        records=records,
+        snapshot_path=snapshot_path,
+        source_csv=source_csv,
+        output_dir=output_dir,
+        thresholds=thresholds,
+        golden_answer_path=golden_answer_path,
+        golden_set=golden_set,
+        failed_funds=failed_funds,
+    )
+
+
+def write_extraction_score_records(
+    *,
+    records: Sequence[Mapping[str, object]],
+    snapshot_path: Path,
+    source_csv: Path,
+    output_dir: Path | None = None,
+    thresholds: ScoreThresholds = ScoreThresholds(),
+    golden_answer_path: Path | None = None,
+    golden_set: GoldenSetSelection | None = None,
+    failed_funds: Sequence[FailedFundRow] = (),
+) -> ExtractionScoreResult:
+    """对已加载的 snapshot 记录写出字段级评分产物。
+
+    Args:
+        records: 已加载的 P4-S1 snapshot 记录。
+        snapshot_path: snapshot 记录来源路径，用于输出元数据。
+        source_csv: 精选基金池 CSV 路径。
+        output_dir: 显式输出目录；为空时使用 snapshot 所在目录。
+        thresholds: 显式评分阈值。
+        golden_answer_path: strict golden answer JSON 路径；为空时不执行 correctness。
+        golden_set: 最小 golden set；为空时写入单基金 gate 专用空选择。
+        failed_funds: 已解析的完全抽取失败基金行。
+
+    Returns:
+        评分运行结果和输出路径。
+
+    Raises:
+        ValueError: snapshot schema 或阈值非法时抛出。
+        OSError: 输出目录或文件写入失败时抛出。
+    """
+
     field_scores = score_snapshot_records(records, thresholds=thresholds)
     fund_scores = score_fund_records(records, thresholds=thresholds)
-    golden_set = select_minimal_golden_set(source_csv)
+    fund_quality = derive_fund_quality_records(records)
+    resolved_golden_set = golden_set or GoldenSetSelection(
+        source_csv=str(source_csv),
+        records=(),
+        excluded_categories=(),
+        exclusion_reason="single-fund analyze quality gate does not select a minimal golden set",
+    )
     correctness = compare_snapshot_correctness(
         records=records,
         golden_answer_path=golden_answer_path,
@@ -486,7 +673,9 @@ def run_extraction_score(
         golden_set_path=golden_set_path,
         field_scores=field_scores,
         fund_scores=fund_scores,
-        golden_set=golden_set,
+        fund_quality=fund_quality,
+        failed_funds=tuple(failed_funds),
+        golden_set=resolved_golden_set,
         thresholds=thresholds,
         correctness=correctness,
     )
@@ -496,7 +685,8 @@ def run_extraction_score(
     )
     score_markdown_path.write_text(_score_markdown(result), encoding="utf-8")
     golden_set_path.write_text(
-        json.dumps(asdict(golden_set), ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+        json.dumps(asdict(resolved_golden_set), ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
     )
     return result
 
@@ -508,9 +698,10 @@ def compare_snapshot_correctness(
 ) -> CorrectnessSummary:
     """用 strict golden answer JSON 对 snapshot 明确字段做 correctness 比对。
 
-    当前 P4-R10 最小闭环只比较 snapshot 直接暴露的 `classified_fund_type.fund_type`。
-    其他 golden 有效记录标记为 `unavailable`，不进入 correctness 分母；skipped
-    golden 字段只计入 skipped 数，不进入分母。见模板第 1 章产品本质的基金类型识别约束。
+    当前 P5-S3 比较 snapshot `comparable_values` 明确暴露的白名单子字段；
+    其他 golden 有效记录标记为 `unavailable`，不进入 correctness 分母。只有
+    白名单字段/子字段且 snapshot 明确缺失时才记为 mismatch。见模板第 1 章产品本质
+    的基金类型识别约束，以及模板第 2 章 R=A+B-C 的净值/基准字段约束。
 
     Args:
         records: P4-S1 `snapshot.jsonl` 解析后的字段级记录。
@@ -590,6 +781,105 @@ def _validate_thresholds(thresholds: ScoreThresholds) -> None:
         raise ValueError("watch coverage 阈值不能高于 pass coverage 阈值")
     if thresholds.watch_traceability > thresholds.pass_traceability:
         raise ValueError("watch traceability 阈值不能高于 pass traceability 阈值")
+
+
+def _failed_fund_row(record: Mapping[str, object], *, line_number: int) -> FailedFundRow:
+    """把 snapshot error 记录转换为失败基金行。
+
+    Args:
+        record: `errors.jsonl` 中的单条 JSON object。
+        line_number: JSONL 行号，用于错误信息。
+
+    Returns:
+        失败基金行。
+
+    Raises:
+        ValueError: `fund_code` 缺失或为空时抛出。
+    """
+
+    fund_code = _required_error_text(record, "fund_code", line_number)
+    return FailedFundRow(
+        fund_code=fund_code,
+        fund_name=_optional_error_text(record, "fund_name"),
+        app_category=_optional_error_text(record, "app_category"),
+        report_year=_optional_error_int(record, "report_year", line_number),
+        error_type=_optional_error_text(record, "error_type"),
+        error_message=_optional_error_text(record, "error_message"),
+    )
+
+
+def _required_error_text(record: Mapping[str, object], key: str, line_number: int) -> str:
+    """读取错误记录中的必需文本字段。
+
+    Args:
+        record: 错误记录。
+        key: 字段名。
+        line_number: JSONL 行号。
+
+    Returns:
+        非空文本。
+
+    Raises:
+        ValueError: 字段缺失或为空时抛出。
+    """
+
+    value = record.get(key)
+    text = str(value).strip() if value is not None else ""
+    if not text:
+        raise ValueError(f"errors 第 {line_number} 行缺少必需字段：{key}")
+    return text
+
+
+def _optional_error_text(record: Mapping[str, object], key: str) -> str | None:
+    """读取错误记录中的可选文本字段。
+
+    Args:
+        record: 错误记录。
+        key: 字段名。
+
+    Returns:
+        非空文本；缺失或空白时返回 `None`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    value = record.get(key)
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
+
+
+def _optional_error_int(
+    record: Mapping[str, object],
+    key: str,
+    line_number: int,
+) -> int | None:
+    """读取错误记录中的可选整数字段。
+
+    Args:
+        record: 错误记录。
+        key: 字段名。
+        line_number: JSONL 行号。
+
+    Returns:
+        整数；缺失时返回 `None`。
+
+    Raises:
+        ValueError: 字段存在但不是整数或整数字符串时抛出。
+    """
+
+    value = record.get(key)
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        raise ValueError(f"errors 第 {line_number} 行字段必须是整数：{key}")
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str) and value.strip().isdigit():
+        return int(value.strip())
+    raise ValueError(f"errors 第 {line_number} 行字段必须是整数：{key}")
 
 
 def _required_text(record: Mapping[str, object], key: str) -> str:
@@ -792,6 +1082,227 @@ def _first_optional_text(records: Sequence[Mapping[str, object]], key: str) -> s
     return None
 
 
+def _build_fund_quality_row(
+    fund_code: str,
+    records: Sequence[Mapping[str, object]],
+) -> FundQualityRow:
+    """构造单只基金质量派生判断。
+
+    Args:
+        fund_code: 基金代码。
+        records: 该基金对应的 snapshot 记录。
+
+    Returns:
+        单基金质量派生判断。
+
+    Raises:
+        ValueError: 记录缺少 `field_name` 时抛出。
+    """
+
+    fund_name, fund_name_reason = _unique_optional_text(records, "fund_name")
+    app_category, app_category_reason = _unique_optional_text(records, "app_category")
+    classified_fund_type, fund_type_reason = _unique_optional_text(records, "classified_fund_type")
+    missing_fields = _missing_fields_by_priority(records)
+    app_category_status = _app_category_status(app_category, classified_fund_type)
+    preferred_lens_key = (
+        PREFERRED_LENS_KEY_BY_FUND_TYPE.get(classified_fund_type)
+        if classified_fund_type is not None
+        else None
+    )
+    preferred_lens_status = _preferred_lens_status(
+        classified_fund_type,
+        preferred_lens_key,
+        app_category_status,
+    )
+    total_field_count = len(records)
+    missing_field_count = sum(
+        1 for record in records if not _truthy_bool(record.get("value_present"))
+    )
+    reasons = [
+        fund_name_reason,
+        app_category_reason,
+        fund_type_reason,
+        _app_category_reason(app_category, classified_fund_type, app_category_status),
+        _preferred_lens_reason(classified_fund_type, preferred_lens_key, preferred_lens_status),
+    ]
+    return FundQualityRow(
+        fund_code=fund_code,
+        fund_name=fund_name,
+        app_category=app_category,
+        classified_fund_type=classified_fund_type,
+        app_category_status=app_category_status,
+        preferred_lens_status=preferred_lens_status,
+        preferred_lens_key=preferred_lens_key,
+        missing_field_count=missing_field_count,
+        total_field_count=total_field_count,
+        missing_field_rate=_rate(missing_field_count, total_field_count),
+        missing_p0_fields=missing_fields[PRIORITY_P0],
+        missing_p1_fields=missing_fields[PRIORITY_P1],
+        reason="；".join(reason for reason in reasons if reason),
+    )
+
+
+def _unique_optional_text(
+    records: Sequence[Mapping[str, object]],
+    key: str,
+) -> tuple[str | None, str]:
+    """读取基金级字段，并显式识别多值冲突。
+
+    Args:
+        records: 单基金 snapshot 记录。
+        key: 基金级字段名。
+
+    Returns:
+        `(value, reason)`；字段冲突时 value 为 `None`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    values = sorted(
+        {
+            str(record.get(key)).strip()
+            for record in records
+            if record.get(key) is not None and str(record.get(key)).strip()
+        }
+    )
+    if len(values) == 1:
+        return values[0], ""
+    if len(values) > 1:
+        return None, f"{key} 存在冲突值：{', '.join(values)}"
+    return None, f"{key} 缺失"
+
+
+def _missing_fields_by_priority(
+    records: Sequence[Mapping[str, object]],
+) -> dict[str, tuple[str, ...]]:
+    """按字段优先级统计缺失字段。
+
+    Args:
+        records: 单基金 snapshot 记录。
+
+    Returns:
+        P0/P1 缺失字段名映射。
+
+    Raises:
+        ValueError: 记录缺少 `field_name` 时抛出。
+    """
+
+    missing_by_priority: dict[str, set[str]] = {PRIORITY_P0: set(), PRIORITY_P1: set()}
+    for record in records:
+        field_name = _required_text(record, "field_name")
+        if _truthy_bool(record.get("value_present")):
+            continue
+        priority = FIELD_PRIORITY_BY_NAME.get(field_name, UNKNOWN_FIELD_PRIORITY)
+        if priority in missing_by_priority:
+            missing_by_priority[priority].add(field_name)
+    return {
+        priority: tuple(sorted(fields)) for priority, fields in missing_by_priority.items()
+    }
+
+
+def _app_category_status(app_category: str | None, classified_fund_type: str | None) -> str:
+    """判断 App 类别与基金类型是否明确冲突。
+
+    Args:
+        app_category: App 类别。
+        classified_fund_type: 系统基金类型。
+
+    Returns:
+        `match / conflict / unknown`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if not app_category or not classified_fund_type:
+        return APP_CATEGORY_STATUS_UNKNOWN
+    allowed_types = APP_CATEGORY_ALLOWED_FUND_TYPES.get(app_category)
+    if allowed_types is None:
+        return APP_CATEGORY_STATUS_UNKNOWN
+    if classified_fund_type in allowed_types:
+        return APP_CATEGORY_STATUS_MATCH
+    return APP_CATEGORY_STATUS_CONFLICT
+
+
+def _preferred_lens_status(
+    classified_fund_type: str | None,
+    preferred_lens_key: str | None,
+    app_category_status: str,
+) -> str:
+    """判断基金类型是否能解析 preferred_lens。
+
+    Args:
+        classified_fund_type: 系统基金类型。
+        preferred_lens_key: 解析出的 lens key。
+        app_category_status: App 类别与基金类型匹配状态。
+
+    Returns:
+        `match / mismatch`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if not classified_fund_type:
+        return PREFERRED_LENS_STATUS_MISMATCH
+    if app_category_status == APP_CATEGORY_STATUS_CONFLICT:
+        return PREFERRED_LENS_STATUS_MISMATCH
+    if preferred_lens_key:
+        return PREFERRED_LENS_STATUS_MATCH
+    return PREFERRED_LENS_STATUS_MISMATCH
+
+
+def _app_category_reason(
+    app_category: str | None,
+    classified_fund_type: str | None,
+    status: str,
+) -> str:
+    """构造 App 类别状态说明。
+
+    Args:
+        app_category: App 类别。
+        classified_fund_type: 系统基金类型。
+        status: App 类别状态。
+
+    Returns:
+        状态说明。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if status == APP_CATEGORY_STATUS_CONFLICT:
+        return f"App 类别 `{app_category}` 与基金类型 `{classified_fund_type}` 明确冲突"
+    if status == APP_CATEGORY_STATUS_MATCH:
+        return f"App 类别 `{app_category}` 与基金类型 `{classified_fund_type}` 匹配"
+    return "App 类别无法映射或基金类型缺失，类别冲突判断为 unknown"
+
+
+def _preferred_lens_reason(
+    classified_fund_type: str | None,
+    preferred_lens_key: str | None,
+    status: str,
+) -> str:
+    """构造 preferred_lens 可解析状态说明。
+
+    Args:
+        classified_fund_type: 系统基金类型。
+        preferred_lens_key: 解析出的 lens key。
+        status: preferred_lens 状态。
+
+    Returns:
+        状态说明。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if status == PREFERRED_LENS_STATUS_MATCH:
+        return f"基金类型 `{classified_fund_type}` 可解析 preferred_lens `{preferred_lens_key}`"
+    return f"基金类型 `{classified_fund_type or ''}` 无法解析 preferred_lens"
+
+
 def _rate(numerator: int, denominator: int) -> float:
     """计算比例。
 
@@ -849,14 +1360,24 @@ def _snapshot_actual_index(
     for record in records:
         fund_code = _required_text(record, "fund_code")
         field_name = _required_text(record, "field_name")
-        if field_name != CLASSIFIED_FUND_TYPE_FIELD:
-            continue
-        actual_value = _optional_record_text(record, CLASSIFIED_FUND_TYPE_FIELD)
-        if not _truthy_bool(record.get("value_present")):
-            actual_value = None
-        actual_index[(fund_code, CLASSIFIED_FUND_TYPE_FIELD, CLASSIFIED_FUND_TYPE_SUB_FIELD)] = (
-            actual_value
-        )
+        has_explicit_comparable_values = "comparable_values" in record
+        if has_explicit_comparable_values:
+            for sub_field in COMPARABLE_SUB_FIELDS_BY_FIELD.get(field_name, ()):
+                actual_index.setdefault((fund_code, field_name, sub_field), None)
+        for sub_field, value in _record_comparable_values(record).items():
+            if not _is_comparable_sub_field(field_name, sub_field):
+                continue
+            actual_value = _optional_scalar_text(value)
+            if actual_value is not None:
+                actual_index[(fund_code, field_name, sub_field)] = actual_value
+        if field_name == CLASSIFIED_FUND_TYPE_FIELD:
+            actual_value = _optional_record_text(record, CLASSIFIED_FUND_TYPE_FIELD)
+            if not _truthy_bool(record.get("value_present")):
+                actual_value = None
+            actual_index.setdefault(
+                (fund_code, CLASSIFIED_FUND_TYPE_FIELD, CLASSIFIED_FUND_TYPE_SUB_FIELD),
+                actual_value,
+            )
     return actual_index
 
 
@@ -976,6 +1497,65 @@ def _optional_record_text(record: Mapping[str, object], key: str) -> str | None:
 
     value = record.get(key)
     if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
+
+
+def _record_comparable_values(record: Mapping[str, object]) -> Mapping[str, object]:
+    """读取 snapshot 记录中的 `comparable_values`。
+
+    Args:
+        record: snapshot 记录。
+
+    Returns:
+        子字段到原始可比值的映射；旧 snapshot 或空值返回空映射。
+
+    Raises:
+        ValueError: `comparable_values` 存在但不是对象时抛出。
+    """
+
+    value = record.get("comparable_values")
+    if value is None:
+        return {}
+    if not isinstance(value, Mapping):
+        raise ValueError("snapshot 记录 comparable_values 必须是 JSON object")
+    return value
+
+
+def _is_comparable_sub_field(field_name: str, sub_field: object) -> bool:
+    """判断子字段是否在 correctness 可比白名单内。
+
+    Args:
+        field_name: snapshot 字段名。
+        sub_field: comparable_values 中的子字段名。
+
+    Returns:
+        子字段名是文本且属于该字段白名单时返回 `True`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if not isinstance(sub_field, str):
+        return False
+    return sub_field in COMPARABLE_SUB_FIELDS_BY_FIELD.get(field_name, ())
+
+
+def _optional_scalar_text(value: object) -> str | None:
+    """把 correctness 可比值转换成非空文本。
+
+    Args:
+        value: JSON 解析后的原始值。
+
+    Returns:
+        非空标量文本；嵌套结构、空值和空白文本返回 `None`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if value is None or isinstance(value, (Mapping, list, tuple, set)):
         return None
     text = str(value).strip()
     return text or None
@@ -1146,6 +1726,8 @@ def _score_json_payload(result: ExtractionScoreResult) -> dict[str, object]:
         "p0_status": _aggregate_status(p0_rows),
         "field_scores": [asdict(row) for row in result.field_scores],
         "fund_scores": [asdict(row) for row in result.fund_scores],
+        "fund_quality": [asdict(row) for row in result.fund_quality],
+        "failed_funds": [asdict(row) for row in result.failed_funds],
         "golden_set": asdict(result.golden_set),
         "correctness": asdict(result.correctness),
     }
@@ -1195,6 +1777,7 @@ def _score_markdown(result: ExtractionScoreResult) -> str:
         f"- source_csv: `{result.source_csv}`",
         f"- field_count: {len(result.field_scores)}",
         f"- fund_count: {len(result.fund_scores)}",
+        f"- failed_fund_count: {len(result.failed_funds)}",
         f"- p0_status: `{_aggregate_status([row for row in result.field_scores if row.priority == 'P0'])}`",
         f"- thresholds: coverage pass `{result.thresholds.pass_coverage:.0%}` / watch `{result.thresholds.watch_coverage:.0%}`, traceability pass `{result.thresholds.pass_traceability:.0%}` / watch `{result.thresholds.watch_traceability:.0%}`",
         f"- correctness: `{result.correctness.status}`",
@@ -1262,6 +1845,54 @@ def _score_markdown(result: ExtractionScoreResult) -> str:
             f"{', '.join(row.p0_failed_fields)} | "
             f"{', '.join(row.p1_failed_fields)} |"
         )
+
+    lines.extend(
+        [
+            "",
+            "## Fund Quality",
+            "",
+            "| fund_code | fund_name | app_category | classified_fund_type | app_category_status | preferred_lens_status | preferred_lens_key | missing_field_rate | missing_p0_fields | missing_p1_fields | reason |",
+            "|---|---|---|---|---|---|---|---:|---|---|---|",
+        ]
+    )
+    for row in result.fund_quality:
+        lines.append(
+            "| "
+            f"{row.fund_code} | "
+            f"{row.fund_name or ''} | "
+            f"{row.app_category or ''} | "
+            f"{row.classified_fund_type or ''} | "
+            f"{row.app_category_status} | "
+            f"{row.preferred_lens_status} | "
+            f"{row.preferred_lens_key or ''} | "
+            f"{row.missing_field_rate:.1%} | "
+            f"{', '.join(row.missing_p0_fields)} | "
+            f"{', '.join(row.missing_p1_fields)} | "
+            f"{_escape_markdown_cell(row.reason)} |"
+        )
+
+    lines.extend(
+        [
+            "",
+            "## Failed Funds",
+            "",
+            "| fund_code | fund_name | app_category | report_year | error_type | error_message |",
+            "|---|---|---|---:|---|---|",
+        ]
+    )
+    if result.failed_funds:
+        for row in result.failed_funds:
+            lines.append(
+                "| "
+                f"{row.fund_code} | "
+                f"{row.fund_name or ''} | "
+                f"{row.app_category or ''} | "
+                f"{row.report_year or ''} | "
+                f"{row.error_type or ''} | "
+                f"{_escape_markdown_cell(row.error_message or '')} |"
+            )
+    else:
+        lines.append("|  |  |  |  |  |  |")
 
     lines.extend(
         [

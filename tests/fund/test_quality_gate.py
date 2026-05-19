@@ -183,6 +183,171 @@ def test_run_quality_gate_blocks_correctness_mismatch_as_fq1(tmp_path: Path) -> 
     assert payload["issues"][0]["expected_value"] == "active_fund"
 
 
+def test_run_quality_gate_blocks_app_category_conflict_and_lens_mismatch(tmp_path: Path) -> None:
+    """验证 App 类别冲突触发 FQ1，preferred_lens 不可解析触发 FQ5。
+
+    Args:
+        tmp_path: pytest 临时目录 fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 FQ1/FQ5 未触发时抛出。
+    """
+
+    score_path = tmp_path / "score.json"
+    score_path.write_text(
+        json.dumps(
+            {
+                "field_scores": [_field_score("classified_fund_type", "P0", "pass", 1.0, 1.0)],
+                "fund_quality": [
+                    _fund_quality(
+                        app_category="国内债券类",
+                        classified_fund_type="active_fund",
+                        app_category_status="conflict",
+                        preferred_lens_status="mismatch",
+                        preferred_lens_key="active_equity_fund",
+                        missing_field_rate=0.0,
+                    )
+                ],
+                "correctness": {"status": "unavailable"},
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    result = run_quality_gate(score_path=score_path)
+    payload = json.loads(result.gate_json_path.read_text(encoding="utf-8"))
+    rule_codes = {issue.rule_code for issue in result.issues}
+
+    assert result.status == GATE_STATUS_BLOCK
+    assert {"FQ1", "FQ5"} <= rule_codes
+    fq1_payload = next(issue for issue in payload["issues"] if issue["rule_code"] == "FQ1")
+    assert fq1_payload["app_category"] == "国内债券类"
+    assert fq1_payload["classified_fund_type"] == "active_fund"
+
+
+def test_run_quality_gate_warns_and_blocks_fq4_missing_rate_thresholds(tmp_path: Path) -> None:
+    """验证 FQ4 按缺失率阈值触发 warn/block。
+
+    Args:
+        tmp_path: pytest 临时目录 fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 FQ4 阈值不符合契约时抛出。
+    """
+
+    score_path = tmp_path / "score.json"
+    score_path.write_text(
+        json.dumps(
+            {
+                "field_scores": [_field_score("classified_fund_type", "P0", "pass", 1.0, 1.0)],
+                "fund_quality": [
+                    _fund_quality(fund_code="000001", missing_field_rate=0.20),
+                    _fund_quality(fund_code="000002", missing_field_rate=0.35),
+                ],
+                "correctness": {"status": "unavailable"},
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    result = run_quality_gate(score_path=score_path)
+    fq4_by_fund = {
+        issue.fund_code: issue for issue in result.issues if issue.rule_code == "FQ4"
+    }
+
+    assert result.status == GATE_STATUS_BLOCK
+    assert fq4_by_fund["000001"].severity == "warn"
+    assert fq4_by_fund["000001"].observed_rate == 0.20
+    assert fq4_by_fund["000001"].threshold == 0.20
+    assert fq4_by_fund["000002"].severity == "block"
+    assert fq4_by_fund["000002"].observed_rate == 0.35
+    assert fq4_by_fund["000002"].threshold == 0.35
+
+
+def test_run_quality_gate_keeps_old_score_without_fund_quality_compatible(tmp_path: Path) -> None:
+    """验证旧 score.json 缺少 fund_quality 时 gate 不 fatal。
+
+    Args:
+        tmp_path: pytest 临时目录 fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当兼容路径异常或缺少 info issue 时抛出。
+    """
+
+    score_path = tmp_path / "score.json"
+    score_path.write_text(
+        json.dumps(
+            {
+                "field_scores": [_field_score("classified_fund_type", "P0", "pass", 1.0, 1.0)],
+                "correctness": {"status": "unavailable"},
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    result = run_quality_gate(score_path=score_path)
+
+    assert result.status == GATE_STATUS_PASS
+    assert any("fund_quality" in issue.message for issue in result.issues)
+
+
+def test_run_quality_gate_blocks_failed_funds_as_fq6(tmp_path: Path) -> None:
+    """验证 failed_funds 会触发 FQ6 阻断。
+
+    Args:
+        tmp_path: pytest 临时目录 fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当失败基金未触发阻断时抛出。
+    """
+
+    score_path = tmp_path / "score.json"
+    score_path.write_text(
+        json.dumps(
+            {
+                "field_scores": [_field_score("classified_fund_type", "P0", "pass", 1.0, 1.0)],
+                "failed_funds": [
+                    {
+                        "fund_code": "000001",
+                        "fund_name": "失败基金",
+                        "app_category": "国内股票类",
+                        "report_year": 2024,
+                        "error_type": "RuntimeError",
+                        "error_message": "fixture failure",
+                    }
+                ],
+                "correctness": {"status": "unavailable"},
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    result = run_quality_gate(score_path=score_path)
+    payload = json.loads(result.gate_json_path.read_text(encoding="utf-8"))
+    fq6_issue = next(issue for issue in result.issues if issue.rule_code == "FQ6")
+
+    assert result.status == GATE_STATUS_BLOCK
+    assert fq6_issue.fund_code == "000001"
+    assert fq6_issue.error_type == "RuntimeError"
+    assert any(issue["rule_code"] == "FQ6" for issue in payload["issues"])
+
+
 def test_run_quality_gate_keeps_fq0_info_without_golden_answer(tmp_path: Path) -> None:
     """验证无 golden answer 时仍保留 FQ0/info skeleton 且不阻断。
 
@@ -284,4 +449,49 @@ def _fund_score(
         "status": p0_status if p0_status == "fail" else p1_status,
         "p0_failed_fields": p0_failed_fields or [],
         "p1_failed_fields": p1_failed_fields or [],
+    }
+
+
+def _fund_quality(
+    *,
+    fund_code: str = "004393",
+    app_category: str = "国内股票类",
+    classified_fund_type: str = "active_fund",
+    app_category_status: str = "match",
+    preferred_lens_status: str = "match",
+    preferred_lens_key: str = "active_equity_fund",
+    missing_field_rate: float = 0.0,
+) -> dict[str, object]:
+    """构造测试用基金质量派生行。
+
+    Args:
+        fund_code: 基金代码。
+        app_category: App 类别。
+        classified_fund_type: 系统基金类型。
+        app_category_status: App 类别状态。
+        preferred_lens_status: preferred_lens 状态。
+        preferred_lens_key: preferred_lens key。
+        missing_field_rate: 缺失字段比例。
+
+    Returns:
+        score.json 中的 fund_quality 对象。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return {
+        "fund_code": fund_code,
+        "fund_name": f"测试基金{fund_code}",
+        "app_category": app_category,
+        "classified_fund_type": classified_fund_type,
+        "app_category_status": app_category_status,
+        "preferred_lens_status": preferred_lens_status,
+        "preferred_lens_key": preferred_lens_key,
+        "missing_field_count": int(missing_field_rate * 100),
+        "total_field_count": 100,
+        "missing_field_rate": missing_field_rate,
+        "missing_p0_fields": [],
+        "missing_p1_fields": [],
+        "reason": "测试原因",
     }

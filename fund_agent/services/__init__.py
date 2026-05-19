@@ -20,12 +20,18 @@ from fund_agent.services.quality_gate_service import (
     QualityGateRequest,
     QualityGateService,
 )
+from fund_agent.services.thermometer_service import (
+    ThermometerRequest,
+    ThermometerService,
+)
 from fund_agent.services.fund_analysis_service import (
     FinalJudgment,
     FundAnalysisRequest,
     FundAnalysisResult,
     FundAnalysisService,
     MoneyHorizon,
+    QualityGateBlockedError,
+    QualityGatePolicy,
     ValuationState,
 )
 
@@ -40,10 +46,14 @@ __all__ = [
     "GoldenPrefillService",
     "QualityGateRequest",
     "QualityGateService",
+    "ThermometerRequest",
+    "ThermometerService",
     "FinalJudgment",
     "FundAnalysisRequest",
     "FundAnalysisResult",
     "FundAnalysisService",
     "MoneyHorizon",
+    "QualityGateBlockedError",
+    "QualityGatePolicy",
     "ValuationState",
 ]

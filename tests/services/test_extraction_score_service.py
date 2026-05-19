@@ -56,6 +56,8 @@ def test_extraction_score_service_delegates_explicit_params(monkeypatch, tmp_pat
             golden_set_path=tmp_path / "golden_set.json",
             field_scores=(),
             fund_scores=(),
+            fund_quality=(),
+            failed_funds=(),
             golden_set=GoldenSetSelection(
                 source_csv=str(kwargs["source_csv"]),
                 records=(),
@@ -87,6 +89,7 @@ def test_extraction_score_service_delegates_explicit_params(monkeypatch, tmp_pat
         output_dir=tmp_path,
         thresholds=thresholds,
         golden_answer_path=tmp_path / "golden-answer.json",
+        errors_path=tmp_path / "errors.jsonl",
     )
 
     result = service.run(request)
@@ -99,6 +102,7 @@ def test_extraction_score_service_delegates_explicit_params(monkeypatch, tmp_pat
         "output_dir": tmp_path,
         "thresholds": thresholds,
         "golden_answer_path": tmp_path / "golden-answer.json",
+        "errors_path": tmp_path / "errors.jsonl",
     }
 
 
@@ -123,4 +127,29 @@ def test_extraction_score_service_rejects_non_jsonl_snapshot(tmp_path: Path) -> 
     )
 
     with pytest.raises(ValueError, match="jsonl"):
+        service.run(request)
+
+
+def test_extraction_score_service_rejects_non_jsonl_errors_path(tmp_path: Path) -> None:
+    """验证 Service 层拒绝非 JSONL errors 路径。
+
+    Args:
+        tmp_path: pytest 临时目录 fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当非法 errors 路径未被拒绝时抛出。
+    """
+
+    service = ExtractionScoreService()
+    request = ExtractionScoreRequest(
+        snapshot_path=tmp_path / "snapshot.jsonl",
+        source_csv=Path("docs/code_20260519.csv"),
+        output_dir=None,
+        errors_path=tmp_path / "errors.txt",
+    )
+
+    with pytest.raises(ValueError, match="errors_path"):
         service.run(request)
