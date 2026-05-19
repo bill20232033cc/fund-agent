@@ -26,6 +26,8 @@ from fund_agent.services import (
     GoldenPrefillRequest,
     GoldenPrefillService,
     MoneyHorizon,
+    QualityGateRequest,
+    QualityGateService,
     ValuationState,
 )
 
@@ -34,6 +36,7 @@ DEFAULT_SELECTED_FUNDS_CSV = Path("docs/code_20260519.csv")
 DEFAULT_GOLDEN_TEMPLATE = Path("docs/golden-answer-template.md")
 DEFAULT_GOLDEN_PREFILL_OUTPUT = Path("reports/golden-answers/golden-answer-prefill.md")
 DEFAULT_GOLDEN_ANSWER_OUTPUT = Path("reports/golden-answers/golden-answer.json")
+DEFAULT_QUALITY_GATE_SCORE = Path("reports/extraction-snapshots/p4-s3b-004393-controller-final-score/score.json")
 
 
 @app.command()
@@ -330,6 +333,40 @@ def golden_build(
     typer.echo(f"funds: {result.fund_count}")
     typer.echo(f"records: {result.record_count}")
     typer.echo(f"skipped: {result.skipped_count}")
+
+
+@app.command("quality-gate")
+def quality_gate(
+    score_path: Annotated[Path, typer.Option("--score-path", help="extraction-score 产出的 score.json 路径")] = DEFAULT_QUALITY_GATE_SCORE,
+    output_dir: Annotated[Path | None, typer.Option("--output-dir", help="质量 gate 输出目录")] = None,
+) -> None:
+    """基于 extraction-score 结果生成报告质量 gate。
+
+    Args:
+        score_path: `score.json` 路径。
+        output_dir: 输出目录。
+
+    Returns:
+        无返回值，产物写入输出目录并在 stdout 打印摘要。
+
+    Raises:
+        typer.Exit: gate 生成失败时以非零状态退出。
+    """
+
+    try:
+        result = QualityGateService().run(
+            QualityGateRequest(
+                score_path=score_path,
+                output_dir=output_dir,
+            )
+        )
+    except Exception as exc:
+        typer.echo(f"质量 gate 生成失败：{exc}", err=True)
+        raise typer.Exit(code=1) from exc
+    typer.echo(f"quality_gate_json: {result.gate_json_path}")
+    typer.echo(f"quality_gate_md: {result.gate_markdown_path}")
+    typer.echo(f"status: {result.status}")
+    typer.echo(f"issues: {len(result.issues)}")
 
 
 def _valuation_state(value: str) -> ValuationState:

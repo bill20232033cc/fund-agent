@@ -202,6 +202,43 @@ class _FakeGoldenAnswerService:
         )
 
 
+@dataclass(frozen=True, slots=True)
+class _FakeQualityGateResult:
+    """CLI 测试用 quality gate 结果。"""
+
+    gate_json_path: Path
+    gate_markdown_path: Path
+    status: str
+    issues: tuple[object, ...]
+
+
+class _FakeQualityGateService:
+    """CLI 测试用 quality gate Service。"""
+
+    last_request = None
+
+    def run(self, request):  # type: ignore[no-untyped-def]
+        """记录请求并返回固定 gate 结果。
+
+        Args:
+            request: CLI 构造的 quality gate 请求。
+
+        Returns:
+            fake gate 结果。
+
+        Raises:
+            无显式抛出。
+        """
+
+        type(self).last_request = request
+        return _FakeQualityGateResult(
+            gate_json_path=Path("quality_gate.json"),
+            gate_markdown_path=Path("quality_gate.md"),
+            status="block",
+            issues=(object(), object()),
+        )
+
+
 def test_analyze_cli_calls_service_and_prints_report(monkeypatch) -> None:  # type: ignore[no-untyped-def]
     """验证 analyze 命令调用 Service 并输出 Markdown。
 
@@ -476,3 +513,42 @@ def test_golden_build_cli_is_thin_service_entry(monkeypatch, tmp_path) -> None: 
     assert _FakeGoldenAnswerService.last_request is not None
     assert _FakeGoldenAnswerService.last_request.input_path == input_path
     assert _FakeGoldenAnswerService.last_request.output_path == output_path
+
+
+def test_quality_gate_cli_is_thin_service_entry(monkeypatch, tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """验证 quality-gate 命令只把显式参数转发给 Service。
+
+    Args:
+        monkeypatch: pytest monkeypatch fixture。
+        tmp_path: pytest 临时目录 fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 CLI 参数转发或输出摘要不符合契约时抛出。
+    """
+
+    _FakeQualityGateService.last_request = None
+    monkeypatch.setattr(cli, "QualityGateService", _FakeQualityGateService)
+    runner = CliRunner()
+    score_path = tmp_path / "score.json"
+    output_dir = tmp_path / "gate"
+
+    result = runner.invoke(
+        cli.app,
+        [
+            "quality-gate",
+            "--score-path",
+            str(score_path),
+            "--output-dir",
+            str(output_dir),
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert "quality_gate_json:" in result.output
+    assert "status: block" in result.output
+    assert _FakeQualityGateService.last_request is not None
+    assert _FakeQualityGateService.last_request.score_path == score_path
+    assert _FakeQualityGateService.last_request.output_dir == output_dir

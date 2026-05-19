@@ -16,6 +16,10 @@ from fund_agent.services.golden_prefill_service import (
     GoldenPrefillRequest,
     GoldenPrefillService,
 )
+from fund_agent.services.quality_gate_service import (
+    QualityGateRequest,
+    QualityGateService,
+)
 from fund_agent.services.fund_analysis_service import (
     FinalJudgment,
     FundAnalysisRequest,
@@ -34,6 +38,8 @@ __all__ = [
     "GoldenAnswerService",
     "GoldenPrefillRequest",
     "GoldenPrefillService",
+    "QualityGateRequest",
+    "QualityGateService",
     "FinalJudgment",
     "FundAnalysisRequest",
     "FundAnalysisResult",

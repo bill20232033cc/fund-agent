@@ -419,7 +419,18 @@ P4-S3b 验证：
 
 FQ6 跨 run snapshot diff 延后到 P4-S4 末尾或 P5，不作为 P4-S1/P4-S2 前置。
 
-### 7.3 标注前衔接产物
+### 7.3 P4-S4 gate 骨架
+
+在 correctness golden answer 完成人工审核前，先落地只依赖 `score.json` 的质量 gate 骨架：
+
+- 输入：`fund-analysis extraction-score` 产出的 `score.json`。
+- 输出：`quality_gate.json` 与 `quality_gate.md`。
+- P0 字段 `fail` 触发 `block`。
+- P1 字段 `fail` 触发 `warn`。
+- correctness 尚未接入时记录 `FQ0/info`，不阻断。
+- 不读取 PDF/cache，不调用 LLM，不改变报告生成主链路。
+
+### 7.4 标注前衔接产物
 
 在用户完成人工标注前，先收口 correctness golden answer 的输入链路：
 
@@ -486,3 +497,4 @@ P4 遵循 phaseflow / gateflow 多 Agent 约定：
 | 2026-05-19 | P4-S3a review judgment | ✅ passed | `004393` 类型误判已修复；MiMo/GLM review + targeted re-review 均 PASS；controller 裁决 `docs/reviews/p4-s3a-code-review-controller-judgment-20260519.md`；accepted commit=`0b3fbc6`；真实 snapshot 显示 `active_fund`；下一 gate 为 P4-S3b |
 | 2026-05-19 | P4-S3b review judgment | ✅ passed | `004393` 的 5 个高影响 extractor 缺口已修复；MiMo/GLM code review 与 targeted re-review 均 PASS，controller 接受并修复 2 个中风险泛化问题；裁决 `docs/reviews/p4-s3b-code-review-controller-judgment-20260519.md`；当前验证 `24 passed`、ruff passed、diff check passed；真实 snapshot/score 显示本 slice 5 字段 coverage / traceability 均为 `100.0%`；下一 gate 为 P4-S4 |
 | 2026-05-19 | P4-S4 pre-label handoff | ✅ passed | 新增 correctness golden answer 预填、人工审核 Markdown 转 strict JSON 与校验 CLI；当前验证 `11 passed`、ruff passed、CLI help passed、golden-build smoke passed；correctness 自动比对仍等待用户人工审核后的 JSON |
+| 2026-05-19 | P4-S4 quality gate skeleton | ✅ passed | 新增只消费 `score.json` 的报告质量 gate 骨架；P0 fail 阻断、P1 fail 警告、correctness 未接入记录 info；当前验证 `12 passed`、ruff passed、CLI help passed、diff check passed |
