@@ -2,7 +2,7 @@
 
 > **版本**: v0.1
 > **日期**: 2026-05-19
-> **状态**: P4-S1 accepted
+> **状态**: P4-S2 accepted
 > **设计真源**: `docs/design.md`
 > **全局总控**: `docs/implementation-control.md`
 > **P4 第一性原理计划**: `docs/post-mvp-p4-first-principles-plan.md`
@@ -32,8 +32,8 @@ P4 必须优先解决三个底层问题：
 | 项目 | 状态 |
 |---|---|
 | 当前 phase | P4 |
-| 当前 gate | `P4-S1 accepted` |
-| 下一 gate | `P4-S2 plan / implementation` |
+| 当前 gate | `P4-S2 accepted` |
+| 下一 gate | `P4-S3 implementation` |
 | 当前分支 | `main` |
 | P4 输入池 | `docs/code_20260519.csv` |
 | 已知数据质量问题 | `016492` 重复；56 条记录、55 个唯一代码 |
@@ -51,7 +51,7 @@ P4-S1 进入 implementation 前置条件已完成：
 | Slice | 名称 | 状态 | 依赖 | 验收信号 |
 |---|---|---|---|---|
 | P4-S1 | Selected Fund Extraction Snapshot + Quality Gate MVP | ✅ accepted | P3 | 能对指定基金和分层抽样基金生成 snapshot 与 summary |
-| P4-S2 | 字段级评分规则 + Golden Set 标注 | ⬜ pending | P4-S1 | P0 字段 coverage / traceability 可计算 |
+| P4-S2 | 字段级评分规则 + Golden Set 标注 | ✅ accepted | P4-S1 | P0 字段 coverage / traceability 可计算 |
 | P4-S3 | 基金类型误判修复 + 高影响 extractor 缺口修复 | ⬜ pending | P4-S2 | `004393` 不再误判为 `index_fund`，并由 score 证明改进 |
 | P4-S4 | 报告质量审计与阻断 | ⬜ pending | P4-S3 | 低质量输入可被 quality gate 标记或阻断 |
 
@@ -208,6 +208,39 @@ P4-S1 通过条件：
 
 ### 5.2 字段等级
 
+P4-S2 前半段使用与 P4-S1 snapshot 同源的 `field_name` 标识符评分，不使用自然语言字段名作为程序输入。
+
+P0 必须字段映射：
+
+| field_name | 对应自然语言字段 |
+|---|---|
+| `basic_identity` | 基金名称、基金代码、基金规模、基金经理或管理人 |
+| `classified_fund_type` | 基金类型 |
+| `benchmark` | 业绩比较基准 |
+| `nav_benchmark_performance` | 净值增长率、基准收益率 |
+| `fee_schedule` | 管理费、托管费 |
+| `manager_strategy_text` | 基金经理或管理人策略文本 |
+
+P1 关键字段映射：
+
+| field_name | 对应自然语言字段 |
+|---|---|
+| `product_profile` | 投资目标、投资范围、投资策略 |
+| `turnover_rate` | 换手率 |
+| `holder_structure` | 持有人结构 |
+| `manager_alignment` | 从业人员或基金经理持有 |
+| `holdings_snapshot` | 前十大持仓、行业分布 |
+| `share_change` | 份额期初/期末/净变动 |
+
+P2 增强字段映射：
+
+| field_name | 对应自然语言字段 |
+|---|---|
+| `investor_return` | 投资者实际收益率 |
+| `nav_data` | 净值序列数据 |
+
+原自然语言清单保留为人工解释口径：
+
 P0 必须字段：
 
 - 基金名称
@@ -243,6 +276,8 @@ P2 增强字段：
 
 - Coverage：字段是否提取到。
 - Traceability：字段是否有证据锚点。
+- Status：按显式阈值计算，coverage 和 traceability 均达到 90% 为 `pass`，均达到 70% 为 `watch`，其余为 `fail`。
+- 输出：`score.json`、`score.md`，并包含字段级 `field_group / field_name / priority / records / coverage_rate / traceability_rate / status`。
 
 Correctness 依赖人工 golden answer，P4-S2 后半段再引入。
 
@@ -264,6 +299,14 @@ Golden set 必须从 `docs/code_20260519.csv` 中选择。
 - 货币基金类是否纳入 P4-S2 由用户裁决；当前模板对货币基金适配度较低，可先作为 edge case
 
 不得直接使用不在 CSV 中的代码作为“精选基金池 golden set”。
+
+P4-S2 前半段当前实现口径：
+
+- 从 CSV 文件顺序选择最小集合。
+- 固定纳入 `004393`。
+- 纳入黄金类、海外股票类、海外债券/稳健类、国内债券类各 1 只。
+- 国内股票类至少 2 只，其中包含 `004393` 和额外 1 只。
+- 暂不纳入货币基金类，作为 edge case 写入 `golden_set.json`。
 
 ---
 
@@ -352,3 +395,6 @@ P4 遵循 phaseflow / gateflow 多 Agent 约定：
 | 2026-05-19 | P4-S1 implementation | 🟡 in progress | 已新增 `fund_agent/fund/extraction_snapshot.py` capability、薄 CLI 入口和 dry-run 单元测试；等待代码审查前验证 |
 | 2026-05-19 | P4-S1 code review | 🟡 in progress | Implementation artifact 已写入 `docs/reviews/p4-s1-implementation-20260519.md`；当前验证 `17 passed`、CLI help 与 dry-run smoke passed，等待 MiMo/GLM code review |
 | 2026-05-19 | P4-S1 review judgment | ✅ passed | MiMo/GLM code review 均 PASS；controller 裁决 `docs/reviews/p4-s1-code-review-controller-judgment-20260519.md`；accepted commit=`c8a47f6`；P4-S1 accepted，下一 gate 为 P4-S2 |
+| 2026-05-19 | P4-S2 implementation | 🟡 in progress | 默认先实现 Coverage / Traceability 评分；Correctness 和人工 golden answer 留到 P4-S2 后半段；货币基金先作为 edge case 不纳入最小 golden set |
+| 2026-05-19 | P4-S2 code review | 🟡 in progress | Implementation artifact 已写入 `docs/reviews/p4-s2-implementation-20260519.md`；当前验证 `17 passed`、ruff passed、CLI help passed、diff check passed，等待 MiMo/GLM code review |
+| 2026-05-19 | P4-S2 review judgment | ✅ passed | MiMo/GLM code review 均 PASS；controller 裁决 `docs/reviews/p4-s2-code-review-controller-judgment-20260519.md`；P4-S2 accepted，下一 gate 为 P4-S3 |

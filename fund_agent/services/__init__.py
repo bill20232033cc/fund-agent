@@ -4,6 +4,10 @@ from fund_agent.services.extraction_snapshot_service import (
     ExtractionSnapshotRequest,
     ExtractionSnapshotService,
 )
+from fund_agent.services.extraction_score_service import (
+    ExtractionScoreRequest,
+    ExtractionScoreService,
+)
 from fund_agent.services.fund_analysis_service import (
     FinalJudgment,
     FundAnalysisRequest,
@@ -16,6 +20,8 @@ from fund_agent.services.fund_analysis_service import (
 __all__ = [
     "ExtractionSnapshotRequest",
     "ExtractionSnapshotService",
+    "ExtractionScoreRequest",
+    "ExtractionScoreService",
     "FinalJudgment",
     "FundAnalysisRequest",
     "FundAnalysisResult",

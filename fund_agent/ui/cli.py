@@ -14,6 +14,8 @@ from typing import Annotated
 import typer
 
 from fund_agent.services import (
+    ExtractionScoreRequest,
+    ExtractionScoreService,
     ExtractionSnapshotRequest,
     ExtractionSnapshotService,
     FinalJudgment,
@@ -194,6 +196,45 @@ def extraction_snapshot(
     typer.echo(f"snapshot: {result.snapshot_path}")
     typer.echo(f"summary: {result.summary_path}")
     typer.echo(f"errors: {result.errors_path}")
+
+
+@app.command("extraction-score")
+def extraction_score(
+    snapshot_path: Annotated[Path, typer.Option("--snapshot-path", help="P4-S1 snapshot.jsonl 路径")],
+    source_csv: Annotated[
+        Path,
+        typer.Option("--source-csv", help="精选基金池 CSV 路径"),
+    ] = DEFAULT_SELECTED_FUNDS_CSV,
+    output_dir: Annotated[Path | None, typer.Option("--output-dir", help="显式输出目录")] = None,
+) -> None:
+    """对 P4-S1 snapshot 生成字段级 coverage / traceability 评分。
+
+    Args:
+        snapshot_path: P4-S1 输出的 JSONL 快照路径。
+        source_csv: 精选基金池 CSV 路径。
+        output_dir: 显式输出目录。
+
+    Returns:
+        无返回值，产物写入输出目录并在 stdout 打印路径。
+
+    Raises:
+        typer.Exit: 评分失败时以非零状态退出。
+    """
+
+    try:
+        result = ExtractionScoreService().run(
+            ExtractionScoreRequest(
+                snapshot_path=snapshot_path,
+                source_csv=source_csv,
+                output_dir=output_dir,
+            )
+        )
+    except Exception as exc:
+        typer.echo(f"评分生成失败：{exc}", err=True)
+        raise typer.Exit(code=1) from exc
+    typer.echo(f"score_json: {result.score_json_path}")
+    typer.echo(f"score_md: {result.score_markdown_path}")
+    typer.echo(f"golden_set: {result.golden_set_path}")
 
 
 def _valuation_state(value: str) -> ValuationState:

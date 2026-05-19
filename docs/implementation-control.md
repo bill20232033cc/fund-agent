@@ -32,8 +32,8 @@
 ### 1.3 当前 Gate 与基线裁决（2026-05-18）
 
 - 当前分支：`main`
-- 当前 gate：`P4-S1 accepted`
-- 下一 gate：`P4-S2 plan / implementation`
+- 当前 gate：`P4-S2 accepted`
+- 下一 gate：`P4-S3 implementation`
 - P4 执行控制文档：`docs/implementation-control-p4.md`
 - 当前裁决：
   - P0 维持 `done`。已验证 `dayu` 依赖可导入、`fund-agent` 处于 editable install、`fund-analysis --help` 可用、样本基金 `110011` 年报可下载、`pdfplumber` 可提取全文文本和表格。
@@ -158,8 +158,8 @@
     - `ProgrammaticAuditInput` 兼容性保持不变
     - 验证命令 `.venv/bin/python -m pytest tests/fund/template tests/fund/audit -q` 当前通过（`23 passed`），`.venv/bin/python -m pytest tests/fund/analysis -q` 当前通过（`40 passed`）
 - 下一 entry point：
-  - 进入 `P4-S2 plan / implementation`
-  - 优先目标是在 P4-S1 snapshot 基础上建立字段级评分规则与最小 golden set
+  - 进入 `P4-S3 implementation`
+  - 优先目标是基于 P4-S2 score 修复 `004393` 类型误判和高影响 extractor 缺口
 - 当前 artifact：
   - plan: `docs/reviews/p1-plan-2026-05-17.md`
   - plan review: `docs/reviews/p1-plan-review-2026-05-17.md`
@@ -1274,3 +1274,6 @@ P0（环境搭建）
 | 2026-05-19 | P4 | 🟡 in progress | 用户提供 `docs/code_20260519.csv` 作为有知有行 App 精选基金池；人工测试 `004393` 暴露基金类型误判和核心字段大量缺失；已形成 `docs/post-mvp-p4-first-principles-plan.md` 与 controller 裁决 `docs/reviews/p4-audit-input-controller-judgment-20260519-0144.md`；`docs/implementation-control-p4.md` 已通过 MiMo/GLM plan review 与 controller 裁决；当前 gate 为 `P4-S1 implementation` |
 | 2026-05-19 | P4-S1 | 🟡 code review | Selected Fund Extraction Snapshot + Quality Gate MVP implementation 已完成；artifact=`docs/reviews/p4-s1-implementation-20260519.md`；当前验证 `17 passed`、CLI help passed、dry-run smoke passed；当前 gate 为 `P4-S1 code review` |
 | 2026-05-19 | P4-S1 | ✅ accepted | MiMo/GLM code review 均 PASS；controller 裁决=`docs/reviews/p4-s1-code-review-controller-judgment-20260519.md`；accepted commit=`c8a47f6`；当前验证 `17 passed`、CLI help passed、dry-run smoke passed；下一 gate 为 `P4-S2 plan / implementation` |
+| 2026-05-19 | P4-S2 | 🟡 implementation | 当前进入字段级 coverage / traceability scoring；实现产物为 `score.json`、`score.md`、`golden_set.json`；Correctness 和人工 golden answer 留到 P4-S2 后半段；货币基金先作为 edge case 不纳入最小 golden set |
+| 2026-05-19 | P4-S2 | 🟡 code review | 字段级 coverage / traceability scoring 与最小 golden set selection 已完成；artifact=`docs/reviews/p4-s2-implementation-20260519.md`；当前验证 `17 passed`、ruff passed、CLI help passed、diff check passed |
+| 2026-05-19 | P4-S2 | ✅ accepted | MiMo/GLM code review 均 PASS；controller 裁决=`docs/reviews/p4-s2-code-review-controller-judgment-20260519.md`；当前验证 `17 passed`、ruff passed、CLI help passed、diff check passed；下一 gate 为 `P4-S3 implementation` |

@@ -13,6 +13,7 @@
 - `tests/fund/extractors/test_manager_ownership.py`：`§4/§8/§9` 管理人/持有人 extractor 测试，覆盖策略文本、换手率、持有披露、持有人结构和 `missing` 路径
 - `tests/fund/extractors/test_holdings_share_change.py`：`§8/§10` 持仓/份额 extractor 测试，覆盖前十大重仓、行业分布、份额变动和表格型 anchor
 - `tests/fund/test_extraction_snapshot.py`：P4-S1 精选基金池字段级抽取快照测试，覆盖 CSV 校验、snapshot schema、summary 重复代码标红、单基金失败继续和 `004393` known failure 捕获；使用 fake extractor，不触发真实网络或 PDF
+- `tests/fund/test_extraction_score.py`：P4-S2 字段级评分测试，覆盖 snapshot JSONL coverage / traceability / status / priority 映射、score 输出和最小 golden set 选择；不触发真实网络或 PDF
 - `tests/fund/data/test_nav_data.py`：净值数据适配器测试，覆盖 `nav_cache` 命中和强制刷新
 - `tests/fund/data/test_thermometer.py`：有知有行温度计适配器测试，覆盖全市场/指数/宏观解析、24h 缓存复用、强制刷新、抓取失败 stale fallback、无缓存 unavailable 和 malformed HTML
 - `tests/fund/analysis/test_r_abc.py`：R=A+B-C 收益归因测试，覆盖公式闭合、P1 字段解析、证据锚点传递和缺失输入路径
@@ -24,6 +25,7 @@
 - `tests/fund/audit/test_audit_programmatic.py`：程序审计测试，覆盖 P1/P2/P3/L1/R1/R2 规则、必需输入缺失、故意注入错误和未知检查清单信号
 - `tests/fund/template/test_renderer.py`：模板渲染器测试，覆盖 8 章完整性、正文与附录证据锚点格式、缺证章节显式输出、页码保留、非年报来源标注、程序审计输入兼容、缺失数据显式渲染、最终判断边界、禁用交易措辞和 README 同步
 - `tests/services/test_fund_analysis_service.py`：Service 编排测试，使用 fake extractor 避免网络/PDF 下载，覆盖结构化抽取到渲染和程序审计的完整调用路径，并验证不含 PDF 下载的单只基金分析低于 30 秒
+- `tests/services/test_extraction_score_service.py`：P4-S2 评分 Service 测试，覆盖显式参数转发和非法 snapshot 路径拒绝
 - `tests/ui/test_cli.py`：Typer CLI 测试，覆盖 `analyze` 调用 Service 并输出 Markdown、失败非零退出，以及 `checklist` 不输出误导性成功文本
 - `tests/scripts/test_selected_funds_smoke.py`：有知有行精选基金池 smoke 脚本测试，覆盖 CSV 数据质量、分层抽样、指定代码和 CLI 命令构造；不触发真实网络
 - `tests/fund/integration/test_p1_sample_matrix.py`：P1 样本矩阵测试，验证 3 只样本基金 12 项结构化数据达到 `36/36`
@@ -44,6 +46,7 @@ pytest tests/fund/extractors/test_performance.py -q
 pytest tests/fund/extractors/test_manager_ownership.py -q
 pytest tests/fund/extractors/test_holdings_share_change.py -q
 pytest tests/fund/test_extraction_snapshot.py -q
+pytest tests/fund/test_extraction_score.py -q
 pytest tests/fund/data/test_nav_data.py -q
 pytest tests/fund/data/test_thermometer.py -q
 pytest tests/fund/analysis/test_r_abc.py -q
@@ -98,9 +101,10 @@ P4-S1 字段级快照可通过 CLI 单独运行，会触发真实年报仓库和
 ```bash
 fund-analysis extraction-snapshot --run-id p4-s1-004393 --fund-code 004393 --report-year 2024
 fund-analysis extraction-snapshot --run-id p4-s1-selected-1x --sample-per-category 1 --report-year 2024
+fund-analysis extraction-score --snapshot-path reports/extraction-snapshots/p4-s1-selected-1x/snapshot.jsonl
 ```
 
-pytest 中的 snapshot 测试必须继续使用 fake extractor，禁止依赖真实 PDF、缓存或网络。
+pytest 中的 snapshot 和 score 测试必须继续使用 fake extractor 或临时 JSONL，禁止依赖真实 PDF、缓存或网络。
 
 ## 维护约定
 
@@ -124,5 +128,6 @@ pytest 中的 snapshot 测试必须继续使用 fake extractor，禁止依赖真
 - Service 测试必须通过 fake extractor 隔离网络、PDF 下载和文档仓库副作用，只断言 Service 对 Capability 模块的编排契约。
 - UI CLI 测试只验证参数解析、Service 调用、stdout/stderr 和退出码；不得在 UI 层直接断言基金分析规则。
 - Snapshot 测试只断言 CSV 校验、字段级 schema、summary/error 写入和 known failure 捕获；不得在 P4-S1 测试中修正或期待 `004393` 分类改善。
+- Score 测试只消费 P4-S1 snapshot 记录或精选基金池 CSV；不得读取 PDF/cache，不得实现或断言 correctness 评分。
 - P3 CLI 端到端矩阵可通过 fake repository 和 fake nav provider 隔离网络/PDF 副作用，但必须经过真实 CLI 参数解析、Service 编排、模板渲染和程序审计，并断言 `ProgrammaticAuditResult.checked_rules` 覆盖 P1/P2/P3/L1/R1/R2，同时验证 8 章正文证据行、附录年报章节/表格/行定位和无缺证占位。
 - 新增基金类型或章节 extractor 时，先补 fixture，再补测试，再扩实现；不要只靠真实年报手工回归。

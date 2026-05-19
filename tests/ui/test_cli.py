@@ -93,6 +93,41 @@ class _FakeExtractionSnapshotService:
         )
 
 
+@dataclass(frozen=True, slots=True)
+class _FakeScoreResult:
+    """CLI 测试用评分运行结果。"""
+
+    score_json_path: Path
+    score_markdown_path: Path
+    golden_set_path: Path
+
+
+class _FakeExtractionScoreService:
+    """CLI 测试用评分 Service。"""
+
+    last_request = None
+
+    def run(self, request):  # type: ignore[no-untyped-def]
+        """记录请求并返回固定路径。
+
+        Args:
+            request: CLI 构造的评分请求。
+
+        Returns:
+            fake 评分结果。
+
+        Raises:
+            无显式抛出。
+        """
+
+        type(self).last_request = request
+        return _FakeScoreResult(
+            score_json_path=Path("score.json"),
+            score_markdown_path=Path("score.md"),
+            golden_set_path=Path("golden_set.json"),
+        )
+
+
 def test_analyze_cli_calls_service_and_prints_report(monkeypatch) -> None:  # type: ignore[no-untyped-def]
     """验证 analyze 命令调用 Service 并输出 Markdown。
 
@@ -247,3 +282,42 @@ def test_extraction_snapshot_cli_is_thin_capability_entry(monkeypatch, tmp_path)
     assert _FakeExtractionSnapshotService.last_request.force_refresh is True
     assert _FakeExtractionSnapshotService.last_request.sample_per_category == 2
     assert _FakeExtractionSnapshotService.last_request.limit == 3
+
+
+def test_extraction_score_cli_is_thin_service_entry(monkeypatch, tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """验证 extraction-score 命令只把显式参数转发给 Service。
+
+    Args:
+        monkeypatch: pytest monkeypatch fixture。
+        tmp_path: pytest 临时目录 fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 CLI 参数转发或输出路径不符合契约时抛出。
+    """
+
+    _FakeExtractionScoreService.last_request = None
+    monkeypatch.setattr(cli, "ExtractionScoreService", _FakeExtractionScoreService)
+    runner = CliRunner()
+
+    result = runner.invoke(
+        cli.app,
+        [
+            "extraction-score",
+            "--snapshot-path",
+            "reports/extraction-snapshots/unit/snapshot.jsonl",
+            "--source-csv",
+            "docs/code_20260519.csv",
+            "--output-dir",
+            str(tmp_path),
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert "score_json:" in result.output
+    assert _FakeExtractionScoreService.last_request is not None
+    assert _FakeExtractionScoreService.last_request.snapshot_path == Path("reports/extraction-snapshots/unit/snapshot.jsonl")
+    assert _FakeExtractionScoreService.last_request.source_csv == Path("docs/code_20260519.csv")
+    assert _FakeExtractionScoreService.last_request.output_dir == tmp_path

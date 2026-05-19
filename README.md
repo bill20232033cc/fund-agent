@@ -56,6 +56,10 @@ fund-analysis extraction-snapshot \
   --run-id p4-s1-004393 \
   --fund-code 004393 \
   --report-year 2024
+
+# 对已有 snapshot 生成字段级评分
+fund-analysis extraction-score \
+  --snapshot-path reports/extraction-snapshots/p4-s1-004393/snapshot.jsonl
 ```
 
 当前 `fund-analysis checklist FUND_CODE` 是占位命令，尚未接入 Service。请使用 `fund-analysis analyze FUND_CODE` 生成包含检查清单的完整报告。
@@ -109,6 +113,7 @@ fund-analysis extraction-snapshot \
 - 程序审计规则：P1/P2/P3/L1/R1/R2
 - 有知有行温度计 data adapter
 - 精选基金池字段级抽取快照：`snapshot.jsonl`、`summary.md`、`errors.jsonl`
+- 精选基金池字段级评分：`score.json`、`score.md`、`golden_set.json`
 - 3 只样本基金 CLI 端到端矩阵，覆盖报告完整性、程序审计和证据锚点
 
 尚未接入：
@@ -138,6 +143,15 @@ fund-analysis extraction-snapshot \
 ```
 
 默认输出到 `reports/extraction-snapshots/<run-id>/`，包含 `snapshot.jsonl`、`summary.md` 和 `errors.jsonl`。当前 CSV 中 `016492` 重复，summary 会标红但不阻断 P4-S1 快照。
+
+对已有 snapshot 生成字段级 coverage / traceability 评分：
+
+```bash
+fund-analysis extraction-score \
+  --snapshot-path reports/extraction-snapshots/p4-s1-selected-1x/snapshot.jsonl
+```
+
+默认输出到 snapshot 所在目录，包含 `score.json`、`score.md` 和 `golden_set.json`。当前评分不包含 correctness；最小 golden set 固定包含 `004393`，并暂时排除货币基金类。
 
 ## 真实精选基金池 Smoke
 
