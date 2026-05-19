@@ -12,6 +12,7 @@
 - `tests/fund/extractors/test_performance.py`：`§3` 表现 extractor 测试，覆盖净值增长率/基准收益率 anchor，以及投资者收益率 `direct / estimated / missing` 三态
 - `tests/fund/extractors/test_manager_ownership.py`：`§4/§8/§9` 管理人/持有人 extractor 测试，覆盖策略文本、换手率、持有披露、持有人结构和 `missing` 路径
 - `tests/fund/extractors/test_holdings_share_change.py`：`§8/§10` 持仓/份额 extractor 测试，覆盖前十大重仓、行业分布、份额变动和表格型 anchor
+- `tests/fund/test_extraction_snapshot.py`：P4-S1 精选基金池字段级抽取快照测试，覆盖 CSV 校验、snapshot schema、summary 重复代码标红、单基金失败继续和 `004393` known failure 捕获；使用 fake extractor，不触发真实网络或 PDF
 - `tests/fund/data/test_nav_data.py`：净值数据适配器测试，覆盖 `nav_cache` 命中和强制刷新
 - `tests/fund/data/test_thermometer.py`：有知有行温度计适配器测试，覆盖全市场/指数/宏观解析、24h 缓存复用、强制刷新、抓取失败 stale fallback、无缓存 unavailable 和 malformed HTML
 - `tests/fund/analysis/test_r_abc.py`：R=A+B-C 收益归因测试，覆盖公式闭合、P1 字段解析、证据锚点传递和缺失输入路径
@@ -24,6 +25,7 @@
 - `tests/fund/template/test_renderer.py`：模板渲染器测试，覆盖 8 章完整性、正文与附录证据锚点格式、缺证章节显式输出、页码保留、非年报来源标注、程序审计输入兼容、缺失数据显式渲染、最终判断边界、禁用交易措辞和 README 同步
 - `tests/services/test_fund_analysis_service.py`：Service 编排测试，使用 fake extractor 避免网络/PDF 下载，覆盖结构化抽取到渲染和程序审计的完整调用路径，并验证不含 PDF 下载的单只基金分析低于 30 秒
 - `tests/ui/test_cli.py`：Typer CLI 测试，覆盖 `analyze` 调用 Service 并输出 Markdown、失败非零退出，以及 `checklist` 不输出误导性成功文本
+- `tests/scripts/test_selected_funds_smoke.py`：有知有行精选基金池 smoke 脚本测试，覆盖 CSV 数据质量、分层抽样、指定代码和 CLI 命令构造；不触发真实网络
 - `tests/fund/integration/test_p1_sample_matrix.py`：P1 样本矩阵测试，验证 3 只样本基金 12 项结构化数据达到 `36/36`
 - `tests/fund/integration/test_p3_cli_e2e_matrix.py`：P3 CLI 端到端矩阵测试，验证 3 只样本基金经 Typer CLI、Service、P1/P2 Capability、模板渲染和程序审计输出完整 8 章报告，并显式断言 P1/P2/P3/L1/R1/R2 全部审计规则执行通过、每章正文证据行和附录来源锚点完整
 - `tests/fixtures/fund/extractors/profile/*.txt`：基础画像最小文本夹具，当前覆盖主动权益、增强指数、债券三类样本
@@ -41,6 +43,7 @@ pytest tests/fund/extractors/test_profile.py -q
 pytest tests/fund/extractors/test_performance.py -q
 pytest tests/fund/extractors/test_manager_ownership.py -q
 pytest tests/fund/extractors/test_holdings_share_change.py -q
+pytest tests/fund/test_extraction_snapshot.py -q
 pytest tests/fund/data/test_nav_data.py -q
 pytest tests/fund/data/test_thermometer.py -q
 pytest tests/fund/analysis/test_r_abc.py -q
@@ -53,6 +56,7 @@ pytest tests/fund/audit/test_audit_programmatic.py -q
 pytest tests/fund/template/test_renderer.py -q
 pytest tests/services -q
 pytest tests/ui -q
+pytest tests/scripts/test_selected_funds_smoke.py -q
 pytest tests/fund/integration/test_p1_sample_matrix.py -q
 pytest tests/fund/integration/test_p3_cli_e2e_matrix.py -q
 ```
@@ -79,6 +83,25 @@ pytest tests/services/test_fund_analysis_service.py -q
 
 Service 性能测试使用 fake extractor 排除网络和 PDF 下载，只验证结构化数据已就绪后的单只基金分析、模板渲染和程序审计低于 30 秒。
 
+真实精选基金池 smoke 不放入常规 pytest。它会触发网络、PDF 下载和真实缓存写入，应单独运行：
+
+```bash
+.venv/bin/python scripts/selected_funds_smoke.py
+.venv/bin/python scripts/selected_funds_smoke.py --code 004393 --run --output-dir reports/smoke/004393
+.venv/bin/python scripts/selected_funds_smoke.py --sample-per-category 1 --run --continue-on-fail --output-dir reports/smoke/selected-1x
+```
+
+脚本默认 dry-run，只校验 `docs/code_20260519.csv` 并打印计划；`--run` 才执行 `fund-analysis analyze`。输出目录会保留每只基金报告、stderr、`results.jsonl` 和 `summary.md`，便于人工复核和后续回归比较。
+
+P4-S1 字段级快照可通过 CLI 单独运行，会触发真实年报仓库和净值数据路径：
+
+```bash
+fund-analysis extraction-snapshot --run-id p4-s1-004393 --fund-code 004393 --report-year 2024
+fund-analysis extraction-snapshot --run-id p4-s1-selected-1x --sample-per-category 1 --report-year 2024
+```
+
+pytest 中的 snapshot 测试必须继续使用 fake extractor，禁止依赖真实 PDF、缓存或网络。
+
 ## 维护约定
 
 - 新增 Capability 测试时，优先使用 fixture、mock 或临时目录隔离网络和文件系统副作用。
@@ -100,5 +123,6 @@ Service 性能测试使用 fake extractor 排除网络和 PDF 下载，只验证
 - 模板渲染测试必须覆盖 8 章结构、证据锚点格式、缺证章节显式文本、页码保留、非年报来源标注、程序审计输入兼容和禁用交易建议措辞；不得只做字符串存在性 smoke test。
 - Service 测试必须通过 fake extractor 隔离网络、PDF 下载和文档仓库副作用，只断言 Service 对 Capability 模块的编排契约。
 - UI CLI 测试只验证参数解析、Service 调用、stdout/stderr 和退出码；不得在 UI 层直接断言基金分析规则。
+- Snapshot 测试只断言 CSV 校验、字段级 schema、summary/error 写入和 known failure 捕获；不得在 P4-S1 测试中修正或期待 `004393` 分类改善。
 - P3 CLI 端到端矩阵可通过 fake repository 和 fake nav provider 隔离网络/PDF 副作用，但必须经过真实 CLI 参数解析、Service 编排、模板渲染和程序审计，并断言 `ProgrammaticAuditResult.checked_rules` 覆盖 P1/P2/P3/L1/R1/R2，同时验证 8 章正文证据行、附录年报章节/表格/行定位和无缺证占位。
 - 新增基金类型或章节 extractor 时，先补 fixture，再补测试，再扩实现；不要只靠真实年报手工回归。

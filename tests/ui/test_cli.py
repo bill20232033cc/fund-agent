@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 
 from typer.testing import CliRunner
 
@@ -55,6 +56,41 @@ class _FailingService:
         """
 
         raise RuntimeError("fixture failure")
+
+
+@dataclass(frozen=True, slots=True)
+class _FakeSnapshotResult:
+    """CLI 测试用快照运行结果。"""
+
+    snapshot_path: Path
+    summary_path: Path
+    errors_path: Path
+
+
+class _FakeExtractionSnapshotService:
+    """CLI 测试用快照 Service。"""
+
+    last_request = None
+
+    async def run(self, request):  # type: ignore[no-untyped-def]
+        """记录请求并返回固定路径。
+
+        Args:
+            request: CLI 构造的快照请求。
+
+        Returns:
+            fake 快照结果。
+
+        Raises:
+            无显式抛出。
+        """
+
+        type(self).last_request = request
+        return _FakeSnapshotResult(
+            snapshot_path=Path("snapshot.jsonl"),
+            summary_path=Path("summary.md"),
+            errors_path=Path("errors.jsonl"),
+        )
 
 
 def test_analyze_cli_calls_service_and_prints_report(monkeypatch) -> None:  # type: ignore[no-untyped-def]
@@ -158,3 +194,56 @@ def test_checklist_cli_is_not_misleading_placeholder() -> None:
 
     assert result.exit_code == 2
     assert "尚未接入 Service" in result.output
+
+
+def test_extraction_snapshot_cli_is_thin_capability_entry(monkeypatch, tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """验证 extraction-snapshot 命令只把显式参数转发给 Service。
+
+    Args:
+        monkeypatch: pytest monkeypatch fixture。
+        tmp_path: pytest 临时目录 fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 CLI 参数转发或输出路径不符合契约时抛出。
+    """
+
+    _FakeExtractionSnapshotService.last_request = None
+    monkeypatch.setattr(cli, "ExtractionSnapshotService", _FakeExtractionSnapshotService)
+    runner = CliRunner()
+
+    result = runner.invoke(
+        cli.app,
+        [
+            "extraction-snapshot",
+            "--run-id",
+            "unit-run",
+            "--fund-code",
+            "004393",
+            "--report-year",
+            "2024",
+            "--source-csv",
+            "docs/code_20260519.csv",
+            "--output-dir",
+            str(tmp_path),
+            "--sample-per-category",
+            "2",
+            "--limit",
+            "3",
+            "--force-refresh",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert "snapshot:" in result.output
+    assert _FakeExtractionSnapshotService.last_request is not None
+    assert _FakeExtractionSnapshotService.last_request.fund_code == "004393"
+    assert _FakeExtractionSnapshotService.last_request.report_year == 2024
+    assert _FakeExtractionSnapshotService.last_request.source_csv == Path("docs/code_20260519.csv")
+    assert _FakeExtractionSnapshotService.last_request.run_id == "unit-run"
+    assert _FakeExtractionSnapshotService.last_request.output_dir == tmp_path
+    assert _FakeExtractionSnapshotService.last_request.force_refresh is True
+    assert _FakeExtractionSnapshotService.last_request.sample_per_category == 2
+    assert _FakeExtractionSnapshotService.last_request.limit == 3

@@ -33,6 +33,7 @@ from fund_agent.fund.template import TemplateFinalJudgment, TemplateRenderInput,
 
 ValuationState = Literal["low", "fair", "high", "unavailable"]
 MoneyHorizon = Literal["long_enough", "uncertain", "too_short"]
+FinalJudgment = TemplateFinalJudgment
 
 
 class _FundDataExtractor(Protocol):
