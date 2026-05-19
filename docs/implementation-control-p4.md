@@ -2,7 +2,7 @@
 
 > **版本**: v0.1
 > **日期**: 2026-05-19
-> **状态**: P4-S3a accepted
+> **状态**: P4-S3b accepted
 > **设计真源**: `docs/design.md`
 > **全局总控**: `docs/implementation-control.md`
 > **P4 第一性原理计划**: `docs/post-mvp-p4-first-principles-plan.md`
@@ -33,8 +33,8 @@ P4 必须优先解决三个底层问题：
 | 项目 | 状态 |
 |---|---|
 | 当前 phase | P4 |
-| 当前 gate | `P4-S3a accepted` |
-| 下一 gate | `P4-S3b implementation` |
+| 当前 gate | `P4-S3b accepted` |
+| 下一 gate | `P4-S4 implementation` |
 | 当前分支 | `main` |
 | P4 输入池 | `docs/code_20260519.csv` |
 | 已知数据质量问题 | `016492` 重复；56 条记录、55 个唯一代码 |
@@ -54,7 +54,7 @@ P4-S1 进入 implementation 前置条件已完成：
 | P4-S1 | Selected Fund Extraction Snapshot + Quality Gate MVP | ✅ accepted | P3 | 能对指定基金和分层抽样基金生成 snapshot 与 summary |
 | P4-S2 | 字段级评分规则 + Golden Set 标注 | ✅ accepted | P4-S1 | P0 字段 coverage / traceability 可计算 |
 | P4-S3a | 基金类型误判修复 | ✅ accepted | P4-S2 | `004393` 不再误判为 `index_fund`，snapshot 显示 `active_fund` |
-| P4-S3b | 高影响 extractor 缺口修复 | ⬜ pending | P4-S3a | `004393` 的高影响缺失字段由 score 证明改进 |
+| P4-S3b | 高影响 extractor 缺口修复 | ✅ accepted | P4-S3a | `004393` 的高影响缺失字段由 score 证明改进 |
 | P4-S4 | 报告质量审计与阻断 | ⬜ pending | P4-S3 | 低质量输入可被 quality gate 标记或阻断 |
 
 ---
@@ -356,27 +356,48 @@ P4-S3a 验证：
 - `.venv/bin/python -m ruff check fund_agent/fund/fund_type.py tests/fund/extractors/test_profile.py`：passed
 - `git diff --check`：passed
 
-### 6.4 P4-S3b next：高影响 extractor 缺口修复
+### 6.4 P4-S3b accepted：高影响 extractor 缺口修复
 
-P4-S3b 继续使用 P4-S2/P4-S3a snapshot 与 score 驱动，不凭肉眼改报告。
+实现与 review artifact：
 
-优先字段：
+- implementation: `docs/reviews/p4-s3b-implementation-20260519.md`
+- code review:
+  - `docs/reviews/p4-s3b-code-review-mimo-20260519.md`
+  - `docs/reviews/p4-s3b-code-review-glm-20260519.md`
+- targeted re-review:
+  - `docs/reviews/p4-s3b-rereview-mimo-20260519-1300.md`
+  - `docs/reviews/p4-s3b-rereview-glm-20260519.md`
+- controller judgment: `docs/reviews/p4-s3b-code-review-controller-judgment-20260519.md`
+
+P4-S3b 裁决：
+
+- 已修复 `004393` 中有直接、语义清晰年报证据的 5 个高影响字段：
+  - `nav_benchmark_performance`
+  - `manager_strategy_text`
+  - `manager_alignment`
+  - `holder_structure`
+  - `share_change`
+- 未修复 `fee_schedule` 是正确边界：真实 `§6` 披露的是当期支付费用金额，不是管理费率/托管费率。
+- Review 接受并经 targeted re-review 关闭 2 个中风险泛化问题：
+  - 净值表现表头匹配排除“标准差”列，避免列序变化时抽错。
+  - 跨页持有人结构 fallback 增加比例值校验，避免把份额列误作比例。
+- `share_change` 多份额列选择策略 deferred；后续需要按基金代码/份额级别明确选择 A/C 列。
+
+P4-S3b 验证：
+
+- `.venv/bin/python -m pytest tests/fund/extractors/test_performance.py tests/fund/extractors/test_manager_ownership.py tests/fund/extractors/test_holdings_share_change.py tests/fund/test_extraction_snapshot.py -q`：`24 passed`
+- `.venv/bin/ruff check fund_agent/fund/extractors/performance.py fund_agent/fund/extractors/manager_ownership.py fund_agent/fund/extractors/holdings_share_change.py tests/fund/extractors/test_performance.py tests/fund/extractors/test_manager_ownership.py tests/fund/extractors/test_holdings_share_change.py`：passed
+- `git diff --check`：passed
+- `reports/extraction-snapshots/p4-s3b-004393-controller-final/summary.md` 显示 5 个本 slice 字段均为 `100.0%` coverage / traceability。
+- `reports/extraction-snapshots/p4-s3b-004393-controller-final-score/score.md` 显示 `pass=9`、`fail=5`、`p0_status=fail`。
+
+仍缺失字段：
 
 - P0：`fee_schedule`
-- P0：`nav_benchmark_performance`
-- P0：`manager_strategy_text`
 - P1：`turnover_rate`
-- P1：`manager_alignment`
-- P1：`holder_structure`
 - P1：`holdings_snapshot`
-- P1：`share_change`
-
-P4-S3b 验收：
-
-- 至少选择 2-3 个高影响字段做最小修复，不一次性重写所有 extractor。
-- 每个字段必须有最小复现测试，优先基于 `004393` 的真实章节格式构造 fixture。
-- 修复后重新生成 `004393` snapshot/score，并证明对应字段 coverage / traceability 改善。
-- 不得绕过统一文档仓库接口，不得在 UI/Service 层写基金解析规则。
+- P2：`investor_return`
+- P2：`nav_data` traceability
 
 ---
 
@@ -448,3 +469,4 @@ P4 遵循 phaseflow / gateflow 多 Agent 约定：
 | 2026-05-19 | P4-S2 code review | 🟡 in progress | Implementation artifact 已写入 `docs/reviews/p4-s2-implementation-20260519.md`；当前验证 `17 passed`、ruff passed、CLI help passed、diff check passed，等待 MiMo/GLM code review |
 | 2026-05-19 | P4-S2 review judgment | ✅ passed | MiMo/GLM code review 均 PASS；controller 裁决 `docs/reviews/p4-s2-code-review-controller-judgment-20260519.md`；accepted commit=`47f2656`；P4-S2 accepted，下一 gate 为 P4-S3 |
 | 2026-05-19 | P4-S3a review judgment | ✅ passed | `004393` 类型误判已修复；MiMo/GLM review + targeted re-review 均 PASS；controller 裁决 `docs/reviews/p4-s3a-code-review-controller-judgment-20260519.md`；accepted commit=`0b3fbc6`；真实 snapshot 显示 `active_fund`；下一 gate 为 P4-S3b |
+| 2026-05-19 | P4-S3b review judgment | ✅ passed | `004393` 的 5 个高影响 extractor 缺口已修复；MiMo/GLM code review 与 targeted re-review 均 PASS，controller 接受并修复 2 个中风险泛化问题；裁决 `docs/reviews/p4-s3b-code-review-controller-judgment-20260519.md`；当前验证 `24 passed`、ruff passed、diff check passed；真实 snapshot/score 显示本 slice 5 字段 coverage / traceability 均为 `100.0%`；下一 gate 为 P4-S4 |

@@ -57,7 +57,7 @@ rabc = calculate_r_abc_from_bundle(bundle, equity_position="80%")
 
 `extract_performance()` 返回 `PerformanceExtractionResult`，当前覆盖模板第 2 章“R=A+B-C 收益归因”和第 4 章“投资者获得感”的最小数据底座：
 
-- `nav_benchmark_performance`：`§3` 中的 `nav_growth_rate`、`benchmark_return_rate`
+- `nav_benchmark_performance`：`§3` 中的 `nav_growth_rate`、`benchmark_return_rate`；当前支持“阶段 / 份额净值增长率 / 业绩比较基准收益率”表格，并优先读取“过去一年”行
 - `investor_return`：`§3` 中的投资者收益率三态输出
   - `direct`：直接披露
   - `estimated`：`§3` 明确标注为估算口径披露
@@ -65,15 +65,15 @@ rabc = calculate_r_abc_from_bundle(bundle, equity_position="80%")
 
 `extract_manager_ownership()` 返回 `ManagerOwnershipExtractionResult`，当前覆盖模板第 2 章“C 成本侵蚀”、第 3 章“基金经理画像与言行一致性”和第 6 章“核心风险与否决项”的最小数据底座：
 
-- `manager_strategy_text`：`§4` 中的策略摘要、风格定位、后市展望原文
+- `manager_strategy_text`：`§4` 中的策略摘要、风格定位、后市展望原文；当前支持显式冒号行和“报告期内基金投资策略和运作分析”等编号标题后的正文块
 - `turnover_rate`：`§8` 中的年度换手率与披露口径
-- `manager_alignment`：`§9` 中的基金经理/从业人员持有原始披露，当前不输出好坏判断
-- `holder_structure`：`§9` 中的机构/个人持有人结构
+- `manager_alignment`：`§9` 中的基金经理/从业人员持有原始披露，当前支持表格披露且不输出好坏判断
+- `holder_structure`：`§9` 中的机构/个人持有人结构；当前支持持有人结构表跨页组表头
 
 `extract_holdings_share_change()` 返回 `HoldingsShareChangeExtractionResult`，当前覆盖模板第 3 章“实际投资行为”和第 4 章“投资者获得感”的最小数据底座：
 
 - `holdings_snapshot`：`§8` 表格中的前十大重仓，以及已披露的行业分布
-- `share_change`：`§10` 表格中的期初份额、期末份额、净变动
+- `share_change`：`§10` 表格中的期初份额、期末份额、净变动；当前支持申购/赎回拆分表，并在缺少净变动行时用期末减期初计算
 
 `FundDataExtractor.extract()` 返回 `StructuredFundDataBundle`，当前聚合 P1 已接受的 12 项结构化数据，并附带净值数据读取结果。它只做 orchestration，不直接读文件、不直接写缓存。
 
