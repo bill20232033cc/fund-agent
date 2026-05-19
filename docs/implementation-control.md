@@ -19,7 +19,7 @@
 | P2 | 分析引擎（R=A+B-C + 检验 + 审计） | Week 3-4 | ✅ done | P1 |
 | P3 | CLI 入口 + 整合测试 + 验证 | Week 4-5 | ✅ done | P2 |
 | P4 | 精选基金池质量闭环（snapshot + score + quality gate） | Post-MVP | ✅ done | P3 |
-| P5 | 报告主链路质量保护（quality gate integration） | Post-P4 | 🟡 in progress | P4 |
+| P5 | 报告主链路质量保护（quality gate integration） | Post-P4 | ✅ draft-PR-pass | P4 |
 
 ### 1.2 里程碑
 
@@ -32,9 +32,9 @@
 
 ### 1.3 当前 Gate 与基线裁决（2026-05-18）
 
-- 当前分支：`main`
-- 当前 gate：`ready-to-open-draft-PR`
-- 下一 gate：`draft PR gate（需用户授权）`
+- 当前分支：`p5-quality-gate-main-path`
+- 当前 gate：`draft-PR-pass`
+- 下一 gate：`merge gate（需用户额外授权）`
 - P4 执行控制文档：`docs/implementation-control-p4.md`
 - 当前裁决：
   - P0 维持 `done`。已验证 `dayu` 依赖可导入、`fund-agent` 处于 editable install、`fund-analysis --help` 可用、样本基金 `110011` 年报可下载、`pdfplumber` 可提取全文文本和表格。
@@ -69,7 +69,8 @@
   - P5 aggregate readiness reconciliation 已接受，artifact=`docs/reviews/p5-aggregate-readiness-reconciliation-20260520.md`。P5-S1/S2/S3/S4/S5/S7 均已 accepted，P5-S6 duplicate `016492` 保持 human-owned 且不阻断 aggregate deepreview；当前验证 full suite `200 passed`、ruff passed、diff check passed；下一 gate 为 `P5 aggregate deepreview`。
   - P5 aggregate deepreview 已完成并修复所有 accepted findings，controller judgment artifact=`docs/reviews/p5-aggregate-deepreview-controller-judgment-20260520.md`。接受并修复 5 个问题：block 策略 gate not-run 成功出报告、显式 golden 路径 typo 静默降级、present parent 下白名单子字段缺失变 unavailable、share_change A 类 fallback 误伤非 A 份额、smoke PASS 隐藏 gate block；当前验证 full suite `206 passed`、ruff passed、diff check passed；下一 gate 为 `P5 aggregate re-review / acceptance`。
   - P5 aggregate targeted re-review 已通过，acceptance artifact=`docs/reviews/p5-aggregate-rereview-controller-acceptance-20260520.md`。AgentCodex/AgentDS 均确认 accepted findings 已关闭；当前验证 targeted `53 passed`、full suite `206 passed`、ruff passed、diff check passed；下一 gate 为 `P5 acceptance / ready-to-open-draft-PR reconciliation`。
-  - P5 acceptance / ready-to-open-draft-PR reconciliation 已接受，artifact=`docs/reviews/p5-acceptance-ready-to-open-draft-pr-reconciliation-20260520.md`。P5 inclusion set 已明确，旧 review artifacts、runtime reports、launchd 和本地 helper scripts 明确排除；当前 gate 为 `ready-to-open-draft-PR`，进入 draft PR gate 仍需用户授权。
+  - P5 acceptance / ready-to-open-draft-PR reconciliation 已接受，artifact=`docs/reviews/p5-acceptance-ready-to-open-draft-pr-reconciliation-20260520.md`。P5 inclusion set 已明确，旧 review artifacts、runtime reports、launchd 和本地 helper scripts 明确排除。
+  - P5 draft PR gate 已接受，artifact=`docs/reviews/p5-draft-pr-gate-reconciliation-20260520.md`，PR-level review artifact=`docs/reviews/pr-4-review-20260520-0625.md`。Draft PR 4 已创建：`https://github.com/bill20232033cc/fund-agent/pull/4`；GitHub 当前 state=`OPEN`、draft=`true`、mergeable=`MERGEABLE`、no checks reported；当前 gate 为 `draft-PR-pass`，merge gate 需用户额外授权。
   - `P3-S1 CLI 入口封装` 已完成，通过 Typer CLI 和 Service 层输出单只基金 8 章 Markdown 报告；下一 gate 为 `P3-S2 implementation + review`。
   - `P3-S2 温度计数据爬取` 已完成并通过 GLM/MiMo code review；当前实现范围仅限 Capability data adapter，不接入 CLI/Service。
   - `P3-S3 端到端整合测试` 已完成实现与 GLM/MiMo/controller code review：新增 3 只样本基金 CLI 端到端矩阵，闭合真实 `§2` 表格字段抽取、parsed report 低质量缓存门槛和模板 `benchmark_text` 契约错配。
@@ -1362,3 +1363,4 @@ P0（环境搭建）
 | 2026-05-20 | P5 aggregate deepreview/fix | ✅ passed after fix | controller judgment=`docs/reviews/p5-aggregate-deepreview-controller-judgment-20260520.md`；AgentCodex/AgentDS findings 均已裁决并修复；当前验证 targeted `53 passed`、full suite `206 passed`、ruff passed、diff check passed；当前 gate 为 `P5 aggregate re-review / acceptance`，下一 gate 为 `P5 acceptance / ready-to-open-draft-PR reconciliation` |
 | 2026-05-20 | P5 aggregate targeted re-review | ✅ accepted | artifact=`docs/reviews/p5-aggregate-rereview-controller-acceptance-20260520.md`；AgentCodex/AgentDS targeted re-review 均 PASS；当前验证 full suite `206 passed`、ruff passed、diff check passed；当前 gate 为 `P5 acceptance / ready-to-open-draft-PR reconciliation`，下一 gate 为 `ready-to-open-draft-PR` |
 | 2026-05-20 | P5 acceptance / ready-to-open-draft-PR reconciliation | ✅ accepted | artifact=`docs/reviews/p5-acceptance-ready-to-open-draft-pr-reconciliation-20260520.md`；PR inclusion/exclusion set 已明确；当前 gate 为 `ready-to-open-draft-PR`，下一 gate 为 `draft PR gate（需用户授权）` |
+| 2026-05-20 | P5 draft PR gate | ✅ draft-PR-pass | Draft PR 4 已创建：`https://github.com/bill20232033cc/fund-agent/pull/4`；controller reconciliation=`docs/reviews/p5-draft-pr-gate-reconciliation-20260520.md`；PR-level review=`docs/reviews/pr-4-review-20260520-0625.md`；GitHub state=`OPEN`、draft=`true`、mergeable=`MERGEABLE`、no checks reported；下一 gate 为 `merge gate（需用户额外授权）` |
