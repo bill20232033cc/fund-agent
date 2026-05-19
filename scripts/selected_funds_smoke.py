@@ -86,6 +86,7 @@ class SmokeRecord:
         duration_seconds: 墙钟耗时秒数。
         stdout_path: 报告 stdout 保存路径。
         stderr_path: stderr 保存路径。
+        quality_gate_status: CLI stderr 中的 quality gate 状态。
         started_at: 开始时间。
         finished_at: 结束时间。
     """
@@ -96,6 +97,7 @@ class SmokeRecord:
     duration_seconds: float
     stdout_path: Path
     stderr_path: Path
+    quality_gate_status: str | None
     started_at: str
     finished_at: str
 
@@ -123,6 +125,7 @@ class SmokeRecord:
             "duration_seconds": round(self.duration_seconds, 3),
             "stdout_path": str(self.stdout_path),
             "stderr_path": str(self.stderr_path),
+            "quality_gate_status": self.quality_gate_status,
             "started_at": self.started_at,
             "finished_at": self.finished_at,
         }
@@ -290,6 +293,8 @@ def build_analyze_command(
         "50%",
         "--valuation-state",
         "unavailable",
+        "--quality-gate-policy",
+        "warn",
         "--money-horizon",
         "long_enough",
         "--user-money-horizon-years",
@@ -400,6 +405,7 @@ def run_smoke_commands(
             duration_seconds=duration_seconds,
             stdout_path=stdout_path,
             stderr_path=stderr_path,
+            quality_gate_status=_quality_gate_status_from_stderr(completed.stderr),
             started_at=started_at,
             finished_at=finished_at,
         )
@@ -554,8 +560,8 @@ def _write_summary(summary_path: Path, records: Sequence[SmokeRecord]) -> None:
         f"- passed: {passed}",
         f"- failed: {failed}",
         "",
-        "| 基金代码 | 基金名称 | 类别 | 状态 | 耗时 | stdout | stderr |",
-        "|---|---|---|---|---:|---|---|",
+        "| 基金代码 | 基金名称 | 类别 | 进程状态 | Quality Gate | 耗时 | stdout | stderr |",
+        "|---|---|---|---|---|---:|---|---|",
     ]
     for record in records:
         status = "PASS" if record.returncode == 0 else f"FAIL({record.returncode})"
@@ -565,11 +571,32 @@ def _write_summary(summary_path: Path, records: Sequence[SmokeRecord]) -> None:
             f"{record.fund.name} | "
             f"{record.fund.category} | "
             f"{status} | "
+            f"{record.quality_gate_status or ''} | "
             f"{record.duration_seconds:.2f}s | "
             f"{record.stdout_path} | "
             f"{record.stderr_path} |"
         )
     summary_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def _quality_gate_status_from_stderr(stderr: str) -> str | None:
+    """从 CLI stderr 文本中提取 quality gate 状态。
+
+    Args:
+        stderr: `fund-analysis analyze` stderr 文本。
+
+    Returns:
+        gate 状态文本；未找到时返回 `None`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    for line in stderr.splitlines():
+        if line.startswith("quality_gate_status:"):
+            status = line.split(":", 1)[1].strip()
+            return status or None
+    return None
 
 
 def _safe_name(value: str) -> str:

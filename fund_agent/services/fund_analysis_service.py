@@ -9,6 +9,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from decimal import Decimal
+from pathlib import Path
+from datetime import datetime, timezone
 from typing import Literal, Protocol
 
 from fund_agent.fund.analysis import (
@@ -28,12 +30,17 @@ from fund_agent.fund.analysis import (
 )
 from fund_agent.fund.audit import ProgrammaticAuditResult, run_programmatic_audit
 from fund_agent.fund.data_extractor import FundDataExtractor, StructuredFundDataBundle
+from fund_agent.fund.extraction_snapshot import DEFAULT_SELECTED_FUNDS_CSV
 from fund_agent.fund.fund_type import FundType
+from fund_agent.fund.quality_gate import GATE_STATUS_BLOCK, QualityGateResult
+from fund_agent.fund.quality_gate_integration import run_quality_gate_for_bundle
 from fund_agent.fund.template import TemplateFinalJudgment, TemplateRenderInput, TemplateRenderResult, render_template_report
 
 ValuationState = Literal["low", "fair", "high", "unavailable"]
 MoneyHorizon = Literal["long_enough", "uncertain", "too_short"]
 FinalJudgment = TemplateFinalJudgment
+QualityGatePolicy = Literal["off", "warn", "block"]
+DEFAULT_GOLDEN_ANSWER_PATH = Path("reports/golden-answers/golden-answer.json")
 
 
 class _FundDataExtractor(Protocol):
@@ -86,6 +93,11 @@ class FundAnalysisRequest:
         current_stage: 当前阶段与关键变化说明，见模板第 5 章。
         final_judgment: 最终持有判断，见模板第 7 章。
         force_refresh: 是否强制刷新底层数据。
+        quality_gate_policy: 报告质量 gate 策略。
+        quality_gate_source_csv: 精选基金池 CSV，用于取得 App 类别。
+        quality_gate_output_dir: quality gate 显式输出目录。
+        quality_gate_run_id: quality gate 运行 ID；为空时 Service 生成唯一 ID。
+        quality_gate_golden_answer_path: strict golden answer JSON 路径。
     """
 
     fund_code: str
@@ -104,6 +116,11 @@ class FundAnalysisRequest:
     current_stage: str | None = None
     final_judgment: TemplateFinalJudgment = "needs_attention"
     force_refresh: bool = False
+    quality_gate_policy: QualityGatePolicy = "block"
+    quality_gate_source_csv: Path | None = DEFAULT_SELECTED_FUNDS_CSV
+    quality_gate_output_dir: Path | None = None
+    quality_gate_run_id: str | None = None
+    quality_gate_golden_answer_path: Path | None = DEFAULT_GOLDEN_ANSWER_PATH
 
 
 @dataclass(frozen=True, slots=True)
@@ -120,6 +137,8 @@ class FundAnalysisResult:
         checklist_result: 7 问题检查清单结果。
         render_result: 模板渲染结果。
         audit_result: 程序审计结果。
+        quality_gate_result: quality gate 结果；未运行时为空。
+        quality_gate_not_run_reason: quality gate 未运行原因。
     """
 
     structured_data: StructuredFundDataBundle
@@ -131,6 +150,8 @@ class FundAnalysisResult:
     checklist_result: ChecklistResult
     render_result: TemplateRenderResult
     audit_result: ProgrammaticAuditResult
+    quality_gate_result: QualityGateResult | None = None
+    quality_gate_not_run_reason: str | None = None
 
     @property
     def report_markdown(self) -> str:
@@ -147,6 +168,35 @@ class FundAnalysisResult:
         """
 
         return self.render_result.report_markdown
+
+
+class QualityGateBlockedError(ValueError):
+    """quality gate 阻断报告输出的结构化异常。
+
+    Attributes:
+        quality_gate_result: 阻断报告的 quality gate 结果。
+        policy: 触发阻断的策略，固定为 `block`。
+    """
+
+    def __init__(self, quality_gate_result: QualityGateResult) -> None:
+        """初始化 quality gate 阻断异常。
+
+        Args:
+            quality_gate_result: 阻断报告的 quality gate 结果。
+
+        Returns:
+            无返回值。
+
+        Raises:
+            无显式抛出。
+        """
+
+        self.quality_gate_result = quality_gate_result
+        self.policy: QualityGatePolicy = "block"
+        super().__init__(
+            f"质量 gate 阻断报告输出：status={quality_gate_result.status}, "
+            f"issues={len(quality_gate_result.issues)}"
+        )
 
 
 class FundAnalysisService:
@@ -182,6 +232,7 @@ class FundAnalysisService:
 
         Raises:
             ValueError: 当基金代码、年份、基金类型或审计结果非法时抛出。
+            QualityGateBlockedError: 当 quality gate 在 block 策略下阻断报告时抛出。
             Exception: 允许底层抽取器或 Capability 模块传播异常。
         """
 
@@ -191,6 +242,15 @@ class FundAnalysisService:
             request.report_year,
             force_refresh=request.force_refresh,
         )
+        quality_gate_result, quality_gate_not_run_reason = _run_quality_gate_if_enabled(
+            structured_data=structured_data,
+            request=request,
+        )
+        if request.quality_gate_policy == "block":
+            if quality_gate_result is None:
+                raise ValueError(f"质量 gate 未运行：{quality_gate_not_run_reason or 'unknown'}")
+            if quality_gate_result.status == GATE_STATUS_BLOCK:
+                raise QualityGateBlockedError(quality_gate_result)
         fund_type = _extract_fund_type(structured_data)
         rabc_attribution = calculate_r_abc_from_bundle(
             structured_data,
@@ -264,6 +324,8 @@ class FundAnalysisService:
             checklist_result=checklist_result,
             render_result=render_result,
             audit_result=audit_result,
+            quality_gate_result=quality_gate_result,
+            quality_gate_not_run_reason=quality_gate_not_run_reason,
         )
 
 
@@ -284,6 +346,88 @@ def _validate_request(request: FundAnalysisRequest) -> None:
         raise ValueError("fund_code 不能为空")
     if request.report_year <= 0:
         raise ValueError("report_year 必须为正整数")
+    if request.quality_gate_policy not in {"off", "warn", "block"}:
+        raise ValueError("quality_gate_policy 必须是 off / warn / block")
+    if request.quality_gate_run_id is not None and not request.quality_gate_run_id.strip():
+        raise ValueError("quality_gate_run_id 不能为空")
+    if (
+        request.quality_gate_output_dir is not None
+        and request.quality_gate_output_dir.exists()
+        and not request.quality_gate_output_dir.is_dir()
+    ):
+        raise ValueError("quality_gate_output_dir 必须是目录")
+
+
+def _run_quality_gate_if_enabled(
+    *,
+    structured_data: StructuredFundDataBundle,
+    request: FundAnalysisRequest,
+) -> tuple[QualityGateResult | None, str | None]:
+    """按请求策略运行输入质量 gate。
+
+    Args:
+        structured_data: 已抽取的结构化基金数据包，避免重复读取年报。
+        request: 基金分析请求。
+
+    Returns:
+        `(quality_gate_result, not_run_reason)`。
+
+    Raises:
+        Exception: 允许 Capability quality gate 传播 JSON 或写文件异常。
+    """
+
+    if request.quality_gate_policy == "off":
+        return None, "policy=off"
+    if request.quality_gate_source_csv is None:
+        return None, "quality_gate_source_csv not provided"
+    golden_answer_path = _resolve_golden_answer_path(request.quality_gate_golden_answer_path)
+    integration_result = run_quality_gate_for_bundle(
+        bundle=structured_data,
+        source_csv=request.quality_gate_source_csv,
+        output_dir=request.quality_gate_output_dir,
+        run_id=request.quality_gate_run_id or _default_quality_gate_run_id(structured_data),
+        golden_answer_path=golden_answer_path,
+    )
+    return integration_result.quality_gate_result, integration_result.not_run_reason
+
+
+def _resolve_golden_answer_path(path: Path | None) -> Path | None:
+    """解析 strict golden answer 路径。
+
+    Args:
+        path: 请求中的 golden answer 路径。
+
+    Returns:
+        文件存在时返回路径，否则返回 `None`，让 correctness 显式 unavailable。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if path is None:
+        return None
+    if path.exists():
+        return path
+    if path != DEFAULT_GOLDEN_ANSWER_PATH:
+        raise FileNotFoundError(f"quality_gate_golden_answer_path 不存在：{path}")
+    return None
+
+
+def _default_quality_gate_run_id(structured_data: StructuredFundDataBundle) -> str:
+    """生成默认 quality gate 运行 ID。
+
+    Args:
+        structured_data: 已抽取的结构化基金数据包。
+
+    Returns:
+        包含基金代码、年报年份和 UTC 时间戳的运行 ID。
+
+    Raises:
+        无显式抛出。
+    """
+
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
+    return f"analyze-{structured_data.fund_code}-{structured_data.report_year}-{timestamp}"
 
 
 def _extract_fund_type(structured_data: StructuredFundDataBundle) -> FundType:

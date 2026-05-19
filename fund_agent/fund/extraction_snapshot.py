@@ -38,6 +38,20 @@ SNAPSHOT_FIELD_ORDER: Final[tuple[tuple[str, str], ...]] = (
     ("share_change", "share_change"),
     ("nav", "nav_data"),
 )
+COMPARABLE_SUB_FIELDS_BY_FIELD: Final[dict[str, tuple[str, ...]]] = {
+    "basic_identity": (
+        "fund_name",
+        "fund_code",
+        "fund_category",
+        "management_company",
+        "custodian",
+        "inception_date",
+        "classified_fund_type",
+    ),
+    "benchmark": ("benchmark_name", "benchmark_text"),
+    "nav_benchmark_performance": ("nav_growth_rate", "benchmark_return_rate"),
+    "classified_fund_type": ("fund_type",),
+}
 _EXTRACTION_MODE_DIRECT: Final[str] = "direct"
 _EXTRACTION_MODE_MISSING: Final[str] = "missing"
 _KNOWN_FAILURE_004393_NOTE: Final[str] = (
@@ -144,6 +158,7 @@ class SnapshotRecord:
         page: 页码。
         table_id: 表格 ID。
         row_id: 行级定位。
+        comparable_values: correctness 可直接比较的白名单子字段值。
         note: 缺失、降级或异常说明。
     """
 
@@ -165,6 +180,7 @@ class SnapshotRecord:
     page: int | None
     table_id: str | None
     row_id: str | None
+    comparable_values: dict[str, str]
     note: str | None
 
 
@@ -804,6 +820,7 @@ def _build_extracted_field_record(
         value_present=extracted_field.extraction_mode != _EXTRACTION_MODE_MISSING
         and _has_present_value(extracted_field.value),
         anchor=anchor,
+        comparable_values=_comparable_values_for_field(field_name, extracted_field.value),
         note=_record_note(selected_fund, classified_fund_type, field_name, extracted_field.note),
     )
 
@@ -856,6 +873,11 @@ def _build_classification_record(
         else _EXTRACTION_MODE_MISSING,
         value_present=bool(classified_fund_type),
         anchor=anchor,
+        comparable_values=(
+            {COMPARABLE_SUB_FIELDS_BY_FIELD[field_name][0]: classified_fund_type}
+            if classified_fund_type
+            else {}
+        ),
         note=_record_note(selected_fund, classified_fund_type, field_name, None),
     )
 
@@ -908,6 +930,7 @@ def _build_nav_record(
         extraction_mode=_EXTRACTION_MODE_DIRECT if value_present else _EXTRACTION_MODE_MISSING,
         value_present=value_present,
         anchor=None,
+        comparable_values={},
         note=note,
     )
 
@@ -926,6 +949,7 @@ def _snapshot_record(
     extraction_mode: str,
     value_present: bool,
     anchor: EvidenceAnchor | None,
+    comparable_values: dict[str, str],
     note: str | None,
 ) -> SnapshotRecord:
     """构造字段级快照记录的公共部分。
@@ -943,6 +967,7 @@ def _snapshot_record(
         extraction_mode: 抽取模式。
         value_present: 是否存在非空值。
         anchor: 首个证据锚点。
+        comparable_values: correctness 可直接比较的白名单子字段值。
         note: 附加说明。
 
     Returns:
@@ -971,8 +996,60 @@ def _snapshot_record(
         page=anchor.page_number if anchor else None,
         table_id=anchor.table_id if anchor else None,
         row_id=anchor.row_locator if anchor else None,
+        comparable_values=comparable_values,
         note=note,
     )
+
+
+def _comparable_values_for_field(
+    field_name: str,
+    value: dict[str, object] | None,
+) -> dict[str, str]:
+    """从抽取字段值中提取 correctness 可比子字段。
+
+    Args:
+        field_name: snapshot 字段名。
+        value: 字段结构化值。
+
+    Returns:
+        白名单子字段到可比较文本值的映射；非白名单字段返回空映射。
+
+    Raises:
+        无显式抛出。
+    """
+
+    allowed_sub_fields = COMPARABLE_SUB_FIELDS_BY_FIELD.get(field_name)
+    if allowed_sub_fields is None or value is None:
+        return {}
+    comparable_values: dict[str, str] = {}
+    for sub_field in allowed_sub_fields:
+        comparable_value = _comparable_scalar(value.get(sub_field))
+        if comparable_value is not None:
+            comparable_values[sub_field] = comparable_value
+    if field_name == "benchmark" and "benchmark_name" not in comparable_values:
+        benchmark_text = _comparable_scalar(value.get("benchmark_text"))
+        if benchmark_text is not None:
+            comparable_values["benchmark_name"] = benchmark_text
+    return comparable_values
+
+
+def _comparable_scalar(value: object) -> str | None:
+    """把可比子字段值转换为保守文本。
+
+    Args:
+        value: 原始子字段值。
+
+    Returns:
+        非空标量文本；嵌套结构、空值和空白文本返回 `None`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if value is None or isinstance(value, (dict, list, tuple, set)):
+        return None
+    text = str(value).strip()
+    return text or None
 
 
 def _normalize_extraction_mode(extraction_mode: str) -> str:

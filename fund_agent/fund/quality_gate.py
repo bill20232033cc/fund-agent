@@ -26,6 +26,10 @@ STATUS_FAIL: Final[str] = "fail"
 CORRECTNESS_STATUS_AVAILABLE: Final[str] = "available"
 CORRECTNESS_STATUS_UNAVAILABLE: Final[str] = "unavailable"
 CORRECTNESS_MISMATCH: Final[str] = "mismatch"
+APP_CATEGORY_STATUS_CONFLICT: Final[str] = "conflict"
+PREFERRED_LENS_STATUS_MISMATCH: Final[str] = "mismatch"
+FQ4_WARN_MISSING_FIELD_RATE: Final[float] = 0.20
+FQ4_BLOCK_MISSING_FIELD_RATE: Final[float] = 0.35
 
 
 @dataclass(frozen=True, slots=True)
@@ -43,6 +47,13 @@ class QualityGateIssue:
         traceability_rate: 字段 traceability；全局 issue 可为空。
         expected_value: correctness 期望值；非 correctness issue 为空。
         actual_value: correctness 实际值；非 correctness issue 为空。
+        app_category: App 类别；非类别相关 issue 为空。
+        classified_fund_type: 系统识别基金类型；非类型相关 issue 为空。
+        preferred_lens_key: preferred_lens key；非 lens 相关 issue 为空。
+        observed_rate: 观测比例，如 FQ4 缺失率。
+        threshold: 触发阈值。
+        error_type: 抽取失败异常类型；非失败基金 issue 为空。
+        error_message: 抽取失败异常信息；非失败基金 issue 为空。
     """
 
     rule_code: str
@@ -55,6 +66,13 @@ class QualityGateIssue:
     traceability_rate: float | None = None
     expected_value: str | None = None
     actual_value: str | None = None
+    app_category: str | None = None
+    classified_fund_type: str | None = None
+    preferred_lens_key: str | None = None
+    observed_rate: float | None = None
+    threshold: float | None = None
+    error_type: str | None = None
+    error_message: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -171,6 +189,33 @@ def _evaluate_score_payload(score_payload: Mapping[str, object]) -> list[Quality
                 raise ValueError(f"fund_scores[{index}] 必须是 JSON object")
             issues.extend(_evaluate_fund_score(raw_row, index))
     issues.extend(_evaluate_correctness(score_payload.get("correctness")))
+    fund_quality = score_payload.get("fund_quality")
+    if fund_quality is None:
+        issues.append(
+            QualityGateIssue(
+                rule_code="FQ0",
+                severity=SEVERITY_INFO,
+                fund_code=None,
+                field_name=None,
+                priority=None,
+                message="score.json 未包含 fund_quality；FQ1 App 类别、FQ4、FQ5 未运行",
+            )
+        )
+    else:
+        if not isinstance(fund_quality, list):
+            raise ValueError("score.json 的 fund_quality 必须是 JSON array")
+        for index, raw_row in enumerate(fund_quality):
+            if not isinstance(raw_row, dict):
+                raise ValueError(f"fund_quality[{index}] 必须是 JSON object")
+            issues.extend(_evaluate_fund_quality(raw_row, index))
+    failed_funds = score_payload.get("failed_funds")
+    if failed_funds is not None:
+        if not isinstance(failed_funds, list):
+            raise ValueError("score.json 的 failed_funds 必须是 JSON array")
+        for index, raw_row in enumerate(failed_funds):
+            if not isinstance(raw_row, dict):
+                raise ValueError(f"failed_funds[{index}] 必须是 JSON object")
+            issues.append(_evaluate_failed_fund(raw_row, index))
     return issues
 
 
@@ -368,6 +413,150 @@ def _evaluate_fund_score(row: Mapping[str, object], index: int) -> list[QualityG
     return issues
 
 
+def _evaluate_fund_quality(row: Mapping[str, object], index: int) -> list[QualityGateIssue]:
+    """评估单只基金质量派生行。
+
+    Args:
+        row: `fund_quality` 中的单行。
+        index: 行号，用于错误信息。
+
+    Returns:
+        该基金触发的 FQ1/FQ4/FQ5 issue。
+
+    Raises:
+        ValueError: 基金质量行结构非法时抛出。
+    """
+
+    fund_code = _required_quality_text(row, "fund_code", index)
+    app_category = _optional_quality_text(row, "app_category")
+    classified_fund_type = _optional_quality_text(row, "classified_fund_type")
+    preferred_lens_key = _optional_quality_text(row, "preferred_lens_key")
+    reason = _optional_quality_text(row, "reason") or ""
+    app_category_status = _required_quality_text(row, "app_category_status", index)
+    preferred_lens_status = _required_quality_text(row, "preferred_lens_status", index)
+    missing_field_rate = _required_quality_number(row, "missing_field_rate", index)
+    issues: list[QualityGateIssue] = []
+    if app_category_status == APP_CATEGORY_STATUS_CONFLICT:
+        issues.append(
+            QualityGateIssue(
+                rule_code="FQ1",
+                severity=SEVERITY_BLOCK,
+                fund_code=fund_code,
+                field_name=None,
+                priority=None,
+                message=(
+                    f"基金 `{fund_code}` 的 App 类别 `{app_category}` 与系统基金类型 "
+                    f"`{classified_fund_type}` 明确冲突；{reason}"
+                ),
+                app_category=app_category,
+                classified_fund_type=classified_fund_type,
+            )
+        )
+    issues.extend(
+        _missing_rate_issues(
+            fund_code=fund_code,
+            missing_field_rate=missing_field_rate,
+        )
+    )
+    if preferred_lens_status == PREFERRED_LENS_STATUS_MISMATCH:
+        issues.append(
+            QualityGateIssue(
+                rule_code="FQ5",
+                severity=SEVERITY_BLOCK,
+                fund_code=fund_code,
+                field_name=None,
+                priority=None,
+                message=(
+                    f"基金 `{fund_code}` 无法稳定解析 preferred_lens；"
+                    f"fund_type=`{classified_fund_type or ''}`，{reason}"
+                ),
+                app_category=app_category,
+                classified_fund_type=classified_fund_type,
+                preferred_lens_key=preferred_lens_key,
+            )
+        )
+    return issues
+
+
+def _missing_rate_issues(
+    *,
+    fund_code: str,
+    missing_field_rate: float,
+) -> list[QualityGateIssue]:
+    """按缺失率生成 FQ4 issue。
+
+    Args:
+        fund_code: 基金代码。
+        missing_field_rate: snapshot 字段缺失率。
+
+    Returns:
+        FQ4 issue 列表。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if missing_field_rate >= FQ4_BLOCK_MISSING_FIELD_RATE:
+        return [
+            QualityGateIssue(
+                rule_code="FQ4",
+                severity=SEVERITY_BLOCK,
+                fund_code=fund_code,
+                field_name=None,
+                priority=None,
+                message=f"基金 `{fund_code}` snapshot 字段缺失率过高，阻断报告可用状态",
+                observed_rate=missing_field_rate,
+                threshold=FQ4_BLOCK_MISSING_FIELD_RATE,
+            )
+        ]
+    if missing_field_rate >= FQ4_WARN_MISSING_FIELD_RATE:
+        return [
+            QualityGateIssue(
+                rule_code="FQ4",
+                severity=SEVERITY_WARN,
+                fund_code=fund_code,
+                field_name=None,
+                priority=None,
+                message=f"基金 `{fund_code}` snapshot 字段缺失率偏高，报告应提示数据不足",
+                observed_rate=missing_field_rate,
+                threshold=FQ4_WARN_MISSING_FIELD_RATE,
+            )
+        ]
+    return []
+
+
+def _evaluate_failed_fund(row: Mapping[str, object], index: int) -> QualityGateIssue:
+    """评估完全抽取失败基金。
+
+    Args:
+        row: `failed_funds` 中的单行。
+        index: 行号，用于错误信息。
+
+    Returns:
+        FQ6 阻断 issue。
+
+    Raises:
+        ValueError: 失败基金行缺少必要基金代码时抛出。
+    """
+
+    fund_code = _required_failed_fund_text(row, "fund_code", index)
+    error_type = _optional_failed_fund_text(row, "error_type")
+    error_message = _optional_failed_fund_text(row, "error_message")
+    return QualityGateIssue(
+        rule_code="FQ6",
+        severity=SEVERITY_BLOCK,
+        fund_code=fund_code,
+        field_name=None,
+        priority=None,
+        message=(
+            f"基金 `{fund_code}` 抽取流程失败，无法生成可靠报告；"
+            f"error_type=`{error_type or ''}`"
+        ),
+        error_type=error_type,
+        error_message=error_message,
+    )
+
+
 def _required_text(row: Mapping[str, object], key: str, index: int) -> str:
     """读取字段评分行中的必需文本。
 
@@ -431,6 +620,111 @@ def _optional_text_list(row: Mapping[str, object], key: str, index: int) -> tupl
     if not isinstance(value, list) or any(not isinstance(item, str) for item in value):
         raise ValueError(f"fund_scores[{index}].{key} 必须是字符串数组")
     return tuple(value)
+
+
+def _required_quality_text(row: Mapping[str, object], key: str, index: int) -> str:
+    """读取基金质量行中的必需文本。
+
+    Args:
+        row: 基金质量行。
+        key: 字段名。
+        index: 行号。
+
+    Returns:
+        非空文本。
+
+    Raises:
+        ValueError: 缺少字段或字段非文本时抛出。
+    """
+
+    value = row.get(key)
+    if not isinstance(value, str) or not value:
+        raise ValueError(f"fund_quality[{index}].{key} 必须是非空字符串")
+    return value
+
+
+def _optional_quality_text(row: Mapping[str, object], key: str) -> str | None:
+    """读取基金质量行中的可选文本。
+
+    Args:
+        row: 基金质量行。
+        key: 字段名。
+
+    Returns:
+        文本或 `None`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    value = row.get(key)
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
+
+
+def _required_quality_number(row: Mapping[str, object], key: str, index: int) -> float:
+    """读取基金质量行中的必需数值。
+
+    Args:
+        row: 基金质量行。
+        key: 字段名。
+        index: 行号。
+
+    Returns:
+        浮点数。
+
+    Raises:
+        ValueError: 缺少字段或字段非数值时抛出。
+    """
+
+    value = row.get(key)
+    if not isinstance(value, int | float):
+        raise ValueError(f"fund_quality[{index}].{key} 必须是数值")
+    return float(value)
+
+
+def _required_failed_fund_text(row: Mapping[str, object], key: str, index: int) -> str:
+    """读取失败基金行中的必需文本。
+
+    Args:
+        row: 失败基金行。
+        key: 字段名。
+        index: 行号。
+
+    Returns:
+        非空文本。
+
+    Raises:
+        ValueError: 缺少字段或字段非文本时抛出。
+    """
+
+    value = row.get(key)
+    if not isinstance(value, str) or not value:
+        raise ValueError(f"failed_funds[{index}].{key} 必须是非空字符串")
+    return value
+
+
+def _optional_failed_fund_text(row: Mapping[str, object], key: str) -> str | None:
+    """读取失败基金行中的可选文本。
+
+    Args:
+        row: 失败基金行。
+        key: 字段名。
+
+    Returns:
+        文本或 `None`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    value = row.get(key)
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
 
 
 def _required_correctness_text(row: Mapping[str, object], key: str, index: int) -> str:
@@ -577,8 +871,8 @@ def _markdown_payload(result: QualityGateResult) -> str:
         "",
         "## Issues",
         "",
-        "| rule | severity | fund_code | field | priority | coverage | traceability | expected | actual | message |",
-        "|---|---|---|---|---|---:|---:|---|---|---|",
+        "| rule | severity | fund_code | field | priority | coverage | traceability | observed | threshold | app_category | fund_type | lens | expected | actual | error_type | message |",
+        "|---|---|---|---|---|---:|---:|---:|---:|---|---|---|---|---|---|---|",
     ]
     for issue in result.issues:
         lines.append(
@@ -590,9 +884,15 @@ def _markdown_payload(result: QualityGateResult) -> str:
             f"{issue.priority or ''} | "
             f"{_format_rate(issue.coverage_rate)} | "
             f"{_format_rate(issue.traceability_rate)} | "
+            f"{_format_rate(issue.observed_rate)} | "
+            f"{_format_rate(issue.threshold)} | "
+            f"{_escape_markdown_cell(issue.app_category or '')} | "
+            f"{_escape_markdown_cell(issue.classified_fund_type or '')} | "
+            f"{_escape_markdown_cell(issue.preferred_lens_key or '')} | "
             f"{_escape_markdown_cell(issue.expected_value or '')} | "
             f"{_escape_markdown_cell(issue.actual_value or '')} | "
-            f"{issue.message} |"
+            f"{_escape_markdown_cell(issue.error_type or '')} | "
+            f"{_escape_markdown_cell(issue.message)} |"
         )
     return "\n".join(lines) + "\n"
 

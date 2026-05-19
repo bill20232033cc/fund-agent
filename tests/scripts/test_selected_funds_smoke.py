@@ -112,4 +112,60 @@ def test_build_analyze_command_uses_explicit_mvp_inputs() -> None:
     assert "--actual-style" in command
     assert "--manager-tenure-months" in command
     assert "--valuation-state" in command
+    assert "--quality-gate-policy" in command
+    assert command[command.index("--quality-gate-policy") + 1] == "warn"
     assert "--force-refresh" in command
+
+
+def test_smoke_record_exposes_quality_gate_status() -> None:
+    """验证 smoke 记录单独暴露 quality gate 状态。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 gate 状态未从 stderr 中提取时抛出。
+    """
+
+    fund = selected_funds_smoke.SelectedFund(
+        line_number=2,
+        name="安信企业价值优选混合A",
+        code="004393",
+        category="国内股票类",
+    )
+    record = selected_funds_smoke.SmokeRecord(
+        fund=fund,
+        command=("fund-analysis", "analyze", "004393"),
+        returncode=0,
+        duration_seconds=1.25,
+        stdout_path=Path("stdout.md"),
+        stderr_path=Path("stderr.txt"),
+        quality_gate_status="block",
+        started_at="2026-05-20T00:00:00+00:00",
+        finished_at="2026-05-20T00:00:01+00:00",
+    )
+
+    assert record.to_jsonable()["status"] == "pass"
+    assert record.to_jsonable()["quality_gate_status"] == "block"
+
+
+def test_quality_gate_status_from_stderr() -> None:
+    """验证从 analyze stderr 中提取 quality gate 状态。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当状态提取不符合契约时抛出。
+    """
+
+    stderr = "quality_gate_status: block\nquality_gate_issues: 2\n"
+
+    assert selected_funds_smoke._quality_gate_status_from_stderr(stderr) == "block"
+    assert selected_funds_smoke._quality_gate_status_from_stderr("分析失败") is None

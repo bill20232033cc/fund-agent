@@ -30,10 +30,11 @@ fund-analysis analyze 004393 \
   --valuation-state low \
   --user-money-horizon-years 4 \
   --current-stage 估值较低但需继续跟踪境外市场波动。 \
-  --final-judgment worth_holding
+  --final-judgment worth_holding \
+  --quality-gate-policy warn
 ```
 
-命令成功后会把完整 Markdown 报告写到 stdout。需要保存报告时可使用 shell 重定向：
+命令成功后会把完整 Markdown 报告写到 stdout，quality gate 摘要写到 stderr。需要保存报告时可使用 shell 重定向：
 
 ```bash
 fund-analysis analyze 004393 --report-year 2024 > report-004393.md
@@ -97,6 +98,11 @@ fund-analysis quality-gate \
 | `--current-stage` | 当前阶段与关键变化说明 |
 | `--final-judgment` | `worth_holding` / `needs_attention` / `suggest_replace` |
 | `--force-refresh` | 强制刷新底层数据 |
+| `--quality-gate-policy` | 报告质量 gate 策略：`block` / `warn` / `off`，默认 `block` |
+| `--quality-gate-source-csv` | 精选基金池 CSV，默认 `docs/code_20260519.csv` |
+| `--quality-gate-output-dir` | quality gate 输出目录；为空时自动生成不覆盖的运行目录 |
+| `--quality-gate-run-id` | quality gate 运行 ID；为空时自动生成 |
+| `--quality-gate-golden-answer-path` | strict golden answer JSON 路径，默认 `reports/golden-answers/golden-answer.json` |
 
 ## 输出内容
 
@@ -126,27 +132,42 @@ fund-analysis quality-gate \
 - 8 章 Markdown 模板渲染
 - 程序审计规则：P1/P2/P3/L1/R1/R2
 - 有知有行温度计 data adapter
+- 有知有行温度计 Service/CLI 查询入口：`fund-analysis thermometer`
 - 精选基金池字段级抽取快照：`snapshot.jsonl`、`summary.md`、`errors.jsonl`
 - 精选基金池字段级评分：`score.json`、`score.md`、`golden_set.json`
 - Correctness golden answer 预填底稿：`fund-analysis golden-prefill`
 - Correctness golden answer JSON 构建与 strict 校验：`fund-analysis golden-build`
 - 报告质量 gate 骨架：`fund-analysis quality-gate`
+- `fund-analysis analyze` 主链路质量保护：复用已抽取结构化数据生成 score/gate，默认 `block` 策略会阻断低质量精选基金报告输出，`warn` 策略只提示不阻断，`off` 明确跳过
 - 3 只样本基金 CLI 端到端矩阵，覆盖报告完整性、程序审计和证据锚点
 
 尚未接入：
 
-- 温度计数据进入 CLI/Service 分析报告
+- 温度计数据自动映射为 `analyze --valuation-state`
 - 独立 `fund-analysis checklist` Service 命令
-- 真实 PDF/network 路径的自动化 smoke gate
+- 真实 PDF/network 路径的普通 pytest gate；当前保留为显式 `--run` smoke
 
 ## 本地验证
 
 ```bash
+pytest tests/fund/data/test_thermometer.py tests/services/test_thermometer_service.py tests/ui/test_cli.py tests/scripts/test_selected_funds_smoke.py -q
 pytest tests/fund/integration/test_p3_cli_e2e_matrix.py -q
 pytest tests/fund/template/test_renderer.py tests/fund/audit/test_audit_programmatic.py -q
 pytest tests/fund/test_extraction_snapshot.py tests/ui/test_cli.py -q
 pytest tests/scripts/test_selected_funds_smoke.py -q
 ```
+
+## 温度计查询
+
+`fund-analysis thermometer` 通过 Service 调用 Capability data 层的 `FundThermometerAdapter`，查询有知有行公开温度计数据并复用本地缓存：
+
+```bash
+fund-analysis thermometer
+fund-analysis thermometer --json
+fund-analysis thermometer --force-refresh --cache-dir cache/thermometer
+```
+
+该命令只输出温度计快照摘要。上游不可用会以 `unavailable: true` 表示并正常退出；只有参数校验或运行异常才非零退出。当前不会把温度计数值自动映射为 `low/fair/high`，分析报告仍需要显式传入 `--valuation-state`。
 
 ## 精选基金池抽取快照
 
@@ -166,10 +187,11 @@ fund-analysis extraction-snapshot \
 ```bash
 fund-analysis extraction-score \
   --snapshot-path reports/extraction-snapshots/p4-s1-selected-1x/snapshot.jsonl \
+  --errors-path reports/extraction-snapshots/p4-s1-selected-1x/errors.jsonl \
   --golden-answer-path reports/golden-answers/golden-answer.json
 ```
 
-默认输出到 snapshot 所在目录，包含 `score.json`、`score.md` 和 `golden_set.json`。`score.json` 同时包含字段级 `field_scores`、单基金 `fund_scores` 和 `correctness`。Correctness 只对 snapshot 显式暴露的可比 golden 字段做保守 normalize 后比较，skipped 和不可比记录不进入分母；未提供 `--golden-answer-path` 时只输出 `FQ0/info` 所需 skeleton。最小 golden set 固定包含 `004393`，并暂时排除货币基金类。
+默认输出到 snapshot 所在目录，包含 `score.json`、`score.md` 和 `golden_set.json`。`score.json` 同时包含字段级 `field_scores`、单基金 `fund_scores`、`fund_quality`、`failed_funds` 和 `correctness`。Correctness 只对 snapshot `comparable_values` 显式暴露的可比 golden 子字段做保守 normalize 后比较，skipped 和不可比记录不进入分母；提供 `--errors-path` 时，`errors.jsonl` 中的完全失败基金会进入 `failed_funds` 并由 quality gate 阻断；未提供 `--golden-answer-path` 时只输出 `FQ0/info` 所需 skeleton。最小 golden set 固定包含 `004393`，并暂时排除货币基金类。
 
 生成 correctness golden answer 自动预填底稿：
 
@@ -199,7 +221,9 @@ fund-analysis quality-gate \
   --score-path reports/extraction-snapshots/p4-s3b-004393-controller-final-score/score.json
 ```
 
-默认输出到 `score.json` 所在目录，包含 `quality_gate.json` 和 `quality_gate.md`。当前 gate 消费 coverage / traceability / correctness：字段级或单基金 P0 fail 会阻断，单基金 issue 会保留 `fund_code`；P1 fail 会警告；correctness 未接入时只记录 `FQ0/info`，strict golden answer 可用且出现明确 mismatch 时触发 `FQ1/block`。
+默认输出到 `score.json` 所在目录，包含 `quality_gate.json` 和 `quality_gate.md`。当前 gate 消费 coverage / traceability / `fund_quality` / `failed_funds` / correctness：字段级或单基金 P0 fail 会阻断，单基金 issue 会保留 `fund_code`；P1 fail 会警告；App 类别与基金类型明确冲突或 strict golden answer mismatch 会触发 `FQ1/block`；字段缺失率达到阈值会触发 FQ4；基金类型无法解析 preferred_lens 会触发 FQ5；完全失败基金会触发 FQ6；correctness 未接入时只记录 `FQ0/info`。
+
+`fund-analysis analyze` 默认也会运行 quality gate。若 gate 状态为 `block`，默认策略会非零退出并在 stderr 输出 `quality_gate.json` / `quality_gate.md` 路径，不输出完整报告；使用 `--quality-gate-policy warn` 可保留报告输出并只在 stderr 提示；使用 `--quality-gate-policy off` 会明确跳过 gate。
 
 ## 真实精选基金池 Smoke
 
@@ -227,6 +251,8 @@ fund-analysis quality-gate \
   --continue-on-fail \
   --output-dir reports/smoke/selected-1x
 ```
+
+真实运行的 smoke 命令会显式传入 `--quality-gate-policy warn`，用于观察真实 PDF/network/report-rendering 路径，同时仍在 stderr 记录质量 gate 状态；生产 `fund-analysis analyze` 默认 `block` 策略不受影响。`results.jsonl` 和 `summary.md` 会分别记录进程退出状态与 `quality_gate_status`，避免把“链路跑完”误读为“质量 gate 通过”。
 
 输出目录会包含每只基金的 Markdown 报告、stderr、`results.jsonl` 和 `summary.md`。当前 CSV 有 56 条记录、55 个唯一基金代码，`016492` 重复，需要人工确认后再启用 `--strict`。
 

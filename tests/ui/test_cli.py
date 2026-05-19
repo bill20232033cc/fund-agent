@@ -2,11 +2,16 @@
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
+from decimal import Decimal
 from pathlib import Path
 
 from typer.testing import CliRunner
 
+from fund_agent.fund.data.thermometer import MacroTemperature, MarketTemperature, ThermometerSnapshot
+from fund_agent.fund.quality_gate import QualityGateResult
+from fund_agent.services import QualityGateBlockedError
 from fund_agent.ui import cli
 
 
@@ -15,6 +20,8 @@ class _FakeResult:
     """CLI 测试用 Service 返回值。"""
 
     report_markdown: str
+    quality_gate_result: object | None = None
+    quality_gate_not_run_reason: str | None = None
 
 
 class _FakeService:
@@ -39,6 +46,47 @@ class _FakeService:
         return _FakeResult(report_markdown="# 0. 投资要点概览\n\n# 7. 是否值得持有——最终判断\n")
 
 
+class _FakeWarnService:
+    """CLI 测试用带 quality gate warning 的 Service。"""
+
+    async def analyze(self, request):  # type: ignore[no-untyped-def]
+        """返回携带 gate 结果的 fake 报告。
+
+        Args:
+            request: CLI 构造的 Service 请求。
+
+        Returns:
+            fake Service 返回值。
+
+        Raises:
+            无显式抛出。
+        """
+
+        return _FakeResult(
+            report_markdown="# 0. 投资要点概览\n",
+            quality_gate_result=_fake_quality_gate_result(status="warn"),
+        )
+
+
+class _FakeBlockedAnalysisService:
+    """CLI 测试用 quality gate 阻断 Service。"""
+
+    async def analyze(self, request):  # type: ignore[no-untyped-def]
+        """抛出结构化 quality gate 阻断异常。
+
+        Args:
+            request: CLI 构造的 Service 请求。
+
+        Returns:
+            无返回值。
+
+        Raises:
+            QualityGateBlockedError: 始终抛出。
+        """
+
+        raise QualityGateBlockedError(_fake_quality_gate_result(status="block"))
+
+
 class _FailingService:
     """CLI 测试用失败 Service。"""
 
@@ -56,6 +104,29 @@ class _FailingService:
         """
 
         raise RuntimeError("fixture failure")
+
+
+def _fake_quality_gate_result(*, status: str) -> QualityGateResult:
+    """构造 CLI 分析路径使用的 fake quality gate 结果。
+
+    Args:
+        status: gate 状态。
+
+    Returns:
+        fake quality gate 结果。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return QualityGateResult(
+        score_path=Path("score.json"),
+        output_dir=Path("quality-output"),
+        gate_json_path=Path("quality-output/quality_gate.json"),
+        gate_markdown_path=Path("quality-output/quality_gate.md"),
+        status=status,
+        issues=(object(), object()),
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -239,6 +310,111 @@ class _FakeQualityGateService:
         )
 
 
+class _FakeThermometerService:
+    """CLI 测试用温度计 Service。"""
+
+    last_request = None
+    snapshot = None
+
+    async def run(self, request):  # type: ignore[no-untyped-def]
+        """记录请求并返回固定温度计快照。
+
+        Args:
+            request: CLI 构造的温度计请求。
+
+        Returns:
+            fake 温度计快照。
+
+        Raises:
+            无显式抛出。
+        """
+
+        type(self).last_request = request
+        return type(self).snapshot or _available_thermometer_snapshot()
+
+
+class _FailingThermometerService:
+    """CLI 测试用失败温度计 Service。"""
+
+    async def run(self, request):  # type: ignore[no-untyped-def]
+        """抛出固定异常。
+
+        Args:
+            request: CLI 构造的温度计请求。
+
+        Returns:
+            无返回值。
+
+        Raises:
+            RuntimeError: 始终抛出。
+        """
+
+        raise RuntimeError("thermometer fixture failure")
+
+
+def _available_thermometer_snapshot() -> ThermometerSnapshot:
+    """构造可用温度计快照。
+
+    Args:
+        无。
+
+    Returns:
+        可用温度计快照。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return ThermometerSnapshot(
+        as_of_text="2026-05-20",
+        as_of_date="2026-05-20",
+        market=MarketTemperature(
+            value=Decimal("32.5"),
+            valuation_band="偏低",
+            trend_text="低估",
+        ),
+        indexes=(),
+        macro=MacroTemperature(
+            bond_temperature=Decimal("55.5"),
+            ten_year_treasury_yield=Decimal("2.1"),
+        ),
+        source="youzhiyouxing",
+        cached=False,
+        stale=False,
+        unavailable=False,
+        unavailable_reason=None,
+        fetched_at="2026-05-20T00:00:00+00:00",
+    )
+
+
+def _unavailable_thermometer_snapshot() -> ThermometerSnapshot:
+    """构造不可用温度计快照。
+
+    Args:
+        无。
+
+    Returns:
+        不可用温度计快照。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return ThermometerSnapshot(
+        as_of_text=None,
+        as_of_date=None,
+        market=None,
+        indexes=(),
+        macro=None,
+        source="youzhiyouxing",
+        cached=False,
+        stale=False,
+        unavailable=True,
+        unavailable_reason="network down",
+        fetched_at=None,
+    )
+
+
 def test_analyze_cli_calls_service_and_prints_report(monkeypatch) -> None:  # type: ignore[no-untyped-def]
     """验证 analyze 命令调用 Service 并输出 Markdown。
 
@@ -286,6 +462,16 @@ def test_analyze_cli_calls_service_and_prints_report(monkeypatch) -> None:  # ty
             "--final-judgment",
             "worth_holding",
             "--force-refresh",
+            "--quality-gate-policy",
+            "warn",
+            "--quality-gate-source-csv",
+            "docs/code_20260519.csv",
+            "--quality-gate-output-dir",
+            "quality-output",
+            "--quality-gate-run-id",
+            "fixture-run",
+            "--quality-gate-golden-answer-path",
+            "reports/golden-answers/golden-answer.json",
         ],
     )
 
@@ -297,6 +483,63 @@ def test_analyze_cli_calls_service_and_prints_report(monkeypatch) -> None:  # ty
     assert _FakeService.last_request.equity_position == "80%"
     assert _FakeService.last_request.final_judgment == "worth_holding"
     assert _FakeService.last_request.force_refresh is True
+    assert _FakeService.last_request.quality_gate_policy == "warn"
+    assert _FakeService.last_request.quality_gate_source_csv == Path("docs/code_20260519.csv")
+    assert _FakeService.last_request.quality_gate_output_dir == Path("quality-output")
+    assert _FakeService.last_request.quality_gate_run_id == "fixture-run"
+    assert _FakeService.last_request.quality_gate_golden_answer_path == Path(
+        "reports/golden-answers/golden-answer.json"
+    )
+
+
+def test_analyze_cli_prints_quality_gate_summary_to_stderr(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    """验证 analyze 成功时 quality gate 摘要写入 stderr。
+
+    Args:
+        monkeypatch: pytest monkeypatch fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 stdout 被 gate 摘要污染或 stderr 缺少摘要时抛出。
+    """
+
+    monkeypatch.setattr(cli, "FundAnalysisService", _FakeWarnService)
+    runner = CliRunner()
+
+    result = runner.invoke(cli.app, ["analyze", "110011", "--quality-gate-policy", "warn"])
+
+    assert result.exit_code == 0
+    assert result.output.endswith("# 0. 投资要点概览\n")
+    assert "quality_gate_status: warn" in result.output
+    assert "quality_gate_json: quality-output/quality_gate.json" in result.output
+
+
+def test_analyze_cli_structured_quality_gate_block(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    """验证 analyze 被 quality gate 阻断时输出结构化 stderr 且 stdout 为空。
+
+    Args:
+        monkeypatch: pytest monkeypatch fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当阻断输出不符合契约时抛出。
+    """
+
+    monkeypatch.setattr(cli, "FundAnalysisService", _FakeBlockedAnalysisService)
+    runner = CliRunner()
+
+    result = runner.invoke(cli.app, ["analyze", "110011"])
+
+    assert result.exit_code == 2
+    assert "# 0. 投资要点概览" not in result.output
+    assert "质量 gate 阻断报告输出" in result.output
+    assert "quality_gate_status: block" in result.output
+    assert "quality_gate_issues: 2" in result.output
+    assert "quality_gate_json: quality-output/quality_gate.json" in result.output
 
 
 def test_analyze_cli_exits_nonzero_with_clear_message(monkeypatch) -> None:  # type: ignore[no-untyped-def]
@@ -340,6 +583,88 @@ def test_checklist_cli_is_not_misleading_placeholder() -> None:
 
     assert result.exit_code == 2
     assert "尚未接入 Service" in result.output
+
+
+def test_thermometer_cli_prints_plain_summary(monkeypatch, tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """验证 thermometer 命令输出 plain text 摘要并转发显式参数。
+
+    Args:
+        monkeypatch: pytest monkeypatch fixture。
+        tmp_path: pytest 临时目录 fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 CLI 输出或参数转发不符合契约时抛出。
+    """
+
+    _FakeThermometerService.last_request = None
+    _FakeThermometerService.snapshot = _available_thermometer_snapshot()
+    monkeypatch.setattr(cli, "ThermometerService", _FakeThermometerService)
+    runner = CliRunner()
+
+    result = runner.invoke(
+        cli.app,
+        ["thermometer", "--cache-dir", str(tmp_path), "--force-refresh"],
+    )
+
+    assert result.exit_code == 0
+    assert "source: youzhiyouxing" in result.output
+    assert "unavailable: false" in result.output
+    assert "market_temperature: 32.5" in result.output
+    assert _FakeThermometerService.last_request is not None
+    assert _FakeThermometerService.last_request.cache_dir == tmp_path
+    assert _FakeThermometerService.last_request.force_refresh is True
+
+
+def test_thermometer_cli_prints_json_for_unavailable_snapshot(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    """验证 thermometer JSON 输出覆盖 unavailable 数据态且退出 0。
+
+    Args:
+        monkeypatch: pytest monkeypatch fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 JSON 输出或退出码不符合契约时抛出。
+    """
+
+    _FakeThermometerService.last_request = None
+    _FakeThermometerService.snapshot = _unavailable_thermometer_snapshot()
+    monkeypatch.setattr(cli, "ThermometerService", _FakeThermometerService)
+    runner = CliRunner()
+
+    result = runner.invoke(cli.app, ["thermometer", "--json"])
+
+    assert result.exit_code == 0
+    payload = json.loads(result.output)
+    assert payload["unavailable"] is True
+    assert payload["unavailable_reason"] == "network down"
+    assert payload["market_temperature"] is None
+
+
+def test_thermometer_cli_exits_nonzero_on_service_error(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    """验证 thermometer Service 异常时 CLI 非零退出。
+
+    Args:
+        monkeypatch: pytest monkeypatch fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当失败路径不符合契约时抛出。
+    """
+
+    monkeypatch.setattr(cli, "ThermometerService", _FailingThermometerService)
+    runner = CliRunner()
+
+    result = runner.invoke(cli.app, ["thermometer"])
+
+    assert result.exit_code == 1
+    assert "温度计查询失败：thermometer fixture failure" in result.output
 
 
 def test_extraction_snapshot_cli_is_thin_capability_entry(monkeypatch, tmp_path) -> None:  # type: ignore[no-untyped-def]
@@ -425,6 +750,8 @@ def test_extraction_score_cli_is_thin_service_entry(monkeypatch, tmp_path) -> No
             str(tmp_path),
             "--golden-answer-path",
             "reports/golden-answers/golden-answer.json",
+            "--errors-path",
+            "reports/extraction-snapshots/unit/errors.jsonl",
         ],
     )
 
@@ -438,6 +765,9 @@ def test_extraction_score_cli_is_thin_service_entry(monkeypatch, tmp_path) -> No
     assert _FakeExtractionScoreService.last_request.output_dir == tmp_path
     assert _FakeExtractionScoreService.last_request.golden_answer_path == Path(
         "reports/golden-answers/golden-answer.json"
+    )
+    assert _FakeExtractionScoreService.last_request.errors_path == Path(
+        "reports/extraction-snapshots/unit/errors.jsonl"
     )
 
 
