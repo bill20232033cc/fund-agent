@@ -158,8 +158,9 @@
     - `ProgrammaticAuditInput` 兼容性保持不变
     - 验证命令 `.venv/bin/python -m pytest tests/fund/template tests/fund/audit -q` 当前通过（`23 passed`），`.venv/bin/python -m pytest tests/fund/analysis -q` 当前通过（`40 passed`）
 - 下一 entry point：
-  - 进入 `P4-S3 implementation`
-  - 优先目标是基于 P4-S2 score 修复 `004393` 类型误判和高影响 extractor 缺口
+  - 进入 `P4-S3b implementation`
+  - `004393` 类型误判已在 P4-S3a 修复为 `active_fund`
+  - 优先目标是基于 P4-S2/P4-S3a snapshot 与 score 修复 `004393` 高影响 extractor 缺口
 - 当前 artifact：
   - plan: `docs/reviews/p1-plan-2026-05-17.md`
   - plan review: `docs/reviews/p1-plan-review-2026-05-17.md`
@@ -1277,3 +1278,4 @@ P0（环境搭建）
 | 2026-05-19 | P4-S2 | 🟡 implementation | 当前进入字段级 coverage / traceability scoring；实现产物为 `score.json`、`score.md`、`golden_set.json`；Correctness 和人工 golden answer 留到 P4-S2 后半段；货币基金先作为 edge case 不纳入最小 golden set |
 | 2026-05-19 | P4-S2 | 🟡 code review | 字段级 coverage / traceability scoring 与最小 golden set selection 已完成；artifact=`docs/reviews/p4-s2-implementation-20260519.md`；当前验证 `17 passed`、ruff passed、CLI help passed、diff check passed |
 | 2026-05-19 | P4-S2 | ✅ accepted | MiMo/GLM code review 均 PASS；controller 裁决=`docs/reviews/p4-s2-code-review-controller-judgment-20260519.md`；accepted commit=`47f2656`；当前验证 `17 passed`、ruff passed、CLI help passed、diff check passed；下一 gate 为 `P4-S3 implementation` |
+| 2026-05-19 | P4-S3a | ✅ accepted | `004393` 类型误判已修复为 `active_fund`；MiMo/GLM code review 与 targeted re-review 均 PASS；controller 裁决=`docs/reviews/p4-s3a-code-review-controller-judgment-20260519.md`；当前验证 `15 passed`、ruff passed、diff check passed；下一 gate 为 `P4-S3b implementation` |

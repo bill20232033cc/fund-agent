@@ -21,17 +21,20 @@ FundType = Literal[
     "fof_fund",
 ]
 
-_INDEX_NAME_KEYWORDS: Final[tuple[str, ...]] = (
-    "沪深300",
-    "中证",
-    "上证",
-    "深证",
-    "创业板",
-    "科创",
-    "红利",
-    "低波",
-    "价值",
-    "质量",
+_INDEX_IDENTITY_KEYWORDS: Final[tuple[str, ...]] = (
+    "指数",
+    "ETF",
+    "交易型开放式",
+    "联接",
+)
+_INDEX_STRATEGY_KEYWORDS: Final[tuple[str, ...]] = (
+    "标的指数",
+    "跟踪指数",
+    "紧密跟踪标的指数",
+    "紧密跟踪指数",
+    "复制法",
+    "完全复制",
+    "抽样复制",
 )
 _ENHANCED_KEYWORDS: Final[tuple[str, ...]] = ("增强",)
 _QDII_KEYWORDS: Final[tuple[str, ...]] = ("QDII", "境外")
@@ -53,12 +56,20 @@ _PROFILE_FIELD_PATTERNS: Final[dict[str, tuple[str, ...]]] = {
     "investment_scope": (
         r"投资范围\s*[：:]\s*(.+)",
     ),
+    "investment_objective": (
+        r"投资目标\s*[：:]\s*(.+)",
+    ),
+    "investment_strategy": (
+        r"投资策略\s*[：:]\s*(.+)",
+    ),
 }
 _PROFILE_TABLE_LABELS: Final[dict[str, tuple[str, ...]]] = {
     "fund_name": ("基金简称", "基金名称"),
     "fund_category": ("基金类型", "基金类别"),
     "benchmark": ("业绩比较基准",),
     "investment_scope": ("投资范围",),
+    "investment_objective": ("投资目标",),
+    "investment_strategy": ("投资策略",),
 }
 
 
@@ -222,6 +233,31 @@ def _contains_any(text: str, keywords: tuple[str, ...]) -> bool:
     return any(keyword in text for keyword in keywords)
 
 
+def _has_index_identity_evidence(fund_name: str, fund_category: str, strategy_text: str) -> bool:
+    """判断是否存在指数基金身份级证据。
+
+    本函数服务于模板第 1 章“产品本质”与第 2 章 `R=A+B-C` 的前置基金类型判断。
+    业绩比较基准只能描述收益参照物，不能单独证明产品是指数基金，因此不参与触发。
+
+    Args:
+        fund_name: 基金名称或简称。
+        fund_category: 年报披露的基金类别。
+        strategy_text: 投资目标、投资范围与投资策略拼接文本。
+
+    Returns:
+        存在基金名称/类别/策略层面的指数身份证据时返回 `True`，否则返回 `False`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    identity_text = f"{fund_name} {fund_category}"
+    return _contains_any(identity_text, _INDEX_IDENTITY_KEYWORDS) or _contains_any(
+        strategy_text,
+        _INDEX_STRATEGY_KEYWORDS,
+    )
+
+
 def classify_fund_type(report: ParsedAnnualReport) -> FundTypeClassification:
     """基于 `§1/§2` 披露信息识别基金类型。
 
@@ -239,7 +275,11 @@ def classify_fund_type(report: ParsedAnnualReport) -> FundTypeClassification:
     fund_category = _extract_profile_value(report, "fund_category") or ""
     benchmark = _extract_profile_value(report, "benchmark") or ""
     investment_scope = _extract_profile_value(report, "investment_scope") or ""
-    name_and_benchmark = f"{fund_name} {benchmark}"
+    investment_objective = _extract_profile_value(report, "investment_objective") or ""
+    investment_strategy = _extract_profile_value(report, "investment_strategy") or ""
+    identity_text = f"{fund_name} {fund_category}"
+    index_strategy_text = f"{investment_objective} {investment_scope} {investment_strategy}"
+    index_evidence_text = f"{identity_text} {index_strategy_text}"
     classification_text = f"{fund_name} {fund_category} {benchmark} {investment_scope}"
 
     if _contains_any(classification_text, _QDII_KEYWORDS):
@@ -266,29 +306,29 @@ def classify_fund_type(report: ParsedAnnualReport) -> FundTypeClassification:
             ),
         )
 
-    if _contains_any(fund_category, _ACTIVE_EQUITY_CATEGORY_KEYWORDS) and "指数" not in fund_category:
-        return FundTypeClassification(
-            classified_fund_type="active_fund",
-            classification_basis=(
-                f"基金类别：{fund_category}",
-                "基金类别已披露为混合型/股票型，且未命中指数型类别",
-            ),
-        )
-
-    if "指数" in fund_category or _contains_any(name_and_benchmark, _INDEX_NAME_KEYWORDS):
-        if _contains_any(name_and_benchmark, _ENHANCED_KEYWORDS):
+    if _has_index_identity_evidence(fund_name, fund_category, index_strategy_text):
+        if _contains_any(index_evidence_text, _ENHANCED_KEYWORDS):
             return FundTypeClassification(
                 classified_fund_type="enhanced_index",
                 classification_basis=(
-                    f"基金类别或名称命中指数特征：{fund_category or fund_name}",
-                    f"名称/基准命中增强关键词：{name_and_benchmark}",
+                    f"基金类别/名称/策略命中指数特征：{fund_category or fund_name}",
+                    f"基金身份或策略命中增强关键词：{index_evidence_text}",
                 ),
             )
         return FundTypeClassification(
             classified_fund_type="index_fund",
             classification_basis=(
-                f"基金类别或名称命中指数特征：{fund_category or fund_name}",
-                f"业绩比较基准：{benchmark}" if benchmark else "未披露基准，按名称/类别识别",
+                f"基金类别/名称/策略命中指数特征：{fund_category or fund_name}",
+                f"业绩比较基准仅作参照：{benchmark}" if benchmark else "未披露基准，按身份信息识别",
+            ),
+        )
+
+    if _contains_any(fund_category, _ACTIVE_EQUITY_CATEGORY_KEYWORDS):
+        return FundTypeClassification(
+            classified_fund_type="active_fund",
+            classification_basis=(
+                f"基金类别：{fund_category}",
+                "基金类别已披露为混合型/股票型，且未命中指数基金身份或策略证据",
             ),
         )
 

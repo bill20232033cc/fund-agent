@@ -2,7 +2,7 @@
 
 > **版本**: v0.1
 > **日期**: 2026-05-19
-> **状态**: P4-S2 accepted
+> **状态**: P4-S3a accepted
 > **设计真源**: `docs/design.md`
 > **全局总控**: `docs/implementation-control.md`
 > **P4 第一性原理计划**: `docs/post-mvp-p4-first-principles-plan.md`
@@ -23,7 +23,8 @@ P4 必须优先解决三个底层问题：
 
 当前已知 failure case：
 
-- `004393 安信企业价值优选混合A` 可生成 8 章报告，但被误判为 `index_fund`，且 `§3/§4/§8/§9/§10` 多个关键字段缺失。
+- `004393 安信企业价值优选混合A` 曾被误判为 `index_fund`，P4-S3a 已修复为 `active_fund`。
+- `004393` 仍存在 `§3/§4/§8/§9/§10` 多个关键字段缺失，P4-S3b 继续修复。
 
 ---
 
@@ -32,8 +33,8 @@ P4 必须优先解决三个底层问题：
 | 项目 | 状态 |
 |---|---|
 | 当前 phase | P4 |
-| 当前 gate | `P4-S2 accepted` |
-| 下一 gate | `P4-S3 implementation` |
+| 当前 gate | `P4-S3a accepted` |
+| 下一 gate | `P4-S3b implementation` |
 | 当前分支 | `main` |
 | P4 输入池 | `docs/code_20260519.csv` |
 | 已知数据质量问题 | `016492` 重复；56 条记录、55 个唯一代码 |
@@ -52,7 +53,8 @@ P4-S1 进入 implementation 前置条件已完成：
 |---|---|---|---|---|
 | P4-S1 | Selected Fund Extraction Snapshot + Quality Gate MVP | ✅ accepted | P3 | 能对指定基金和分层抽样基金生成 snapshot 与 summary |
 | P4-S2 | 字段级评分规则 + Golden Set 标注 | ✅ accepted | P4-S1 | P0 字段 coverage / traceability 可计算 |
-| P4-S3 | 基金类型误判修复 + 高影响 extractor 缺口修复 | ⬜ pending | P4-S2 | `004393` 不再误判为 `index_fund`，并由 score 证明改进 |
+| P4-S3a | 基金类型误判修复 | ✅ accepted | P4-S2 | `004393` 不再误判为 `index_fund`，snapshot 显示 `active_fund` |
+| P4-S3b | 高影响 extractor 缺口修复 | ⬜ pending | P4-S3a | `004393` 的高影响缺失字段由 score 证明改进 |
 | P4-S4 | 报告质量审计与阻断 | ⬜ pending | P4-S3 | 低质量输入可被 quality gate 标记或阻断 |
 
 ---
@@ -318,9 +320,9 @@ P4-S2 前半段当前实现口径：
 
 优先修复：
 
-1. `004393` 被误判为 `index_fund`。
-2. 真实年报中 `§3/§4/§8/§9/§10` 关键字段缺失率高的问题。
-3. App 类别与系统分类明显冲突的问题。
+1. `004393` 被误判为 `index_fund`。已在 P4-S3a 修复。
+2. 真实年报中 `§3/§4/§8/§9/§10` 关键字段缺失率高的问题。进入 P4-S3b。
+3. App 类别与系统分类明显冲突的问题。P4-S3b / P4-S4 继续追踪。
 
 ### 6.2 验收
 
@@ -328,6 +330,53 @@ P4-S2 前半段当前实现口径：
 - 修复后 snapshot/score 能显示分类改善。
 - 修复不得通过基金代码特判实现。
 - 修复不得把业绩基准中的指数词简单等同于指数基金类型。
+
+### 6.3 P4-S3a accepted：基金类型误判修复
+
+实现与 review artifact：
+
+- implementation: `docs/reviews/p4-s3a-implementation-20260519.md`
+- code review:
+  - `docs/reviews/p4-s3a-code-review-mimo-20260519.md`
+  - `docs/reviews/p4-s3a-code-review-glm-20260519.md`
+  - `docs/reviews/p4-s3a-rereview-mimo-20260519.md`
+  - `docs/reviews/p4-s3a-rereview-glm-20260519.md`
+- controller judgment: `docs/reviews/p4-s3a-code-review-controller-judgment-20260519.md`
+
+P4-S3a 裁决：
+
+- `004393` 误判 root cause 已用代码和已解析年报同源确认：旧规则把 `fund_name + benchmark` 用于指数关键词匹配，且关键词包含 `价值` / `沪深300` 等宽泛词。
+- 新规则不再让业绩比较基准单独触发指数基金分类；指数身份必须来自基金名称/类别或投资目标/范围/策略中的显式指数策略证据。
+- GLM 发现的 `紧密跟踪` 泛化误伤风险已修复：收窄为 `紧密跟踪标的指数` / `紧密跟踪指数`，并新增主动基金回归测试。
+- 真实 snapshot `reports/extraction-snapshots/p4-s3a-004393-rereview/summary.md` 显示 `004393` 为 `active_fund`，且 known failure note 不再出现。
+
+P4-S3a 验证：
+
+- `.venv/bin/python -m pytest tests/fund/extractors/test_profile.py tests/fund/test_extraction_snapshot.py tests/fund/integration/test_p1_sample_matrix.py tests/fund/integration/test_p3_cli_e2e_matrix.py -q`：`15 passed`
+- `.venv/bin/python -m ruff check fund_agent/fund/fund_type.py tests/fund/extractors/test_profile.py`：passed
+- `git diff --check`：passed
+
+### 6.4 P4-S3b next：高影响 extractor 缺口修复
+
+P4-S3b 继续使用 P4-S2/P4-S3a snapshot 与 score 驱动，不凭肉眼改报告。
+
+优先字段：
+
+- P0：`fee_schedule`
+- P0：`nav_benchmark_performance`
+- P0：`manager_strategy_text`
+- P1：`turnover_rate`
+- P1：`manager_alignment`
+- P1：`holder_structure`
+- P1：`holdings_snapshot`
+- P1：`share_change`
+
+P4-S3b 验收：
+
+- 至少选择 2-3 个高影响字段做最小修复，不一次性重写所有 extractor。
+- 每个字段必须有最小复现测试，优先基于 `004393` 的真实章节格式构造 fixture。
+- 修复后重新生成 `004393` snapshot/score，并证明对应字段 coverage / traceability 改善。
+- 不得绕过统一文档仓库接口，不得在 UI/Service 层写基金解析规则。
 
 ---
 
@@ -398,3 +447,4 @@ P4 遵循 phaseflow / gateflow 多 Agent 约定：
 | 2026-05-19 | P4-S2 implementation | 🟡 in progress | 默认先实现 Coverage / Traceability 评分；Correctness 和人工 golden answer 留到 P4-S2 后半段；货币基金先作为 edge case 不纳入最小 golden set |
 | 2026-05-19 | P4-S2 code review | 🟡 in progress | Implementation artifact 已写入 `docs/reviews/p4-s2-implementation-20260519.md`；当前验证 `17 passed`、ruff passed、CLI help passed、diff check passed，等待 MiMo/GLM code review |
 | 2026-05-19 | P4-S2 review judgment | ✅ passed | MiMo/GLM code review 均 PASS；controller 裁决 `docs/reviews/p4-s2-code-review-controller-judgment-20260519.md`；accepted commit=`47f2656`；P4-S2 accepted，下一 gate 为 P4-S3 |
+| 2026-05-19 | P4-S3a review judgment | ✅ passed | `004393` 类型误判已修复；MiMo/GLM review + targeted re-review 均 PASS；controller 裁决 `docs/reviews/p4-s3a-code-review-controller-judgment-20260519.md`；真实 snapshot 显示 `active_fund`；下一 gate 为 P4-S3b |
