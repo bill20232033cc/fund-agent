@@ -33,8 +33,8 @@ P4 必须优先解决三个底层问题：
 | 项目 | 状态 |
 |---|---|
 | 当前 phase | P5 follow-up |
-| 当前 gate | `P5 merged` |
-| 下一 gate | `post-P5 follow-up planning` |
+| 当前 gate | `post-P5 follow-up planning accepted` |
+| 下一 gate | `P6-S1 template contract manifest plan/review` |
 | 当前分支 | `main` |
 | P4 输入池 | `docs/code_20260519.csv` |
 | 已知数据质量问题 | `016492` 重复；56 条记录、55 个唯一代码 |
@@ -74,6 +74,7 @@ P4-S1 进入 implementation 前置条件已完成：
 - P5 acceptance / ready-to-open-draft-PR reconciliation 已接受，artifact=`docs/reviews/p5-acceptance-ready-to-open-draft-pr-reconciliation-20260520.md`；下一 gate 为 ready-to-open-draft-PR。
 - P5 draft PR gate 已接受，artifact=`docs/reviews/p5-draft-pr-gate-reconciliation-20260520.md`，PR-level review artifact=`docs/reviews/pr-4-review-20260520-0625.md`。
 - P5 已通过 PR 4 合入 `main`：`https://github.com/bill20232033cc/fund-agent/pull/4`；squash merge commit=`d33b901fd1bee9f85206df461cc6419a813bcbae`，mergedAt=`2026-05-19T22:51:32Z`；下一 gate 为 post-P5 follow-up planning。
+- Post-P5 follow-up planning 已接受，artifact=`docs/reviews/post-p5-follow-up-planning-20260520.md`；下一阶段第一优先级裁决为 P6-S1 template contract manifest，把 `CHAPTER_CONTRACT` / `ITEM_RULE` 推进为 Capability 层可消费的机器契约。
 
 ---
 
@@ -594,3 +595,4 @@ P4 遵循 phaseflow / gateflow 多 Agent 约定：
 | 2026-05-20 | P5 acceptance / ready-to-open-draft-PR reconciliation | ✅ accepted | artifact=`docs/reviews/p5-acceptance-ready-to-open-draft-pr-reconciliation-20260520.md`；当前 gate 为 `ready-to-open-draft-PR` |
 | 2026-05-20 | P5 draft PR gate | ✅ draft-PR-pass | Draft PR 4 已创建：`https://github.com/bill20232033cc/fund-agent/pull/4`；controller reconciliation=`docs/reviews/p5-draft-pr-gate-reconciliation-20260520.md`；PR-level review=`docs/reviews/pr-4-review-20260520-0625.md`；GitHub state=`OPEN`、draft=`true`、mergeable=`MERGEABLE`、no checks reported；下一 gate 为 `merge gate（需用户额外授权）` |
 | 2026-05-20 | P5 merge gate | ✅ merged | PR 4 已 squash merge 到 `main`：`https://github.com/bill20232033cc/fund-agent/pull/4`；merge commit=`d33b901fd1bee9f85206df461cc6419a813bcbae`，mergedAt=`2026-05-19T22:51:32Z`；本地 `main` 已 fast-forward 到 `origin/main`；下一 gate 为 `post-P5 follow-up planning` |
+| 2026-05-20 | post-P5 follow-up planning | ✅ accepted | controller 裁决下一阶段第一优先级为 P6-S1 template contract manifest；artifact=`docs/reviews/post-p5-follow-up-planning-20260520.md`；当前 gate 为 `post-P5 follow-up planning accepted`，下一 gate 为 `P6-S1 template contract manifest plan/review` |

@@ -19,7 +19,8 @@
 | P2 | 分析引擎（R=A+B-C + 检验 + 审计） | Week 3-4 | ✅ done | P1 |
 | P3 | CLI 入口 + 整合测试 + 验证 | Week 4-5 | ✅ done | P2 |
 | P4 | 精选基金池质量闭环（snapshot + score + quality gate） | Post-MVP | ✅ done | P3 |
-| P5 | 报告主链路质量保护（quality gate integration） | Post-P4 | ✅ draft-PR-pass | P4 |
+| P5 | 报告主链路质量保护（quality gate integration） | Post-P4 | ✅ done | P4 |
+| P6 | 模板契约机器化（CHAPTER_CONTRACT / ITEM_RULE） | Post-P5 | 🟡 planned | P5 |
 
 ### 1.2 里程碑
 
@@ -33,8 +34,8 @@
 ### 1.3 当前 Gate 与基线裁决（2026-05-18）
 
 - 当前分支：`main`
-- 当前 gate：`P5 merged`
-- 下一 gate：`post-P5 follow-up planning`
+- 当前 gate：`post-P5 follow-up planning accepted`
+- 下一 gate：`P6-S1 template contract manifest plan/review`
 - P4 执行控制文档：`docs/implementation-control-p4.md`
 - 当前裁决：
   - P0 维持 `done`。已验证 `dayu` 依赖可导入、`fund-agent` 处于 editable install、`fund-analysis --help` 可用、样本基金 `110011` 年报可下载、`pdfplumber` 可提取全文文本和表格。
@@ -72,6 +73,7 @@
   - P5 acceptance / ready-to-open-draft-PR reconciliation 已接受，artifact=`docs/reviews/p5-acceptance-ready-to-open-draft-pr-reconciliation-20260520.md`。P5 inclusion set 已明确，旧 review artifacts、runtime reports、launchd 和本地 helper scripts 明确排除。
   - P5 draft PR gate 已接受，artifact=`docs/reviews/p5-draft-pr-gate-reconciliation-20260520.md`，PR-level review artifact=`docs/reviews/pr-4-review-20260520-0625.md`。
   - P5 已通过 PR 4 合入 `main`：`https://github.com/bill20232033cc/fund-agent/pull/4`；squash merge commit=`d33b901fd1bee9f85206df461cc6419a813bcbae`，mergedAt=`2026-05-19T22:51:32Z`。当前 gate 为 `P5 merged`，下一 gate 为 `post-P5 follow-up planning`。
+  - Post-P5 follow-up planning 已接受，artifact=`docs/reviews/post-p5-follow-up-planning-20260520.md`。controller 裁决下一阶段第一优先级为 P6-S1 template contract manifest：把 `docs/fund-analysis-template-draft.md` 中的 `CHAPTER_CONTRACT` / `ITEM_RULE` 推进为 Capability 层可消费的机器契约；当前 gate 为 `post-P5 follow-up planning accepted`，下一 gate 为 `P6-S1 template contract manifest plan/review`。
   - `P3-S1 CLI 入口封装` 已完成，通过 Typer CLI 和 Service 层输出单只基金 8 章 Markdown 报告；下一 gate 为 `P3-S2 implementation + review`。
   - `P3-S2 温度计数据爬取` 已完成并通过 GLM/MiMo code review；当前实现范围仅限 Capability data adapter，不接入 CLI/Service。
   - `P3-S3 端到端整合测试` 已完成实现与 GLM/MiMo/controller code review：新增 3 只样本基金 CLI 端到端矩阵，闭合真实 `§2` 表格字段抽取、parsed report 低质量缓存门槛和模板 `benchmark_text` 契约错配。
@@ -1211,7 +1213,7 @@ P0（环境搭建）
 | RR-1 | PDF 格式不统一导致解析失败 | P1 | 已设计兜底策略 | 否 |
 | RR-2 | 超额收益性质判断主观性强 | P2 | MVP 用规则引擎 | 否 |
 | RR-3 | 审计规则过严导致频繁阻断 | P2 | MVP 仅启用程序审计 | 否 |
-| RR-4 | 温度计爬虫被封锁 | P3/v2 | 24h 缓存 + 7 天 stale fallback + `unavailable=True`；Service/CLI 接入移交 P5-S7 / post-MVP infra validation | 是（如被封锁且无可用缓存需人工确认） |
+| RR-4 | 温度计爬虫被封锁 | P3/v2 | P5-S7 已提供 read-only Service/CLI、24h 缓存、7 天 stale fallback 与 `unavailable=True`；自动映射为 `valuation_state` 仍 deferred，除非先有同源估值规则 | 是（如被封锁且无可用缓存需人工确认） |
 | RR-5 | `dayu-agent` wheel 下载受 GitHub 可达性影响 | P0/P1 | 当前虚拟环境已安装，可继续开发；新环境安装待镜像化或替代分发方案 | 否 |
 | RR-6 | 模板禁用交易措辞使用 substring 匹配，未来合法短语可能误报 | P3/v2 | P2 当前输出已测试通过；P3 若调整模板措辞需同步审查 | 否 |
 | RR-7 | 缺证附录当前为章节级，不是 item 级证据确认 | v2 | MVP 先保证章节级可追溯，Evidence Confirm 层后续细化 | 否 |
@@ -1223,7 +1225,7 @@ P0（环境搭建）
 | RR-13 | 精选基金池 CSV 中 `016492` 重复 | P4/P5 | P5-S6 artifact 已形成：`docs/code_20260519.csv` 第 26 行 `南方均衡成长混合A,016492` 与第 35 行 `易方达逆向投资混合A,016492` 冲突；需用户/App 源确认，不由代码自动裁决 | 是 |
 | RR-14 | P4 quality gate 缺少 per-fund 阻断粒度 | P4 | 已关闭；P4 aggregate re-review MiMo/GLM 均 PASS，controller 裁决=`docs/reviews/p4-aggregate-rereview-controller-judgment-20260519.md` | 否 |
 | RR-15 | P4 quality gate 未接入 `analyze` 主链路 | P4/P5 | 已关闭；P5-S1 accepted，quality gate 已通过 `analyze` Service 显式接入，CLI/Service 支持 `off/warn/block` 和结构化阻断结果；裁决=`docs/reviews/p5-s1-acceptance-reconciliation-20260520.md` | 否 |
-| RR-16 | correctness 可比字段覆盖面窄 | P4/P5 | 部分关闭；P5-S3 已新增 snapshot `comparable_values` 白名单并让 correctness 比较 `basic_identity`、`benchmark`、`nav_benchmark_performance`、`classified_fund_type` 的稳定子字段；剩余覆盖面仍取决于 extractor 输出和 strict golden answer 内容 | 否 |
+| RR-16 | correctness 可比字段覆盖面窄 | P4/P5/P6 | 部分关闭；P5-S3 已新增 snapshot `comparable_values` 白名单并让 correctness 比较 `basic_identity`、`benchmark`、`nav_benchmark_performance`、`classified_fund_type` 的稳定子字段；P6-S1/S5 将先补机器化 contract 基础，再决定是否升级 contract-aware correctness / FQ5 | 否 |
 | RR-17 | P4 draft PR 前工作树范围不清 | P4 | 已关闭；PR inclusion set 已在 `docs/reviews/p4-pr-scope-hygiene-reconciliation-20260520.md` 明确，draft PR 必须按 include / exclude 清单准备 | 否 |
 
 ---
@@ -1366,3 +1368,4 @@ P0（环境搭建）
 | 2026-05-20 | P5 acceptance / ready-to-open-draft-PR reconciliation | ✅ accepted | artifact=`docs/reviews/p5-acceptance-ready-to-open-draft-pr-reconciliation-20260520.md`；PR inclusion/exclusion set 已明确；当前 gate 为 `ready-to-open-draft-PR`，下一 gate 为 `draft PR gate（需用户授权）` |
 | 2026-05-20 | P5 draft PR gate | ✅ draft-PR-pass | Draft PR 4 已创建：`https://github.com/bill20232033cc/fund-agent/pull/4`；controller reconciliation=`docs/reviews/p5-draft-pr-gate-reconciliation-20260520.md`；PR-level review=`docs/reviews/pr-4-review-20260520-0625.md`；GitHub state=`OPEN`、draft=`true`、mergeable=`MERGEABLE`、no checks reported；下一 gate 为 `merge gate（需用户额外授权）` |
 | 2026-05-20 | P5 merge gate | ✅ merged | PR 4 已 squash merge 到 `main`：`https://github.com/bill20232033cc/fund-agent/pull/4`；merge commit=`d33b901fd1bee9f85206df461cc6419a813bcbae`，mergedAt=`2026-05-19T22:51:32Z`；本地 `main` 已 fast-forward 到 `origin/main`；下一 gate 为 `post-P5 follow-up planning` |
+| 2026-05-20 | post-P5 follow-up planning | ✅ accepted | controller 裁决下一阶段第一优先级为 P6-S1 template contract manifest；artifact=`docs/reviews/post-p5-follow-up-planning-20260520.md`；当前 gate 为 `post-P5 follow-up planning accepted`，下一 gate 为 `P6-S1 template contract manifest plan/review` |
