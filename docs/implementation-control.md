@@ -32,15 +32,15 @@
 ### 1.3 当前 Gate 与基线裁决（2026-05-18）
 
 - 当前分支：`main`
-- 当前 gate：`P4-S2 accepted`
-- 下一 gate：`P4-S3 implementation`
+- 当前 gate：`P4-S3a accepted`
+- 下一 gate：`P4-S3b implementation`
 - P4 执行控制文档：`docs/implementation-control-p4.md`
 - 当前裁决：
   - P0 维持 `done`。已验证 `dayu` 依赖可导入、`fund-agent` 处于 editable install、`fund-analysis --help` 可用、样本基金 `110011` 年报可下载、`pdfplumber` 可提取全文文本和表格。
   - P1 已完成并通过 aggregate review。
   - P2 已完成并通过 aggregate deepreview。
   - P3 已完成并合入 `main`。
-  - P4 已完成 P4-S1 并进入 P4-S2：当前目标不是继续扩功能，而是建立精选基金池真实年报提取质量闭环，让 snapshot、score、golden set 和 report quality gate 成为后续 extractor / 分类器 / 审计规则迭代的依据。
+  - P4 已完成 P4-S1/P4-S2/P4-S3a：当前目标不是继续扩功能，而是建立精选基金池真实年报提取质量闭环；`004393` 类型误判已修复为 `active_fund`，下一步进入 P4-S3b 修复高影响 extractor 缺口。
   - `P3-S1 CLI 入口封装` 已完成，通过 Typer CLI 和 Service 层输出单只基金 8 章 Markdown 报告；下一 gate 为 `P3-S2 implementation + review`。
   - `P3-S2 温度计数据爬取` 已完成并通过 GLM/MiMo code review；当前实现范围仅限 Capability data adapter，不接入 CLI/Service。
   - `P3-S3 端到端整合测试` 已完成实现与 GLM/MiMo/controller code review：新增 3 只样本基金 CLI 端到端矩阵，闭合真实 `§2` 表格字段抽取、parsed report 低质量缓存门槛和模板 `benchmark_text` 契约错配。
@@ -1278,4 +1278,4 @@ P0（环境搭建）
 | 2026-05-19 | P4-S2 | 🟡 implementation | 当前进入字段级 coverage / traceability scoring；实现产物为 `score.json`、`score.md`、`golden_set.json`；Correctness 和人工 golden answer 留到 P4-S2 后半段；货币基金先作为 edge case 不纳入最小 golden set |
 | 2026-05-19 | P4-S2 | 🟡 code review | 字段级 coverage / traceability scoring 与最小 golden set selection 已完成；artifact=`docs/reviews/p4-s2-implementation-20260519.md`；当前验证 `17 passed`、ruff passed、CLI help passed、diff check passed |
 | 2026-05-19 | P4-S2 | ✅ accepted | MiMo/GLM code review 均 PASS；controller 裁决=`docs/reviews/p4-s2-code-review-controller-judgment-20260519.md`；accepted commit=`47f2656`；当前验证 `17 passed`、ruff passed、CLI help passed、diff check passed；下一 gate 为 `P4-S3 implementation` |
-| 2026-05-19 | P4-S3a | ✅ accepted | `004393` 类型误判已修复为 `active_fund`；MiMo/GLM code review 与 targeted re-review 均 PASS；controller 裁决=`docs/reviews/p4-s3a-code-review-controller-judgment-20260519.md`；当前验证 `15 passed`、ruff passed、diff check passed；下一 gate 为 `P4-S3b implementation` |
+| 2026-05-19 | P4-S3a | ✅ accepted | `004393` 类型误判已修复为 `active_fund`；MiMo/GLM code review 与 targeted re-review 均 PASS；controller 裁决=`docs/reviews/p4-s3a-code-review-controller-judgment-20260519.md`；accepted commit=`0b3fbc6`；当前验证 `15 passed`、ruff passed、diff check passed；下一 gate 为 `P4-S3b implementation` |

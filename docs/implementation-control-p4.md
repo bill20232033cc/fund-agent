@@ -447,4 +447,4 @@ P4 遵循 phaseflow / gateflow 多 Agent 约定：
 | 2026-05-19 | P4-S2 implementation | 🟡 in progress | 默认先实现 Coverage / Traceability 评分；Correctness 和人工 golden answer 留到 P4-S2 后半段；货币基金先作为 edge case 不纳入最小 golden set |
 | 2026-05-19 | P4-S2 code review | 🟡 in progress | Implementation artifact 已写入 `docs/reviews/p4-s2-implementation-20260519.md`；当前验证 `17 passed`、ruff passed、CLI help passed、diff check passed，等待 MiMo/GLM code review |
 | 2026-05-19 | P4-S2 review judgment | ✅ passed | MiMo/GLM code review 均 PASS；controller 裁决 `docs/reviews/p4-s2-code-review-controller-judgment-20260519.md`；accepted commit=`47f2656`；P4-S2 accepted，下一 gate 为 P4-S3 |
-| 2026-05-19 | P4-S3a review judgment | ✅ passed | `004393` 类型误判已修复；MiMo/GLM review + targeted re-review 均 PASS；controller 裁决 `docs/reviews/p4-s3a-code-review-controller-judgment-20260519.md`；真实 snapshot 显示 `active_fund`；下一 gate 为 P4-S3b |
+| 2026-05-19 | P4-S3a review judgment | ✅ passed | `004393` 类型误判已修复；MiMo/GLM review + targeted re-review 均 PASS；controller 裁决 `docs/reviews/p4-s3a-code-review-controller-judgment-20260519.md`；accepted commit=`0b3fbc6`；真实 snapshot 显示 `active_fund`；下一 gate 为 P4-S3b |
