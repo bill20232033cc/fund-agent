@@ -184,6 +184,8 @@ class AnnualReportDocumentCache:
         self.root_dir = root_dir or DOCUMENT_CACHE_ROOT
         self.parsed_reports_dir = self.root_dir / PARSED_REPORT_CACHE_DIRNAME
         self.sqlite_path = self.root_dir / SQLITE_CACHE_FILENAME
+        self._initialize_lock = asyncio.Lock()
+        self._initialized = False
         self._lock = asyncio.Lock()
 
     async def initialize(self) -> None:
@@ -200,7 +202,11 @@ class AnnualReportDocumentCache:
             sqlite3.Error: 初始化 SQLite 失败时抛出。
         """
 
-        await asyncio.to_thread(self._initialize_sync)
+        async with self._initialize_lock:
+            if self._initialized:
+                return
+            await asyncio.to_thread(self._initialize_sync)
+            self._initialized = True
 
     def _initialize_sync(self) -> None:
         """同步初始化缓存目录与 SQLite schema。

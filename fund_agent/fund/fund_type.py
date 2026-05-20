@@ -36,7 +36,7 @@ _INDEX_STRATEGY_KEYWORDS: Final[tuple[str, ...]] = (
     "完全复制",
     "抽样复制",
 )
-_ENHANCED_KEYWORDS: Final[tuple[str, ...]] = ("增强",)
+_ENHANCED_KEYWORDS: Final[tuple[str, ...]] = ("指数增强", "增强指数", "增强型指数")
 _QDII_KEYWORDS: Final[tuple[str, ...]] = ("QDII", "境外")
 _FOF_KEYWORDS: Final[tuple[str, ...]] = ("FOF", "基金中基金")
 _BOND_KEYWORDS: Final[tuple[str, ...]] = ("债券", "中债")
@@ -319,9 +319,9 @@ def classify_fund_type(report: ParsedAnnualReport) -> FundTypeClassification:
     identity_text = f"{fund_name} {fund_category}"
     index_strategy_text = f"{investment_objective} {investment_scope} {investment_strategy}"
     index_evidence_text = f"{identity_text} {index_strategy_text}"
-    classification_text = f"{fund_name} {fund_category} {benchmark} {investment_scope}"
+    qdii_fof_text = f"{fund_name} {fund_category} {investment_objective} {investment_scope} {investment_strategy}"
 
-    if _contains_any(classification_text, _QDII_KEYWORDS):
+    if _contains_any(qdii_fof_text, _QDII_KEYWORDS):
         return FundTypeClassification(
             classified_fund_type="qdii_fund",
             classification_basis=(
@@ -335,7 +335,7 @@ def classify_fund_type(report: ParsedAnnualReport) -> FundTypeClassification:
             ),
         )
 
-    if _contains_any(classification_text, _FOF_KEYWORDS):
+    if _contains_any(qdii_fof_text, _FOF_KEYWORDS):
         return FundTypeClassification(
             classified_fund_type="fof_fund",
             classification_basis=(

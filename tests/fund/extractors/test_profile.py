@@ -439,6 +439,86 @@ def test_extract_profile_does_not_treat_tracking_market_dynamics_as_index() -> N
     assert result.basic_identity.value["classified_fund_type"] != "index_fund"
 
 
+def test_extract_profile_does_not_treat_generic_enhance_word_as_enhanced_index() -> None:
+    """验证泛化“增强收益”表述不会把普通指数基金误判为指数增强。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当普通指数基金因泛化增强词被误判时抛出。
+    """
+
+    report = _build_table_profile_report(
+        "510310",
+        ParsedTable(
+            page_number=5,
+            table_index=0,
+            headers=("基金名称", "示例沪深300指数证券投资基金"),
+            rows=(("基金简称", "示例沪深300指数A"), ("基金主代码", "510310")),
+        ),
+        ParsedTable(
+            page_number=5,
+            table_index=1,
+            headers=("投资目标", "紧密跟踪标的指数表现，并力争增强投资者长期持有体验。"),
+            rows=(
+                ("投资范围", "投资于沪深300指数成份股。"),
+                ("投资策略", "采用完全复制法跟踪标的指数。"),
+                ("业绩比较基准", "沪深300指数收益率"),
+            ),
+        ),
+    )
+
+    result = extract_profile(report)
+
+    assert result.basic_identity.value is not None
+    assert result.basic_identity.value["classified_fund_type"] == "index_fund"
+    assert result.basic_identity.value["classified_fund_type"] != "enhanced_index"
+
+
+def test_extract_profile_does_not_use_benchmark_for_qdii_or_fof_classification() -> None:
+    """验证 QDII/FOF 顶层分类不由业绩比较基准单独触发。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当基准文本中的境外或 FOF 词触发顶层分类时抛出。
+    """
+
+    report = _build_table_profile_report(
+        "019998",
+        ParsedTable(
+            page_number=5,
+            table_index=0,
+            headers=("基金名称", "示例灵活配置混合型证券投资基金"),
+            rows=(("基金简称", "示例灵活配置混合A"), ("基金主代码", "019998")),
+        ),
+        ParsedTable(
+            page_number=5,
+            table_index=1,
+            headers=("投资目标", "在严格控制风险的前提下追求长期稳健增值。"),
+            rows=(
+                ("投资范围", "本基金主要投资于境内股票、存托凭证和现金管理工具。"),
+                ("投资策略", "采用主动管理策略。"),
+                ("业绩比较基准", "境外权益指数收益率×20%+FOF基金指数收益率×10%+沪深300指数收益率×70%"),
+            ),
+        ),
+    )
+
+    result = extract_profile(report)
+
+    assert result.basic_identity.value is not None
+    assert result.basic_identity.value["classified_fund_type"] == "active_fund"
+    assert result.basic_identity.value["classified_fund_type"] not in {"qdii_fund", "fof_fund"}
+
+
 def test_extract_profile_uses_table_short_name_for_qdii_classification() -> None:
     """验证基金简称中的 QDII 标识可参与基金类型判断。
 
