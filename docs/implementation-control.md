@@ -34,8 +34,8 @@
 ### 1.3 当前 Gate 与基线裁决（2026-05-18）
 
 - 当前分支：`main`
-- 当前 gate：`P6-S1 template contract manifest plan drafted`
-- 下一 gate：`P6-S1 plan review`
+- 当前 gate：`P6-S1 implementation`
+- 下一 gate：`P6-S1 code review`
 - P4 执行控制文档：`docs/implementation-control-p4.md`
 - 当前裁决：
   - P0 维持 `done`。已验证 `dayu` 依赖可导入、`fund-agent` 处于 editable install、`fund-analysis --help` 可用、样本基金 `110011` 年报可下载、`pdfplumber` 可提取全文文本和表格。
@@ -74,7 +74,7 @@
   - P5 draft PR gate 已接受，artifact=`docs/reviews/p5-draft-pr-gate-reconciliation-20260520.md`，PR-level review artifact=`docs/reviews/pr-4-review-20260520-0625.md`。
   - P5 已通过 PR 4 合入 `main`：`https://github.com/bill20232033cc/fund-agent/pull/4`；squash merge commit=`d33b901fd1bee9f85206df461cc6419a813bcbae`，mergedAt=`2026-05-19T22:51:32Z`。当前 gate 为 `P5 merged`，下一 gate 为 `post-P5 follow-up planning`。
   - Post-P5 follow-up planning 已接受，artifact=`docs/reviews/post-p5-follow-up-planning-20260520.md`。controller 裁决下一阶段第一优先级为 P6-S1 template contract manifest：把 `docs/fund-analysis-template-draft.md` 中的 `CHAPTER_CONTRACT` / `ITEM_RULE` 推进为 Capability 层可消费的机器契约；当前 gate 为 `post-P5 follow-up planning accepted`，下一 gate 为 `P6-S1 template contract manifest plan/review`。
-  - P6-S1 template contract manifest plan 已 drafted，artifact=`docs/reviews/p6-s1-template-contract-manifest-plan-20260520.md`。计划裁决为首版在 Capability 层维护 typed Python manifest，不在运行时解析 Markdown 注释；下一 gate 为 `P6-S1 plan review`。
+  - P6-S1 template contract manifest plan 已 drafted 并通过 controller review/rereview，plan artifact=`docs/reviews/p6-s1-template-contract-manifest-plan-20260520.md`，review artifact=`docs/reviews/p6-s1-plan-review-controller-20260520.md`，re-review artifact=`docs/reviews/p6-s1-plan-rereview-controller-20260520.md`。计划裁决为首版在 Capability 层维护 typed Python manifest，不在运行时解析 Markdown 注释，且 production code 不依赖 renderer 私有 `_CHAPTER_TITLES`；下一 gate 为 `P6-S1 implementation`。
   - `P3-S1 CLI 入口封装` 已完成，通过 Typer CLI 和 Service 层输出单只基金 8 章 Markdown 报告；下一 gate 为 `P3-S2 implementation + review`。
   - `P3-S2 温度计数据爬取` 已完成并通过 GLM/MiMo code review；当前实现范围仅限 Capability data adapter，不接入 CLI/Service。
   - `P3-S3 端到端整合测试` 已完成实现与 GLM/MiMo/controller code review：新增 3 只样本基金 CLI 端到端矩阵，闭合真实 `§2` 表格字段抽取、parsed report 低质量缓存门槛和模板 `benchmark_text` 契约错配。
@@ -1371,3 +1371,4 @@ P0（环境搭建）
 | 2026-05-20 | P5 merge gate | ✅ merged | PR 4 已 squash merge 到 `main`：`https://github.com/bill20232033cc/fund-agent/pull/4`；merge commit=`d33b901fd1bee9f85206df461cc6419a813bcbae`，mergedAt=`2026-05-19T22:51:32Z`；本地 `main` 已 fast-forward 到 `origin/main`；下一 gate 为 `post-P5 follow-up planning` |
 | 2026-05-20 | post-P5 follow-up planning | ✅ accepted | controller 裁决下一阶段第一优先级为 P6-S1 template contract manifest；artifact=`docs/reviews/post-p5-follow-up-planning-20260520.md`；当前 gate 为 `post-P5 follow-up planning accepted`，下一 gate 为 `P6-S1 template contract manifest plan/review` |
 | 2026-05-20 | P6-S1 template contract manifest plan | 🟡 drafted | plan artifact=`docs/reviews/p6-s1-template-contract-manifest-plan-20260520.md`；计划首版在 Capability 层维护 typed Python manifest，覆盖 0-7 章 CHAPTER_CONTRACT，不运行时解析 Markdown 注释，不实现 ITEM_RULE / contract audit / FQ5 upgrade；当前 gate 为 `P6-S1 template contract manifest plan drafted`，下一 gate 为 `P6-S1 plan review` |
+| 2026-05-20 | P6-S1 plan review/fix/rereview | ✅ passed | controller plan review=`docs/reviews/p6-s1-plan-review-controller-20260520.md` 发现 renderer 私有标题常量耦合风险；plan 已修订并由 re-review=`docs/reviews/p6-s1-plan-rereview-controller-20260520.md` 确认关闭；当前 gate 为 `P6-S1 implementation`，下一 gate 为 `P6-S1 code review` |

@@ -43,6 +43,8 @@ Docs:
 
 Do not modify `render_template_report(...)` in P6-S1 except for import/export wiring if needed. Renderer alignment is P6-S2.
 
+P6-S1 production code must not import renderer private constants such as `_CHAPTER_TITLES`. The manifest should carry its own chapter titles as the P6 machine-contract title source. P6-S2 will decide whether renderer should reuse those public manifest titles or expose a public chapter-splitting helper.
+
 ## Public Contract
 
 Add dataclasses in `fund_agent/fund/template/contracts.py`:
@@ -84,7 +86,7 @@ All functions need complete Chinese docstrings. Exceptions should fail closed:
 ## Schema Rules
 
 1. Chapter ids are integers `0..7`, matching current renderer headings and `docs/design.md` section 3.1.
-2. Titles must match current `_CHAPTER_TITLES` in `fund_agent/fund/template/renderer.py`.
+2. Titles must match `docs/design.md` section 3.1 and the current 0-7 chapter headings in `docs/fund-analysis-template-draft.md`.
 3. Lens keys must reuse existing `FundType` values:
    - `index_fund`
    - `active_fund`
@@ -115,7 +117,7 @@ If a chapter has no `default` lens, `resolve_preferred_lens(...)` should require
 Add tests that prove:
 
 1. `load_template_contract_manifest()` returns exactly 8 chapters with ids `0..7`.
-2. Chapter titles match the renderer titles.
+2. Chapter titles match `docs/design.md` section 3.1 and no production code imports renderer private constants.
 3. Every chapter has non-empty `narrative_mode`, `must_answer`, `must_not_cover`, `required_output_items`, and `preferred_lens`.
 4. Every supported `FundType` resolves a lens for every chapter, either exact or default fallback.
 5. Invalid manifest cases fail closed:
@@ -153,3 +155,13 @@ Plan review should challenge:
 - Whether `FundType` reuse fully avoids new template-specific type names.
 - Whether fail-closed validation catches realistic manifest drift.
 - Whether P6-S1 stays inside Capability and avoids Service/UI ownership creep.
+- Whether the manifest becomes the machine contract title source without depending on renderer private implementation details.
+
+## Plan Review Patch
+
+Controller plan review found that the original title check could push implementation toward importing renderer private `_CHAPTER_TITLES` or maintaining two unowned title sources. The plan is patched as follows:
+
+- `contracts.py` owns P6 machine-contract chapter titles.
+- Production code must not import renderer private constants.
+- Tests should validate titles against design/template expectations, not by coupling contract code to renderer internals.
+- Renderer title alignment remains P6-S2.

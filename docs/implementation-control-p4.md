@@ -33,8 +33,8 @@ P4 必须优先解决三个底层问题：
 | 项目 | 状态 |
 |---|---|
 | 当前 phase | P5 follow-up |
-| 当前 gate | `P6-S1 template contract manifest plan drafted` |
-| 下一 gate | `P6-S1 plan review` |
+| 当前 gate | `P6-S1 implementation` |
+| 下一 gate | `P6-S1 code review` |
 | 当前分支 | `main` |
 | P4 输入池 | `docs/code_20260519.csv` |
 | 已知数据质量问题 | `016492` 重复；56 条记录、55 个唯一代码 |
@@ -75,7 +75,7 @@ P4-S1 进入 implementation 前置条件已完成：
 - P5 draft PR gate 已接受，artifact=`docs/reviews/p5-draft-pr-gate-reconciliation-20260520.md`，PR-level review artifact=`docs/reviews/pr-4-review-20260520-0625.md`。
 - P5 已通过 PR 4 合入 `main`：`https://github.com/bill20232033cc/fund-agent/pull/4`；squash merge commit=`d33b901fd1bee9f85206df461cc6419a813bcbae`，mergedAt=`2026-05-19T22:51:32Z`；下一 gate 为 post-P5 follow-up planning。
 - Post-P5 follow-up planning 已接受，artifact=`docs/reviews/post-p5-follow-up-planning-20260520.md`；下一阶段第一优先级裁决为 P6-S1 template contract manifest，把 `CHAPTER_CONTRACT` / `ITEM_RULE` 推进为 Capability 层可消费的机器契约。
-- P6-S1 template contract manifest plan 已 drafted，artifact=`docs/reviews/p6-s1-template-contract-manifest-plan-20260520.md`；计划首版在 Capability 层维护 typed Python manifest，不在运行时解析 Markdown 注释；下一 gate 为 P6-S1 plan review。
+- P6-S1 template contract manifest plan 已 drafted 并通过 controller review/rereview，plan artifact=`docs/reviews/p6-s1-template-contract-manifest-plan-20260520.md`，review artifact=`docs/reviews/p6-s1-plan-review-controller-20260520.md`，re-review artifact=`docs/reviews/p6-s1-plan-rereview-controller-20260520.md`；计划首版在 Capability 层维护 typed Python manifest，不在运行时解析 Markdown 注释，且 production code 不依赖 renderer 私有 `_CHAPTER_TITLES`；下一 gate 为 P6-S1 implementation。
 
 ---
 
@@ -598,3 +598,4 @@ P4 遵循 phaseflow / gateflow 多 Agent 约定：
 | 2026-05-20 | P5 merge gate | ✅ merged | PR 4 已 squash merge 到 `main`：`https://github.com/bill20232033cc/fund-agent/pull/4`；merge commit=`d33b901fd1bee9f85206df461cc6419a813bcbae`，mergedAt=`2026-05-19T22:51:32Z`；本地 `main` 已 fast-forward 到 `origin/main`；下一 gate 为 `post-P5 follow-up planning` |
 | 2026-05-20 | post-P5 follow-up planning | ✅ accepted | controller 裁决下一阶段第一优先级为 P6-S1 template contract manifest；artifact=`docs/reviews/post-p5-follow-up-planning-20260520.md`；当前 gate 为 `post-P5 follow-up planning accepted`，下一 gate 为 `P6-S1 template contract manifest plan/review` |
 | 2026-05-20 | P6-S1 template contract manifest plan | 🟡 drafted | plan artifact=`docs/reviews/p6-s1-template-contract-manifest-plan-20260520.md`；计划首版在 Capability 层维护 typed Python manifest，覆盖 0-7 章 CHAPTER_CONTRACT，不运行时解析 Markdown 注释，不实现 ITEM_RULE / contract audit / FQ5 upgrade；当前 gate 为 `P6-S1 template contract manifest plan drafted`，下一 gate 为 `P6-S1 plan review` |
+| 2026-05-20 | P6-S1 plan review/fix/rereview | ✅ passed | controller plan review=`docs/reviews/p6-s1-plan-review-controller-20260520.md` 发现 renderer 私有标题常量耦合风险；plan 已修订并由 re-review=`docs/reviews/p6-s1-plan-rereview-controller-20260520.md` 确认关闭；当前 gate 为 `P6-S1 implementation`，下一 gate 为 `P6-S1 code review` |
