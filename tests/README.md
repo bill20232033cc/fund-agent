@@ -30,8 +30,9 @@
 - `tests/fund/analysis/test_checklist.py`：买入前检查清单测试，覆盖 7 问题顺序、红黄绿灰汇总、缺失显式输入、估值状态、资金期限阈值和异常否决项输入
 - `tests/fund/audit/test_audit_programmatic.py`：程序审计测试，覆盖 P1/P2/P3/C2/L1/R1/R2 规则、每章最小证据行、required_output_items marker、must_not_cover 禁止 marker、章节切分 fallback、必需输入缺失、故意注入错误和未知检查清单信号
 - `tests/fund/template/test_contracts.py`：模板 CHAPTER_CONTRACT manifest 测试，覆盖 0-7 章完整性、设计标题、必需字段非空、所有标准基金类型 preferred_lens 解析和 fail-closed 校验
+- `tests/fund/template/test_lens_application.py`：preferred_lens 应用计划测试，覆盖所有标准基金类型 8 章 plan、default fallback 标记，以及非法基金类型、空章节、重复章节和越界章节 fail-closed
 - `tests/fund/template/test_item_rules.py`：模板 ITEM_RULE manifest 测试，覆盖四条 conditional 规则、源文案 fidelity、optional schema fixture、显式 facet/fund type 冲突 fail-closed 和唯一段落标记检查
-- `tests/fund/template/test_renderer.py`：模板渲染器测试，覆盖 8 章完整性、CHAPTER_CONTRACT 标题来源、渲染章节块、splitter fail-closed、正文与附录证据锚点格式、缺证章节显式输出、页码保留、非年报来源标注、程序审计输入兼容、缺失数据显式渲染、最终判断边界、禁用交易措辞和 README 同步
+- `tests/fund/template/test_renderer.py`：模板渲染器测试，覆盖 8 章完整性、CHAPTER_CONTRACT 标题来源、渲染章节块、splitter fail-closed、正文与附录证据锚点格式、缺证章节显式输出、页码保留、非年报来源标注、preferred_lens 第 0/1 章确定性应用、程序审计输入兼容、缺失数据显式渲染、最终判断边界、禁用交易措辞和 README 同步
 - `tests/services/test_fund_analysis_service.py`：Service 编排测试，使用 fake extractor 避免网络/PDF 下载，覆盖结构化抽取到渲染和程序审计的完整调用路径、fund_code 入口校验、quality gate `off / warn / block / not-run` 路径、结构化阻断异常、默认 gate run id 不覆盖，并验证不含 PDF 下载的单只基金分析低于 30 秒
 - `tests/services/test_extraction_score_service.py`：P4-S2/P5-S4 评分 Service 测试，覆盖显式参数转发、`errors_path` 转发、非法 snapshot 路径和非法 errors 路径拒绝
 - `tests/services/test_thermometer_service.py`：温度计 Service 测试，覆盖注入 fake adapter、显式 cache_dir/force_refresh 转发和非法缓存路径拒绝；不触发真实网络

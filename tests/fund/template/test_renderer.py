@@ -103,12 +103,18 @@ def _field(
     )
 
 
-def _bundle(*, missing: bool = False, anchor_without_row: bool = False) -> StructuredFundDataBundle:
+def _bundle(
+    *,
+    missing: bool = False,
+    anchor_without_row: bool = False,
+    fund_type: str = "active_fund",
+) -> StructuredFundDataBundle:
     """构造 P1 结构化数据包。
 
     Args:
         missing: 是否构造关键字段缺失路径。
         anchor_without_row: 是否让部分证据缺少行定位。
+        fund_type: classified_fund_type fixture 值。
 
     Returns:
         P1 结构化数据包。
@@ -127,7 +133,7 @@ def _bundle(*, missing: bool = False, anchor_without_row: bool = False) -> Struc
             "fund_category": "混合型",
             "fund_scale": "10.00亿元",
             "fund_manager": "张三",
-            "classified_fund_type": "active_fund",
+            "classified_fund_type": fund_type,
             "classification_basis": ("基金类别：混合型",),
         },
         "§1",
@@ -368,11 +374,11 @@ def _risk_check() -> RiskCheckResult:
     )
 
 
-def _stress_test() -> StressTestResult:
+def _stress_test(*, fund_type: str = "active_fund") -> StressTestResult:
     """构造压力测试结果。
 
     Args:
-        无。
+        fund_type: 压力测试使用的标准基金类型。
 
     Returns:
         压力测试结果。
@@ -417,7 +423,7 @@ def _stress_test() -> StressTestResult:
         ),
     )
     return StressTestResult(
-        fund_type="active_fund",
+        fund_type=fund_type,  # type: ignore[arg-type]
         investment_amount=Decimal("10000"),
         max_tolerable_loss_rate=Decimal("0.50"),
         scenarios=scenarios,
@@ -476,12 +482,18 @@ def _checklist(signal: str = "green") -> ChecklistResult:
     )
 
 
-def _render_input(*, missing: bool = False, final_judgment: str = "worth_holding") -> TemplateRenderInput:
+def _render_input(
+    *,
+    missing: bool = False,
+    final_judgment: str = "worth_holding",
+    fund_type: str = "active_fund",
+) -> TemplateRenderInput:
     """构造模板渲染输入。
 
     Args:
         missing: 是否构造缺失数据路径。
         final_judgment: 最终判断。
+        fund_type: classified_fund_type fixture 值。
 
     Returns:
         模板渲染输入。
@@ -491,13 +503,13 @@ def _render_input(*, missing: bool = False, final_judgment: str = "worth_holding
     """
 
     return TemplateRenderInput(
-        structured_data=_bundle(missing=missing, anchor_without_row=True),
+        structured_data=_bundle(missing=missing, anchor_without_row=True, fund_type=fund_type),
         rabc_attributions=(_rabc(missing=missing),),
         alpha_judgment=_alpha_judgment(),
         consistency_result=_consistency(),
         investor_experience=_investor_experience(missing=missing),
         risk_check_result=_risk_check(),
-        stress_test_result=_stress_test(),
+        stress_test_result=_stress_test(fund_type=fund_type),
         checklist_result=_checklist("gray" if missing else "green"),
         final_judgment=final_judgment,  # type: ignore[arg-type]
         current_stage=None if missing else "规模稳定，收益归因仍需跨期观察",
@@ -870,6 +882,55 @@ def test_render_template_report_builds_audit_input_that_passes_p1_p2_p3_c2_l1_r1
     assert audit_result.checked_rules == ("P1", "P2", "P3", "C2", "L1", "R1", "R2")
 
 
+def test_render_template_report_applies_active_fund_lens_to_target_slots() -> None:
+    """验证主动基金报告在第 0/1 章应用确定性 lens 关注点。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当主动基金 lens 未写入目标 slot 时抛出。
+    """
+
+    result = render_template_report(_render_input(fund_type="active_fund"))
+
+    assert result.lens_application_plan is not None
+    assert result.lens_application_plan.fund_type == "active_fund"
+    assert "- 当前最值得盯住的变量：基金经理言行一致性与超额收益稳定性。当前公开输入仍需后续证据验证。" in result.chapter_blocks[0].body_markdown
+    assert "- 看这类基金最先看什么：先看基金经理、超额收益稳定性、言行一致性。" in result.chapter_blocks[1].body_markdown
+    assert "preferred_lens" not in result.report_markdown
+
+
+def test_render_template_report_applies_index_fund_lens_to_target_slots() -> None:
+    """验证指数基金报告在第 0/1 章应用确定性 lens 关注点。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当指数基金 lens 未写入目标 slot 时抛出。
+    """
+
+    active_result = render_template_report(_render_input(fund_type="active_fund"))
+    index_result = render_template_report(_render_input(fund_type="index_fund"))
+    index_audit_result = run_programmatic_audit(index_result.audit_input)
+
+    assert index_result.lens_application_plan is not None
+    assert index_result.lens_application_plan.fund_type == "index_fund"
+    assert "- 当前最值得盯住的变量：跟踪误差、费率和规模流动性。当前公开输入仍需后续证据验证。" in index_result.chapter_blocks[0].body_markdown
+    assert "- 看这类基金最先看什么：先看跟踪误差、费率、规模/流动性。" in index_result.chapter_blocks[1].body_markdown
+    assert "基金经理言行一致性与超额收益稳定性" not in index_result.chapter_blocks[0].body_markdown
+    assert active_result.chapter_blocks[0].body_markdown != index_result.chapter_blocks[0].body_markdown
+    assert active_result.chapter_blocks[1].body_markdown != index_result.chapter_blocks[1].body_markdown
+    assert index_audit_result.passed
+
+
 def test_render_template_report_missing_data_path_is_explicit_and_audit_compatible() -> None:
     """验证缺失数据路径显式输出未披露或数据不足且仍兼容审计输入。
 
@@ -888,8 +949,51 @@ def test_render_template_report_missing_data_path_is_explicit_and_audit_compatib
 
     assert "未披露" in result.report_markdown
     assert "数据不足" in result.report_markdown
+    assert result.lens_application_plan is None
     assert result.audit_input.final_judgment == "needs_attention"
     assert audit_result.passed
+
+
+def test_render_template_report_rejects_present_identity_without_classified_fund_type() -> None:
+    """验证存在身份数据但缺少基金类型时 renderer fail closed。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当缺少基金类型未抛出 `ValueError` 时抛出。
+    """
+
+    input_data = _render_input()
+    identity = dict(input_data.structured_data.basic_identity.value or {})
+    identity.pop("classified_fund_type")
+    structured_data = replace(
+        input_data.structured_data,
+        basic_identity=replace(input_data.structured_data.basic_identity, value=identity),
+    )
+
+    with pytest.raises(ValueError, match="classified_fund_type"):
+        render_template_report(replace(input_data, structured_data=structured_data))
+
+
+def test_render_template_report_rejects_unsupported_classified_fund_type() -> None:
+    """验证不受支持的基金类型在 renderer 入口 fail closed。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当非法基金类型未抛出 `ValueError` 时抛出。
+    """
+
+    with pytest.raises(ValueError, match="不支持的基金类型"):
+        render_template_report(_render_input(fund_type="money_market_fund"))
 
 
 def test_render_template_report_rejects_unsafe_final_judgment_wording() -> None:

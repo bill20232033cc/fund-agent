@@ -269,6 +269,7 @@ C2 当前只做确定性 marker / 元数据检查，不调用 LLM，不判断语
 - `validate_template_contract_manifest()` 对章节数量、id 连续性、重复 id、空字段、unsupported lens key 和无 lens fallback 执行 fail-closed 校验
 - 当前 CHAPTER_CONTRACT manifest 是可机器消费的契约清单，不改变 `render_template_report()` 的 Markdown 输出结构；FQ5 只使用它派生模板契约适用性，不声明 renderer compliance
 - `fund_agent/fund/audit/contract_rules.py` 中的 `ContractAuditCoverageManifest` 逐条映射 `must_answer` 到 `covered_by_required_item`、`programmatic_marker`、`structured_data_availability`、`llm_semantic_audit`、`evidence_confirm` 或 `narrative_guidance`；当前内置规则没有 `programmatic_marker`，因此既有报告 C2 行为保持不变
+- `build_lens_application_plan(fund_type)` 返回 `LensApplicationPlan`，把每章 `preferred_lens` 解析为 normalized `primary_focus`、`watch_variable_label` 和 `risk_focus_label`；renderer 当前只在第 0 章“当前最值得盯住的变量”和第 1 章“看这类基金最先看什么”两个既有 slot 消费这些标签，不把 raw `lens:` statements 渲染进最终报告
 
 `load_template_item_rule_manifest()` 返回 `TemplateItemRuleManifest`，当前覆盖 `docs/fund-analysis-template-draft.md` 已声明的四条 `ITEM_RULE`：
 

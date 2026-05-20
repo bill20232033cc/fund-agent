@@ -36,8 +36,8 @@
 ### 1.3 当前 Gate 与基线裁决（2026-05-21）
 
 - 当前分支：`main`
-- 当前 gate：`P8-S2 renderer preferred_lens application design plan/review passed`
-- 下一 gate：`P8-S2 implementation`
+- 当前 gate：`P8-S2 renderer preferred_lens application implementation`
+- 下一 gate：`P8-S2 code review`
 - P4 执行控制文档：`docs/implementation-control-p4.md`
 - 当前裁决：
   - P7 已完成并直接集成到 `main`。当前年报来源顺序为 EID/证监会资本市场统一信息披露平台主源，Eastmoney/akshare fallback，经 `FundDocumentRepository` 统一封装；source metadata/cache provenance 和 legacy cache compatibility 已接入。
@@ -48,6 +48,7 @@
   - P8-S1 must_answer audit contract design 已通过 plan/review，commit=`f3bbfc9`。实现已完成并通过 controller code review，implementation commit=`5f5a7a6`，review artifact=`docs/reviews/code-review-20260521-043045.md`。新增独立 `ContractAuditCoverageManifest` 逐条路由 45 条 `must_answer`，保持 `ProgrammaticContractRules` 只代表确定性 C2 marker 规则；当前内置映射为 44 条 `covered_by_required_item`、1 条 `narrative_guidance`、0 条 `programmatic_marker`。验证：targeted `30 passed`、full suite `329 passed`、ruff passed、diff check passed。
   - Post-P8-S1 follow-up planning 已接受，artifact=`docs/reviews/post-p8-s1-follow-up-planning-20260521.md`。P8-S1 已关闭 `must_answer` 确定性 contract-routing residual；下一优先级裁决为 `P8-S2 renderer preferred_lens application design`，目标是在 Capability template 层定义 lens 如何影响确定性 renderer 输出，禁止简单把 raw lens statements 粘贴进报告 Markdown。
   - P8-S2 renderer preferred_lens application design plan/review 已通过，plan artifact=`docs/reviews/p8-s2-renderer-preferred-lens-application-plan-20260521.md`，review artifact=`docs/reviews/plan-review-20260521-052601.md`，re-review artifact=`docs/reviews/plan-review-20260521-052707.md`。计划裁决为：新增 Capability-owned `LensApplicationPlan`，renderer 只在第 0/1 章确定性 slot 应用 normalized lens labels，不渲染 raw `TemplateLensRule.statements`，不改变 Service/UI/Engine、quality gate 或 `ProgrammaticAuditInput`；下一 gate 为 `P8-S2 implementation`。
+  - P8-S2 implementation 正在推进：新增 `fund_agent/fund/template/lens_application.py` 和 `LensApplicationPlan`，renderer 第 0/1 章已接入 normalized lens labels，当前 targeted `67 passed`；下一步为 full verification 与 code review。
   - P0 维持 `done`。已验证 `dayu` 依赖可导入、`fund-agent` 处于 editable install、`fund-analysis --help` 可用、样本基金 `110011` 年报可下载、`pdfplumber` 可提取全文文本和表格。
   - P1 已完成并通过 aggregate review。
   - P2 已完成并通过 aggregate deepreview。

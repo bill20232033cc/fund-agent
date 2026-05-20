@@ -28,6 +28,11 @@ from fund_agent.fund.template.chapter_blocks import (
     split_rendered_chapter_blocks,
 )
 from fund_agent.fund.template.contracts import get_chapter_contract
+from fund_agent.fund.template.lens_application import (
+    LensApplicationPlan,
+    LensChapterApplication,
+    build_lens_application_plan,
+)
 
 TemplateFinalJudgment = Literal["worth_holding", "needs_attention", "suggest_replace"]
 
@@ -85,12 +90,14 @@ class TemplateRenderResult:
         audit_input: 可直接传给 `run_programmatic_audit` 的程序审计输入。
         evidence_anchors: 报告引用到的去重证据锚点。
         chapter_blocks: 按模板第 0-7 章切分的渲染章节块。
+        lens_application_plan: preferred_lens 确定性应用计划；完全缺失基金身份时为 `None`。
     """
 
     report_markdown: str
     audit_input: ProgrammaticAuditInput
     evidence_anchors: tuple[EvidenceAnchor, ...]
     chapter_blocks: tuple[RenderedChapterBlock, ...]
+    lens_application_plan: LensApplicationPlan | None
 
 
 def render_template_report(input_data: TemplateRenderInput) -> TemplateRenderResult:
@@ -107,11 +114,12 @@ def render_template_report(input_data: TemplateRenderInput) -> TemplateRenderRes
     """
 
     _validate_final_judgment(input_data.final_judgment)
+    lens_application_plan = _resolve_lens_application_plan(input_data.structured_data)
     evidence_anchors = _collect_evidence_anchors(input_data)
     chapter_evidence_groups = _collect_chapter_evidence_groups(input_data)
     sections = (
-        _render_chapter_0(input_data),
-        _render_chapter_1(input_data),
+        _render_chapter_0(input_data, lens_application_plan),
+        _render_chapter_1(input_data, lens_application_plan),
         _render_chapter_2(input_data),
         _render_chapter_3(input_data),
         _render_chapter_4(input_data),
@@ -136,6 +144,7 @@ def render_template_report(input_data: TemplateRenderInput) -> TemplateRenderRes
         ),
         evidence_anchors=evidence_anchors,
         chapter_blocks=chapter_blocks,
+        lens_application_plan=lens_application_plan,
     )
 
 
@@ -155,11 +164,106 @@ def build_programmatic_audit_input(render_result: TemplateRenderResult) -> Progr
     return render_result.audit_input
 
 
-def _render_chapter_0(input_data: TemplateRenderInput) -> str:
+def _resolve_lens_application_plan(
+    structured_data: StructuredFundDataBundle,
+) -> LensApplicationPlan | None:
+    """从结构化基金身份解析 preferred_lens 应用计划。
+
+    Args:
+        structured_data: P1 结构化基金数据包。
+
+    Returns:
+        已解析的 lens 应用计划；完全缺失基金身份时返回 `None`。
+
+    Raises:
+        ValueError: 基金身份存在但缺少或包含不受支持的 `classified_fund_type` 时抛出。
+    """
+
+    identity = structured_data.basic_identity.value
+    if identity is None:
+        return None
+    fund_type = identity.get("classified_fund_type")
+    if not isinstance(fund_type, str) or not fund_type.strip():
+        raise ValueError("P1 结构化数据缺少有效 classified_fund_type，不能应用 preferred_lens")
+    return build_lens_application_plan(fund_type=fund_type)  # type: ignore[arg-type]
+
+
+def _lens_chapter_application(
+    lens_application_plan: LensApplicationPlan | None,
+    chapter_id: int,
+) -> LensChapterApplication | None:
+    """读取指定章节的 lens 应用事实。
+
+    Args:
+        lens_application_plan: preferred_lens 应用计划。
+        chapter_id: 模板章节编号。
+
+    Returns:
+        命中时返回章节 lens 应用事实，否则返回 `None`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if lens_application_plan is None:
+        return None
+    for chapter in lens_application_plan.chapters:
+        if chapter.chapter_id == chapter_id:
+            return chapter
+    return None
+
+
+def _lens_watch_variable_text(
+    lens_application_plan: LensApplicationPlan | None,
+) -> str:
+    """渲染第 0 章 lens 化“当前最值得盯住的变量”文本。
+
+    Args:
+        lens_application_plan: preferred_lens 应用计划。
+
+    Returns:
+        第 0 章变量 slot 文本。
+
+    Raises:
+        无显式抛出。
+    """
+
+    chapter = _lens_chapter_application(lens_application_plan, 0)
+    if chapter is None or chapter.watch_variable_label is None:
+        return f"{_INSUFFICIENT_TEXT}，当前未提供独立变量识别输入。"
+    return f"{chapter.watch_variable_label}。当前公开输入仍需后续证据验证。"
+
+
+def _lens_primary_focus_text(
+    lens_application_plan: LensApplicationPlan | None,
+) -> str:
+    """渲染第 1 章 lens 化“看这类基金最先看什么”文本。
+
+    Args:
+        lens_application_plan: preferred_lens 应用计划。
+
+    Returns:
+        第 1 章关注点 slot 文本。
+
+    Raises:
+        无显式抛出。
+    """
+
+    chapter = _lens_chapter_application(lens_application_plan, 1)
+    if chapter is None:
+        return "先看基金类型、业绩基准和成本底座。"
+    return f"先看{chapter.primary_focus}。"
+
+
+def _render_chapter_0(
+    input_data: TemplateRenderInput,
+    lens_application_plan: LensApplicationPlan | None,
+) -> str:
     """渲染模板第 0 章“投资要点概览”。
 
     Args:
         input_data: 模板渲染输入。
+        lens_application_plan: preferred_lens 确定性应用计划；完全缺失基金身份时为 `None`。
 
     Returns:
         第 0 章 Markdown。
@@ -175,14 +279,15 @@ def _render_chapter_0(input_data: TemplateRenderInput) -> str:
     judgment_text = _FINAL_JUDGMENT_TEXT[input_data.final_judgment]
     primary_rabc = _primary_rabc(input_data.rabc_attributions)
     net_excess = _ratio_text(primary_rabc.net_excess_return) if primary_rabc else _INSUFFICIENT_TEXT
+    watch_variable_text = _lens_watch_variable_text(lens_application_plan)
     content = [
         get_template_chapter_heading(0),
         f"- 基金：{fund_name}（{fund_code}）。",
-        f"- 基金类型：{fund_type}，本报告先识别基金类型，再应用对应 preferred_lens。",
+        f"- 基金类型：{fund_type}。",
         f"- 最终判断：{judgment_text}；检查清单汇总为 {input_data.checklist_result.overall_signal} / {input_data.checklist_result.overall_status}。",
         f"- 当前业绩与运作状态：R=A+B-C 净超额 {net_excess}；超额性质 {input_data.alpha_judgment.nature}。",
         f"- 支撑当前动作的最主要理由：检查清单汇总为 {input_data.checklist_result.overall_signal} / {input_data.checklist_result.overall_status}。",
-        f"- 当前最值得盯住的变量：{_INSUFFICIENT_TEXT}，当前未提供独立变量识别输入。",
+        f"- 当前最值得盯住的变量：{watch_variable_text}",
         f"- 当前最大的风险：{_INSUFFICIENT_TEXT}，当前未提供独立最大风险排序输入。",
         f"- R=A+B-C 净超额：{net_excess}；超额性质：{input_data.alpha_judgment.nature}。",
         f"- 下一步最小验证问题：{input_data.checklist_result.next_minimum_verification}",
@@ -192,11 +297,15 @@ def _render_chapter_0(input_data: TemplateRenderInput) -> str:
     return "\n".join(content)
 
 
-def _render_chapter_1(input_data: TemplateRenderInput) -> str:
+def _render_chapter_1(
+    input_data: TemplateRenderInput,
+    lens_application_plan: LensApplicationPlan | None,
+) -> str:
     """渲染模板第 1 章“这只基金到底是什么产品”。
 
     Args:
         input_data: 模板渲染输入。
+        lens_application_plan: preferred_lens 确定性应用计划；完全缺失基金身份时为 `None`。
 
     Returns:
         第 1 章 Markdown。
@@ -209,6 +318,7 @@ def _render_chapter_1(input_data: TemplateRenderInput) -> str:
     profile = input_data.structured_data.product_profile.value or {}
     benchmark = input_data.structured_data.benchmark.value or {}
     fee = input_data.structured_data.fee_schedule.value or {}
+    primary_focus_text = _lens_primary_focus_text(lens_application_plan)
     anchors = _merge_anchors(
         input_data.structured_data.basic_identity,
         input_data.structured_data.product_profile,
@@ -221,7 +331,7 @@ def _render_chapter_1(input_data: TemplateRenderInput) -> str:
         f"- 投资目标（一句话）：{_value_text(profile, 'investment_objective')}。",
         f"- 投资策略概述：{_value_text(profile, 'investment_strategy')}；投资范围：{_value_text(profile, 'investment_scope')}。",
         f"- 业绩基准及合理性：{_value_text(benchmark, 'benchmark_text')}；合理性当前为 {_INSUFFICIENT_TEXT}。",
-        "- 看这类基金最先看什么：先看基金类型、业绩基准、成本底座和 preferred_lens。",
+        f"- 看这类基金最先看什么：{primary_focus_text}",
         f"- 会改变产品理解的特别情况：{_INSUFFICIENT_TEXT}，当前输入未提供额外特别情况。",
         f"- 产品本质：{_value_text(profile, 'investment_objective')}；投资范围：{_value_text(profile, 'investment_scope')}。",
         f"- 收益来源假设：围绕基金类别 {_value_text(identity, 'fund_category')} 和业绩基准 {_value_text(benchmark, 'benchmark_text')} 观察。",

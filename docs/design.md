@@ -125,6 +125,8 @@ fund-analysis CLI → FundAnalysisService → FundDataExtractor → FundDocument
 | QDII 基金 | 海外市场/汇率风险、跟踪或管理能力、成本 |
 | FOF 基金 | 底层基金配置、双重费率、组合分散度 |
 
+renderer 通过 Capability 层 `LensApplicationPlan` 消费 `preferred_lens`：先解析每章 lens，再使用 normalized 关注点标签填充既有报告 slot。当前确定性应用范围仅限第 0 章“当前最值得盯住的变量”和第 1 章“看这类基金最先看什么”；raw `lens:` statements 不直接出现在最终报告中。Quality gate 的 FQ5 仍只证明模板契约适用性，不证明 renderer 已完整执行 lens 语义。
+
 ---
 
 ## 4. 分析引擎
