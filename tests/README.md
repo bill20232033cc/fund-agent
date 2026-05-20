@@ -5,9 +5,9 @@
 ## 当前目录
 
 - `tests/fund/documents/test_repository.py`：文档仓库契约测试，验证仓库对外返回 `ParsedAnnualReport`，不暴露本地 `Path`，并覆盖来源元数据、cache provenance、metadata-aware/legacy loader 和并发防串扰
-- `tests/fund/documents/test_annual_report_sources.py`：年报来源编排测试，使用 fake source 和 fake EID network 覆盖 EID 主源、Eastmoney fallback、fail-closed 错误类别、请求级 timeout、PDF 校验、`force_refresh` 转发和 PDF 适配器来源调用；不触发真实 EID/Eastmoney/akshare 网络
-- `tests/fund/documents/test_cache.py`：文档缓存最小闭环测试，覆盖 PDF 元信息缓存、source metadata JSON、损坏来源元数据降级、parsed report 物化、legacy metadata 兼容和缓存失效回退
-- `tests/fund/pdf/test_downloader.py`：PDF 下载 helper 测试，验证内部缓存命中、强制刷新下载和年报 URL 组装
+- `tests/fund/documents/test_annual_report_sources.py`：年报来源编排测试，使用 fake source 和 fake EID network 覆盖 EID 主源、Eastmoney fallback、fail-closed 错误类别、请求级 timeout、PDF 校验、PDF cache 完整性校验、原子写入、`force_refresh` 转发和 PDF 适配器来源调用；不触发真实 EID/Eastmoney/akshare 网络
+- `tests/fund/documents/test_cache.py`：文档缓存最小闭环测试，覆盖 PDF 元信息缓存、source metadata JSON、损坏来源元数据降级、parsed report 物化、损坏 parsed payload 回退未命中、legacy metadata 兼容和缓存失效回退
+- `tests/fund/pdf/test_downloader.py`：PDF 下载 helper 测试，验证内部缓存命中、损坏缓存刷新、非 PDF 响应拒绝、强制刷新下载和年报 URL 组装
 - `tests/fund/pdf/test_parser.py`：章节定位测试，覆盖 `§3` 正文命中、目录误判回归和偏移单调递增
 - `tests/fund/extractors/test_profile.py`：基础画像 extractor 测试，覆盖分类先行、`classified_fund_type` / `classification_basis` 稳定输出，以及费率/基准/规模/经理 anchor
 - `tests/fund/extractors/test_performance.py`：`§3` 表现 extractor 测试，覆盖冒号行与年度表现表中的净值增长率/基准收益率 anchor，以及投资者收益率 `direct / estimated / missing` 三态
@@ -31,7 +31,7 @@
 - `tests/fund/template/test_contracts.py`：模板 CHAPTER_CONTRACT manifest 测试，覆盖 0-7 章完整性、设计标题、必需字段非空、所有标准基金类型 preferred_lens 解析和 fail-closed 校验
 - `tests/fund/template/test_item_rules.py`：模板 ITEM_RULE manifest 测试，覆盖四条 conditional 规则、源文案 fidelity、optional schema fixture、显式 facet/fund type 冲突 fail-closed 和唯一段落标记检查
 - `tests/fund/template/test_renderer.py`：模板渲染器测试，覆盖 8 章完整性、CHAPTER_CONTRACT 标题来源、渲染章节块、splitter fail-closed、正文与附录证据锚点格式、缺证章节显式输出、页码保留、非年报来源标注、程序审计输入兼容、缺失数据显式渲染、最终判断边界、禁用交易措辞和 README 同步
-- `tests/services/test_fund_analysis_service.py`：Service 编排测试，使用 fake extractor 避免网络/PDF 下载，覆盖结构化抽取到渲染和程序审计的完整调用路径、quality gate `off / warn / block / not-run` 路径、结构化阻断异常、默认 gate run id 不覆盖，并验证不含 PDF 下载的单只基金分析低于 30 秒
+- `tests/services/test_fund_analysis_service.py`：Service 编排测试，使用 fake extractor 避免网络/PDF 下载，覆盖结构化抽取到渲染和程序审计的完整调用路径、fund_code 入口校验、quality gate `off / warn / block / not-run` 路径、结构化阻断异常、默认 gate run id 不覆盖，并验证不含 PDF 下载的单只基金分析低于 30 秒
 - `tests/services/test_extraction_score_service.py`：P4-S2/P5-S4 评分 Service 测试，覆盖显式参数转发、`errors_path` 转发、非法 snapshot 路径和非法 errors 路径拒绝
 - `tests/services/test_thermometer_service.py`：温度计 Service 测试，覆盖注入 fake adapter、显式 cache_dir/force_refresh 转发和非法缓存路径拒绝；不触发真实网络
 - `tests/ui/test_cli.py`：Typer CLI 测试，覆盖 `analyze` 调用 Service 并输出 Markdown、quality gate 参数转发、gate summary/blocked 信息输出、失败非零退出、`thermometer` plain/JSON/unavailable 输出，以及 `checklist` 不输出误导性成功文本

@@ -132,7 +132,7 @@ class _RecordingAsyncClient:
 
         self.__class__.captured["url"] = url
         self.__class__.captured["headers"] = headers
-        return _FakeResponse(b"fresh-pdf")
+        return _FakeResponse(b"%PDF-1.7\nfresh-pdf")
 
 
 @pytest.mark.asyncio
@@ -154,13 +154,13 @@ async def test_download_pdf_returns_cached_file_without_network(
     """
 
     cached_path = tmp_path / "cached.pdf"
-    cached_path.write_bytes(b"cached-pdf")
+    cached_path.write_bytes(b"%PDF-1.7\ncached-pdf")
     monkeypatch.setattr(downloader.httpx, "AsyncClient", _FailingAsyncClient)
 
     result = await downloader._download_pdf("https://example.com/cached.pdf", tmp_path)
 
     assert result == cached_path
-    assert result.read_bytes() == b"cached-pdf"
+    assert result.read_bytes() == b"%PDF-1.7\ncached-pdf"
 
 
 @pytest.mark.asyncio
@@ -184,7 +184,7 @@ async def test_download_pdf_downloads_file_when_force_refresh_enabled(
     _RecordingAsyncClient.captured = {}
     monkeypatch.setattr(downloader.httpx, "AsyncClient", _RecordingAsyncClient)
     cached_path = tmp_path / "report.pdf"
-    cached_path.write_bytes(b"stale-pdf")
+    cached_path.write_bytes(b"%PDF-1.7\nstale-pdf")
 
     result = await downloader._download_pdf(
         "https://example.com/report.pdf",
@@ -194,13 +194,94 @@ async def test_download_pdf_downloads_file_when_force_refresh_enabled(
     )
 
     assert result == cached_path
-    assert result.read_bytes() == b"fresh-pdf"
+    assert result.read_bytes() == b"%PDF-1.7\nfresh-pdf"
     assert _RecordingAsyncClient.captured["url"] == "https://example.com/report.pdf"
     assert "User-Agent" in _RecordingAsyncClient.captured["headers"]
     assert _RecordingAsyncClient.captured["client_kwargs"] == {
         "timeout": 60.0,
         "follow_redirects": True,
     }
+
+
+@pytest.mark.asyncio
+async def test_download_pdf_refreshes_invalid_cached_file(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """验证损坏 PDF 缓存不会被当作有效缓存复用。
+
+    Args:
+        tmp_path: pytest 提供的临时目录。
+        monkeypatch: pytest 提供的运行时打补丁工具。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当损坏缓存未触发重新下载时抛出。
+    """
+
+    _RecordingAsyncClient.captured = {}
+    monkeypatch.setattr(downloader.httpx, "AsyncClient", _RecordingAsyncClient)
+    cached_path = tmp_path / "cached.pdf"
+    cached_path.write_bytes(b"<html>error</html>")
+
+    result = await downloader._download_pdf("https://example.com/cached.pdf", tmp_path)
+
+    assert result == cached_path
+    assert result.read_bytes() == b"%PDF-1.7\nfresh-pdf"
+    assert _RecordingAsyncClient.captured["url"] == "https://example.com/cached.pdf"
+
+
+@pytest.mark.asyncio
+async def test_download_pdf_rejects_non_pdf_response(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """验证 Eastmoney 返回 HTML 时不会写入 PDF 缓存。
+
+    Args:
+        tmp_path: pytest 提供的临时目录。
+        monkeypatch: pytest 提供的运行时打补丁工具。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当非 PDF 响应被写入缓存时抛出。
+    """
+
+    class _HtmlAsyncClient(_RecordingAsyncClient):
+        """返回 HTML 正文的假客户端。"""
+
+        async def get(self, url: str, headers: dict[str, str]) -> _FakeResponse:
+            """返回非 PDF 响应。
+
+            Args:
+                url: 请求地址。
+                headers: 请求头。
+
+            Returns:
+                HTML 响应。
+
+            Raises:
+                无显式抛出。
+            """
+
+            self.__class__.captured["url"] = url
+            self.__class__.captured["headers"] = headers
+            return _FakeResponse(b"<html>error</html>")
+
+    monkeypatch.setattr(downloader.httpx, "AsyncClient", _HtmlAsyncClient)
+
+    with pytest.raises(ValueError, match="PDF 响应缺少"):
+        await downloader._download_pdf(
+            "https://example.com/report.pdf",
+            tmp_path,
+            filename="report.pdf",
+        )
+
+    assert not (tmp_path / "report.pdf").exists()
 
 
 @pytest.mark.asyncio

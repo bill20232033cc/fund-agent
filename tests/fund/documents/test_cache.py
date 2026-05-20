@@ -484,6 +484,54 @@ async def test_cache_returns_none_for_missing_or_stale_payload(tmp_path: Path) -
 
 
 @pytest.mark.asyncio
+async def test_cache_returns_none_for_corrupt_parsed_report_payload(tmp_path: Path) -> None:
+    """验证损坏 parsed report JSON 会安全回退为缓存未命中。
+
+    Args:
+        tmp_path: pytest 提供的临时目录。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当损坏 payload 抛出异常或被误用时抛出。
+    """
+
+    cache = AnnualReportDocumentCache(tmp_path / "documents-cache")
+    document_key = DocumentKey(fund_code="110011", year=2024)
+    payload_path = tmp_path / "corrupt.json"
+    payload_path.write_text('{"key": ', encoding="utf-8")
+    await cache.initialize()
+
+    with sqlite3.connect(cache.sqlite_path) as connection:
+        connection.execute(
+            """
+            INSERT INTO parsed_reports (
+                document_key,
+                fund_code,
+                year,
+                document_kind,
+                payload_path,
+                schema_version,
+                updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "annual_report:110011:2024",
+                "110011",
+                2024,
+                "annual_report",
+                str(payload_path),
+                PARSED_REPORT_SCHEMA_VERSION,
+                "2026-05-17T00:00:00+00:00",
+            ),
+        )
+        connection.commit()
+
+    assert await cache.load_parsed_report(document_key) is None
+
+
+@pytest.mark.asyncio
 async def test_cache_rejects_unusable_parsed_report_payload(tmp_path: Path) -> None:
     """验证低质量 parsed report 缓存不会被误用为真实年报。
 

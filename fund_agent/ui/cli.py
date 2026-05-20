@@ -28,6 +28,7 @@ from fund_agent.services import (
     GoldenPrefillService,
     MoneyHorizon,
     QualityGateBlockedError,
+    QualityGateNotRunBlockedError,
     QualityGateRequest,
     QualityGateService,
     ThermometerRequest,
@@ -178,6 +179,9 @@ def analyze(
     )
     try:
         result = asyncio.run(FundAnalysisService().analyze(request))
+    except QualityGateNotRunBlockedError as exc:
+        _echo_quality_gate_not_run_blocked(exc)
+        raise typer.Exit(code=2) from exc
     except QualityGateBlockedError as exc:
         _echo_quality_gate_blocked(exc)
         raise typer.Exit(code=2) from exc
@@ -677,6 +681,24 @@ def _echo_quality_gate_blocked(error: QualityGateBlockedError) -> None:
     typer.echo(f"quality_gate_issues: {len(result.issues)}", err=True)
     typer.echo(f"quality_gate_json: {result.gate_json_path}", err=True)
     typer.echo(f"quality_gate_md: {result.gate_markdown_path}", err=True)
+
+
+def _echo_quality_gate_not_run_blocked(error: QualityGateNotRunBlockedError) -> None:
+    """输出 quality gate 未运行导致的 block 策略阻断信息。
+
+    Args:
+        error: Service 抛出的未运行阻断异常。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        无显式抛出。
+    """
+
+    typer.echo("质量 gate 阻断报告输出", err=True)
+    typer.echo("quality_gate_status: not_run", err=True)
+    typer.echo(f"quality_gate_not_run_reason: {error.reason}", err=True)
 
 
 def _echo_quality_gate_summary(result) -> None:  # type: ignore[no-untyped-def]

@@ -31,6 +31,7 @@ from fund_agent.services.fund_analysis_service import (
     FundAnalysisService,
     MoneyHorizon,
     QualityGateBlockedError,
+    QualityGateNotRunBlockedError,
     QualityGatePolicy,
     ValuationState,
 )
@@ -54,6 +55,7 @@ __all__ = [
     "FundAnalysisService",
     "MoneyHorizon",
     "QualityGateBlockedError",
+    "QualityGateNotRunBlockedError",
     "QualityGatePolicy",
     "ValuationState",
 ]

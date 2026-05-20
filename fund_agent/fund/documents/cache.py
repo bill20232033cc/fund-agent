@@ -470,8 +470,13 @@ class AnnualReportDocumentCache:
             return None
         if not payload_path.exists():
             return None
-        payload = json.loads(payload_path.read_text(encoding="utf-8"))
-        report = ParsedAnnualReport.from_dict(payload)
+        try:
+            payload = json.loads(payload_path.read_text(encoding="utf-8"))
+            if not isinstance(payload, dict):
+                return None
+            report = ParsedAnnualReport.from_dict(payload)
+        except (json.JSONDecodeError, KeyError, TypeError, ValueError):
+            return None
         if not is_parsed_annual_report_cache_usable(report):
             return None
         return report

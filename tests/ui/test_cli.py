@@ -11,7 +11,7 @@ from typer.testing import CliRunner
 
 from fund_agent.fund.data.thermometer import MacroTemperature, MarketTemperature, ThermometerSnapshot
 from fund_agent.fund.quality_gate import QualityGateResult
-from fund_agent.services import QualityGateBlockedError
+from fund_agent.services import QualityGateBlockedError, QualityGateNotRunBlockedError
 from fund_agent.ui import cli
 
 
@@ -85,6 +85,25 @@ class _FakeBlockedAnalysisService:
         """
 
         raise QualityGateBlockedError(_fake_quality_gate_result(status="block"))
+
+
+class _FakeNotRunBlockedAnalysisService:
+    """CLI 测试用 quality gate 未运行阻断 Service。"""
+
+    async def analyze(self, request):  # type: ignore[no-untyped-def]
+        """抛出 quality gate 未运行阻断异常。
+
+        Args:
+            request: CLI 构造的 Service 请求。
+
+        Returns:
+            无返回值。
+
+        Raises:
+            QualityGateNotRunBlockedError: 始终抛出。
+        """
+
+        raise QualityGateNotRunBlockedError("fund_code `110011` not found")
 
 
 class _FailingService:
@@ -540,6 +559,33 @@ def test_analyze_cli_structured_quality_gate_block(monkeypatch) -> None:  # type
     assert "quality_gate_status: block" in result.output
     assert "quality_gate_issues: 2" in result.output
     assert "quality_gate_json: quality-output/quality_gate.json" in result.output
+
+
+def test_analyze_cli_structured_quality_gate_not_run_block(
+    monkeypatch,
+) -> None:  # type: ignore[no-untyped-def]
+    """验证 block 策略下 quality gate 未运行时返回结构化退出码。
+
+    Args:
+        monkeypatch: pytest monkeypatch fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 not-run 阻断输出不符合契约时抛出。
+    """
+
+    monkeypatch.setattr(cli, "FundAnalysisService", _FakeNotRunBlockedAnalysisService)
+    runner = CliRunner()
+
+    result = runner.invoke(cli.app, ["analyze", "110011"])
+
+    assert result.exit_code == 2
+    assert "# 0. 投资要点概览" not in result.output
+    assert "质量 gate 阻断报告输出" in result.output
+    assert "quality_gate_status: not_run" in result.output
+    assert "quality_gate_not_run_reason: fund_code `110011` not found" in result.output
 
 
 def test_analyze_cli_exits_nonzero_with_clear_message(monkeypatch) -> None:  # type: ignore[no-untyped-def]

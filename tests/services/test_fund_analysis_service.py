@@ -12,7 +12,12 @@ import pytest
 from fund_agent.fund.data.nav_data import NavDataResult
 from fund_agent.fund.data_extractor import StructuredFundDataBundle
 from fund_agent.fund.extractors.models import EvidenceAnchor, ExtractedField
-from fund_agent.services import FundAnalysisRequest, FundAnalysisService, QualityGateBlockedError
+from fund_agent.services import (
+    FundAnalysisRequest,
+    FundAnalysisService,
+    QualityGateBlockedError,
+    QualityGateNotRunBlockedError,
+)
 
 _P3_S8_MAX_ANALYSIS_SECONDS = 30.0
 
@@ -385,7 +390,7 @@ async def test_fund_analysis_service_block_policy_fails_when_fund_absent_from_qu
 
     service = FundAnalysisService(extractor=_FakeExtractor(_bundle()))
 
-    with pytest.raises(ValueError, match="质量 gate 未运行"):
+    with pytest.raises(QualityGateNotRunBlockedError, match="质量 gate 未运行") as exc_info:
         await service.analyze(
             FundAnalysisRequest(
                 fund_code="110011",
@@ -403,6 +408,31 @@ async def test_fund_analysis_service_block_policy_fails_when_fund_absent_from_qu
                 quality_gate_golden_answer_path=None,
             )
         )
+
+    assert exc_info.value.reason == "fund_code `110011` not found in quality gate source csv"
+
+
+@pytest.mark.asyncio
+async def test_fund_analysis_service_rejects_invalid_fund_code_before_extraction() -> None:
+    """验证 analyze 入口先拒绝非 6 位数字基金代码。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当非法基金代码穿透到抽取器时抛出。
+    """
+
+    extractor = _FakeExtractor(_bundle())
+    service = FundAnalysisService(extractor=extractor)
+
+    with pytest.raises(ValueError, match="fund_code 必须是 6 位数字"):
+        await service.analyze(FundAnalysisRequest(fund_code="ABCDEF", quality_gate_policy="off"))
+
+    assert extractor.calls == []
 
 
 @pytest.mark.asyncio

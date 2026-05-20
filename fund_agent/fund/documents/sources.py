@@ -9,9 +9,11 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 from contextlib import AbstractAsyncContextManager
 from dataclasses import dataclass, replace
 from pathlib import Path
+from tempfile import NamedTemporaryFile
 from typing import Any, Awaitable, Callable, Literal, Protocol
 
 import httpx
@@ -325,7 +327,9 @@ class EidAnnualReportSource:
             metadata = _build_eid_metadata(pdf_url, candidate)
             pdf_path = self._build_pdf_cache_path(normalized_fund_code, year)
             if await asyncio.to_thread(pdf_path.exists) and not force_refresh:
-                return AnnualReportSourceResult(pdf_path=pdf_path, metadata=metadata)
+                if await asyncio.to_thread(_is_valid_cached_pdf, pdf_path):
+                    return AnnualReportSourceResult(pdf_path=pdf_path, metadata=metadata)
+                await asyncio.to_thread(pdf_path.unlink, missing_ok=True)
             response = await _request_with_retries(
                 client,
                 "GET",
@@ -335,7 +339,7 @@ class EidAnnualReportSource:
             )
             _validate_pdf_response(response)
             await asyncio.to_thread(pdf_path.parent.mkdir, parents=True, exist_ok=True)
-            await asyncio.to_thread(pdf_path.write_bytes, response.content)
+            await asyncio.to_thread(_write_pdf_bytes_atomic, pdf_path, response.content)
             return AnnualReportSourceResult(pdf_path=pdf_path, metadata=metadata)
 
     async def _validate_fund(self, client: Any, fund_code: str) -> _EidValidatedFund:
@@ -465,7 +469,7 @@ class EastmoneyAnnualReportSource:
 
         Raises:
             AnnualReportSourceNotFoundError: 未找到对应年报时抛出。
-            Exception: 其他下载异常保持原始异常类别向上抛出。
+            AnnualReportSourceUnavailableError: 来源临时不可用或缓存写入失败时抛出。
         """
 
         try:
@@ -476,7 +480,7 @@ class EastmoneyAnnualReportSource:
             )
         except FileNotFoundError as exc:
             raise AnnualReportSourceNotFoundError(str(exc)) from exc
-        except httpx.HTTPError as exc:
+        except (httpx.HTTPError, OSError, ValueError) as exc:
             raise AnnualReportSourceUnavailableError(str(exc)) from exc
         return AnnualReportSourceResult(
             pdf_path=pdf_path,
@@ -1006,6 +1010,65 @@ def _validate_pdf_response(response: httpx.Response) -> None:
         raise AnnualReportSourceSchemaError(f"EID PDF Content-Type 非法: {content_type!r}")
     if not response.content.startswith(PDF_MAGIC_BYTES):
         raise AnnualReportSourceSchemaError("EID PDF 响应缺少 %PDF- 文件头")
+
+
+def _is_valid_cached_pdf(path: Path) -> bool:
+    """检查本地缓存 PDF 是否满足最小完整性要求。
+
+    Args:
+        path: PDF 缓存路径。
+
+    Returns:
+        文件存在、非空且以 PDF 文件头开头时返回 ``True``。
+
+    Raises:
+        无显式抛出；读取失败会被视为无效缓存。
+    """
+
+    try:
+        if path.stat().st_size < len(PDF_MAGIC_BYTES):
+            return False
+        with path.open("rb") as file_obj:
+            return file_obj.read(len(PDF_MAGIC_BYTES)) == PDF_MAGIC_BYTES
+    except OSError:
+        return False
+
+
+def _write_pdf_bytes_atomic(dest_path: Path, content: bytes) -> None:
+    """以临时文件加原子替换方式写入 PDF 缓存。
+
+    Args:
+        dest_path: 最终 PDF 路径。
+        content: 已校验的 PDF 内容。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        OSError: 写入或替换失败时抛出。
+        AnnualReportSourceSchemaError: 内容缺少 PDF 文件头时抛出。
+    """
+
+    if not content.startswith(PDF_MAGIC_BYTES):
+        raise AnnualReportSourceSchemaError("PDF 内容缺少 %PDF- 文件头")
+    temp_path: Path | None = None
+    try:
+        with NamedTemporaryFile(
+            "wb",
+            dir=dest_path.parent,
+            prefix=f".{dest_path.name}.",
+            suffix=".tmp",
+            delete=False,
+        ) as temp_file:
+            temp_path = Path(temp_file.name)
+            temp_file.write(content)
+            temp_file.flush()
+            os.fsync(temp_file.fileno())
+        os.replace(temp_path, dest_path)
+    except Exception:
+        if temp_path is not None:
+            temp_path.unlink(missing_ok=True)
+        raise
 
 
 def _build_eid_metadata(

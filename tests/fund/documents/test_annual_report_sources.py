@@ -1132,3 +1132,45 @@ async def test_eastmoney_source_maps_http_error_to_unavailable() -> None:
 
     with pytest.raises(AnnualReportSourceUnavailableError, match="004393-2024-True"):
         await source.fetch_annual_report_pdf("004393", 2024, force_refresh=True)
+
+
+@pytest.mark.asyncio
+async def test_eastmoney_source_maps_os_error_to_unavailable() -> None:
+    """验证 Eastmoney 包装器会把缓存写入错误归类为来源不可用。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 OSError 未被归类为 unavailable 时抛出。
+    """
+
+    async def failing_downloader(
+        fund_code: str,
+        year: int,
+        *,
+        force_refresh: bool = False,
+    ) -> Path:
+        """抛出文件系统错误的假下载器。
+
+        Args:
+            fund_code: 基金代码。
+            year: 年报年份。
+            force_refresh: 是否强制刷新。
+
+        Returns:
+            不返回。
+
+        Raises:
+            OSError: 固定抛出。
+        """
+
+        raise OSError(f"{fund_code}-{year}-{force_refresh}")
+
+    source = EastmoneyAnnualReportSource(downloader=failing_downloader)
+
+    with pytest.raises(AnnualReportSourceUnavailableError, match="004393-2024-True"):
+        await source.fetch_annual_report_pdf("004393", 2024, force_refresh=True)

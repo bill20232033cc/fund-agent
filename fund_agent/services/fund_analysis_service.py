@@ -199,6 +199,32 @@ class QualityGateBlockedError(ValueError):
         )
 
 
+class QualityGateNotRunBlockedError(ValueError):
+    """quality gate 在 block 策略下未运行的结构化异常。
+
+    Attributes:
+        reason: quality gate 未运行原因。
+        policy: 触发阻断的策略，固定为 `block`。
+    """
+
+    def __init__(self, reason: str) -> None:
+        """初始化未运行阻断异常。
+
+        Args:
+            reason: quality gate 未运行原因。
+
+        Returns:
+            无返回值。
+
+        Raises:
+            无显式抛出。
+        """
+
+        self.reason = reason
+        self.policy: QualityGatePolicy = "block"
+        super().__init__(f"质量 gate 未运行：{reason}")
+
+
 class FundAnalysisService:
     """基金分析用例编排 Service。
 
@@ -248,7 +274,7 @@ class FundAnalysisService:
         )
         if request.quality_gate_policy == "block":
             if quality_gate_result is None:
-                raise ValueError(f"质量 gate 未运行：{quality_gate_not_run_reason or 'unknown'}")
+                raise QualityGateNotRunBlockedError(quality_gate_not_run_reason or "unknown")
             if quality_gate_result.status == GATE_STATUS_BLOCK:
                 raise QualityGateBlockedError(quality_gate_result)
         fund_type = _extract_fund_type(structured_data)
@@ -342,8 +368,11 @@ def _validate_request(request: FundAnalysisRequest) -> None:
         ValueError: 当基金代码或年报年份非法时抛出。
     """
 
-    if not request.fund_code.strip():
+    normalized_fund_code = request.fund_code.strip()
+    if not normalized_fund_code:
         raise ValueError("fund_code 不能为空")
+    if len(normalized_fund_code) != 6 or not normalized_fund_code.isdigit():
+        raise ValueError("fund_code 必须是 6 位数字")
     if request.report_year <= 0:
         raise ValueError("report_year 必须为正整数")
     if request.quality_gate_policy not in {"off", "warn", "block"}:
