@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import sqlite3
 from dataclasses import replace
 from pathlib import Path
@@ -248,6 +249,72 @@ async def test_cache_loads_legacy_documents_row_without_source_metadata(tmp_path
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "source_metadata_json",
+    [
+        "{not-json",
+        json.dumps(["not", "object"], ensure_ascii=False),
+        json.dumps({"source": "cninfo", "fund_code": "110011"}, ensure_ascii=False),
+    ],
+)
+async def test_cache_degrades_invalid_source_metadata_json_to_none(
+    tmp_path: Path,
+    source_metadata_json: str,
+) -> None:
+    """验证损坏的来源元数据不会阻断 PDF cache entry 读取。
+
+    Args:
+        tmp_path: pytest 提供的临时目录。
+        source_metadata_json: 损坏或非法的来源元数据 JSON。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当损坏元数据导致 PDF 路径不可用时抛出。
+    """
+
+    cache = AnnualReportDocumentCache(tmp_path / "documents-cache")
+    document_key = DocumentKey(fund_code="110011", year=2024)
+    pdf_path = tmp_path / "110011_2024_annual_report.pdf"
+    pdf_path.write_bytes(b"pdf")
+
+    await cache.initialize()
+    with sqlite3.connect(cache.sqlite_path) as connection:
+        connection.execute(
+            """
+            INSERT INTO documents (
+                document_key,
+                fund_code,
+                year,
+                document_kind,
+                pdf_path,
+                source_metadata_json,
+                updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "annual_report:110011:2024",
+                "110011",
+                2024,
+                "annual_report",
+                str(pdf_path),
+                source_metadata_json,
+                "2026-05-20T00:00:00+00:00",
+            ),
+        )
+        connection.commit()
+
+    entry = await cache.get_pdf_entry(document_key)
+    pdf_path_only = await cache.get_pdf_path(document_key)
+
+    assert entry is not None
+    assert entry.pdf_path == pdf_path
+    assert entry.source_metadata is None
+    assert pdf_path_only == pdf_path
+
+
+@pytest.mark.asyncio
 async def test_parsed_report_payload_round_trips_metadata(tmp_path: Path) -> None:
     """验证 parsed report payload 会保留来源元数据。
 
@@ -300,8 +367,7 @@ async def test_legacy_parsed_report_without_metadata_loads_with_empty_metadata(
     payload_path = cache.parsed_reports_dir / "legacy.json"
     payload = report.to_dict()
     payload.pop("metadata")
-    payload_path.write_text(str(), encoding="utf-8")
-    payload_path.write_text(__import__("json").dumps(payload, ensure_ascii=False), encoding="utf-8")
+    payload_path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
     with sqlite3.connect(cache.sqlite_path) as connection:
         connection.execute(
             """

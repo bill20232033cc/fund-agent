@@ -119,15 +119,21 @@ def _source_metadata_from_json(payload: object) -> AnnualReportSourceMetadata | 
         来源元数据；空值返回 ``None``。
 
     Raises:
-        ValueError: JSON 字符串无法解析为对象时抛出。
+        无显式抛出；缓存中的非法来源元数据会降级为空元数据。
     """
 
     if payload is None:
         return None
-    parsed = json.loads(str(payload))
+    try:
+        parsed = json.loads(str(payload))
+    except (TypeError, ValueError):
+        return None
     if not isinstance(parsed, dict):
-        raise ValueError("source_metadata_json 不是对象")
-    return AnnualReportSourceMetadata.from_dict(parsed)
+        return None
+    try:
+        return AnnualReportSourceMetadata.from_dict(parsed)
+    except ValueError:
+        return None
 
 
 def _normalize_report_source_metadata(

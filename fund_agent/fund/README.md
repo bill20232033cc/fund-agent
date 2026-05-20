@@ -54,7 +54,7 @@ chapter_lens = resolve_preferred_lens(chapter_id=2, fund_type="active_fund")
 - `tables`：年报表格的结构化结果
 - `metadata`：年报来源与缓存来源信息；`metadata.source` 标识 EID 或 Eastmoney fallback 及可用公告/PDF ID，`metadata.cache` 标识 parsed report 或 PDF cache 命中来源
 
-年报 PDF 获取由 documents 层内部的来源编排器完成，调用方不感知具体下载源。当前生产默认顺序是 EID/证监会资本市场统一信息披露平台主源，Eastmoney/akshare fallback；来源优先级、fallback、EID 请求级 timeout/retry、PDF 校验和来源元数据持久化只存在于 Fund Capability 内部，不暴露给 Service、UI、Engine 或 CLI。
+年报 PDF 获取由 documents 层内部的来源编排器完成，调用方不感知具体下载源。当前生产默认顺序是 EID/证监会资本市场统一信息披露平台主源，Eastmoney/akshare fallback；来源优先级、fallback、EID 请求级 timeout/retry、PDF 校验和来源元数据持久化只存在于 Fund Capability 内部，不暴露给 Service、UI、Engine 或 CLI。缓存读取时，如果历史或人工污染的 `source_metadata_json` 无法解析为合法来源元数据，documents 层会保留可用 PDF 路径并将 `metadata.source` 降级为 `None`；正常写入和模型反序列化仍保持来源闭集校验。
 
 `extract_profile()` 返回 `ProfileExtractionResult`，当前只覆盖模板第 1 章“这只基金到底是什么产品”的最小数据底座：
 
@@ -290,7 +290,7 @@ C2 当前只做确定性 marker / 元数据检查，不调用 LLM，不判断语
 
 - `models.py`：`DocumentKey`、`ParsedAnnualReport`、`ReportSection`、`ParsedTable`
 - `repository.py`：对外唯一公开读取入口 `FundDocumentRepository`
-- `cache.py`：raw PDF 元信息缓存与 parsed report 物化缓存；parsed report 命中前会检查最小正文长度和关键章节集合，避免历史低质量解析物被当作真实年报复用
+- `cache.py`：raw PDF 元信息缓存与 parsed report 物化缓存；parsed report 命中前会检查最小正文长度和关键章节集合，避免历史低质量解析物被当作真实年报复用；损坏的来源元数据只降级为空元数据，不阻断 PDF 路径缓存读取
 - `adapters/annual_report_pdf.py`：把底层 PDF helper 适配为统一仓库返回值
 
 基础画像 extractor 位于 `fund_agent/fund/extractors/`：
