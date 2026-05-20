@@ -9,11 +9,12 @@ from __future__ import annotations
 import asyncio
 import json
 import sqlite3
+from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Final
 
-from fund_agent.fund.documents.models import DocumentKey, ParsedAnnualReport
+from fund_agent.fund.documents.models import AnnualReportSourceMetadata, DocumentKey, ParsedAnnualReport
 
 DOCUMENT_CACHE_ROOT: Final[Path] = Path("cache/documents")
 PARSED_REPORT_CACHE_DIRNAME: Final[str] = "parsed_reports"
@@ -23,6 +24,21 @@ MIN_PARSED_REPORT_RAW_TEXT_LENGTH: Final[int] = 1_000
 REQUIRED_PARSED_REPORT_SECTION_IDS: Final[frozenset[str]] = frozenset(
     {"§2", "§3", "§4", "§8", "§9", "§10"}
 )
+
+
+@dataclass(frozen=True, slots=True)
+class AnnualReportPdfCacheEntry:
+    """原始 PDF 缓存条目。
+
+    Attributes:
+        pdf_path: 原始 PDF 本地路径。
+        source_metadata: 年报来源元数据。
+        updated_at: 缓存更新时间。
+    """
+
+    pdf_path: Path
+    source_metadata: AnnualReportSourceMetadata | None
+    updated_at: str
 
 
 def _document_cache_key(key: DocumentKey) -> str:
@@ -73,6 +89,68 @@ def is_parsed_annual_report_cache_usable(report: ParsedAnnualReport) -> bool:
     if len(report.raw_text.strip()) < MIN_PARSED_REPORT_RAW_TEXT_LENGTH:
         return False
     return REQUIRED_PARSED_REPORT_SECTION_IDS <= set(report.sections)
+
+
+def _source_metadata_to_json(metadata: AnnualReportSourceMetadata | None) -> str | None:
+    """把来源元数据序列化为 SQLite JSON 字符串。
+
+    Args:
+        metadata: 来源元数据。
+
+    Returns:
+        JSON 字符串；无元数据时返回 ``None``。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if metadata is None:
+        return None
+    return json.dumps(metadata.to_dict(), ensure_ascii=False, separators=(",", ":"))
+
+
+def _source_metadata_from_json(payload: object) -> AnnualReportSourceMetadata | None:
+    """从 SQLite JSON 字符串反序列化来源元数据。
+
+    Args:
+        payload: SQLite 字段值。
+
+    Returns:
+        来源元数据；空值返回 ``None``。
+
+    Raises:
+        ValueError: JSON 字符串无法解析为对象时抛出。
+    """
+
+    if payload is None:
+        return None
+    parsed = json.loads(str(payload))
+    if not isinstance(parsed, dict):
+        raise ValueError("source_metadata_json 不是对象")
+    return AnnualReportSourceMetadata.from_dict(parsed)
+
+
+def _normalize_report_source_metadata(
+    report: ParsedAnnualReport,
+    source_metadata: AnnualReportSourceMetadata | None,
+) -> ParsedAnnualReport:
+    """对齐 parsed payload 与 documents row 的来源元数据。
+
+    Args:
+        report: 原始 parsed report。
+        source_metadata: 应写入 documents row 的来源元数据。
+
+    Returns:
+        来源元数据已对齐的 parsed report。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return replace(
+        report,
+        metadata=replace(report.metadata, source=source_metadata),
+    )
 
 
 class AnnualReportDocumentCache:
@@ -146,6 +224,7 @@ class AnnualReportDocumentCache:
                 )
                 """
             )
+            self._ensure_documents_source_metadata_column(connection)
             connection.execute(
                 """
                 CREATE TABLE IF NOT EXISTS parsed_reports (
@@ -161,6 +240,26 @@ class AnnualReportDocumentCache:
             )
             connection.commit()
 
+    def _ensure_documents_source_metadata_column(self, connection: sqlite3.Connection) -> None:
+        """确保 documents 表存在来源元数据 JSON 列。
+
+        Args:
+            connection: SQLite 连接。
+
+        Returns:
+            无返回值。
+
+        Raises:
+            sqlite3.Error: 查询或修改 schema 失败时抛出。
+        """
+
+        columns = {
+            str(row[1])
+            for row in connection.execute("PRAGMA table_info(documents)").fetchall()
+        }
+        if "source_metadata_json" not in columns:
+            connection.execute("ALTER TABLE documents ADD COLUMN source_metadata_json TEXT")
+
     async def get_pdf_path(self, key: DocumentKey) -> Path | None:
         """读取缓存中的原始 PDF 路径。
 
@@ -175,7 +274,24 @@ class AnnualReportDocumentCache:
         """
 
         await self.initialize()
-        return await asyncio.to_thread(self._get_pdf_path_sync, key)
+        entry = await asyncio.to_thread(self._get_pdf_entry_sync, key)
+        return entry.pdf_path if entry is not None else None
+
+    async def get_pdf_entry(self, key: DocumentKey) -> AnnualReportPdfCacheEntry | None:
+        """读取缓存中的原始 PDF 条目。
+
+        Args:
+            key: 文档主键。
+
+        Returns:
+            命中且文件存在时返回 PDF 缓存条目，否则返回 `None`。
+
+        Raises:
+            sqlite3.Error: 查询 SQLite 失败时抛出。
+        """
+
+        await self.initialize()
+        return await asyncio.to_thread(self._get_pdf_entry_sync, key)
 
     def _get_pdf_path_sync(self, key: DocumentKey) -> Path | None:
         """同步读取缓存中的原始 PDF 路径。
@@ -190,10 +306,27 @@ class AnnualReportDocumentCache:
             sqlite3.Error: 查询 SQLite 失败时抛出。
         """
 
+        entry = self._get_pdf_entry_sync(key)
+        return entry.pdf_path if entry is not None else None
+
+    def _get_pdf_entry_sync(self, key: DocumentKey) -> AnnualReportPdfCacheEntry | None:
+        """同步读取缓存中的原始 PDF 条目。
+
+        Args:
+            key: 文档主键。
+
+        Returns:
+            命中且文件存在时返回 PDF 缓存条目，否则返回 `None`。
+
+        Raises:
+            sqlite3.Error: 查询 SQLite 失败时抛出。
+        """
+
         with sqlite3.connect(self.sqlite_path) as connection:
+            self._ensure_documents_source_metadata_column(connection)
             row = connection.execute(
                 """
-                SELECT pdf_path
+                SELECT pdf_path, source_metadata_json, updated_at
                 FROM documents
                 WHERE document_key = ?
                 """,
@@ -204,14 +337,25 @@ class AnnualReportDocumentCache:
         pdf_path = Path(str(row[0]))
         if not pdf_path.exists():
             return None
-        return pdf_path
+        return AnnualReportPdfCacheEntry(
+            pdf_path=pdf_path,
+            source_metadata=_source_metadata_from_json(row[1]),
+            updated_at=str(row[2]),
+        )
 
-    async def record_pdf_path(self, key: DocumentKey, pdf_path: Path) -> None:
+    async def record_pdf_path(
+        self,
+        key: DocumentKey,
+        pdf_path: Path,
+        *,
+        source_metadata: AnnualReportSourceMetadata | None = None,
+    ) -> None:
         """写入原始 PDF 的缓存元信息。
 
         Args:
             key: 文档主键。
             pdf_path: 已缓存 PDF 的本地路径。
+            source_metadata: 年报来源元数据。
 
         Returns:
             无返回值。
@@ -221,14 +365,20 @@ class AnnualReportDocumentCache:
         """
 
         await self.initialize()
-        await asyncio.to_thread(self._record_pdf_path_sync, key, pdf_path)
+        await asyncio.to_thread(self._record_pdf_path_sync, key, pdf_path, source_metadata)
 
-    def _record_pdf_path_sync(self, key: DocumentKey, pdf_path: Path) -> None:
+    def _record_pdf_path_sync(
+        self,
+        key: DocumentKey,
+        pdf_path: Path,
+        source_metadata: AnnualReportSourceMetadata | None,
+    ) -> None:
         """同步写入原始 PDF 的缓存元信息。
 
         Args:
             key: 文档主键。
             pdf_path: 已缓存 PDF 的本地路径。
+            source_metadata: 年报来源元数据。
 
         Returns:
             无返回值。
@@ -246,10 +396,12 @@ class AnnualReportDocumentCache:
                     year,
                     document_kind,
                     pdf_path,
+                    source_metadata_json,
                     updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(document_key) DO UPDATE SET
                     pdf_path = excluded.pdf_path,
+                    source_metadata_json = excluded.source_metadata_json,
                     updated_at = excluded.updated_at
                 """,
                 (
@@ -258,6 +410,7 @@ class AnnualReportDocumentCache:
                     key.year,
                     key.document_kind,
                     str(pdf_path),
+                    _source_metadata_to_json(source_metadata),
                     _utc_timestamp(),
                 ),
             )
@@ -322,12 +475,14 @@ class AnnualReportDocumentCache:
         report: ParsedAnnualReport,
         *,
         pdf_path: Path | None = None,
+        source_metadata: AnnualReportSourceMetadata | None = None,
     ) -> None:
         """物化已解析年报缓存。
 
         Args:
             report: 已解析年报对象。
             pdf_path: 原始 PDF 路径；提供时会一并刷新 documents 表。
+            source_metadata: 显式来源元数据，优先于 report.metadata.source。
 
         Returns:
             无返回值。
@@ -338,18 +493,25 @@ class AnnualReportDocumentCache:
         """
 
         await self.initialize()
-        await asyncio.to_thread(self._save_parsed_report_sync, report, pdf_path)
+        await asyncio.to_thread(
+            self._save_parsed_report_sync,
+            report,
+            pdf_path,
+            source_metadata,
+        )
 
     def _save_parsed_report_sync(
         self,
         report: ParsedAnnualReport,
         pdf_path: Path | None,
+        source_metadata: AnnualReportSourceMetadata | None,
     ) -> None:
         """同步物化已解析年报缓存。
 
         Args:
             report: 已解析年报对象。
             pdf_path: 原始 PDF 路径；提供时会一并刷新 documents 表。
+            source_metadata: 显式来源元数据，优先于 report.metadata.source。
 
         Returns:
             无返回值。
@@ -359,10 +521,12 @@ class AnnualReportDocumentCache:
             sqlite3.Error: 写入 SQLite 失败时抛出。
         """
 
-        payload_path = self._parsed_report_payload_path(report.key)
+        effective_source_metadata = source_metadata or report.metadata.source
+        normalized_report = _normalize_report_source_metadata(report, effective_source_metadata)
+        payload_path = self._parsed_report_payload_path(normalized_report.key)
         payload_path.parent.mkdir(parents=True, exist_ok=True)
         payload_path.write_text(
-            json.dumps(report.to_dict(), ensure_ascii=False, indent=2),
+            json.dumps(normalized_report.to_dict(), ensure_ascii=False, indent=2),
             encoding="utf-8",
         )
         with sqlite3.connect(self.sqlite_path) as connection:
@@ -375,18 +539,21 @@ class AnnualReportDocumentCache:
                         year,
                         document_kind,
                         pdf_path,
+                        source_metadata_json,
                         updated_at
-                    ) VALUES (?, ?, ?, ?, ?, ?)
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT(document_key) DO UPDATE SET
                         pdf_path = excluded.pdf_path,
+                        source_metadata_json = excluded.source_metadata_json,
                         updated_at = excluded.updated_at
                     """,
                     (
-                        _document_cache_key(report.key),
-                        report.key.fund_code,
-                        report.key.year,
-                        report.key.document_kind,
+                        _document_cache_key(normalized_report.key),
+                        normalized_report.key.fund_code,
+                        normalized_report.key.year,
+                        normalized_report.key.document_kind,
                         str(pdf_path),
+                        _source_metadata_to_json(effective_source_metadata),
                         _utc_timestamp(),
                     ),
                 )
@@ -407,10 +574,10 @@ class AnnualReportDocumentCache:
                     updated_at = excluded.updated_at
                 """,
                 (
-                    _document_cache_key(report.key),
-                    report.key.fund_code,
-                    report.key.year,
-                    report.key.document_kind,
+                    _document_cache_key(normalized_report.key),
+                    normalized_report.key.fund_code,
+                    normalized_report.key.year,
+                    normalized_report.key.document_kind,
                     str(payload_path),
                     PARSED_REPORT_SCHEMA_VERSION,
                     _utc_timestamp(),

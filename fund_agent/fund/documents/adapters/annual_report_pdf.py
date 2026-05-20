@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Callable
 
 from fund_agent.fund.documents.models import (
+    AnnualReportPdfFetchResult,
     DocumentKey,
     ParsedAnnualReport,
     ParsedTable,
@@ -198,6 +199,38 @@ class AnnualReportPdfAdapter:
         self._table_extractor = table_extractor
         self._section_locator = section_locator
 
+    async def fetch_pdf(
+        self,
+        fund_code: str,
+        year: int,
+        *,
+        force_refresh: bool = False,
+    ) -> AnnualReportPdfFetchResult:
+        """确保原始 PDF 已下载到本地并返回路径与来源元数据。
+
+        Args:
+            fund_code: 基金代码。
+            year: 年报年份。
+            force_refresh: 是否强制刷新底层 PDF 缓存。
+
+        Returns:
+            本地 PDF 文件路径和同一次来源调用产生的元数据。
+
+        Raises:
+            FileNotFoundError: 未找到对应年报时抛出。
+            Exception: 允许底层下载异常直接传播。
+        """
+
+        result = await self._source_orchestrator.fetch_annual_report_pdf(
+            fund_code,
+            year,
+            force_refresh=force_refresh,
+        )
+        return AnnualReportPdfFetchResult(
+            pdf_path=result.pdf_path,
+            source_metadata=result.metadata,
+        )
+
     async def fetch_pdf_path(
         self,
         fund_code: str,
@@ -220,7 +253,7 @@ class AnnualReportPdfAdapter:
             Exception: 允许底层下载异常直接传播。
         """
 
-        result = await self._source_orchestrator.fetch_annual_report_pdf(
+        result = await self.fetch_pdf(
             fund_code,
             year,
             force_refresh=force_refresh,

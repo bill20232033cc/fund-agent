@@ -1,5 +1,7 @@
 """文档仓库测试。"""
 
+import asyncio
+from dataclasses import replace
 from pathlib import Path
 from unittest.mock import AsyncMock, Mock
 
@@ -9,9 +11,15 @@ import fund_agent.fund.documents.adapters.annual_report_pdf as annual_report_pdf
 import fund_agent.fund.documents.repository as repository_module
 from fund_agent.fund.documents.adapters.annual_report_pdf import AnnualReportPdfAdapter
 from fund_agent.fund.documents.cache import AnnualReportDocumentCache
-from fund_agent.fund.documents.models import DocumentKey, ParsedAnnualReport, ReportSection
+from fund_agent.fund.documents.models import (
+    AnnualReportPdfFetchResult,
+    AnnualReportSourceMetadata,
+    DocumentKey,
+    ParsedAnnualReport,
+    ReportSection,
+)
 from fund_agent.fund.documents.repository import FundDocumentRepository
-from fund_agent.fund.documents.sources import AnnualReportSourceMetadata, AnnualReportSourceResult
+from fund_agent.fund.documents.sources import AnnualReportSourceResult
 
 
 class _FakeSourceOrchestrator:
@@ -150,6 +158,84 @@ def _build_stub_report(fund_code: str, year: int, marker: str = "仓库样本基
         sections=sections,
         tables=(),
     )
+
+
+def _eid_metadata(fund_code: str = "110011", year: int = 2024) -> AnnualReportSourceMetadata:
+    """构造仓库测试使用的 EID 来源元数据。
+
+    Args:
+        fund_code: 基金代码。
+        year: 年报年份。
+
+    Returns:
+        EID 来源元数据。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return AnnualReportSourceMetadata(
+        source="eid",
+        source_url=f"http://eid.test/{fund_code}/{year}.pdf",
+        fund_code=fund_code,
+        fund_id=f"fund-{fund_code}",
+        report_year=year,
+        report_code="FB010010",
+        report_desp="年度报告",
+        report_name=f"{fund_code} {year} 年年度报告",
+        upload_info_id=f"upload-{fund_code}-{year}",
+        upload_info_detail_id=f"detail-{fund_code}-{year}",
+        table_name="PDF",
+        fallback_used=False,
+    )
+
+
+def _eastmoney_fallback_metadata(
+    fund_code: str = "110011",
+    year: int = 2024,
+) -> AnnualReportSourceMetadata:
+    """构造仓库测试使用的 Eastmoney fallback 元数据。
+
+    Args:
+        fund_code: 基金代码。
+        year: 年报年份。
+
+    Returns:
+        Eastmoney fallback 来源元数据。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return AnnualReportSourceMetadata(
+        source="eastmoney",
+        fund_code=fund_code,
+        report_year=year,
+        fallback_used=True,
+    )
+
+
+def _assert_same_report_content(
+    actual: ParsedAnnualReport,
+    expected: ParsedAnnualReport,
+) -> None:
+    """断言两个 parsed report 的业务内容一致，忽略 metadata。
+
+    Args:
+        actual: 实际报告。
+        expected: 预期报告。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 业务内容不一致时抛出。
+    """
+
+    assert actual.key == expected.key
+    assert actual.raw_text == expected.raw_text
+    assert actual.sections == expected.sections
+    assert actual.tables == expected.tables
 
 
 @pytest.mark.asyncio
@@ -344,6 +430,136 @@ class _FakeCacheAwareLoader:
         self.load_annual_report = AsyncMock(side_effect=AssertionError("不应走直接加载路径"))
 
 
+class _FakeMetadataAwareLoader:
+    """仓库 metadata 测试使用的显式 PDF 获取结果加载器。"""
+
+    def __init__(
+        self,
+        fetch_results: dict[tuple[str, int], AnnualReportPdfFetchResult],
+        reports: dict[tuple[str, int], ParsedAnnualReport],
+    ) -> None:
+        """初始化 metadata-aware 假加载器。
+
+        Args:
+            fetch_results: 按基金代码和年份索引的 PDF 获取结果。
+            reports: 按基金代码和年份索引的 parsed report。
+
+        Returns:
+            无返回值。
+
+        Raises:
+            无显式抛出。
+        """
+
+        self.fetch_results = fetch_results
+        self.reports = reports
+        self.fetch_pdf_calls: list[tuple[str, int, bool]] = []
+        self.fetch_pdf_path = AsyncMock(side_effect=AssertionError("不应调用 legacy fetch_pdf_path"))
+        self.load_annual_report = AsyncMock(side_effect=AssertionError("不应走直接加载路径"))
+
+    async def fetch_pdf(
+        self,
+        fund_code: str,
+        year: int,
+        *,
+        force_refresh: bool = False,
+    ) -> AnnualReportPdfFetchResult:
+        """返回预设 PDF 获取结果。
+
+        Args:
+            fund_code: 基金代码。
+            year: 年报年份。
+            force_refresh: 是否强制刷新。
+
+        Returns:
+            PDF 获取结果。
+
+        Raises:
+            KeyError: 未配置对应结果时抛出。
+        """
+
+        self.fetch_pdf_calls.append((fund_code, year, force_refresh))
+        return self.fetch_results[(fund_code, year)]
+
+    async def parse_pdf(
+        self,
+        pdf_path: Path,
+        fund_code: str,
+        year: int,
+    ) -> ParsedAnnualReport:
+        """返回预设 parsed report。
+
+        Args:
+            pdf_path: PDF 路径。
+            fund_code: 基金代码。
+            year: 年报年份。
+
+        Returns:
+            parsed report。
+
+        Raises:
+            KeyError: 未配置对应报告时抛出。
+        """
+
+        return self.reports[(fund_code, year)]
+
+
+class _ConcurrentMetadataAwareLoader(_FakeMetadataAwareLoader):
+    """用于并发串扰回归的 metadata-aware 假加载器。"""
+
+    def __init__(
+        self,
+        fetch_results: dict[tuple[str, int], AnnualReportPdfFetchResult],
+        reports: dict[tuple[str, int], ParsedAnnualReport],
+    ) -> None:
+        """初始化并发假加载器。
+
+        Args:
+            fetch_results: 按基金代码和年份索引的 PDF 获取结果。
+            reports: 按基金代码和年份索引的 parsed report。
+
+        Returns:
+            无返回值。
+
+        Raises:
+            无显式抛出。
+        """
+
+        super().__init__(fetch_results, reports)
+        self._first_fetch_started = asyncio.Event()
+        self._second_fetch_started = asyncio.Event()
+
+    async def fetch_pdf(
+        self,
+        fund_code: str,
+        year: int,
+        *,
+        force_refresh: bool = False,
+    ) -> AnnualReportPdfFetchResult:
+        """用事件强制两个 fetch 调用交错。
+
+        Args:
+            fund_code: 基金代码。
+            year: 年报年份。
+            force_refresh: 是否强制刷新。
+
+        Returns:
+            PDF 获取结果。
+
+        Raises:
+            KeyError: 未配置对应结果时抛出。
+        """
+
+        self.fetch_pdf_calls.append((fund_code, year, force_refresh))
+        if fund_code == "110011":
+            self._first_fetch_started.set()
+            await self._second_fetch_started.wait()
+        else:
+            await self._first_fetch_started.wait()
+            self._second_fetch_started.set()
+        return self.fetch_results[(fund_code, year)]
+
+
 def _install_temp_cache(monkeypatch: pytest.MonkeyPatch, cache_root: Path) -> None:
     """把仓库默认缓存替换为测试临时目录。
 
@@ -394,10 +610,12 @@ async def test_repository_reuses_parsed_report_cache_without_reparsing(
     first_report = await repository.load_annual_report("110011", 2024)
     second_report = await repository.load_annual_report("110011", 2024)
 
-    assert first_report == report
-    assert second_report == report
+    _assert_same_report_content(first_report, report)
+    _assert_same_report_content(second_report, report)
     loader.fetch_pdf_path.assert_awaited_once_with("110011", 2024, force_refresh=False)
     loader.parse_pdf.assert_awaited_once_with(pdf_path, "110011", 2024)
+    assert first_report.metadata.cache.parsed_cache_hit is False
+    assert second_report.metadata.cache.parsed_cache_hit is True
 
 
 @pytest.mark.asyncio
@@ -430,8 +648,8 @@ async def test_repository_force_refresh_bypasses_cached_pdf_and_parsed_report(
     first_report = await repository.load_annual_report("110011", 2024)
     refreshed_report = await repository.load_annual_report("110011", 2024, force_refresh=True)
 
-    assert first_report == stale_report
-    assert refreshed_report == fresh_report
+    _assert_same_report_content(first_report, stale_report)
+    _assert_same_report_content(refreshed_report, fresh_report)
     assert loader.fetch_pdf_path.await_count == 2
     assert loader.parse_pdf.await_count == 2
     loader.fetch_pdf_path.assert_any_await("110011", 2024, force_refresh=False)
@@ -468,6 +686,364 @@ async def test_repository_reuses_cached_pdf_metadata_when_parsed_cache_missing(
     await repository._cache.record_pdf_path(document_key, pdf_path)
     loaded_report = await repository.load_annual_report("110011", 2024)
 
-    assert loaded_report == report
+    _assert_same_report_content(loaded_report, report)
     loader.fetch_pdf_path.assert_not_awaited()
     loader.parse_pdf.assert_awaited_once_with(pdf_path, "110011", 2024)
+    assert loaded_report.metadata.cache.pdf_cache_hit is True
+
+
+@pytest.mark.asyncio
+async def test_repository_attaches_eid_source_metadata_on_fresh_fetch(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """验证仓库 fresh fetch 会附加并持久化 EID 来源元数据。
+
+    Args:
+        tmp_path: pytest 提供的临时目录。
+        monkeypatch: pytest 提供的运行时打补丁工具。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 EID 元数据未正确附加或持久化时抛出。
+    """
+
+    cache_root = tmp_path / "documents-cache"
+    pdf_path = tmp_path / "110011_2024_annual_report.pdf"
+    pdf_path.write_bytes(b"pdf")
+    metadata = _eid_metadata()
+    report = _build_stub_report("110011", 2024)
+    loader = _FakeMetadataAwareLoader(
+        {("110011", 2024): AnnualReportPdfFetchResult(pdf_path, metadata)},
+        {("110011", 2024): report},
+    )
+    _install_temp_cache(monkeypatch, cache_root)
+    repository = FundDocumentRepository(loader)
+
+    loaded_report = await repository.load_annual_report("110011", 2024)
+    cache_entry = await repository._cache.get_pdf_entry(DocumentKey("110011", 2024))
+
+    assert loaded_report.metadata.source == metadata
+    assert loaded_report.metadata.cache.pdf_cache_hit is False
+    assert loaded_report.metadata.cache.parsed_cache_hit is False
+    assert loaded_report.metadata.cache.source_metadata_present is True
+    assert cache_entry is not None
+    assert cache_entry.source_metadata == metadata
+    assert loader.fetch_pdf_calls == [("110011", 2024, False)]
+    loader.fetch_pdf_path.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_repository_attaches_eastmoney_fallback_metadata_on_fresh_fetch(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """验证仓库会持久化 Eastmoney fallback 元数据且不伪造 EID ID。
+
+    Args:
+        tmp_path: pytest 提供的临时目录。
+        monkeypatch: pytest 提供的运行时打补丁工具。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 fallback 元数据错误时抛出。
+    """
+
+    cache_root = tmp_path / "documents-cache"
+    pdf_path = tmp_path / "110011_2024_annual_report.pdf"
+    pdf_path.write_bytes(b"pdf")
+    metadata = _eastmoney_fallback_metadata()
+    loader = _FakeMetadataAwareLoader(
+        {("110011", 2024): AnnualReportPdfFetchResult(pdf_path, metadata)},
+        {("110011", 2024): _build_stub_report("110011", 2024)},
+    )
+    _install_temp_cache(monkeypatch, cache_root)
+    repository = FundDocumentRepository(loader)
+
+    loaded_report = await repository.load_annual_report("110011", 2024)
+
+    assert loaded_report.metadata.source == metadata
+    assert loaded_report.metadata.source is not None
+    assert loaded_report.metadata.source.source == "eastmoney"
+    assert loaded_report.metadata.source.fallback_used is True
+    assert loaded_report.metadata.source.fund_id is None
+    assert loaded_report.metadata.source.upload_info_id is None
+    assert loaded_report.metadata.source.upload_info_detail_id is None
+
+
+@pytest.mark.asyncio
+async def test_repository_parsed_cache_hit_retains_metadata(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """验证 parsed cache hit 会保留来源元数据并标记 cache provenance。
+
+    Args:
+        tmp_path: pytest 提供的临时目录。
+        monkeypatch: pytest 提供的运行时打补丁工具。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 parsed cache hit 丢失元数据时抛出。
+    """
+
+    cache_root = tmp_path / "documents-cache"
+    pdf_path = tmp_path / "110011_2024_annual_report.pdf"
+    pdf_path.write_bytes(b"pdf")
+    metadata = _eid_metadata()
+    loader = _FakeMetadataAwareLoader(
+        {("110011", 2024): AnnualReportPdfFetchResult(pdf_path, metadata)},
+        {("110011", 2024): _build_stub_report("110011", 2024)},
+    )
+    _install_temp_cache(monkeypatch, cache_root)
+    repository = FundDocumentRepository(loader)
+
+    first_report = await repository.load_annual_report("110011", 2024)
+    second_report = await repository.load_annual_report("110011", 2024)
+
+    assert first_report.metadata.source == metadata
+    assert second_report.metadata.source == metadata
+    assert second_report.metadata.cache.parsed_cache_hit is True
+    assert loader.fetch_pdf_calls == [("110011", 2024, False)]
+
+
+@pytest.mark.asyncio
+async def test_repository_pdf_cache_hit_uses_cached_source_metadata(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """验证 PDF cache hit 会使用 documents 行中的来源元数据。
+
+    Args:
+        tmp_path: pytest 提供的临时目录。
+        monkeypatch: pytest 提供的运行时打补丁工具。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 PDF cache hit 丢失来源元数据时抛出。
+    """
+
+    cache_root = tmp_path / "documents-cache"
+    pdf_path = tmp_path / "110011_2024_annual_report.pdf"
+    pdf_path.write_bytes(b"pdf")
+    metadata = _eid_metadata()
+    loader = _FakeCacheAwareLoader(pdf_path, [_build_stub_report("110011", 2024)])
+    _install_temp_cache(monkeypatch, cache_root)
+    repository = FundDocumentRepository(loader)
+    document_key = DocumentKey("110011", 2024)
+
+    await repository._cache.record_pdf_path(document_key, pdf_path, source_metadata=metadata)
+    loaded_report = await repository.load_annual_report("110011", 2024)
+    cached_report = await repository._cache.load_parsed_report(document_key)
+
+    assert loaded_report.metadata.source == metadata
+    assert loaded_report.metadata.cache.pdf_cache_hit is True
+    assert cached_report is not None
+    assert cached_report.metadata.source == metadata
+    loader.fetch_pdf_path.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_repository_legacy_cache_without_metadata_still_loads(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """验证 PDF cache legacy 元数据缺失时仍能加载。
+
+    Args:
+        tmp_path: pytest 提供的临时目录。
+        monkeypatch: pytest 提供的运行时打补丁工具。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 legacy cache 无法加载时抛出。
+    """
+
+    cache_root = tmp_path / "documents-cache"
+    pdf_path = tmp_path / "110011_2024_annual_report.pdf"
+    pdf_path.write_bytes(b"pdf")
+    loader = _FakeCacheAwareLoader(pdf_path, [_build_stub_report("110011", 2024)])
+    _install_temp_cache(monkeypatch, cache_root)
+    repository = FundDocumentRepository(loader)
+
+    await repository._cache.record_pdf_path(DocumentKey("110011", 2024), pdf_path)
+    loaded_report = await repository.load_annual_report("110011", 2024)
+
+    assert loaded_report.metadata.source is None
+    assert loaded_report.metadata.cache.pdf_cache_hit is True
+
+
+@pytest.mark.asyncio
+async def test_repository_force_refresh_overwrites_source_metadata(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """验证 force_refresh 会覆盖旧来源元数据。
+
+    Args:
+        tmp_path: pytest 提供的临时目录。
+        monkeypatch: pytest 提供的运行时打补丁工具。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当旧元数据未被覆盖时抛出。
+    """
+
+    cache_root = tmp_path / "documents-cache"
+    pdf_path = tmp_path / "110011_2024_annual_report.pdf"
+    pdf_path.write_bytes(b"pdf")
+    metadata_a = _eid_metadata()
+    metadata_b = replace(metadata_a, upload_info_id="new-upload", upload_info_detail_id="new-detail")
+    loader = _FakeMetadataAwareLoader(
+        {
+            ("110011", 2024): AnnualReportPdfFetchResult(pdf_path, metadata_a),
+        },
+        {
+            ("110011", 2024): _build_stub_report("110011", 2024),
+        },
+    )
+    _install_temp_cache(monkeypatch, cache_root)
+    repository = FundDocumentRepository(loader)
+
+    first_report = await repository.load_annual_report("110011", 2024)
+    loader.fetch_results[("110011", 2024)] = AnnualReportPdfFetchResult(pdf_path, metadata_b)
+    loader.reports[("110011", 2024)] = _build_stub_report("110011", 2024, marker="fresh")
+    refreshed_report = await repository.load_annual_report("110011", 2024, force_refresh=True)
+    cache_entry = await repository._cache.get_pdf_entry(DocumentKey("110011", 2024))
+
+    assert first_report.metadata.source == metadata_a
+    assert refreshed_report.metadata.source == metadata_b
+    assert cache_entry is not None
+    assert cache_entry.source_metadata == metadata_b
+
+
+@pytest.mark.asyncio
+async def test_repository_metadata_aware_loader_preferred_over_legacy_fetch_pdf_path(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """验证同时存在两种 fetch 方法时仓库优先使用 metadata-aware contract。
+
+    Args:
+        tmp_path: pytest 提供的临时目录。
+        monkeypatch: pytest 提供的运行时打补丁工具。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当仓库错误调用 legacy 方法时抛出。
+    """
+
+    cache_root = tmp_path / "documents-cache"
+    pdf_path = tmp_path / "110011_2024_annual_report.pdf"
+    pdf_path.write_bytes(b"pdf")
+    metadata = _eid_metadata()
+    loader = _FakeMetadataAwareLoader(
+        {("110011", 2024): AnnualReportPdfFetchResult(pdf_path, metadata)},
+        {("110011", 2024): _build_stub_report("110011", 2024)},
+    )
+    _install_temp_cache(monkeypatch, cache_root)
+    repository = FundDocumentRepository(loader)
+
+    loaded_report = await repository.load_annual_report("110011", 2024)
+
+    assert loaded_report.metadata.source == metadata
+    assert loader.fetch_pdf_calls == [("110011", 2024, False)]
+    loader.fetch_pdf_path.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_repository_legacy_fetch_pdf_path_loader_gets_empty_source_metadata(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """验证只支持 legacy fetch_pdf_path 的 loader 仍可工作且来源元数据为空。
+
+    Args:
+        tmp_path: pytest 提供的临时目录。
+        monkeypatch: pytest 提供的运行时打补丁工具。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 legacy loader 失效时抛出。
+    """
+
+    cache_root = tmp_path / "documents-cache"
+    pdf_path = tmp_path / "110011_2024_annual_report.pdf"
+    pdf_path.write_bytes(b"pdf")
+    loader = _FakeCacheAwareLoader(pdf_path, [_build_stub_report("110011", 2024)])
+    _install_temp_cache(monkeypatch, cache_root)
+    repository = FundDocumentRepository(loader)
+
+    loaded_report = await repository.load_annual_report("110011", 2024)
+
+    assert loaded_report.metadata.source is None
+    assert loaded_report.metadata.cache.source_metadata_present is False
+
+
+@pytest.mark.asyncio
+async def test_repository_concurrent_loads_do_not_cross_attach_source_metadata(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """验证并发加载不会把不同调用的来源元数据串接到错误报告。
+
+    Args:
+        tmp_path: pytest 提供的临时目录。
+        monkeypatch: pytest 提供的运行时打补丁工具。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当并发调用发生元数据串扰时抛出。
+    """
+
+    cache_root = tmp_path / "documents-cache"
+    pdf_path_a = tmp_path / "110011_2024_annual_report.pdf"
+    pdf_path_b = tmp_path / "004393_2024_annual_report.pdf"
+    pdf_path_a.write_bytes(b"pdf-a")
+    pdf_path_b.write_bytes(b"pdf-b")
+    metadata_a = _eid_metadata("110011", 2024)
+    metadata_b = _eid_metadata("004393", 2024)
+    loader = _ConcurrentMetadataAwareLoader(
+        {
+            ("110011", 2024): AnnualReportPdfFetchResult(pdf_path_a, metadata_a),
+            ("004393", 2024): AnnualReportPdfFetchResult(pdf_path_b, metadata_b),
+        },
+        {
+            ("110011", 2024): _build_stub_report("110011", 2024),
+            ("004393", 2024): _build_stub_report("004393", 2024),
+        },
+    )
+    _install_temp_cache(monkeypatch, cache_root)
+    repository = FundDocumentRepository(loader)
+
+    report_a, report_b = await asyncio.gather(
+        repository.load_annual_report("110011", 2024),
+        repository.load_annual_report("004393", 2024),
+    )
+    entry_a = await repository._cache.get_pdf_entry(DocumentKey("110011", 2024))
+    entry_b = await repository._cache.get_pdf_entry(DocumentKey("004393", 2024))
+
+    assert report_a.metadata.source == metadata_a
+    assert report_b.metadata.source == metadata_b
+    assert entry_a is not None
+    assert entry_b is not None
+    assert entry_a.source_metadata == metadata_a
+    assert entry_b.source_metadata == metadata_b

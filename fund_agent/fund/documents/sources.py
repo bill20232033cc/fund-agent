@@ -16,9 +16,9 @@ from typing import Any, Awaitable, Callable, Literal, Protocol
 
 import httpx
 
+from fund_agent.fund.documents.models import AnnualReportSourceMetadata, AnnualReportSourceName
 from fund_agent.fund.pdf.downloader import DEFAULT_CACHE_DIR, _download_annual_report_pdf
 
-AnnualReportSourceName = Literal["eid", "eastmoney"]
 AnnualReportDownloader = Callable[..., Awaitable[Path]]
 EidClientFactory = Callable[..., AbstractAsyncContextManager[Any]]
 
@@ -161,47 +161,6 @@ class AnnualReportSourceConfig:
     pdf_timeout_seconds: float = 60.0
     retry_attempts: int = 2
     max_concurrency: int = 1
-
-
-@dataclass(frozen=True, slots=True)
-class AnnualReportSourceMetadata:
-    """年报来源元数据。
-
-    P7-S2 只在内部返回和测试该对象，暂不持久化到 parsed report 或 cache schema。
-
-    Attributes:
-        source: 来源名称。
-        source_url: 来源 URL。
-        fund_code: 基金代码。
-        fund_id: 来源平台基金 ID。
-        report_year: 报告年份。
-        report_code: 来源报告类型代码。
-        report_desp: 来源报告类型描述。
-        report_name: 来源报告名称。
-        upload_info_id: 来源公告实例 ID。
-        upload_info_detail_id: 来源公告详情 ID。
-        table_name: 来源文件类型标记。
-        report_send_date: 来源报告发送日期。
-        operation_upload_type: 来源上传操作类型。
-        corrections_num: 来源更正次数。
-        fallback_used: 是否为 fallback 来源命中。
-    """
-
-    source: AnnualReportSourceName
-    source_url: str | None = None
-    fund_code: str | None = None
-    fund_id: str | None = None
-    report_year: int | None = None
-    report_code: str | None = None
-    report_desp: str | None = None
-    report_name: str | None = None
-    upload_info_id: str | None = None
-    upload_info_detail_id: str | None = None
-    table_name: str | None = None
-    report_send_date: str | None = None
-    operation_upload_type: str | None = None
-    corrections_num: int | None = None
-    fallback_used: bool = False
 
 
 @dataclass(frozen=True, slots=True)

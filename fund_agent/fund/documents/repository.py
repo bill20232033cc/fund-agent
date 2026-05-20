@@ -7,12 +7,20 @@
 from __future__ import annotations
 
 import inspect
+from dataclasses import replace
 from pathlib import Path
 from typing import Protocol
 
 from fund_agent.fund.documents.adapters.annual_report_pdf import AnnualReportPdfAdapter
-from fund_agent.fund.documents.cache import AnnualReportDocumentCache
-from fund_agent.fund.documents.models import DocumentKey, ParsedAnnualReport
+from fund_agent.fund.documents.cache import AnnualReportDocumentCache, PARSED_REPORT_SCHEMA_VERSION
+from fund_agent.fund.documents.models import (
+    AnnualReportCacheProvenance,
+    AnnualReportMetadata,
+    AnnualReportPdfFetchResult,
+    AnnualReportSourceMetadata,
+    DocumentKey,
+    ParsedAnnualReport,
+)
 
 
 class _AnnualReportLoader(Protocol):
@@ -63,6 +71,32 @@ class _CacheAwareAnnualReportLoader(_AnnualReportLoader, Protocol):
 
         Returns:
             本地 PDF 文件路径。
+
+        Raises:
+            FileNotFoundError: 未找到对应年报时抛出。
+            Exception: 允许底层下载异常直接传播。
+        """
+
+
+class _MetadataAwareAnnualReportLoader(_CacheAwareAnnualReportLoader, Protocol):
+    """支持显式 PDF 获取结果的年报加载器协议。"""
+
+    async def fetch_pdf(
+        self,
+        fund_code: str,
+        year: int,
+        *,
+        force_refresh: bool = False,
+    ) -> AnnualReportPdfFetchResult:
+        """确保原始 PDF 已缓存并返回路径与来源元数据。
+
+        Args:
+            fund_code: 基金代码。
+            year: 年报年份。
+            force_refresh: 是否强制刷新底层 PDF 缓存。
+
+        Returns:
+            PDF 获取结果。
 
         Raises:
             FileNotFoundError: 未找到对应年报时抛出。
@@ -167,6 +201,69 @@ def _get_cache_aware_loader(
     return annual_report_loader
 
 
+def _get_metadata_aware_loader(
+    annual_report_loader: _AnnualReportLoader,
+) -> _MetadataAwareAnnualReportLoader | None:
+    """判断加载器是否支持显式来源元数据获取。
+
+    Args:
+        annual_report_loader: 年报加载器实例。
+
+    Returns:
+        支持显式 PDF 获取结果时返回对应协议视图，否则返回 `None`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    cache_aware_loader = _get_cache_aware_loader(annual_report_loader)
+    if cache_aware_loader is None:
+        return None
+    fetch_pdf = getattr(annual_report_loader, "fetch_pdf", None)
+    if not inspect.iscoroutinefunction(fetch_pdf):
+        return None
+    return annual_report_loader
+
+
+def _with_annual_report_metadata(
+    report: ParsedAnnualReport,
+    *,
+    source_metadata: AnnualReportSourceMetadata | None,
+    pdf_path: Path | None,
+    pdf_cache_hit: bool,
+    parsed_cache_hit: bool,
+) -> ParsedAnnualReport:
+    """给 parsed report 附加来源与缓存元数据。
+
+    Args:
+        report: 原始 parsed report。
+        source_metadata: 年报来源元数据。
+        pdf_path: 原始 PDF 路径。
+        pdf_cache_hit: 是否命中 PDF 路径缓存。
+        parsed_cache_hit: 是否命中 parsed report 缓存。
+
+    Returns:
+        附加元数据后的 parsed report。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return replace(
+        report,
+        metadata=AnnualReportMetadata(
+            source=source_metadata,
+            cache=AnnualReportCacheProvenance(
+                pdf_path=str(pdf_path) if pdf_path is not None else None,
+                pdf_cache_hit=pdf_cache_hit,
+                parsed_cache_hit=parsed_cache_hit,
+                source_metadata_present=source_metadata is not None,
+                cache_schema_version=PARSED_REPORT_SCHEMA_VERSION,
+            ),
+        ),
+    )
+
+
 class FundDocumentRepository:
     """基金文档仓库。
 
@@ -226,25 +323,65 @@ class FundDocumentRepository:
         if not force_refresh:
             cached_report = await self._cache.load_parsed_report(document_key)
             if cached_report is not None:
-                return cached_report
+                return _with_annual_report_metadata(
+                    cached_report,
+                    source_metadata=cached_report.metadata.source,
+                    pdf_path=Path(cached_report.metadata.cache.pdf_path)
+                    if cached_report.metadata.cache.pdf_path
+                    else None,
+                    pdf_cache_hit=cached_report.metadata.cache.pdf_cache_hit,
+                    parsed_cache_hit=True,
+                )
 
         pdf_path = None
+        source_metadata = None
+        pdf_cache_hit = False
         if not force_refresh:
-            pdf_path = await self._cache.get_pdf_path(document_key)
+            pdf_entry = await self._cache.get_pdf_entry(document_key)
+            if pdf_entry is not None:
+                pdf_path = pdf_entry.pdf_path
+                source_metadata = pdf_entry.source_metadata
+                pdf_cache_hit = True
         if pdf_path is None:
-            pdf_path = await cache_aware_loader.fetch_pdf_path(
-                normalized_fund_code,
-                normalized_year,
-                force_refresh=force_refresh,
+            metadata_aware_loader = _get_metadata_aware_loader(self._annual_report_loader)
+            if metadata_aware_loader is not None:
+                fetch_result = await metadata_aware_loader.fetch_pdf(
+                    normalized_fund_code,
+                    normalized_year,
+                    force_refresh=force_refresh,
+                )
+                pdf_path = fetch_result.pdf_path
+                source_metadata = fetch_result.source_metadata
+            else:
+                pdf_path = await cache_aware_loader.fetch_pdf_path(
+                    normalized_fund_code,
+                    normalized_year,
+                    force_refresh=force_refresh,
+                )
+                source_metadata = None
+            await self._cache.record_pdf_path(
+                document_key,
+                pdf_path,
+                source_metadata=source_metadata,
             )
-            await self._cache.record_pdf_path(document_key, pdf_path)
 
         parsed_report = await cache_aware_loader.parse_pdf(
             pdf_path,
             normalized_fund_code,
             normalized_year,
         )
-        await self._cache.save_parsed_report(parsed_report, pdf_path=pdf_path)
+        parsed_report = _with_annual_report_metadata(
+            parsed_report,
+            source_metadata=source_metadata,
+            pdf_path=pdf_path,
+            pdf_cache_hit=pdf_cache_hit,
+            parsed_cache_hit=False,
+        )
+        await self._cache.save_parsed_report(
+            parsed_report,
+            pdf_path=pdf_path,
+            source_metadata=source_metadata,
+        )
         return parsed_report
 
     def _build_document_key(self, fund_code: str, year: int) -> DocumentKey:

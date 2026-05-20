@@ -8,12 +8,12 @@ import httpx
 import pytest
 
 from fund_agent.fund.documents.adapters.annual_report_pdf import AnnualReportPdfAdapter
+from fund_agent.fund.documents.models import AnnualReportSourceMetadata
 from fund_agent.fund.documents.sources import (
     AnnualReportSourceAggregateError,
     AnnualReportSourceConfig,
     EastmoneyAnnualReportSource,
     EidAnnualReportSource,
-    AnnualReportSourceMetadata,
     AnnualReportSourceMismatchError,
     AnnualReportSourceNotFoundError,
     AnnualReportSourceOrchestrator,
