@@ -36,8 +36,8 @@
 ### 1.3 当前 Gate 与基线裁决（2026-05-21）
 
 - 当前分支：`main`
-- 当前 gate：`P8-S1 must_answer audit contract implementation`
-- 下一 gate：`P8-S1 implementation review`
+- 当前 gate：`P8-S1 implementation review passed`
+- 下一 gate：`post-P8-S1 follow-up planning`
 - P4 执行控制文档：`docs/implementation-control-p4.md`
 - 当前裁决：
   - P7 已完成并直接集成到 `main`。当前年报来源顺序为 EID/证监会资本市场统一信息披露平台主源，Eastmoney/akshare fallback，经 `FundDocumentRepository` 统一封装；source metadata/cache provenance 和 legacy cache compatibility 已接入。
@@ -45,7 +45,7 @@
   - Post-P7 follow-up planning 已接受，commit=`26adce7`。`CLAUDE.md` 已从旧 `zhixing` 项目说明重写为当前 `fund-agent` 指南；旧项目关键词检查无命中；全量测试 `299 passed`。
   - Post-P7 code findings 已全部收口并提交；当前 tracked worktree clean，full suite baseline `322 passed`。DS repo review reconciliation 已更新到当前 HEAD，artifact=`docs/reviews/repo-review-ds-20260520.md`。
   - Post-P7 residual design slice planning 已形成，artifact=`docs/reviews/post-p7-residual-design-slice-planning-20260521.md`。剩余项均为后续 design slice：`must_answer` 审计消费、renderer `preferred_lens` 应用、EID schema fallback 策略、preflight quality gate 性能优化、C2 marker 粒度；均不阻塞当前代码基线。
-  - P8-S1 must_answer audit contract design 已通过 plan/review，commit=`f3bbfc9`。实现裁决为：新增独立 `ContractAuditCoverageManifest` 逐条路由 45 条 `must_answer`，保持 `ProgrammaticContractRules` 只代表确定性 C2 marker 规则；当前内置映射为 44 条 `covered_by_required_item`、1 条 `narrative_guidance`、0 条 `programmatic_marker`。
+  - P8-S1 must_answer audit contract design 已通过 plan/review，commit=`f3bbfc9`。实现已完成并通过 controller code review，implementation commit=`5f5a7a6`，review artifact=`docs/reviews/code-review-20260521-043045.md`。新增独立 `ContractAuditCoverageManifest` 逐条路由 45 条 `must_answer`，保持 `ProgrammaticContractRules` 只代表确定性 C2 marker 规则；当前内置映射为 44 条 `covered_by_required_item`、1 条 `narrative_guidance`、0 条 `programmatic_marker`。验证：targeted `30 passed`、full suite `329 passed`、ruff passed、diff check passed。
   - P0 维持 `done`。已验证 `dayu` 依赖可导入、`fund-agent` 处于 editable install、`fund-analysis --help` 可用、样本基金 `110011` 年报可下载、`pdfplumber` 可提取全文文本和表格。
   - P1 已完成并通过 aggregate review。
   - P2 已完成并通过 aggregate deepreview。
