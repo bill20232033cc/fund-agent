@@ -627,7 +627,13 @@ def _build_field_from_matches(
     )
     if not anchors:
         return _missing_field(missing_note)
-    return ExtractedField(value=value, anchors=anchors, extraction_mode="direct", note=None)
+    partial = any(mf is None for mf in matched_fields)
+    return ExtractedField(
+        value=value,
+        anchors=anchors,
+        extraction_mode="direct",
+        note="部分子字段缺失，仅抽取到部分信息" if partial else None,
+    )
 
 
 def _build_manager_strategy_text(report: ParsedAnnualReport) -> ExtractedField[dict[str, object]]:

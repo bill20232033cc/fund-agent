@@ -79,6 +79,7 @@ chapter_lens = resolve_preferred_lens(chapter_id=2, fund_type="active_fund")
 - `turnover_rate`：`§8` 中的年度换手率与披露口径
 - `manager_alignment`：`§9` 中的基金经理/从业人员持有原始披露，当前支持表格披露且不输出好坏判断
 - `holder_structure`：`§9` 中的机构/个人持有人结构；当前支持持有人结构表跨页组表头
+- 多子字段 extractor 在至少命中一项时保持 `direct` 并保留已抽取原文；策略文本、利益一致性、持有人结构若存在部分子字段缺失，会在 `note` 中标记“部分子字段缺失，仅抽取到部分信息”。换手率以数值为核心字段：数值存在时保持 direct，口径缺失不单独标 partial；仅口径存在时返回 `missing`
 
 `extract_holdings_share_change()` 返回 `HoldingsShareChangeExtractionResult`，当前覆盖模板第 3 章“实际投资行为”和第 4 章“投资者获得感”的最小数据底座：
 
