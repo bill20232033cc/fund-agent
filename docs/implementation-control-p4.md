@@ -33,8 +33,8 @@ P4 必须优先解决三个底层问题：
 | 项目 | 状态 |
 |---|---|
 | 当前 phase | P7 annual report source migration |
-| 当前 gate | `P7-S1 EID source research spike plan/review` |
-| 下一 gate | `P7-S1 plan review` |
+| 当前 gate | `P7-S2 document repository source abstraction plan/review` |
+| 下一 gate | `P7-S2 plan review` |
 | 当前分支 | `main` |
 | P4 输入池 | `docs/code_20260519.csv` |
 | 已知数据质量问题 | `016492` 重复；56 条记录、55 个唯一代码 |
@@ -618,3 +618,4 @@ P4 遵循 phaseflow / gateflow 多 Agent 约定：
 | 2026-05-20 | P6 acceptance / ready-to-open-draft-PR reconciliation | ✅ accepted | artifact=`docs/reviews/p6-acceptance-ready-to-open-draft-pr-reconciliation-20260520.md`；P6 已完成 deterministic template contract hardening，P6-S6/RR-13 等 residual risks 均有 owner 且不阻塞 draft PR；当前 gate 为 `ready-to-open-draft-PR`，下一 gate 为 `draft PR gate（需用户授权）` |
 | 2026-05-20 | P6 draft PR gate reconciliation | ✅ not applicable / integrated | artifact=`docs/reviews/p6-draft-pr-gate-reconciliation-20260520.md`；用户已授权 draft PR gate，但 `HEAD == origin/main == e8d6a53`，P6 已由 accepted commits 直接集成到 `main`，无非空 draft PR 可创建；当前 gate 为 `P6 closed / integrated on main`，下一 gate 为 `post-P6 follow-up planning` |
 | 2026-05-20 | post-P6 follow-up planning | ✅ accepted | plan artifact=`docs/reviews/post-p6-follow-up-planning-20260520.md`，controller review=`docs/reviews/post-p6-follow-up-plan-review-controller-20260520.md`；裁决下一阶段第一优先级为 P7 annual report source migration，第一 gate 为 `P7-S1 EID source research spike plan/review`；P6-S6/RR-13 仍为 human-owned，RR-16/Evidence Confirm/LLM audit 等后移 |
+| 2026-05-20 | P7-S1 EID source research spike plan/review | ✅ accepted | research artifact=`docs/reviews/p7-s1-eid-source-research-spike-plan-20260520.md`，plan review=`docs/reviews/plan-review-20260520-210548.md`；实测确认 EID 链路：`validate_fund.do`、`advanced_search_report.do`、`instance_show_pdf_id.do`；`004393/2024` 命中 `fundId=1618`、`uploadInfoId=1248088`、`uploadInfoDetailId=1285356`、PDF `Content-Type=application/pdf`；`docs/design.md` 数据源表已同步为 EID 主源、天天基金/Eastmoney fallback、统一文档仓库接口；当前 gate 为 `P7-S2 document repository source abstraction plan/review`，下一 gate 为 `P7-S2 plan review` |
