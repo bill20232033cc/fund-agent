@@ -13,8 +13,15 @@ from typing import Final, Literal
 
 from fund_agent.fund.analysis.checklist import ChecklistItem, ChecklistResult
 from fund_agent.fund.analysis.r_abc import RabcAttribution
+from fund_agent.fund.audit.contract_rules import load_programmatic_contract_rules
+from fund_agent.fund.template.chapter_blocks import (
+    RenderedChapterBlock,
+    get_template_chapter_heading,
+    split_rendered_chapter_blocks,
+)
+from fund_agent.fund.template.contracts import load_template_contract_manifest
 
-AuditRuleCode = Literal["P1", "P2", "P3", "L1", "R1", "R2"]
+AuditRuleCode = Literal["P1", "P2", "P3", "C2", "L1", "R1", "R2"]
 AuditSeverity = Literal["blocker", "reviewable"]
 AuditStatus = Literal["pass", "fail"]
 FinalJudgment = Literal["worth_holding", "needs_attention", "suggest_replace"]
@@ -22,17 +29,12 @@ FinalJudgment = Literal["worth_holding", "needs_attention", "suggest_replace"]
 _MIN_CONTENT_LENGTH: Final[int] = 10
 _L1_TOLERANCE: Final[Decimal] = Decimal("0.0001")
 _EVIDENCE_MARKER_PATTERN: Final[re.Pattern[str]] = re.compile(r"(证据与出处|📎\s*证据|年报\d{4}§)")
+_CHAPTER_EVIDENCE_LINE_PATTERN: Final[re.Pattern[str]] = re.compile(r"(?m)^>\s*📎\s*证据：")
 _HEADING_PATTERN: Final[re.Pattern[str]] = re.compile(r"^#{1,6}\s+(.+?)\s*$", re.MULTILINE)
-_REQUIRED_CHAPTER_TITLES: Final[tuple[str, ...]] = (
-    "投资要点概览",
-    "这只基金到底是什么产品",
-    "R=A+B-C",
-    "基金经理画像",
-    "投资者获得感",
-    "当前阶段",
-    "核心风险与否决项",
-    "是否值得持有",
+_REQUIRED_CHAPTER_TITLES: Final[tuple[str, ...]] = tuple(
+    chapter.title for chapter in load_template_contract_manifest().chapters
 )
+_CHECKED_RULES: Final[tuple[AuditRuleCode, ...]] = ("P1", "P2", "P3", "C2", "L1", "R1", "R2")
 _CHECKLIST_SIGNAL_ORDER: Final[dict[str, int]] = {
     "green": 0,
     "gray": 1,
@@ -85,6 +87,7 @@ class ProgrammaticAuditInput:
         checklist_result: 检查清单结果，用于 R1/R2 规则审计。
         final_judgment: 最终判断，用于 R2 与检查清单信号一致性审计。
         required_chapter_titles: 必要章节标题列表。
+        chapter_blocks: 已渲染章节块，用于 P3 每章证据和 C2 契约审计。
     """
 
     report_markdown: str | None = None
@@ -92,6 +95,7 @@ class ProgrammaticAuditInput:
     checklist_result: ChecklistResult | None = None
     final_judgment: FinalJudgment | None = None
     required_chapter_titles: tuple[str, ...] = _REQUIRED_CHAPTER_TITLES
+    chapter_blocks: tuple[RenderedChapterBlock, ...] = ()
 
 
 def run_programmatic_audit(input_data: ProgrammaticAuditInput) -> ProgrammaticAuditResult:
@@ -107,9 +111,13 @@ def run_programmatic_audit(input_data: ProgrammaticAuditInput) -> ProgrammaticAu
         无显式抛出。
     """
 
+    chapter_blocks, block_issues = _resolve_chapter_blocks_for_audit(input_data)
     issues = (
         *_audit_required_inputs(input_data),
         *_audit_report_structure(input_data.report_markdown, input_data.required_chapter_titles),
+        *block_issues,
+        *_audit_minimum_chapter_evidence(chapter_blocks),
+        *_audit_contract_conformance(chapter_blocks),
         *_audit_rabc_closure(input_data.rabc_attributions),
         *_audit_checklist_rules(input_data.checklist_result),
         *_audit_final_judgment(input_data.checklist_result, input_data.final_judgment),
@@ -117,7 +125,7 @@ def run_programmatic_audit(input_data: ProgrammaticAuditInput) -> ProgrammaticAu
     return ProgrammaticAuditResult(
         passed=not issues,
         issues=issues,
-        checked_rules=("P1", "P2", "P3", "L1", "R1", "R2"),
+        checked_rules=_CHECKED_RULES,
     )
 
 
@@ -217,6 +225,164 @@ def _audit_report_structure(
                 location="report_markdown",
             ),
         )
+    return tuple(issues)
+
+
+def _resolve_chapter_blocks_for_audit(
+    input_data: ProgrammaticAuditInput,
+) -> tuple[tuple[RenderedChapterBlock, ...], tuple[AuditIssue, ...]]:
+    """解析程序审计所需的渲染章节块。
+
+    Args:
+        input_data: 程序审计输入。
+
+    Returns:
+        章节块与解析问题；解析失败时返回空章节块和 P1 问题。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if input_data.chapter_blocks:
+        return input_data.chapter_blocks, ()
+    if input_data.report_markdown is None:
+        return (), ()
+    try:
+        return split_rendered_chapter_blocks(input_data.report_markdown), ()
+    except ValueError as exc:
+        return (), (
+            _issue(
+                code="P1",
+                message=f"报告无法按 CHAPTER_CONTRACT 切分章节：{exc}",
+                location="report_markdown",
+            ),
+        )
+
+
+def _audit_minimum_chapter_evidence(
+    chapter_blocks: tuple[RenderedChapterBlock, ...],
+) -> tuple[AuditIssue, ...]:
+    """执行每章最小证据行审计。
+
+    Args:
+        chapter_blocks: 已渲染章节块。
+
+    Returns:
+        P3 证据格式问题。
+
+    Raises:
+        无显式抛出。
+    """
+
+    issues: list[AuditIssue] = []
+    for block in chapter_blocks:
+        location = _chapter_location(block)
+        if not _CHAPTER_EVIDENCE_LINE_PATTERN.search(block.body_markdown):
+            issues.append(
+                _issue(
+                    code="P3",
+                    message=f"模板第{block.chapter_id}章缺少章节内证据行。",
+                    location=location,
+                )
+            )
+        if "## 证据与出处" in block.body_markdown:
+            issues.append(
+                _issue(
+                    code="P3",
+                    message=f"模板第{block.chapter_id}章正文不应包含证据与出处附录。",
+                    location=location,
+                )
+            )
+    return tuple(issues)
+
+
+def _audit_contract_conformance(
+    chapter_blocks: tuple[RenderedChapterBlock, ...],
+) -> tuple[AuditIssue, ...]:
+    """执行确定性 CHAPTER_CONTRACT C2 审计。
+
+    Args:
+        chapter_blocks: 已渲染章节块。
+
+    Returns:
+        C2 契约问题。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if not chapter_blocks:
+        return ()
+
+    issues: list[AuditIssue] = []
+    issues.extend(_audit_chapter_block_metadata(chapter_blocks))
+    rules = load_programmatic_contract_rules()
+    for block in chapter_blocks:
+        for rule in rules.required_items:
+            if rule.chapter_id != block.chapter_id:
+                continue
+            if not any(marker in block.body_markdown for marker in rule.markers_any):
+                issues.append(
+                    _issue(
+                        code="C2",
+                        message=f"模板第{block.chapter_id}章缺少 required_output_item：{rule.item_text}。",
+                        location=f"{_chapter_location(block)}:{rule.item_text}",
+                    )
+                )
+        for rule in rules.forbidden_contents:
+            if rule.chapter_id != block.chapter_id:
+                continue
+            matched_markers = tuple(
+                marker for marker in rule.forbidden_markers_any if marker in block.body_markdown
+            )
+            if matched_markers:
+                issues.append(
+                    _issue(
+                        code="C2",
+                        message=(
+                            f"模板第{block.chapter_id}章包含 must_not_cover 禁止内容："
+                            f"{'、'.join(matched_markers)}。"
+                        ),
+                        location=f"{_chapter_location(block)}:{rule.item_text}",
+                    )
+                )
+    return tuple(issues)
+
+
+def _audit_chapter_block_metadata(
+    chapter_blocks: tuple[RenderedChapterBlock, ...],
+) -> tuple[AuditIssue, ...]:
+    """审计章节块与契约元数据一致性。
+
+    Args:
+        chapter_blocks: 已渲染章节块。
+
+    Returns:
+        C2 元数据问题。
+
+    Raises:
+        无显式抛出。
+    """
+
+    issues: list[AuditIssue] = []
+    chapter_ids = tuple(block.chapter_id for block in chapter_blocks)
+    if chapter_ids != tuple(range(8)):
+        issues.append(
+            _issue(
+                code="C2",
+                message=f"渲染章节块必须按 0..7 顺序完整出现，实际为 {chapter_ids}。",
+                location="chapter_blocks",
+            )
+        )
+    for block in chapter_blocks:
+        location = _chapter_location(block)
+        expected_heading = get_template_chapter_heading(block.chapter_id)
+        if block.chapter_id != block.contract.chapter_id:
+            issues.append(_issue(code="C2", message="章节编号与契约编号不一致。", location=location))
+        if block.title != block.contract.title:
+            issues.append(_issue(code="C2", message="章节标题与契约标题不一致。", location=location))
+        if block.heading != expected_heading:
+            issues.append(_issue(code="C2", message="章节 Markdown 标题与契约标题不一致。", location=location))
     return tuple(issues)
 
 
@@ -397,6 +563,22 @@ def _missing_chapter_titles(
         if not any(required_title in heading for heading in headings):
             missing.append(required_title)
     return tuple(missing)
+
+
+def _chapter_location(block: RenderedChapterBlock) -> str:
+    """渲染章节块审计位置。
+
+    Args:
+        block: 已渲染章节块。
+
+    Returns:
+        章节位置文本。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return f"chapter_{block.chapter_id}:{block.title}"
 
 
 def _short_content_locations(report_markdown: str) -> tuple[str, ...]:

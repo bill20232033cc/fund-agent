@@ -846,7 +846,7 @@ def test_fund_readme_has_single_current_template_layer_entry() -> None:
     assert "- `template/`：后续模板能力的扩展位置" not in readme_text
 
 
-def test_render_template_report_builds_audit_input_that_passes_p1_p2_p3_l1_r1_r2() -> None:
+def test_render_template_report_builds_audit_input_that_passes_p1_p2_p3_c2_l1_r1_r2() -> None:
     """验证渲染结果可直接通过程序审计。
 
     Args:
@@ -864,9 +864,10 @@ def test_render_template_report_builds_audit_input_that_passes_p1_p2_p3_l1_r1_r2
     audit_result = run_programmatic_audit(audit_input)
 
     assert audit_input.report_markdown == result.report_markdown
+    assert audit_input.chapter_blocks == result.chapter_blocks
     assert audit_input.rabc_attributions == (_rabc(),)
     assert audit_result.passed
-    assert audit_result.checked_rules == ("P1", "P2", "P3", "L1", "R1", "R2")
+    assert audit_result.checked_rules == ("P1", "P2", "P3", "C2", "L1", "R1", "R2")
 
 
 def test_render_template_report_missing_data_path_is_explicit_and_audit_compatible() -> None:

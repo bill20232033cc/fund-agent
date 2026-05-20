@@ -5,8 +5,18 @@ from __future__ import annotations
 from dataclasses import replace
 from decimal import Decimal
 
+import pytest
+
 from fund_agent.fund.analysis import ChecklistItem, ChecklistResult, RabcAttribution
+from fund_agent.fund.audit.contract_rules import (
+    ContractRequiredItemRule,
+    ProgrammaticContractRules,
+    load_programmatic_contract_rules,
+    validate_programmatic_contract_rules,
+)
 from fund_agent.fund.audit import ProgrammaticAuditInput, run_programmatic_audit
+from fund_agent.fund.template import render_template_report, split_rendered_chapter_blocks
+from tests.fund.template.test_renderer import _render_input
 
 
 def _complete_report() -> str:
@@ -113,8 +123,44 @@ def _checklist(signal: str = "green") -> ChecklistResult:
     )
 
 
+def _rendered_audit_input(
+    *,
+    report_markdown: str | None = None,
+    use_explicit_blocks: bool = True,
+) -> ProgrammaticAuditInput:
+    """构造基于真实模板渲染结果的审计输入。
+
+    Args:
+        report_markdown: 覆盖使用的报告 Markdown。
+        use_explicit_blocks: 是否显式传入渲染章节块。
+
+    Returns:
+        程序审计输入。
+
+    Raises:
+        ValueError: 覆盖报告无法切分章节时由 splitter 抛出。
+    """
+
+    render_result = render_template_report(_render_input())
+    markdown = report_markdown if report_markdown is not None else render_result.report_markdown
+    chapter_blocks = (
+        split_rendered_chapter_blocks(markdown)
+        if report_markdown is not None and use_explicit_blocks
+        else render_result.chapter_blocks
+        if use_explicit_blocks
+        else ()
+    )
+    return ProgrammaticAuditInput(
+        report_markdown=markdown,
+        rabc_attributions=render_result.audit_input.rabc_attributions,
+        checklist_result=render_result.audit_input.checklist_result,
+        final_judgment=render_result.audit_input.final_judgment,
+        chapter_blocks=chapter_blocks,
+    )
+
+
 def test_run_programmatic_audit_passes_complete_inputs() -> None:
-    """验证完整输入通过 P1/P2/P3/L1/R1/R2 审计。
+    """验证完整输入通过 P1/P2/P3/C2/L1/R1/R2 审计。
 
     Args:
         无。
@@ -126,18 +172,220 @@ def test_run_programmatic_audit_passes_complete_inputs() -> None:
         AssertionError: 当完整输入未通过审计时抛出。
     """
 
+    render_result = render_template_report(_render_input())
     result = run_programmatic_audit(
         ProgrammaticAuditInput(
-            report_markdown=_complete_report(),
+            report_markdown=render_result.report_markdown,
             rabc_attributions=(_rabc(),),
             checklist_result=_checklist("green"),
             final_judgment="worth_holding",
+            chapter_blocks=render_result.chapter_blocks,
         ),
     )
 
     assert result.passed
     assert not result.issues
-    assert result.checked_rules == ("P1", "P2", "P3", "L1", "R1", "R2")
+    assert result.checked_rules == ("P1", "P2", "P3", "C2", "L1", "R1", "R2")
+
+
+def test_run_programmatic_audit_splits_report_when_chapter_blocks_absent() -> None:
+    """验证未显式传入章节块时审计可从 Markdown fallback 切分。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 fallback 切分未通过完整审计时抛出。
+    """
+
+    result = run_programmatic_audit(_rendered_audit_input(use_explicit_blocks=False))
+
+    assert result.passed
+    assert result.issues == ()
+
+
+def test_run_programmatic_audit_reports_p1_when_splitter_fallback_fails() -> None:
+    """验证 fallback 切分失败时审计记录 P1 而不是抛异常。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当非法 Markdown 未触发 P1 时抛出。
+    """
+
+    render_result = render_template_report(_render_input())
+    chapter_2 = render_result.chapter_blocks[2].markdown
+    broken_markdown = render_result.report_markdown.replace(
+        f"\n\n{chapter_2}",
+        f"\n\n# 非法标题\n\nbody\n\n{chapter_2}",
+        1,
+    )
+
+    result = run_programmatic_audit(
+        _rendered_audit_input(report_markdown=broken_markdown, use_explicit_blocks=False)
+    )
+
+    assert not result.passed
+    assert any(issue.code == "P1" and "无法按 CHAPTER_CONTRACT 切分" in issue.message for issue in result.issues)
+
+
+def test_run_programmatic_audit_detects_missing_required_output_item_marker() -> None:
+    """验证 C2 能检测 required_output_items marker 缺失。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当缺失 required item 未触发 C2 时抛出。
+    """
+
+    render_result = render_template_report(_render_input())
+    broken_markdown = render_result.report_markdown.replace(
+        "- 盈利投资者占比：数据不足，当前公开输入未提供该字段。\n",
+        "",
+        1,
+    )
+
+    result = run_programmatic_audit(_rendered_audit_input(report_markdown=broken_markdown))
+
+    assert not result.passed
+    assert any(
+        issue.code == "C2" and "盈利投资者占比" in issue.message
+        for issue in result.issues
+    )
+
+
+def test_run_programmatic_audit_detects_forbidden_contract_marker() -> None:
+    """验证 C2 能检测 must_not_cover 确定性禁止 marker。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当禁止 marker 未触发 C2 时抛出。
+    """
+
+    render_result = render_template_report(_render_input())
+    chapter_7 = render_result.chapter_blocks[7].markdown
+    broken_chapter_7 = chapter_7.replace(
+        "- 最终判断：值得持有。",
+        "- 最终判断：值得持有。\n- 买入金额：fixture。",
+        1,
+    )
+    broken_markdown = render_result.report_markdown.replace(chapter_7, broken_chapter_7, 1)
+
+    result = run_programmatic_audit(_rendered_audit_input(report_markdown=broken_markdown))
+
+    assert not result.passed
+    assert any(issue.code == "C2" and "买入金额" in issue.message for issue in result.issues)
+
+
+def test_run_programmatic_audit_detects_malformed_explicit_chapter_blocks() -> None:
+    """验证 C2 能检测显式传入的畸形章节块元数据。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当畸形章节块未触发 C2 时抛出。
+    """
+
+    render_result = render_template_report(_render_input())
+    broken_heading_block = replace(render_result.chapter_blocks[0], heading="# 0. 错误标题")
+    result = run_programmatic_audit(
+        ProgrammaticAuditInput(
+            report_markdown=render_result.report_markdown,
+            rabc_attributions=render_result.audit_input.rabc_attributions,
+            checklist_result=render_result.audit_input.checklist_result,
+            final_judgment=render_result.audit_input.final_judgment,
+            chapter_blocks=(broken_heading_block, *render_result.chapter_blocks[1:]),
+        )
+    )
+
+    assert not result.passed
+    assert any(issue.code == "C2" and "Markdown 标题" in issue.message for issue in result.issues)
+
+    incomplete_result = run_programmatic_audit(
+        ProgrammaticAuditInput(
+            report_markdown=render_result.report_markdown,
+            rabc_attributions=render_result.audit_input.rabc_attributions,
+            checklist_result=render_result.audit_input.checklist_result,
+            final_judgment=render_result.audit_input.final_judgment,
+            chapter_blocks=render_result.chapter_blocks[:-1],
+        )
+    )
+
+    assert not incomplete_result.passed
+    assert any(issue.code == "C2" and "0..7" in issue.message for issue in incomplete_result.issues)
+
+
+def test_run_programmatic_audit_detects_missing_chapter_evidence_line() -> None:
+    """验证 P3 能检测单章证据行缺失。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当单章证据行缺失未触发 P3 时抛出。
+    """
+
+    render_result = render_template_report(_render_input())
+    broken_markdown = render_result.report_markdown.replace(
+        "> 📎 证据：年报2024§3 nav_benchmark_performance\n\n# 6.",
+        "\n\n# 6.",
+        1,
+    )
+
+    result = run_programmatic_audit(_rendered_audit_input(report_markdown=broken_markdown))
+
+    assert not result.passed
+    assert any(issue.code == "P3" and "第5章" in issue.message for issue in result.issues)
+
+
+def test_programmatic_contract_rules_cover_manifest_and_fail_closed_for_invalid_rule() -> None:
+    """验证程序化契约规则覆盖 manifest 并对非法条目 fail closed。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当规则覆盖不完整或非法规则未被拒绝时抛出。
+    """
+
+    rules = load_programmatic_contract_rules()
+    validate_programmatic_contract_rules(rules)
+
+    broken_rules = ProgrammaticContractRules(
+        required_items=(
+            *rules.required_items,
+            ContractRequiredItemRule(0, "不存在的 required item", ("fixture",)),
+        ),
+        forbidden_contents=rules.forbidden_contents,
+    )
+    with pytest.raises(ValueError, match="未匹配 manifest"):
+        validate_programmatic_contract_rules(broken_rules)
 
 
 def test_run_programmatic_audit_detects_missing_chapter_short_content_and_evidence() -> None:

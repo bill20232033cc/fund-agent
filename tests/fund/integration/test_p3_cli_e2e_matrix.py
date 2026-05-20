@@ -574,7 +574,7 @@ def test_p3_cli_outputs_complete_reports_for_three_sample_funds(monkeypatch) -> 
     assert len(recording_service.results) == 3
     for result in recording_service.results:
         assert result.audit_result.passed
-        assert result.audit_result.checked_rules == ("P1", "P2", "P3", "L1", "R1", "R2")
+        assert result.audit_result.checked_rules == ("P1", "P2", "P3", "C2", "L1", "R1", "R2")
         assert result.audit_result.issues == ()
     assert repository.calls == [(case.fund_code, 2024, True) for case in _SAMPLE_CASES]
     assert nav_provider.calls == [(case.fund_code, True) for case in _SAMPLE_CASES]
