@@ -34,8 +34,8 @@
 ### 1.3 当前 Gate 与基线裁决（2026-05-18）
 
 - 当前分支：`main`
-- 当前 gate：`P6-S1 implementation`
-- 下一 gate：`P6-S1 code review`
+- 当前 gate：`P6-S1 acceptance / next slice planning`
+- 下一 gate：`P6-S2 plan/review`
 - P4 执行控制文档：`docs/implementation-control-p4.md`
 - 当前裁决：
   - P0 维持 `done`。已验证 `dayu` 依赖可导入、`fund-agent` 处于 editable install、`fund-analysis --help` 可用、样本基金 `110011` 年报可下载、`pdfplumber` 可提取全文文本和表格。
@@ -75,6 +75,7 @@
   - P5 已通过 PR 4 合入 `main`：`https://github.com/bill20232033cc/fund-agent/pull/4`；squash merge commit=`d33b901fd1bee9f85206df461cc6419a813bcbae`，mergedAt=`2026-05-19T22:51:32Z`。当前 gate 为 `P5 merged`，下一 gate 为 `post-P5 follow-up planning`。
   - Post-P5 follow-up planning 已接受，artifact=`docs/reviews/post-p5-follow-up-planning-20260520.md`。controller 裁决下一阶段第一优先级为 P6-S1 template contract manifest：把 `docs/fund-analysis-template-draft.md` 中的 `CHAPTER_CONTRACT` / `ITEM_RULE` 推进为 Capability 层可消费的机器契约；当前 gate 为 `post-P5 follow-up planning accepted`，下一 gate 为 `P6-S1 template contract manifest plan/review`。
   - P6-S1 template contract manifest plan 已 drafted 并通过 controller review/rereview，plan artifact=`docs/reviews/p6-s1-template-contract-manifest-plan-20260520.md`，review artifact=`docs/reviews/p6-s1-plan-review-controller-20260520.md`，re-review artifact=`docs/reviews/p6-s1-plan-rereview-controller-20260520.md`。计划裁决为首版在 Capability 层维护 typed Python manifest，不在运行时解析 Markdown 注释，且 production code 不依赖 renderer 私有 `_CHAPTER_TITLES`；下一 gate 为 `P6-S1 implementation`。
+  - P6-S1 template contract manifest implementation 已完成并通过 MiMo/GLM code review，controller 裁决=`docs/reviews/p6-s1-code-review-controller-judgment-20260520.md`，review artifacts=`docs/reviews/code-review-20260520-125906.md`,`docs/reviews/code-review-20260520-130008.md`。实现新增 Capability 层 typed `CHAPTER_CONTRACT` manifest、公开 accessor、preferred_lens 解析和 fail-closed validation；已修复 lens key / `fund_type` mismatch 测试覆盖缺口；当前验证 targeted `7 passed`、full suite `213 passed`、ruff passed、diff check passed；下一 gate 为 `P6-S2 plan/review`。
   - `P3-S1 CLI 入口封装` 已完成，通过 Typer CLI 和 Service 层输出单只基金 8 章 Markdown 报告；下一 gate 为 `P3-S2 implementation + review`。
   - `P3-S2 温度计数据爬取` 已完成并通过 GLM/MiMo code review；当前实现范围仅限 Capability data adapter，不接入 CLI/Service。
   - `P3-S3 端到端整合测试` 已完成实现与 GLM/MiMo/controller code review：新增 3 只样本基金 CLI 端到端矩阵，闭合真实 `§2` 表格字段抽取、parsed report 低质量缓存门槛和模板 `benchmark_text` 契约错配。
@@ -1229,6 +1230,7 @@ P0（环境搭建）
 | RR-16 | correctness 可比字段覆盖面窄 | P4/P5/P6 | 部分关闭；P5-S3 已新增 snapshot `comparable_values` 白名单并让 correctness 比较 `basic_identity`、`benchmark`、`nav_benchmark_performance`、`classified_fund_type` 的稳定子字段；P6-S1/S5 将先补机器化 contract 基础，再决定是否升级 contract-aware correctness / FQ5 | 否 |
 | RR-17 | P4 draft PR 前工作树范围不清 | P4 | 已关闭；PR inclusion set 已在 `docs/reviews/p4-pr-scope-hygiene-reconciliation-20260520.md` 明确，draft PR 必须按 include / exclude 清单准备 | 否 |
 | RR-18 | 年报下载主源不是监管披露主源 | P7 | 当前实现通过 akshare + Eastmoney PDF 下载年报；已接受 EID/证监会资本市场电子化信息披露平台作为后续主源方向，天天基金/Eastmoney 作为 fallback，需独立 P7 plan/review/implementation，不阻塞 P6-S1 | 否 |
+| RR-19 | 模板源文档第 7 章 `危级/降级阈值` 疑似 typo | P6 | P6-S1 保持 manifest 与 `docs/fund-analysis-template-draft.md` 源文档忠实一致，未单边改成 `升级/降级阈值`；后续模板源文档清理时应同步修正 source template 与 manifest | 否 |
 
 ---
 
@@ -1374,3 +1376,4 @@ P0（环境搭建）
 | 2026-05-20 | P6-S1 template contract manifest plan | 🟡 drafted | plan artifact=`docs/reviews/p6-s1-template-contract-manifest-plan-20260520.md`；计划首版在 Capability 层维护 typed Python manifest，覆盖 0-7 章 CHAPTER_CONTRACT，不运行时解析 Markdown 注释，不实现 ITEM_RULE / contract audit / FQ5 upgrade；当前 gate 为 `P6-S1 template contract manifest plan drafted`，下一 gate 为 `P6-S1 plan review` |
 | 2026-05-20 | P6-S1 plan review/fix/rereview | ✅ passed | controller plan review=`docs/reviews/p6-s1-plan-review-controller-20260520.md` 发现 renderer 私有标题常量耦合风险；plan 已修订并由 re-review=`docs/reviews/p6-s1-plan-rereview-controller-20260520.md` 确认关闭；当前 gate 为 `P6-S1 implementation`，下一 gate 为 `P6-S1 code review` |
 | 2026-05-20 | annual report source strategy reconciliation | 🟡 tracked | 接受 AgentCodex 建议方向：EID/证监会资本市场电子化信息披露平台作为后续主源，天天基金/Eastmoney fallback，巨潮不作为公募基金年报主源；artifact=`docs/reviews/annual-report-source-strategy-reconciliation-20260520.md`；新增 RR-18 / P7 data-source migration，不阻塞 P6-S1 |
+| 2026-05-20 | P6-S1 implementation/code review | ✅ passed after fix | implementation owner=AgentCodex；controller 裁决=`docs/reviews/p6-s1-code-review-controller-judgment-20260520.md`；MiMo/GLM reviews=`docs/reviews/code-review-20260520-130008.md`,`docs/reviews/code-review-20260520-125906.md`；新增 `fund_agent/fund/template/contracts.py`、template contract public exports、contract tests 和 README 同步；lens key / `fund_type` mismatch 测试覆盖缺口已修复；当前验证 targeted `7 passed`、full suite `213 passed`、ruff passed、diff check passed；当前 gate 为 `P6-S1 acceptance / next slice planning`，下一 gate 为 `P6-S2 plan/review` |
