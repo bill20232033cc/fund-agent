@@ -7,16 +7,38 @@
 
 from __future__ import annotations
 
+import asyncio
+import json
+from contextlib import AbstractAsyncContextManager
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Awaitable, Callable, Literal, Protocol
+from typing import Any, Awaitable, Callable, Literal, Protocol
 
 import httpx
 
-from fund_agent.fund.pdf.downloader import _download_annual_report_pdf
+from fund_agent.fund.pdf.downloader import DEFAULT_CACHE_DIR, _download_annual_report_pdf
 
 AnnualReportSourceName = Literal["eid", "eastmoney"]
 AnnualReportDownloader = Callable[..., Awaitable[Path]]
+EidClientFactory = Callable[..., AbstractAsyncContextManager[Any]]
+
+EID_BASE_URL = "http://eid.csrc.gov.cn/fund"
+EID_VALIDATE_FUND_PATH = "/fund/disclose/validate_fund.do"
+EID_ADVANCED_SEARCH_REPORT_PATH = "/fund/disclose/advanced_search_report.do"
+EID_PDF_PATH = "/fund/disclose/instance_show_pdf_id.do"
+EID_ANNUAL_REPORT_TYPE = "FB010"
+EID_ANNUAL_REPORT_CODE = "FB010010"
+EID_ANNUAL_REPORT_DESP = "年度报告"
+PDF_CONTENT_TYPE = "application/pdf"
+PDF_MAGIC_BYTES = b"%PDF-"
+_EID_DISPLAY_START = 0
+_EID_DISPLAY_LENGTH = 20
+_EID_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+        "AppleWebKit/537.36"
+    ),
+}
 
 
 class AnnualReportSourceUnavailableError(Exception):
@@ -159,6 +181,9 @@ class AnnualReportSourceMetadata:
         upload_info_id: 来源公告实例 ID。
         upload_info_detail_id: 来源公告详情 ID。
         table_name: 来源文件类型标记。
+        report_send_date: 来源报告发送日期。
+        operation_upload_type: 来源上传操作类型。
+        corrections_num: 来源更正次数。
         fallback_used: 是否为 fallback 来源命中。
     """
 
@@ -173,6 +198,9 @@ class AnnualReportSourceMetadata:
     upload_info_id: str | None = None
     upload_info_detail_id: str | None = None
     table_name: str | None = None
+    report_send_date: str | None = None
+    operation_upload_type: str | None = None
+    corrections_num: int | None = None
     fallback_used: bool = False
 
 
@@ -220,6 +248,220 @@ class AnnualReportSource(Protocol):
             AnnualReportSourceMismatchError: 来源返回内容与请求矛盾。
             AnnualReportSourceSchemaError: 来源响应结构非法。
         """
+
+
+@dataclass(frozen=True, slots=True)
+class _EidValidatedFund:
+    """EID 基金代码校验结果。"""
+
+    fund_id: str
+
+
+@dataclass(frozen=True, slots=True)
+class _EidAnnualReportCandidate:
+    """EID 年报候选记录。"""
+
+    fund_code: str
+    fund_id: str
+    report_year: int
+    report_desp: str
+    report_code: str
+    upload_info_id: str
+    upload_info_detail_id: str
+    table_name: str
+    report_name: str | None = None
+    report_send_date: str | None = None
+    operation_upload_type: str | None = None
+    corrections_num: int | None = None
+    attach_file_name: str | None = None
+    attach_file_path: str | None = None
+
+
+class EidAnnualReportSource:
+    """EID/证监会披露平台年报来源。
+
+    该来源只负责模板第 1 章数据底座之前的年报 PDF 获取，不解析 PDF 内容。
+    """
+
+    name: AnnualReportSourceName = "eid"
+
+    def __init__(
+        self,
+        *,
+        base_url: str = EID_BASE_URL,
+        cache_dir: Path | None = None,
+        config: AnnualReportSourceConfig | None = None,
+        client_factory: EidClientFactory | None = None,
+    ) -> None:
+        """初始化 EID 年报来源。
+
+        Args:
+            base_url: EID 平台基础 URL。
+            cache_dir: PDF 缓存目录。
+            config: 来源访问配置。
+            client_factory: 测试用异步客户端工厂。
+
+        Returns:
+            无返回值。
+
+        Raises:
+            无显式抛出。
+        """
+
+        self._base_url = base_url.rstrip("/")
+        self._cache_dir = cache_dir or DEFAULT_CACHE_DIR
+        self._config = config or AnnualReportSourceConfig()
+        self._client_factory = client_factory or self._default_client_factory
+
+    def _default_client_factory(self) -> AbstractAsyncContextManager[Any]:
+        """创建默认 HTTP 客户端。
+
+        Args:
+            无。
+
+        Returns:
+            支持异步上下文管理的 HTTP 客户端。
+
+        Raises:
+            无显式抛出。
+        """
+
+        return httpx.AsyncClient(follow_redirects=True, headers=_EID_HEADERS)
+
+    async def fetch_annual_report_pdf(
+        self,
+        fund_code: str,
+        year: int,
+        *,
+        force_refresh: bool = False,
+    ) -> AnnualReportSourceResult:
+        """从 EID 获取指定基金指定年份年报 PDF。
+
+        Args:
+            fund_code: 基金代码。
+            year: 年报年份。
+            force_refresh: 是否强制刷新 PDF 缓存。
+
+        Returns:
+            年报 PDF 路径和 EID 元数据。
+
+        Raises:
+            AnnualReportSourceUnavailableError: 来源临时不可用。
+            AnnualReportSourceNotFoundError: EID 未找到指定年报。
+            AnnualReportSourceMismatchError: EID 返回内容与请求矛盾。
+            AnnualReportSourceSchemaError: EID 响应结构非法。
+            OSError: 写入 PDF 缓存失败时抛出。
+        """
+
+        normalized_fund_code = _normalize_fund_code(fund_code)
+        async with self._client_factory() as client:
+            validated_fund = await self._validate_fund(client, normalized_fund_code)
+            candidate = await self._search_annual_report(
+                client,
+                normalized_fund_code,
+                year,
+                validated_fund,
+            )
+            pdf_url = _build_eid_pdf_url(self._base_url, candidate.upload_info_id)
+            metadata = _build_eid_metadata(pdf_url, candidate)
+            pdf_path = self._build_pdf_cache_path(normalized_fund_code, year)
+            if await asyncio.to_thread(pdf_path.exists) and not force_refresh:
+                return AnnualReportSourceResult(pdf_path=pdf_path, metadata=metadata)
+            response = await _request_with_retries(
+                client,
+                "GET",
+                pdf_url,
+                timeout=self._config.pdf_timeout_seconds,
+                retry_attempts=self._config.retry_attempts,
+            )
+            _validate_pdf_response(response)
+            await asyncio.to_thread(pdf_path.parent.mkdir, parents=True, exist_ok=True)
+            await asyncio.to_thread(pdf_path.write_bytes, response.content)
+            return AnnualReportSourceResult(pdf_path=pdf_path, metadata=metadata)
+
+    async def _validate_fund(self, client: Any, fund_code: str) -> _EidValidatedFund:
+        """调用 EID 基金代码校验接口。
+
+        Args:
+            client: 异步 HTTP 客户端。
+            fund_code: 规范化基金代码。
+
+        Returns:
+            基金代码校验结果。
+
+        Raises:
+            AnnualReportSourceUnavailableError: 网络或服务端瞬时错误。
+            AnnualReportSourceNotFoundError: EID 明确表示基金不存在。
+            AnnualReportSourceSchemaError: 响应结构非法。
+        """
+
+        response = await _request_with_retries(
+            client,
+            "POST",
+            _join_eid_url(self._base_url, EID_VALIDATE_FUND_PATH),
+            data={"cFundCode": fund_code},
+            timeout=self._config.metadata_timeout_seconds,
+            retry_attempts=self._config.retry_attempts,
+        )
+        return _parse_eid_validate_response(_response_json(response))
+
+    async def _search_annual_report(
+        self,
+        client: Any,
+        fund_code: str,
+        year: int,
+        validated_fund: _EidValidatedFund,
+    ) -> _EidAnnualReportCandidate:
+        """调用 EID 年报检索接口并选择唯一候选。
+
+        Args:
+            client: 异步 HTTP 客户端。
+            fund_code: 规范化基金代码。
+            year: 年报年份。
+            validated_fund: 基金代码校验结果。
+
+        Returns:
+            唯一 EID 年报候选。
+
+        Raises:
+            AnnualReportSourceUnavailableError: 网络或服务端瞬时错误。
+            AnnualReportSourceNotFoundError: EID 未找到候选。
+            AnnualReportSourceMismatchError: 候选与请求矛盾。
+            AnnualReportSourceSchemaError: 响应结构非法。
+        """
+
+        encoded_ao_data = _build_eid_ao_data(fund_code, year)
+        response = await _request_with_retries(
+            client,
+            "GET",
+            _join_eid_url(self._base_url, EID_ADVANCED_SEARCH_REPORT_PATH),
+            params={"aoData": encoded_ao_data},
+            timeout=self._config.metadata_timeout_seconds,
+            retry_attempts=self._config.retry_attempts,
+        )
+        candidates = _parse_eid_search_response(_response_json(response))
+        return _select_eid_annual_report_candidate(
+            candidates,
+            fund_code,
+            year,
+            validated_fund.fund_id,
+        )
+
+    def _build_pdf_cache_path(self, fund_code: str, year: int) -> Path:
+        """构造 EID PDF 本地缓存路径。
+
+        Args:
+            fund_code: 规范化基金代码。
+            year: 年报年份。
+
+        Returns:
+            EID PDF 缓存路径。
+
+        Raises:
+            无显式抛出。
+        """
+
+        return self._cache_dir / f"{fund_code}_{year}_annual_report_eid.pdf"
 
 
 class EastmoneyAnnualReportSource:
@@ -302,7 +544,7 @@ class AnnualReportSourceOrchestrator:
         """初始化来源编排器。
 
         Args:
-            sources: 按优先级排列的年报来源；未提供时使用当前生产默认 Eastmoney 来源。
+            sources: 按优先级排列的年报来源；未提供时使用 EID 主源与 Eastmoney fallback。
             config: 来源访问配置。
 
         Returns:
@@ -312,10 +554,14 @@ class AnnualReportSourceOrchestrator:
             ValueError: 来源列表为空时抛出。
         """
 
-        self.sources = (EastmoneyAnnualReportSource(),) if sources is None else sources
+        self.config = config or AnnualReportSourceConfig()
+        self.sources = (
+            (EidAnnualReportSource(config=self.config), EastmoneyAnnualReportSource())
+            if sources is None
+            else sources
+        )
         if not self.sources:
             raise ValueError("sources 不能为空")
-        self.config = config or AnnualReportSourceConfig()
 
     async def fetch_annual_report_pdf(
         self,
@@ -448,3 +694,452 @@ def _raise_exhausted_sources(
     if categories == {"unavailable"} and len(failures) == 1:
         raise AnnualReportSourceUnavailableError(message)
     raise AnnualReportSourceAggregateError(failures)
+
+
+def _normalize_fund_code(fund_code: str) -> str:
+    """规范化基金代码。
+
+    Args:
+        fund_code: 原始基金代码。
+
+    Returns:
+        六位基金代码字符串。
+
+    Raises:
+        AnnualReportSourceMismatchError: 基金代码格式不符合六位数字时抛出。
+    """
+
+    normalized = str(fund_code).strip()
+    if len(normalized) != 6 or not normalized.isdigit():
+        raise AnnualReportSourceMismatchError(f"EID 基金代码非法: {fund_code!r}")
+    return normalized
+
+
+def _join_eid_url(base_url: str, path: str) -> str:
+    """拼接 EID 接口 URL。
+
+    Args:
+        base_url: EID 基础 URL。
+        path: 接口路径。
+
+    Returns:
+        完整接口 URL。
+
+    Raises:
+        无显式抛出。
+    """
+
+    normalized_base = base_url.rstrip("/")
+    normalized_path = f"/{path.lstrip('/')}"
+    if normalized_base.endswith("/fund") and normalized_path.startswith("/fund/"):
+        normalized_base = normalized_base.removesuffix("/fund")
+    return f"{normalized_base}{normalized_path}"
+
+
+async def _request_with_retries(
+    client: Any,
+    method: Literal["GET", "POST"],
+    url: str,
+    *,
+    timeout: float,
+    retry_attempts: int,
+    params: dict[str, str] | None = None,
+    data: dict[str, str] | None = None,
+) -> httpx.Response:
+    """按请求级 timeout 执行 EID 请求并重试瞬时错误。
+
+    Args:
+        client: 异步 HTTP 客户端。
+        method: HTTP 方法。
+        url: 请求 URL。
+        timeout: 本次请求使用的超时秒数。
+        retry_attempts: 瞬时错误重试次数。
+        params: GET 查询参数。
+        data: POST 表单参数。
+
+    Returns:
+        HTTP 响应对象。
+
+    Raises:
+        AnnualReportSourceUnavailableError: 网络、超时或 5xx 错误耗尽重试后抛出。
+    """
+
+    attempts = max(1, retry_attempts)
+    last_error: Exception | None = None
+    for attempt_index in range(attempts):
+        try:
+            if method == "POST":
+                response = await client.post(url, data=data, timeout=timeout)
+            else:
+                response = await client.get(url, params=params, timeout=timeout)
+            if response.status_code >= 500:
+                raise AnnualReportSourceUnavailableError(
+                    f"EID 服务端错误 {response.status_code}: {url}"
+                )
+            if response.status_code != 200:
+                raise AnnualReportSourceUnavailableError(
+                    f"EID 请求失败 {response.status_code}: {url}"
+                )
+            return response
+        except AnnualReportSourceUnavailableError as exc:
+            last_error = exc
+        except (httpx.TimeoutException, httpx.TransportError) as exc:
+            last_error = exc
+        if attempt_index < attempts - 1:
+            await asyncio.sleep(0)
+    raise AnnualReportSourceUnavailableError(str(last_error)) from last_error
+
+
+def _response_json(response: httpx.Response) -> dict[str, Any]:
+    """解析 EID JSON 响应。
+
+    Args:
+        response: HTTP 响应对象。
+
+    Returns:
+        JSON 对象。
+
+    Raises:
+        AnnualReportSourceSchemaError: 响应不是 JSON 对象时抛出。
+    """
+
+    try:
+        payload = response.json()
+    except ValueError as exc:
+        raise AnnualReportSourceSchemaError("EID 响应不是合法 JSON") from exc
+    if not isinstance(payload, dict):
+        raise AnnualReportSourceSchemaError("EID JSON 响应不是对象")
+    return payload
+
+
+def _parse_eid_validate_response(payload: dict[str, Any]) -> _EidValidatedFund:
+    """解析 EID 基金代码校验响应。
+
+    Args:
+        payload: EID JSON 响应对象。
+
+    Returns:
+        基金代码校验结果。
+
+    Raises:
+        AnnualReportSourceNotFoundError: EID 明确表示基金不存在。
+        AnnualReportSourceSchemaError: 响应缺少必需字段。
+    """
+
+    if payload.get("isSuccess") is not True:
+        if payload.get("isSuccess") is False:
+            raise AnnualReportSourceNotFoundError("EID 未找到基金代码")
+        raise AnnualReportSourceSchemaError("EID validate_fund 缺少 isSuccess=true")
+    fund_id = _optional_string(payload.get("fundId"))
+    if fund_id is None:
+        raise AnnualReportSourceSchemaError("EID validate_fund 缺少 fundId")
+    return _EidValidatedFund(fund_id=fund_id)
+
+
+def _build_eid_ao_data(fund_code: str, year: int) -> str:
+    """构造 EID advanced_search_report.do 的 aoData 参数。
+
+    Args:
+        fund_code: 基金代码。
+        year: 年报年份。
+
+    Returns:
+        JSON 字符串形式的 aoData。
+
+    Raises:
+        无显式抛出。
+    """
+
+    ao_data = [
+        {"name": "iDisplayStart", "value": _EID_DISPLAY_START},
+        {"name": "iDisplayLength", "value": _EID_DISPLAY_LENGTH},
+        {"name": "fundType", "value": ""},
+        {"name": "reportType", "value": EID_ANNUAL_REPORT_TYPE},
+        {"name": "reportYear", "value": str(year)},
+        {"name": "fundCompanyShortName", "value": ""},
+        {"name": "fundCode", "value": fund_code},
+        {"name": "fundShortName", "value": ""},
+        {"name": "startUploadDate", "value": ""},
+        {"name": "endUploadDate", "value": ""},
+    ]
+    return json.dumps(ao_data, ensure_ascii=False, separators=(",", ":"))
+
+
+def _parse_eid_search_response(payload: dict[str, Any]) -> tuple[_EidAnnualReportCandidate, ...]:
+    """解析 EID 年报检索响应。
+
+    Args:
+        payload: EID JSON 响应对象。
+
+    Returns:
+        年报候选元组。
+
+    Raises:
+        AnnualReportSourceUnavailableError: EID 明确返回服务不可用时抛出。
+        AnnualReportSourceSchemaError: 响应结构非法时抛出。
+    """
+
+    if payload.get("success") is False:
+        raise AnnualReportSourceUnavailableError("EID advanced_search_report 返回 success=false")
+    raw_rows = payload.get("aaData")
+    if not isinstance(raw_rows, list):
+        raise AnnualReportSourceSchemaError("EID advanced_search_report 缺少 aaData 列表")
+    return tuple(_parse_eid_candidate(row) for row in raw_rows)
+
+
+def _parse_eid_candidate(payload: Any) -> _EidAnnualReportCandidate:
+    """解析单条 EID 年报候选。
+
+    Args:
+        payload: 原始候选对象。
+
+    Returns:
+        结构化年报候选。
+
+    Raises:
+        AnnualReportSourceSchemaError: 必需字段缺失或类型非法时抛出。
+    """
+
+    if not isinstance(payload, dict):
+        raise AnnualReportSourceSchemaError("EID 候选记录不是对象")
+    report_year_raw = _required_string(payload, "reportYear")
+    try:
+        report_year = int(report_year_raw)
+    except ValueError as exc:
+        raise AnnualReportSourceSchemaError(
+            f"EID 候选 reportYear 非法: {report_year_raw!r}"
+        ) from exc
+    return _EidAnnualReportCandidate(
+        fund_code=_required_string(payload, "fundCode"),
+        fund_id=_required_string(payload, "fundId"),
+        report_year=report_year,
+        report_desp=_required_string(payload, "reportDesp"),
+        report_code=_required_string(payload, "reportCode"),
+        upload_info_id=_required_string(payload, "uploadInfoId"),
+        upload_info_detail_id=_required_string(payload, "uploadInfoDetailId"),
+        table_name=_required_string(payload, "tableName"),
+        report_name=_optional_string(payload.get("reportName")),
+        report_send_date=_optional_string(payload.get("reportSendDate")),
+        operation_upload_type=_optional_string(payload.get("operationUploadType")),
+        corrections_num=_optional_int(payload.get("correctionsNum")),
+        attach_file_name=_optional_string(payload.get("attachFileName")),
+        attach_file_path=_optional_string(payload.get("attachFilePath")),
+    )
+
+
+def _select_eid_annual_report_candidate(
+    candidates: tuple[_EidAnnualReportCandidate, ...],
+    fund_code: str,
+    year: int,
+    fund_id: str,
+) -> _EidAnnualReportCandidate:
+    """按 fail-closed 规则选择唯一 EID 年报候选。
+
+    Args:
+        candidates: EID 年报候选。
+        fund_code: 请求基金代码。
+        year: 请求年报年份。
+        fund_id: validate_fund.do 返回的基金 ID。
+
+    Returns:
+        唯一年报候选。
+
+    Raises:
+        AnnualReportSourceNotFoundError: 候选为空时抛出。
+        AnnualReportSourceMismatchError: 候选与请求矛盾时抛出。
+        AnnualReportSourceSchemaError: 多个有效候选或不支持附件链路时抛出。
+    """
+
+    if not candidates:
+        raise AnnualReportSourceNotFoundError(f"EID 未找到 {fund_code} {year} 年年报")
+
+    valid_candidates: list[_EidAnnualReportCandidate] = []
+    mismatch_reasons: list[str] = []
+    for candidate in candidates:
+        # 逐字段收集矛盾原因，避免混入季度报或摘要时被误判成“未找到”。
+        reason = _eid_candidate_mismatch_reason(candidate, fund_code, year, fund_id)
+        if reason is None:
+            valid_candidates.append(candidate)
+        else:
+            mismatch_reasons.append(reason)
+
+    if len(valid_candidates) == 1:
+        return valid_candidates[0]
+    if len(valid_candidates) > 1:
+        raise AnnualReportSourceSchemaError("EID 命中多个年度 PDF 候选，拒绝静默选择")
+    raise AnnualReportSourceMismatchError(
+        "EID 候选与请求不匹配: " + "; ".join(mismatch_reasons)
+    )
+
+
+def _eid_candidate_mismatch_reason(
+    candidate: _EidAnnualReportCandidate,
+    fund_code: str,
+    year: int,
+    fund_id: str,
+) -> str | None:
+    """返回候选不匹配原因，匹配时返回空值。
+
+    Args:
+        candidate: EID 年报候选。
+        fund_code: 请求基金代码。
+        year: 请求年报年份。
+        fund_id: validate_fund.do 返回的基金 ID。
+
+    Returns:
+        不匹配原因；匹配时返回 ``None``。
+
+    Raises:
+        AnnualReportSourceSchemaError: 候选使用 P7-S3 不支持的附件链路时抛出。
+    """
+
+    if candidate.fund_code != fund_code:
+        return f"fundCode={candidate.fund_code!r}"
+    if candidate.fund_id != fund_id:
+        return f"fundId={candidate.fund_id!r}"
+    if candidate.report_year != year:
+        return f"reportYear={candidate.report_year!r}"
+    if candidate.report_code != EID_ANNUAL_REPORT_CODE:
+        return f"reportCode={candidate.report_code!r}"
+    if candidate.report_desp != EID_ANNUAL_REPORT_DESP:
+        return f"reportDesp={candidate.report_desp!r}"
+    if candidate.table_name != "PDF":
+        return f"tableName={candidate.table_name!r}"
+    if candidate.report_name and "摘要" in candidate.report_name:
+        return f"reportName={candidate.report_name!r}"
+    if candidate.attach_file_name or candidate.attach_file_path:
+        raise AnnualReportSourceSchemaError("EID 候选包含 P7-S3 不支持的附件链路")
+    return None
+
+
+def _build_eid_pdf_url(base_url: str, upload_info_id: str) -> str:
+    """构造 EID PDF 查看 URL。
+
+    Args:
+        base_url: EID 基础 URL。
+        upload_info_id: EID 公告实例 ID。
+
+    Returns:
+        PDF URL。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return f"{_join_eid_url(base_url, EID_PDF_PATH)}?instanceid={upload_info_id}"
+
+
+def _validate_pdf_response(response: httpx.Response) -> None:
+    """校验 EID PDF 响应确为 PDF。
+
+    Args:
+        response: HTTP 响应对象。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AnnualReportSourceSchemaError: 响应不是 PDF 时抛出。
+    """
+
+    content_type = response.headers.get("content-type", "").split(";", 1)[0].lower().strip()
+    if content_type != PDF_CONTENT_TYPE:
+        raise AnnualReportSourceSchemaError(f"EID PDF Content-Type 非法: {content_type!r}")
+    if not response.content.startswith(PDF_MAGIC_BYTES):
+        raise AnnualReportSourceSchemaError("EID PDF 响应缺少 %PDF- 文件头")
+
+
+def _build_eid_metadata(
+    source_url: str,
+    candidate: _EidAnnualReportCandidate,
+) -> AnnualReportSourceMetadata:
+    """构造 EID 来源元数据。
+
+    Args:
+        source_url: EID PDF URL。
+        candidate: EID 年报候选。
+
+    Returns:
+        来源元数据。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return AnnualReportSourceMetadata(
+        source="eid",
+        source_url=source_url,
+        fund_code=candidate.fund_code,
+        fund_id=candidate.fund_id,
+        report_year=candidate.report_year,
+        report_code=candidate.report_code,
+        report_desp=candidate.report_desp,
+        report_name=candidate.report_name,
+        upload_info_id=candidate.upload_info_id,
+        upload_info_detail_id=candidate.upload_info_detail_id,
+        table_name=candidate.table_name,
+        report_send_date=candidate.report_send_date,
+        operation_upload_type=candidate.operation_upload_type,
+        corrections_num=candidate.corrections_num,
+    )
+
+
+def _required_string(payload: dict[str, Any], key: str) -> str:
+    """读取必需字符串字段。
+
+    Args:
+        payload: 原始字段映射。
+        key: 字段名。
+
+    Returns:
+        非空字符串字段值。
+
+    Raises:
+        AnnualReportSourceSchemaError: 字段缺失或为空时抛出。
+    """
+
+    value = _optional_string(payload.get(key))
+    if value is None:
+        raise AnnualReportSourceSchemaError(f"EID 候选缺少字段 {key}")
+    return value
+
+
+def _optional_string(value: Any) -> str | None:
+    """把可选 EID 字段规范化为字符串。
+
+    Args:
+        value: 原始字段值。
+
+    Returns:
+        非空字符串；空值返回 ``None``。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if value is None:
+        return None
+    normalized = str(value).strip()
+    return normalized or None
+
+
+def _optional_int(value: Any) -> int | None:
+    """把可选 EID 字段规范化为整数。
+
+    Args:
+        value: 原始字段值。
+
+    Returns:
+        整数；空值返回 ``None``。
+
+    Raises:
+        AnnualReportSourceSchemaError: 非空字段无法转换为整数时抛出。
+    """
+
+    normalized = _optional_string(value)
+    if normalized is None:
+        return None
+    try:
+        return int(normalized)
+    except ValueError as exc:
+        raise AnnualReportSourceSchemaError(f"EID 整数字段非法: {value!r}") from exc
