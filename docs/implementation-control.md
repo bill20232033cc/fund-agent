@@ -20,7 +20,9 @@
 | P3 | CLI 入口 + 整合测试 + 验证 | Week 4-5 | ✅ done | P2 |
 | P4 | 精选基金池质量闭环（snapshot + score + quality gate） | Post-MVP | ✅ done | P3 |
 | P5 | 报告主链路质量保护（quality gate integration） | Post-P4 | ✅ done | P4 |
-| P6 | 模板契约机器化（CHAPTER_CONTRACT / ITEM_RULE） | Post-P5 | 🟡 planned | P5 |
+| P6 | 模板契约机器化（CHAPTER_CONTRACT / ITEM_RULE） | Post-P5 | ✅ done | P5 |
+| P7 | 年报来源迁移（EID 主源 + Eastmoney fallback） | Post-P6 | ✅ done | P6 |
+| Post-P7 | repo-level deepreview 与后续规划 | Post-P7 | 🟡 in progress | P7 |
 
 ### 1.2 里程碑
 
@@ -31,13 +33,17 @@
 | M3: 分析引擎可用 | Week 4 中 | P2 | R=A+B-C 计算正确，言行一致性检验输出信号 |
 | M4: MVP 交付 | Week 5 结束 | P3 | `fund-analysis <code>` 输出完整 8 章报告 |
 
-### 1.3 当前 Gate 与基线裁决（2026-05-18）
+### 1.3 当前 Gate 与基线裁决（2026-05-21）
 
 - 当前分支：`main`
-- 当前 gate：`P6-S2 acceptance / next slice planning`
-- 下一 gate：`P6-S3 plan/review`
+- 当前 gate：`post-P7 follow-up planning`
+- 下一 gate：`design/control/code reconciliation follow-up`
 - P4 执行控制文档：`docs/implementation-control-p4.md`
 - 当前裁决：
+  - P7 已完成并直接集成到 `main`。当前年报来源顺序为 EID/证监会资本市场统一信息披露平台主源，Eastmoney/akshare fallback，经 `FundDocumentRepository` 统一封装；source metadata/cache provenance 和 legacy cache compatibility 已接入。
+  - repo-level `deepreview --all` 已完成，MiMo/DS artifacts 已入库；controller 已完成 aggregate fix，commit=`58bba13`。已修复 PDF 内容校验/原子写入、parsed report JSON cache crash loop、quality gate `block + not_run` 结构化阻断和 `analyze` fund_code 校验；全量测试 `299 passed`。
+  - Post-P7 follow-up planning 已接受，commit=`26adce7`。`CLAUDE.md` 已从旧 `zhixing` 项目说明重写为当前 `fund-agent` 指南；旧项目关键词检查无命中；全量测试 `299 passed`。
+  - 当前执行专项 design/control/code reconciliation：目标是把 `docs/design.md`、`docs/implementation-control.md`、`docs/implementation-control-p4.md` 顶层状态和当前代码事实重新对齐，不重排历史日志。
   - P0 维持 `done`。已验证 `dayu` 依赖可导入、`fund-agent` 处于 editable install、`fund-analysis --help` 可用、样本基金 `110011` 年报可下载、`pdfplumber` 可提取全文文本和表格。
   - P1 已完成并通过 aggregate review。
   - P2 已完成并通过 aggregate deepreview。

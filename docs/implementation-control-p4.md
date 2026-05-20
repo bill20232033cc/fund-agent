@@ -2,7 +2,7 @@
 
 > **版本**: v0.1
 > **日期**: 2026-05-19
-> **状态**: P4 closed / PR 3 merged
+> **状态**: P7 closed / post-P7 follow-up planning
 > **设计真源**: `docs/design.md`
 > **全局总控**: `docs/implementation-control.md`
 > **P4 第一性原理计划**: `docs/post-mvp-p4-first-principles-plan.md`
@@ -33,11 +33,18 @@ P4 必须优先解决三个底层问题：
 | 项目 | 状态 |
 |---|---|
 | 当前 phase | P7 annual report source migration |
-| 当前 gate | `P7 closed / integrated on main` |
-| 下一 gate | `repo-level deepreview --all` |
+| 当前 gate | `post-P7 follow-up planning` |
+| 下一 gate | `design/control/code reconciliation follow-up` |
 | 当前分支 | `main` |
 | P4 输入池 | `docs/code_20260519.csv` |
 | 已知数据质量问题 | `016492` 重复；56 条记录、55 个唯一代码 |
+
+当前 post-P7 状态：
+
+- P7 已直接集成到 `main`，EID/证监会资本市场统一信息披露平台为年报主源，Eastmoney/akshare fallback。
+- repo-level `deepreview --all` 已完成，MiMo/DS review artifacts 已入库；controller aggregate fix commit=`58bba13`，全量测试 `299 passed`。
+- `CLAUDE.md` 旧项目说明已在 commit=`26adce7` 中修正；post-P7 follow-up planning artifact=`docs/reviews/post-p7-follow-up-planning-20260521.md`。
+- 当前正在执行 `docs/design.md` ↔ control docs ↔ 当前代码事实 reconciliation；本文件保留 P4-P7 历史日志，不再作为单一 phase 的实时下一步来源。
 
 P4-S1 进入 implementation 前置条件已完成：
 
