@@ -36,8 +36,8 @@
 ### 1.3 当前 Gate 与基线裁决（2026-05-21）
 
 - 当前分支：`main`
-- 当前 gate：`post-P8-S2 follow-up planning accepted`
-- 下一 gate：`P8-S3 source fallback policy design plan/review`
+- 当前 gate：`P8-S3 source fallback policy design plan/review passed`
+- 下一 gate：`P8-S3 implementation`
 - P4 执行控制文档：`docs/implementation-control-p4.md`
 - 当前裁决：
   - P7 已完成并直接集成到 `main`。当前年报来源顺序为 EID/证监会资本市场统一信息披露平台主源，Eastmoney/akshare fallback，经 `FundDocumentRepository` 统一封装；source metadata/cache provenance 和 legacy cache compatibility 已接入。
@@ -50,6 +50,7 @@
   - P8-S2 renderer preferred_lens application design plan/review 已通过，plan artifact=`docs/reviews/p8-s2-renderer-preferred-lens-application-plan-20260521.md`，review artifact=`docs/reviews/plan-review-20260521-052601.md`，re-review artifact=`docs/reviews/plan-review-20260521-052707.md`。计划裁决为：新增 Capability-owned `LensApplicationPlan`，renderer 只在第 0/1 章确定性 slot 应用 normalized lens labels，不渲染 raw `TemplateLensRule.statements`，不改变 Service/UI/Engine、quality gate 或 `ProgrammaticAuditInput`；下一 gate 为 `P8-S2 implementation`。
   - P8-S2 renderer preferred_lens application implementation 已完成并通过 controller code review，implementation commit=`6dbf6ca`，review artifact=`docs/reviews/code-review-20260521-060057.md`。实现新增 Capability-owned `LensApplicationPlan`，renderer 仅在第 0/1 章确定性 slot 应用 normalized lens labels，不渲染 raw `TemplateLensRule.statements`，并保持 `ProgrammaticAuditInput` 形状不变；当前验证 targeted `67 passed`、full suite `344 passed`、ruff passed、diff check passed；下一 gate 为 `post-P8-S2 follow-up planning`。
   - Post-P8-S2 follow-up planning 已接受，artifact=`docs/reviews/post-p8-s2-follow-up-planning-20260521.md`。P8-S1/P8-S2 已分别关闭 `must_answer` contract-routing 与 renderer `preferred_lens` deterministic application residual；下一优先级裁决为 `P8-S3 source fallback policy design`，目标是在 Fund Capability document source 层显式定义 EID/Eastmoney 来源错误分类、fallback eligibility 与 fallback-blocked provenance，避免官方来源 schema drift / identity mismatch / integrity error 被商业站 fallback 静默掩盖。
+  - P8-S3 source fallback policy design plan/review 已通过，plan artifact=`docs/reviews/p8-s3-source-fallback-policy-plan-20260521.md`，review artifact=`docs/reviews/plan-review-20260521-060952.md`。计划裁决为：在 Fund Capability document source 层新增五类来源失败 taxonomy、table-driven fallback eligibility 和 fallback-blocked structured exception；`not_found/unavailable` 可 fallback，`schema_drift/identity_mismatch/integrity_error` 必须 fail closed 并保留 source/category/message provenance；下一 gate 为 `P8-S3 implementation`。
   - P0 维持 `done`。已验证 `dayu` 依赖可导入、`fund-agent` 处于 editable install、`fund-analysis --help` 可用、样本基金 `110011` 年报可下载、`pdfplumber` 可提取全文文本和表格。
   - P1 已完成并通过 aggregate review。
   - P2 已完成并通过 aggregate deepreview。
