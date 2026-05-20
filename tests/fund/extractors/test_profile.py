@@ -473,3 +473,86 @@ def test_extract_profile_uses_table_short_name_for_qdii_classification() -> None
     assert result.basic_identity.value is not None
     assert result.basic_identity.value["fund_name"] == "易方达优质精选混合型证券投资基金"
     assert result.basic_identity.value["classified_fund_type"] == "qdii_fund"
+
+
+def test_extract_profile_preserves_qdii_enhanced_index_evidence() -> None:
+    """验证 QDII 顶层分类会保留增强指数并发证据。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 QDII 增强指数证据被分类早返回吞掉时抛出。
+    """
+
+    report = _build_table_profile_report(
+        "161128",
+        ParsedTable(
+            page_number=5,
+            table_index=0,
+            headers=("基金名称", "易方达标普500指数增强型证券投资基金（QDII）"),
+            rows=(("基金简称", "易方达标普500增强QDII"), ("基金主代码", "161128")),
+        ),
+        ParsedTable(
+            page_number=5,
+            table_index=1,
+            headers=("投资目标", "在控制跟踪误差的基础上追求超越标的指数的增强收益。"),
+            rows=(
+                ("投资范围", "本基金主要投资于标普500指数成份股及备选成份股。"),
+                ("投资策略", "采用指数增强策略，力争获得超越标的指数的收益。"),
+                ("业绩比较基准", "标普500指数收益率"),
+            ),
+        ),
+    )
+
+    result = extract_profile(report)
+
+    assert result.basic_identity.value is not None
+    assert result.basic_identity.value["classified_fund_type"] == "qdii_fund"
+    basis_text = "\n".join(result.basic_identity.value["classification_basis"])
+    assert "同时命中指数基金身份或策略证据" in basis_text
+    assert "同时命中增强关键词" in basis_text
+
+
+def test_extract_profile_preserves_fof_index_evidence() -> None:
+    """验证 FOF 顶层分类会保留指数并发证据。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 FOF 指数证据被分类早返回吞掉时抛出。
+    """
+
+    report = _build_table_profile_report(
+        "020001",
+        ParsedTable(
+            page_number=5,
+            table_index=0,
+            headers=("基金名称", "示例目标日期指数基金中基金（FOF）"),
+            rows=(("基金简称", "示例目标日期指数FOF"), ("基金主代码", "020001")),
+        ),
+        ParsedTable(
+            page_number=5,
+            table_index=1,
+            headers=("投资目标", "紧密跟踪目标日期基金指数表现。"),
+            rows=(
+                ("投资范围", "本基金主要投资于公开募集证券投资基金。"),
+                ("投资策略", "采用抽样复制方法跟踪目标日期基金指数。"),
+                ("业绩比较基准", "目标日期基金指数收益率"),
+            ),
+        ),
+    )
+
+    result = extract_profile(report)
+
+    assert result.basic_identity.value is not None
+    assert result.basic_identity.value["classified_fund_type"] == "fof_fund"
+    basis_text = "\n".join(result.basic_identity.value["classification_basis"])
+    assert "同时命中指数基金身份或策略证据" in basis_text

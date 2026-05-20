@@ -307,6 +307,7 @@ C2 当前只做确定性 marker / 元数据检查，不调用 LLM，不判断语
 - 当前标准标签：`index_fund`、`active_fund`、`bond_fund`、`enhanced_index`、`qdii_fund`、`fof_fund`
 - 当前只基于 `§1/§2` 的名称、类别、投资目标、投资范围、投资策略做规则识别；业绩比较基准只作为输出和依据说明，不单独触发指数基金分类
 - 当前支持从 `§2` 键值表读取名称、简称、类别、基准、投资目标、投资范围和投资策略；基金简称中的 QDII 标识会参与分类，债券基金名称优先于混合股票指数基准，避免产品因基准含沪深 300 被误判为指数基金
+- QDII/FOF 是当前顶层分类标签；当 QDII/FOF 产品同时具备指数或增强指数身份时，`classified_fund_type` 仍保持 `qdii_fund`/`fof_fund`，并在 `classification_basis` 中保留并发指数/增强证据，不引入复合类型
 - 分类结果通过 `FundTypeClassification(classified_fund_type, classification_basis)` 输出
 - 当前实现明确遵守“基金类型判断优先于通用分析”，即先分类，再构造 `basic_identity`
 
