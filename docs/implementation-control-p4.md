@@ -33,8 +33,8 @@ P4 必须优先解决三个底层问题：
 | 项目 | 状态 |
 |---|---|
 | 当前 phase | P7 annual report source migration |
-| 当前 gate | `P7-S2 document repository source abstraction plan/review` |
-| 下一 gate | `P7-S2 plan review` |
+| 当前 gate | `P7-S2 implementation` |
+| 下一 gate | `P7-S2 code review` |
 | 当前分支 | `main` |
 | P4 输入池 | `docs/code_20260519.csv` |
 | 已知数据质量问题 | `016492` 重复；56 条记录、55 个唯一代码 |
@@ -619,3 +619,4 @@ P4 遵循 phaseflow / gateflow 多 Agent 约定：
 | 2026-05-20 | P6 draft PR gate reconciliation | ✅ not applicable / integrated | artifact=`docs/reviews/p6-draft-pr-gate-reconciliation-20260520.md`；用户已授权 draft PR gate，但 `HEAD == origin/main == e8d6a53`，P6 已由 accepted commits 直接集成到 `main`，无非空 draft PR 可创建；当前 gate 为 `P6 closed / integrated on main`，下一 gate 为 `post-P6 follow-up planning` |
 | 2026-05-20 | post-P6 follow-up planning | ✅ accepted | plan artifact=`docs/reviews/post-p6-follow-up-planning-20260520.md`，controller review=`docs/reviews/post-p6-follow-up-plan-review-controller-20260520.md`；裁决下一阶段第一优先级为 P7 annual report source migration，第一 gate 为 `P7-S1 EID source research spike plan/review`；P6-S6/RR-13 仍为 human-owned，RR-16/Evidence Confirm/LLM audit 等后移 |
 | 2026-05-20 | P7-S1 EID source research spike plan/review | ✅ accepted | research artifact=`docs/reviews/p7-s1-eid-source-research-spike-plan-20260520.md`，plan review=`docs/reviews/plan-review-20260520-210548.md`；实测确认 EID 链路：`validate_fund.do`、`advanced_search_report.do`、`instance_show_pdf_id.do`；`004393/2024` 命中 `fundId=1618`、`uploadInfoId=1248088`、`uploadInfoDetailId=1285356`、PDF `Content-Type=application/pdf`；`docs/design.md` 数据源表已同步为 EID 主源、天天基金/Eastmoney fallback、统一文档仓库接口；当前 gate 为 `P7-S2 document repository source abstraction plan/review`，下一 gate 为 `P7-S2 plan review` |
+| 2026-05-20 | P7-S2 document repository source abstraction plan/review | ✅ passed after amendment | plan artifact=`docs/reviews/p7-s2-document-repository-source-abstraction-plan-20260520.md`；controller review=`docs/reviews/plan-review-20260520-211052.md` 发现 all-source failure 被压扁为 `FileNotFoundError` 的错误分类风险；plan 已修订并由 rereview=`docs/reviews/p7-s2-plan-rereview-controller-20260520.md` 接受；P7-S2 只引入内部 source abstraction/orchestrator 和 fake-source tests，不实现 EID client，不改变 `FundDocumentRepository.load_annual_report(...)` 公共签名；当前 gate 为 `P7-S2 implementation`，下一 gate 为 `P7-S2 code review` |
