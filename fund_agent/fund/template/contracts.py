@@ -9,7 +9,7 @@ Markdown 注释，也不依赖模板渲染器的私有常量。
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Final, Literal, Mapping
+from typing import Final, Literal, Mapping, get_args
 
 from fund_agent.fund.fund_type import FundType
 
@@ -18,15 +18,11 @@ LensKey = FundType | Literal["default"]
 _TEMPLATE_ID: Final[str] = "fund-analysis-template-v1"
 _SOURCE_PATH: Final[str] = "docs/fund-analysis-template-draft.md"
 _EXPECTED_CHAPTER_IDS: Final[tuple[int, ...]] = tuple(range(8))
-_SUPPORTED_FUND_TYPES: Final[tuple[FundType, ...]] = (
-    "index_fund",
-    "active_fund",
-    "bond_fund",
-    "enhanced_index",
-    "qdii_fund",
-    "fof_fund",
-)
+_SUPPORTED_FUND_TYPES: Final[tuple[FundType, ...]] = get_args(FundType)
 _SUPPORTED_LENS_KEYS: Final[frozenset[str]] = frozenset((*_SUPPORTED_FUND_TYPES, "default"))
+_SUPPORTED_LENS_PRIORITIES: Final[frozenset[str]] = frozenset(
+    ("core", "high", "medium", "low")
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -910,6 +906,8 @@ def _validate_lens_rule(chapter_id: int, lens_rule: TemplateLensRule) -> None:
         raise ValueError(f"章节 {chapter_id} preferred_lens.facets_any 存在空值")
     if lens_rule.priority is not None and not lens_rule.priority.strip():
         raise ValueError(f"章节 {chapter_id} preferred_lens.priority 不能为空字符串")
+    if lens_rule.priority is not None and lens_rule.priority not in _SUPPORTED_LENS_PRIORITIES:
+        raise ValueError(f"章节 {chapter_id} preferred_lens.priority 不受支持：{lens_rule.priority}")
 
 
 def _validate_non_empty_text_tuple(values: tuple[str, ...], field_name: str, chapter_id: int) -> None:

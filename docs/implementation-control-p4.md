@@ -33,8 +33,8 @@ P4 必须优先解决三个底层问题：
 | 项目 | 状态 |
 |---|---|
 | 当前 phase | P6 template contract hardening |
-| 当前 gate | `P6 aggregate readiness reconciliation` |
-| 下一 gate | `P6 aggregate deepreview` |
+| 当前 gate | `P6 aggregate rereview accepted` |
+| 下一 gate | `P6 acceptance / ready-to-open-draft-PR reconciliation` |
 | 当前分支 | `main` |
 | P4 输入池 | `docs/code_20260519.csv` |
 | 已知数据质量问题 | `016492` 重复；56 条记录、55 个唯一代码 |
@@ -614,3 +614,4 @@ P4 遵循 phaseflow / gateflow 多 Agent 约定：
 | 2026-05-20 | P6-S5 quality gate FQ5 upgrade plan | ✅ passed after amendment | plan artifact=`docs/reviews/p6-s5-quality-gate-fq5-upgrade-plan-20260520.md`；controller plan review=`docs/reviews/plan-review-20260520-155533.md` 初判需修 `classified_fund_type` 多值冲突被误归为 `not_applicable` 的阻断风险；plan 已修订并由 rereview=`docs/reviews/p6-s5-plan-rereview-controller-20260520.md` 接受；当前 gate 为 `P6-S5 implementation`，下一 gate 为 `P6-S5 code review` |
 | 2026-05-20 | P6-S5 implementation/code review | ✅ passed | implementation owner=AgentCodex；controller 裁决=`docs/reviews/p6-s5-code-review-controller-judgment-20260520.md`；新增 FQ5 `template_contract_applicability` 状态 `resolved / not_applicable / mismatch`、`score.json.fund_quality` manifest facts、`quality_gate.json.rule_results`、legacy `match` 兼容和多值 `classified_fund_type` 冲突阻断；`quality_gate.py` 仍只消费 score JSON；当前验证 targeted `33 passed`、template/Service/CLI `38 passed`、full suite `246 passed`、ruff passed、diff check passed；当前 gate 为 `P6-S5 acceptance / next slice planning`，下一 gate 待裁决 |
 | 2026-05-20 | P6 aggregate readiness reconciliation | ✅ accepted | artifact=`docs/reviews/p6-aggregate-readiness-reconciliation-20260520.md`；P6-S1 到 P6-S5 均已 accepted 并推送到 `origin/main`；P6-S6/RR-13 为 human-owned `016492` App 源数据裁决，不阻塞代码 aggregate review；当前 gate 为 `P6 aggregate deepreview`，下一 gate 为 `P6 aggregate review judgment / fix if needed` |
+| 2026-05-20 | P6 aggregate deepreview/fix/rereview | ✅ accepted | MiMo/GLM aggregate reviews PASS，artifacts=`docs/reviews/p6-aggregate-deepreview-mimo-20260520.md`,`docs/reviews/p6-aggregate-deepreview-glm-20260520.md`；controller accepted 6 个低风险维护项并完成 fix，judgment=`docs/reviews/p6-aggregate-deepreview-controller-judgment-20260520.md`，fix artifact=`docs/reviews/p6-aggregate-fix-20260520.md`；targeted re-review MiMo/GLM 均 PASS，acceptance=`docs/reviews/p6-aggregate-rereview-controller-acceptance-20260520.md`；当前验证 targeted `87 passed`、full suite `246 passed`、ruff passed、diff check passed；当前 gate 为 `P6 acceptance / ready-to-open-draft-PR reconciliation` |

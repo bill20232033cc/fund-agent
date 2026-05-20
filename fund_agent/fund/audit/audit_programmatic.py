@@ -15,6 +15,7 @@ from fund_agent.fund.analysis.checklist import ChecklistItem, ChecklistResult
 from fund_agent.fund.analysis.r_abc import RabcAttribution
 from fund_agent.fund.audit.contract_rules import load_programmatic_contract_rules
 from fund_agent.fund.template.chapter_blocks import (
+    EVIDENCE_APPENDIX_HEADING,
     RenderedChapterBlock,
     get_template_chapter_heading,
     split_rendered_chapter_blocks,
@@ -99,7 +100,7 @@ class ProgrammaticAuditInput:
 
 
 def run_programmatic_audit(input_data: ProgrammaticAuditInput) -> ProgrammaticAuditResult:
-    """执行 P1/P2/P3/L1/R1/R2 程序审计。
+    """执行 P1/P2/P3/C2/L1/R1/R2 程序审计。
 
     Args:
         input_data: 程序审计输入。
@@ -285,7 +286,7 @@ def _audit_minimum_chapter_evidence(
                     location=location,
                 )
             )
-        if "## 证据与出处" in block.body_markdown:
+        if EVIDENCE_APPENDIX_HEADING in block.body_markdown:
             issues.append(
                 _issue(
                     code="P3",

@@ -8,7 +8,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Final, Literal
+from typing import Final, Literal, get_args
 
 from fund_agent.fund.fund_type import FundType
 from fund_agent.fund.template.contracts import load_template_contract_manifest
@@ -19,14 +19,7 @@ TemplateItemRuleDecisionStatus = Literal["render", "delete"]
 
 _TEMPLATE_ID: Final[str] = "fund-analysis-template-v1"
 _SOURCE_PATH: Final[str] = "docs/fund-analysis-template-draft.md"
-_SUPPORTED_FUND_TYPES: Final[tuple[FundType, ...]] = (
-    "index_fund",
-    "active_fund",
-    "bond_fund",
-    "enhanced_index",
-    "qdii_fund",
-    "fof_fund",
-)
+_SUPPORTED_FUND_TYPES: Final[tuple[FundType, ...]] = get_args(FundType)
 _SUPPORTED_MODES: Final[frozenset[str]] = frozenset(("optional", "conditional"))
 _SUPPORTED_MISSING_BEHAVIORS: Final[frozenset[str]] = frozenset(
     ("render_unavailable", "delete_segment")

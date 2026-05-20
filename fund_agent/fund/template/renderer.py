@@ -22,6 +22,7 @@ from fund_agent.fund.audit import ProgrammaticAuditInput
 from fund_agent.fund.data_extractor import StructuredFundDataBundle
 from fund_agent.fund.extractors.models import EvidenceAnchor, ExtractedField
 from fund_agent.fund.template.chapter_blocks import (
+    EVIDENCE_APPENDIX_HEADING,
     RenderedChapterBlock,
     get_template_chapter_heading,
     split_rendered_chapter_blocks,
@@ -464,7 +465,7 @@ def _render_evidence_section(
         无显式抛出。
     """
 
-    lines = ["## 证据与出处"]
+    lines = [EVIDENCE_APPENDIX_HEADING]
     for index, anchor in enumerate(anchors, start=1):
         lines.append(f"- [{index}] {_anchor_reference(anchor)}")
     for chapter_index, chapter_anchors in enumerate(chapter_evidence_groups):

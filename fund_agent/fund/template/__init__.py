@@ -10,6 +10,7 @@ from fund_agent.fund.template.contracts import (
     validate_template_contract_manifest,
 )
 from fund_agent.fund.template.chapter_blocks import (
+    EVIDENCE_APPENDIX_HEADING,
     RenderedChapterBlock,
     get_template_chapter_heading,
     split_rendered_chapter_blocks,
@@ -60,6 +61,7 @@ def __getattr__(name: str) -> object:
 
 __all__ = [
     "ChapterContract",
+    "EVIDENCE_APPENDIX_HEADING",
     "RenderedChapterBlock",
     "TemplateContractManifest",
     "TemplateFinalJudgment",

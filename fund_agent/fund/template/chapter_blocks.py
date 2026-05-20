@@ -15,9 +15,9 @@ from fund_agent.fund.template.contracts import ChapterContract, get_chapter_cont
 _EXPECTED_CHAPTER_IDS: Final[tuple[int, ...]] = tuple(range(8))
 _TEMPLATE_HEADING_RE: Final[re.Pattern[str]] = re.compile(r"(?m)^#\s+(\d+)\.\s+(.+?)\s*$")
 _TOP_LEVEL_HEADING_RE: Final[re.Pattern[str]] = re.compile(r"(?m)^#(?!#).*$")
-_EVIDENCE_APPENDIX_HEADING: Final[str] = "## 证据与出处"
+EVIDENCE_APPENDIX_HEADING: Final[str] = "## 证据与出处"
 _EVIDENCE_APPENDIX_HEADING_RE: Final[re.Pattern[str]] = re.compile(
-    rf"(?m)^{re.escape(_EVIDENCE_APPENDIX_HEADING)}\s*$"
+    rf"(?m)^{re.escape(EVIDENCE_APPENDIX_HEADING)}\s*$"
 )
 
 

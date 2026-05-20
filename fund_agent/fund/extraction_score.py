@@ -1365,8 +1365,9 @@ def _derive_contract_applicability(
     contract_manifest = load_template_contract_manifest()
     chapter_resolutions: list[PreferredLensChapterResolution] = []
     unresolved_chapter_ids: list[int] = []
-    try:
-        for chapter in contract_manifest.chapters:
+    resolution_errors: list[str] = []
+    for chapter in contract_manifest.chapters:
+        try:
             lens = resolve_preferred_lens(chapter.chapter_id, fund_type)
             chapter_resolutions.append(
                 PreferredLensChapterResolution(
@@ -1376,15 +1377,16 @@ def _derive_contract_applicability(
                     used_default=lens.fund_type == "default",
                 )
             )
-    except ValueError as exc:
-        if "chapter" in locals():
+        except ValueError as exc:
             unresolved_chapter_ids.append(chapter.chapter_id)
+            resolution_errors.append(f"chapter_id={chapter.chapter_id}: {exc}")
+    if unresolved_chapter_ids:
         return _contract_applicability_result(
             status=PREFERRED_LENS_STATUS_MISMATCH,
             preferred_lens_key=fund_type,
             preferred_lens_chapters=tuple(chapter_resolutions),
             preferred_lens_unresolved_chapter_ids=tuple(unresolved_chapter_ids),
-            reason=f"CHAPTER_CONTRACT preferred_lens 解析失败：{exc}",
+            reason=f"CHAPTER_CONTRACT preferred_lens 解析失败：{'; '.join(resolution_errors)}",
             contract_template_id=contract_manifest.template_id,
         )
 

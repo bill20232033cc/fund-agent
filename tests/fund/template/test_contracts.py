@@ -186,6 +186,24 @@ def test_validate_template_contract_manifest_fails_closed_for_invalid_cases() ->
     with pytest.raises(ValueError, match="不一致"):
         validate_template_contract_manifest(lens_key_fund_type_mismatch)
 
+    unsupported_priority = _replace_chapter(
+        manifest,
+        0,
+        replace(
+            manifest.chapters[0],
+            preferred_lens={
+                **dict(manifest.chapters[0].preferred_lens),
+                "default": TemplateLensRule(
+                    fund_type="default",
+                    statements=("priority 闭集校验 fixture",),
+                    priority="urgent",
+                ),
+            },
+        ),
+    )
+    with pytest.raises(ValueError, match="priority 不受支持"):
+        validate_template_contract_manifest(unsupported_priority)
+
 
 def test_get_chapter_contract_zero_returns_cover_contract() -> None:
     """验证第 0 章契约可按编号读取。
