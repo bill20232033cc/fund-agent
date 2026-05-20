@@ -33,8 +33,8 @@ P4 必须优先解决三个底层问题：
 | 项目 | 状态 |
 |---|---|
 | 当前 phase | P7 annual report source migration |
-| 当前 gate | `P7 aggregate readiness reconciliation` |
-| 下一 gate | `P7 aggregate deepreview` |
+| 当前 gate | `P7 aggregate deepreview` |
+| 下一 gate | `P7 aggregate review judgment / fix if needed` |
 | 当前分支 | `main` |
 | P4 输入池 | `docs/code_20260519.csv` |
 | 已知数据质量问题 | `016492` 重复；56 条记录、55 个唯一代码 |
@@ -625,3 +625,4 @@ P4 遵循 phaseflow / gateflow 多 Agent 约定：
 | 2026-05-20 | P7-S3 implementation/code review | ✅ accepted | implementation owner=AgentCodex，artifact=`docs/reviews/p7-s3-implementation-20260520.md`；MiMo/GLM reviews=`docs/reviews/code-review-p7-s3-mimo-20260520.md`,`docs/reviews/code-review-p7-s3-glm-20260520-221816.md`；controller judgment=`docs/reviews/p7-s3-code-review-controller-judgment-20260520.md`；新增 `EidAnnualReportSource`、EID `validate_fund.do`/`advanced_search_report.do`/`instance_show_pdf_id.do` fake-network 测试、PDF Content-Type 与 `%PDF-` 校验、metadata/PDF request-level timeout 区分，默认来源顺序改为 EID primary -> Eastmoney/akshare fallback；MiMo 低风险附件链路错误类别建议按 plan 允许口径裁决为非阻断；当前验证 source/documents focused `38 passed`、full suite `276 passed`、ruff passed、diff check passed；当前 gate 为 `P7-S3 acceptance / next slice planning`，下一 gate 为 `P7-S4 source metadata hardening plan/review` |
 | 2026-05-20 | P7-S4 source metadata hardening plan/review | ✅ passed after amendment | plan artifact=`docs/reviews/p7-s4-source-metadata-hardening-plan-20260520.md`；controller review=`docs/reviews/p7-s4-plan-review-controller-20260520.md` 发现 adapter-wide latest source metadata 状态在并发 repository load 下可能串贴 metadata；plan 已修订为 per-call `AnnualReportPdfFetchResult(pdf_path, source_metadata)` 显式契约，并要求并发防串 metadata regression test 与 parsed payload/documents row metadata precedence；rereview=`docs/reviews/p7-s4-plan-rereview-controller-20260520.md` PASS；当前 gate 为 `P7-S4 implementation`，下一 gate 为 `P7-S4 code review` |
 | 2026-05-20 | P7-S4 implementation/code review | ✅ accepted | implementation owner=AgentCodex，artifact=`docs/reviews/p7-s4-implementation-20260520.md`；MiMo/GLM reviews=`docs/reviews/code-review-p7-s4-mimo-20260520.md`,`docs/reviews/code-review-p7-s4-glm-20260520-225512.md` 均 PASS；controller judgment=`docs/reviews/p7-s4-code-review-controller-judgment-20260520.md`；新增 `ParsedAnnualReport.metadata`、共享 `AnnualReportSourceMetadata`、per-call `AnnualReportPdfFetchResult`、documents `source_metadata_json` additive column、metadata-aware/legacy loader 兼容、cache provenance、force_refresh metadata overwrite、并发防串 metadata 回归测试；当前验证 source metadata focused `55 passed`、full suite `290 passed`、ruff passed、diff check passed；当前 gate 为 `P7 aggregate readiness reconciliation`，下一 gate 为 `P7 aggregate deepreview` |
+| 2026-05-20 | P7 aggregate readiness reconciliation | ✅ accepted | artifact=`docs/reviews/p7-aggregate-readiness-reconciliation-20260520.md`；P7-S1 至 P7-S4 均已 accepted 并推送到 `origin/main`；EID 主源、Eastmoney/akshare fallback、fail-closed 错误类别、source metadata/cache provenance 和 legacy cache compatibility 均已有 slice-level verification；当前 gate 为 `P7 aggregate deepreview`，下一 gate 为 `P7 aggregate review judgment / fix if needed` |
