@@ -21,6 +21,7 @@
 - `tests/fund/test_quality_gate_integration.py`：P5-S1 单基金 quality gate adapter 测试，覆盖从已抽取 `StructuredFundDataBundle` 生成 snapshot/score/gate 产物，以及基金不在精选池时返回 not-run reason；不触发真实网络或 PDF
 - `tests/fund/data/test_nav_data.py`：净值数据适配器测试，覆盖 `nav_cache` 命中和强制刷新
 - `tests/fund/data/test_thermometer.py`：有知有行温度计适配器测试，覆盖全市场/指数/宏观解析、24h 缓存复用、强制刷新、抓取失败 stale fallback、无缓存 unavailable 和 malformed HTML
+- `tests/fund/analysis/test_ratios.py`：分析模块公共比例解析测试，覆盖披露文本百分比解析、数值型输入已标准化契约、保留的显式数值百分比归一 helper 和非法输入 fail-closed
 - `tests/fund/analysis/test_r_abc.py`：R=A+B-C 收益归因测试，覆盖公式闭合、P1 字段解析、证据锚点传递和缺失输入路径
 - `tests/fund/analysis/test_alpha_judge.py`：超额收益性质判断测试，覆盖结构性、部分结构性、阶段性、不适用、样本不足和显式环境输入要求
 - `tests/fund/analysis/test_consistency_check.py`：言行一致性检验测试，覆盖 4 维度信号、红灯冲突和显式实际风格/仓位输入要求
@@ -57,6 +58,7 @@ pytest tests/fund/test_extraction_snapshot.py -q
 pytest tests/fund/test_extraction_score.py -q
 pytest tests/fund/data/test_nav_data.py -q
 pytest tests/fund/data/test_thermometer.py -q
+pytest tests/fund/analysis/test_ratios.py -q
 pytest tests/fund/analysis/test_r_abc.py -q
 pytest tests/fund/analysis/test_alpha_judge.py -q
 pytest tests/fund/analysis/test_consistency_check.py -q
