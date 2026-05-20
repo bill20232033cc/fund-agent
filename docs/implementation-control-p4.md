@@ -76,6 +76,7 @@ P4-S1 进入 implementation 前置条件已完成：
 - P5 已通过 PR 4 合入 `main`：`https://github.com/bill20232033cc/fund-agent/pull/4`；squash merge commit=`d33b901fd1bee9f85206df461cc6419a813bcbae`，mergedAt=`2026-05-19T22:51:32Z`；下一 gate 为 post-P5 follow-up planning。
 - Post-P5 follow-up planning 已接受，artifact=`docs/reviews/post-p5-follow-up-planning-20260520.md`；下一阶段第一优先级裁决为 P6-S1 template contract manifest，把 `CHAPTER_CONTRACT` / `ITEM_RULE` 推进为 Capability 层可消费的机器契约。
 - P6-S1 template contract manifest plan 已 drafted 并通过 controller review/rereview，plan artifact=`docs/reviews/p6-s1-template-contract-manifest-plan-20260520.md`，review artifact=`docs/reviews/p6-s1-plan-review-controller-20260520.md`，re-review artifact=`docs/reviews/p6-s1-plan-rereview-controller-20260520.md`；计划首版在 Capability 层维护 typed Python manifest，不在运行时解析 Markdown 注释，且 production code 不依赖 renderer 私有 `_CHAPTER_TITLES`；下一 gate 为 P6-S1 implementation。
+- Annual report source strategy reconciliation 已记录，artifact=`docs/reviews/annual-report-source-strategy-reconciliation-20260520.md`；接受 EID/证监会资本市场电子化信息披露平台作为后续主源方向，天天基金/Eastmoney fallback，巨潮不作为公募基金年报主源；该项移交 P7 data-source migration，不阻塞 P6-S1。
 
 ---
 
@@ -599,3 +600,4 @@ P4 遵循 phaseflow / gateflow 多 Agent 约定：
 | 2026-05-20 | post-P5 follow-up planning | ✅ accepted | controller 裁决下一阶段第一优先级为 P6-S1 template contract manifest；artifact=`docs/reviews/post-p5-follow-up-planning-20260520.md`；当前 gate 为 `post-P5 follow-up planning accepted`，下一 gate 为 `P6-S1 template contract manifest plan/review` |
 | 2026-05-20 | P6-S1 template contract manifest plan | 🟡 drafted | plan artifact=`docs/reviews/p6-s1-template-contract-manifest-plan-20260520.md`；计划首版在 Capability 层维护 typed Python manifest，覆盖 0-7 章 CHAPTER_CONTRACT，不运行时解析 Markdown 注释，不实现 ITEM_RULE / contract audit / FQ5 upgrade；当前 gate 为 `P6-S1 template contract manifest plan drafted`，下一 gate 为 `P6-S1 plan review` |
 | 2026-05-20 | P6-S1 plan review/fix/rereview | ✅ passed | controller plan review=`docs/reviews/p6-s1-plan-review-controller-20260520.md` 发现 renderer 私有标题常量耦合风险；plan 已修订并由 re-review=`docs/reviews/p6-s1-plan-rereview-controller-20260520.md` 确认关闭；当前 gate 为 `P6-S1 implementation`，下一 gate 为 `P6-S1 code review` |
+| 2026-05-20 | annual report source strategy reconciliation | 🟡 tracked | 接受 AgentCodex 建议方向：EID/证监会资本市场电子化信息披露平台作为后续主源，天天基金/Eastmoney fallback，巨潮不作为公募基金年报主源；artifact=`docs/reviews/annual-report-source-strategy-reconciliation-20260520.md`；移交 P7 data-source migration，不阻塞 P6-S1 |

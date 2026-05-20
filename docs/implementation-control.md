@@ -1199,7 +1199,7 @@ P0（环境搭建）
 
 | ID | 问题 | 影响 Phase | 状态 | 决议 |
 |----|------|-----------|------|------|
-| BQ-1 | 巨潮网反爬策略未知 | P0/P1 | ✅ closed | 已改用 akshare + eastmoney PDF，无需直接访问巨潮 |
+| BQ-1 | 公募基金年报下载主源选择 | P0/P1/P7 | 🟡 reopened for source strategy | 当前实现已不直接访问巨潮，而是 akshare + Eastmoney PDF；AgentCodex 建议 EID/证监会资本市场电子化信息披露平台作为主源、天天基金/Eastmoney fallback，controller 已记录为 P7 data-source migration，artifact=`docs/reviews/annual-report-source-strategy-reconciliation-20260520.md` |
 | BQ-2 | 2026 新规"投资者收益率"披露时间表 | P2 | ⬜ open | P1 已提供 `investor_return` 三态和 `share_change` 输入，P2 再实现行为损益 |
 | BQ-3 | 有知有行温度数据页面结构 | P3 | ✅ closed | P3-S2 已用真实响应 smoke 验证 `/data` 与 `/data/macro` 当前布局，并以 fake HTML 单测锁定关键解析路径 |
 | BQ-4 | akshare 基金净值 API 稳定性 | P1/P3 | 🟡 partially closed | P1-S8 已封装可注入 fetcher 与 `nav_cache`，真实网络验证移交 P3 |
@@ -1228,6 +1228,7 @@ P0（环境搭建）
 | RR-15 | P4 quality gate 未接入 `analyze` 主链路 | P4/P5 | 已关闭；P5-S1 accepted，quality gate 已通过 `analyze` Service 显式接入，CLI/Service 支持 `off/warn/block` 和结构化阻断结果；裁决=`docs/reviews/p5-s1-acceptance-reconciliation-20260520.md` | 否 |
 | RR-16 | correctness 可比字段覆盖面窄 | P4/P5/P6 | 部分关闭；P5-S3 已新增 snapshot `comparable_values` 白名单并让 correctness 比较 `basic_identity`、`benchmark`、`nav_benchmark_performance`、`classified_fund_type` 的稳定子字段；P6-S1/S5 将先补机器化 contract 基础，再决定是否升级 contract-aware correctness / FQ5 | 否 |
 | RR-17 | P4 draft PR 前工作树范围不清 | P4 | 已关闭；PR inclusion set 已在 `docs/reviews/p4-pr-scope-hygiene-reconciliation-20260520.md` 明确，draft PR 必须按 include / exclude 清单准备 | 否 |
+| RR-18 | 年报下载主源不是监管披露主源 | P7 | 当前实现通过 akshare + Eastmoney PDF 下载年报；已接受 EID/证监会资本市场电子化信息披露平台作为后续主源方向，天天基金/Eastmoney 作为 fallback，需独立 P7 plan/review/implementation，不阻塞 P6-S1 | 否 |
 
 ---
 
@@ -1372,3 +1373,4 @@ P0（环境搭建）
 | 2026-05-20 | post-P5 follow-up planning | ✅ accepted | controller 裁决下一阶段第一优先级为 P6-S1 template contract manifest；artifact=`docs/reviews/post-p5-follow-up-planning-20260520.md`；当前 gate 为 `post-P5 follow-up planning accepted`，下一 gate 为 `P6-S1 template contract manifest plan/review` |
 | 2026-05-20 | P6-S1 template contract manifest plan | 🟡 drafted | plan artifact=`docs/reviews/p6-s1-template-contract-manifest-plan-20260520.md`；计划首版在 Capability 层维护 typed Python manifest，覆盖 0-7 章 CHAPTER_CONTRACT，不运行时解析 Markdown 注释，不实现 ITEM_RULE / contract audit / FQ5 upgrade；当前 gate 为 `P6-S1 template contract manifest plan drafted`，下一 gate 为 `P6-S1 plan review` |
 | 2026-05-20 | P6-S1 plan review/fix/rereview | ✅ passed | controller plan review=`docs/reviews/p6-s1-plan-review-controller-20260520.md` 发现 renderer 私有标题常量耦合风险；plan 已修订并由 re-review=`docs/reviews/p6-s1-plan-rereview-controller-20260520.md` 确认关闭；当前 gate 为 `P6-S1 implementation`，下一 gate 为 `P6-S1 code review` |
+| 2026-05-20 | annual report source strategy reconciliation | 🟡 tracked | 接受 AgentCodex 建议方向：EID/证监会资本市场电子化信息披露平台作为后续主源，天天基金/Eastmoney fallback，巨潮不作为公募基金年报主源；artifact=`docs/reviews/annual-report-source-strategy-reconciliation-20260520.md`；新增 RR-18 / P7 data-source migration，不阻塞 P6-S1 |
