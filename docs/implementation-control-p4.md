@@ -33,8 +33,8 @@ P4 必须优先解决三个底层问题：
 | 项目 | 状态 |
 |---|---|
 | 当前 phase | P5 follow-up |
-| 当前 gate | `P6-S1 acceptance / next slice planning` |
-| 下一 gate | `P6-S2 plan/review` |
+| 当前 gate | `P6-S2 implementation` |
+| 下一 gate | `P6-S2 code review` |
 | 当前分支 | `main` |
 | P4 输入池 | `docs/code_20260519.csv` |
 | 已知数据质量问题 | `016492` 重复；56 条记录、55 个唯一代码 |
@@ -78,6 +78,7 @@ P4-S1 进入 implementation 前置条件已完成：
 - P6-S1 template contract manifest plan 已 drafted 并通过 controller review/rereview，plan artifact=`docs/reviews/p6-s1-template-contract-manifest-plan-20260520.md`，review artifact=`docs/reviews/p6-s1-plan-review-controller-20260520.md`，re-review artifact=`docs/reviews/p6-s1-plan-rereview-controller-20260520.md`；计划首版在 Capability 层维护 typed Python manifest，不在运行时解析 Markdown 注释，且 production code 不依赖 renderer 私有 `_CHAPTER_TITLES`；下一 gate 为 P6-S1 implementation。
 - Annual report source strategy reconciliation 已记录，artifact=`docs/reviews/annual-report-source-strategy-reconciliation-20260520.md`；接受 EID/证监会资本市场电子化信息披露平台作为后续主源方向，天天基金/Eastmoney fallback，巨潮不作为公募基金年报主源；该项移交 P7 data-source migration，不阻塞 P6-S1。
 - P6-S1 implementation/code review 已通过 after fix，controller 裁决=`docs/reviews/p6-s1-code-review-controller-judgment-20260520.md`，review artifacts=`docs/reviews/code-review-20260520-125906.md`,`docs/reviews/code-review-20260520-130008.md`；实现新增 Capability 层 typed `CHAPTER_CONTRACT` manifest、公开 accessor、preferred_lens 解析和 fail-closed validation；当前验证 targeted `7 passed`、full suite `213 passed`、ruff passed、diff check passed；下一 gate 为 P6-S2 plan/review。
+- P6-S2 renderer contract alignment plan 已 drafted 并通过 controller review/rereview，plan artifact=`docs/reviews/p6-s2-renderer-contract-alignment-plan-20260520.md`，review artifact=`docs/reviews/p6-s2-plan-review-controller-20260520.md`，re-review artifact=`docs/reviews/p6-s2-plan-rereview-controller-20260520.md`；计划只做 renderer 标题真源收口、`RenderedChapterBlock` 和 Markdown chapter split helper，不做 ITEM_RULE / contract audit / FQ5 upgrade；下一 gate 为 P6-S2 implementation。
 
 ---
 
@@ -603,3 +604,4 @@ P4 遵循 phaseflow / gateflow 多 Agent 约定：
 | 2026-05-20 | P6-S1 plan review/fix/rereview | ✅ passed | controller plan review=`docs/reviews/p6-s1-plan-review-controller-20260520.md` 发现 renderer 私有标题常量耦合风险；plan 已修订并由 re-review=`docs/reviews/p6-s1-plan-rereview-controller-20260520.md` 确认关闭；当前 gate 为 `P6-S1 implementation`，下一 gate 为 `P6-S1 code review` |
 | 2026-05-20 | annual report source strategy reconciliation | 🟡 tracked | 接受 AgentCodex 建议方向：EID/证监会资本市场电子化信息披露平台作为后续主源，天天基金/Eastmoney fallback，巨潮不作为公募基金年报主源；artifact=`docs/reviews/annual-report-source-strategy-reconciliation-20260520.md`；移交 P7 data-source migration，不阻塞 P6-S1 |
 | 2026-05-20 | P6-S1 implementation/code review | ✅ passed after fix | implementation owner=AgentCodex；controller 裁决=`docs/reviews/p6-s1-code-review-controller-judgment-20260520.md`；MiMo/GLM reviews=`docs/reviews/code-review-20260520-130008.md`,`docs/reviews/code-review-20260520-125906.md`；新增 `fund_agent/fund/template/contracts.py`、template contract public exports、contract tests 和 README 同步；lens key / `fund_type` mismatch 测试覆盖缺口已修复；当前验证 targeted `7 passed`、full suite `213 passed`、ruff passed、diff check passed；当前 gate 为 `P6-S1 acceptance / next slice planning`，下一 gate 为 `P6-S2 plan/review` |
+| 2026-05-20 | P6-S2 renderer contract alignment plan | ✅ passed | plan artifact=`docs/reviews/p6-s2-renderer-contract-alignment-plan-20260520.md`；controller review/rereview=`docs/reviews/p6-s2-plan-review-controller-20260520.md`,`docs/reviews/p6-s2-plan-rereview-controller-20260520.md`；计划限定本 slice 只做 renderer 标题真源收口、`RenderedChapterBlock` 和 Markdown chapter split helper，不做 ITEM_RULE / contract audit / FQ5 upgrade；当前 gate 为 `P6-S2 implementation`，下一 gate 为 `P6-S2 code review` |
