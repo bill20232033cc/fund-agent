@@ -9,11 +9,16 @@ import pytest
 
 from fund_agent.fund.analysis import ChecklistItem, ChecklistResult, RabcAttribution
 from fund_agent.fund.audit.contract_rules import (
+    ContractAuditCoverageManifest,
+    ContractMustAnswerCoverageRule,
     ContractRequiredItemRule,
     ProgrammaticContractRules,
+    load_contract_audit_coverage_manifest,
     load_programmatic_contract_rules,
+    validate_contract_audit_coverage_manifest,
     validate_programmatic_contract_rules,
 )
+from fund_agent.fund.template.contracts import load_template_contract_manifest
 from fund_agent.fund.audit import ProgrammaticAuditInput, run_programmatic_audit
 from fund_agent.fund.template import render_template_report, split_rendered_chapter_blocks
 from tests.fund.template.test_renderer import _render_input
@@ -386,6 +391,212 @@ def test_programmatic_contract_rules_cover_manifest_and_fail_closed_for_invalid_
     )
     with pytest.raises(ValueError, match="未匹配 manifest"):
         validate_programmatic_contract_rules(broken_rules)
+
+
+def test_contract_audit_coverage_manifest_covers_every_must_answer() -> None:
+    """验证 must_answer 审计覆盖清单完整覆盖模板问题。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当覆盖清单缺失、重复或分类错误时抛出。
+    """
+
+    coverage_manifest = load_contract_audit_coverage_manifest()
+    template_manifest = load_template_contract_manifest()
+    manifest_questions = {
+        (chapter.chapter_id, question)
+        for chapter in template_manifest.chapters
+        for question in chapter.must_answer
+    }
+    coverage_questions = {
+        (rule.chapter_id, rule.question_text)
+        for rule in coverage_manifest.must_answer_coverages
+    }
+
+    assert coverage_questions == manifest_questions
+    assert len(coverage_manifest.must_answer_coverages) == 45
+    assert sum(
+        1
+        for rule in coverage_manifest.must_answer_coverages
+        if rule.coverage_kind == "narrative_guidance"
+    ) == 1
+
+
+def test_contract_audit_coverage_manifest_fails_closed_for_missing_rule() -> None:
+    """验证缺失 must_answer 覆盖规则会 fail closed。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当缺失覆盖未被拒绝时抛出。
+    """
+
+    coverage_manifest = load_contract_audit_coverage_manifest()
+    broken_manifest = ContractAuditCoverageManifest(
+        must_answer_coverages=coverage_manifest.must_answer_coverages[:-1],
+    )
+
+    with pytest.raises(ValueError, match="must_answer 未被覆盖规则覆盖"):
+        validate_contract_audit_coverage_manifest(broken_manifest)
+
+
+def test_contract_audit_coverage_manifest_fails_closed_for_duplicate_rule() -> None:
+    """验证重复 must_answer 覆盖规则会 fail closed。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当重复覆盖未被拒绝时抛出。
+    """
+
+    coverage_manifest = load_contract_audit_coverage_manifest()
+    first_rule = coverage_manifest.must_answer_coverages[0]
+    broken_manifest = ContractAuditCoverageManifest(
+        must_answer_coverages=(
+            first_rule,
+            *coverage_manifest.must_answer_coverages,
+        ),
+    )
+
+    with pytest.raises(ValueError, match="must_answer 覆盖规则重复"):
+        validate_contract_audit_coverage_manifest(broken_manifest)
+
+
+def test_contract_audit_coverage_manifest_fails_closed_for_unknown_required_item() -> None:
+    """验证 must_answer 覆盖引用未知 required item 会 fail closed。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当未知 required item 未被拒绝时抛出。
+    """
+
+    coverage_manifest = load_contract_audit_coverage_manifest()
+    first_rule = coverage_manifest.must_answer_coverages[0]
+    broken_rule = replace(first_rule, required_item_texts=("不存在的 required item",))
+    broken_manifest = ContractAuditCoverageManifest(
+        must_answer_coverages=(
+            broken_rule,
+            *coverage_manifest.must_answer_coverages[1:],
+        ),
+    )
+
+    with pytest.raises(ValueError, match="引用未知 required item"):
+        validate_contract_audit_coverage_manifest(broken_manifest)
+
+
+def test_contract_audit_coverage_manifest_fails_closed_for_empty_programmatic_marker() -> None:
+    """验证 programmatic_marker 覆盖类型必须声明 marker。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当空 marker 未被拒绝时抛出。
+    """
+
+    coverage_manifest = load_contract_audit_coverage_manifest()
+    first_rule = coverage_manifest.must_answer_coverages[0]
+    broken_rule = replace(
+        first_rule,
+        coverage_kind="programmatic_marker",
+        required_item_texts=(),
+        markers_any=(),
+    )
+    broken_manifest = ContractAuditCoverageManifest(
+        must_answer_coverages=(
+            broken_rule,
+            *coverage_manifest.must_answer_coverages[1:],
+        ),
+    )
+
+    with pytest.raises(ValueError, match="programmatic_marker 必须声明 marker"):
+        validate_contract_audit_coverage_manifest(broken_manifest)
+
+
+def test_contract_audit_coverage_manifest_fails_closed_for_non_programmatic_markers() -> None:
+    """验证非程序化 must_answer 覆盖不能声明 marker。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当非程序化 marker 未被拒绝时抛出。
+    """
+
+    coverage_manifest = load_contract_audit_coverage_manifest()
+    narrative_rule_index, narrative_rule = next(
+        (index, rule)
+        for index, rule in enumerate(coverage_manifest.must_answer_coverages)
+        if rule.coverage_kind == "narrative_guidance"
+    )
+    broken_rule = replace(narrative_rule, markers_any=("为什么偏偏是现在：",))
+    broken_rules = (
+        *coverage_manifest.must_answer_coverages[:narrative_rule_index],
+        broken_rule,
+        *coverage_manifest.must_answer_coverages[narrative_rule_index + 1 :],
+    )
+    broken_manifest = ContractAuditCoverageManifest(must_answer_coverages=broken_rules)
+
+    with pytest.raises(ValueError, match="非程序化 must_answer 覆盖不应声明 marker"):
+        validate_contract_audit_coverage_manifest(broken_manifest)
+
+
+def test_run_programmatic_audit_detects_missing_must_answer_programmatic_marker(monkeypatch: pytest.MonkeyPatch) -> None:
+    """验证 programmatic_marker 覆盖规则缺失 marker 时触发 C2。
+
+    Args:
+        monkeypatch: pytest monkeypatch fixture，用于替换 coverage manifest loader。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当缺失 must_answer marker 未触发 C2 时抛出。
+    """
+
+    marker_rule = ContractMustAnswerCoverageRule(
+        chapter_id=0,
+        question_text="用一句话定义这只基金到底是什么产品。",
+        coverage_kind="programmatic_marker",
+        markers_any=("不存在的独立 must_answer marker：",),
+    )
+    fixture_manifest = ContractAuditCoverageManifest(must_answer_coverages=(marker_rule,))
+    monkeypatch.setattr(
+        "fund_agent.fund.audit.audit_programmatic.load_contract_audit_coverage_manifest",
+        lambda: fixture_manifest,
+    )
+
+    result = run_programmatic_audit(_rendered_audit_input())
+
+    assert not result.passed
+    assert any(
+        issue.code == "C2" and "缺少 must_answer marker" in issue.message
+        for issue in result.issues
+    )
 
 
 def test_run_programmatic_audit_detects_missing_chapter_short_content_and_evidence() -> None:

@@ -102,6 +102,8 @@ fund-analysis CLI → FundAnalysisService → FundDataExtractor → FundDocument
 - `required_output_items`：必须输出的条目
 - `preferred_lens`：按基金类型动态适配的分析视角
 
+`must_answer` 由 Capability 层 `ContractAuditCoverageManifest` 逐条声明审计覆盖路由。当前覆盖类型包括 `covered_by_required_item`、`programmatic_marker`、`structured_data_availability`、`llm_semantic_audit`、`evidence_confirm` 和 `narrative_guidance`；其中只有 `covered_by_required_item` 和 `programmatic_marker` 属于 MVP C2 的确定性可证明子集，其余类型只作为后续 LLM / evidence / quality gate 的显式路由。
+
 ### 3.3 ITEM_RULE 机制
 
 条件型条目——某些内容只在特定条件下出现：
@@ -222,7 +224,7 @@ C（Cost）= 管理费 + 托管费 + 换手率 × 0.3%
 | R1 | 检查清单规则错误 | 阻断 | ✅ 实现 | 🆕 基金专属 |
 | R2 | 判定与评分不一致 | 阻断 | ✅ 实现 | 🆕 基金专属 |
 
-MVP 的 C2 只覆盖确定性 `CHAPTER_CONTRACT` 子集：章节块与契约元数据一致、`required_output_items` 显式 marker 存在、`must_not_cover` 显式禁止 marker 不出现。语义型章节越界、幻觉判断、证据与断言匹配和修复合同仍属于 v2。
+MVP 的 C2 只覆盖确定性 `CHAPTER_CONTRACT` 子集：章节块与契约元数据一致、`required_output_items` 显式 marker 存在、`must_answer` 独立程序 marker 存在、`must_not_cover` 显式禁止 marker 不出现。`must_answer` 的非程序化 coverage 只记录审计路由，不表示 C2 已证明语义质量；语义型章节越界、幻觉判断、证据与断言匹配和修复合同仍属于 v2。
 
 ### 5.3 修复闭环机制（v2）
 

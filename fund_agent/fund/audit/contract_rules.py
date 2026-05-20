@@ -1,15 +1,36 @@
-"""CHAPTER_CONTRACT 程序审计规则。
+"""CHAPTER_CONTRACT 审计规则与覆盖路由。
 
 本模块属于基金 Capability 层，服务 `docs/design.md` 第 5.2 节的确定性 C2 审计。
-它只维护 manifest 到程序审计 marker 的显式映射，不做 LLM 判断或语义推断。
+它维护 manifest 到确定性程序审计 marker 的显式映射，也维护 must_answer 到后续审计层的覆盖路由。
+本模块只做规则声明和 fail-closed 校验，不执行 LLM 判断、语义推断或证据复核。
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Final
+from typing import Final, Literal
 
 from fund_agent.fund.template.contracts import TemplateContractManifest, load_template_contract_manifest
+
+MustAnswerCoverageKind = Literal[
+    "covered_by_required_item",
+    "programmatic_marker",
+    "structured_data_availability",
+    "llm_semantic_audit",
+    "evidence_confirm",
+    "narrative_guidance",
+]
+
+_MUST_ANSWER_COVERAGE_KINDS: Final[frozenset[str]] = frozenset(
+    (
+        "covered_by_required_item",
+        "programmatic_marker",
+        "structured_data_availability",
+        "llm_semantic_audit",
+        "evidence_confirm",
+        "narrative_guidance",
+    )
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -40,6 +61,39 @@ class ContractForbiddenContentRule:
     chapter_id: int
     item_text: str
     forbidden_markers_any: tuple[str, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class ContractMustAnswerCoverageRule:
+    """模板 must_answer 的审计覆盖路由规则。
+
+    Attributes:
+        chapter_id: 模板章节编号。
+        question_text: manifest 中的 must_answer 原文。
+        coverage_kind: 当前问题的审计覆盖类型。
+        required_item_texts: 当 `coverage_kind` 为 `covered_by_required_item` 时，
+            用于证明该问题至少有显式输出位置的 required_output_items 原文列表。
+        markers_any: 当 `coverage_kind` 为 `programmatic_marker` 时，任一出现即可判定该问题有显式 marker。
+        rationale: 非程序化覆盖或复合映射的说明。
+    """
+
+    chapter_id: int
+    question_text: str
+    coverage_kind: MustAnswerCoverageKind
+    required_item_texts: tuple[str, ...] = ()
+    markers_any: tuple[str, ...] = ()
+    rationale: str = ""
+
+
+@dataclass(frozen=True, slots=True)
+class ContractAuditCoverageManifest:
+    """CHAPTER_CONTRACT 审计覆盖路由清单。
+
+    Attributes:
+        must_answer_coverages: 每条 must_answer 的显式覆盖路由。
+    """
+
+    must_answer_coverages: tuple[ContractMustAnswerCoverageRule, ...]
 
 
 @dataclass(frozen=True, slots=True)
@@ -115,6 +169,132 @@ _FORBIDDEN_CONTENT_RULES: Final[tuple[ContractForbiddenContentRule, ...]] = (
     ContractForbiddenContentRule(7, "不输出具体的买入金额、卖出时机或仓位比例。", ("买入金额", "卖出时机", "仓位比例")),
 )
 
+_MUST_ANSWER_COVERAGE_RULES: Final[tuple[ContractMustAnswerCoverageRule, ...]] = (
+    ContractMustAnswerCoverageRule(0, "用一句话定义这只基金到底是什么产品。", "covered_by_required_item", ("一句话这是什么基金",)),
+    ContractMustAnswerCoverageRule(
+        0,
+        "给出一个极简基金简介，帮助第一次接触这只基金的读者快速建立产品画像；只保留基金类型、基金经理、管理规模、成立时间中最必要的信息。",
+        "covered_by_required_item",
+        ("基金简介",),
+    ),
+    ContractMustAnswerCoverageRule(
+        0,
+        "回答当前判断应是值得持有、需要关注还是建议替换。",
+        "covered_by_required_item",
+        ("当前动作（🟢 值得持有 / 🟡 需要关注 / 🔴 建议替换）",),
+    ),
+    ContractMustAnswerCoverageRule(
+        0,
+        "回答这只基金当前业绩和运作处在什么状态，但只保留最能支撑当前动作判断的净值表现、超额收益或风险指标。",
+        "covered_by_required_item",
+        ("当前业绩与运作状态",),
+    ),
+    ContractMustAnswerCoverageRule(
+        0,
+        "回答支撑当前动作的最主要理由，默认压缩成 1 条；只有在第二条判断彼此独立且缺一不可时才允许写第 2 条。",
+        "covered_by_required_item",
+        ("支撑当前动作的最主要理由",),
+    ),
+    ContractMustAnswerCoverageRule(
+        0,
+        "回答当前最值得盯住的变量是什么；先点出看这类基金时通常最先要看的东西；如果基金还有一个更能决定整份报告判断的特别情况，就把它放到最前面来写。",
+        "covered_by_required_item",
+        ("当前最值得盯住的变量",),
+    ),
+    ContractMustAnswerCoverageRule(0, "回答当前最大的风险是什么，默认只保留一个主要风险。", "covered_by_required_item", ("当前最大的风险",)),
+    ContractMustAnswerCoverageRule(0, "回答下一步最小验证问题是什么，默认先写 1 个最关键问题。", "covered_by_required_item", ("下一步最小验证问题",)),
+    ContractMustAnswerCoverageRule(
+        0,
+        "回答什么变化会升级、降级或终止当前动作，优先压缩成 1 个升级阈值和 1 个降级或终止阈值。",
+        "covered_by_required_item",
+        ("什么变化会升级、降级或终止当前动作",),
+    ),
+    ContractMustAnswerCoverageRule(1, "用最低认知负担定义这只基金到底是什么产品。", "covered_by_required_item", ("基金类型与分类标签",)),
+    ContractMustAnswerCoverageRule(
+        1,
+        "说明基金的投资目标和投资策略（从招募说明书和年报§2提取）。",
+        "covered_by_required_item",
+        ("投资目标（一句话）", "投资策略概述"),
+        rationale="这是复合问题，必须同时具备投资目标和投资策略两个输出位置。",
+    ),
+    ContractMustAnswerCoverageRule(1, "说明基金的业绩基准是什么，为什么选这个基准。", "covered_by_required_item", ("业绩基准及合理性",)),
+    ContractMustAnswerCoverageRule(1, "说明基金的类型分类（按有知有行三维标签：市值×风格×管理方式）。", "covered_by_required_item", ("基金类型与分类标签",)),
+    ContractMustAnswerCoverageRule(1, "回答看这类基金时，通常最先要看什么。", "covered_by_required_item", ("看这类基金最先看什么",)),
+    ContractMustAnswerCoverageRule(
+        1,
+        "如果基金有一个不太符合常规、却会直接改变你对“这是什么产品”理解的特别情况，要说明它为什么重要。",
+        "covered_by_required_item",
+        ("会改变产品理解的特别情况（如有）",),
+    ),
+    ContractMustAnswerCoverageRule(2, "近 1 年、3 年、5 年的基金净值增长率（R）。", "covered_by_required_item", ("近 1/3/5 年净值增长率",)),
+    ContractMustAnswerCoverageRule(2, "同期业绩基准收益率（B）。", "covered_by_required_item", ("近 1/3/5 年业绩基准收益率",)),
+    ContractMustAnswerCoverageRule(2, "计算超额收益（A = R - B）。", "covered_by_required_item", ("超额收益（A = R - B）及稳定性",)),
+    ContractMustAnswerCoverageRule(2, "判断超额收益是结构性的还是阶段性的。", "covered_by_required_item", ("超额收益性质判断（结构性 vs 阶段性）",)),
+    ContractMustAnswerCoverageRule(2, "拆解成本 C：管理费 + 托管费 + 销售服务费 + 交易成本（估算）。", "covered_by_required_item", ("成本拆解（管理费、托管费、交易成本）",)),
+    ContractMustAnswerCoverageRule(
+        2,
+        "判断超额收益是否为正且稳定、是否覆盖成本。",
+        "covered_by_required_item",
+        ("超额收益（A = R - B）及稳定性", "R=A+B-C 综合评估"),
+        rationale="稳定性由超额收益条目承载，覆盖成本结论由 R=A+B-C 综合评估承载。",
+    ),
+    ContractMustAnswerCoverageRule(3, "基金经理的基本信息（从业年限、管理本基金时间、管理规模）。", "covered_by_required_item", ("基金经理基本信息",)),
+    ContractMustAnswerCoverageRule(3, "基金经理宣称的投资策略和风格（从年报§4提取）。", "covered_by_required_item", ("宣称的投资策略（§4）",)),
+    ContractMustAnswerCoverageRule(
+        3,
+        "基金经理实际的投资行为（从年报§8提取：行业配置、持仓集中度、换手率）。",
+        "covered_by_required_item",
+        ("实际投资行为（§8）",),
+    ),
+    ContractMustAnswerCoverageRule(3, "言行一致性判断：说的和做的一样吗？", "covered_by_required_item", ("言行一致性判断",)),
+    ContractMustAnswerCoverageRule(3, "风格稳定性判断：跨期风格是否漂移？", "covered_by_required_item", ("风格稳定性判断",)),
+    ContractMustAnswerCoverageRule(3, "利益一致性判断：基金经理是否持有本基金？", "covered_by_required_item", ("利益一致性判断",)),
+    ContractMustAnswerCoverageRule(4, "基金产品收益（净值增长率）。", "covered_by_required_item", ("基金产品收益 vs 投资者实际收益",)),
+    ContractMustAnswerCoverageRule(
+        4,
+        "投资者实际收益（盈利投资者占比、加权平均收益率）。",
+        "covered_by_required_item",
+        ("基金产品收益 vs 投资者实际收益", "盈利投资者占比"),
+        rationale="投资者实际收益由收益对比条目承载，盈利投资者占比由独立条目承载。",
+    ),
+    ContractMustAnswerCoverageRule(4, "行为损益 = 投资者实际收益 - 基金产品收益。", "covered_by_required_item", ("行为损益估算",)),
+    ContractMustAnswerCoverageRule(4, "份额变动趋势（资金是在追涨还是在抄底？）。", "covered_by_required_item", ("份额变动趋势",)),
+    ContractMustAnswerCoverageRule(5, "过去一年最关键的 1-3 个变化（基金经理变更、规模剧变、策略调整、大额申赎等）。", "covered_by_required_item", ("过去一年最关键的变化（1-3 个）",)),
+    ContractMustAnswerCoverageRule(5, "基金当前大致处在什么阶段（建仓期/稳定期/膨胀期/萎缩期/转型期）。", "covered_by_required_item", ("基金当前所处阶段",)),
+    ContractMustAnswerCoverageRule(5, "这些变化有没有改变第 1-4 章的判断。", "covered_by_required_item", ("变化是否改变前文判断",)),
+    ContractMustAnswerCoverageRule(
+        5,
+        "为什么偏偏是现在需要关注这只基金。",
+        "narrative_guidance",
+        rationale="这是第 5 章“当前阶段”叙事约束，当前模板没有独立输出项；C2 marker 不能证明“为什么是现在”的语义质量。",
+    ),
+    ContractMustAnswerCoverageRule(5, "接下来最该跟踪什么。", "covered_by_required_item", ("接下来最该跟踪的变量",)),
+    ContractMustAnswerCoverageRule(6, "最关键的风险或否决项（1-2 个最致命的风险）。", "covered_by_required_item", ("最关键的风险或否决项",)),
+    ContractMustAnswerCoverageRule(6, "为什么足以改变结论——这个风险推翻了哪条核心假设。", "covered_by_required_item", ("为什么足以改变结论",)),
+    ContractMustAnswerCoverageRule(6, "一票否决还是还能跟踪。", "covered_by_required_item", ("否决 vs 跟踪判断",)),
+    ContractMustAnswerCoverageRule(6, "下一轮先验证什么。", "covered_by_required_item", ("下一轮先验证什么",)),
+    ContractMustAnswerCoverageRule(7, "三选一明确立场：值得持有、需要关注、建议替换。", "covered_by_required_item", ("最终判断（🟢 值得持有 / 🟡 需要关注 / 🔴 建议替换）",)),
+    ContractMustAnswerCoverageRule(7, "为什么现在更适合这个判断，而不是另外两个。", "covered_by_required_item", ("支撑判断的核心依据（1-2 条）",)),
+    ContractMustAnswerCoverageRule(7, "当前最容易看错的地方是什么。", "covered_by_required_item", ("当前最容易看错的地方",)),
+    ContractMustAnswerCoverageRule(7, "下一轮先核实什么（1-2 个最小验证问题）。", "covered_by_required_item", ("下一轮最小验证计划",)),
+    ContractMustAnswerCoverageRule(7, "什么变化会升级、降级或终止当前判断。", "covered_by_required_item", ("危级/降级阈值",)),
+)
+
+
+def load_contract_audit_coverage_manifest() -> ContractAuditCoverageManifest:
+    """读取 CHAPTER_CONTRACT 审计覆盖路由清单。
+
+    Returns:
+        已通过 manifest 校验的审计覆盖路由清单。
+
+    Raises:
+        ValueError: 覆盖规则缺失、重复、引用未知条目或类型字段无效时抛出。
+    """
+
+    manifest = ContractAuditCoverageManifest(must_answer_coverages=_MUST_ANSWER_COVERAGE_RULES)
+    validate_contract_audit_coverage_manifest(manifest)
+    return manifest
+
 
 def load_programmatic_contract_rules() -> ProgrammaticContractRules:
     """读取程序化 CHAPTER_CONTRACT 审计规则。
@@ -131,6 +311,7 @@ def load_programmatic_contract_rules() -> ProgrammaticContractRules:
         forbidden_contents=_FORBIDDEN_CONTENT_RULES,
     )
     validate_programmatic_contract_rules(rules)
+    load_contract_audit_coverage_manifest()
     return rules
 
 
@@ -150,6 +331,191 @@ def validate_programmatic_contract_rules(rules: ProgrammaticContractRules) -> No
     manifest = load_template_contract_manifest()
     _validate_required_item_rules(rules.required_items, manifest)
     _validate_forbidden_content_rules(rules.forbidden_contents, manifest)
+
+
+def validate_contract_audit_coverage_manifest(
+    coverage_manifest: ContractAuditCoverageManifest,
+) -> None:
+    """校验 CHAPTER_CONTRACT 审计覆盖路由清单。
+
+    Args:
+        coverage_manifest: 待校验的 must_answer 覆盖清单。
+
+    Returns:
+        校验通过时返回 `None`。
+
+    Raises:
+        ValueError: 覆盖规则缺失、重复、引用未知条目或类型字段无效时抛出。
+    """
+
+    template_manifest = load_template_contract_manifest()
+    manifest_questions = _manifest_must_answer_questions(template_manifest)
+    manifest_required_items = _manifest_required_output_items(template_manifest)
+    required_rule_items = {(rule.chapter_id, rule.item_text) for rule in _REQUIRED_ITEM_RULES}
+
+    seen_questions: set[tuple[int, str]] = set()
+    for rule in coverage_manifest.must_answer_coverages:
+        key = (rule.chapter_id, rule.question_text)
+        if key in seen_questions:
+            raise ValueError(f"must_answer 覆盖规则重复：chapter_id={rule.chapter_id}, question={rule.question_text}")
+        seen_questions.add(key)
+        if key not in manifest_questions:
+            raise ValueError(f"must_answer 覆盖规则未匹配 manifest：chapter_id={rule.chapter_id}, question={rule.question_text}")
+        _validate_must_answer_coverage_rule(rule, manifest_required_items, required_rule_items)
+
+    missing_questions = manifest_questions - seen_questions
+    if missing_questions:
+        missing_text = "、".join(f"{chapter_id}:{question}" for chapter_id, question in sorted(missing_questions))
+        raise ValueError(f"must_answer 未被覆盖规则覆盖：{missing_text}")
+
+
+def _manifest_must_answer_questions(
+    manifest: TemplateContractManifest,
+) -> set[tuple[int, str]]:
+    """提取模板中的 must_answer 问题集合。
+
+    Args:
+        manifest: 模板契约清单。
+
+    Returns:
+        `(chapter_id, question_text)` 集合。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return {
+        (chapter.chapter_id, question)
+        for chapter in manifest.chapters
+        for question in chapter.must_answer
+    }
+
+
+def _manifest_required_output_items(
+    manifest: TemplateContractManifest,
+) -> set[tuple[int, str]]:
+    """提取模板中的 required_output_items 集合。
+
+    Args:
+        manifest: 模板契约清单。
+
+    Returns:
+        `(chapter_id, item_text)` 集合。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return {
+        (chapter.chapter_id, item)
+        for chapter in manifest.chapters
+        for item in chapter.required_output_items
+    }
+
+
+def _validate_must_answer_coverage_rule(
+    rule: ContractMustAnswerCoverageRule,
+    manifest_required_items: set[tuple[int, str]],
+    required_rule_items: set[tuple[int, str]],
+) -> None:
+    """校验单条 must_answer 覆盖规则。
+
+    Args:
+        rule: 待校验的 must_answer 覆盖规则。
+        manifest_required_items: 模板 required_output_items 集合。
+        required_rule_items: 已配置确定性 marker 的 required_output_items 集合。
+
+    Returns:
+        校验通过时返回 `None`。
+
+    Raises:
+        ValueError: 覆盖类型、marker 或 required item 映射无效时抛出。
+    """
+
+    if rule.coverage_kind not in _MUST_ANSWER_COVERAGE_KINDS:
+        raise ValueError(f"未知 must_answer 覆盖类型：{rule.coverage_kind}")
+    if rule.coverage_kind == "covered_by_required_item":
+        _validate_required_item_coverage_rule(rule, manifest_required_items, required_rule_items)
+        return
+    if rule.coverage_kind == "programmatic_marker":
+        _validate_programmatic_marker_coverage_rule(rule)
+        return
+    _validate_non_programmatic_coverage_rule(rule)
+
+
+def _validate_required_item_coverage_rule(
+    rule: ContractMustAnswerCoverageRule,
+    manifest_required_items: set[tuple[int, str]],
+    required_rule_items: set[tuple[int, str]],
+) -> None:
+    """校验 required_output_item 覆盖类型规则。
+
+    Args:
+        rule: 待校验的 must_answer 覆盖规则。
+        manifest_required_items: 模板 required_output_items 集合。
+        required_rule_items: 已配置确定性 marker 的 required_output_items 集合。
+
+    Returns:
+        校验通过时返回 `None`。
+
+    Raises:
+        ValueError: required item 缺失、未知或未配置确定性 marker 时抛出。
+    """
+
+    if not rule.required_item_texts:
+        raise ValueError(f"covered_by_required_item 必须声明 required item：chapter_id={rule.chapter_id}")
+    if rule.markers_any:
+        raise ValueError(f"covered_by_required_item 不应直接声明 marker：chapter_id={rule.chapter_id}")
+    for item_text in rule.required_item_texts:
+        key = (rule.chapter_id, item_text)
+        if key not in manifest_required_items:
+            raise ValueError(f"must_answer 覆盖引用未知 required item：chapter_id={rule.chapter_id}, item={item_text}")
+        if key not in required_rule_items:
+            raise ValueError(f"must_answer 覆盖引用未配置 marker 的 required item：chapter_id={rule.chapter_id}, item={item_text}")
+
+
+def _validate_programmatic_marker_coverage_rule(
+    rule: ContractMustAnswerCoverageRule,
+) -> None:
+    """校验 programmatic_marker 覆盖类型规则。
+
+    Args:
+        rule: 待校验的 must_answer 覆盖规则。
+
+    Returns:
+        校验通过时返回 `None`。
+
+    Raises:
+        ValueError: marker 缺失或同时声明 required item 时抛出。
+    """
+
+    if not rule.markers_any:
+        raise ValueError(f"programmatic_marker 必须声明 marker：chapter_id={rule.chapter_id}")
+    if rule.required_item_texts:
+        raise ValueError(f"programmatic_marker 不应声明 required item：chapter_id={rule.chapter_id}")
+
+
+def _validate_non_programmatic_coverage_rule(
+    rule: ContractMustAnswerCoverageRule,
+) -> None:
+    """校验非程序化覆盖类型规则。
+
+    Args:
+        rule: 待校验的 must_answer 覆盖规则。
+
+    Returns:
+        校验通过时返回 `None`。
+
+    Raises:
+        ValueError: 缺少 rationale 或错误声明 marker/required item 时抛出。
+    """
+
+    if rule.markers_any:
+        raise ValueError(f"非程序化 must_answer 覆盖不应声明 marker：chapter_id={rule.chapter_id}")
+    if rule.required_item_texts:
+        raise ValueError(f"非程序化 must_answer 覆盖不应声明 required item：chapter_id={rule.chapter_id}")
+    if not rule.rationale:
+        raise ValueError(f"非程序化 must_answer 覆盖必须声明 rationale：chapter_id={rule.chapter_id}")
 
 
 def _validate_required_item_rules(

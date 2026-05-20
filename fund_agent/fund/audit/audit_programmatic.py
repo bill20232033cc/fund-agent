@@ -13,7 +13,11 @@ from typing import Final, Literal
 
 from fund_agent.fund.analysis.checklist import ChecklistItem, ChecklistResult
 from fund_agent.fund.analysis.r_abc import RabcAttribution
-from fund_agent.fund.audit.contract_rules import load_programmatic_contract_rules
+from fund_agent.fund.audit.contract_rules import (
+    ContractMustAnswerCoverageRule,
+    load_contract_audit_coverage_manifest,
+    load_programmatic_contract_rules,
+)
 from fund_agent.fund.template.chapter_blocks import (
     EVIDENCE_APPENDIX_HEADING,
     RenderedChapterBlock,
@@ -318,6 +322,12 @@ def _audit_contract_conformance(
     issues: list[AuditIssue] = []
     issues.extend(_audit_chapter_block_metadata(chapter_blocks))
     rules = load_programmatic_contract_rules()
+    coverage_manifest = load_contract_audit_coverage_manifest()
+    marker_coverage_rules = tuple(
+        rule
+        for rule in coverage_manifest.must_answer_coverages
+        if rule.coverage_kind == "programmatic_marker"
+    )
     for block in chapter_blocks:
         for rule in rules.required_items:
             if rule.chapter_id != block.chapter_id:
@@ -330,6 +340,7 @@ def _audit_contract_conformance(
                         location=f"{_chapter_location(block)}:{rule.item_text}",
                     )
                 )
+        issues.extend(_audit_must_answer_programmatic_markers(block, marker_coverage_rules))
         for rule in rules.forbidden_contents:
             if rule.chapter_id != block.chapter_id:
                 continue
@@ -348,6 +359,39 @@ def _audit_contract_conformance(
                     )
                 )
     return tuple(issues)
+
+
+def _audit_must_answer_programmatic_markers(
+    block: RenderedChapterBlock,
+    marker_coverage_rules: tuple[ContractMustAnswerCoverageRule, ...],
+) -> list[AuditIssue]:
+    """审计 must_answer 的独立确定性 marker 规则。
+
+    Args:
+        block: 已渲染章节块。
+        marker_coverage_rules: 覆盖类型为 `programmatic_marker` 的 must_answer 规则。
+
+    Returns:
+        C2 契约问题列表。
+
+    Raises:
+        无显式抛出。
+    """
+
+    issues: list[AuditIssue] = []
+    for rule in marker_coverage_rules:
+        if rule.chapter_id != block.chapter_id:
+            continue
+        if any(marker in block.body_markdown for marker in rule.markers_any):
+            continue
+        issues.append(
+            _issue(
+                code="C2",
+                message=f"模板第{block.chapter_id}章缺少 must_answer marker：{rule.question_text}。",
+                location=f"{_chapter_location(block)}:{rule.question_text}",
+            )
+        )
+    return issues
 
 
 def _audit_chapter_block_metadata(
