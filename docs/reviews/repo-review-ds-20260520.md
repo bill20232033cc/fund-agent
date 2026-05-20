@@ -1,5 +1,33 @@
 # Code Review — Repo-Level Deepreview
 
+## Controller Reconciliation（2026-05-21）
+
+以下 findings 已经 controller 直接代码复查（同源验证），并与截至 `18cb94d` 的后续提交对齐：
+
+**✅ 已接受并修复 / 收口**：
+- **F-001（CLAUDE.md 错误）**：已在 `26adce7` 重写为 fund-agent 项目说明，`post-p7-follow-up-planning-20260521.md` 记录验证。
+- **F-002 / F-006 / F-021（PDF 校验、原子写入、OSError 与 cache 完整性）**：已在 `58bba13` 修复，EID/Eastmoney 均校验 `%PDF-`、原子写入并分类来源不可用错误。
+- **F-003（QDII/FOF 由 benchmark 误触发）**：已在 `95dd76c` 修复，QDII/FOF 分类不再消费业绩比较基准；见 `post-p7-fund-type-trigger-reconciliation-20260521.md`。
+- **F-005（block + not_run exit semantics）**：已在 `58bba13` 修复为结构化 `QualityGateNotRunBlockedError` / exit 2。
+- **F-007（文档缓存并发无锁）**：已在 `a303d7f` 和 `95dd76c` 做同进程同实例最小串行保护；parsed report load/save 与 initialize 加锁，EID 同 key fetch 加锁。跨进程锁仍是残余风险。
+- **F-009（partial 子字段无 note）**：已在 `aec9310` 收口，策略文本、利益一致性、持有人结构 partial direct 会写 note；换手率保持核心数值边界。见 `post-p7-manager-partial-note-reconciliation-20260521.md`。
+- **F-010（`parse_ratio` 数值型 >1 歧义）**：已在 `18cb94d` 明确契约：字符串按披露文本解析，数值型输入视为已标准化小数比例；见 `post-p7-ratio-input-contract-reconciliation-20260521.md`。
+- **F-011（增强指数关键词过宽）**：已在 `95dd76c` 收窄为身份级短语 `指数增强 / 增强指数 / 增强型指数`。
+- **F-012（facet map 缺 bond/QDII/FOF）**：已在 `55c07dc` 补全，并覆盖空格别名；见 `post-p7-item-rule-facet-reconciliation-20260521.md`。
+- **F-013（fund_code 格式校验缺失）**：已在 `58bba13` 于 `FundAnalysisService._validate_request()` 修复 analyze 入口。
+- **F-015（design/control stale）**：已在 `eb32912` 做专项 reconciliation；见 `design-control-code-reconciliation-20260521.md`。
+
+**🚧 仍保留为后续 design slice / 非本轮代码修复**：
+- **F-004（must_answer 未由程序审计消费）**：确认仍成立。当前 C2 只做确定性 marker / 元数据检查；`must_answer` 语义性强，应在后续审计设计中决定程序化 marker、LLM 审计或 evidence confirm 的职责边界。
+- **F-008（renderer 不调用 `resolve_preferred_lens()`）**：确认仍成立。当前 `preferred_lens` 用于 manifest 校验与 extraction score 的模板契约适用性，renderer 尚未把 lens 注入报告文本；需另起模板渲染 design slice，避免简单拼接 lens 文案造成报告结构漂移。
+- **F-014（EID schema error 是否 fallback）**：维持 `58bba13` controller 裁决：官方源 schema/mismatch fail-closed，不用 fallback 隐藏官方源漂移，除非设计明确改变来源策略。
+- **F-020（block 策略 cheap selected-pool rejection）**：性能优化项，涉及 Service 行为顺序；未作为 correctness blocker 处理。
+- **F-023（C2 marker 粒度）**：与 F-004 同属审计契约增强，不在本轮局部修补中处理。
+
+以下 artifact 保留下方原始 subagent 输出供追溯；本节为当前 controller 裁决。
+
+---
+
 ## Scope
 
 - **Mode**: all repository
