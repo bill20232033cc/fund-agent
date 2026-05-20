@@ -33,8 +33,8 @@ P4 必须优先解决三个底层问题：
 | 项目 | 状态 |
 |---|---|
 | 当前 phase | P7 annual report source migration |
-| 当前 gate | `ready-to-open-draft-PR` |
-| 下一 gate | `draft PR gate` |
+| 当前 gate | `P7 closed / integrated on main` |
+| 下一 gate | `repo-level deepreview --all` |
 | 当前分支 | `main` |
 | P4 输入池 | `docs/code_20260519.csv` |
 | 已知数据质量问题 | `016492` 重复；56 条记录、55 个唯一代码 |
@@ -629,3 +629,4 @@ P4 遵循 phaseflow / gateflow 多 Agent 约定：
 | 2026-05-20 | P7 aggregate deepreview/fix | ✅ fix implemented | MiMo/GLM aggregate reviews=`docs/reviews/p7-aggregate-deepreview-mimo-20260520.md`,`docs/reviews/p7-aggregate-deepreview-glm-20260520.md`；controller 接受 MiMo medium finding 并完成 cache source metadata resilience fix，fix artifact=`docs/reviews/p7-aggregate-fix-20260520.md`；坏 JSON、非对象 JSON 或未知 `source` 的 `source_metadata_json` 现在降级为 `None`，不阻断 PDF path cache hit；low findings 保留为 residual risk；当前验证 cache focused `11 passed`、full suite `293 passed`、ruff passed、diff check passed；当前 gate 为 `P7 aggregate targeted re-review`，下一 gate 为 `P7 aggregate acceptance / ready-to-open-draft-PR reconciliation` |
 | 2026-05-20 | P7 aggregate targeted re-review | ✅ accepted | MiMo/GLM targeted re-review 均 PASS，artifacts=`docs/reviews/p7-aggregate-rereview-mimo-20260520.md`,`docs/reviews/p7-aggregate-rereview-glm-20260520.md`；controller acceptance=`docs/reviews/p7-aggregate-rereview-controller-acceptance-20260520.md`；确认 accepted finding 已关闭，模型层来源闭集校验仍 fail-closed，Service/UI/Engine/CLI 无 source awareness 泄漏；当前验证 cache focused `11 passed`、full suite `293 passed`、ruff passed、diff check passed；当前 gate 为 `P7 acceptance / ready-to-open-draft-PR reconciliation`，下一 gate 为 `ready-to-open-draft-PR` |
 | 2026-05-20 | P7 acceptance / ready-to-open-draft-PR reconciliation | ✅ accepted | artifact=`docs/reviews/p7-acceptance-ready-to-open-draft-pr-reconciliation-20260520.md`；design/control/code 三方一致：EID/证监会统一披露平台为年报主源，Eastmoney fallback，经统一文档仓库接口封装；P7-S1 至 P7-S4、aggregate review/fix/rereview 均已关闭并推送到 `origin/main`；residual risks 均为低风险后续增强；当前 gate 为 `ready-to-open-draft-PR`，下一 gate 为 `draft PR gate` |
+| 2026-05-20 | P7 draft PR gate reconciliation | ✅ not applicable | artifact=`docs/reviews/p7-draft-pr-gate-reconciliation-20260520.md`；用户授权 draft PR gate 后核对发现 P7 已直接集成并推送到 `origin/main`，`HEAD == origin/main == merge-base`，当前无开放 PR，无法创建非空 draft PR；P7 状态裁决为 `closed / integrated on main`；下一 gate 为用户要求的 repo-level deepreview --all |
