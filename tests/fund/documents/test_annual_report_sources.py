@@ -1,5 +1,6 @@
 """年报来源编排测试。"""
 
+import asyncio
 import json
 from pathlib import Path
 from urllib.parse import parse_qs
@@ -791,6 +792,43 @@ async def test_eid_source_without_force_refresh_reuses_existing_pdf_after_metada
         "/fund/disclose/validate_fund.do",
         "/fund/disclose/advanced_search_report.do",
     ]
+
+
+@pytest.mark.asyncio
+async def test_eid_source_serializes_same_document_downloads(tmp_path: Path) -> None:
+    """验证同一基金年份的 EID 并发请求只下载一次 PDF。
+
+    Args:
+        tmp_path: pytest 临时目录。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当同 key 并发请求重复下载 PDF 时抛出。
+    """
+
+    server = _EidMockServer(pdf_bytes=b"%PDF-concurrent")
+    source = EidAnnualReportSource(
+        base_url=_EID_BASE_URL,
+        cache_dir=tmp_path,
+        client_factory=server.client_factory,
+    )
+
+    results = await asyncio.gather(
+        source.fetch_annual_report_pdf("004393", 2024),
+        source.fetch_annual_report_pdf("004393", 2024),
+    )
+
+    assert {result.pdf_path for result in results} == {
+        tmp_path / "004393_2024_annual_report_eid.pdf"
+    }
+    assert results[0].pdf_path.read_bytes() == b"%PDF-concurrent"
+    assert [
+        request.url.path
+        for request in server.requests
+        if request.url.path == "/fund/disclose/instance_show_pdf_id.do"
+    ] == ["/fund/disclose/instance_show_pdf_id.do"]
 
 
 @pytest.mark.asyncio

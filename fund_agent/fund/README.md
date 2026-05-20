@@ -290,7 +290,7 @@ C2 当前只做确定性 marker / 元数据检查，不调用 LLM，不判断语
 
 - `models.py`：`DocumentKey`、`ParsedAnnualReport`、`ReportSection`、`ParsedTable`
 - `repository.py`：对外唯一公开读取入口 `FundDocumentRepository`
-- `cache.py`：raw PDF 元信息缓存与 parsed report 物化缓存；parsed report 命中前会检查最小正文长度和关键章节集合，避免历史低质量解析物被当作真实年报复用；损坏的来源元数据只降级为空元数据，不阻断 PDF 路径缓存读取
+- `cache.py`：raw PDF 元信息缓存与 parsed report 物化缓存；parsed report 命中前会检查最小正文长度和关键章节集合，避免历史低质量解析物被当作真实年报复用；损坏的来源元数据只降级为空元数据，不阻断 PDF 路径缓存读取；同一缓存实例内 parsed report 读写串行执行，避免同进程并发读写同一 SQLite/JSON 物化状态
 - `adapters/annual_report_pdf.py`：把底层 PDF helper 适配为统一仓库返回值
 
 基础画像 extractor 位于 `fund_agent/fund/extractors/`：
@@ -338,6 +338,7 @@ C2 当前只做确定性 marker / 元数据检查，不调用 LLM，不判断语
 - `pdf/`：底层 PDF helper。当前包含：
   - `downloader.py`：仅供仓库内部使用的 PDF 下载 helper，会写入本地缓存
   - `parser.py`：PDF 全文、表格与章节定位原型
+- EID 年报来源对同一基金代码/年份的 PDF 下载使用实例级锁；同 key 并发请求会复用首个请求落地的 PDF 缓存。该保护不等同于跨进程锁或完整仓库事务。
 - `audit/`：程序审计规则。当前包含 `audit_programmatic.py`，执行 P1/P2/P3/L1/R1/R2。
 
 ## 当前边界

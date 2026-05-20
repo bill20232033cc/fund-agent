@@ -184,6 +184,7 @@ class AnnualReportDocumentCache:
         self.root_dir = root_dir or DOCUMENT_CACHE_ROOT
         self.parsed_reports_dir = self.root_dir / PARSED_REPORT_CACHE_DIRNAME
         self.sqlite_path = self.root_dir / SQLITE_CACHE_FILENAME
+        self._lock = asyncio.Lock()
 
     async def initialize(self) -> None:
         """初始化缓存目录与 SQLite schema。
@@ -437,7 +438,8 @@ class AnnualReportDocumentCache:
         """
 
         await self.initialize()
-        return await asyncio.to_thread(self._load_parsed_report_sync, key)
+        async with self._lock:
+            return await asyncio.to_thread(self._load_parsed_report_sync, key)
 
     def _load_parsed_report_sync(self, key: DocumentKey) -> ParsedAnnualReport | None:
         """同步读取已解析年报缓存。
@@ -504,12 +506,13 @@ class AnnualReportDocumentCache:
         """
 
         await self.initialize()
-        await asyncio.to_thread(
-            self._save_parsed_report_sync,
-            report,
-            pdf_path,
-            source_metadata,
-        )
+        async with self._lock:
+            await asyncio.to_thread(
+                self._save_parsed_report_sync,
+                report,
+                pdf_path,
+                source_metadata,
+            )
 
     def _save_parsed_report_sync(
         self,

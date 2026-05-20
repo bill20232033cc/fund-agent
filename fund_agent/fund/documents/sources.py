@@ -273,6 +273,7 @@ class EidAnnualReportSource:
         self._cache_dir = cache_dir or DEFAULT_CACHE_DIR
         self._config = config or AnnualReportSourceConfig()
         self._client_factory = client_factory or self._default_client_factory
+        self._cache_locks: dict[str, asyncio.Lock] = {}
 
     def _default_client_factory(self) -> AbstractAsyncContextManager[Any]:
         """创建默认 HTTP 客户端。
@@ -315,32 +316,36 @@ class EidAnnualReportSource:
         """
 
         normalized_fund_code = _normalize_fund_code(fund_code)
-        async with self._client_factory() as client:
-            validated_fund = await self._validate_fund(client, normalized_fund_code)
-            candidate = await self._search_annual_report(
-                client,
-                normalized_fund_code,
-                year,
-                validated_fund,
-            )
-            pdf_url = _build_eid_pdf_url(self._base_url, candidate.upload_info_id)
-            metadata = _build_eid_metadata(pdf_url, candidate)
-            pdf_path = self._build_pdf_cache_path(normalized_fund_code, year)
-            if await asyncio.to_thread(pdf_path.exists) and not force_refresh:
-                if await asyncio.to_thread(_is_valid_cached_pdf, pdf_path):
-                    return AnnualReportSourceResult(pdf_path=pdf_path, metadata=metadata)
-                await asyncio.to_thread(pdf_path.unlink, missing_ok=True)
-            response = await _request_with_retries(
-                client,
-                "GET",
-                pdf_url,
-                timeout=self._config.pdf_timeout_seconds,
-                retry_attempts=self._config.retry_attempts,
-            )
-            _validate_pdf_response(response)
-            await asyncio.to_thread(pdf_path.parent.mkdir, parents=True, exist_ok=True)
-            await asyncio.to_thread(_write_pdf_bytes_atomic, pdf_path, response.content)
-            return AnnualReportSourceResult(pdf_path=pdf_path, metadata=metadata)
+        lock_key = f"{normalized_fund_code}:{year}"
+        if lock_key not in self._cache_locks:
+            self._cache_locks[lock_key] = asyncio.Lock()
+        async with self._cache_locks[lock_key]:
+            async with self._client_factory() as client:
+                validated_fund = await self._validate_fund(client, normalized_fund_code)
+                candidate = await self._search_annual_report(
+                    client,
+                    normalized_fund_code,
+                    year,
+                    validated_fund,
+                )
+                pdf_url = _build_eid_pdf_url(self._base_url, candidate.upload_info_id)
+                metadata = _build_eid_metadata(pdf_url, candidate)
+                pdf_path = self._build_pdf_cache_path(normalized_fund_code, year)
+                if await asyncio.to_thread(pdf_path.exists) and not force_refresh:
+                    if await asyncio.to_thread(_is_valid_cached_pdf, pdf_path):
+                        return AnnualReportSourceResult(pdf_path=pdf_path, metadata=metadata)
+                    await asyncio.to_thread(pdf_path.unlink, missing_ok=True)
+                response = await _request_with_retries(
+                    client,
+                    "GET",
+                    pdf_url,
+                    timeout=self._config.pdf_timeout_seconds,
+                    retry_attempts=self._config.retry_attempts,
+                )
+                _validate_pdf_response(response)
+                await asyncio.to_thread(pdf_path.parent.mkdir, parents=True, exist_ok=True)
+                await asyncio.to_thread(_write_pdf_bytes_atomic, pdf_path, response.content)
+                return AnnualReportSourceResult(pdf_path=pdf_path, metadata=metadata)
 
     async def _validate_fund(self, client: Any, fund_code: str) -> _EidValidatedFund:
         """调用 EID 基金代码校验接口。

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import sqlite3
 from dataclasses import replace
@@ -529,6 +530,72 @@ async def test_cache_returns_none_for_corrupt_parsed_report_payload(tmp_path: Pa
         connection.commit()
 
     assert await cache.load_parsed_report(document_key) is None
+
+
+@pytest.mark.asyncio
+async def test_parsed_report_load_and_save_are_serialized_per_cache_instance(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """验证 parsed report 读写在同一缓存实例内串行执行。
+
+    Args:
+        tmp_path: pytest 提供的临时目录。
+        monkeypatch: pytest 提供的运行时打补丁工具。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 parsed report 读写临界区发生重入时抛出。
+    """
+
+    cache = AnnualReportDocumentCache(tmp_path / "documents-cache")
+    document_key = DocumentKey(fund_code="110011", year=2024)
+    report = _build_stub_report("110011", 2024)
+    active_operations = 0
+    max_active_operations = 0
+    original_load = cache._load_parsed_report_sync
+    original_save = cache._save_parsed_report_sync
+
+    def _enter_operation() -> None:
+        nonlocal active_operations, max_active_operations
+        active_operations += 1
+        max_active_operations = max(max_active_operations, active_operations)
+
+    def _exit_operation() -> None:
+        nonlocal active_operations
+        active_operations -= 1
+
+    def _serialized_load(key: DocumentKey) -> ParsedAnnualReport | None:
+        _enter_operation()
+        try:
+            return original_load(key)
+        finally:
+            _exit_operation()
+
+    def _serialized_save(
+        parsed_report: ParsedAnnualReport,
+        pdf_path: Path | None,
+        source_metadata: AnnualReportSourceMetadata | None,
+    ) -> None:
+        _enter_operation()
+        try:
+            original_save(parsed_report, pdf_path, source_metadata)
+        finally:
+            _exit_operation()
+
+    monkeypatch.setattr(cache, "_load_parsed_report_sync", _serialized_load)
+    monkeypatch.setattr(cache, "_save_parsed_report_sync", _serialized_save)
+
+    await asyncio.gather(
+        cache.save_parsed_report(report),
+        cache.load_parsed_report(document_key),
+        cache.save_parsed_report(report),
+        cache.load_parsed_report(document_key),
+    )
+
+    assert max_active_operations == 1
 
 
 @pytest.mark.asyncio
