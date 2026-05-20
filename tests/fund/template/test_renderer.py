@@ -30,7 +30,10 @@ from fund_agent.fund.extractors.models import EvidenceAnchor, ExtractedField
 from fund_agent.fund.template import (
     TemplateRenderInput,
     build_programmatic_audit_input,
+    get_chapter_contract,
+    get_template_chapter_heading,
     render_template_report,
+    split_rendered_chapter_blocks,
 )
 
 _REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -531,6 +534,143 @@ def test_render_template_report_contains_exact_eight_design_chapters() -> None:
     assert result.report_markdown.startswith("# 0. 投资要点概览")
 
 
+def test_render_template_report_exposes_contract_aligned_chapter_blocks() -> None:
+    """验证渲染结果暴露与 CHAPTER_CONTRACT 对齐的章节块。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当章节块未对齐 manifest 契约时抛出。
+    """
+
+    result = render_template_report(_render_input())
+
+    assert len(result.chapter_blocks) == 8
+    assert tuple(block.chapter_id for block in result.chapter_blocks) == tuple(range(8))
+    for block in result.chapter_blocks:
+        contract = get_chapter_contract(block.chapter_id)
+        assert block.title == contract.title
+        assert block.heading == get_template_chapter_heading(block.chapter_id)
+        assert block.markdown.startswith(block.heading)
+        assert block.body_markdown
+        assert block.contract == contract
+    assert result.chapter_blocks[2].contract.required_output_items
+    assert result.audit_input.report_markdown == result.report_markdown
+    assert result.report_markdown
+    assert result.audit_input
+    assert result.evidence_anchors
+
+
+def test_split_rendered_chapter_blocks_matches_render_result_and_excludes_appendix() -> None:
+    """验证公共 splitter 与渲染结果共用章节块语义。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 splitter 吞入附录或破坏 Markdown 兼容时抛出。
+    """
+
+    result = render_template_report(_render_input())
+    blocks = split_rendered_chapter_blocks(result.report_markdown)
+    joined_blocks = "\n\n".join(block.markdown for block in blocks)
+
+    assert blocks == result.chapter_blocks
+    assert "## 证据与出处" not in result.chapter_blocks[7].body_markdown
+    assert result.report_markdown.startswith(joined_blocks)
+
+
+@pytest.mark.parametrize(
+    ("broken_markdown", "match_text"),
+    (
+        ("", "为空"),
+        ("# 0. 错误标题\n\nbody", "不匹配"),
+        ("# 8. 越界\n\nbody", "越界"),
+        ("# 非模板标题\n\nbody", "非模板一级标题"),
+    ),
+)
+def test_split_rendered_chapter_blocks_fails_closed_for_invalid_headings(
+    broken_markdown: str,
+    match_text: str,
+) -> None:
+    """验证 splitter 对非法标题 fail closed。
+
+    Args:
+        broken_markdown: 非法 Markdown fixture。
+        match_text: 预期错误信息片段。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当非法标题未抛出 `ValueError` 时抛出。
+    """
+
+    with pytest.raises(ValueError, match=match_text):
+        split_rendered_chapter_blocks(broken_markdown)
+
+
+def test_split_rendered_chapter_blocks_fails_closed_for_missing_duplicate_and_order() -> None:
+    """验证 splitter 对缺章、重复和乱序 fail closed。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当章节序列错误未抛出 `ValueError` 时抛出。
+    """
+
+    result = render_template_report(_render_input())
+    chapter_1 = result.chapter_blocks[1].markdown
+    chapter_2 = result.chapter_blocks[2].markdown
+
+    missing = result.report_markdown.replace(f"\n\n{chapter_2}", "", 1)
+    duplicate = result.report_markdown.replace(f"\n\n{chapter_2}", f"\n\n{chapter_1}\n\n{chapter_2}", 1)
+    out_of_order = result.report_markdown.replace(f"\n\n{chapter_1}\n\n{chapter_2}", f"\n\n{chapter_2}\n\n{chapter_1}", 1)
+
+    with pytest.raises(ValueError, match="0..7"):
+        split_rendered_chapter_blocks(missing)
+    with pytest.raises(ValueError, match="重复"):
+        split_rendered_chapter_blocks(duplicate)
+    with pytest.raises(ValueError, match="0..7"):
+        split_rendered_chapter_blocks(out_of_order)
+
+
+def test_split_rendered_chapter_blocks_fails_closed_for_embedded_non_template_heading() -> None:
+    """验证 splitter 拒绝合法章节序列中混入的非模板一级标题。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当混入非模板一级标题未抛出 `ValueError` 时抛出。
+    """
+
+    result = render_template_report(_render_input())
+    chapter_2 = result.chapter_blocks[2].markdown
+    broken_markdown = result.report_markdown.replace(
+        f"\n\n{chapter_2}",
+        f"\n\n# 非法标题\n\nbody\n\n{chapter_2}",
+        1,
+    )
+
+    with pytest.raises(ValueError, match="非模板一级标题"):
+        split_rendered_chapter_blocks(broken_markdown)
+
+
 def test_render_template_report_formats_evidence_anchors_with_year_section_and_optional_row() -> None:
     """验证正文证据锚点格式包含年份、章节和描述。
 
@@ -699,7 +839,7 @@ def test_fund_readme_has_single_current_template_layer_entry() -> None:
     readme_text = (_REPO_ROOT / "fund_agent/fund/README.md").read_text(encoding="utf-8")
     current_entry = (
         "- `template/`：模板渲染能力。当前包含 `renderer.py`，"
-        "只消费 P1/P2 结构化结果并输出 8 章 Markdown 与程序审计输入。"
+        "只消费 P1/P2 结构化结果并输出 8 章 Markdown、章节块与程序审计输入。"
     )
 
     assert readme_text.count(current_entry) == 1

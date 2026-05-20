@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+import re
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from decimal import Decimal
@@ -21,18 +22,16 @@ from fund_agent.fund.analysis.risk_check import RiskCheckResult, StressTestResul
 from fund_agent.fund.audit import ProgrammaticAuditInput
 from fund_agent.fund.data_extractor import StructuredFundDataBundle
 from fund_agent.fund.extractors.models import EvidenceAnchor, ExtractedField
+from fund_agent.fund.template.contracts import ChapterContract, get_chapter_contract
 
 TemplateFinalJudgment = Literal["worth_holding", "needs_attention", "suggest_replace"]
 
-_CHAPTER_TITLES: Final[tuple[str, ...]] = (
-    "投资要点概览",
-    "这只基金到底是什么产品",
-    "R=A+B-C 收益归因",
-    "基金经理画像与言行一致性",
-    "投资者获得感",
-    "当前阶段与关键变化",
-    "核心风险与否决项",
-    "是否值得持有——最终判断",
+_EXPECTED_CHAPTER_IDS: Final[tuple[int, ...]] = tuple(range(8))
+_TEMPLATE_HEADING_RE: Final[re.Pattern[str]] = re.compile(r"(?m)^#\s+(\d+)\.\s+(.+?)\s*$")
+_TOP_LEVEL_HEADING_RE: Final[re.Pattern[str]] = re.compile(r"(?m)^#(?!#).*$")
+_EVIDENCE_APPENDIX_HEADING: Final[str] = "## 证据与出处"
+_EVIDENCE_APPENDIX_HEADING_RE: Final[re.Pattern[str]] = re.compile(
+    rf"(?m)^{re.escape(_EVIDENCE_APPENDIX_HEADING)}\s*$"
 )
 _FINAL_JUDGMENT_TEXT: Final[dict[TemplateFinalJudgment, str]] = {
     "worth_holding": "值得持有",
@@ -80,6 +79,27 @@ class TemplateRenderInput:
 
 
 @dataclass(frozen=True, slots=True)
+class RenderedChapterBlock:
+    """已渲染的模板单章块。
+
+    Attributes:
+        chapter_id: 模板章节编号，必须来自公开 `ChapterContract`。
+        title: 模板章节标题，必须来自公开 `ChapterContract`。
+        heading: 报告中的原始 Markdown 一级标题行。
+        markdown: 单章 Markdown 块，包含标题但不包含证据附录。
+        body_markdown: 单章正文 Markdown，不包含标题和证据附录。
+        contract: 与当前章节编号一致的 `ChapterContract`。
+    """
+
+    chapter_id: int
+    title: str
+    heading: str
+    markdown: str
+    body_markdown: str
+    contract: ChapterContract
+
+
+@dataclass(frozen=True, slots=True)
 class TemplateRenderResult:
     """8 章模板渲染结果。
 
@@ -87,11 +107,196 @@ class TemplateRenderResult:
         report_markdown: 已渲染的完整 Markdown 报告。
         audit_input: 可直接传给 `run_programmatic_audit` 的程序审计输入。
         evidence_anchors: 报告引用到的去重证据锚点。
+        chapter_blocks: 按模板第 0-7 章切分的渲染章节块。
     """
 
     report_markdown: str
     audit_input: ProgrammaticAuditInput
     evidence_anchors: tuple[EvidenceAnchor, ...]
+    chapter_blocks: tuple[RenderedChapterBlock, ...]
+
+
+def get_template_chapter_heading(chapter_id: int) -> str:
+    """读取模板章节 Markdown 标题。
+
+    Args:
+        chapter_id: 模板章节编号，必须为 0-7。
+
+    Returns:
+        使用 CHAPTER_CONTRACT 标题生成的一级 Markdown 标题。
+
+    Raises:
+        ValueError: 章节编号不存在或契约清单校验失败时抛出。
+    """
+
+    contract = get_chapter_contract(chapter_id)
+    return f"# {contract.chapter_id}. {contract.title}"
+
+
+def split_rendered_chapter_blocks(report_markdown: str) -> tuple[RenderedChapterBlock, ...]:
+    """按 CHAPTER_CONTRACT 切分已渲染的 8 章报告。
+
+    Args:
+        report_markdown: `render_template_report()` 生成的完整 Markdown 报告。
+
+    Returns:
+        按章节编号 0-7 排序的渲染章节块。
+
+    Raises:
+        ValueError: 当文本为空、缺章、重复、乱序、越界、标题不匹配，
+            或出现非模板一级标题时抛出。
+    """
+
+    if not report_markdown.strip():
+        raise ValueError("渲染报告为空，无法切分模板章节")
+
+    heading_matches = _collect_template_heading_matches(report_markdown)
+    blocks = _build_rendered_chapter_blocks(report_markdown, heading_matches)
+    _validate_rendered_chapter_sequence(blocks)
+    return tuple(blocks)
+
+
+def _collect_template_heading_matches(report_markdown: str) -> tuple[re.Match[str], ...]:
+    """收集并校验报告中的模板一级标题。
+
+    Args:
+        report_markdown: 完整 Markdown 报告。
+
+    Returns:
+        模板章节一级标题的正则匹配结果。
+
+    Raises:
+        ValueError: 出现非模板一级标题或没有模板章节标题时抛出。
+    """
+
+    matches: list[re.Match[str]] = []
+    for heading_match in _TOP_LEVEL_HEADING_RE.finditer(report_markdown):
+        heading_line = heading_match.group(0)
+        template_match = _TEMPLATE_HEADING_RE.match(
+            report_markdown,
+            heading_match.start(),
+            heading_match.end(),
+        )
+        if template_match is None:
+            raise ValueError(f"报告出现非模板一级标题：{heading_line}")
+        matches.append(template_match)
+
+    if not matches:
+        raise ValueError("渲染报告缺少模板章节标题")
+    return tuple(matches)
+
+
+def _build_rendered_chapter_blocks(
+    report_markdown: str,
+    heading_matches: tuple[re.Match[str], ...],
+) -> list[RenderedChapterBlock]:
+    """根据模板标题位置构造章节块。
+
+    Args:
+        report_markdown: 完整 Markdown 报告。
+        heading_matches: 已校验为模板一级标题的匹配结果。
+
+    Returns:
+        渲染章节块列表。
+
+    Raises:
+        ValueError: 章节编号越界或标题与契约不一致时抛出。
+    """
+
+    blocks: list[RenderedChapterBlock] = []
+    for index, heading_match in enumerate(heading_matches):
+        chapter_id = _parse_heading_chapter_id(heading_match)
+        contract = get_chapter_contract(chapter_id)
+        heading = heading_match.group(0)
+        expected_heading = get_template_chapter_heading(chapter_id)
+        if heading != expected_heading:
+            raise ValueError(f"模板第{chapter_id}章标题不匹配：{heading}")
+
+        next_start = _next_chapter_or_appendix_start(report_markdown, heading_matches, index)
+        markdown = report_markdown[heading_match.start() : next_start].strip()
+        _, _, body = markdown.partition("\n")
+        blocks.append(
+            RenderedChapterBlock(
+                chapter_id=contract.chapter_id,
+                title=contract.title,
+                heading=heading,
+                markdown=markdown,
+                body_markdown=body.strip(),
+                contract=contract,
+            )
+        )
+    return blocks
+
+
+def _parse_heading_chapter_id(heading_match: re.Match[str]) -> int:
+    """解析章节标题中的模板章节编号。
+
+    Args:
+        heading_match: 模板一级标题匹配结果。
+
+    Returns:
+        章节编号。
+
+    Raises:
+        ValueError: 章节编号不在 0-7 范围内时抛出。
+    """
+
+    chapter_id = int(heading_match.group(1))
+    if chapter_id not in _EXPECTED_CHAPTER_IDS:
+        raise ValueError(f"模板章节编号越界：chapter_id={chapter_id}")
+    return chapter_id
+
+
+def _next_chapter_or_appendix_start(
+    report_markdown: str,
+    heading_matches: tuple[re.Match[str], ...],
+    current_index: int,
+) -> int:
+    """定位当前章节块结束位置。
+
+    Args:
+        report_markdown: 完整 Markdown 报告。
+        heading_matches: 模板章节一级标题匹配结果。
+        current_index: 当前章节在匹配结果中的索引。
+
+    Returns:
+        当前章节 Markdown 块的结束偏移。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if current_index + 1 < len(heading_matches):
+        return heading_matches[current_index + 1].start()
+
+    appendix_match = _EVIDENCE_APPENDIX_HEADING_RE.search(
+        report_markdown,
+        heading_matches[current_index].end(),
+    )
+    if appendix_match is not None:
+        # 第 7 章边界优先截到证据附录前，避免把附录吞进正文。
+        return appendix_match.start()
+    return len(report_markdown)
+
+
+def _validate_rendered_chapter_sequence(blocks: list[RenderedChapterBlock]) -> None:
+    """校验渲染章节块严格覆盖模板第 0-7 章。
+
+    Args:
+        blocks: 已构造的章节块列表。
+
+    Returns:
+        校验通过时返回 `None`。
+
+    Raises:
+        ValueError: 章节缺失、重复或乱序时抛出。
+    """
+
+    chapter_ids = tuple(block.chapter_id for block in blocks)
+    if len(set(chapter_ids)) != len(chapter_ids):
+        raise ValueError("渲染报告存在重复模板章节")
+    if chapter_ids != _EXPECTED_CHAPTER_IDS:
+        raise ValueError(f"渲染报告章节必须按 0..7 顺序完整出现，实际为 {chapter_ids}")
 
 
 def render_template_report(input_data: TemplateRenderInput) -> TemplateRenderResult:
@@ -125,6 +330,7 @@ def render_template_report(input_data: TemplateRenderInput) -> TemplateRenderRes
     )
     report_markdown = "\n\n".join(sections).strip() + "\n"
     _validate_report_wording(report_markdown)
+    chapter_blocks = split_rendered_chapter_blocks(report_markdown)
     return TemplateRenderResult(
         report_markdown=report_markdown,
         audit_input=ProgrammaticAuditInput(
@@ -134,6 +340,7 @@ def render_template_report(input_data: TemplateRenderInput) -> TemplateRenderRes
             final_judgment=input_data.final_judgment,
         ),
         evidence_anchors=evidence_anchors,
+        chapter_blocks=chapter_blocks,
     )
 
 
@@ -174,7 +381,7 @@ def _render_chapter_0(input_data: TemplateRenderInput) -> str:
     primary_rabc = _primary_rabc(input_data.rabc_attributions)
     net_excess = _ratio_text(primary_rabc.net_excess_return) if primary_rabc else _INSUFFICIENT_TEXT
     content = [
-        f"# 0. {_CHAPTER_TITLES[0]}",
+        get_template_chapter_heading(0),
         f"- 基金：{fund_name}（{fund_code}）。",
         f"- 基金类型：{fund_type}，本报告先识别基金类型，再应用对应 preferred_lens。",
         f"- 最终判断：{judgment_text}；检查清单汇总为 {input_data.checklist_result.overall_signal} / {input_data.checklist_result.overall_status}。",
@@ -209,7 +416,7 @@ def _render_chapter_1(input_data: TemplateRenderInput) -> str:
         input_data.structured_data.fee_schedule,
     )
     content = [
-        f"# 1. {_CHAPTER_TITLES[1]}",
+        get_template_chapter_heading(1),
         f"- 产品本质：{_value_text(profile, 'investment_objective')}；投资范围：{_value_text(profile, 'investment_scope')}。",
         f"- 收益来源假设：围绕基金类别 {_value_text(identity, 'fund_category')} 和业绩基准 {_value_text(benchmark, 'benchmark_text')} 观察。",
         f"- 成本底座：管理费 {_value_text(fee, 'management_fee')}，托管费 {_value_text(fee, 'custody_fee')}。",
@@ -233,7 +440,7 @@ def _render_chapter_2(input_data: TemplateRenderInput) -> str:
     """
 
     lines = [
-        f"# 2. {_CHAPTER_TITLES[2]}",
+        get_template_chapter_heading(2),
         "- 公式口径：R=基金净值增长率，B=业绩比较基准收益率×股票仓位，A=R-B，C=管理费+托管费+换手率×0.3%。",
     ]
     for attribution in input_data.rabc_attributions:
@@ -275,7 +482,7 @@ def _render_chapter_3(input_data: TemplateRenderInput) -> str:
     strategy = input_data.structured_data.manager_strategy_text.value or {}
     manager_alignment = input_data.structured_data.manager_alignment.value or {}
     lines = [
-        f"# 3. {_CHAPTER_TITLES[3]}",
+        get_template_chapter_heading(3),
         f"- 管理人表述：{_value_text(strategy, 'strategy_summary')}；产品风格定位：{_value_text(profile, 'style_positioning')}。",
         f"- 利益一致性原始披露：{_join_values(manager_alignment.values()) if manager_alignment else _MISSING_TEXT}。",
         f"- 言行一致性汇总：{input_data.consistency_result.overall_signal} / {input_data.consistency_result.overall_status}。",
@@ -306,7 +513,7 @@ def _render_chapter_4(input_data: TemplateRenderInput) -> str:
     behavior_gap = input_data.investor_experience.behavior_gap
     fund_flow = input_data.investor_experience.fund_flow
     lines = [
-        f"# 4. {_CHAPTER_TITLES[4]}",
+        get_template_chapter_heading(4),
         f"- 获得感状态：{input_data.investor_experience.status}。",
         f"- 行为损益：产品收益 {_ratio_text(behavior_gap.product_return)}，投资者实际收益 {_ratio_text(behavior_gap.investor_return)}，差额 {_ratio_text(behavior_gap.behavior_gap)}。",
         f"- 资金流向：{fund_flow.signal}；期初份额 {_decimal_text(fund_flow.beginning_share)}，期末份额 {_decimal_text(fund_flow.ending_share)}，净变动 {_decimal_text(fund_flow.net_change)}。",
@@ -336,7 +543,7 @@ def _render_chapter_5(input_data: TemplateRenderInput) -> str:
         else _INSUFFICIENT_TEXT
     )
     lines = [
-        f"# 5. {_CHAPTER_TITLES[5]}",
+        get_template_chapter_heading(5),
         f"- 当前阶段：{stage_text}。",
         f"- 关键变化输入：净值记录 {nav_count} 条；跨期年报对比结论当前为 {_INSUFFICIENT_TEXT}。",
         "- 需要补证：若要判断阶段变化，应继续补充多期年报与同口径净值序列。",
@@ -359,7 +566,7 @@ def _render_chapter_6(input_data: TemplateRenderInput) -> str:
     """
 
     lines = [
-        f"# 6. {_CHAPTER_TITLES[6]}",
+        get_template_chapter_heading(6),
         f"- 否决项汇总：{input_data.risk_check_result.overall_status}；红灯否决 {len(input_data.risk_check_result.veto_items)} 项，跟踪/补证 {len(input_data.risk_check_result.watch_items)} 项。",
     ]
     for item in input_data.risk_check_result.items:
@@ -392,7 +599,7 @@ def _render_chapter_7(input_data: TemplateRenderInput) -> str:
     """
 
     lines = [
-        f"# 7. {_CHAPTER_TITLES[7]}",
+        get_template_chapter_heading(7),
         f"- 最终判断：{_FINAL_JUDGMENT_TEXT[input_data.final_judgment]}。",
         "- 判断边界：本结论只在公开披露信息和显式输入范围内成立，不预测未来收益，不给出交易或配置指令。",
         f"- 检查清单汇总：{input_data.checklist_result.overall_signal} / {input_data.checklist_result.overall_status}。",
@@ -534,7 +741,7 @@ def _missing_anchor_reference(report_year: int, chapter_index: int) -> str:
         无显式抛出。
     """
 
-    chapter_title = _CHAPTER_TITLES[chapter_index]
+    chapter_title = get_chapter_contract(chapter_index).title
     return (
         f"年报{report_year}§{_UNLOCATED_TEXT}表{_UNLOCATED_TEXT}行{_UNLOCATED_TEXT}："
         f"{_INSUFFICIENT_TEXT}，模板第{chapter_index}章《{chapter_title}》当前输入未携带证据锚点。"
