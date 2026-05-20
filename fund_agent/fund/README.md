@@ -132,10 +132,12 @@ chapter_lens = resolve_preferred_lens(chapter_id=2, fund_type="active_fund")
 - correctness 可用且出现明确 mismatch 时触发 `FQ1/block`
 - `fund_quality` 中 App 类别与基金类型明确冲突时触发 `FQ1/block`
 - `fund_quality.missing_field_rate` 达到 20% 触发 `FQ4/warn`，达到 35% 触发 `FQ4/block`
-- 基金类型无法解析当前标准 `preferred_lens` 时触发 `FQ5/block`；当前 FQ5 只校验 lens 可解析性，不宣称已校验最终报告中的机器可读 CHAPTER_CONTRACT
+- `fund_quality.preferred_lens_status` 使用 `resolved / not_applicable / mismatch` 表达模板契约适用性；`mismatch` 触发 `FQ5/block`，`resolved` 和 `not_applicable` 只进入 `quality_gate.json.rule_results`
+- FQ5 只消费 `score.json` 中由 CHAPTER_CONTRACT / ITEM_RULE manifest 派生的适用性事实，不解析最终报告 Markdown，也不证明 renderer 已遵守 preferred_lens 或正确渲染/删除 ITEM_RULE 段落
 - `failed_funds` 中的完全抽取失败基金触发 `FQ6/block`
 - 旧 `score.json` 缺少 `fund_quality` 时只记录 `FQ0/info`，不作为 fatal schema 错误
-- 输出 `quality_gate.json` 和 `quality_gate.md`
+- 旧 `score.json` 中 `preferred_lens_status=match` 兼容为 `resolved`
+- 输出 `quality_gate.json` 和 `quality_gate.md`，其中 `rule_results` 记录未触发 issue 的 FQ5 解释性结果
 
 `run_quality_gate_for_bundle()` 返回 `BundleQualityGateResult`，当前用于 P5-S1 `analyze` 主链路质量保护：
 
@@ -261,7 +263,7 @@ C2 当前只做确定性 marker / 元数据检查，不调用 LLM，不判断语
 - `preferred_lens` key 只允许当前标准基金类型 `index_fund`、`active_fund`、`bond_fund`、`enhanced_index`、`qdii_fund`、`fof_fund` 和 `default`
 - `resolve_preferred_lens(chapter_id, fund_type)` 优先返回精确基金类型 lens，没有精确命中时返回 `default`；章节缺失、基金类型不支持或缺少 fallback 时抛出 `ValueError`
 - `validate_template_contract_manifest()` 对章节数量、id 连续性、重复 id、空字段、unsupported lens key 和无 lens fallback 执行 fail-closed 校验
-- 当前 CHAPTER_CONTRACT manifest 是可机器消费的契约清单，不改变 `render_template_report()` 的 Markdown 输出结构，也不实现 quality gate FQ5 升级
+- 当前 CHAPTER_CONTRACT manifest 是可机器消费的契约清单，不改变 `render_template_report()` 的 Markdown 输出结构；FQ5 只使用它派生模板契约适用性，不声明 renderer compliance
 
 `load_template_item_rule_manifest()` 返回 `TemplateItemRuleManifest`，当前覆盖 `docs/fund-analysis-template-draft.md` 已声明的四条 `ITEM_RULE`：
 

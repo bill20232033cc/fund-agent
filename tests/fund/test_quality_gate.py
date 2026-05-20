@@ -184,7 +184,7 @@ def test_run_quality_gate_blocks_correctness_mismatch_as_fq1(tmp_path: Path) -> 
 
 
 def test_run_quality_gate_blocks_app_category_conflict_and_lens_mismatch(tmp_path: Path) -> None:
-    """验证 App 类别冲突触发 FQ1，preferred_lens 不可解析触发 FQ5。
+    """验证 App 类别冲突触发 FQ1，模板契约 mismatch 触发 FQ5。
 
     Args:
         tmp_path: pytest 临时目录 fixture。
@@ -207,7 +207,7 @@ def test_run_quality_gate_blocks_app_category_conflict_and_lens_mismatch(tmp_pat
                         classified_fund_type="active_fund",
                         app_category_status="conflict",
                         preferred_lens_status="mismatch",
-                        preferred_lens_key="active_equity_fund",
+                        preferred_lens_key="active_fund",
                         missing_field_rate=0.0,
                     )
                 ],
@@ -225,8 +225,200 @@ def test_run_quality_gate_blocks_app_category_conflict_and_lens_mismatch(tmp_pat
     assert result.status == GATE_STATUS_BLOCK
     assert {"FQ1", "FQ5"} <= rule_codes
     fq1_payload = next(issue for issue in payload["issues"] if issue["rule_code"] == "FQ1")
+    fq5_payload = next(issue for issue in payload["issues"] if issue["rule_code"] == "FQ5")
     assert fq1_payload["app_category"] == "国内债券类"
     assert fq1_payload["classified_fund_type"] == "active_fund"
+    assert fq5_payload["preferred_lens_key"] == "active_fund"
+    assert payload["rule_results"][0]["status"] == "mismatch"
+
+
+def test_run_quality_gate_records_resolved_fq5_without_issue(tmp_path: Path) -> None:
+    """验证 resolved FQ5 只进入 rule_results，不产生 issue。
+
+    Args:
+        tmp_path: pytest 临时目录 fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: resolved FQ5 被错误记为 issue 时抛出。
+    """
+
+    score_path = tmp_path / "score.json"
+    score_path.write_text(
+        json.dumps(
+            {
+                "field_scores": [_field_score("classified_fund_type", "P0", "pass", 1.0, 1.0)],
+                "fund_quality": [_fund_quality(preferred_lens_status="resolved")],
+                "correctness": {"status": "unavailable"},
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    result = run_quality_gate(score_path=score_path)
+    payload = json.loads(result.gate_json_path.read_text(encoding="utf-8"))
+    markdown = result.gate_markdown_path.read_text(encoding="utf-8")
+
+    assert result.status == GATE_STATUS_PASS
+    assert not any(issue.rule_code == "FQ5" for issue in result.issues)
+    assert payload["rule_results"][0]["rule_code"] == "FQ5"
+    assert payload["rule_results"][0]["status"] == "resolved"
+    assert "## Rule Results" in markdown
+
+
+def test_run_quality_gate_records_not_applicable_fq5_without_issue(tmp_path: Path) -> None:
+    """验证 not_applicable FQ5 只解释状态，不触发阻断。
+
+    Args:
+        tmp_path: pytest 临时目录 fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: not_applicable FQ5 被错误记为 issue 时抛出。
+    """
+
+    score_path = tmp_path / "score.json"
+    score_path.write_text(
+        json.dumps(
+            {
+                "field_scores": [_field_score("classified_fund_type", "P0", "pass", 1.0, 1.0)],
+                "fund_quality": [
+                    _fund_quality(
+                        classified_fund_type="",
+                        preferred_lens_status="not_applicable",
+                        preferred_lens_key="",
+                    )
+                ],
+                "correctness": {"status": "unavailable"},
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    result = run_quality_gate(score_path=score_path)
+    payload = json.loads(result.gate_json_path.read_text(encoding="utf-8"))
+
+    assert result.status == GATE_STATUS_PASS
+    assert not any(issue.rule_code == "FQ5" for issue in result.issues)
+    assert payload["rule_results"][0]["status"] == "not_applicable"
+
+
+def test_run_quality_gate_keeps_legacy_match_status_compatible(tmp_path: Path) -> None:
+    """验证旧 score.json 的 match 状态被规范化为 resolved。
+
+    Args:
+        tmp_path: pytest 临时目录 fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: legacy match 未保持兼容时抛出。
+    """
+
+    score_path = tmp_path / "score.json"
+    score_path.write_text(
+        json.dumps(
+            {
+                "field_scores": [_field_score("classified_fund_type", "P0", "pass", 1.0, 1.0)],
+                "fund_quality": [
+                    _fund_quality(
+                        preferred_lens_status="match",
+                        preferred_lens_key="active_equity_fund",
+                    )
+                ],
+                "correctness": {"status": "unavailable"},
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    result = run_quality_gate(score_path=score_path)
+    payload = json.loads(result.gate_json_path.read_text(encoding="utf-8"))
+
+    assert result.status == GATE_STATUS_PASS
+    assert payload["rule_results"][0]["status"] == "resolved"
+
+
+def test_run_quality_gate_rejects_unknown_fq5_status(tmp_path: Path) -> None:
+    """验证未知 FQ5 状态 fail closed。
+
+    Args:
+        tmp_path: pytest 临时目录 fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 未知状态未抛出 `ValueError` 时抛出。
+    """
+
+    score_path = tmp_path / "score.json"
+    score_path.write_text(
+        json.dumps(
+            {
+                "field_scores": [_field_score("classified_fund_type", "P0", "pass", 1.0, 1.0)],
+                "fund_quality": [_fund_quality(preferred_lens_status="unknown")],
+                "correctness": {"status": "unavailable"},
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    try:
+        run_quality_gate(score_path=score_path)
+    except ValueError as exc:
+        assert "preferred_lens_status" in str(exc)
+    else:
+        raise AssertionError("expected ValueError for unknown preferred_lens_status")
+
+
+def test_run_quality_gate_preserves_fund_type_conflict_reason_in_fq5(tmp_path: Path) -> None:
+    """验证 score 派生的多基金类型冲突会进入 FQ5/block 并保留原因。
+
+    Args:
+        tmp_path: pytest 临时目录 fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 冲突原因未进入 FQ5 issue 时抛出。
+    """
+
+    score_path = tmp_path / "score.json"
+    score_path.write_text(
+        json.dumps(
+            {
+                "field_scores": [_field_score("classified_fund_type", "P0", "pass", 1.0, 1.0)],
+                "fund_quality": [
+                    _fund_quality(
+                        classified_fund_type="",
+                        preferred_lens_status="mismatch",
+                        preferred_lens_key="",
+                        reason="classified_fund_type 存在冲突值：active_fund, bond_fund",
+                    )
+                ],
+                "correctness": {"status": "unavailable"},
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    result = run_quality_gate(score_path=score_path)
+    fq5_issue = next(issue for issue in result.issues if issue.rule_code == "FQ5")
+
+    assert result.status == GATE_STATUS_BLOCK
+    assert "active_fund, bond_fund" in fq5_issue.message
 
 
 def test_run_quality_gate_warns_and_blocks_fq4_missing_rate_thresholds(tmp_path: Path) -> None:
@@ -458,9 +650,10 @@ def _fund_quality(
     app_category: str = "国内股票类",
     classified_fund_type: str = "active_fund",
     app_category_status: str = "match",
-    preferred_lens_status: str = "match",
-    preferred_lens_key: str = "active_equity_fund",
+    preferred_lens_status: str = "resolved",
+    preferred_lens_key: str = "active_fund",
     missing_field_rate: float = 0.0,
+    reason: str = "测试原因",
 ) -> dict[str, object]:
     """构造测试用基金质量派生行。
 
@@ -472,6 +665,7 @@ def _fund_quality(
         preferred_lens_status: preferred_lens 状态。
         preferred_lens_key: preferred_lens key。
         missing_field_rate: 缺失字段比例。
+        reason: 基金质量原因。
 
     Returns:
         score.json 中的 fund_quality 对象。
@@ -493,5 +687,5 @@ def _fund_quality(
         "missing_field_rate": missing_field_rate,
         "missing_p0_fields": [],
         "missing_p1_fields": [],
-        "reason": "测试原因",
+        "reason": reason,
     }

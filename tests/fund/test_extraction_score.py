@@ -141,7 +141,7 @@ def test_score_fund_records_exposes_single_fund_p0_failure_when_aggregate_can_pa
 
 
 def test_derive_fund_quality_records_outputs_category_lens_and_missing_rate() -> None:
-    """验证 fund_quality 输出类别匹配、preferred_lens 和缺失率。
+    """验证 fund_quality 输出类别匹配、模板契约适用性和缺失率。
 
     Args:
         无。
@@ -165,13 +165,59 @@ def test_derive_fund_quality_records_outputs_category_lens_and_missing_rate() ->
     row = derive_fund_quality_records(records)[0]
 
     assert row.app_category_status == "match"
-    assert row.preferred_lens_status == "match"
-    assert row.preferred_lens_key == "active_equity_fund"
+    assert row.preferred_lens_status == "resolved"
+    assert row.preferred_lens_key == "active_fund"
+    assert row.contract_template_id == "fund-analysis-template-v1"
+    assert row.item_rule_template_id == "fund-analysis-template-v1"
+    assert len(row.preferred_lens_chapters) == 8
+    assert row.preferred_lens_unresolved_chapter_ids == ()
     assert row.missing_field_count == 2
     assert row.total_field_count == 4
     assert row.missing_field_rate == 0.5
     assert row.missing_p0_fields == ("benchmark",)
     assert row.missing_p1_fields == ("turnover_rate",)
+
+
+def test_derive_fund_quality_records_resolves_all_standard_fund_types() -> None:
+    """验证所有标准基金类型都能解析当前模板契约。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 任一标准基金类型无法解析 8 章 preferred_lens 时抛出。
+    """
+
+    cases = (
+        ("index_fund", "国内股票类"),
+        ("active_fund", "国内股票类"),
+        ("bond_fund", "国内债券类"),
+        ("enhanced_index", "国内股票类"),
+        ("qdii_fund", "海外股票类"),
+        ("fof_fund", "海外债券/稳健类"),
+    )
+
+    for fund_type, app_category in cases:
+        row = derive_fund_quality_records(
+            [
+                _snapshot_record(
+                    "profile",
+                    "classified_fund_type",
+                    app_category=app_category,
+                    classified_fund_type=fund_type,
+                    value_present=True,
+                    anchor_present=True,
+                )
+            ]
+        )[0]
+
+        assert row.preferred_lens_status == "resolved"
+        assert row.preferred_lens_key == fund_type
+        assert len(row.preferred_lens_chapters) == 8
+        assert row.preferred_lens_unresolved_chapter_ids == ()
 
 
 def test_derive_fund_quality_records_marks_conflicting_fund_type_without_first_row_fallback() -> None:
@@ -209,7 +255,103 @@ def test_derive_fund_quality_records_marks_conflicting_fund_type_without_first_r
     assert row.classified_fund_type is None
     assert row.app_category_status == "unknown"
     assert row.preferred_lens_status == "mismatch"
+    assert row.preferred_lens_chapters == ()
+    assert row.item_rule_decisions == ()
     assert "classified_fund_type 存在冲突值" in row.reason
+
+
+def test_derive_fund_quality_records_marks_missing_fund_type_not_applicable() -> None:
+    """验证基金类型缺失时 FQ5 不声明模板契约适用性。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 缺失基金类型被错误阻断或生成契约事实时抛出。
+    """
+
+    row = derive_fund_quality_records(
+        [
+            _snapshot_record(
+                "profile",
+                "classified_fund_type",
+                value_present=True,
+                anchor_present=True,
+                classified_fund_type="",
+            )
+        ]
+    )[0]
+
+    assert row.classified_fund_type is None
+    assert row.preferred_lens_status == "not_applicable"
+    assert row.preferred_lens_chapters == ()
+    assert row.item_rule_decisions == ()
+
+
+def test_derive_fund_quality_records_marks_unsupported_fund_type_mismatch() -> None:
+    """验证不受支持但已存在的基金类型触发 FQ5 mismatch。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 不受支持基金类型未触发 mismatch 时抛出。
+    """
+
+    row = derive_fund_quality_records(
+        [
+            _snapshot_record(
+                "profile",
+                "classified_fund_type",
+                app_category="未知类别",
+                classified_fund_type="money_market_fund",
+                value_present=True,
+                anchor_present=True,
+            )
+        ]
+    )[0]
+
+    assert row.preferred_lens_status == "mismatch"
+    assert row.preferred_lens_key == "money_market_fund"
+    assert "不受当前模板契约支持" in row.reason
+
+
+def test_derive_fund_quality_records_marks_money_market_category_not_applicable() -> None:
+    """验证货币基金类显式标记为当前 8 章模板不适用。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 货币基金类未进入 not_applicable 时抛出。
+    """
+
+    row = derive_fund_quality_records(
+        [
+            _snapshot_record(
+                "profile",
+                "classified_fund_type",
+                app_category="货币基金类",
+                classified_fund_type="money_market_fund",
+                value_present=True,
+                anchor_present=True,
+            )
+        ]
+    )[0]
+
+    assert row.preferred_lens_status == "not_applicable"
+    assert row.preferred_lens_key is None
+    assert row.preferred_lens_chapters == ()
+    assert row.item_rule_decisions == ()
 
 
 def test_derive_fund_quality_records_marks_lens_mismatch_on_app_category_conflict() -> None:
@@ -239,7 +381,7 @@ def test_derive_fund_quality_records_marks_lens_mismatch_on_app_category_conflic
     row = derive_fund_quality_records(records)[0]
 
     assert row.app_category_status == "conflict"
-    assert row.preferred_lens_key == "active_equity_fund"
+    assert row.preferred_lens_key == "active_fund"
     assert row.preferred_lens_status == "mismatch"
     assert "明确冲突" in row.reason
 
@@ -289,8 +431,22 @@ def test_run_extraction_score_writes_score_outputs(tmp_path: Path) -> None:
     assert score_payload["fund_count"] == 1
     assert score_payload["failed_funds"] == []
     assert score_payload["fund_scores"][0]["fund_code"] == "004393"
-    assert score_payload["fund_quality"][0]["preferred_lens_key"] == "active_equity_fund"
+    quality_row = score_payload["fund_quality"][0]
+    assert quality_row["preferred_lens_status"] == "resolved"
+    assert quality_row["preferred_lens_key"] == "active_fund"
+    assert quality_row["contract_template_id"] == "fund-analysis-template-v1"
+    assert quality_row["item_rule_template_id"] == "fund-analysis-template-v1"
+    assert len(quality_row["preferred_lens_chapters"]) == 8
+    assert quality_row["preferred_lens_unresolved_chapter_ids"] == []
+    decisions_by_rule = {
+        decision["rule_id"]: decision for decision in quality_row["item_rule_decisions"]
+    }
+    assert decisions_by_rule["chapter_1_manager_philosophy"]["status"] == "render"
+    assert decisions_by_rule["chapter_2_alpha_yearly_breakdown"]["status"] == "render"
+    assert decisions_by_rule["chapter_1_index_constituents"]["status"] == "delete"
+    assert decisions_by_rule["chapter_2_tracking_error_analysis"]["status"] == "delete"
     assert "## Fund Quality" in markdown
+    assert "delete=2/render=2" in markdown
     assert score_payload["correctness"]["status"] == CORRECTNESS_STATUS_UNAVAILABLE
     assert score_payload["p0_status"] == STATUS_FAIL
     assert "## Correctness" in markdown

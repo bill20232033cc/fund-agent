@@ -13,10 +13,10 @@
 - `tests/fund/extractors/test_manager_ownership.py`：`§4/§8/§9` 管理人/持有人 extractor 测试，覆盖编号标题策略文本、换手率、持有披露表、跨页持有人结构和 `missing` 路径
 - `tests/fund/extractors/test_holdings_share_change.py`：`§8/§10` 持仓/份额 extractor 测试，覆盖前十大重仓、行业分布、净变动表、申购/赎回拆分表、多份额列选择、非 A 份额不默认 A 类、歧义多列表 missing、利润变动表误命中回归和表格型 anchor
 - `tests/fund/test_extraction_snapshot.py`：P4-S1/P5-S3 精选基金池字段级抽取快照测试，覆盖 CSV 校验、snapshot schema、`comparable_values` 白名单子字段、summary 重复代码标红、单基金失败继续和 `004393` known failure 捕获；使用 fake extractor，不触发真实网络或 PDF
-- `tests/fund/test_extraction_score.py`：P4-S2/P4-R10/P5-S2/P5-S3/P5-S4 字段级评分测试，覆盖 snapshot JSONL coverage / traceability / status / priority 映射、单基金质量汇总、`fund_quality` 派生、`failed_funds` accounting、score 输出、最小 golden set 选择、correctness perfect match、mismatch、白名单缺失、旧 snapshot 兼容和 skipped 分母处理；不触发真实网络或 PDF
+- `tests/fund/test_extraction_score.py`：P4-S2/P4-R10/P5-S2/P5-S3/P5-S4/P6-S5 字段级评分测试，覆盖 snapshot JSONL coverage / traceability / status / priority 映射、单基金质量汇总、`fund_quality` 模板契约适用性派生、`failed_funds` accounting、score 输出、最小 golden set 选择、correctness perfect match、mismatch、白名单缺失、旧 snapshot 兼容和 skipped 分母处理；不触发真实网络或 PDF
 - `tests/fund/test_golden_prefill.py`：correctness golden answer 预填底稿测试，覆盖模板基金代码识别、字段预填、证据 source 和跳过字段保留；使用 fake extractor，不触发真实网络或 PDF
 - `tests/fund/test_golden_answer.py`：人工审核后的 golden answer Markdown 转 JSON 与 strict JSON loader 测试，覆盖 strict 校验、跳过字段、转义竖线和机器可读 JSON 输出；不触发真实网络或 PDF
-- `tests/fund/test_quality_gate.py`：P4-S4/P5-S2/P5-S4 报告质量 gate 测试，覆盖字段级与单基金 P0 fail 阻断、P1 fail 警告、correctness 未接入 info、correctness mismatch 触发 FQ1、App 类别冲突 FQ1、缺失率 FQ4、preferred_lens 可解析性 FQ5、失败基金 FQ6 和旧 score 兼容；只消费 score JSON，不触发真实网络或 PDF
+- `tests/fund/test_quality_gate.py`：P4-S4/P5-S2/P5-S4/P6-S5 报告质量 gate 测试，覆盖字段级与单基金 P0 fail 阻断、P1 fail 警告、correctness 未接入 info、correctness mismatch 触发 FQ1、App 类别冲突 FQ1、缺失率 FQ4、模板契约适用性 FQ5、`rule_results`、失败基金 FQ6 和旧 score 兼容；只消费 score JSON，不触发真实网络或 PDF
 - `tests/fund/test_quality_gate_integration.py`：P5-S1 单基金 quality gate adapter 测试，覆盖从已抽取 `StructuredFundDataBundle` 生成 snapshot/score/gate 产物，以及基金不在精选池时返回 not-run reason；不触发真实网络或 PDF
 - `tests/fund/data/test_nav_data.py`：净值数据适配器测试，覆盖 `nav_cache` 命中和强制刷新
 - `tests/fund/data/test_thermometer.py`：有知有行温度计适配器测试，覆盖全市场/指数/宏观解析、24h 缓存复用、强制刷新、抓取失败 stale fallback、无缓存 unavailable 和 malformed HTML

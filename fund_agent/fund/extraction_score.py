@@ -12,8 +12,9 @@ import json
 from collections import Counter
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Final, Mapping, Sequence
+from typing import Final, Mapping, Sequence, cast, get_args
 
+from fund_agent.fund.fund_type import FundType
 from fund_agent.fund.extraction_snapshot import (
     COMPARABLE_SUB_FIELDS_BY_FIELD,
     DEFAULT_SELECTED_FUNDS_CSV,
@@ -26,6 +27,14 @@ from fund_agent.fund.golden_answer import (
     GoldenAnswerFund,
     GoldenAnswerRecord,
     load_golden_answer_json,
+)
+from fund_agent.fund.template.contracts import (
+    load_template_contract_manifest,
+    resolve_preferred_lens,
+)
+from fund_agent.fund.template.item_rules import (
+    evaluate_template_item_rules,
+    load_template_item_rule_manifest,
 )
 
 FIELD_PRIORITY_BY_NAME: Final[dict[str, str]] = {
@@ -77,8 +86,10 @@ CLASSIFIED_FUND_TYPE_SUB_FIELD: Final[str] = "fund_type"
 APP_CATEGORY_STATUS_MATCH: Final[str] = "match"
 APP_CATEGORY_STATUS_CONFLICT: Final[str] = "conflict"
 APP_CATEGORY_STATUS_UNKNOWN: Final[str] = "unknown"
-PREFERRED_LENS_STATUS_MATCH: Final[str] = "match"
+PREFERRED_LENS_STATUS_RESOLVED: Final[str] = "resolved"
+PREFERRED_LENS_STATUS_NOT_APPLICABLE: Final[str] = "not_applicable"
 PREFERRED_LENS_STATUS_MISMATCH: Final[str] = "mismatch"
+SUPPORTED_CONTRACT_FUND_TYPES: Final[tuple[str, ...]] = tuple(get_args(FundType))
 APP_CATEGORY_ALLOWED_FUND_TYPES: Final[dict[str, tuple[str, ...]]] = {
     "国内股票类": ("active_fund", "index_fund", "enhanced_index"),
     "国内债券类": ("bond_fund",),
@@ -86,14 +97,7 @@ APP_CATEGORY_ALLOWED_FUND_TYPES: Final[dict[str, tuple[str, ...]]] = {
     "海外债券/稳健类": ("qdii_fund", "bond_fund", "fof_fund"),
     "黄金类": ("qdii_fund", "fof_fund", "index_fund", "enhanced_index"),
 }
-PREFERRED_LENS_KEY_BY_FUND_TYPE: Final[dict[str, str]] = {
-    "index_fund": "index_fund",
-    "active_fund": "active_equity_fund",
-    "bond_fund": "bond_fund",
-    "enhanced_index": "enhanced_index",
-    "qdii_fund": "qdii_fund",
-    "fof_fund": "fof_fund",
-}
+TEMPLATE_NOT_APPLICABLE_CATEGORIES: Final[tuple[str, ...]] = (MONEY_MARKET_CATEGORY,)
 
 
 @dataclass(frozen=True, slots=True)
@@ -185,6 +189,11 @@ class FundQualityRow:
         missing_p0_fields: 缺失的 P0 字段。
         missing_p1_fields: 缺失的 P1 字段。
         reason: 人类可读原因。
+        contract_template_id: CHAPTER_CONTRACT manifest 标识；未评估时为空。
+        item_rule_template_id: ITEM_RULE manifest 标识；未评估时为空。
+        preferred_lens_chapters: 每章 preferred_lens 解析事实。
+        preferred_lens_unresolved_chapter_ids: 未能解析 preferred_lens 的章节编号。
+        item_rule_decisions: ITEM_RULE evaluator 的确定性适用性决策。
     """
 
     fund_code: str
@@ -200,6 +209,49 @@ class FundQualityRow:
     missing_p0_fields: tuple[str, ...]
     missing_p1_fields: tuple[str, ...]
     reason: str
+    contract_template_id: str | None
+    item_rule_template_id: str | None
+    preferred_lens_chapters: tuple["PreferredLensChapterResolution", ...]
+    preferred_lens_unresolved_chapter_ids: tuple[int, ...]
+    item_rule_decisions: tuple["ItemRuleDecisionSummary", ...]
+
+
+@dataclass(frozen=True, slots=True)
+class PreferredLensChapterResolution:
+    """单章 preferred_lens 解析事实。
+
+    Attributes:
+        chapter_id: 模板章节编号，见模板第 0-7 章。
+        title: 模板章节标题。
+        lens_key: 当前章节解析出的 lens key。
+        used_default: 是否回退到 `default` lens。
+    """
+
+    chapter_id: int
+    title: str
+    lens_key: str
+    used_default: bool
+
+
+@dataclass(frozen=True, slots=True)
+class ItemRuleDecisionSummary:
+    """ITEM_RULE evaluator 决策摘要。
+
+    Attributes:
+        rule_id: ITEM_RULE 规则编号。
+        chapter_id: 规则所属模板章节编号。
+        item_title: 规则对应条目标题。
+        triggered: 当前基金类型是否触发规则。
+        status: evaluator 决定渲染或删除的状态。
+        missing_behavior: 未触发或缺失时的策略。
+    """
+
+    rule_id: str
+    chapter_id: int
+    item_title: str
+    triggered: bool
+    status: str
+    missing_behavior: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -365,6 +417,31 @@ class _FieldScoreCounter:
     records: int = 0
     covered_records: int = 0
     traceable_records: int = 0
+
+
+@dataclass(frozen=True, slots=True)
+class _ContractApplicability:
+    """内部使用的模板契约适用性派生结果。
+
+    Attributes:
+        status: FQ5 适用性状态。
+        preferred_lens_key: 当前尝试应用的 preferred_lens key。
+        preferred_lens_chapters: 每章 lens 解析事实。
+        preferred_lens_unresolved_chapter_ids: 未解析成功的章节编号。
+        item_rule_decisions: ITEM_RULE evaluator 决策摘要。
+        reason: 人类可读原因。
+        contract_template_id: CHAPTER_CONTRACT manifest 标识。
+        item_rule_template_id: ITEM_RULE manifest 标识。
+    """
+
+    status: str
+    preferred_lens_key: str | None
+    preferred_lens_chapters: tuple[PreferredLensChapterResolution, ...]
+    preferred_lens_unresolved_chapter_ids: tuple[int, ...]
+    item_rule_decisions: tuple[ItemRuleDecisionSummary, ...]
+    reason: str
+    contract_template_id: str | None
+    item_rule_template_id: str | None
 
 
 def load_snapshot_records(snapshot_path: Path) -> list[dict[str, object]]:
@@ -1104,15 +1181,11 @@ def _build_fund_quality_row(
     classified_fund_type, fund_type_reason = _unique_optional_text(records, "classified_fund_type")
     missing_fields = _missing_fields_by_priority(records)
     app_category_status = _app_category_status(app_category, classified_fund_type)
-    preferred_lens_key = (
-        PREFERRED_LENS_KEY_BY_FUND_TYPE.get(classified_fund_type)
-        if classified_fund_type is not None
-        else None
-    )
-    preferred_lens_status = _preferred_lens_status(
-        classified_fund_type,
-        preferred_lens_key,
-        app_category_status,
+    contract_applicability = _derive_contract_applicability(
+        classified_fund_type=classified_fund_type,
+        app_category=app_category,
+        app_category_status=app_category_status,
+        fund_type_reason=fund_type_reason,
     )
     total_field_count = len(records)
     missing_field_count = sum(
@@ -1123,7 +1196,7 @@ def _build_fund_quality_row(
         app_category_reason,
         fund_type_reason,
         _app_category_reason(app_category, classified_fund_type, app_category_status),
-        _preferred_lens_reason(classified_fund_type, preferred_lens_key, preferred_lens_status),
+        contract_applicability.reason,
     ]
     return FundQualityRow(
         fund_code=fund_code,
@@ -1131,14 +1204,21 @@ def _build_fund_quality_row(
         app_category=app_category,
         classified_fund_type=classified_fund_type,
         app_category_status=app_category_status,
-        preferred_lens_status=preferred_lens_status,
-        preferred_lens_key=preferred_lens_key,
+        preferred_lens_status=contract_applicability.status,
+        preferred_lens_key=contract_applicability.preferred_lens_key,
         missing_field_count=missing_field_count,
         total_field_count=total_field_count,
         missing_field_rate=_rate(missing_field_count, total_field_count),
         missing_p0_fields=missing_fields[PRIORITY_P0],
         missing_p1_fields=missing_fields[PRIORITY_P1],
         reason="；".join(reason for reason in reasons if reason),
+        contract_template_id=contract_applicability.contract_template_id,
+        item_rule_template_id=contract_applicability.item_rule_template_id,
+        preferred_lens_chapters=contract_applicability.preferred_lens_chapters,
+        preferred_lens_unresolved_chapter_ids=(
+            contract_applicability.preferred_lens_unresolved_chapter_ids
+        ),
+        item_rule_decisions=contract_applicability.item_rule_decisions,
     )
 
 
@@ -1225,32 +1305,178 @@ def _app_category_status(app_category: str | None, classified_fund_type: str | N
     return APP_CATEGORY_STATUS_CONFLICT
 
 
-def _preferred_lens_status(
+def _derive_contract_applicability(
+    *,
     classified_fund_type: str | None,
-    preferred_lens_key: str | None,
+    app_category: str | None,
     app_category_status: str,
-) -> str:
-    """判断基金类型是否能解析 preferred_lens。
+    fund_type_reason: str,
+) -> _ContractApplicability:
+    """派生单基金模板契约适用性事实。
+
+    本函数只使用模板 manifest 与已识别基金类型，见模板第 0-7 章
+    CHAPTER_CONTRACT 和第 1/2 章 ITEM_RULE；不读取报告 Markdown 或基金文档。
 
     Args:
-        classified_fund_type: 系统基金类型。
-        preferred_lens_key: 解析出的 lens key。
+        classified_fund_type: 系统识别基金类型。
+        app_category: App 类别。
         app_category_status: App 类别与基金类型匹配状态。
+        fund_type_reason: 基金类型字段唯一性判断原因。
 
     Returns:
-        `match / mismatch`。
+        FQ5 模板契约适用性派生结果。
+
+    Raises:
+        无显式抛出；manifest/evaluator 异常会转为 `mismatch` 结果。
+    """
+
+    if "classified_fund_type 存在冲突值" in fund_type_reason:
+        return _contract_applicability_result(
+            status=PREFERRED_LENS_STATUS_MISMATCH,
+            preferred_lens_key=None,
+            reason=fund_type_reason,
+        )
+    if app_category in TEMPLATE_NOT_APPLICABLE_CATEGORIES:
+        return _contract_applicability_result(
+            status=PREFERRED_LENS_STATUS_NOT_APPLICABLE,
+            preferred_lens_key=None,
+            reason=f"App 类别 `{app_category}` 不适用当前 8 章基金分析模板",
+        )
+    if classified_fund_type is None:
+        return _contract_applicability_result(
+            status=PREFERRED_LENS_STATUS_NOT_APPLICABLE,
+            preferred_lens_key=None,
+            reason=f"基金类型缺失，FQ5 不声明模板契约适用性；{fund_type_reason}",
+        )
+    if app_category_status == APP_CATEGORY_STATUS_CONFLICT:
+        return _contract_applicability_result(
+            status=PREFERRED_LENS_STATUS_MISMATCH,
+            preferred_lens_key=classified_fund_type,
+            reason=f"App 类别与基金类型冲突，不能稳定应用模板契约：{classified_fund_type}",
+        )
+    if not _is_supported_contract_fund_type(classified_fund_type):
+        return _contract_applicability_result(
+            status=PREFERRED_LENS_STATUS_MISMATCH,
+            preferred_lens_key=classified_fund_type,
+            reason=f"基金类型 `{classified_fund_type}` 不受当前模板契约支持",
+        )
+
+    fund_type = cast(FundType, classified_fund_type)
+    contract_manifest = load_template_contract_manifest()
+    chapter_resolutions: list[PreferredLensChapterResolution] = []
+    unresolved_chapter_ids: list[int] = []
+    try:
+        for chapter in contract_manifest.chapters:
+            lens = resolve_preferred_lens(chapter.chapter_id, fund_type)
+            chapter_resolutions.append(
+                PreferredLensChapterResolution(
+                    chapter_id=chapter.chapter_id,
+                    title=chapter.title,
+                    lens_key=lens.fund_type,
+                    used_default=lens.fund_type == "default",
+                )
+            )
+    except ValueError as exc:
+        if "chapter" in locals():
+            unresolved_chapter_ids.append(chapter.chapter_id)
+        return _contract_applicability_result(
+            status=PREFERRED_LENS_STATUS_MISMATCH,
+            preferred_lens_key=fund_type,
+            preferred_lens_chapters=tuple(chapter_resolutions),
+            preferred_lens_unresolved_chapter_ids=tuple(unresolved_chapter_ids),
+            reason=f"CHAPTER_CONTRACT preferred_lens 解析失败：{exc}",
+            contract_template_id=contract_manifest.template_id,
+        )
+
+    try:
+        item_rule_manifest = load_template_item_rule_manifest()
+        item_rule_decisions = tuple(
+            ItemRuleDecisionSummary(
+                rule_id=decision.rule_id,
+                chapter_id=decision.chapter_id,
+                item_title=decision.item_title,
+                triggered=decision.triggered,
+                status=decision.status,
+                missing_behavior=decision.missing_behavior,
+            )
+            for decision in evaluate_template_item_rules(fund_type=fund_type, facets=())
+        )
+    except ValueError as exc:
+        return _contract_applicability_result(
+            status=PREFERRED_LENS_STATUS_MISMATCH,
+            preferred_lens_key=fund_type,
+            preferred_lens_chapters=tuple(chapter_resolutions),
+            reason=f"ITEM_RULE evaluator 运行失败：{exc}",
+            contract_template_id=contract_manifest.template_id,
+        )
+
+    return _contract_applicability_result(
+        status=PREFERRED_LENS_STATUS_RESOLVED,
+        preferred_lens_key=fund_type,
+        preferred_lens_chapters=tuple(chapter_resolutions),
+        item_rule_decisions=item_rule_decisions,
+        reason="8 个模板章节均已解析 preferred_lens，ITEM_RULE 已完成确定性适用性评估",
+        contract_template_id=contract_manifest.template_id,
+        item_rule_template_id=item_rule_manifest.template_id,
+    )
+
+
+def _contract_applicability_result(
+    *,
+    status: str,
+    preferred_lens_key: str | None,
+    reason: str,
+    preferred_lens_chapters: tuple[PreferredLensChapterResolution, ...] = (),
+    preferred_lens_unresolved_chapter_ids: tuple[int, ...] = (),
+    item_rule_decisions: tuple[ItemRuleDecisionSummary, ...] = (),
+    contract_template_id: str | None = None,
+    item_rule_template_id: str | None = None,
+) -> _ContractApplicability:
+    """构造内部模板契约适用性结果。
+
+    Args:
+        status: FQ5 适用性状态。
+        preferred_lens_key: 当前尝试应用的 lens key。
+        reason: 状态原因。
+        preferred_lens_chapters: 每章 lens 解析事实。
+        preferred_lens_unresolved_chapter_ids: 未解析章节编号。
+        item_rule_decisions: ITEM_RULE 决策摘要。
+        contract_template_id: CHAPTER_CONTRACT manifest 标识。
+        item_rule_template_id: ITEM_RULE manifest 标识。
+
+    Returns:
+        `_ContractApplicability` 对象。
 
     Raises:
         无显式抛出。
     """
 
-    if not classified_fund_type:
-        return PREFERRED_LENS_STATUS_MISMATCH
-    if app_category_status == APP_CATEGORY_STATUS_CONFLICT:
-        return PREFERRED_LENS_STATUS_MISMATCH
-    if preferred_lens_key:
-        return PREFERRED_LENS_STATUS_MATCH
-    return PREFERRED_LENS_STATUS_MISMATCH
+    return _ContractApplicability(
+        status=status,
+        preferred_lens_key=preferred_lens_key,
+        preferred_lens_chapters=preferred_lens_chapters,
+        preferred_lens_unresolved_chapter_ids=preferred_lens_unresolved_chapter_ids,
+        item_rule_decisions=item_rule_decisions,
+        reason=reason,
+        contract_template_id=contract_template_id,
+        item_rule_template_id=item_rule_template_id,
+    )
+
+
+def _is_supported_contract_fund_type(value: str) -> bool:
+    """判断文本是否为当前模板契约支持的基金类型。
+
+    Args:
+        value: 基金类型文本。
+
+    Returns:
+        属于当前 `FundType` 集合时返回 `True`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return value in SUPPORTED_CONTRACT_FUND_TYPES
 
 
 def _app_category_reason(
@@ -1277,30 +1503,6 @@ def _app_category_reason(
     if status == APP_CATEGORY_STATUS_MATCH:
         return f"App 类别 `{app_category}` 与基金类型 `{classified_fund_type}` 匹配"
     return "App 类别无法映射或基金类型缺失，类别冲突判断为 unknown"
-
-
-def _preferred_lens_reason(
-    classified_fund_type: str | None,
-    preferred_lens_key: str | None,
-    status: str,
-) -> str:
-    """构造 preferred_lens 可解析状态说明。
-
-    Args:
-        classified_fund_type: 系统基金类型。
-        preferred_lens_key: 解析出的 lens key。
-        status: preferred_lens 状态。
-
-    Returns:
-        状态说明。
-
-    Raises:
-        无显式抛出。
-    """
-
-    if status == PREFERRED_LENS_STATUS_MATCH:
-        return f"基金类型 `{classified_fund_type}` 可解析 preferred_lens `{preferred_lens_key}`"
-    return f"基金类型 `{classified_fund_type or ''}` 无法解析 preferred_lens"
 
 
 def _rate(numerator: int, denominator: int) -> float:
@@ -1851,8 +2053,8 @@ def _score_markdown(result: ExtractionScoreResult) -> str:
             "",
             "## Fund Quality",
             "",
-            "| fund_code | fund_name | app_category | classified_fund_type | app_category_status | preferred_lens_status | preferred_lens_key | missing_field_rate | missing_p0_fields | missing_p1_fields | reason |",
-            "|---|---|---|---|---|---|---|---:|---|---|---|",
+            "| fund_code | fund_name | app_category | classified_fund_type | app_category_status | preferred_lens_status | preferred_lens_key | resolved_chapters | unresolved_chapters | item_rule_decisions | missing_field_rate | missing_p0_fields | missing_p1_fields | reason |",
+            "|---|---|---|---|---|---|---|---:|---|---|---:|---|---|---|",
         ]
     )
     for row in result.fund_quality:
@@ -1865,6 +2067,9 @@ def _score_markdown(result: ExtractionScoreResult) -> str:
             f"{row.app_category_status} | "
             f"{row.preferred_lens_status} | "
             f"{row.preferred_lens_key or ''} | "
+            f"{len(row.preferred_lens_chapters)} | "
+            f"{', '.join(str(chapter_id) for chapter_id in row.preferred_lens_unresolved_chapter_ids)} | "
+            f"{_item_rule_decision_summary(row.item_rule_decisions)} | "
             f"{row.missing_field_rate:.1%} | "
             f"{', '.join(row.missing_p0_fields)} | "
             f"{', '.join(row.missing_p1_fields)} | "
@@ -1960,6 +2165,25 @@ def _format_optional_rate(value: float | None) -> str:
     if value is None:
         return "n/a"
     return f"{value:.1%}"
+
+
+def _item_rule_decision_summary(decisions: Sequence[ItemRuleDecisionSummary]) -> str:
+    """汇总 ITEM_RULE evaluator 决策数量。
+
+    Args:
+        decisions: ITEM_RULE 决策摘要序列。
+
+    Returns:
+        形如 `delete=2/render=2` 的摘要；无决策时返回空字符串。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if not decisions:
+        return ""
+    counts = Counter(decision.status for decision in decisions)
+    return "/".join(f"{status}={counts[status]}" for status in sorted(counts))
 
 
 def _escape_markdown_cell(value: str) -> str:

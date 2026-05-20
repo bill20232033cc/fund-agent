@@ -28,6 +28,9 @@ CORRECTNESS_STATUS_UNAVAILABLE: Final[str] = "unavailable"
 CORRECTNESS_MISMATCH: Final[str] = "mismatch"
 APP_CATEGORY_STATUS_CONFLICT: Final[str] = "conflict"
 PREFERRED_LENS_STATUS_MISMATCH: Final[str] = "mismatch"
+PREFERRED_LENS_STATUS_RESOLVED: Final[str] = "resolved"
+PREFERRED_LENS_STATUS_NOT_APPLICABLE: Final[str] = "not_applicable"
+LEGACY_PREFERRED_LENS_STATUS_MATCH: Final[str] = "match"
 FQ4_WARN_MISSING_FIELD_RATE: Final[float] = 0.20
 FQ4_BLOCK_MISSING_FIELD_RATE: Final[float] = 0.35
 
@@ -76,6 +79,31 @@ class QualityGateIssue:
 
 
 @dataclass(frozen=True, slots=True)
+class QualityGateRuleResult:
+    """质量 gate 单条规则运行结果。
+
+    Attributes:
+        rule_code: 质量规则码。
+        severity: 规则结果严重级别。
+        fund_code: 关联基金代码；全局规则可为空。
+        status: 规则状态。
+        message: 人类可读说明。
+        app_category: App 类别；非类别相关规则为空。
+        classified_fund_type: 系统识别基金类型；非类型相关规则为空。
+        preferred_lens_key: preferred_lens key；非 lens 相关规则为空。
+    """
+
+    rule_code: str
+    severity: str
+    fund_code: str | None
+    status: str
+    message: str
+    app_category: str | None = None
+    classified_fund_type: str | None = None
+    preferred_lens_key: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class QualityGateResult:
     """报告质量 gate 运行结果。
 
@@ -86,6 +114,7 @@ class QualityGateResult:
         gate_markdown_path: gate Markdown 输出路径。
         status: 聚合状态，取值为 `pass / warn / block`。
         issues: 质量问题列表。
+        rule_results: 规则运行结果列表，包含未触发 issue 的解释性结果。
     """
 
     score_path: Path
@@ -94,6 +123,20 @@ class QualityGateResult:
     gate_markdown_path: Path
     status: str
     issues: tuple[QualityGateIssue, ...]
+    rule_results: tuple[QualityGateRuleResult, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class _ScoreEvaluation:
+    """score payload 内部评估结果。
+
+    Attributes:
+        issues: 质量问题列表。
+        rule_results: 规则运行结果列表。
+    """
+
+    issues: tuple[QualityGateIssue, ...]
+    rule_results: tuple[QualityGateRuleResult, ...]
 
 
 def run_quality_gate(
@@ -118,7 +161,8 @@ def run_quality_gate(
     """
 
     score_payload = _load_score_payload(score_path)
-    issues = _evaluate_score_payload(score_payload)
+    evaluation = _evaluate_score_payload(score_payload)
+    issues = evaluation.issues
     status = _aggregate_gate_status(issues)
     resolved_output_dir = output_dir or score_path.parent
     resolved_output_dir.mkdir(parents=True, exist_ok=True)
@@ -129,6 +173,7 @@ def run_quality_gate(
         gate_markdown_path=resolved_output_dir / GATE_MARKDOWN_FILENAME,
         status=status,
         issues=tuple(issues),
+        rule_results=evaluation.rule_results,
     )
     result.gate_json_path.write_text(
         json.dumps(_json_payload(result), ensure_ascii=False, indent=2) + "\n",
@@ -159,14 +204,14 @@ def _load_score_payload(score_path: Path) -> dict[str, object]:
     return payload
 
 
-def _evaluate_score_payload(score_payload: Mapping[str, object]) -> list[QualityGateIssue]:
-    """从 score payload 生成质量 issue。
+def _evaluate_score_payload(score_payload: Mapping[str, object]) -> _ScoreEvaluation:
+    """从 score payload 生成质量 issue 和规则结果。
 
     Args:
         score_payload: `score.json` 顶层 payload。
 
     Returns:
-        质量 issue 列表。
+        质量 issue 与规则结果。
 
     Raises:
         ValueError: 缺少 `field_scores` 或字段行结构非法时抛出。
@@ -176,6 +221,7 @@ def _evaluate_score_payload(score_payload: Mapping[str, object]) -> list[Quality
     if not isinstance(field_scores, list):
         raise ValueError("score.json 缺少 field_scores 列表")
     issues: list[QualityGateIssue] = []
+    rule_results: list[QualityGateRuleResult] = []
     for index, raw_row in enumerate(field_scores):
         if not isinstance(raw_row, dict):
             raise ValueError(f"field_scores[{index}] 必须是 JSON object")
@@ -207,7 +253,9 @@ def _evaluate_score_payload(score_payload: Mapping[str, object]) -> list[Quality
         for index, raw_row in enumerate(fund_quality):
             if not isinstance(raw_row, dict):
                 raise ValueError(f"fund_quality[{index}] 必须是 JSON object")
-            issues.extend(_evaluate_fund_quality(raw_row, index))
+            fund_quality_evaluation = _evaluate_fund_quality(raw_row, index)
+            issues.extend(fund_quality_evaluation.issues)
+            rule_results.extend(fund_quality_evaluation.rule_results)
     failed_funds = score_payload.get("failed_funds")
     if failed_funds is not None:
         if not isinstance(failed_funds, list):
@@ -216,7 +264,7 @@ def _evaluate_score_payload(score_payload: Mapping[str, object]) -> list[Quality
             if not isinstance(raw_row, dict):
                 raise ValueError(f"failed_funds[{index}] 必须是 JSON object")
             issues.append(_evaluate_failed_fund(raw_row, index))
-    return issues
+    return _ScoreEvaluation(issues=tuple(issues), rule_results=tuple(rule_results))
 
 
 def _evaluate_correctness(correctness: object) -> list[QualityGateIssue]:
@@ -413,7 +461,7 @@ def _evaluate_fund_score(row: Mapping[str, object], index: int) -> list[QualityG
     return issues
 
 
-def _evaluate_fund_quality(row: Mapping[str, object], index: int) -> list[QualityGateIssue]:
+def _evaluate_fund_quality(row: Mapping[str, object], index: int) -> _ScoreEvaluation:
     """评估单只基金质量派生行。
 
     Args:
@@ -421,7 +469,7 @@ def _evaluate_fund_quality(row: Mapping[str, object], index: int) -> list[Qualit
         index: 行号，用于错误信息。
 
     Returns:
-        该基金触发的 FQ1/FQ4/FQ5 issue。
+        该基金触发的 issue 与 FQ5 规则结果。
 
     Raises:
         ValueError: 基金质量行结构非法时抛出。
@@ -433,9 +481,20 @@ def _evaluate_fund_quality(row: Mapping[str, object], index: int) -> list[Qualit
     preferred_lens_key = _optional_quality_text(row, "preferred_lens_key")
     reason = _optional_quality_text(row, "reason") or ""
     app_category_status = _required_quality_text(row, "app_category_status", index)
-    preferred_lens_status = _required_quality_text(row, "preferred_lens_status", index)
+    preferred_lens_status = _normalize_preferred_lens_status(
+        _required_quality_text(row, "preferred_lens_status", index),
+        index,
+    )
     missing_field_rate = _required_quality_number(row, "missing_field_rate", index)
     issues: list[QualityGateIssue] = []
+    rule_result = _fund_quality_rule_result(
+        fund_code=fund_code,
+        app_category=app_category,
+        classified_fund_type=classified_fund_type,
+        preferred_lens_key=preferred_lens_key,
+        preferred_lens_status=preferred_lens_status,
+        reason=reason,
+    )
     if app_category_status == APP_CATEGORY_STATUS_CONFLICT:
         issues.append(
             QualityGateIssue(
@@ -467,7 +526,7 @@ def _evaluate_fund_quality(row: Mapping[str, object], index: int) -> list[Qualit
                 field_name=None,
                 priority=None,
                 message=(
-                    f"基金 `{fund_code}` 无法稳定解析 preferred_lens；"
+                    f"基金 `{fund_code}` 无法稳定应用模板契约；"
                     f"fund_type=`{classified_fund_type or ''}`，{reason}"
                 ),
                 app_category=app_category,
@@ -475,7 +534,7 @@ def _evaluate_fund_quality(row: Mapping[str, object], index: int) -> list[Qualit
                 preferred_lens_key=preferred_lens_key,
             )
         )
-    return issues
+    return _ScoreEvaluation(issues=tuple(issues), rule_results=(rule_result,))
 
 
 def _missing_rate_issues(
@@ -523,6 +582,73 @@ def _missing_rate_issues(
             )
         ]
     return []
+
+
+def _normalize_preferred_lens_status(status: str, index: int) -> str:
+    """规范化 score.json 中的 FQ5 状态。
+
+    Args:
+        status: score.json `preferred_lens_status` 原始状态。
+        index: `fund_quality` 行号，用于错误信息。
+
+    Returns:
+        `resolved / not_applicable / mismatch` 之一。
+
+    Raises:
+        ValueError: 状态不受支持时抛出。
+    """
+
+    if status == LEGACY_PREFERRED_LENS_STATUS_MATCH:
+        return PREFERRED_LENS_STATUS_RESOLVED
+    if status in {
+        PREFERRED_LENS_STATUS_RESOLVED,
+        PREFERRED_LENS_STATUS_NOT_APPLICABLE,
+        PREFERRED_LENS_STATUS_MISMATCH,
+    }:
+        return status
+    raise ValueError(f"fund_quality[{index}].preferred_lens_status 不受支持：{status}")
+
+
+def _fund_quality_rule_result(
+    *,
+    fund_code: str,
+    app_category: str | None,
+    classified_fund_type: str | None,
+    preferred_lens_key: str | None,
+    preferred_lens_status: str,
+    reason: str,
+) -> QualityGateRuleResult:
+    """构造 FQ5 模板契约适用性规则结果。
+
+    Args:
+        fund_code: 基金代码。
+        app_category: App 类别。
+        classified_fund_type: 系统识别基金类型。
+        preferred_lens_key: score.json 中记录的 preferred_lens key。
+        preferred_lens_status: 已规范化的 FQ5 状态。
+        reason: score.json 中的基金质量原因。
+
+    Returns:
+        FQ5 规则运行结果。
+
+    Raises:
+        无显式抛出。
+    """
+
+    severity = SEVERITY_BLOCK if preferred_lens_status == PREFERRED_LENS_STATUS_MISMATCH else SEVERITY_INFO
+    return QualityGateRuleResult(
+        rule_code="FQ5",
+        severity=severity,
+        fund_code=fund_code,
+        status=preferred_lens_status,
+        message=(
+            f"基金 `{fund_code}` FQ5 template_contract_applicability="
+            f"`{preferred_lens_status}`；{reason}"
+        ),
+        app_category=app_category,
+        classified_fund_type=classified_fund_type,
+        preferred_lens_key=preferred_lens_key,
+    )
 
 
 def _evaluate_failed_fund(row: Mapping[str, object], index: int) -> QualityGateIssue:
@@ -846,6 +972,7 @@ def _json_payload(result: QualityGateResult) -> dict[str, object]:
         "status": result.status,
         "issue_count": len(result.issues),
         "issues": [asdict(issue) for issue in result.issues],
+        "rule_results": [asdict(rule_result) for rule_result in result.rule_results],
     }
 
 
@@ -868,6 +995,7 @@ def _markdown_payload(result: QualityGateResult) -> str:
         f"- score_path: `{result.score_path}`",
         f"- status: `{result.status}`",
         f"- issue_count: {len(result.issues)}",
+        f"- rule_result_count: {len(result.rule_results)}",
         "",
         "## Issues",
         "",
@@ -893,6 +1021,27 @@ def _markdown_payload(result: QualityGateResult) -> str:
             f"{_escape_markdown_cell(issue.actual_value or '')} | "
             f"{_escape_markdown_cell(issue.error_type or '')} | "
             f"{_escape_markdown_cell(issue.message)} |"
+        )
+    lines.extend(
+        [
+            "",
+            "## Rule Results",
+            "",
+            "| rule | severity | fund_code | status | app_category | fund_type | lens | message |",
+            "|---|---|---|---|---|---|---|---|",
+        ]
+    )
+    for rule_result in result.rule_results:
+        lines.append(
+            "| "
+            f"{rule_result.rule_code} | "
+            f"{rule_result.severity} | "
+            f"{rule_result.fund_code or ''} | "
+            f"{rule_result.status} | "
+            f"{_escape_markdown_cell(rule_result.app_category or '')} | "
+            f"{_escape_markdown_cell(rule_result.classified_fund_type or '')} | "
+            f"{_escape_markdown_cell(rule_result.preferred_lens_key or '')} | "
+            f"{_escape_markdown_cell(rule_result.message)} |"
         )
     return "\n".join(lines) + "\n"
 
