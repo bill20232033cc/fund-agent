@@ -261,7 +261,16 @@ C2 当前只做确定性 marker / 元数据检查，不调用 LLM，不判断语
 - `preferred_lens` key 只允许当前标准基金类型 `index_fund`、`active_fund`、`bond_fund`、`enhanced_index`、`qdii_fund`、`fof_fund` 和 `default`
 - `resolve_preferred_lens(chapter_id, fund_type)` 优先返回精确基金类型 lens，没有精确命中时返回 `default`；章节缺失、基金类型不支持或缺少 fallback 时抛出 `ValueError`
 - `validate_template_contract_manifest()` 对章节数量、id 连续性、重复 id、空字段、unsupported lens key 和无 lens fallback 执行 fail-closed 校验
-- 当前 manifest 是可机器消费的契约清单，不改变 `render_template_report()` 的 Markdown 输出结构，也不实现 `ITEM_RULE`、contract audit 或 quality gate FQ5 升级
+- 当前 CHAPTER_CONTRACT manifest 是可机器消费的契约清单，不改变 `render_template_report()` 的 Markdown 输出结构，也不实现 quality gate FQ5 升级
+
+`load_template_item_rule_manifest()` 返回 `TemplateItemRuleManifest`，当前覆盖 `docs/fund-analysis-template-draft.md` 已声明的四条 `ITEM_RULE`：
+
+- manifest 位于 Capability 层 `fund_agent/fund/template/item_rules.py`，与 `contracts.py` 平级，不依赖 renderer、audit、Service、Engine、UI 或 CLI
+- 当前内置规则全部为 `conditional`，覆盖第 1 章“指数编制规则与成分股”“基金经理投资哲学”和第 2 章“超额收益分年度拆解”“跟踪误差分析”；没有内置 optional 规则
+- `evaluate_template_item_rules(fund_type=..., facets=...)` 只按标准基金类型和调用方显式提供的 facet 做确定性触发，不从报告文本推断 facet；已知 facet 与基金类型冲突时抛出 `ValueError`
+- `conditional` 未触发时决策为 `delete_segment`；schema 同时支持 `optional`，其缺失策略为 `render_unavailable`
+- `rendered_segment_present(markdown, rule)` 只按唯一小节标记做字面量检查，不把“跟踪指数”等普通正文短语当作 ITEM_RULE 段落命中
+- 当前 ITEM_RULE manifest 不接入程序审计、质量门禁、Service/UI/CLI，也不读取年报、PDF 或外部数据
 
 所有关键字段都通过 `EvidenceAnchor` 记录 `document_year`、`section_id`、`row_locator` 和命中原文，供后续证据锚点渲染使用。
 
@@ -319,6 +328,7 @@ C2 当前只做确定性 marker / 元数据检查，不调用 LLM，不判断语
 - `analysis/`：分析计算模块。当前包含 `r_abc.py`、`alpha_judge.py`、`consistency_check.py`、`investor_return.py`、`risk_check.py` 与内部比例解析 helper，只消费 P1/P2 结构化数据和显式判断证据，不直接读取年报文件。
 - `template/`：模板渲染能力。当前包含 `renderer.py`，只消费 P1/P2 结构化结果并输出 8 章 Markdown、章节块与程序审计输入。
 - `template/contracts.py`：模板契约能力，维护第 0-7 章 CHAPTER_CONTRACT 机器契约、章节契约读取和基金类型 lens 解析。
+- `template/item_rules.py`：模板 ITEM_RULE manifest，维护当前四条 conditional 规则、确定性触发评估和段落标记检查。
 - `pdf/`：底层 PDF helper。当前包含：
   - `downloader.py`：仅供仓库内部使用的 PDF 下载 helper，会写入本地缓存
   - `parser.py`：PDF 全文、表格与章节定位原型
@@ -346,5 +356,6 @@ C2 当前只做确定性 marker / 元数据检查，不调用 LLM，不判断语
 - 当前 `analysis/checklist.py` 实现 7 问题检查清单，消费分析结果和显式用户输入，不读取外部数据。
 - 当前 `audit/audit_programmatic.py` 实现 MVP 程序审计，不调用 LLM 或证据复核。
 - 当前 `template/contracts.py` 实现第 0-7 章 CHAPTER_CONTRACT manifest、章节契约读取、基金类型 lens 解析和 fail-closed manifest 校验；不运行时解析 Markdown 注释。
+- 当前 `template/item_rules.py` 实现 ITEM_RULE manifest、显式基金类型/facet 评估和唯一段落标记检查；不调用 LLM、不读取基金文档、不接入程序审计或质量门禁。
 - 当前 `template/renderer.py` 实现 8 章 Markdown 模板渲染，按 CHAPTER_CONTRACT manifest 生成章节标题，并返回可直接用于程序审计的 `ProgrammaticAuditInput` 与 `RenderedChapterBlock` 章节块。
 - `parser.py` 已具备 `§3` 定位修复，但真实样本扩展和更多章节/表格抽取仍在后续 slice 完成。
