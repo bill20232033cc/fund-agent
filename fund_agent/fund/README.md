@@ -272,7 +272,7 @@ C2 当前只做确定性 marker / 元数据检查，不调用 LLM，不判断语
 
 - manifest 位于 Capability 层 `fund_agent/fund/template/item_rules.py`，与 `contracts.py` 平级，不依赖 renderer、audit、Service、Engine、UI 或 CLI
 - 当前内置规则全部为 `conditional`，覆盖第 1 章“指数编制规则与成分股”“基金经理投资哲学”和第 2 章“超额收益分年度拆解”“跟踪误差分析”；没有内置 optional 规则
-- `evaluate_template_item_rules(fund_type=..., facets=...)` 只按标准基金类型和调用方显式提供的 facet 做确定性触发，不从报告文本推断 facet；已知 facet 与基金类型冲突时抛出 `ValueError`
+- `evaluate_template_item_rules(fund_type=..., facets=...)` 只按标准基金类型和调用方显式提供的 facet 做确定性触发，不从报告文本推断 facet；已知 facet 覆盖指数、主动、增强指数、债券、QDII 和 FOF 细分标签，与基金类型冲突时抛出 `ValueError`
 - `conditional` 未触发时决策为 `delete_segment`；schema 同时支持 `optional`，其缺失策略为 `render_unavailable`
 - `rendered_segment_present(markdown, rule)` 只按唯一小节标记做字面量检查，不把“跟踪指数”等普通正文短语当作 ITEM_RULE 段落命中
 - 当前 ITEM_RULE manifest 不接入程序审计、质量门禁、Service/UI/CLI，也不读取年报、PDF 或外部数据

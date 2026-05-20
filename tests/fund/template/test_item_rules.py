@@ -239,6 +239,76 @@ def test_evaluate_template_item_rule_validates_explicit_facets_against_fund_type
     assert unknown_facet_decision.triggered is False
 
 
+@pytest.mark.parametrize(
+    ("fund_type", "facets"),
+    (
+        ("bond_fund", ("债券基金", "纯债基金", "二级债基/混合债基", "偏债混合基金")),
+        ("qdii_fund", ("QDII基金", "QDII 基金", "境外权益基金")),
+        ("fof_fund", ("FOF基金", "FOF 基金", "基金中基金")),
+    ),
+)
+def test_evaluate_template_item_rule_accepts_non_equity_explicit_facets(
+    fund_type: FundType,
+    facets: tuple[str, ...],
+) -> None:
+    """验证债券、QDII 与 FOF 的合法显式 facet 不会被静默丢弃。
+
+    Args:
+        fund_type: 标准基金类型。
+        facets: 与基金类型相容的显式细分标签。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当合法非权益 facet 未进入 evaluator 原因说明时抛出。
+    """
+
+    decision = evaluate_template_item_rule(
+        _non_equity_fixture_rule(fund_type, facets),
+        fund_type=fund_type,
+        facets=facets,
+    )
+
+    assert decision.status == "render"
+    assert decision.triggered is True
+    assert "显式 facet" in decision.reason
+    assert facets[0] in decision.reason
+
+
+@pytest.mark.parametrize(
+    ("fund_type", "facets"),
+    (
+        ("bond_fund", ("QDII 基金",)),
+        ("qdii_fund", ("FOF 基金",)),
+        ("fof_fund", ("纯债基金",)),
+    ),
+)
+def test_evaluate_template_item_rule_rejects_non_equity_facet_conflicts(
+    fund_type: FundType,
+    facets: tuple[str, ...],
+) -> None:
+    """验证债券、QDII 与 FOF 的显式 facet 冲突会 fail closed。
+
+    Args:
+        fund_type: 标准基金类型。
+        facets: 与基金类型冲突的显式细分标签。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当冲突 facet 未抛出 `ValueError` 时抛出。
+    """
+
+    with pytest.raises(ValueError, match="冲突"):
+        evaluate_template_item_rule(
+            _non_equity_fixture_rule("bond_fund", ("债券基金",)),
+            fund_type=fund_type,
+            facets=facets,
+        )
+
+
 def test_optional_fixture_renders_unavailable_without_builtin_optional_rule() -> None:
     """验证 optional 模式只作为 schema/evaluator 能力存在，不进入内置 manifest。
 
@@ -348,6 +418,33 @@ def _optional_rule() -> TemplateItemRule:
         fund_types_any=("active_fund",),
         segment_markers_any=("#### 测试可选字段",),
         missing_behavior="render_unavailable",
+    )
+
+
+def _non_equity_fixture_rule(fund_type: FundType, facets: tuple[str, ...]) -> TemplateItemRule:
+    """构造用于验证非权益 facet 映射的本地 ITEM_RULE。
+
+    Args:
+        fund_type: 规则显式适用的标准基金类型。
+        facets: 规则显式适用的细分标签。
+
+    Returns:
+        conditional 模式规则 fixture。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return TemplateItemRule(
+        rule_id=f"fixture_{fund_type}_facets",
+        chapter_id=1,
+        item_title="测试非权益细分标签",
+        mode="conditional",
+        when_text="测试 fixture",
+        facets_any=facets,
+        fund_types_any=(fund_type,),
+        segment_markers_any=("#### 测试非权益细分标签",),
+        missing_behavior="delete_segment",
     )
 
 
