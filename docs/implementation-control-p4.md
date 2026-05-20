@@ -32,9 +32,9 @@ P4 必须优先解决三个底层问题：
 
 | 项目 | 状态 |
 |---|---|
-| 当前 phase | P6 template contract hardening |
-| 当前 gate | `P6 closed / integrated on main` |
-| 下一 gate | `post-P6 follow-up planning` |
+| 当前 phase | P7 annual report source migration |
+| 当前 gate | `P7-S1 EID source research spike plan/review` |
+| 下一 gate | `P7-S1 plan review` |
 | 当前分支 | `main` |
 | P4 输入池 | `docs/code_20260519.csv` |
 | 已知数据质量问题 | `016492` 重复；56 条记录、55 个唯一代码 |
@@ -617,3 +617,4 @@ P4 遵循 phaseflow / gateflow 多 Agent 约定：
 | 2026-05-20 | P6 aggregate deepreview/fix/rereview | ✅ accepted | MiMo/GLM aggregate reviews PASS，artifacts=`docs/reviews/p6-aggregate-deepreview-mimo-20260520.md`,`docs/reviews/p6-aggregate-deepreview-glm-20260520.md`；controller accepted 6 个低风险维护项并完成 fix，judgment=`docs/reviews/p6-aggregate-deepreview-controller-judgment-20260520.md`，fix artifact=`docs/reviews/p6-aggregate-fix-20260520.md`；targeted re-review MiMo/GLM 均 PASS，acceptance=`docs/reviews/p6-aggregate-rereview-controller-acceptance-20260520.md`；当前验证 targeted `87 passed`、full suite `246 passed`、ruff passed、diff check passed；当前 gate 为 `P6 acceptance / ready-to-open-draft-PR reconciliation` |
 | 2026-05-20 | P6 acceptance / ready-to-open-draft-PR reconciliation | ✅ accepted | artifact=`docs/reviews/p6-acceptance-ready-to-open-draft-pr-reconciliation-20260520.md`；P6 已完成 deterministic template contract hardening，P6-S6/RR-13 等 residual risks 均有 owner 且不阻塞 draft PR；当前 gate 为 `ready-to-open-draft-PR`，下一 gate 为 `draft PR gate（需用户授权）` |
 | 2026-05-20 | P6 draft PR gate reconciliation | ✅ not applicable / integrated | artifact=`docs/reviews/p6-draft-pr-gate-reconciliation-20260520.md`；用户已授权 draft PR gate，但 `HEAD == origin/main == e8d6a53`，P6 已由 accepted commits 直接集成到 `main`，无非空 draft PR 可创建；当前 gate 为 `P6 closed / integrated on main`，下一 gate 为 `post-P6 follow-up planning` |
+| 2026-05-20 | post-P6 follow-up planning | ✅ accepted | plan artifact=`docs/reviews/post-p6-follow-up-planning-20260520.md`，controller review=`docs/reviews/post-p6-follow-up-plan-review-controller-20260520.md`；裁决下一阶段第一优先级为 P7 annual report source migration，第一 gate 为 `P7-S1 EID source research spike plan/review`；P6-S6/RR-13 仍为 human-owned，RR-16/Evidence Confirm/LLM audit 等后移 |
