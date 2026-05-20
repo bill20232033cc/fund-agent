@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import asyncio
 from pathlib import Path
-from typing import Awaitable, Callable
+from typing import Callable
 
 from fund_agent.fund.documents.models import (
     DocumentKey,
@@ -16,12 +16,11 @@ from fund_agent.fund.documents.models import (
     ParsedTable,
     ReportSection,
 )
-from fund_agent.fund.pdf.downloader import _download_annual_report_pdf
+from fund_agent.fund.documents.sources import AnnualReportSourceOrchestrator
 from fund_agent.fund.pdf.parser import extract_tables, extract_text, locate_sections
 
 SectionOffsets = dict[str, tuple[int, int]]
 TablePayload = dict[str, object]
-AnnualReportDownloader = Callable[..., Awaitable[Path]]
 TextExtractor = Callable[[Path], str]
 TableExtractor = Callable[[Path], list[TablePayload]]
 SectionLocator = Callable[[str], SectionOffsets]
@@ -174,7 +173,7 @@ class AnnualReportPdfAdapter:
 
     def __init__(
         self,
-        downloader: AnnualReportDownloader = _download_annual_report_pdf,
+        source_orchestrator: AnnualReportSourceOrchestrator | None = None,
         text_extractor: TextExtractor = extract_text,
         table_extractor: TableExtractor = extract_tables,
         section_locator: SectionLocator = locate_sections,
@@ -182,7 +181,7 @@ class AnnualReportPdfAdapter:
         """初始化 PDF 适配器。
 
         Args:
-            downloader: 年报 PDF 下载函数。
+            source_orchestrator: 年报来源编排器；未提供时使用当前默认来源。
             text_extractor: PDF 全文提取函数。
             table_extractor: PDF 表格提取函数。
             section_locator: 章节定位函数。
@@ -194,7 +193,7 @@ class AnnualReportPdfAdapter:
             无显式抛出。
         """
 
-        self._downloader = downloader
+        self._source_orchestrator = source_orchestrator or AnnualReportSourceOrchestrator()
         self._text_extractor = text_extractor
         self._table_extractor = table_extractor
         self._section_locator = section_locator
@@ -221,11 +220,12 @@ class AnnualReportPdfAdapter:
             Exception: 允许底层下载异常直接传播。
         """
 
-        return await self._downloader(
+        result = await self._source_orchestrator.fetch_annual_report_pdf(
             fund_code,
             year,
             force_refresh=force_refresh,
         )
+        return result.pdf_path
 
     async def parse_pdf(
         self,

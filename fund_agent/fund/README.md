@@ -53,6 +53,8 @@ chapter_lens = resolve_preferred_lens(chapter_id=2, fund_type="active_fund")
 - `sections`：章节索引，供后续模板第 2 章 `R=A+B-C` 和第 4 章“投资者获得感”提取复用
 - `tables`：年报表格的结构化结果
 
+年报 PDF 获取由 documents 层内部的来源编排器完成，调用方不感知具体下载源。当前生产默认来源仍是 Eastmoney/akshare 包装器；来源优先级、fallback 和 timeout/retry 配置边界只存在于 Fund Capability 内部，不暴露给 Service、UI、Engine 或 CLI。
+
 `extract_profile()` 返回 `ProfileExtractionResult`，当前只覆盖模板第 1 章“这只基金到底是什么产品”的最小数据底座：
 
 - `basic_identity`：基金名称、代码、披露类别、规模、基金经理，以及稳定输出 `classified_fund_type` / `classification_basis`

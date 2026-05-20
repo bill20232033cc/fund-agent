@@ -11,6 +11,31 @@ from fund_agent.fund.documents.adapters.annual_report_pdf import AnnualReportPdf
 from fund_agent.fund.documents.cache import AnnualReportDocumentCache
 from fund_agent.fund.documents.models import DocumentKey, ParsedAnnualReport, ReportSection
 from fund_agent.fund.documents.repository import FundDocumentRepository
+from fund_agent.fund.documents.sources import AnnualReportSourceMetadata, AnnualReportSourceResult
+
+
+class _FakeSourceOrchestrator:
+    """PDF 适配器测试使用的假来源编排器。"""
+
+    def __init__(self, pdf_path: Path) -> None:
+        """初始化假来源编排器。
+
+        Args:
+            pdf_path: 伪造的 PDF 路径。
+
+        Returns:
+            无返回值。
+
+        Raises:
+            无显式抛出。
+        """
+
+        self.fetch_annual_report_pdf = AsyncMock(
+            return_value=AnnualReportSourceResult(
+                pdf_path=pdf_path,
+                metadata=AnnualReportSourceMetadata(source="eastmoney"),
+            )
+        )
 
 
 @pytest.mark.asyncio
@@ -29,7 +54,7 @@ async def test_repository_returns_parsed_annual_report_without_path_exposure() -
 
     raw_text = "§1 基金简介\n第一章正文\n§3 基金净值表现\n第三章正文"
     section_three_offset = raw_text.index("§3")
-    downloader = AsyncMock(return_value=Path("/tmp/mock-report.pdf"))
+    source_orchestrator = _FakeSourceOrchestrator(Path("/tmp/mock-report.pdf"))
     text_extractor = Mock(return_value=raw_text)
     table_extractor = Mock(
         return_value=[
@@ -47,7 +72,7 @@ async def test_repository_returns_parsed_annual_report_without_path_exposure() -
         }
     )
     adapter = AnnualReportPdfAdapter(
-        downloader=downloader,
+        source_orchestrator=source_orchestrator,
         text_extractor=text_extractor,
         table_extractor=table_extractor,
         section_locator=section_locator,
@@ -67,7 +92,9 @@ async def test_repository_returns_parsed_annual_report_without_path_exposure() -
     assert report.tables[0].page_number == 2
     assert report.tables[0].headers == ("字段", "数值")
     assert report.tables[0].rows == (("累计净值", "1.23"),)
-    downloader.assert_awaited_once_with("110011", 2024, force_refresh=True)
+    source_orchestrator.fetch_annual_report_pdf.assert_awaited_once_with(
+        "110011", 2024, force_refresh=True
+    )
     text_extractor.assert_called_once()
     table_extractor.assert_called_once()
     section_locator.assert_called_once_with(raw_text)
@@ -192,7 +219,7 @@ async def test_annual_report_pdf_adapter_happy_path_builds_sections_and_tables()
     raw_text = "§1 基金简介\n第一章\n§4 管理人报告\n第四章"
     section_four_offset = raw_text.index("§4")
     adapter = AnnualReportPdfAdapter(
-        downloader=AsyncMock(return_value=pdf_path),
+        source_orchestrator=_FakeSourceOrchestrator(pdf_path),
         text_extractor=Mock(return_value=raw_text),
         table_extractor=Mock(
             return_value=[
@@ -279,7 +306,7 @@ async def test_annual_report_pdf_adapter_runs_sync_helpers_via_to_thread(
 
     monkeypatch.setattr(annual_report_pdf_module.asyncio, "to_thread", _fake_to_thread)
     adapter = AnnualReportPdfAdapter(
-        downloader=AsyncMock(return_value=pdf_path),
+        source_orchestrator=_FakeSourceOrchestrator(pdf_path),
         text_extractor=text_extractor,
         table_extractor=table_extractor,
         section_locator=section_locator,
