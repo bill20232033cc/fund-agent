@@ -45,7 +45,7 @@ Resume checklist: confirm current gate and next entry point; confirm the next ac
 | `P11-S2 implementation/code review` | accepted | `docs/reviews/p11-s2-implementation-20260521.md`, `docs/reviews/p11-s2-code-review-controller-judgment-20260521.md` | local docs-only change | MiMo/GLM PASS_WITH_FINDINGS; Startup Packet residual bookkeeping fixed | post-P11 planning | follow-up planning |
 | `post-P11 follow-up planning accepted` | accepted | `docs/reviews/post-p11-second-follow-up-planning-20260522.md` | `ba77e02` | P11 recovery accepted; ITEM_RULE deterministic compliance selected as next product slice | P12-S1 | plan/review |
 | `P12-S1 ITEM_RULE renderer/audit compliance plan/review` | accepted | `docs/reviews/p12-s1-item-rule-renderer-audit-compliance-plan-20260522.md`, `docs/reviews/p12-s1-plan-review-controller-judgment-20260522.md` | local docs-only plan | MiMo/GLM initial PASS_WITH_FINDINGS; targeted re-reviews PASS | P12-S1 implementation | implementation |
-| `P12-S1 ITEM_RULE renderer/audit compliance implementation/code review` | accepted | `docs/reviews/p12-s1-implementation-20260522.md`, `docs/reviews/p12-s1-code-review-controller-judgment-20260522.md` | local implementation change | controller verified diff check, targeted `81 passed`, adjacent `43 passed`, ruff passed, full `401 passed`; MiMo PASS; GLM PASS | post-P12-S1 planning | follow-up planning |
+| `P12-S1 ITEM_RULE renderer/audit compliance implementation/code review` | accepted | `docs/reviews/p12-s1-implementation-20260522.md`, `docs/reviews/p12-s1-code-review-controller-judgment-20260522.md` | `c757036` | controller verified diff check, targeted `81 passed`, adjacent `43 passed`, ruff passed, full `401 passed`; MiMo PASS; GLM PASS | post-P12-S1 planning | follow-up planning |
 
 ## Phase History Index
 
@@ -63,7 +63,7 @@ Resume checklist: confirm current gate and next entry point; confirm the next ac
 | P9 | done | [Archive: P9](#archive-p9) | P9 product contract and aggregate deepreview artifacts | `2bacdb3`, `ce603a0` recorded | full suite `377 passed` | review limitation documented |
 | P10 | merged | [Archive: P10](#archive-p10) | P10 plan/code/aggregate/PR artifacts | PR #6 merge `acc692c7e84c855398de86497b0d05f30b6f5ca5` | full suite `388 passed`, CI pass | `docs/repo-audit-20260521.md` excluded |
 | P11 | accepted | [Archive: P11](#archive-p11) | P11 plan/review/implementation/code-review/follow-up/P11-S2 artifacts | `5f5331b` | P11-S2 docs-only validation passed | closed |
-| P12 | accepted | [Archive: P12](#archive-p12) | `docs/reviews/post-p11-second-follow-up-planning-20260522.md`, `docs/reviews/p12-s1-plan-review-controller-judgment-20260522.md`, `docs/reviews/p12-s1-code-review-controller-judgment-20260522.md` | pending local commit | full suite `401 passed` | post-P12-S1 planning |
+| P12 | accepted | [Archive: P12](#archive-p12) | `docs/reviews/post-p11-second-follow-up-planning-20260522.md`, `docs/reviews/p12-s1-plan-review-controller-judgment-20260522.md`, `docs/reviews/p12-s1-code-review-controller-judgment-20260522.md` | `c757036` | full suite `401 passed` | post-P12-S1 planning |
 
 ## P12 Current Phase Notes
 
