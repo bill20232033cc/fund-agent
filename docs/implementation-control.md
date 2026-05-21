@@ -12,9 +12,9 @@
 
 | Field | State |
 |---|---|
-| Branch | `main` |
-| Current gate | `ready-to-open-draft-PR` |
-| Next entry point | `draft PR gate pending user authorization` |
+| Branch | `feat/p13-tracking-error-direct-disclosure` |
+| Current gate | `draft-PR-pass` |
+| Next entry point | `await user authorization for merge / mark ready / next phase` |
 | Current phase | `P13 tracking-error / index-data source contract` |
 | Design truth | `docs/design.md` |
 | Control truth | `docs/implementation-control.md` |
@@ -38,12 +38,13 @@
 | Latest P13-S1 plan artifacts | `docs/reviews/p13-s1-tracking-error-index-data-plan-20260522.md`, `docs/reviews/p13-s1-plan-review-mimo-20260522.md`, `docs/reviews/p13-s1-plan-review-glm-20260522.md`, `docs/reviews/p13-s1-plan-rereview-mimo-20260522.md`, `docs/reviews/p13-s1-plan-rereview-glm-20260522.md`, `docs/reviews/p13-s1-plan-review-controller-judgment-20260522.md` |
 | Latest P13 implementation artifacts | `docs/reviews/p13-tracking-error-direct-disclosure-implementation-20260522.md`, `docs/reviews/p13-tracking-error-code-review-mimo-20260522.md`, `docs/reviews/p13-tracking-error-code-review-glm-20260522.md`, `docs/reviews/p13-tracking-error-code-rereview-mimo-20260522.md`, `docs/reviews/p13-tracking-error-code-rereview-glm-20260522.md`, `docs/reviews/p13-tracking-error-code-review-controller-judgment-20260522.md` |
 | Latest P13 aggregate artifacts | `docs/reviews/p13-aggregate-deepreview-mimo-20260522.md`, `docs/reviews/p13-aggregate-deepreview-glm-20260522.md`, `docs/reviews/p13-aggregate-deepreview-controller-judgment-20260522.md` |
+| Latest P13 PR artifacts | `https://github.com/bill20232033cc/fund-agent/pull/7`, `docs/reviews/p13-pr-review-mimo-20260522.md`, `docs/reviews/p13-pr-review-glm-20260522.md`, `docs/reviews/p13-pr-review-controller-judgment-20260522.md` |
 | Last merged PR | PR #6, merge commit `acc692c7e84c855398de86497b0d05f30b6f5ca5` |
-| Product baseline | P10 release-readiness merged; P11 control-doc recovery accepted; P12 closed on main; post-P12 release lane maintenance-ready; P13 direct tracking-error disclosure ready for draft PR |
+| Product baseline | P10 release-readiness merged; P11 control-doc recovery accepted; P12 closed on main; post-P12 release lane maintenance-ready; P13 direct tracking-error disclosure draft PR passed |
 | Open residuals | RR-13 duplicate `016492`, excluded `docs/repo-audit-20260521.md`, future P13 tracking-error/index-data candidates, future E1-E3/Evidence Confirm, repo-hygiene candidates D-1/D-8-C5/C-9 |
 | Non-goal reminder | do not introduce Dayu Host/Engine/tool loop, LLM writing, or external runtime dependency |
 
-Resume checklist: confirm current gate and next entry point; next action is draft PR gate only after explicit user authorization to push and create draft PR; keep RR-13 source data and `docs/repo-audit-20260521.md` excluded unless explicitly scoped; preserve deterministic MVP boundaries and do not introduce LLM audit, Host, Engine, tool loop, Evidence Confirm execution, calculated index series, methodology extraction, or constituents extraction.
+Resume checklist: confirm current gate and next entry point; PR 7 is open as draft and has passed CI plus MiMo/GLM PR review; do not merge, approve, mark ready for review, request reviewers, delete branch, comment externally, or create/modify external issues without explicit user authorization; keep RR-13 source data and `docs/repo-audit-20260521.md` excluded unless explicitly scoped; preserve deterministic MVP boundaries and do not introduce LLM audit, Host, Engine, tool loop, Evidence Confirm execution, calculated index series, methodology extraction, or constituents extraction.
 
 ## Active Gate Ledger
 
@@ -69,6 +70,7 @@ Resume checklist: confirm current gate and next entry point; next action is draf
 | `P13-S1 tracking-error / index-data source contract plan-review` | accepted | `docs/reviews/p13-s1-tracking-error-index-data-plan-20260522.md`, `docs/reviews/p13-s1-plan-review-controller-judgment-20260522.md` | local docs-only plan | MiMo/GLM initial reviews found 9 findings; revised plan re-reviews PASS/PASS; all findings closed | P13 tracking-error direct-disclosure implementation | implementation |
 | `P13 tracking-error direct-disclosure implementation/code review` | accepted | `docs/reviews/p13-tracking-error-direct-disclosure-implementation-20260522.md`, `docs/reviews/p13-tracking-error-code-review-controller-judgment-20260522.md` | `2172691` | full suite `424 passed`; ruff passed; diff check passed; MiMo PASS then rereview PASS; GLM PASS_WITH_FINDINGS then rereview PASS | P13 aggregate deepreview | aggregate review |
 | `P13 aggregate deepreview` | accepted | `docs/reviews/p13-aggregate-deepreview-mimo-20260522.md`, `docs/reviews/p13-aggregate-deepreview-glm-20260522.md`, `docs/reviews/p13-aggregate-deepreview-controller-judgment-20260522.md` | `ffa8eff` | MiMo PASS; GLM PASS; controller verified full suite `424 passed`, ruff passed, diff check passed | ready-to-open-draft-PR | draft PR gate |
+| `P13 draft PR gate / PR review` | accepted | `https://github.com/bill20232033cc/fund-agent/pull/7`, `docs/reviews/p13-pr-review-mimo-20260522.md`, `docs/reviews/p13-pr-review-glm-20260522.md`, `docs/reviews/p13-pr-review-controller-judgment-20260522.md` | pending accepted PR review commit | PR 7 CI `test` passed; MiMo PASS; GLM PASS; controller `git diff --check HEAD` passed | P13 residuals assigned to future phases / user | draft-PR-pass |
 
 ## Phase History Index
 
@@ -87,7 +89,7 @@ Resume checklist: confirm current gate and next entry point; next action is draf
 | P10 | merged | [Archive: P10](#archive-p10) | P10 plan/code/aggregate/PR artifacts | PR #6 merge `acc692c7e84c855398de86497b0d05f30b6f5ca5` | full suite `388 passed`, CI pass | `docs/repo-audit-20260521.md` excluded |
 | P11 | accepted | [Archive: P11](#archive-p11) | P11 plan/review/implementation/code-review/follow-up/P11-S2 artifacts | `5f5331b` | P11-S2 docs-only validation passed | closed |
 | P12 / next selection | accepted | [Archive: P12](#archive-p12) | `docs/reviews/post-p11-second-follow-up-planning-20260522.md`, `docs/reviews/p12-s1-plan-review-controller-judgment-20260522.md`, `docs/reviews/p12-s1-code-review-controller-judgment-20260522.md`, `docs/reviews/p12-s2-plan-review-controller-judgment-20260522.md`, `docs/reviews/p12-aggregate-deepreview-controller-judgment-20260522.md`, `docs/reviews/p12-main-branch-closeout-20260522.md`, `docs/reviews/post-p12-release-maintenance-closeout-20260522.md`, `docs/reviews/next-phase-selection-controller-judgment-20260522.md` | `69d5b3e` | full suite `403 passed`; aggregate PASS/PASS; release closeout review PASS; next selection reviews pass-with-risks/PASS | P13-S1 plan/review |
-| P13 | ready-to-open-draft-PR | [Archive: P13](#archive-p13) | `docs/reviews/p13-s1-tracking-error-index-data-plan-20260522.md`, `docs/reviews/p13-s1-plan-review-controller-judgment-20260522.md`, `docs/reviews/p13-tracking-error-direct-disclosure-implementation-20260522.md`, `docs/reviews/p13-tracking-error-code-review-controller-judgment-20260522.md`, `docs/reviews/p13-aggregate-deepreview-controller-judgment-20260522.md` | `2172691` | full suite `424 passed`; code re-reviews PASS/PASS; aggregate PASS/PASS | draft PR gate pending user authorization |
+| P13 | draft-PR-pass | [Archive: P13](#archive-p13) | `docs/reviews/p13-s1-tracking-error-index-data-plan-20260522.md`, `docs/reviews/p13-s1-plan-review-controller-judgment-20260522.md`, `docs/reviews/p13-tracking-error-direct-disclosure-implementation-20260522.md`, `docs/reviews/p13-tracking-error-code-review-controller-judgment-20260522.md`, `docs/reviews/p13-aggregate-deepreview-controller-judgment-20260522.md`, `docs/reviews/p13-pr-review-controller-judgment-20260522.md` | PR 7 draft; accepted PR review commit pending | full suite `424 passed`; code re-reviews PASS/PASS; aggregate PASS/PASS; PR reviews PASS/PASS; PR CI passed | await user authorization for merge / mark ready / next phase |
 
 ## P12 Current Phase Notes
 
@@ -100,7 +102,7 @@ Post-P12-S1 guardrails:
 - Do not introduce Dayu runtime, Host, Engine, tool loop, prompt scene registry, or LLM writing as part of follow-up planning.
 - Keep ITEM_RULE evidence/extractor follow-ups separate from renderer/audit compliance unless a future plan explicitly owns those inputs.
 
-Success signals for the next step: after user authorization, draft PR gate pushes `feat/p13-tracking-error-direct-disclosure`, opens a draft PR, runs PR checks/review, fixes any findings, and records PR URL/status; no push or PR creation before authorization.
+Success signals for the next step: PR 7 is open as draft, CI passed, MiMo/GLM PR reviews passed, and residuals have owners. Merge, approve, mark-ready, reviewer requests, branch deletion, external comments, and external issue changes require explicit user authorization.
 
 ## Active Residuals
 
@@ -197,7 +199,7 @@ P12 ITEM_RULE deterministic compliance planning starts from `docs/reviews/post-p
 
 ## Archive: P13
 
-P13 starts with source-contract planning for direct tracking-error disclosure, selected in `docs/reviews/next-phase-selection-controller-judgment-20260522.md`. P13-S1 plan/review is accepted in `docs/reviews/p13-s1-plan-review-controller-judgment-20260522.md`. Direct tracking-error disclosure implementation is accepted in `docs/reviews/p13-tracking-error-code-review-controller-judgment-20260522.md`: Fund Capability now has typed `index_profile` and `tracking_error` fields, direct annual-report tracking-error extraction, Service risk-check authority migration to resolved structured data, renderer/audit consumption, snapshot observability without FQ2/comparable/golden denominator promotion, deterministic fixtures, and synced Fund/test docs. Aggregate deepreview is accepted in `docs/reviews/p13-aggregate-deepreview-controller-judgment-20260522.md`; P13 is ready to open a draft PR after explicit user authorization. Calculated index series, methodology extraction, constituents extraction, E1/E2/E3, Evidence Confirm, Dayu runtime, RR-13 data, and `docs/repo-audit-20260521.md` remain out of first implementation scope.
+P13 starts with source-contract planning for direct tracking-error disclosure, selected in `docs/reviews/next-phase-selection-controller-judgment-20260522.md`. P13-S1 plan/review is accepted in `docs/reviews/p13-s1-plan-review-controller-judgment-20260522.md`. Direct tracking-error disclosure implementation is accepted in `docs/reviews/p13-tracking-error-code-review-controller-judgment-20260522.md`: Fund Capability now has typed `index_profile` and `tracking_error` fields, direct annual-report tracking-error extraction, Service risk-check authority migration to resolved structured data, renderer/audit consumption, snapshot observability without FQ2/comparable/golden denominator promotion, deterministic fixtures, and synced Fund/test docs. Aggregate deepreview is accepted in `docs/reviews/p13-aggregate-deepreview-controller-judgment-20260522.md`. PR 7 (`https://github.com/bill20232033cc/fund-agent/pull/7`) is open as draft and accepted in `docs/reviews/p13-pr-review-controller-judgment-20260522.md`: CI passed, MiMo/GLM PR reviews passed, and no PR-review blocking finding remains. Calculated index series, methodology extraction, constituents extraction, E1/E2/E3, Evidence Confirm, Dayu runtime, RR-13 data, and `docs/repo-audit-20260521.md` remain out of first implementation scope.
 
 ## Original Detailed Control Record
 
