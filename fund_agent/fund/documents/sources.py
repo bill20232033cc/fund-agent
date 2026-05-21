@@ -14,7 +14,7 @@ from contextlib import AbstractAsyncContextManager
 from dataclasses import dataclass, replace
 from pathlib import Path
 from tempfile import NamedTemporaryFile
-from typing import Any, Awaitable, Callable, Literal, Protocol
+from typing import Any, Awaitable, Callable, Final, Literal, Protocol
 
 import httpx
 
@@ -23,6 +23,13 @@ from fund_agent.fund.pdf.downloader import DEFAULT_CACHE_DIR, _download_annual_r
 
 AnnualReportDownloader = Callable[..., Awaitable[Path]]
 EidClientFactory = Callable[..., AbstractAsyncContextManager[Any]]
+AnnualReportSourceFailureCategory = Literal[
+    "not_found",
+    "unavailable",
+    "schema_drift",
+    "identity_mismatch",
+    "integrity_error",
+]
 
 EID_BASE_URL = "http://eid.csrc.gov.cn/fund"
 EID_VALIDATE_FUND_PATH = "/fund/disclose/validate_fund.do"
@@ -33,6 +40,9 @@ EID_ANNUAL_REPORT_CODE = "FB010010"
 EID_ANNUAL_REPORT_DESP = "年度报告"
 PDF_CONTENT_TYPE = "application/pdf"
 PDF_MAGIC_BYTES = b"%PDF-"
+_FALLBACK_ELIGIBLE_CATEGORIES: Final[frozenset[AnnualReportSourceFailureCategory]] = frozenset(
+    {"not_found", "unavailable"}
+)
 _EID_DISPLAY_START = 0
 _EID_DISPLAY_LENGTH = 20
 _EID_HEADERS = {
@@ -99,6 +109,20 @@ class AnnualReportSourceSchemaError(ValueError):
     """
 
 
+class AnnualReportSourceIntegrityError(ValueError):
+    """表示来源返回的 PDF 或文件内容未通过完整性校验。
+
+    Args:
+        message: 错误说明。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        无显式抛出。
+    """
+
+
 @dataclass(frozen=True, slots=True)
 class AnnualReportSourceFailure:
     """单个年报来源失败记录。
@@ -110,8 +134,49 @@ class AnnualReportSourceFailure:
     """
 
     source: AnnualReportSourceName
-    category: Literal["not_found", "unavailable"]
+    category: AnnualReportSourceFailureCategory
     message: str
+
+
+class AnnualReportSourceFallbackBlockedError(Exception):
+    """表示来源失败类别不允许 fallback，编排器主动阻断后续来源。
+
+    Args:
+        failures: 已记录的逐来源失败记录，包含阻断失败。
+        blocking_failure: 触发阻断的失败记录。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        ValueError: 失败记录为空或阻断失败不在失败记录中时抛出。
+    """
+
+    def __init__(
+        self,
+        failures: tuple[AnnualReportSourceFailure, ...],
+        blocking_failure: AnnualReportSourceFailure,
+    ) -> None:
+        """初始化 fallback 阻断错误。
+
+        Args:
+            failures: 已记录的逐来源失败记录，包含阻断失败。
+            blocking_failure: 触发阻断的失败记录。
+
+        Returns:
+            无返回值。
+
+        Raises:
+            ValueError: 失败记录为空或阻断失败不在失败记录末尾时抛出。
+        """
+
+        if not failures:
+            raise ValueError("failures 不能为空")
+        if failures[-1] != blocking_failure:
+            raise ValueError("blocking_failure 必须是最后一条失败记录")
+        self.failures = failures
+        self.blocking_failure = blocking_failure
+        super().__init__(_format_blocked_failure(failures, blocking_failure))
 
 
 class AnnualReportSourceAggregateError(Exception):
@@ -208,6 +273,7 @@ class AnnualReportSource(Protocol):
             AnnualReportSourceNotFoundError: 来源未找到指定年报。
             AnnualReportSourceMismatchError: 来源返回内容与请求矛盾。
             AnnualReportSourceSchemaError: 来源响应结构非法。
+            AnnualReportSourceIntegrityError: PDF 内容完整性校验失败。
         """
 
 
@@ -312,6 +378,7 @@ class EidAnnualReportSource:
             AnnualReportSourceNotFoundError: EID 未找到指定年报。
             AnnualReportSourceMismatchError: EID 返回内容与请求矛盾。
             AnnualReportSourceSchemaError: EID 响应结构非法。
+            AnnualReportSourceIntegrityError: PDF 内容完整性校验失败。
             OSError: 写入 PDF 缓存失败时抛出。
         """
 
@@ -549,8 +616,7 @@ class AnnualReportSourceOrchestrator:
             首个成功来源返回的年报 PDF 路径和元数据。
 
         Raises:
-            AnnualReportSourceMismatchError: 来源返回矛盾内容时抛出。
-            AnnualReportSourceSchemaError: 来源响应结构非法时抛出。
+            AnnualReportSourceFallbackBlockedError: 来源失败类别不允许 fallback 时抛出。
             AnnualReportSourceNotFoundError: 所有来源均为 not-found 时抛出。
             AnnualReportSourceUnavailableError: 单个来源不可用且无其他失败类别时抛出。
             AnnualReportSourceAggregateError: 混合失败或多个不可用失败需要保留类别时抛出。
@@ -565,13 +631,29 @@ class AnnualReportSourceOrchestrator:
                     force_refresh=force_refresh,
                 )
             except AnnualReportSourceNotFoundError as exc:
-                failures.append(_build_failure(source.name, "not_found", exc))
+                failure = _build_failure(source.name, "not_found", exc)
+                failures.append(failure)
+                if not _can_fallback_after_failure(failure.category):
+                    _raise_fallback_blocked(tuple(failures), failure, exc)
                 continue
             except AnnualReportSourceUnavailableError as exc:
-                failures.append(_build_failure(source.name, "unavailable", exc))
+                failure = _build_failure(source.name, "unavailable", exc)
+                failures.append(failure)
+                if not _can_fallback_after_failure(failure.category):
+                    _raise_fallback_blocked(tuple(failures), failure, exc)
                 continue
-            except (AnnualReportSourceMismatchError, AnnualReportSourceSchemaError):
-                raise
+            except AnnualReportSourceMismatchError as exc:
+                failure = _build_failure(source.name, "identity_mismatch", exc)
+                failures.append(failure)
+                _raise_fallback_blocked(tuple(failures), failure, exc)
+            except AnnualReportSourceSchemaError as exc:
+                failure = _build_failure(source.name, "schema_drift", exc)
+                failures.append(failure)
+                _raise_fallback_blocked(tuple(failures), failure, exc)
+            except AnnualReportSourceIntegrityError as exc:
+                failure = _build_failure(source.name, "integrity_error", exc)
+                failures.append(failure)
+                _raise_fallback_blocked(tuple(failures), failure, exc)
             if failures:
                 return _mark_fallback_used(result)
             return result
@@ -580,7 +662,7 @@ class AnnualReportSourceOrchestrator:
 
 def _build_failure(
     source: AnnualReportSourceName,
-    category: Literal["not_found", "unavailable"],
+    category: AnnualReportSourceFailureCategory,
     exc: Exception,
 ) -> AnnualReportSourceFailure:
     """构造来源失败记录。
@@ -600,6 +682,22 @@ def _build_failure(
     return AnnualReportSourceFailure(source=source, category=category, message=str(exc))
 
 
+def _can_fallback_after_failure(category: AnnualReportSourceFailureCategory) -> bool:
+    """判断指定失败类别是否允许尝试下一个来源。
+
+    Args:
+        category: 来源失败类别。
+
+    Returns:
+        类别允许 fallback 时返回 ``True``。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return category in _FALLBACK_ELIGIBLE_CATEGORIES
+
+
 def _format_failures(failures: tuple[AnnualReportSourceFailure, ...]) -> str:
     """格式化逐来源失败记录。
 
@@ -617,6 +715,53 @@ def _format_failures(failures: tuple[AnnualReportSourceFailure, ...]) -> str:
         f"{failure.source}:{failure.category}:{failure.message}" for failure in failures
     )
     return f"所有年报来源均未成功: {details}"
+
+
+def _format_blocked_failure(
+    failures: tuple[AnnualReportSourceFailure, ...],
+    blocking_failure: AnnualReportSourceFailure,
+) -> str:
+    """格式化 fallback 被阻断时的逐来源失败记录。
+
+    Args:
+        failures: 已记录的逐来源失败记录。
+        blocking_failure: 触发阻断的失败记录。
+
+    Returns:
+        可读的阻断摘要。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return (
+        "年报来源 fallback 被阻断: "
+        f"blocking={blocking_failure.source}:{blocking_failure.category}:"
+        f"{blocking_failure.message}; "
+        f"{_format_failures(failures)}"
+    )
+
+
+def _raise_fallback_blocked(
+    failures: tuple[AnnualReportSourceFailure, ...],
+    blocking_failure: AnnualReportSourceFailure,
+    exc: Exception,
+) -> None:
+    """抛出 fallback 阻断错误并保留原始异常 cause。
+
+    Args:
+        failures: 已记录的逐来源失败记录。
+        blocking_failure: 触发阻断的失败记录。
+        exc: 原始来源异常。
+
+    Returns:
+        不返回。
+
+    Raises:
+        AnnualReportSourceFallbackBlockedError: 始终抛出。
+    """
+
+    raise AnnualReportSourceFallbackBlockedError(failures, blocking_failure) from exc
 
 
 def _mark_fallback_used(result: AnnualReportSourceResult) -> AnnualReportSourceResult:
@@ -1007,14 +1152,14 @@ def _validate_pdf_response(response: httpx.Response) -> None:
         无返回值。
 
     Raises:
-        AnnualReportSourceSchemaError: 响应不是 PDF 时抛出。
+        AnnualReportSourceIntegrityError: 响应不是 PDF 时抛出。
     """
 
     content_type = response.headers.get("content-type", "").split(";", 1)[0].lower().strip()
     if content_type != PDF_CONTENT_TYPE:
-        raise AnnualReportSourceSchemaError(f"EID PDF Content-Type 非法: {content_type!r}")
+        raise AnnualReportSourceIntegrityError(f"EID PDF Content-Type 非法: {content_type!r}")
     if not response.content.startswith(PDF_MAGIC_BYTES):
-        raise AnnualReportSourceSchemaError("EID PDF 响应缺少 %PDF- 文件头")
+        raise AnnualReportSourceIntegrityError("EID PDF 响应缺少 %PDF- 文件头")
 
 
 def _is_valid_cached_pdf(path: Path) -> bool:
@@ -1051,11 +1196,11 @@ def _write_pdf_bytes_atomic(dest_path: Path, content: bytes) -> None:
 
     Raises:
         OSError: 写入或替换失败时抛出。
-        AnnualReportSourceSchemaError: 内容缺少 PDF 文件头时抛出。
+        AnnualReportSourceIntegrityError: 内容缺少 PDF 文件头时抛出。
     """
 
     if not content.startswith(PDF_MAGIC_BYTES):
-        raise AnnualReportSourceSchemaError("PDF 内容缺少 %PDF- 文件头")
+        raise AnnualReportSourceIntegrityError("PDF 内容缺少 %PDF- 文件头")
     temp_path: Path | None = None
     try:
         with NamedTemporaryFile(

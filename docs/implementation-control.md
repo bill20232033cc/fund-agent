@@ -22,7 +22,7 @@
 | P5 | 报告主链路质量保护（quality gate integration） | Post-P4 | ✅ done | P4 |
 | P6 | 模板契约机器化（CHAPTER_CONTRACT / ITEM_RULE） | Post-P5 | ✅ done | P5 |
 | P7 | 年报来源迁移（EID 主源 + Eastmoney fallback） | Post-P6 | ✅ done | P6 |
-| Post-P7 | repo-level deepreview 与后续规划 | Post-P7 | ✅ code findings closed / design planning | P7 |
+| P8 | 模板契约与来源策略加固（must_answer audit / preferred_lens / source fallback） | Post-P7 | 🟡 in progress | P7 |
 
 ### 1.2 里程碑
 
@@ -36,8 +36,8 @@
 ### 1.3 当前 Gate 与基线裁决（2026-05-21）
 
 - 当前分支：`main`
-- 当前 gate：`P8-S3 source fallback policy design plan/review passed`
-- 下一 gate：`P8-S3 implementation`
+- 当前 gate：`P8-S3 implementation completed`
+- 下一 gate：`P8-S3 code review`
 - P4 执行控制文档：`docs/implementation-control-p4.md`
 - 当前裁决：
   - P7 已完成并直接集成到 `main`。当前年报来源顺序为 EID/证监会资本市场统一信息披露平台主源，Eastmoney/akshare fallback，经 `FundDocumentRepository` 统一封装；source metadata/cache provenance 和 legacy cache compatibility 已接入。
@@ -1394,3 +1394,4 @@ P0（环境搭建）
 | 2026-05-20 | P6-S1 implementation/code review | ✅ passed after fix | implementation owner=AgentCodex；controller 裁决=`docs/reviews/p6-s1-code-review-controller-judgment-20260520.md`；MiMo/GLM reviews=`docs/reviews/code-review-20260520-130008.md`,`docs/reviews/code-review-20260520-125906.md`；新增 `fund_agent/fund/template/contracts.py`、template contract public exports、contract tests 和 README 同步；lens key / `fund_type` mismatch 测试覆盖缺口已修复；当前验证 targeted `7 passed`、full suite `213 passed`、ruff passed、diff check passed；当前 gate 为 `P6-S1 acceptance / next slice planning`，下一 gate 为 `P6-S2 plan/review` |
 | 2026-05-20 | P6-S2 renderer contract alignment plan | ✅ passed | plan artifact=`docs/reviews/p6-s2-renderer-contract-alignment-plan-20260520.md`；controller review/rereview=`docs/reviews/p6-s2-plan-review-controller-20260520.md`,`docs/reviews/p6-s2-plan-rereview-controller-20260520.md`；计划限定本 slice 只做 renderer 标题真源收口、`RenderedChapterBlock` 和 Markdown chapter split helper，不做 ITEM_RULE / contract audit / FQ5 upgrade；当前 gate 为 `P6-S2 implementation`，下一 gate 为 `P6-S2 code review` |
 | 2026-05-20 | P6-S2 implementation/code review | ✅ passed after fix | implementation owner=AgentCodex；controller 裁决=`docs/reviews/p6-s2-code-review-controller-judgment-20260520.md`；MiMo/GLM reviews=`docs/reviews/code-review-20260520-134053.md`,`docs/reviews/code-review-20260520-134023.md`；renderer 标题来源已收口到 `CHAPTER_CONTRACT` manifest，新增 `RenderedChapterBlock`、public heading helper、fail-closed chapter splitter 和 `TemplateRenderResult.chapter_blocks`；混入非法一级标题测试覆盖缺口已修复；当前验证 targeted `29 passed`、full suite `221 passed`、ruff passed、diff check passed；当前 gate 为 `P6-S2 acceptance / next slice planning`，下一 gate 为 `P6-S3 plan/review` |
+| 2026-05-21 | P8-S3 source fallback policy implementation | 🟡 completed | 新增 `AnnualReportSourceFailureCategory` 五类 taxonomy（`not_found`/`unavailable`/`schema_drift`/`identity_mismatch`/`integrity_error`）、table-driven fallback eligibility、`AnnualReportSourceFallbackBlockedError` 结构化阻断异常、`AnnualReportSourceIntegrityError` PDF 完整性异常、`_validate_pdf_response`/`_write_pdf_bytes_atomic` 改用 IntegrityError、orchestrator 阻断路径 provenance 保留；docs/design.md、fund_agent/fund/README.md、tests/README.md 已同步；当前验证 documents focused `35 passed`、full suite `347 passed`、ruff passed；当前 gate 为 `P8-S3 code review`，下一 gate 为 `P8-S3 acceptance / next slice planning` |
