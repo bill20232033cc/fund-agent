@@ -10,6 +10,20 @@
 
 ## 1. 总览
 
+### 1.0 Current Snapshot（2026-05-21）
+
+| 项目 | 当前状态 |
+|------|----------|
+| 当前分支 | `main` |
+| 当前 gate | `P8 closed` |
+| 下一 entry point | `post-P8 planning` |
+| 设计真源 | `docs/design.md`，已按 `docs/design-update.md` reconciliation 收口 |
+| 近期设计裁决 | `docs/reviews/design-update-reconciliation-20260521.md`、`docs/reviews/implementation-control-update-reconciliation-20260521.md` |
+| P8 交付物 | `must_answer` audit routing、renderer `preferred_lens` deterministic application、source fallback taxonomy |
+| 当前残余风险 | product contract、repo hygiene、Dayu dependency strategy、quality gate / golden coverage ROI |
+
+当前控制文档仍是 phaseflow 的总控真源：详细 gate、artifact、review、commit、验证和 residual risk 记录保留在后文，不用摘要替代。`docs/implementation-control-update.md` 仅作为摘要候选输入；经 reconciliation 后只融合稳定 summary，不替换本文件。
+
 ### 1.1 Phase 列表
 
 | Phase | 名称 | 周期 | 状态 | 依赖 |
@@ -22,7 +36,31 @@
 | P5 | 报告主链路质量保护（quality gate integration） | Post-P4 | ✅ done | P4 |
 | P6 | 模板契约机器化（CHAPTER_CONTRACT / ITEM_RULE） | Post-P5 | ✅ done | P5 |
 | P7 | 年报来源迁移（EID 主源 + Eastmoney fallback） | Post-P6 | ✅ done | P6 |
-| P8 | 模板契约与来源策略加固（must_answer audit / preferred_lens / source fallback） | Post-P7 | 🟡 in progress | P7 |
+| P8 | 模板契约与来源策略加固（must_answer audit / preferred_lens / source fallback） | Post-P7 | ✅ done | P7 |
+
+### 1.1.1 能力域摘要
+
+| 能力域 | 当前状态 | 稳定入口 / 归属 |
+|--------|----------|----------------|
+| CLI / UI | 已实现用户入口和开发辅助命令 | `fund_agent/ui/cli.py` |
+| Service 编排 | 已实现主分析、快照、评分、quality gate、golden answer、温度计等 use case | `fund_agent/services/` |
+| 文档仓库 | 统一仓库入口、PDF/parsed cache、source metadata、EID 主源 + Eastmoney fallback | `fund_agent/fund/documents/` |
+| 结构化抽取 | P1 数据 façade 与 profile/performance/manager/holdings extractors | `fund_agent/fund/data_extractor.py`、`fund_agent/fund/extractors/` |
+| 分析引擎 | R=A+B-C、alpha nature、言行一致性、投资者获得感、风险、压力测试、检查清单 | `fund_agent/fund/analysis/` |
+| 模板系统 | CHAPTER_CONTRACT、ITEM_RULE、preferred_lens、renderer、chapter blocks | `fund_agent/fund/template/` |
+| 程序审计 | P1/P2/P3/C2/L1/R1/R2 确定性子集 | `fund_agent/fund/audit/` |
+| 质量门控 | snapshot / score / quality gate / golden answer correctness | `fund_agent/fund/quality_gate*.py`、`fund_agent/fund/extraction_*` |
+| 外部数据 | NAV 与有知有行温度计 read-only 查询 | `fund_agent/fund/data/` |
+
+### 1.1.2 当前技术债与后续规划摘要
+
+| 类别 | 状态 | Owner / Destination |
+|------|------|---------------------|
+| Product contract | `analyze` 用户最小输入 vs dev override 参数仍需设计 | post-P8 planning |
+| Repo hygiene | LICENSE、CI、`.gitignore`、默认路径配置需单独 slice | post-P8 planning |
+| Dependency strategy | Dayu 仍是声明依赖，主链路未接入 runtime；供应链策略待裁决 | post-P8 planning |
+| Quality gate ROI | golden coverage 与 gate 复杂度需继续校准 | post-P8 planning |
+| Control doc hygiene | 可读性需提升，但不能丢失 phaseflow recovery 证据 | 后续文档治理 slice |
 
 ### 1.2 里程碑
 
@@ -36,8 +74,8 @@
 ### 1.3 当前 Gate 与基线裁决（2026-05-21）
 
 - 当前分支：`main`
-- 当前 gate：`P8-S3 implementation completed`
-- 下一 gate：`P8-S3 code review`
+- 当前 gate：`P8 closed`
+- 下一 gate：`post-P8 planning`
 - P4 执行控制文档：`docs/implementation-control-p4.md`
 - 当前裁决：
   - P7 已完成并直接集成到 `main`。当前年报来源顺序为 EID/证监会资本市场统一信息披露平台主源，Eastmoney/akshare fallback，经 `FundDocumentRepository` 统一封装；source metadata/cache provenance 和 legacy cache compatibility 已接入。
@@ -1394,4 +1432,5 @@ P0（环境搭建）
 | 2026-05-20 | P6-S1 implementation/code review | ✅ passed after fix | implementation owner=AgentCodex；controller 裁决=`docs/reviews/p6-s1-code-review-controller-judgment-20260520.md`；MiMo/GLM reviews=`docs/reviews/code-review-20260520-130008.md`,`docs/reviews/code-review-20260520-125906.md`；新增 `fund_agent/fund/template/contracts.py`、template contract public exports、contract tests 和 README 同步；lens key / `fund_type` mismatch 测试覆盖缺口已修复；当前验证 targeted `7 passed`、full suite `213 passed`、ruff passed、diff check passed；当前 gate 为 `P6-S1 acceptance / next slice planning`，下一 gate 为 `P6-S2 plan/review` |
 | 2026-05-20 | P6-S2 renderer contract alignment plan | ✅ passed | plan artifact=`docs/reviews/p6-s2-renderer-contract-alignment-plan-20260520.md`；controller review/rereview=`docs/reviews/p6-s2-plan-review-controller-20260520.md`,`docs/reviews/p6-s2-plan-rereview-controller-20260520.md`；计划限定本 slice 只做 renderer 标题真源收口、`RenderedChapterBlock` 和 Markdown chapter split helper，不做 ITEM_RULE / contract audit / FQ5 upgrade；当前 gate 为 `P6-S2 implementation`，下一 gate 为 `P6-S2 code review` |
 | 2026-05-20 | P6-S2 implementation/code review | ✅ passed after fix | implementation owner=AgentCodex；controller 裁决=`docs/reviews/p6-s2-code-review-controller-judgment-20260520.md`；MiMo/GLM reviews=`docs/reviews/code-review-20260520-134053.md`,`docs/reviews/code-review-20260520-134023.md`；renderer 标题来源已收口到 `CHAPTER_CONTRACT` manifest，新增 `RenderedChapterBlock`、public heading helper、fail-closed chapter splitter 和 `TemplateRenderResult.chapter_blocks`；混入非法一级标题测试覆盖缺口已修复；当前验证 targeted `29 passed`、full suite `221 passed`、ruff passed、diff check passed；当前 gate 为 `P6-S2 acceptance / next slice planning`，下一 gate 为 `P6-S3 plan/review` |
-| 2026-05-21 | P8-S3 source fallback policy implementation | 🟡 completed | 新增 `AnnualReportSourceFailureCategory` 五类 taxonomy（`not_found`/`unavailable`/`schema_drift`/`identity_mismatch`/`integrity_error`）、table-driven fallback eligibility、`AnnualReportSourceFallbackBlockedError` 结构化阻断异常、`AnnualReportSourceIntegrityError` PDF 完整性异常、`_validate_pdf_response`/`_write_pdf_bytes_atomic` 改用 IntegrityError、orchestrator 阻断路径 provenance 保留；docs/design.md、fund_agent/fund/README.md、tests/README.md 已同步；当前验证 documents focused `35 passed`、full suite `347 passed`、ruff passed；当前 gate 为 `P8-S3 code review`，下一 gate 为 `P8-S3 acceptance / next slice planning` |
+| 2026-05-21 | P8-S3 source fallback policy implementation | ✅ accepted | controller self-review 通过；五类 taxonomy、table-driven fallback eligibility、结构化阻断异常、PDF 完整性异常、provenance 保留均符合计划验收标准；当前验证 `347 passed`、ruff passed；implementation commit=`93ae6ea` |
+| 2026-05-21 | post-P8-S3 follow-up planning | ✅ accepted | P8 三个核心交付物（must_answer audit / preferred_lens / source fallback）均已完成；artifact=`docs/reviews/post-p8-s3-follow-up-planning-20260521.md`；P8-S4 preflight quality gate 和 open repo findings (003/005/006) deferred 到 post-P8；当前 gate 为 `P8 aggregate readiness reconciliation`，下一 gate 为 `P8 closed` |
