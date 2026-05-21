@@ -50,9 +50,12 @@ UI（CLI）→ Service（用例编排）→ Fund Capability（基金领域能力
 | **UI** | 采集输入、渲染结果、CLI 退出码 | `fund_agent/ui/cli.py` |
 | **Service** | 用例编排、参数校验、调用 Capability、组合报告与 quality gate | `fund_agent/services/*.py` |
 | **Capability** | 基金文档仓库、提取、分析、模板、审计、quality gate、外部数据 adapter | `fund_agent/fund/` |
+| **Config** | 当前仅保留配置命名空间占位，不参与主链路装配 | `fund_agent/config/` |
 | **Host/Engine** | v2 候选托管执行层；当前未接入主链路 | `dayu-agent` 依赖存在，但 `fund-analysis analyze` 不经过 `dayu.host` / `dayu.engine` |
 
 > **当前边界（2026-05-21）**：`fund-analysis analyze` 直接通过 `FundAnalysisService` 编排 `fund_agent/fund` Capability。Dayu 仍作为 Host/Engine/Prompting/Config 的架构参考和后续接入候选；当前代码没有自建或接入通用 tool loop / Host session / Agent runtime。
+
+> **目录事实裁决（2026-05-21）**：`fund_agent/config` 的存在不代表 prompt manifest、scene registry 或 Dayu config runtime 已接入；空目录或本地未跟踪 prompt skeleton 不能作为设计事实。空的 `fund_agent/fund/tools` 包已移除，当前没有通用 Fund tool runtime。
 
 ### 2.2 执行链路
 
@@ -393,7 +396,7 @@ Golden Answer pipeline 由预填底稿、人工复核、strict JSON 构建和 co
 | `dayu.host` | 后续候选 | 当前未接入 Host session/run 生命周期 |
 | `dayu.contracts` | 后续候选 | 当前未使用 ExecutionContract / AppEvent 作为主链路契约 |
 | `dayu.prompting` | 后续候选 | 当前模板契约在 `fund_agent/fund/template` typed manifest 中维护 |
-| `dayu.config` | 依赖候选 | 当前配置包存在，但主链路不依赖 dayu config 装配 |
+| `dayu.config` | 依赖候选 | 当前 `fund_agent/config` 只是占位命名空间，主链路不依赖 dayu config、scene 或 prompt manifest 装配 |
 | 审计机制 | 架构借鉴 | 当前已实现 deterministic programmatic audit；LLM audit / Evidence Confirm 后续再接 |
 
 ---

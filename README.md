@@ -269,5 +269,7 @@ fund-analysis quality-gate \
 | [docs/fund-analysis-template-draft.md](docs/fund-analysis-template-draft.md) | 8 章分析模板 |
 | [docs/sample-funds.md](docs/sample-funds.md) | 样本基金基线 |
 | [docs/code_20260519.csv](docs/code_20260519.csv) | 有知有行 App 精选基金池手动清单 |
+| [fund_agent/README.md](fund_agent/README.md) | 开发手册总览，说明当前 UI / Service / Fund Capability 边界 |
 | [fund_agent/fund/README.md](fund_agent/fund/README.md) | Fund capability 说明 |
+| [fund_agent/config/README.md](fund_agent/config/README.md) | 配置命名空间当前状态 |
 | [tests/README.md](tests/README.md) | 测试说明 |

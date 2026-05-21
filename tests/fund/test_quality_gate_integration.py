@@ -6,7 +6,7 @@ import json
 from dataclasses import replace
 from pathlib import Path
 
-from fund_agent.fund.quality_gate_integration import run_quality_gate_for_bundle
+from fund_agent.fund.quality_gate_integration import check_quality_gate_fund_membership, run_quality_gate_for_bundle
 from tests.services.test_fund_analysis_service import _bundle
 
 
@@ -73,6 +73,27 @@ def test_run_quality_gate_for_bundle_not_run_when_fund_absent(tmp_path: Path) ->
     assert result.score_result is None
     assert result.not_run_reason == "fund_code `110011` not found in quality gate source csv"
     assert not output_dir.exists()
+
+
+def test_check_quality_gate_fund_membership_reports_missing_csv(tmp_path: Path) -> None:
+    """验证抽取前成员检查能区分精选池 CSV 缺失。
+
+    Args:
+        tmp_path: pytest 临时目录 fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当缺失 CSV 被误报为通用格式错误时抛出。
+    """
+
+    not_run_reason = check_quality_gate_fund_membership(
+        source_csv=tmp_path / "missing.csv",
+        fund_code="110011",
+    )
+
+    assert not_run_reason == "quality gate source csv not found"
 
 
 def _source_csv(tmp_path: Path, fund_code: str) -> Path:
