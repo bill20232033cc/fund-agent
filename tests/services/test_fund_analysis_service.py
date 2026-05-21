@@ -11,7 +11,12 @@ import pytest
 
 from fund_agent.fund.data.nav_data import NavDataResult
 from fund_agent.fund.data_extractor import StructuredFundDataBundle
-from fund_agent.fund.extractors.models import EvidenceAnchor, ExtractedField
+from fund_agent.fund.extractors.models import (
+    EvidenceAnchor,
+    ExtractedField,
+    IndexProfileValue,
+    TrackingErrorValue,
+)
 from fund_agent.services import (
     FundAnalysisDeveloperOverrides,
     FundAnalysisRequest,
@@ -166,6 +171,18 @@ def _bundle() -> StructuredFundDataBundle:
         无显式抛出。
     """
 
+    missing_index_profile: ExtractedField[IndexProfileValue] = ExtractedField(
+        value=None,
+        anchors=(),
+        extraction_mode="missing",
+        note="fixture",
+    )
+    missing_tracking_error: ExtractedField[TrackingErrorValue] = ExtractedField(
+        value=None,
+        anchors=(),
+        extraction_mode="missing",
+        note="fixture",
+    )
     return StructuredFundDataBundle(
         fund_code="110011",
         report_year=2024,
@@ -191,6 +208,7 @@ def _bundle() -> StructuredFundDataBundle:
             "product_profile",
         ),
         benchmark=_field({"benchmark": "沪深300指数收益率*80%+中债指数收益率*20%"}, "§2", "benchmark"),
+        index_profile=missing_index_profile,
         fee_schedule=_field({"management_fee": "1.20%", "custody_fee": "0.20%"}, "§2", "fee_schedule"),
         turnover_rate=_field({"turnover_rate": "80.00%"}, "§8", "turnover_rate"),
         nav_benchmark_performance=_field(
@@ -199,6 +217,7 @@ def _bundle() -> StructuredFundDataBundle:
             "nav_benchmark_performance",
         ),
         investor_return=_field({"investor_return_rate": "12.00%", "disclosure_status": "direct"}, "§3", "investor_return"),
+        tracking_error=missing_tracking_error,
         share_change=_field(
             {"beginning_share": "100", "ending_share": "110", "net_change": "10"},
             "§10",

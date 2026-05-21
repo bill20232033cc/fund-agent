@@ -19,6 +19,7 @@ from fund_agent.fund.audit.contract_rules import (
     load_contract_audit_coverage_manifest,
     load_programmatic_contract_rules,
 )
+from fund_agent.fund.extractors.models import ExtractedField, IndexProfileValue, TrackingErrorValue
 from fund_agent.fund.template.chapter_blocks import (
     EVIDENCE_APPENDIX_HEADING,
     RenderedChapterBlock,
@@ -104,6 +105,8 @@ class ProgrammaticAuditInput:
         chapter_blocks: 已渲染章节块，用于 P3 每章证据和 C2 契约审计。
         item_rule_decisions: renderer 产生的 ITEM_RULE 渲染/删除决策。
         item_rule_audit_context: ITEM_RULE 审计上下文，用于区分身份缺失与身份存在路径。
+        index_profile: 指数画像结构化字段，用于确定性来源边界审计。
+        tracking_error: 跟踪误差结构化字段，用于确定性来源边界审计。
     """
 
     report_markdown: str | None = None
@@ -116,6 +119,8 @@ class ProgrammaticAuditInput:
     chapter_blocks: tuple[RenderedChapterBlock, ...] = ()
     item_rule_decisions: tuple[TemplateItemRuleDecision, ...] = ()
     item_rule_audit_context: TemplateItemRuleAuditContext = "identity_missing"
+    index_profile: ExtractedField[IndexProfileValue] | None = None
+    tracking_error: ExtractedField[TrackingErrorValue] | None = None
 
 
 def run_programmatic_audit(input_data: ProgrammaticAuditInput) -> ProgrammaticAuditResult:
@@ -143,6 +148,8 @@ def run_programmatic_audit(input_data: ProgrammaticAuditInput) -> ProgrammaticAu
             input_data.item_rule_decisions,
             input_data.item_rule_audit_context,
         ),
+        *_audit_tracking_error_source_guard(chapter_blocks, input_data.tracking_error),
+        *_audit_index_profile_source_guard(chapter_blocks, input_data.index_profile),
         *_audit_rabc_closure(input_data.rabc_attributions),
         *_audit_checklist_rules(input_data.checklist_result),
         *_audit_final_judgment(
@@ -602,6 +609,196 @@ def _audit_single_item_rule_decision(
             )
         )
     return issues
+
+
+def _audit_tracking_error_source_guard(
+    chapter_blocks: tuple[RenderedChapterBlock, ...],
+    tracking_error: ExtractedField[TrackingErrorValue] | None,
+) -> tuple[AuditIssue, ...]:
+    """审计跟踪误差段落是否由结构化跟踪误差字段支撑。
+
+    Args:
+        chapter_blocks: 已渲染章节块。
+        tracking_error: 跟踪误差结构化字段。
+
+    Returns:
+        跟踪误差来源边界问题。
+
+    Raises:
+        无显式抛出。
+    """
+
+    chapter_2 = _block_by_id(chapter_blocks, 2)
+    if chapter_2 is None or "#### 跟踪误差分析" not in chapter_2.body_markdown:
+        return ()
+    segment = _segment_after_heading(chapter_2.body_markdown, "#### 跟踪误差分析")
+    if "- 跟踪误差：数据不足" in segment:
+        return ()
+    if (
+        tracking_error is None
+        or tracking_error.value is None
+        or tracking_error.extraction_mode not in {"direct", "derived"}
+    ):
+        return (
+            _issue(
+                code="C2",
+                message="跟踪误差非数据不足输出缺少 structured_data.tracking_error 支撑。",
+                location="chapter_2:tracking_error",
+            ),
+        )
+    if tracking_error.value.source_type == "direct_disclosure" and not _has_annual_report_anchor(
+        tracking_error.anchors
+    ):
+        return (
+            _issue(
+                code="C2",
+                message="年报直接披露跟踪误差缺少 annual_report 锚点。",
+                location="chapter_2:tracking_error",
+            ),
+        )
+    if tracking_error.value.source_type == "derived" and not tracking_error.value.provenance_note:
+        return (
+            _issue(
+                code="C2",
+                message="派生跟踪误差缺少公式或来源 provenance。",
+                location="chapter_2:tracking_error",
+            ),
+        )
+    return ()
+
+
+def _audit_index_profile_source_guard(
+    chapter_blocks: tuple[RenderedChapterBlock, ...],
+    index_profile: ExtractedField[IndexProfileValue] | None,
+) -> tuple[AuditIssue, ...]:
+    """审计指数编制方法和成分股没有被 benchmark-only 证据误支撑。
+
+    Args:
+        chapter_blocks: 已渲染章节块。
+        index_profile: 指数画像结构化字段。
+
+    Returns:
+        指数画像来源边界问题。
+
+    Raises:
+        无显式抛出。
+    """
+
+    chapter_1 = _block_by_id(chapter_blocks, 1)
+    if chapter_1 is None or "#### 指数编制规则与成分股" not in chapter_1.body_markdown:
+        return ()
+    segment = _segment_after_heading(chapter_1.body_markdown, "#### 指数编制规则与成分股")
+    issues: list[AuditIssue] = []
+    profile_value = index_profile.value if index_profile is not None else None
+    if _line_is_not_insufficient(segment, "- 编制方法：") and not (
+        profile_value is not None
+        and profile_value.methodology_availability in {"direct_disclosure", "source_reference"}
+    ):
+        issues.append(
+            _issue(
+                code="C2",
+                message="指数编制方法不能由 benchmark-only 证据替代。",
+                location="chapter_1:index_methodology",
+            )
+        )
+    if _line_is_not_insufficient(segment, "- 成分股：") and not (
+        profile_value is not None
+        and profile_value.constituents_availability in {"direct_disclosure", "source_reference"}
+    ):
+        issues.append(
+            _issue(
+                code="C2",
+                message="指数成分股不能由 benchmark-only 证据替代。",
+                location="chapter_1:index_constituents",
+            )
+        )
+    return tuple(issues)
+
+
+def _block_by_id(
+    chapter_blocks: tuple[RenderedChapterBlock, ...],
+    chapter_id: int,
+) -> RenderedChapterBlock | None:
+    """按章节编号查找章节块。
+
+    Args:
+        chapter_blocks: 已渲染章节块。
+        chapter_id: 章节编号。
+
+    Returns:
+        命中的章节块；不存在时返回 `None`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    for block in chapter_blocks:
+        if block.chapter_id == chapter_id:
+            return block
+    return None
+
+
+def _segment_after_heading(markdown: str, heading: str) -> str:
+    """截取指定四级标题后的段落。
+
+    Args:
+        markdown: 章节 Markdown。
+        heading: 四级标题。
+
+    Returns:
+        标题和后续 bullet 文本。
+
+    Raises:
+        无显式抛出。
+    """
+
+    lines = markdown.splitlines()
+    try:
+        start = lines.index(heading)
+    except ValueError:
+        return ""
+    end = len(lines)
+    for index in range(start + 1, len(lines)):
+        if lines[index].startswith("#### ") or lines[index].startswith("> 📎 证据"):
+            end = index
+            break
+    return "\n".join(lines[start:end])
+
+
+def _line_is_not_insufficient(segment: str, prefix: str) -> bool:
+    """判断段落中某个 bullet 是否不是数据不足。
+
+    Args:
+        segment: ITEM_RULE 段落文本。
+        prefix: 待检查 bullet 前缀。
+
+    Returns:
+        找到对应行且不含数据不足时返回 `True`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    for line in segment.splitlines():
+        if line.startswith(prefix):
+            return "数据不足" not in line
+    return False
+
+
+def _has_annual_report_anchor(anchors: tuple[object, ...]) -> bool:
+    """判断锚点集合是否包含年报锚点。
+
+    Args:
+        anchors: 待检查锚点集合。
+
+    Returns:
+        任一锚点来源为 annual_report 时返回 `True`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return any(getattr(anchor, "source_kind", None) == "annual_report" for anchor in anchors)
 
 
 def _audit_rabc_closure(rabc_attributions: tuple[RabcAttribution, ...]) -> tuple[AuditIssue, ...]:

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from decimal import Decimal, InvalidOperation
 from typing import Final
 
 from fund_agent.fund.documents.models import ParsedAnnualReport, ParsedTable
@@ -11,6 +12,7 @@ from fund_agent.fund.extractors.models import (
     EvidenceAnchor,
     ExtractedField,
     PerformanceExtractionResult,
+    TrackingErrorValue,
 )
 
 _SECTION_ID: Final[str] = "§3"
@@ -35,6 +37,28 @@ _FIELD_PATTERNS: Final[dict[str, tuple[str, ...]]] = {
 }
 _NAV_BENCHMARK_TABLE_HEADERS: Final[tuple[str, ...]] = ("阶段", "净值增长率", "业绩比较基准收益率")
 _NAV_BENCHMARK_PREFERRED_PERIODS: Final[tuple[str, ...]] = ("过去一年", "过去一年内")
+_TRACKING_ERROR_KEYWORDS: Final[tuple[str, ...]] = ("跟踪误差", "跟踪偏离度")
+_TRACKING_ERROR_NEGATIVE_KEYWORDS: Final[tuple[str, ...]] = (
+    "控制在",
+    "不超过",
+    "力争",
+    "争取",
+    "目标",
+    "限制",
+    "控制目标",
+    "风险控制",
+    "最小化",
+)
+_TRACKING_ERROR_ACTUAL_KEYWORDS: Final[tuple[str, ...]] = (
+    "实际",
+    "报告期",
+    "本报告期",
+    "过去一年",
+    "年化",
+)
+_TRACKING_ERROR_VALUE_PATTERN: Final[re.Pattern[str]] = re.compile(
+    r"(?P<value>[-+]?\d+(?:,\d{3})*(?:\.\d+)?)\s*%"
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -69,6 +93,31 @@ class _MatchedTableField:
     table: ParsedTable
     row_label: str
     matched_header: str
+
+
+@dataclass(frozen=True, slots=True)
+class _MatchedTrackingError:
+    """跟踪误差命中结果。
+
+    Attributes:
+        value_text: 年报披露的数值文本。
+        matched_text: 命中的行或表格上下文。
+        period_label: 跟踪误差期间。
+        annualized: 是否年化。
+        section_id: 命中章节。
+        table: 命中的表格；文本命中时为 `None`。
+        row_label: 表格行标签。
+        matched_header: 表格表头。
+    """
+
+    value_text: str
+    matched_text: str
+    period_label: str
+    annualized: bool
+    section_id: str = _SECTION_ID
+    table: ParsedTable | None = None
+    row_label: str | None = None
+    matched_header: str | None = None
 
 
 def _extract_field(report: ParsedAnnualReport, field_name: str) -> _MatchedField | None:
@@ -292,6 +341,421 @@ def _extract_nav_benchmark_table_fields(
     return None, None
 
 
+def _extract_tracking_error(report: ParsedAnnualReport) -> ExtractedField[TrackingErrorValue]:
+    """从年报 `§3/§2` 提取直接披露的实际跟踪误差，见模板第 2 章 R=A+B-C。
+
+    Args:
+        report: 已解析年报对象。
+
+    Returns:
+        直接披露时返回 `direct`；缺失、目标值或语义模糊时返回 `missing`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if _has_ambiguous_tracking_error_text(report):
+        return _missing_tracking_error("tracking_error_ambiguous")
+    table_match = _extract_tracking_error_from_tables(report)
+    text_match = _extract_tracking_error_from_text(report)
+    if table_match is not None and text_match is not None:
+        match = _select_consistent_tracking_error_match(table_match, text_match)
+        if match is None:
+            return _missing_tracking_error("tracking_error_ambiguous")
+    else:
+        match = table_match or text_match
+    if match is None:
+        return _missing_tracking_error("年报未直接披露跟踪误差")
+    value = _parse_percent_ratio(match.value_text)
+    if value is None:
+        return _missing_tracking_error("tracking_error_unparseable")
+    anchor = _build_tracking_error_anchor(report, match)
+    return ExtractedField(
+        value=TrackingErrorValue(
+            value=value,
+            value_text=match.value_text,
+            unit="ratio",
+            period_label=match.period_label,
+            period_start=None,
+            period_end=None,
+            annualized=match.annualized,
+            source_type="direct_disclosure",
+            calculation_method="disclosed",
+            benchmark_identity_status="missing",
+            benchmark_index_name=None,
+            benchmark_index_code=None,
+            fund_series_source=None,
+            index_series_source=None,
+            observation_count=None,
+            frequency="annual_report_period",
+            annualization_factor=None,
+            input_period_complete=True,
+            provenance_note="年报§3直接披露的实际跟踪误差；未使用业绩基准收益率或标准差列推导。",
+        ),
+        anchors=(anchor,),
+        extraction_mode="direct",
+        note=None,
+    )
+
+
+def _select_consistent_tracking_error_match(
+    table_match: _MatchedTrackingError,
+    text_match: _MatchedTrackingError,
+) -> _MatchedTrackingError | None:
+    """在表格和正文同时命中时选择一致的跟踪误差披露。
+
+    Args:
+        table_match: 表格命中结果。
+        text_match: 正文命中结果。
+
+    Returns:
+        两者解析值一致时优先返回表格命中；不一致时返回 `None` 代表语义模糊。
+
+    Raises:
+        无显式抛出。
+    """
+
+    table_value = _parse_percent_ratio(table_match.value_text)
+    text_value = _parse_percent_ratio(text_match.value_text)
+    if table_value is None or text_value is None:
+        return None
+    if table_value != text_value:
+        return None
+    return table_match
+
+
+def _extract_tracking_error_from_tables(report: ParsedAnnualReport) -> _MatchedTrackingError | None:
+    """从 `§3` 表格中提取实际跟踪误差。
+
+    Args:
+        report: 已解析年报对象。
+
+    Returns:
+        命中结果；不存在或语义模糊时返回 `None`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    matches: list[_MatchedTrackingError] = []
+    for table in report.tables:
+        header_index = _find_tracking_error_header_index(table.headers)
+        if header_index is None:
+            continue
+        period_index = _find_header_index(table.headers, ("阶段",))
+        for row in table.rows:
+            value = _cell_at(row, header_index)
+            if value is None or _parse_percent_ratio(value) is None:
+                continue
+            row_label = _cell_at(row, period_index) or "报告期"
+            context = " ".join((*table.headers, *row))
+            if _tracking_error_context_is_target_or_ambiguous(context):
+                continue
+            matches.append(
+                _MatchedTrackingError(
+                    value_text=value,
+                    matched_text=context,
+                    period_label=row_label,
+                    annualized=_is_annualized_text(table.headers[header_index]),
+                    table=table,
+                    row_label=row_label,
+                    matched_header=table.headers[header_index],
+                )
+            )
+    if len(matches) > 1:
+        return None
+    if not matches:
+        return None
+    return matches[0]
+
+
+def _extract_tracking_error_from_text(report: ParsedAnnualReport) -> _MatchedTrackingError | None:
+    """从 `§3` 优先、`§2` 兜底的正文中提取实际跟踪误差。
+
+    Args:
+        report: 已解析年报对象。
+
+    Returns:
+        命中结果；不存在或语义模糊时返回 `None`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    matches: list[_MatchedTrackingError] = []
+    for section_id in ("§3", "§2"):
+        section_text = report.get_section_text(section_id)
+        if not section_text:
+            continue
+        for line in section_text.splitlines():
+            normalized_line = line.strip()
+            if not _line_has_tracking_error_value(normalized_line):
+                continue
+            if _tracking_error_context_is_target_or_ambiguous(normalized_line):
+                if _has_actual_tracking_error_signal(normalized_line):
+                    return None
+                continue
+            value_text = _extract_percent_text(normalized_line)
+            if value_text is None:
+                continue
+            matches.append(
+                _MatchedTrackingError(
+                    value_text=value_text,
+                    matched_text=normalized_line,
+                    period_label=_period_label_from_text(normalized_line),
+                    annualized=_is_annualized_text(normalized_line),
+                    section_id=section_id,
+                )
+            )
+    if len(matches) > 1:
+        return None
+    if not matches:
+        return None
+    return matches[0]
+
+
+def _has_ambiguous_tracking_error_text(report: ParsedAnnualReport) -> bool:
+    """判断年报是否存在实际值与目标值混杂的跟踪误差文本。
+
+    Args:
+        report: 已解析年报对象。
+
+    Returns:
+        同一行同时出现实际披露信号和目标控制语义时返回 `True`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    for section_id in ("§3", "§2"):
+        section_text = report.get_section_text(section_id)
+        if not section_text:
+            continue
+        for line in section_text.splitlines():
+            normalized_line = line.strip()
+            if (
+                _line_has_tracking_error_value(normalized_line)
+                and _tracking_error_context_is_target_or_ambiguous(normalized_line)
+                and _has_actual_tracking_error_signal(normalized_line)
+            ):
+                return True
+    return False
+
+
+def _find_tracking_error_header_index(headers: tuple[str, ...]) -> int | None:
+    """查找跟踪误差表头下标。
+
+    Args:
+        headers: 表头元组。
+
+    Returns:
+        命中时返回下标，否则返回 `None`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    for index, header in enumerate(headers):
+        normalized_header = _compact_text(header)
+        if "标准差" in normalized_header:
+            continue
+        if any(keyword in normalized_header for keyword in _TRACKING_ERROR_KEYWORDS):
+            return index
+    return None
+
+
+def _line_has_tracking_error_value(line: str) -> bool:
+    """判断文本行是否包含跟踪误差数值。
+
+    Args:
+        line: 年报正文行。
+
+    Returns:
+        同时包含跟踪误差语义和百分比数值时返回 `True`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    normalized_line = _compact_text(line)
+    return (
+        any(keyword in normalized_line for keyword in _TRACKING_ERROR_KEYWORDS)
+        and _extract_percent_text(line) is not None
+    )
+
+
+def _tracking_error_context_is_target_or_ambiguous(text: str) -> bool:
+    """判断上下文是否只是目标、限制或控制口径。
+
+    Args:
+        text: 表格或正文上下文。
+
+    Returns:
+        存在目标/限制语义时返回 `True`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    normalized_text = _compact_text(text)
+    return any(keyword in normalized_text for keyword in _TRACKING_ERROR_NEGATIVE_KEYWORDS)
+
+
+def _has_actual_tracking_error_signal(text: str) -> bool:
+    """判断文本是否同时出现实际披露和目标控制语义。
+
+    Args:
+        text: 年报正文行。
+
+    Returns:
+        语义混杂时返回 `True`，调用方应 fail closed。
+
+    Raises:
+        无显式抛出。
+    """
+
+    normalized_text = _compact_text(text)
+    return any(keyword in normalized_text for keyword in _TRACKING_ERROR_ACTUAL_KEYWORDS)
+
+
+def _extract_percent_text(text: str) -> str | None:
+    """从文本中提取百分比数值原文。
+
+    Args:
+        text: 年报正文或表格单元格。
+
+    Returns:
+        首个百分比数值；不存在时返回 `None`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    match = _TRACKING_ERROR_VALUE_PATTERN.search(text)
+    if match is None:
+        return None
+    return f"{match.group('value').replace(',', '')}%"
+
+
+def _parse_percent_ratio(value_text: str) -> Decimal | None:
+    """把百分比文本解析为小数比例。
+
+    Args:
+        value_text: 百分比文本。
+
+    Returns:
+        小数比例；无法解析时返回 `None`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    match = _TRACKING_ERROR_VALUE_PATTERN.search(value_text)
+    if match is None:
+        return None
+    try:
+        return Decimal(match.group("value").replace(",", "")) / Decimal("100")
+    except InvalidOperation:
+        return None
+
+
+def _period_label_from_text(text: str) -> str:
+    """从披露文本中提取期间标签。
+
+    Args:
+        text: 年报正文行。
+
+    Returns:
+        期间标签；无法精确定位时返回 `报告期`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if "过去一年" in text:
+        return "过去一年"
+    if "本报告期" in text:
+        return "本报告期"
+    if "报告期" in text:
+        return "报告期"
+    return "报告期"
+
+
+def _is_annualized_text(text: str) -> bool:
+    """判断文本是否标注年化口径。
+
+    Args:
+        text: 表头或正文。
+
+    Returns:
+        包含年化语义时返回 `True`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return "年化" in text or "年跟踪误差" in _compact_text(text)
+
+
+def _build_tracking_error_anchor(
+    report: ParsedAnnualReport,
+    matched: _MatchedTrackingError,
+) -> EvidenceAnchor:
+    """构造跟踪误差证据锚点。
+
+    Args:
+        report: 已解析年报对象。
+        matched: 跟踪误差命中结果。
+
+    Returns:
+        年报证据锚点。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if matched.table is not None:
+        return EvidenceAnchor(
+            source_kind="annual_report",
+            document_year=report.key.year,
+            section_id=matched.section_id,
+            page_number=matched.table.page_number,
+            table_id=_table_id(matched.table),
+            row_locator="tracking_error",
+            note=f"{matched.row_label}; {matched.matched_header}",
+        )
+    return EvidenceAnchor(
+        source_kind="annual_report",
+        document_year=report.key.year,
+        section_id=matched.section_id,
+        page_number=None,
+        table_id=None,
+        row_locator="tracking_error",
+        note=matched.matched_text,
+    )
+
+
+def _missing_tracking_error(note: str) -> ExtractedField[TrackingErrorValue]:
+    """构造跟踪误差缺失字段。
+
+    Args:
+        note: 缺失或 fail closed 原因。
+
+    Returns:
+        `missing` 跟踪误差字段。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return ExtractedField(
+        value=None,
+        anchors=(),
+        extraction_mode="missing",
+        note=note,
+    )
+
+
 def _build_anchor(report: ParsedAnnualReport, matched_field: _MatchedField) -> EvidenceAnchor:
     """根据 `§3` 字段命中结果构造证据锚点。
 
@@ -494,4 +958,5 @@ def extract_performance(report: ParsedAnnualReport) -> PerformanceExtractionResu
     return PerformanceExtractionResult(
         nav_benchmark_performance=_build_nav_benchmark_performance(report),
         investor_return=_build_investor_return(report),
+        tracking_error=_extract_tracking_error(report),
     )

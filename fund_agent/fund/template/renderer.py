@@ -21,7 +21,12 @@ from fund_agent.fund.analysis.r_abc import RabcAttribution
 from fund_agent.fund.analysis.risk_check import RiskCheckResult, StressTestResult
 from fund_agent.fund.audit import ProgrammaticAuditInput
 from fund_agent.fund.data_extractor import StructuredFundDataBundle
-from fund_agent.fund.extractors.models import EvidenceAnchor, ExtractedField
+from fund_agent.fund.extractors.models import (
+    EvidenceAnchor,
+    ExtractedField,
+    IndexProfileValue,
+    TrackingErrorValue,
+)
 from fund_agent.fund.template.chapter_blocks import (
     EVIDENCE_APPENDIX_HEADING,
     RenderedChapterBlock,
@@ -156,6 +161,8 @@ def render_template_report(input_data: TemplateRenderInput) -> TemplateRenderRes
             chapter_blocks=chapter_blocks,
             item_rule_decisions=item_rule_decisions,
             item_rule_audit_context=item_rule_audit_context,
+            index_profile=input_data.structured_data.index_profile,
+            tracking_error=input_data.structured_data.tracking_error,
         ),
         evidence_anchors=evidence_anchors,
         chapter_blocks=chapter_blocks,
@@ -505,16 +512,93 @@ def _render_index_constituents_segment(input_data: TemplateRenderInput) -> str:
         无显式抛出。
     """
 
+    index_profile = input_data.structured_data.index_profile.value
     benchmark = input_data.structured_data.benchmark.value or {}
+    benchmark_text = _index_profile_benchmark_text(index_profile) or _value_text(
+        benchmark,
+        "benchmark_text",
+    )
+    methodology_text = _index_profile_methodology_text(index_profile)
+    constituents_text = _index_profile_constituents_text(index_profile)
     return "\n".join(
         (
             "#### 指数编制规则与成分股",
-            f"- 业绩基准引用：{_value_text(benchmark, 'benchmark_text')}。",
-            f"- 编制方法：{_INSUFFICIENT_TEXT}，当前输入未抽取指数编制方法。",
-            f"- 成分股：{_INSUFFICIENT_TEXT}，当前输入未抽取指数成分股。",
-            _item_rule_evidence_bullet(input_data.structured_data.benchmark.anchors),
+            f"- 业绩基准引用：{benchmark_text}。",
+            f"- 编制方法：{methodology_text}",
+            f"- 成分股：{constituents_text}",
+            _item_rule_evidence_bullet(
+                input_data.structured_data.index_profile.anchors
+                or input_data.structured_data.benchmark.anchors
+            ),
         )
     )
+
+
+def _index_profile_benchmark_text(index_profile: IndexProfileValue | None) -> str | None:
+    """读取指数画像中的基准文本。
+
+    Args:
+        index_profile: 指数画像值。
+
+    Returns:
+        非空基准文本；缺失时返回 `None`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if index_profile is None or not index_profile.benchmark_text:
+        return None
+    return index_profile.benchmark_text
+
+
+def _index_profile_methodology_text(index_profile: IndexProfileValue | None) -> str:
+    """渲染指数编制方法文本。
+
+    Args:
+        index_profile: 指数画像值。
+
+    Returns:
+        可用时返回披露文本，否则保留数据不足。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if (
+        index_profile is not None
+        and index_profile.methodology_availability in {"direct_disclosure", "source_reference"}
+        and (index_profile.methodology_summary or index_profile.methodology_source_title)
+    ):
+        return f"{index_profile.methodology_summary or index_profile.methodology_source_title}。"
+    return f"{_INSUFFICIENT_TEXT}，当前输入未抽取指数编制方法。"
+
+
+def _index_profile_constituents_text(index_profile: IndexProfileValue | None) -> str:
+    """渲染指数成分股文本。
+
+    Args:
+        index_profile: 指数画像值。
+
+    Returns:
+        可用时返回披露文本，否则保留数据不足。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if (
+        index_profile is not None
+        and index_profile.constituents_availability in {"direct_disclosure", "source_reference"}
+        and (index_profile.constituents_summary or index_profile.constituents_as_of_date)
+    ):
+        suffix = (
+            f"（截至 {index_profile.constituents_as_of_date}）"
+            if index_profile.constituents_as_of_date
+            else ""
+        )
+        return f"{index_profile.constituents_summary or _INSUFFICIENT_TEXT}{suffix}。"
+    return f"{_INSUFFICIENT_TEXT}，当前输入未抽取指数成分股。"
 
 
 def _render_manager_philosophy_segment(input_data: TemplateRenderInput) -> str:
@@ -579,12 +663,36 @@ def _render_tracking_error_segment(input_data: TemplateRenderInput) -> str:
         无显式抛出。
     """
 
-    anchors = _dedupe_anchors(
-        (
-            *input_data.structured_data.benchmark.anchors,
-            *_collect_rabc_anchors(input_data.rabc_attributions),
+    tracking_error = input_data.structured_data.tracking_error
+    anchors = tracking_error.anchors
+    if _has_renderable_tracking_error(tracking_error):
+        value = tracking_error.value
+        if value is None:
+            return _render_tracking_error_insufficient(anchors)
+        return "\n".join(
+            (
+                "#### 跟踪误差分析",
+                f"- 跟踪误差：{value.value_text}（{value.period_label}，{_annualized_text(value)}，来源：{_tracking_error_source_text(value)}）。",
+                "- 后续最小验证：复核年报原始披露的期间和年化口径；如需计算口径，另行接入净值/指数日频序列。",
+                f"- 证据边界：{_tracking_error_provenance_text(value, anchors)}",
+            )
         )
-    )
+    return _render_tracking_error_insufficient(anchors)
+
+
+def _render_tracking_error_insufficient(anchors: tuple[EvidenceAnchor, ...]) -> str:
+    """渲染跟踪误差数据不足段落。
+
+    Args:
+        anchors: 跟踪误差字段证据锚点。
+
+    Returns:
+        数据不足的固定 Markdown 段落。
+
+    Raises:
+        无显式抛出。
+    """
+
     return "\n".join(
         (
             "#### 跟踪误差分析",
@@ -593,6 +701,85 @@ def _render_tracking_error_segment(input_data: TemplateRenderInput) -> str:
             _item_rule_evidence_bullet(anchors),
         )
     )
+
+
+def _has_renderable_tracking_error(
+    tracking_error: ExtractedField[TrackingErrorValue],
+) -> bool:
+    """判断跟踪误差字段是否可渲染为产品证据。
+
+    Args:
+        tracking_error: 跟踪误差字段。
+
+    Returns:
+        有结构化值、直接/派生模式和 provenance 时返回 `True`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return (
+        tracking_error.extraction_mode in {"direct", "derived"}
+        and tracking_error.value is not None
+        and bool(tracking_error.value.provenance_note)
+    )
+
+
+def _annualized_text(value: TrackingErrorValue) -> str:
+    """渲染跟踪误差年化口径。
+
+    Args:
+        value: 跟踪误差结构化值。
+
+    Returns:
+        年化或非年化说明。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return "年化" if value.annualized else "未标注年化"
+
+
+def _tracking_error_source_text(value: TrackingErrorValue) -> str:
+    """渲染跟踪误差来源类型。
+
+    Args:
+        value: 跟踪误差结构化值。
+
+    Returns:
+        人类可读来源说明。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if value.source_type == "direct_disclosure":
+        return "年报直接披露"
+    return "净值/指数序列计算"
+
+
+def _tracking_error_provenance_text(
+    value: TrackingErrorValue,
+    anchors: tuple[EvidenceAnchor, ...],
+) -> str:
+    """渲染跟踪误差证据边界。
+
+    Args:
+        value: 跟踪误差结构化值。
+        anchors: 跟踪误差锚点。
+
+    Returns:
+        证据边界文本。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if anchors:
+        anchor_text = "；".join(_body_anchor_reference(anchor) for anchor in _dedupe_anchors(anchors))
+        return f"{anchor_text}；{value.provenance_note}。"
+    return f"{_INSUFFICIENT_TEXT}，{value.provenance_note}。"
 
 
 def _item_rule_evidence_bullet(anchors: tuple[EvidenceAnchor, ...]) -> str:
@@ -1037,10 +1224,12 @@ def _collect_evidence_anchors(input_data: TemplateRenderInput) -> tuple[Evidence
                 input_data.structured_data.basic_identity,
                 input_data.structured_data.product_profile,
                 input_data.structured_data.benchmark,
+                input_data.structured_data.index_profile,
                 input_data.structured_data.fee_schedule,
                 input_data.structured_data.turnover_rate,
                 input_data.structured_data.nav_benchmark_performance,
                 input_data.structured_data.investor_return,
+                input_data.structured_data.tracking_error,
                 input_data.structured_data.share_change,
                 input_data.structured_data.manager_alignment,
                 input_data.structured_data.manager_strategy_text,
@@ -1079,9 +1268,15 @@ def _collect_chapter_evidence_groups(
             input_data.structured_data.basic_identity,
             input_data.structured_data.product_profile,
             input_data.structured_data.benchmark,
+            input_data.structured_data.index_profile,
             input_data.structured_data.fee_schedule,
         ),
-        _collect_rabc_anchors(input_data.rabc_attributions),
+        _dedupe_anchors(
+            (
+                *_collect_rabc_anchors(input_data.rabc_attributions),
+                *input_data.structured_data.tracking_error.anchors,
+            )
+        ),
         _collect_consistency_anchors(input_data),
         _dedupe_anchors((*behavior_gap.anchors, *fund_flow.anchors)),
         _merge_anchors(input_data.structured_data.nav_benchmark_performance),

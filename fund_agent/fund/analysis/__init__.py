@@ -42,12 +42,14 @@ from fund_agent.fund.analysis.r_abc import (
     calculate_r_abc_series,
 )
 from fund_agent.fund.analysis.risk_check import (
+    ResolvedTrackingErrorForRisk,
     RiskCheckItem,
     RiskCheckResult,
     RiskCheckRule,
     StressScenarioResult,
     StressTestResult,
     StressTestRule,
+    resolve_tracking_error_for_risk,
     run_risk_checks,
     run_stress_test,
 )
@@ -71,6 +73,7 @@ __all__ = [
     "InvestorExperienceResult",
     "RabcAttribution",
     "RabcInput",
+    "ResolvedTrackingErrorForRisk",
     "RiskCheckItem",
     "RiskCheckResult",
     "RiskCheckRule",
@@ -87,6 +90,7 @@ __all__ = [
     "judge_alpha_nature",
     "judge_fund_flow",
     "observations_from_attributions",
+    "resolve_tracking_error_for_risk",
     "run_checklist",
     "run_risk_checks",
     "run_stress_test",

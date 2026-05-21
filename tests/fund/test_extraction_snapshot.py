@@ -18,7 +18,12 @@ from fund_agent.fund.extraction_snapshot import (
     run_extraction_snapshot,
     validate_selected_fund_pool,
 )
-from fund_agent.fund.extractors import EvidenceAnchor, ExtractedField
+from fund_agent.fund.extractors import (
+    EvidenceAnchor,
+    ExtractedField,
+    IndexProfileValue,
+    TrackingErrorValue,
+)
 
 
 class _FakeExtractor:
@@ -106,7 +111,7 @@ def test_selected_fund_csv_validation_flags_missing_bad_code_and_duplicates(tmp_
 
 
 def test_build_snapshot_records_contains_required_schema_and_all_fields() -> None:
-    """验证 snapshot 记录包含 P4-S1 schema 与 14 个字段。
+    """验证 snapshot 记录包含 schema 与 P13 观测字段。
 
     Args:
         无。
@@ -180,6 +185,8 @@ def test_build_snapshot_records_contains_required_schema_and_all_fields() -> Non
     assert records_by_name["classified_fund_type"].comparable_values == {
         "fund_type": "active_fund"
     }
+    assert records_by_name["index_profile"].comparable_values == {}
+    assert records_by_name["tracking_error"].comparable_values == {}
     assert records_by_name["product_profile"].comparable_values == {}
     assert records_by_name["fee_schedule"].comparable_values == {}
 
@@ -294,6 +301,18 @@ def _build_bundle(fund_code: str, classified_fund_type: str) -> StructuredFundDa
         无显式抛出。
     """
 
+    missing_index_profile: ExtractedField[IndexProfileValue] = ExtractedField(
+        value=None,
+        anchors=(),
+        extraction_mode="missing",
+        note="fixture index profile missing",
+    )
+    missing_tracking_error: ExtractedField[TrackingErrorValue] = ExtractedField(
+        value=None,
+        anchors=(),
+        extraction_mode="missing",
+        note="fixture tracking error missing",
+    )
     return StructuredFundDataBundle(
         fund_code=fund_code,
         report_year=2024,
@@ -309,6 +328,7 @@ def _build_bundle(fund_code: str, classified_fund_type: str) -> StructuredFundDa
         ),
         product_profile=_field({"investment_scope": "股票等"}, "investment_scope"),
         benchmark=_field({"benchmark_text": "沪深300指数收益率"}, "benchmark"),
+        index_profile=missing_index_profile,
         fee_schedule=_field({"management_fee": "1.20%", "custody_fee": "0.20%"}, "fee_schedule"),
         turnover_rate=_field(None, "turnover_rate", extraction_mode="missing", note="fixture missing"),
         nav_benchmark_performance=_field({"nav_growth_rate": "1%", "benchmark_return_rate": "0.5%"}, "performance"),
@@ -318,6 +338,7 @@ def _build_bundle(fund_code: str, classified_fund_type: str) -> StructuredFundDa
             extraction_mode="missing",
             note="fixture investor return missing",
         ),
+        tracking_error=missing_tracking_error,
         share_change=_field({"beginning_share": "1", "ending_share": "2", "net_change": "1"}, "share_change"),
         manager_alignment=_field(None, "manager_alignment", extraction_mode="missing", note="fixture missing"),
         manager_strategy_text=_field({"strategy_summary": "精选个股"}, "manager_strategy_text"),

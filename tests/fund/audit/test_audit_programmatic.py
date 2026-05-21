@@ -22,7 +22,7 @@ from fund_agent.fund.template.contracts import load_template_contract_manifest
 from fund_agent.fund.template.item_rules import get_template_item_rule
 from fund_agent.fund.audit import ProgrammaticAuditInput, run_programmatic_audit
 from fund_agent.fund.template import render_template_report, split_rendered_chapter_blocks
-from tests.fund.template.test_renderer import _render_input
+from tests.fund.template.test_renderer import _render_input, _tracking_error_field
 
 
 def _complete_report() -> str:
@@ -477,6 +477,107 @@ def test_run_programmatic_audit_detects_item_rule_deleted_marker_present() -> No
     assert any(
         issue.code == "C2" and "要求删除" in issue.message and "chapter_2_tracking_error_analysis" in issue.message
         for issue in result.issues
+    )
+
+
+def test_run_programmatic_audit_detects_tracking_error_without_structured_field() -> None:
+    """验证跟踪误差非数据不足输出必须有 structured tracking_error 支撑。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当基准锚点可冒充跟踪误差证据时抛出。
+    """
+
+    render_result = render_template_report(_render_input(fund_type="index_fund"))
+    broken_blocks = tuple(
+        replace(
+            block,
+            body_markdown=block.body_markdown.replace(
+                "- 跟踪误差：数据不足，当前输入未抽取跟踪误差。",
+                "- 跟踪误差：1.23%（报告期，年化，来源：年报直接披露）。",
+            ),
+            markdown=block.markdown.replace(
+                "- 跟踪误差：数据不足，当前输入未抽取跟踪误差。",
+                "- 跟踪误差：1.23%（报告期，年化，来源：年报直接披露）。",
+            ),
+        )
+        if block.chapter_id == 2
+        else block
+        for block in render_result.chapter_blocks
+    )
+
+    result = run_programmatic_audit(replace(render_result.audit_input, chapter_blocks=broken_blocks))
+
+    assert not result.passed
+    assert any(
+        issue.code == "C2" and "structured_data.tracking_error" in issue.message
+        for issue in result.issues
+    )
+
+
+def test_run_programmatic_audit_accepts_tracking_error_with_structured_field() -> None:
+    """验证结构化跟踪误差可通过 deterministic source guard。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当合法结构化跟踪误差被误拒时抛出。
+    """
+
+    render_result = render_template_report(
+        _render_input(fund_type="index_fund", tracking_error=_tracking_error_field())
+    )
+
+    result = run_programmatic_audit(render_result.audit_input)
+
+    assert result.passed
+
+
+def test_run_programmatic_audit_detects_benchmark_only_methodology_misuse() -> None:
+    """验证 benchmark-only 不得支撑指数编制方法。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当基准证据被误用为编制方法时抛出。
+    """
+
+    render_result = render_template_report(_render_input(fund_type="index_fund"))
+    broken_blocks = tuple(
+        replace(
+            block,
+            body_markdown=block.body_markdown.replace(
+                "- 编制方法：数据不足，当前输入未抽取指数编制方法。",
+                "- 编制方法：采用完全复制法。",
+            ),
+            markdown=block.markdown.replace(
+                "- 编制方法：数据不足，当前输入未抽取指数编制方法。",
+                "- 编制方法：采用完全复制法。",
+            ),
+        )
+        if block.chapter_id == 1
+        else block
+        for block in render_result.chapter_blocks
+    )
+
+    result = run_programmatic_audit(replace(render_result.audit_input, chapter_blocks=broken_blocks))
+
+    assert not result.passed
+    assert any(
+        issue.code == "C2" and "benchmark-only" in issue.message for issue in result.issues
     )
 
 

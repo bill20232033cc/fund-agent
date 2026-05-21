@@ -27,7 +27,12 @@ from fund_agent.fund.analysis import (
 from fund_agent.fund.audit import run_programmatic_audit
 from fund_agent.fund.data.nav_data import NavDataResult
 from fund_agent.fund.data_extractor import StructuredFundDataBundle
-from fund_agent.fund.extractors.models import EvidenceAnchor, ExtractedField
+from fund_agent.fund.extractors.models import (
+    EvidenceAnchor,
+    ExtractedField,
+    IndexProfileValue,
+    TrackingErrorValue,
+)
 from fund_agent.fund.fund_type import FundType
 from fund_agent.fund.template import (
     TemplateRenderInput,
@@ -116,11 +121,54 @@ def _field(
     )
 
 
+def _tracking_error_field(value_text: str = "1.23%") -> ExtractedField[TrackingErrorValue]:
+    """构造直接披露跟踪误差字段。
+
+    Args:
+        value_text: 跟踪误差百分比文本。
+
+    Returns:
+        跟踪误差抽取字段。
+
+    Raises:
+        无显式抛出。
+    """
+
+    value = Decimal(value_text.replace("%", "")) / Decimal("100")
+    return ExtractedField(
+        value=TrackingErrorValue(
+            value=value,
+            value_text=value_text,
+            unit="ratio",
+            period_label="报告期",
+            period_start=None,
+            period_end=None,
+            annualized=True,
+            source_type="direct_disclosure",
+            calculation_method="disclosed",
+            benchmark_identity_status="identified",
+            benchmark_index_name="沪深300指数",
+            benchmark_index_code=None,
+            fund_series_source=None,
+            index_series_source=None,
+            observation_count=None,
+            frequency="annual_report_period",
+            annualization_factor=None,
+            input_period_complete=True,
+            provenance_note="fixture direct disclosure",
+        ),
+        anchors=(_anchor("§3", "tracking_error"),),
+        extraction_mode="direct",
+        note=None,
+    )
+
+
 def _bundle(
     *,
     missing: bool = False,
     anchor_without_row: bool = False,
     fund_type: str = "active_fund",
+    tracking_error: ExtractedField[TrackingErrorValue] | None = None,
 ) -> StructuredFundDataBundle:
     """构造 P1 结构化数据包。
 
@@ -128,6 +176,7 @@ def _bundle(
         missing: 是否构造关键字段缺失路径。
         anchor_without_row: 是否让部分证据缺少行定位。
         fund_type: classified_fund_type fixture 值。
+        tracking_error: 显式跟踪误差字段。
 
     Returns:
         P1 结构化数据包。
@@ -164,7 +213,36 @@ def _bundle(
         "§2",
         "product_profile",
     )
-    benchmark = _field({"benchmark": "沪深300指数收益率*80%+中债指数收益率*20%"}, "§2", "benchmark")
+    benchmark = _field({"benchmark_text": "沪深300指数收益率*80%+中债指数收益率*20%"}, "§2", "benchmark")
+    index_profile: ExtractedField[IndexProfileValue]
+    if fund_type in {"index_fund", "enhanced_index"}:
+        index_profile = ExtractedField(
+            value=IndexProfileValue(
+                benchmark_text="沪深300指数收益率*80%+中债指数收益率*20%",
+                benchmark_identity_status="composite",
+                benchmark_index_name=None,
+                benchmark_index_code=None,
+                benchmark_component_text=("沪深300指数收益率*80%", "中债指数收益率*20%"),
+                methodology_availability="benchmark_only",
+                methodology_summary=None,
+                methodology_source_title=None,
+                constituents_availability="benchmark_only",
+                constituents_summary=None,
+                constituents_as_of_date=None,
+                source_tier="benchmark_context",
+                missing_reasons=("fixture",),
+            ),
+            anchors=benchmark.anchors,
+            extraction_mode="direct",
+            note="fixture",
+        )
+    else:
+        index_profile = ExtractedField(
+            value=None,
+            anchors=(),
+            extraction_mode="missing",
+            note="非指数基金不适用指数画像",
+        )
     fee_schedule = _field({"management_fee": "1.20%", "custody_fee": "0.20%"}, "§2", "fee_schedule")
     turnover_rate = _field({"turnover_rate": "100.00%"}, "§8", "turnover_rate")
     nav_performance = _field(
@@ -194,16 +272,24 @@ def _bundle(
         "holdings_snapshot",
     )
     holder_structure = _field({"institutional_holder_ratio": "30%", "individual_holder_ratio": "70%"}, "§9", "holder_structure")
+    tracking_error_field = tracking_error or ExtractedField(
+        value=None,
+        anchors=(),
+        extraction_mode="missing",
+        note="fixture tracking error missing",
+    )
     return StructuredFundDataBundle(
         fund_code="110011",
         report_year=2024,
         basic_identity=basic_identity,
         product_profile=product_profile,
         benchmark=benchmark,
+        index_profile=index_profile,
         fee_schedule=fee_schedule,
         turnover_rate=turnover_rate,
         nav_benchmark_performance=nav_performance,
         investor_return=investor_return,
+        tracking_error=tracking_error_field,
         share_change=share_change,
         manager_alignment=manager_alignment,
         manager_strategy_text=manager_strategy,
@@ -500,6 +586,7 @@ def _render_input(
     missing: bool = False,
     final_judgment: str = "worth_holding",
     fund_type: str = "active_fund",
+    tracking_error: ExtractedField[TrackingErrorValue] | None = None,
 ) -> TemplateRenderInput:
     """构造模板渲染输入。
 
@@ -507,6 +594,7 @@ def _render_input(
         missing: 是否构造缺失数据路径。
         final_judgment: 最终 selected 判断。
         fund_type: classified_fund_type fixture 值。
+        tracking_error: 显式跟踪误差字段。
 
     Returns:
         模板渲染输入。
@@ -516,7 +604,12 @@ def _render_input(
     """
 
     return TemplateRenderInput(
-        structured_data=_bundle(missing=missing, anchor_without_row=True, fund_type=fund_type),
+        structured_data=_bundle(
+            missing=missing,
+            anchor_without_row=True,
+            fund_type=fund_type,
+            tracking_error=tracking_error,
+        ),
         rabc_attributions=(_rabc(missing=missing),),
         alpha_judgment=_alpha_judgment(),
         consistency_result=_consistency(),
@@ -1040,6 +1133,78 @@ def test_render_template_report_applies_item_rule_segments_by_fund_type(
         assert (marker in result.report_markdown) is (marker in expected_markers)
 
 
+def test_render_template_report_replaces_tracking_error_only_from_structured_data() -> None:
+    """验证跟踪误差段落只通过 structured_data.tracking_error 替换占位。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当跟踪误差未按结构化字段渲染时抛出。
+    """
+
+    result = render_template_report(
+        _render_input(fund_type="index_fund", tracking_error=_tracking_error_field("1.23%"))
+    )
+    chapter_2 = result.chapter_blocks[2].body_markdown
+
+    assert "- 跟踪误差：1.23%（报告期，年化，来源：年报直接披露）。" in chapter_2
+    assert "fixture direct disclosure" in chapter_2
+    assert "年报2024§3 tracking_error" in chapter_2
+
+
+def test_render_template_report_defensively_handles_missing_tracking_error_value() -> None:
+    """验证渲染器不用 assert 作为运行时完整性保护。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当值缺失路径抛异常或误渲染时抛出。
+    """
+
+    tracking_error: ExtractedField[TrackingErrorValue] = ExtractedField(
+        value=None,
+        anchors=(_anchor("§3", "tracking_error"),),
+        extraction_mode="direct",
+        note="fixture inconsistent field",
+    )
+
+    result = render_template_report(
+        _render_input(fund_type="index_fund", tracking_error=tracking_error)
+    )
+    chapter_2 = result.chapter_blocks[2].body_markdown
+
+    assert "- 跟踪误差：数据不足，当前输入未抽取跟踪误差。" in chapter_2
+
+
+def test_render_template_report_keeps_methodology_and_constituents_insufficient_for_benchmark_only() -> None:
+    """验证 benchmark-only 指数画像不替代编制方法或成分股。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当基准证据被误用为编制方法或成分股时抛出。
+    """
+
+    result = render_template_report(_render_input(fund_type="index_fund"))
+    chapter_1 = result.chapter_blocks[1].body_markdown
+
+    assert "- 业绩基准引用：沪深300指数收益率*80%+中债指数收益率*20%。" in chapter_1
+    assert "- 编制方法：数据不足，当前输入未抽取指数编制方法。" in chapter_1
+    assert "- 成分股：数据不足，当前输入未抽取指数成分股。" in chapter_1
+
+
 def test_render_template_report_renders_item_rule_segments_with_fixed_bullets_and_evidence_boundaries() -> None:
     """验证 ITEM_RULE 段落使用固定 bullet 且不伪造证据边界。
 
@@ -1058,7 +1223,6 @@ def test_render_template_report_renders_item_rule_segments_with_fixed_bullets_an
     chapter_2 = result.chapter_blocks[2].body_markdown
     input_data = _render_input(fund_type="enhanced_index")
     benchmark_reference = _body_anchor_reference(input_data.structured_data.benchmark.anchors[0])
-    rabc_reference = _body_anchor_reference(input_data.rabc_attributions[0].anchors[0])
     tracking_evidence_line = _evidence_boundary_line(chapter_2, "#### 跟踪误差分析")
     index_evidence_line = _evidence_boundary_line(chapter_1, "#### 指数编制规则与成分股")
     index_segment = _segment_lines(chapter_1, "#### 指数编制规则与成分股")
@@ -1070,9 +1234,7 @@ def test_render_template_report_renders_item_rule_segments_with_fixed_bullets_an
     assert "- 分年度结论：数据不足，当前输入未形成多年度完整序列时不得推断稳定性。" in chapter_2
     assert "#### 跟踪误差分析\n- 跟踪误差：数据不足，当前输入未抽取跟踪误差。" in chapter_2
     assert "- 后续最小验证：补充跟踪误差披露或净值/指数日频序列后再计算。" in chapter_2
-    assert benchmark_reference in tracking_evidence_line
-    assert rabc_reference in tracking_evidence_line
-    assert "；" in tracking_evidence_line
+    assert tracking_evidence_line == _ITEM_RULE_EMPTY_EVIDENCE_BOUNDARY
     assert index_evidence_line.count(benchmark_reference) == 1
     assert "；" not in index_evidence_line
     assert not any(line.startswith("> 📎 证据") for line in index_segment)

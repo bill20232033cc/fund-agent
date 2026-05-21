@@ -2,14 +2,18 @@
 
 from __future__ import annotations
 
+from decimal import Decimal
+
 from fund_agent.fund.analysis import (
     ConsistencyCheckResult,
     ConsistencyDimensionResult,
+    ResolvedTrackingErrorForRisk,
     StressTestRule,
+    resolve_tracking_error_for_risk,
     run_risk_checks,
     run_stress_test,
 )
-from fund_agent.fund.extractors.models import EvidenceAnchor, ExtractedField
+from fund_agent.fund.extractors.models import EvidenceAnchor, ExtractedField, TrackingErrorValue
 
 
 def _anchor(section_id: str, row_locator: str) -> EvidenceAnchor:
@@ -109,6 +113,50 @@ def _fee_schedule(
     )
 
 
+def _tracking_error_field(value_text: str | None = None) -> ExtractedField[TrackingErrorValue]:
+    """构造跟踪误差字段。
+
+    Args:
+        value_text: 跟踪误差百分比文本；为空时返回 missing。
+
+    Returns:
+        跟踪误差抽取字段。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if value_text is None:
+        return ExtractedField(value=None, anchors=(), extraction_mode="missing", note="fixture missing")
+    value = TrackingErrorValue(
+        value=Decimal(value_text.replace("%", "")) / Decimal("100"),
+        value_text=value_text,
+        unit="ratio",
+        period_label="报告期",
+        period_start=None,
+        period_end=None,
+        annualized=True,
+        source_type="direct_disclosure",
+        calculation_method="disclosed",
+        benchmark_identity_status="identified",
+        benchmark_index_name="沪深300指数",
+        benchmark_index_code=None,
+        fund_series_source=None,
+        index_series_source=None,
+        observation_count=None,
+        frequency="annual_report_period",
+        annualization_factor=None,
+        input_period_complete=True,
+        provenance_note="fixture direct disclosure",
+    )
+    return ExtractedField(
+        value=value,
+        anchors=(_anchor("§3", "tracking_error"),),
+        extraction_mode="direct",
+        note=None,
+    )
+
+
 def _consistency(signal: str = "green") -> ConsistencyCheckResult:
     """构造言行一致性结果。
 
@@ -137,6 +185,28 @@ def _consistency(signal: str = "green") -> ConsistencyCheckResult:
         overall_status=status,  # type: ignore[arg-type]
         overall_signal=signal,  # type: ignore[arg-type]
         reasons=("fixture",),
+    )
+
+
+def _resolved_tracking_error(value_text: str | None, fund_type: str = "index_fund") -> ResolvedTrackingErrorForRisk:
+    """构造风险检查使用的 resolved 跟踪误差。
+
+    Args:
+        value_text: 跟踪误差百分比文本。
+        fund_type: 基金类型。
+
+    Returns:
+        风险检查解析对象。
+
+    Raises:
+        ValueError: 当输入格式非法时抛出。
+    """
+
+    return resolve_tracking_error_for_risk(
+        tracking_error_field=_tracking_error_field(value_text),
+        developer_override=None,
+        developer_override_enabled=False,
+        fund_type=fund_type,  # type: ignore[arg-type]
     )
 
 
@@ -245,11 +315,117 @@ def test_run_risk_checks_vetoes_index_tracking_error() -> None:
         fund_type="index_fund",
         manager_tenure_months=36,
         peer_fee_median="0.50%",
-        tracking_error="2.50%",
+        tracking_error=_resolved_tracking_error("2.50%"),
     )
 
     assert result.overall_status == "veto"
     assert {item.code for item in result.veto_items} == {"tracking_error"}
+    item = result.veto_items[0]
+    assert item.anchors[0].row_locator == "tracking_error"
+
+
+def test_resolve_tracking_error_prefers_structured_data_over_developer_override() -> None:
+    """验证结构化跟踪误差优先于开发覆盖。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当开发覆盖覆盖产品证据时抛出。
+    """
+
+    resolved = resolve_tracking_error_for_risk(
+        tracking_error_field=_tracking_error_field("1.50%"),
+        developer_override="3.00%",
+        developer_override_enabled=True,
+        fund_type="index_fund",
+    )
+
+    assert resolved.value == Decimal("0.015")
+    assert resolved.source_type == "direct_disclosure"
+    assert resolved.authority == "capability_structured_data"
+    assert resolved.is_product_evidence is True
+    assert resolved.conflict_note is not None
+
+
+def test_resolve_tracking_error_uses_developer_override_only_when_missing_and_enabled() -> None:
+    """验证开发覆盖只在结构化数据缺失且开发模式启用时作为风险 fallback。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当开发覆盖被当作产品证据时抛出。
+    """
+
+    resolved = resolve_tracking_error_for_risk(
+        tracking_error_field=_tracking_error_field(None),
+        developer_override="1.00%",
+        developer_override_enabled=True,
+        fund_type="index_fund",
+    )
+
+    assert resolved.value == Decimal("0.01")
+    assert resolved.source_type == "developer_override"
+    assert resolved.authority == "developer_override"
+    assert resolved.anchors == ()
+    assert resolved.is_product_evidence is False
+
+
+def test_resolve_tracking_error_ignores_developer_override_in_product_mode() -> None:
+    """验证 product mode 不使用开发覆盖。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 product mode 使用开发覆盖时抛出。
+    """
+
+    resolved = resolve_tracking_error_for_risk(
+        tracking_error_field=_tracking_error_field(None),
+        developer_override="1.00%",
+        developer_override_enabled=False,
+        fund_type="index_fund",
+    )
+
+    assert resolved.value is None
+    assert resolved.source_type == "missing"
+    assert resolved.authority == "missing"
+
+
+def test_resolve_tracking_error_marks_qdii_not_applicable() -> None:
+    """验证 QDII 当前不适用 P13 跟踪误差规则。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 QDII 被纳入当前跟踪误差规则时抛出。
+    """
+
+    resolved = resolve_tracking_error_for_risk(
+        tracking_error_field=_tracking_error_field("1.00%"),
+        developer_override="3.00%",
+        developer_override_enabled=True,
+        fund_type="qdii_fund",
+    )
+
+    assert resolved.source_type == "not_applicable"
+    assert resolved.authority == "not_applicable"
+    assert resolved.value is None
 
 
 def test_run_risk_checks_reports_insufficient_data_without_explicit_inputs() -> None:
@@ -270,6 +446,7 @@ def test_run_risk_checks_reports_insufficient_data_without_explicit_inputs() -> 
         fee_schedule=_fee_schedule("1.20%", "0.20%"),
         consistency_result=None,
         fund_type="index_fund",
+        tracking_error=_resolved_tracking_error(None),
     )
 
     assert result.overall_status == "watch"
