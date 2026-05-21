@@ -270,6 +270,8 @@ C2 当前只做确定性 marker / 元数据检查，不调用 LLM，不判断语
 
 - manifest 位于 Capability 层 `fund_agent/fund/template/contracts.py`，自带章节标题，不依赖 renderer 私有 `_CHAPTER_TITLES`
 - 每章包含 `narrative_mode`、`must_answer`、`must_not_cover`、`required_output_items` 和 `preferred_lens`
+- 第 5 章“当前阶段与关键变化”只承载当前阶段、上一期或历史对比下的关键变化、变化是否影响原始投资假设和下一步最小验证问题；不得给最终判断或展开风险清单
+- 第 6 章“核心风险与否决项”承载结构性/阶段性风险、否决项、压力测试和最可能改变最终判断的信息缺口；不得复述阶段事实，除非明确转译为风险、压力测试或否决项
 - `preferred_lens` key 只允许当前标准基金类型 `index_fund`、`active_fund`、`bond_fund`、`enhanced_index`、`qdii_fund`、`fof_fund` 和 `default`
 - `resolve_preferred_lens(chapter_id, fund_type)` 优先返回精确基金类型 lens，没有精确命中时返回 `default`；章节缺失、基金类型不支持或缺少 fallback 时抛出 `ValueError`
 - `validate_template_contract_manifest()` 对章节数量、id 连续性、重复 id、空字段、unsupported lens key 和无 lens fallback 执行 fail-closed 校验

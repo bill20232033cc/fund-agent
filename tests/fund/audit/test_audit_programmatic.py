@@ -419,12 +419,18 @@ def test_contract_audit_coverage_manifest_covers_every_must_answer() -> None:
     }
 
     assert coverage_questions == manifest_questions
-    assert len(coverage_manifest.must_answer_coverages) == 45
+    assert len(coverage_manifest.must_answer_coverages) == 47
     assert sum(
         1
         for rule in coverage_manifest.must_answer_coverages
         if rule.coverage_kind == "narrative_guidance"
-    ) == 1
+    ) == 2
+    assert any(
+        rule.chapter_id == 6
+        and rule.question_text == "压力测试结论是什么。"
+        and rule.coverage_kind == "structured_data_availability"
+        for rule in coverage_manifest.must_answer_coverages
+    )
 
 
 def test_contract_audit_coverage_manifest_fails_closed_for_missing_rule() -> None:
