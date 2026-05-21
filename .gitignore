@@ -5,3 +5,8 @@ __pycache__/
 
 cache/
 .claude/
+
+# Generated analysis outputs.
+report-*.md
+reports/extraction-snapshots/
+reports/quality-gate-runs/
