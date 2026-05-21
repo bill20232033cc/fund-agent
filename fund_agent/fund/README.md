@@ -151,6 +151,12 @@ chapter_lens = resolve_preferred_lens(chapter_id=2, fund_type="active_fund")
 - 基金不在精选池 CSV、CSV 不可用或 schema 非法时返回 `not_run_reason`，不伪造 App 类别；Service 在 `quality_gate_policy=block` 下会把该状态转成结构化阻断异常，CLI 以退出码 2 输出 `quality_gate_status: not_run`
 - 默认输出目录由 Service 生成唯一 run id 后落在 `reports/quality-gate-runs/<run-id>`，避免覆盖上一轮自动运行
 
+`check_quality_gate_fund_membership()` 是 Service 抽取前短路使用的轻量公开契约：
+
+- 只读取并校验精选池 CSV，确认当前基金是否存在
+- 不读取年报、不生成 snapshot、不执行 score 或 gate
+- 返回 `None` 表示可运行；返回 not-run reason 表示 block 策略下应阻断昂贵抽取
+
 `select_minimal_golden_set()` 从 `docs/code_20260519.csv` 选择最小 golden set：
 
 - 固定包含 `004393`

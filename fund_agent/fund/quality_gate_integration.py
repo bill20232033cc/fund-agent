@@ -124,6 +124,34 @@ def run_quality_gate_for_bundle(
     )
 
 
+def check_quality_gate_fund_membership(
+    *,
+    source_csv: Path,
+    fund_code: str,
+) -> str | None:
+    """检查当前基金是否可运行单基金 quality gate。
+
+    该函数只做精选池 CSV 可用性和基金代码成员检查，不读取年报、不生成
+    snapshot，也不执行评分。Service 可用它在昂贵抽取前进行 block 策略短路。
+
+    Args:
+        source_csv: 精选基金池 CSV 路径。
+        fund_code: 当前基金代码。
+
+    Returns:
+        可运行时返回 `None`；不可运行时返回 not-run reason。
+
+    Raises:
+        无显式抛出；CSV 读取和校验异常会转换为 not-run reason。
+    """
+
+    _, not_run_reason = _selected_fund_for_bundle(
+        source_csv=source_csv,
+        fund_code=fund_code,
+    )
+    return not_run_reason
+
+
 def _selected_fund_for_bundle(
     *,
     source_csv: Path,

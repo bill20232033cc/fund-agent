@@ -36,6 +36,7 @@ _L1_TOLERANCE: Final[Decimal] = Decimal("0.0001")
 _EVIDENCE_MARKER_PATTERN: Final[re.Pattern[str]] = re.compile(r"(证据与出处|📎\s*证据|年报\d{4}§)")
 _CHAPTER_EVIDENCE_LINE_PATTERN: Final[re.Pattern[str]] = re.compile(r"(?m)^>\s*📎\s*证据：")
 _HEADING_PATTERN: Final[re.Pattern[str]] = re.compile(r"^#{1,6}\s+(.+?)\s*$", re.MULTILINE)
+_CHAPTER_HEADING_PATTERN: Final[re.Pattern[str]] = re.compile(r"^#\s+(.+?)\s*$", re.MULTILINE)
 _REQUIRED_CHAPTER_TITLES: Final[tuple[str, ...]] = tuple(
     chapter.title for chapter in load_template_contract_manifest().chapters
 )
@@ -220,6 +221,7 @@ def _audit_report_structure(
                 code="P2",
                 message="章节内容过短。",
                 location=location,
+                severity="reviewable",
             ),
         )
     if not _EVIDENCE_MARKER_PATTERN.search(report_markdown):
@@ -228,6 +230,7 @@ def _audit_report_structure(
                 code="P3",
                 message="报告缺少证据与出处或证据锚点。",
                 location="report_markdown",
+                severity="reviewable",
             ),
         )
     return tuple(issues)
@@ -457,11 +460,22 @@ def _audit_rabc_closure(rabc_attributions: tuple[RabcAttribution, ...]) -> tuple
                 ),
             )
             continue
-        assert attribution.total_return_r is not None
-        assert attribution.beta_return_b is not None
-        assert attribution.alpha_return_a is not None
-        assert attribution.explicit_cost_c is not None
-        assert attribution.net_excess_return is not None
+        components = (
+            attribution.total_return_r,
+            attribution.beta_return_b,
+            attribution.alpha_return_a,
+            attribution.explicit_cost_c,
+            attribution.net_excess_return,
+        )
+        if any(v is None for v in components):
+            issues.append(
+                _issue(
+                    code="L1",
+                    message="R=A+B-C 关键计算字段在 computed 状态下意外为 None。",
+                    location=attribution.period,
+                ),
+            )
+            continue
         alpha_expected = attribution.total_return_r - attribution.beta_return_b
         net_excess_expected = attribution.alpha_return_a - attribution.explicit_cost_c
         if _abs_decimal(alpha_expected - attribution.alpha_return_a) > _L1_TOLERANCE:
@@ -639,7 +653,7 @@ def _short_content_locations(report_markdown: str) -> tuple[str, ...]:
         无显式抛出。
     """
 
-    heading_matches = list(_HEADING_PATTERN.finditer(report_markdown))
+    heading_matches = list(_CHAPTER_HEADING_PATTERN.finditer(report_markdown))
     locations: list[str] = []
     for index, match in enumerate(heading_matches):
         start = match.end()
@@ -736,6 +750,7 @@ def _issue(
     code: AuditRuleCode,
     message: str,
     location: str | None = None,
+    severity: AuditSeverity = "blocker",
 ) -> AuditIssue:
     """构造程序审计问题。
 
@@ -743,6 +758,7 @@ def _issue(
         code: 审计规则码。
         message: 问题说明。
         location: 问题位置。
+        severity: 阻断级别，默认 blocker。
 
     Returns:
         审计问题。
@@ -754,7 +770,7 @@ def _issue(
     return AuditIssue(
         code=code,
         status="fail",
-        severity="blocker",
+        severity=severity,
         message=message,
         location=location,
     )

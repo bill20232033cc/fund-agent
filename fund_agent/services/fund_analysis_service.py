@@ -33,7 +33,7 @@ from fund_agent.fund.data_extractor import FundDataExtractor, StructuredFundData
 from fund_agent.fund.extraction_snapshot import DEFAULT_SELECTED_FUNDS_CSV
 from fund_agent.fund.fund_type import FundType
 from fund_agent.fund.quality_gate import GATE_STATUS_BLOCK, QualityGateResult
-from fund_agent.fund.quality_gate_integration import run_quality_gate_for_bundle
+from fund_agent.fund.quality_gate_integration import check_quality_gate_fund_membership, run_quality_gate_for_bundle
 from fund_agent.fund.template import TemplateFinalJudgment, TemplateRenderInput, TemplateRenderResult, render_template_report
 
 ValuationState = Literal["low", "fair", "high", "unavailable"]
@@ -263,6 +263,7 @@ class FundAnalysisService:
         """
 
         _validate_request(request)
+        _check_pool_membership_before_extraction(request)
         structured_data = await self._extractor.extract(
             request.fund_code,
             request.report_year,
@@ -385,6 +386,34 @@ def _validate_request(request: FundAnalysisRequest) -> None:
         and not request.quality_gate_output_dir.is_dir()
     ):
         raise ValueError("quality_gate_output_dir 必须是目录")
+
+
+def _check_pool_membership_before_extraction(request: FundAnalysisRequest) -> None:
+    """在抽取前轻量检查基金是否在精选池中。
+
+    仅当 quality gate policy 为 block 时生效。不在池中时提前阻断，
+    避免浪费昂贵的年报抽取 I/O。
+
+    Args:
+        request: 基金分析请求。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        QualityGateNotRunBlockedError: 基金不在精选池中时抛出。
+    """
+
+    if request.quality_gate_policy != "block":
+        return
+    if request.quality_gate_source_csv is None:
+        return
+    not_run_reason = check_quality_gate_fund_membership(
+        source_csv=request.quality_gate_source_csv,
+        fund_code=request.fund_code,
+    )
+    if not_run_reason is not None:
+        raise QualityGateNotRunBlockedError(not_run_reason)
 
 
 def _run_quality_gate_if_enabled(

@@ -383,11 +383,11 @@ def classify_fund_type(report: ParsedAnnualReport) -> FundTypeClassification:
             ),
         )
 
-    if _contains_any(investment_scope, _BOND_KEYWORDS):
+    if _contains_any(investment_scope, _BOND_KEYWORDS) and "股票" not in investment_scope:
         return FundTypeClassification(
             classified_fund_type="bond_fund",
             classification_basis=(
-                f"基金类别或投资范围命中债券特征：{fund_category or investment_scope}",
+                f"基金类别或投资范围命中债券特征且不含股票：{fund_category or investment_scope}",
             ),
         )
 
