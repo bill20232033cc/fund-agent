@@ -8,9 +8,154 @@
 
 ---
 
-## 1. 总览
+## Startup Packet
 
-### 1.0 Current Snapshot（2026-05-21）
+| Field | State |
+|---|---|
+| Branch | `main` |
+| Current gate | `P11-S1 accepted` |
+| Next entry point | `post-P11 follow-up planning` |
+| Current phase | `P11 Control doc hygiene / recovery ergonomics` |
+| Design truth | `docs/design.md` |
+| Control truth | `docs/implementation-control.md` |
+| Latest accepted planning artifact | `docs/reviews/p11-s1-control-doc-hygiene-recovery-plan-20260521.md` |
+| Plan reviews | `docs/reviews/p11-s1-plan-review-mimo-20260521.md`, `docs/reviews/p11-s1-plan-review-glm-20260521.md` |
+| Implementation artifact | `docs/reviews/p11-s1-implementation-20260521.md` |
+| Last merged PR | PR #6, merge commit `acc692c7e84c855398de86497b0d05f30b6f5ca5` |
+| Product baseline | P10 release-readiness merged; P11-S1 is documentation-only |
+| Open residuals | RR-13 duplicate `016492`, excluded `docs/repo-audit-20260521.md`, historical duplicate summary rows |
+| Non-goal reminder | no source, tests, config, product behavior, runtime, Dayu Host/Engine/tool loop, or LLM writing changes |
+
+Resume checklist: confirm current gate and next entry point; confirm the next action is post-P11 planning, not implementation; keep source/product behavior out of scope; check active residual owners before opening a new phase. Do not run artifact existence checks as routine resume work; they are a one-time acceptance gate after reference edits.
+
+## Active Gate Ledger
+
+| Gate | Status | Artifact | Commit / PR | Validation | Residual owner | Next action |
+|---|---|---|---|---|---|---|
+| `post-P10 follow-up planning accepted` | accepted | `docs/reviews/post-p10-follow-up-planning-20260521.md` | PR #6 merge `acc692c7e84c855398de86497b0d05f30b6f5ca5` | P10 CI/review pass recorded in archive | P11-S1 | closed by P11 plan |
+| `P11-S1 control doc hygiene and recovery plan/review` | accepted | `docs/reviews/p11-s1-control-doc-hygiene-recovery-plan-20260521.md` | n/a | plan reviews PASS_WITH_FINDINGS; findings folded into plan | P11-S1 implementation | completed |
+| `P11-S1 implementation/code review` | accepted | `docs/reviews/p11-s1-implementation-20260521.md`, `docs/reviews/p11-s1-code-review-controller-judgment-20260521.md` | local docs-only change | diff check and artifact reference check passed; MiMo PASS, GLM PASS_WITH_FINDINGS accepted | post-P11 planning | follow-up planning |
+
+## Phase History Index
+
+| Phase / sequence | Status | Archive | Primary artifacts | Merge / accepted commit | Last validation | Open residuals |
+|---|---|---|---|---|---|---|
+| P0 | done | [Archive: P0](#archive-p0) | original control record | n/a | environment baseline recorded | none active |
+| P1 | done | [Archive: P1](#archive-p1) | P1 slice artifacts, `docs/reviews/p1-aggregate-review-2026-05-17.md` | multiple slice commits | P1 matrix `36/36` | none active |
+| P2 | done | [Archive: P2](#archive-p2) | P2 implementation/review artifacts | `07fe0d0` accepted deepreview | analysis/audit tests recorded | none active |
+| P3 | done / PR #2 merged | [Archive: P3](#archive-p3) | PR #2 review artifacts | `0be218f28ea7d26c7ad1e55963ca907217f5dede` | `116 passed / 90.07%` coverage matrix | none active |
+| P4 | done / PR #3 merged | [Archive: P4](#archive-p4) | `docs/implementation-control-p4.md`, P4 review artifacts | `7596c5ece4894166d5479ee764fc8641a23cfc0d` | targeted/full suites recorded | RR-13 remains human-owned |
+| P5 | done / PR #4 merged | [Archive: P5](#archive-p5) | P5 quality gate artifacts, `docs/reviews/p5-s6-user-app-source-reconciliation-20260520.md` | `d33b901fd1bee9f85206df461cc6419a813bcbae` | full suite `206 passed` | RR-13 human-owned |
+| P6 | done | [Archive: P6](#archive-p6) | P6 contract manifest and renderer alignment artifacts | slice commits recorded | full suite up to `221 passed` | template typo cleanup deferred |
+| P7 | done | [Archive: P7](#archive-p7) | source migration/reconciliation artifacts | post-P7 commits recorded | full suite `322 passed` baseline | none active |
+| P8 | done | [Archive: P8](#archive-p8) | P8-S1/S2/S3 plan and review artifacts | `90bb9d2`, `b4aaaaa` recorded | full suite `347 passed` | none active |
+| P9 | done | [Archive: P9](#archive-p9) | P9 product contract and aggregate deepreview artifacts | `2bacdb3`, `ce603a0` recorded | full suite `377 passed` | review limitation documented |
+| P10 | merged | [Archive: P10](#archive-p10) | P10 plan/code/aggregate/PR artifacts | PR #6 merge `acc692c7e84c855398de86497b0d05f30b6f5ca5` | full suite `388 passed`, CI pass | `docs/repo-audit-20260521.md` excluded |
+| P11 | accepted | [Archive: P11](#archive-p11) | P11 plan/review/implementation/code-review artifacts | n/a | docs-only validation passed | post-P11 planning |
+
+## P11 Current Phase Plan
+
+P11 goal: reduce `phaseflow` resume and handoff cost while preserving all gate evidence in the control record. P11-S1 is documentation-only: reorganize `docs/implementation-control.md`, keep same-file archive evidence, and make active state recoverable from the first screen.
+
+Implementation guardrails:
+
+- Do not modify source code, tests, config, product behavior, `docs/design.md`, or `docs/repo-audit-20260521.md`.
+- Do not delete historical review artifacts or rewrite prior accepted facts.
+- Do not auto-resolve RR-13 duplicate `016492`.
+- Do not introduce Dayu runtime, Host, Engine, tool loop, prompt scene registry, or LLM writing.
+- Keep `Startup Packet` plus `Active Gate Ledger` under 80 lines.
+- Treat artifact existence checking as implementation acceptance validation, not resume routine.
+
+Success signals: first-screen recovery is short; `Phase History Index` links to unique phase-prefixed archive headings; exact artifact paths, commit hashes, PR links, validation results, and residual owners are preserved; design/control alignment rules are explicit.
+
+## Active Residuals
+
+| Risk | Owner | Required handling |
+|---|---|---|
+| RR-13 duplicate `016492` | User / App source | Preserve as human-owned; do not modify CSV automatically |
+| `docs/repo-audit-20260521.md` | Controller / user | Keep excluded unless later scope explicitly accepts publication |
+| Historical duplicate summary rows | Future control-doc cleanup | GLM INFO finding; does not affect active Startup Packet or current control truth |
+| Future product feature selection | Post-P11 planning | Deferred until control-doc recovery is accepted |
+
+## Evidence Preservation Rules
+
+Every accepted gate archive entry must preserve available artifact paths, plan review paths, code review paths, controller judgment paths, re-review paths, implementation artifact paths, accepted local commit hashes, PR URLs, PR branch/head/merge commits, CI run IDs and status, validation commands and exact pass counts, residual risk IDs and owners, and reviewer limitations or availability caveats.
+
+If an old entry lacks one of these fields, do not invent it. Use `not recorded` only when the historical record truly lacks it. Missing local artifact references must be marked and assigned to controller reconciliation; do not silently replace them with nearby artifacts.
+
+## Archive / Summarize Strategy
+
+Use three levels of detail:
+
+1. Active startup packet: current gate, next entry point, latest artifacts, open residuals, and immediate next action.
+2. Phase history index: one row per phase or major sequence, with anchors and primary artifacts.
+3. Historical evidence archive: detailed historical gate log retained in the same file.
+
+Duplicated prose may be summarized only when exact facts remain in a table or archive entry. Do not delete artifact paths, commit hashes, PR links, validation results, or residual owners. If a future slice splits history into a separate file, this control doc must still identify that file as part of the control record.
+
+## Design / Control Alignment Rules
+
+1. `docs/design.md` remains the design truth for architecture, boundaries, product behavior, Dayu non-dependency, and `FundDocumentRepository` source boundaries.
+2. `docs/implementation-control.md` remains the control truth for phase state, gates, artifacts, commits, validation, residual risks, and next entry point.
+3. A control-doc hygiene pass may reorganize implementation history but may not change design facts.
+4. If control history contradicts `docs/design.md`, create a reconciliation artifact before changing either document.
+5. Current design facts that must not regress during P11: `fund-analysis analyze` remains deterministic UI -> Service -> Fund Capability; Dayu remains methodology/reference only; `FundDocumentRepository` remains the production annual-report entry point; fallback taxonomy remains `not_found`, `unavailable`, `schema_drift`, `identity_mismatch`, `integrity_error`; no prompt scene registry, Host session, Engine tool loop, or LLM writing is introduced.
+
+## Historical Evidence Archive
+
+The archive headings below are unique phase-prefixed anchors for `Phase History Index`. Detailed historical evidence remains in the original control record that follows these anchors.
+
+## Archive: P0
+
+P0 environment and architecture skeleton evidence is preserved in the original control record below, including the P0 phase definition and status log entries.
+
+## Archive: P1
+
+P1 document access, parsing, extraction, cache, and façade evidence is preserved below, including slice artifacts, accepted commits, and P1 aggregate review paths.
+
+## Archive: P2
+
+P2 analysis, checklist, stress test, renderer, evidence anchor, and programmatic audit evidence is preserved below, including implementation/review artifacts and accepted deepreview commit.
+
+## Archive: P3
+
+P3 CLI, integration tests, README, coverage, performance, PR #2 review, and merge evidence is preserved below.
+
+## Archive: P4
+
+P4 selected fund pool, extraction snapshot, scoring, quality gate, correctness, RR-13, PR #3, and merge evidence is preserved below and in `docs/implementation-control-p4.md`.
+
+## Archive: P5
+
+P5 analyze quality gate integration, quality rules, snapshot sub-fields, failure accounting, share change hardening, thermometer, RR-13, PR #4, and merge evidence is preserved below.
+
+## Archive: P6
+
+P6 CHAPTER_CONTRACT manifest and renderer contract alignment evidence is preserved below, including plan/review artifacts and validation results.
+
+## Archive: P7
+
+P7 annual-report source migration and post-P7 follow-up evidence is preserved below, including repository review reconciliation and full-suite baselines.
+
+## Archive: P8
+
+P8 must_answer routing, preferred_lens deterministic rendering, source fallback taxonomy, aggregate closure, and post-P8 planning evidence is preserved below.
+
+## Archive: P9
+
+P9 analyze product contract, developer override separation, golden coverage calibration, aggregate reviews, and reviewer limitation evidence is preserved below.
+
+## Archive: P10
+
+P10 repo hygiene, release readiness, PR #6 draft/merge gate, CI, excluded repo-audit input, and merge commit evidence is preserved below.
+
+## Archive: P11
+
+P11 control doc hygiene plan/review, implementation, and code review evidence is preserved in the startup packet, active ledger, this archive heading, `docs/reviews/p11-s1-implementation-20260521.md`, and `docs/reviews/p11-s1-code-review-controller-judgment-20260521.md`.
+
+## Original Detailed Control Record
+
+### Historical Snapshot Before P11-S1（2026-05-21）
 
 | 项目 | 当前状态 |
 |------|----------|
@@ -1481,3 +1626,4 @@ P0（环境搭建）
 | 2026-05-21 | P10 merge gate | ✅ merged | PR 6 已 squash merge 到 `main`：`https://github.com/bill20232033cc/fund-agent/pull/6`；merge commit=`acc692c7e84c855398de86497b0d05f30b6f5ca5`，mergedAt=`2026-05-21T15:39:33Z`；controller reconciliation=`docs/reviews/p10-merge-gate-reconciliation-20260521.md`；本地 `main` 已对齐 `origin/main`；pre-squash 本地线性历史保留在 `backup/p10-pre-squash-main`；当前 gate 为 `P10 merged`，下一 gate 为 `post-P10 follow-up planning` |
 | 2026-05-21 | post-P10 follow-up planning | ✅ accepted | artifact=`docs/reviews/post-p10-follow-up-planning-20260521.md`；controller 裁决下一阶段优先做 P11 control doc hygiene / recovery ergonomics，先进入 plan/review，不改产品主链路；RR-13 继续 human-owned，`docs/repo-audit-20260521.md` 继续本地排除；当前 gate 为 `post-P10 follow-up planning accepted`，下一 gate 为 `P11-S1 control doc hygiene and recovery plan/review` |
 | 2026-05-21 | P11-S1 control doc hygiene and recovery plan/review | ✅ accepted | plan artifact=`docs/reviews/p11-s1-control-doc-hygiene-recovery-plan-20260521.md`；controller judgment=`docs/reviews/p11-s1-plan-review-controller-judgment-20260521.md`；MiMo/GLM initial reviews 均为 `PASS_WITH_FINDINGS`，targeted re-review 均 `PASS`；计划接受 documentation-only same-file restructure，要求 Startup Packet + Active Gate Ledger <= 80 行、phase-prefixed unique archive anchors、artifact existence check 作为一次性 implementation acceptance gate；当前 gate 为 `P11-S1 plan accepted`，下一 gate 为 `P11-S1 implementation` |
+| 2026-05-21 | P11-S1 implementation/code review | ✅ accepted | implementation artifact=`docs/reviews/p11-s1-implementation-20260521.md`；controller judgment=`docs/reviews/p11-s1-code-review-controller-judgment-20260521.md`；MiMo code review PASS，GLM code review PASS_WITH_FINDINGS；GLM F1 archive heading ambiguity 已修复为 historical snapshot，GLM F2 historical duplicate summary rows deferred；docs-only reorg 增加 Startup Packet、Active Gate Ledger、Phase History Index、Evidence Preservation Rules 和 Archive P0-P11 anchors；当前验证 diff check passed、artifact reference check passed、first-screen budget under 80 lines；当前 gate 为 `P11-S1 accepted`，下一 gate 为 `post-P11 follow-up planning` |
