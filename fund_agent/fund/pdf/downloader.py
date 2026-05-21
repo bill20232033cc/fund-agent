@@ -12,12 +12,14 @@ from tempfile import NamedTemporaryFile
 import akshare as ak
 import httpx
 
+from fund_agent.config.paths import DEFAULT_PDF_CACHE_ROOT
+
 logger = logging.getLogger(__name__)
 
 EASTMONEY_PDF_URL = "https://pdf.dfcfw.com/pdf/H2_{report_id}_1.pdf"
 PDF_MAGIC_BYTES = b"%PDF-"
 
-DEFAULT_CACHE_DIR = Path("cache/pdf")
+DEFAULT_CACHE_DIR = DEFAULT_PDF_CACHE_ROOT
 __all__: list[str] = []
 
 

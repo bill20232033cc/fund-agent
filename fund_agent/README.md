@@ -15,7 +15,7 @@ UI CLI -> Service use case -> Fund Capability
 | `fund_agent/ui` | Typer CLI、参数采集、stdout/stderr 输出和退出码 |
 | `fund_agent/services` | 用例编排、请求校验、调用 Fund Capability、组合返回结果 |
 | `fund_agent/fund` | 基金领域能力：文档仓库、抽取、分析、模板、审计、quality gate、数据 adapter |
-| `fund_agent/config` | 配置命名空间占位；当前不参与主链路装配 |
+| `fund_agent/config` | 静态仓库默认路径；当前不提供 Host/Engine runtime 配置 |
 
 ## 稳定边界
 
@@ -24,6 +24,7 @@ UI CLI -> Service use case -> Fund Capability
 - Fund Capability 拥有基金类型判断、CHAPTER_CONTRACT、preferred_lens、ITEM_RULE、证据锚点、最终判断派生和审计规则。
 - 文档读取只通过 `FundDocumentRepository.load_annual_report(...)` 进入生产路径。
 - Dayu 相关 Host/Engine/Prompting 只作为方法论参考，不是安装依赖或当前主链路事实。
+- `fund_agent/config/paths.py` 只集中维护仓库默认路径常量，不代表 workspace override、prompt manifest、scene registry 或工具运行时已经接入。
 
 ## 阅读顺序
 

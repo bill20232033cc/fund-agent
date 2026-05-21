@@ -2,6 +2,7 @@
 name = "fund-agent"
 version = "0.1.0"
 description = "基金行为教练 Agent — 买入前专业级基金体检报告"
+license = "MIT"
 requires-python = ">=3.11"
 dependencies = [
     "pdfplumber>=0.11",

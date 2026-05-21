@@ -1058,6 +1058,35 @@ def test_golden_build_cli_is_thin_service_entry(monkeypatch, tmp_path) -> None: 
     assert _FakeGoldenAnswerService.last_request.output_path == output_path
 
 
+def test_golden_build_cli_defaults_to_reviewed_markdown(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    """验证 golden-build 默认读取人工审核后的 Markdown。
+
+    Args:
+        monkeypatch: pytest monkeypatch fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当默认输入路径不是 reviewed Markdown 时抛出。
+    """
+
+    _FakeGoldenAnswerService.last_request = None
+    monkeypatch.setattr(cli, "GoldenAnswerService", _FakeGoldenAnswerService)
+    runner = CliRunner()
+
+    result = runner.invoke(cli.app, ["golden-build"])
+
+    assert result.exit_code == 0
+    assert _FakeGoldenAnswerService.last_request is not None
+    assert _FakeGoldenAnswerService.last_request.input_path == Path(
+        "reports/golden-answers/golden-answer-prefill-reviewed.md"
+    )
+    assert _FakeGoldenAnswerService.last_request.output_path == Path(
+        "reports/golden-answers/golden-answer.json"
+    )
+
+
 def test_quality_gate_cli_is_thin_service_entry(monkeypatch, tmp_path) -> None:  # type: ignore[no-untyped-def]
     """验证 quality-gate 命令只把显式参数转发给 Service。
 

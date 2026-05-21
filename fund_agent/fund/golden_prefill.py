@@ -12,11 +12,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Final, Protocol
 
+from fund_agent.config.paths import DEFAULT_GOLDEN_PREFILL_OUTPUT, DEFAULT_GOLDEN_TEMPLATE_PATH
 from fund_agent.fund.data_extractor import FundDataExtractor, StructuredFundDataBundle
 from fund_agent.fund.extractors import EvidenceAnchor, ExtractedField
 
-DEFAULT_GOLDEN_TEMPLATE_PATH: Final[Path] = Path("docs/golden-answer-template.md")
-DEFAULT_GOLDEN_PREFILL_OUTPUT: Final[Path] = Path("reports/golden-answers/golden-answer-prefill.md")
 _FUND_HEADING_PATTERN: Final[re.Pattern[str]] = re.compile(r"^##\s+(?P<code>\d{6})\s+.+$")
 _TABLE_ROW_PATTERN: Final[re.Pattern[str]] = re.compile(r"^\|\s*(?P<field>[^|]+?)\s*\|\s*(?P<sub_field>[^|]+?)\s*\|")
 _GOLDEN_PREFILL_NOTICE: Final[str] = (

@@ -14,6 +14,13 @@ from typing import Annotated
 
 import typer
 
+from fund_agent.config.paths import (
+    DEFAULT_GOLDEN_ANSWER_JSON,
+    DEFAULT_GOLDEN_PREFILL_OUTPUT,
+    DEFAULT_GOLDEN_REVIEWED_MARKDOWN,
+    DEFAULT_GOLDEN_TEMPLATE_PATH,
+    DEFAULT_SELECTED_FUNDS_CSV,
+)
 from fund_agent.services import (
     ExtractionScoreRequest,
     ExtractionScoreService,
@@ -38,10 +45,9 @@ from fund_agent.services import (
 )
 
 app = typer.Typer(help="基金行为教练 Agent — 买入前专业级基金体检报告")
-DEFAULT_SELECTED_FUNDS_CSV = Path("docs/code_20260519.csv")
-DEFAULT_GOLDEN_TEMPLATE = Path("docs/golden-answer-template.md")
-DEFAULT_GOLDEN_PREFILL_OUTPUT = Path("reports/golden-answers/golden-answer-prefill.md")
-DEFAULT_GOLDEN_ANSWER_OUTPUT = Path("reports/golden-answers/golden-answer.json")
+DEFAULT_GOLDEN_TEMPLATE = DEFAULT_GOLDEN_TEMPLATE_PATH
+DEFAULT_GOLDEN_ANSWER_OUTPUT = DEFAULT_GOLDEN_ANSWER_JSON
+# 独立 quality-gate helper 的历史 P4 score fixture 路径，不是仓库级默认输出根。
 DEFAULT_QUALITY_GATE_SCORE = Path(
     "reports/extraction-snapshots/p4-s3b-004393-controller-final-score/score.json"
 )
@@ -450,7 +456,7 @@ def golden_build(
     input_path: Annotated[
         Path,
         typer.Option("--input-path", help="人工审核后的 golden answer Markdown 路径"),
-    ] = DEFAULT_GOLDEN_PREFILL_OUTPUT,
+    ] = DEFAULT_GOLDEN_REVIEWED_MARKDOWN,
     output_path: Annotated[
         Path,
         typer.Option("--output-path", help="strict golden answer JSON 输出路径"),

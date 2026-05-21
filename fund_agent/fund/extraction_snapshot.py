@@ -15,12 +15,16 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Final, Protocol, Sequence
 
+from fund_agent.config.paths import (
+    DEFAULT_EXTRACTION_SNAPSHOT_ROOT,
+    DEFAULT_SELECTED_FUNDS_CSV as _DEFAULT_SELECTED_FUNDS_CSV,
+)
 from fund_agent.fund.data.nav_data import NavDataResult
 from fund_agent.fund.data_extractor import FundDataExtractor, StructuredFundDataBundle
 from fund_agent.fund.extractors import EvidenceAnchor, ExtractedField
 
-DEFAULT_SELECTED_FUNDS_CSV: Final[Path] = Path("docs/code_20260519.csv")
-DEFAULT_SNAPSHOT_OUTPUT_ROOT: Final[Path] = Path("reports/extraction-snapshots")
+DEFAULT_SELECTED_FUNDS_CSV: Final[Path] = _DEFAULT_SELECTED_FUNDS_CSV
+DEFAULT_SNAPSHOT_OUTPUT_ROOT: Final[Path] = DEFAULT_EXTRACTION_SNAPSHOT_ROOT
 REQUIRED_SELECTED_FUND_COLUMNS: Final[tuple[str, ...]] = ("基金名称", "基金代码", "类别")
 SNAPSHOT_FIELD_ORDER: Final[tuple[tuple[str, str], ...]] = (
     ("profile", "basic_identity"),

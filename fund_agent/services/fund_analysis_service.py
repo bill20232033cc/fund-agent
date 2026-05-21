@@ -13,6 +13,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Literal, Protocol
 
+from fund_agent.config.paths import DEFAULT_GOLDEN_ANSWER_JSON
 from fund_agent.fund.analysis import (
     ChecklistResult,
     ConsistencyCheckResult,
@@ -44,7 +45,7 @@ ValuationState = Literal["low", "fair", "high", "unavailable"]
 MoneyHorizon = Literal["long_enough", "uncertain", "too_short"]
 QualityGatePolicy = Literal["off", "warn", "block"]
 AnalyzeMode = Literal["product", "developer_override"]
-DEFAULT_GOLDEN_ANSWER_PATH = Path("reports/golden-answers/golden-answer.json")
+DEFAULT_GOLDEN_ANSWER_PATH = DEFAULT_GOLDEN_ANSWER_JSON
 
 
 class _FundDataExtractor(Protocol):

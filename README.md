@@ -56,7 +56,7 @@ fund-analysis golden-prefill \
 
 # 将人工审核后的 golden answer Markdown 转为 strict JSON
 fund-analysis golden-build \
-  --input-path reports/golden-answers/golden-answer-prefill.md \
+  --input-path reports/golden-answers/golden-answer-prefill-reviewed.md \
   --output-path reports/golden-answers/golden-answer.json
 
 # 基于 score.json 生成报告质量 gate
@@ -124,6 +124,16 @@ fund-analysis quality-gate \
 
 ## 本地验证
 
+CI 使用 Python 3.11，并执行以下发布就绪检查：
+
+```bash
+uv sync --extra dev --frozen
+uv run ruff check .
+uv run pytest -q
+```
+
+本地也可以按关注范围运行较小的测试集：
+
 ```bash
 pytest tests/fund/data/test_thermometer.py tests/services/test_thermometer_service.py tests/ui/test_cli.py tests/scripts/test_selected_funds_smoke.py -q
 pytest tests/fund/integration/test_p3_cli_e2e_matrix.py -q
@@ -183,7 +193,7 @@ fund-analysis golden-prefill \
 
 ```bash
 fund-analysis golden-build \
-  --input-path reports/golden-answers/golden-answer-prefill.md \
+  --input-path reports/golden-answers/golden-answer-prefill-reviewed.md \
   --output-path reports/golden-answers/golden-answer.json
 ```
 
@@ -232,6 +242,12 @@ fund-analysis quality-gate \
 输出目录会包含每只基金的 Markdown 报告、stderr、`results.jsonl` 和 `summary.md`。当前 CSV 有 56 条记录、55 个唯一基金代码，`016492` 重复，需要人工确认后再启用 `--strict`。
 
 完整开发验证入口见 [tests/README.md](tests/README.md)。
+
+## 仓库产物策略
+
+仓库采用 MIT License。发布基础验证由 GitHub Actions 执行 Python 3.11 下的 `uv sync --extra dev --frozen`、`uv run ruff check .` 和 `uv run pytest -q`。
+
+当前会跟踪人工维护或可复核的输入产物，例如 `docs/code_20260519.csv`、`docs/golden-answer-template.md` 和 `reports/golden-answers/` 下的 curated golden answer 文件。运行时生成物保持本地：`cache/`、`reports/extraction-snapshots/`、`reports/quality-gate-runs/`、`report-*.md` 和 `docs/*.docx` 不纳入默认版本控制。
 
 ## 文档导航
 

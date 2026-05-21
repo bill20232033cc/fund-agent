@@ -11,7 +11,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Final
 
-NAV_CACHE_ROOT: Final[Path] = Path("cache/nav")
+from fund_agent.config.paths import DEFAULT_NAV_CACHE_ROOT
+
+NAV_CACHE_ROOT: Final[Path] = DEFAULT_NAV_CACHE_ROOT
 NAV_SQLITE_FILENAME: Final[str] = "nav.sqlite3"
 NavPayload = list[dict[str, object]]
 NavFetcher = Callable[[str], Awaitable[NavPayload] | NavPayload]

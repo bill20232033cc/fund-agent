@@ -15,8 +15,8 @@
 | 项目 | 当前状态 |
 |------|----------|
 | 当前分支 | `main` |
-| 当前 gate | `post-P9 follow-up planning accepted` |
-| 下一 entry point | `P10-S1 repo hygiene and release readiness plan/review` |
+| 当前 gate | `ready-to-open-draft-PR` |
+| 下一 entry point | `draft PR gate（需用户授权）` |
 | 设计真源 | `docs/design.md`，已按 `docs/design-update.md` reconciliation 收口 |
 | 近期设计裁决 | `docs/reviews/design-update-reconciliation-20260521.md`、`docs/reviews/implementation-control-update-reconciliation-20260521.md` |
 | P8 交付物 | `must_answer` audit routing、renderer `preferred_lens` deterministic application、source fallback taxonomy |
@@ -38,7 +38,7 @@
 | P7 | 年报来源迁移（EID 主源 + Eastmoney fallback） | Post-P6 | ✅ done | P6 |
 | P8 | 模板契约与来源策略加固（must_answer audit / preferred_lens / source fallback） | Post-P7 | ✅ done | P7 |
 | P9 | Analyze 产品契约加固（用户最小输入 + dev override 分离） | Post-P8 | ✅ done | P8 |
-| P10 | Repo hygiene / release readiness | Post-P9 | 🟡 planned | P9 |
+| P10 | Repo hygiene / release readiness | Post-P9 | 🟡 in progress | P9 |
 
 ### 1.1.1 能力域摘要
 
@@ -59,7 +59,7 @@
 | 类别 | 状态 | Owner / Destination |
 |------|------|---------------------|
 | Product contract | P9-S1 已接受：用户最小输入、developer override 分离、final judgment 派生与 R2 审计已收口 | closed by P9-S1 |
-| Repo hygiene | LICENSE、CI、`.gitignore`、默认路径配置需单独 slice | post-P8 planning |
+| Repo hygiene | P10 accepted / ready-to-open-draft-PR；等待用户授权 draft PR gate | draft PR gate |
 | Dependency strategy | Dayu 裁决为方法论参考，生产依赖移除；后续 runtime 能力必须项目内化 | closed by 2026-05-21 reconciliation |
 | Quality gate ROI | P9-S2 已接受：区分 gate not-run 与 correctness coverage gap；精选池成员缺 strict golden 覆盖输出 FQ0/info | closed by P9-S2 |
 | P9 aggregate review coverage | P9 aggregate deepreview 已接受；AgentDS 独立 PASS，AgentMiMo 补充 PASS 但记录 P9-S2 reviewer limitation | closed by P9 aggregate |
@@ -78,8 +78,8 @@
 ### 1.3 当前 Gate 与基线裁决（2026-05-21）
 
 - 当前分支：`main`
-- 当前 gate：`post-P9 follow-up planning accepted`
-- 下一 gate：`P10-S1 repo hygiene and release readiness plan/review`
+- 当前 gate：`ready-to-open-draft-PR`
+- 下一 gate：`draft PR gate（需用户授权）`
 - Repo findings 收口：003（QDII basis 记录并发指数证据）已修复；005（CSV ValueError/FNFE 分离）已修复；006（alpha 空 observations MVP 注释）已文档化；004/008/009/010 低严重度保持 deferred。
 - P4 执行控制文档：`docs/implementation-control-p4.md`
 - 当前裁决：
@@ -104,6 +104,11 @@
   - P9 aggregate readiness reconciliation 已接受，artifact=`docs/reviews/p9-aggregate-readiness-reconciliation-20260521.md`。P9 功能态已可进入 aggregate deepreview，但 reviewer availability 阻塞：AgentDS pane 在 P9-S2 review compacting 后未产出 artifact，AgentGLM 401，AgentCodex/AgentMiMo 参与 P9-S2 implementation 不适合作为独立 P9-S2 reviewer。下一步必须先恢复 AgentDS/AgentGLM 并取得两份独立 aggregate review，或由用户明确接受单 reviewer / controller-only 风险例外。
   - P9 aggregate deepreview 已接受，controller judgment=`docs/reviews/p9-aggregate-deepreview-controller-judgment-20260521.md`，review artifacts=`docs/reviews/p9-aggregate-deepreview-ds-20260521.md`,`docs/reviews/p9-aggregate-deepreview-mimo-20260521.md`。AgentDS 独立 aggregate review 为 `PASS`；AgentMiMo 补充 review 为 `PASS`，但因参与 P9-S2 implementation 仍记录 reviewer limitation。Controller 复核后拒绝 DS 的 README `coverage_scope` LOW finding（当前 README 已包含 `no_comparable_fields`），拒绝 MiMo 的 `AuditRuleCode` C2 info finding（真实 `AuditRuleCode` 已包含 `C2`）。P9 无阻断 finding，当前 gate 为 `P9 aggregate deepreview accepted`，下一 gate 为 `post-P9 follow-up planning`。
   - Post-P9 follow-up planning 已接受，artifact=`docs/reviews/post-p9-follow-up-planning-20260521.md`。P9 已关闭产品契约主风险；不继续启动新的产品功能 slice。下一阶段优先做 `P10 repo hygiene / release readiness`，首个 gate 为 `P10-S1 repo hygiene and release readiness plan/review`，规划范围包括 LICENSE、CI、`.gitignore` / artifact policy、默认路径配置策略和当前未跟踪文件处置；control doc hygiene 后置，RR-13 `016492` 重复保持 human-owned。
+  - P10-S1 repo hygiene and release readiness plan/review 已接受，plan artifact=`docs/reviews/p10-s1-repo-hygiene-release-readiness-plan-20260521.md`，controller judgment=`docs/reviews/p10-s1-plan-review-controller-judgment-20260521.md`，review artifacts=`docs/reviews/p10-s1-plan-review-ds-20260521.md`,`docs/reviews/p10-s1-plan-review-mimo-20260521.md`。计划裁决为：只做仓库级发布就绪，不改变基金分析行为；新增 MIT LICENSE/CI/`.gitignore` 策略、静态 `fund_agent.config.paths` 默认路径、路径迁移守卫测试和 README 同步；`.docx` 源审计文件保持本地忽略，`docs/reviews/code-review-p8-s3-ds-20260521.md` 作为 durable review artifact 纳入。MIT holder 已由用户确认为 `bill20232033cc`。
+  - P10-S1 implementation/code review 已接受，implementation artifact=`docs/reviews/p10-s1-implementation-20260521.md`，controller judgment=`docs/reviews/p10-s1-code-review-controller-judgment-20260521.md`，review artifacts=`docs/reviews/p10-s1-code-review-mimo-20260521.md`,`docs/reviews/p10-s1-code-review-glm-20260521.md`。实现新增 MIT LICENSE、GitHub Actions CI、窄口径 `.gitignore`、静态 `fund_agent.config.paths`、默认路径别名迁移、repo hygiene/path guard tests 和 README 同步；`golden-build` 默认输入修正为人工审核后的 reviewed Markdown。当前验证 full suite `388 passed`、ruff passed、diff check passed、`uv lock --check` passed；当前 gate 为 `P10-S1 code review accepted`，下一 gate 为 `P10 aggregate readiness reconciliation`。
+  - P10 aggregate readiness reconciliation 已接受，artifact=`docs/reviews/p10-aggregate-readiness-reconciliation-20260521.md`。P10-S1 可进入 aggregate deepreview；`docs/repo-audit-20260521.md` 建议已逐条裁决，`fund_agent/fund/tools/` 空目录、repo-audit artifact inclusion、reviews 目录体量、RR-13 duplicate `016492` 均有后续 owner；当前 gate 为 `P10 aggregate readiness accepted`，下一 gate 为 `P10 aggregate deepreview`。
+  - P10 aggregate deepreview 已接受，controller judgment=`docs/reviews/p10-aggregate-deepreview-controller-judgment-20260521.md`，review artifacts=`docs/reviews/p10-aggregate-deepreview-mimo-20260521.md`,`docs/reviews/p10-aggregate-deepreview-glm-20260521.md`。MiMo/GLM 均 PASS，无阻断 finding；确认 P10 release-readiness diff 未改变 `fund-analysis analyze`、quality gate、renderer、audit 或 Fund Capability 规则；残余风险均有 owner。当前 gate 为 `P10 aggregate deepreview accepted`，下一 gate 为 `ready-to-open-draft-PR reconciliation`。
+  - P10 acceptance / ready-to-open-draft-PR reconciliation 已接受，artifact=`docs/reviews/p10-acceptance-ready-to-open-draft-pr-reconciliation-20260521.md`。PR inclusion/exclusion set 已明确；`docs/repo-audit-20260521.md` 和本地 `.docx` 审计输入排除，P10 release-readiness 代码、文档和 review artifacts 纳入；当前 gate 为 `ready-to-open-draft-PR`，下一 gate 为 `draft PR gate（需用户授权）`。
   - Agent routing 补充：Procodex / AgentCodex 为 planning / implementation 首选；如遇网络或环境问题，AgentMiMo 可作为替补。但 MiMo 若参与某 slice 的 planning / implementation，则不得担任同 slice 独立 reviewer，应改用 AgentDS + AgentGLM。
   - P0 维持 `done`。历史上曾验证 `dayu` 依赖可导入；2026-05-21 架构裁决改为不保留外部 Dayu 生产依赖，相关 Host/Engine/tool-loop 能力如后续需要必须在项目内化实现。当前 `fund-agent` 处于 editable install，`fund-analysis --help` 可用，样本基金 `110011` 年报可下载，`pdfplumber` 可提取全文文本和表格。
   - P1 已完成并通过 aggregate review。
@@ -1461,3 +1466,8 @@ P0（环境搭建）
 | 2026-05-21 | P9 aggregate readiness reconciliation | 🟡 ready but blocked | artifact=`docs/reviews/p9-aggregate-readiness-reconciliation-20260521.md`；P9 功能态可进入 aggregate deepreview，但 reviewer availability 阻塞：AgentDS 未产出 durable review artifact，AgentGLM 401，AgentCodex/AgentMiMo 参与实现；下一步需恢复 AgentDS/AgentGLM 或用户接受单 reviewer / controller-only 风险例外 |
 | 2026-05-21 | P9 aggregate deepreview | ✅ accepted | controller judgment=`docs/reviews/p9-aggregate-deepreview-controller-judgment-20260521.md`；AgentDS review=`docs/reviews/p9-aggregate-deepreview-ds-20260521.md` 为独立 PASS；AgentMiMo review=`docs/reviews/p9-aggregate-deepreview-mimo-20260521.md` 为 PASS with reviewer limitation；controller 拒绝两个非阻断 finding（README 已含 `no_comparable_fields`，`AuditRuleCode` 已含 `C2`）；当前 gate 为 `P9 aggregate deepreview accepted`，下一 gate 为 `post-P9 follow-up planning` |
 | 2026-05-21 | post-P9 follow-up planning | ✅ accepted | artifact=`docs/reviews/post-p9-follow-up-planning-20260521.md`；P9 关闭后不继续扩产品功能，下一阶段进入 P10 repo hygiene / release readiness；首个 gate 为 `P10-S1 repo hygiene and release readiness plan/review`；control doc hygiene 后置，RR-13 仍需人工裁决 |
+| 2026-05-21 | P10-S1 repo hygiene / release readiness plan/review | ✅ accepted with blocker | plan artifact=`docs/reviews/p10-s1-repo-hygiene-release-readiness-plan-20260521.md`；controller judgment=`docs/reviews/p10-s1-plan-review-controller-judgment-20260521.md`；AgentDS/AgentMiMo plan reviews 均为 pass-with-risks；中风险项已通过 plan revision 收口为 implementation guardrails；当前 gate 为 `P10-S1 plan/review accepted with implementation blocker`，下一 gate 为 `P10-S1 implementation`，实施前必须确认 MIT License copyright holder |
+| 2026-05-21 | P10-S1 implementation/code review | ✅ accepted | implementation artifact=`docs/reviews/p10-s1-implementation-20260521.md`；controller judgment=`docs/reviews/p10-s1-code-review-controller-judgment-20260521.md`；MiMo/GLM code reviews 均 PASS；新增 MIT LICENSE、CI、`.gitignore` artifact policy、`fund_agent.config.paths`、路径迁移守卫测试和 README 同步；当前验证 full suite `388 passed`、ruff passed、diff check passed、`uv lock --check` passed；当前 gate 为 `P10-S1 code review accepted`，下一 gate 为 `P10 aggregate readiness reconciliation` |
+| 2026-05-21 | P10 aggregate readiness reconciliation | ✅ accepted | artifact=`docs/reviews/p10-aggregate-readiness-reconciliation-20260521.md`；P10-S1 可进入 aggregate deepreview；repo-audit suggestions 已裁决为 closed/deferred/follow-up，`fund_agent/fund/tools/` 空目录和 repo-audit artifact inclusion 留给 aggregate/follow-up；当前 gate 为 `P10 aggregate readiness accepted`，下一 gate 为 `P10 aggregate deepreview` |
+| 2026-05-21 | P10 aggregate deepreview | ✅ accepted | controller judgment=`docs/reviews/p10-aggregate-deepreview-controller-judgment-20260521.md`；MiMo/GLM aggregate reviews 均 PASS；无阻断 finding，确认 release-readiness diff 不改变 analyze / quality gate / renderer / audit / Fund Capability 规则；当前 gate 为 `P10 aggregate deepreview accepted`，下一 gate 为 `ready-to-open-draft-PR reconciliation` |
+| 2026-05-21 | P10 acceptance / ready-to-open-draft-PR reconciliation | ✅ accepted | artifact=`docs/reviews/p10-acceptance-ready-to-open-draft-pr-reconciliation-20260521.md`；P10 PR inclusion/exclusion set 已明确，repo-audit 输入和本地 `.docx` 排除；当前 gate 为 `ready-to-open-draft-PR`，下一 gate 为 `draft PR gate（需用户授权）` |

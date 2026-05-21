@@ -14,9 +14,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Final
 
+from fund_agent.config.paths import DEFAULT_DOCUMENT_CACHE_ROOT
 from fund_agent.fund.documents.models import AnnualReportSourceMetadata, DocumentKey, ParsedAnnualReport
 
-DOCUMENT_CACHE_ROOT: Final[Path] = Path("cache/documents")
+DOCUMENT_CACHE_ROOT: Final[Path] = DEFAULT_DOCUMENT_CACHE_ROOT
 PARSED_REPORT_CACHE_DIRNAME: Final[str] = "parsed_reports"
 SQLITE_CACHE_FILENAME: Final[str] = "documents.sqlite3"
 PARSED_REPORT_SCHEMA_VERSION: Final[int] = 1
