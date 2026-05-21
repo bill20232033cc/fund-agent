@@ -16,6 +16,7 @@ from fund_agent.fund.template.contracts import load_template_contract_manifest
 TemplateItemRuleMode = Literal["optional", "conditional"]
 TemplateItemRuleMissingBehavior = Literal["render_unavailable", "delete_segment"]
 TemplateItemRuleDecisionStatus = Literal["render", "delete"]
+TemplateItemRuleAuditContext = Literal["identity_missing", "identity_present"]
 
 _TEMPLATE_ID: Final[str] = "fund-analysis-template-v1"
 _SOURCE_PATH: Final[str] = "docs/fund-analysis-template-draft.md"

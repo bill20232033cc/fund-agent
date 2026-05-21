@@ -28,6 +28,7 @@ from fund_agent.fund.audit import run_programmatic_audit
 from fund_agent.fund.data.nav_data import NavDataResult
 from fund_agent.fund.data_extractor import StructuredFundDataBundle
 from fund_agent.fund.extractors.models import EvidenceAnchor, ExtractedField
+from fund_agent.fund.fund_type import FundType
 from fund_agent.fund.template import (
     TemplateRenderInput,
     build_programmatic_audit_input,
@@ -38,6 +39,12 @@ from fund_agent.fund.template import (
 )
 
 _REPO_ROOT = Path(__file__).resolve().parents[3]
+_ITEM_RULE_MARKERS = (
+    "#### 指数编制规则与成分股",
+    "#### 基金经理投资哲学",
+    "#### 超额收益分年度拆解",
+    "#### 跟踪误差分析",
+)
 
 
 def _anchor(
@@ -939,6 +946,74 @@ def test_render_template_report_applies_index_fund_lens_to_target_slots() -> Non
     assert index_audit_result.passed
 
 
+@pytest.mark.parametrize(
+    ("fund_type", "expected_markers"),
+    (
+        ("index_fund", ("#### 指数编制规则与成分股", "#### 跟踪误差分析")),
+        ("active_fund", ("#### 基金经理投资哲学", "#### 超额收益分年度拆解")),
+        (
+            "enhanced_index",
+            ("#### 指数编制规则与成分股", "#### 超额收益分年度拆解", "#### 跟踪误差分析"),
+        ),
+        ("bond_fund", ()),
+        ("qdii_fund", ()),
+        ("fof_fund", ()),
+    ),
+)
+def test_render_template_report_applies_item_rule_segments_by_fund_type(
+    fund_type: FundType,
+    expected_markers: tuple[str, ...],
+) -> None:
+    """验证六类基金按 ITEM_RULE 决策渲染或删除条件段落。
+
+    Args:
+        fund_type: 标准基金类型。
+        expected_markers: 当前基金类型应渲染的 ITEM_RULE 小节标题。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 ITEM_RULE 段落集合或审计上下文不符合预期时抛出。
+    """
+
+    result = render_template_report(_render_input(fund_type=fund_type))
+    audit_result = run_programmatic_audit(result.audit_input)
+
+    assert result.item_rule_audit_context == "identity_present"
+    assert result.audit_input.item_rule_audit_context == "identity_present"
+    assert result.item_rule_decisions == result.audit_input.item_rule_decisions
+    assert audit_result.passed
+    for marker in _ITEM_RULE_MARKERS:
+        assert (marker in result.report_markdown) is (marker in expected_markers)
+
+
+def test_render_template_report_renders_item_rule_segments_with_fixed_bullets_and_evidence_boundaries() -> None:
+    """验证 ITEM_RULE 段落使用固定 bullet 且不伪造证据边界。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当固定段落或数据不足边界被破坏时抛出。
+    """
+
+    result = render_template_report(_render_input(fund_type="enhanced_index"))
+    chapter_1 = result.chapter_blocks[1].body_markdown
+    chapter_2 = result.chapter_blocks[2].body_markdown
+
+    assert "#### 指数编制规则与成分股\n- 业绩基准引用：" in chapter_1
+    assert "- 编制方法：数据不足，当前输入未抽取指数编制方法。" in chapter_1
+    assert "- 成分股：数据不足，当前输入未抽取指数成分股。" in chapter_1
+    assert "#### 超额收益分年度拆解\n- 可用周期：2024。" in chapter_2
+    assert "- 分年度结论：数据不足，当前输入未形成多年度完整序列时不得推断稳定性。" in chapter_2
+    assert "#### 跟踪误差分析\n- 跟踪误差：数据不足，当前输入未抽取跟踪误差。" in chapter_2
+    assert "- 后续最小验证：补充跟踪误差披露或净值/指数日频序列后再计算。" in chapter_2
+
+
 def test_render_template_report_missing_data_path_is_explicit_and_audit_compatible() -> None:
     """验证缺失数据路径显式输出未披露或数据不足且仍兼容审计输入。
 
@@ -958,6 +1033,9 @@ def test_render_template_report_missing_data_path_is_explicit_and_audit_compatib
     assert "未披露" in result.report_markdown
     assert "数据不足" in result.report_markdown
     assert result.lens_application_plan is None
+    assert result.item_rule_decisions == ()
+    assert result.item_rule_audit_context == "identity_missing"
+    assert result.audit_input.item_rule_audit_context == "identity_missing"
     assert result.audit_input.final_judgment == "needs_attention"
     assert result.audit_input.derived_final_judgment == "needs_attention"
     assert result.audit_input.final_judgment_source == "derived"

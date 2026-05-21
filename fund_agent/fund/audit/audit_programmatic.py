@@ -26,6 +26,12 @@ from fund_agent.fund.template.chapter_blocks import (
     split_rendered_chapter_blocks,
 )
 from fund_agent.fund.template.contracts import load_template_contract_manifest
+from fund_agent.fund.template.item_rules import (
+    TemplateItemRuleAuditContext,
+    TemplateItemRuleDecision,
+    get_template_item_rule,
+    rendered_segment_present,
+)
 
 AuditRuleCode = Literal["P1", "P2", "P3", "C2", "L1", "R1", "R2"]
 AuditSeverity = Literal["blocker", "reviewable"]
@@ -96,6 +102,8 @@ class ProgrammaticAuditInput:
         final_judgment_source: selected 判断来源，用于区分系统派生与开发覆盖。
         required_chapter_titles: 必要章节标题列表。
         chapter_blocks: 已渲染章节块，用于 P3 每章证据和 C2 契约审计。
+        item_rule_decisions: renderer 产生的 ITEM_RULE 渲染/删除决策。
+        item_rule_audit_context: ITEM_RULE 审计上下文，用于区分身份缺失与身份存在路径。
     """
 
     report_markdown: str | None = None
@@ -106,6 +114,8 @@ class ProgrammaticAuditInput:
     final_judgment_source: FinalJudgmentSource | None = None
     required_chapter_titles: tuple[str, ...] = _REQUIRED_CHAPTER_TITLES
     chapter_blocks: tuple[RenderedChapterBlock, ...] = ()
+    item_rule_decisions: tuple[TemplateItemRuleDecision, ...] = ()
+    item_rule_audit_context: TemplateItemRuleAuditContext = "identity_missing"
 
 
 def run_programmatic_audit(input_data: ProgrammaticAuditInput) -> ProgrammaticAuditResult:
@@ -128,6 +138,11 @@ def run_programmatic_audit(input_data: ProgrammaticAuditInput) -> ProgrammaticAu
         *block_issues,
         *_audit_minimum_chapter_evidence(chapter_blocks),
         *_audit_contract_conformance(chapter_blocks),
+        *_audit_item_rule_compliance(
+            chapter_blocks,
+            input_data.item_rule_decisions,
+            input_data.item_rule_audit_context,
+        ),
         *_audit_rabc_closure(input_data.rabc_attributions),
         *_audit_checklist_rules(input_data.checklist_result),
         *_audit_final_judgment(
@@ -457,6 +472,136 @@ def _audit_chapter_block_metadata(
         if block.heading != expected_heading:
             issues.append(_issue(code="C2", message="章节 Markdown 标题与契约标题不一致。", location=location))
     return tuple(issues)
+
+
+def _audit_item_rule_compliance(
+    chapter_blocks: tuple[RenderedChapterBlock, ...],
+    decisions: tuple[TemplateItemRuleDecision, ...],
+    audit_context: TemplateItemRuleAuditContext,
+) -> tuple[AuditIssue, ...]:
+    """执行 ITEM_RULE 确定性渲染/删除合规审计。
+
+    Args:
+        chapter_blocks: 已渲染章节块。
+        decisions: renderer 产生的 ITEM_RULE 决策。
+        audit_context: ITEM_RULE 审计上下文。
+
+    Returns:
+        C2 ITEM_RULE 合规问题。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if not chapter_blocks:
+        return ()
+    if audit_context == "identity_missing" and not decisions:
+        return ()
+    if audit_context == "identity_present" and not decisions:
+        return (
+            _issue(
+                code="C2",
+                message="基金身份存在但缺少 ITEM_RULE 决策，无法验证条件型段落合规。",
+                location="item_rule_decisions",
+            ),
+        )
+
+    issues: list[AuditIssue] = []
+    seen_rule_ids: set[str] = set()
+    blocks_by_id = {block.chapter_id: block for block in chapter_blocks}
+    for decision in decisions:
+        if decision.rule_id in seen_rule_ids:
+            issues.append(
+                _issue(
+                    code="C2",
+                    message=f"ITEM_RULE 决策重复：{decision.rule_id}。",
+                    location="item_rule_decisions",
+                )
+            )
+            continue
+        seen_rule_ids.add(decision.rule_id)
+        issues.extend(_audit_single_item_rule_decision(decision, blocks_by_id))
+    return tuple(issues)
+
+
+def _audit_single_item_rule_decision(
+    decision: TemplateItemRuleDecision,
+    blocks_by_id: dict[int, RenderedChapterBlock],
+) -> list[AuditIssue]:
+    """审计单条 ITEM_RULE 决策与对应章节块是否一致。
+
+    Args:
+        decision: renderer 产生的 ITEM_RULE 决策。
+        blocks_by_id: 按章节编号索引的渲染章节块。
+
+    Returns:
+        单条决策产生的 C2 问题。
+
+    Raises:
+        无显式抛出。
+    """
+
+    issues: list[AuditIssue] = []
+    try:
+        rule = get_template_item_rule(decision.rule_id)
+    except ValueError:
+        return [
+            _issue(
+                code="C2",
+                message=f"ITEM_RULE 决策引用未知规则：{decision.rule_id}。",
+                location="item_rule_decisions",
+            )
+        ]
+
+    if decision.chapter_id != rule.chapter_id:
+        issues.append(
+            _issue(
+                code="C2",
+                message=(
+                    f"ITEM_RULE {decision.rule_id} 决策章节 {decision.chapter_id} "
+                    f"与 manifest 章节 {rule.chapter_id} 不一致。"
+                ),
+                location=f"item_rule_decisions:{decision.rule_id}",
+            )
+        )
+    block = blocks_by_id.get(decision.chapter_id)
+    if block is None:
+        issues.append(
+            _issue(
+                code="C2",
+                message=f"ITEM_RULE {decision.rule_id} 指向的章节块不存在：{decision.chapter_id}。",
+                location=f"item_rule_decisions:{decision.rule_id}",
+            )
+        )
+        return issues
+
+    present = rendered_segment_present(block.body_markdown, rule)
+    location = f"{_chapter_location(block)}:{decision.rule_id}"
+    if decision.status == "render" and not present:
+        issues.append(
+            _issue(
+                code="C2",
+                message=f"ITEM_RULE {decision.rule_id} 要求渲染，但章节内缺少对应段落标记。",
+                location=location,
+            )
+        )
+    elif decision.status == "delete" and present:
+        issues.append(
+            _issue(
+                code="C2",
+                message=f"ITEM_RULE {decision.rule_id} 要求删除，但章节内仍包含对应段落标记。",
+                location=location,
+            )
+        )
+    elif decision.status not in {"render", "delete"}:
+        issues.append(
+            _issue(
+                code="C2",
+                message=f"ITEM_RULE {decision.rule_id} 决策状态不受支持：{decision.status}。",
+                location=location,
+            )
+        )
+    return issues
 
 
 def _audit_rabc_closure(rabc_attributions: tuple[RabcAttribution, ...]) -> tuple[AuditIssue, ...]:

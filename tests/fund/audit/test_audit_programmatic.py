@@ -19,6 +19,7 @@ from fund_agent.fund.audit.contract_rules import (
     validate_programmatic_contract_rules,
 )
 from fund_agent.fund.template.contracts import load_template_contract_manifest
+from fund_agent.fund.template.item_rules import get_template_item_rule
 from fund_agent.fund.audit import ProgrammaticAuditInput, run_programmatic_audit
 from fund_agent.fund.template import render_template_report, split_rendered_chapter_blocks
 from tests.fund.template.test_renderer import _render_input
@@ -163,6 +164,8 @@ def _rendered_audit_input(
         derived_final_judgment=render_result.audit_input.derived_final_judgment,
         final_judgment_source=render_result.audit_input.final_judgment_source,
         chapter_blocks=chapter_blocks,
+        item_rule_decisions=render_result.audit_input.item_rule_decisions,
+        item_rule_audit_context=render_result.audit_input.item_rule_audit_context,
     )
 
 
@@ -189,6 +192,8 @@ def test_run_programmatic_audit_passes_complete_inputs() -> None:
             derived_final_judgment="worth_holding",
             final_judgment_source="derived",
             chapter_blocks=render_result.chapter_blocks,
+            item_rule_decisions=render_result.audit_input.item_rule_decisions,
+            item_rule_audit_context=render_result.audit_input.item_rule_audit_context,
         ),
     )
 
@@ -326,6 +331,8 @@ def test_run_programmatic_audit_detects_malformed_explicit_chapter_blocks() -> N
             derived_final_judgment=render_result.audit_input.derived_final_judgment,
             final_judgment_source=render_result.audit_input.final_judgment_source,
             chapter_blocks=(broken_heading_block, *render_result.chapter_blocks[1:]),
+            item_rule_decisions=render_result.audit_input.item_rule_decisions,
+            item_rule_audit_context=render_result.audit_input.item_rule_audit_context,
         )
     )
 
@@ -341,11 +348,220 @@ def test_run_programmatic_audit_detects_malformed_explicit_chapter_blocks() -> N
             derived_final_judgment=render_result.audit_input.derived_final_judgment,
             final_judgment_source=render_result.audit_input.final_judgment_source,
             chapter_blocks=render_result.chapter_blocks[:-1],
+            item_rule_decisions=render_result.audit_input.item_rule_decisions,
+            item_rule_audit_context=render_result.audit_input.item_rule_audit_context,
         )
     )
 
     assert not incomplete_result.passed
     assert any(issue.code == "C2" and "0..7" in issue.message for issue in incomplete_result.issues)
+
+
+def test_run_programmatic_audit_detects_identity_present_missing_item_rule_decisions() -> None:
+    """验证身份存在但缺少 ITEM_RULE 决策时触发 C2。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当缺少 ITEM_RULE 决策未触发 C2 时抛出。
+    """
+
+    render_result = render_template_report(_render_input())
+    audit_input = replace(
+        render_result.audit_input,
+        item_rule_decisions=(),
+        item_rule_audit_context="identity_present",
+    )
+
+    result = run_programmatic_audit(audit_input)
+
+    assert not result.passed
+    assert any(
+        issue.code == "C2" and "缺少 ITEM_RULE 决策" in issue.message
+        for issue in result.issues
+    )
+
+
+def test_run_programmatic_audit_skips_missing_decision_issue_for_identity_missing_context() -> None:
+    """验证身份缺失路径只跳过 ITEM_RULE 缺决策问题。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当身份缺失路径误报 ITEM_RULE 缺决策时抛出。
+    """
+
+    render_result = render_template_report(_render_input(missing=True, final_judgment="needs_attention"))
+    audit_input = replace(render_result.audit_input, item_rule_decisions=(), item_rule_audit_context="identity_missing")
+
+    result = run_programmatic_audit(audit_input)
+
+    assert result.passed
+    assert not any("缺少 ITEM_RULE 决策" in issue.message for issue in result.issues)
+
+
+def test_run_programmatic_audit_detects_item_rule_render_marker_missing() -> None:
+    """验证触发的 ITEM_RULE 段落缺失时触发 C2。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当触发段落缺失未触发 C2 时抛出。
+    """
+
+    render_result = render_template_report(_render_input(fund_type="active_fund"))
+    broken_blocks = tuple(
+        replace(
+            block,
+            body_markdown=block.body_markdown.replace(
+                "#### 基金经理投资哲学",
+                "#### 被误删的基金经理段落",
+                1,
+            ),
+            markdown=block.markdown.replace("#### 基金经理投资哲学", "#### 被误删的基金经理段落", 1),
+        )
+        if block.chapter_id == 1
+        else block
+        for block in render_result.chapter_blocks
+    )
+
+    result = run_programmatic_audit(replace(render_result.audit_input, chapter_blocks=broken_blocks))
+
+    assert not result.passed
+    assert any(
+        issue.code == "C2" and "要求渲染" in issue.message and "chapter_1_manager_philosophy" in issue.message
+        for issue in result.issues
+    )
+
+
+def test_run_programmatic_audit_detects_item_rule_deleted_marker_present() -> None:
+    """验证未触发的 ITEM_RULE 段落残留时触发 C2。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当应删除段落残留未触发 C2 时抛出。
+    """
+
+    render_result = render_template_report(_render_input(fund_type="active_fund"))
+    broken_blocks = tuple(
+        replace(
+            block,
+            body_markdown=f"{block.body_markdown}\n#### 跟踪误差分析\n- 跟踪误差：数据不足。",
+            markdown=f"{block.markdown}\n#### 跟踪误差分析\n- 跟踪误差：数据不足。",
+        )
+        if block.chapter_id == 2
+        else block
+        for block in render_result.chapter_blocks
+    )
+
+    result = run_programmatic_audit(replace(render_result.audit_input, chapter_blocks=broken_blocks))
+
+    assert not result.passed
+    assert any(
+        issue.code == "C2" and "要求删除" in issue.message and "chapter_2_tracking_error_analysis" in issue.message
+        for issue in result.issues
+    )
+
+
+def test_run_programmatic_audit_detects_item_rule_duplicate_unknown_and_mismatched_decisions() -> None:
+    """验证 ITEM_RULE 决策重复、未知和章节错配均 fail closed。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当非法 ITEM_RULE 决策未触发 C2 时抛出。
+    """
+
+    render_result = render_template_report(_render_input())
+    first_decision = render_result.audit_input.item_rule_decisions[0]
+    unknown_decision = replace(first_decision, rule_id="unknown_rule")
+    mismatched_decision = replace(
+        next(
+            decision
+            for decision in render_result.audit_input.item_rule_decisions
+            if decision.rule_id == "chapter_1_manager_philosophy"
+        ),
+        chapter_id=2,
+    )
+    audit_input = replace(
+        render_result.audit_input,
+        item_rule_decisions=(
+            first_decision,
+            first_decision,
+            unknown_decision,
+            mismatched_decision,
+        ),
+    )
+
+    result = run_programmatic_audit(audit_input)
+
+    assert not result.passed
+    messages = tuple(issue.message for issue in result.issues if issue.code == "C2")
+    assert any("决策重复" in message for message in messages)
+    assert any("未知规则" in message for message in messages)
+    assert any("不一致" in message for message in messages)
+
+
+def test_run_programmatic_audit_checks_item_rule_markers_inside_matching_chapter_only() -> None:
+    """验证 ITEM_RULE 审计只检查匹配章节块的正文。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当全局 Markdown 或其他章节 marker 被误判为命中时抛出。
+    """
+
+    render_result = render_template_report(_render_input(fund_type="active_fund"))
+    rule = get_template_item_rule("chapter_1_manager_philosophy")
+    broken_blocks = tuple(
+        replace(
+            block,
+            body_markdown=block.body_markdown.replace("#### 基金经理投资哲学", "#### 错误章节内的主动段落", 1),
+            markdown=block.markdown.replace("#### 基金经理投资哲学", "#### 错误章节内的主动段落", 1),
+        )
+        if block.chapter_id == 1
+        else replace(
+            block,
+            body_markdown=f"{block.body_markdown}\n{rule.segment_markers_any[0]}\n- fixture：错误章节。",
+            markdown=f"{block.markdown}\n{rule.segment_markers_any[0]}\n- fixture：错误章节。",
+        )
+        if block.chapter_id == 2
+        else block
+        for block in render_result.chapter_blocks
+    )
+
+    result = run_programmatic_audit(replace(render_result.audit_input, chapter_blocks=broken_blocks))
+
+    assert not result.passed
+    assert any(
+        issue.code == "C2" and "chapter_1_manager_philosophy" in issue.message and "要求渲染" in issue.message
+        for issue in result.issues
+    )
 
 
 def test_run_programmatic_audit_detects_missing_chapter_evidence_line() -> None:

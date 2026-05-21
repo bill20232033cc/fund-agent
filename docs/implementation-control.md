@@ -13,8 +13,8 @@
 | Field | State |
 |---|---|
 | Branch | `main` |
-| Current gate | `P12-S1 ITEM_RULE renderer/audit compliance plan accepted` |
-| Next entry point | `P12-S1 implementation` |
+| Current gate | `P12-S1 ITEM_RULE renderer/audit compliance accepted` |
+| Next entry point | `post-P12-S1 follow-up planning` |
 | Current phase | `P12 ITEM_RULE deterministic compliance` |
 | Design truth | `docs/design.md` |
 | Control truth | `docs/implementation-control.md` |
@@ -23,14 +23,15 @@
 | Latest post-P11 planning artifact | `docs/reviews/post-p11-second-follow-up-planning-20260522.md` |
 | Latest P11-S2 plan artifact | `docs/reviews/p11-s2-historical-summary-dedupe-plan-20260521.md` |
 | Latest P12-S1 plan artifact | `docs/reviews/p12-s1-item-rule-renderer-audit-compliance-plan-20260522.md` |
-| Plan reviews | `docs/reviews/p11-s1-plan-review-mimo-20260521.md`, `docs/reviews/p11-s1-plan-review-glm-20260521.md` |
-| Implementation artifact | `docs/reviews/p11-s2-implementation-20260521.md` |
+| Plan reviews | `docs/reviews/p12-s1-plan-review-mimo-20260522.md`, `docs/reviews/p12-s1-plan-review-glm-20260522.md`, `docs/reviews/p12-s1-plan-rereview-mimo-20260522.md`, `docs/reviews/p12-s1-plan-rereview-glm-20260522.md` |
+| Implementation artifact | `docs/reviews/p12-s1-implementation-20260522.md` |
+| Code review artifacts | `docs/reviews/p12-s1-code-review-mimo-20260522.md`, `docs/reviews/p12-s1-code-review-glm-20260522.md`, `docs/reviews/p12-s1-code-review-controller-judgment-20260522.md` |
 | Last merged PR | PR #6, merge commit `acc692c7e84c855398de86497b0d05f30b6f5ca5` |
-| Product baseline | P10 release-readiness merged; P11 control-doc recovery accepted |
-| Open residuals | RR-13 duplicate `016492`, excluded `docs/repo-audit-20260521.md` |
-| Non-goal reminder | no source, tests, config, product behavior, runtime, Dayu Host/Engine/tool loop, or LLM writing changes |
+| Product baseline | P10 release-readiness merged; P11 control-doc recovery accepted; P12-S1 ITEM_RULE renderer/audit compliance accepted |
+| Open residuals | RR-13 duplicate `016492`, excluded `docs/repo-audit-20260521.md`, P12-S1 evidence/extractor follow-ups |
+| Non-goal reminder | do not introduce Dayu Host/Engine/tool loop, LLM writing, or external runtime dependency |
 
-Resume checklist: confirm current gate and next entry point; confirm the next action is P12-S1 implementation, not planning; keep RR-13 source data, `docs/repo-audit-20260521.md`, and `docs/implementation-control.md` out of implementation scope; preserve deterministic MVP boundaries and do not introduce LLM audit, Host, Engine, or tool loop.
+Resume checklist: confirm current gate and next entry point; confirm the next action is post-P12-S1 follow-up planning, not implementation; keep RR-13 source data and `docs/repo-audit-20260521.md` excluded unless explicitly scoped; preserve deterministic MVP boundaries and do not introduce LLM audit, Host, Engine, or tool loop.
 
 ## Active Gate Ledger
 
@@ -44,6 +45,7 @@ Resume checklist: confirm current gate and next entry point; confirm the next ac
 | `P11-S2 implementation/code review` | accepted | `docs/reviews/p11-s2-implementation-20260521.md`, `docs/reviews/p11-s2-code-review-controller-judgment-20260521.md` | local docs-only change | MiMo/GLM PASS_WITH_FINDINGS; Startup Packet residual bookkeeping fixed | post-P11 planning | follow-up planning |
 | `post-P11 follow-up planning accepted` | accepted | `docs/reviews/post-p11-second-follow-up-planning-20260522.md` | `ba77e02` | P11 recovery accepted; ITEM_RULE deterministic compliance selected as next product slice | P12-S1 | plan/review |
 | `P12-S1 ITEM_RULE renderer/audit compliance plan/review` | accepted | `docs/reviews/p12-s1-item-rule-renderer-audit-compliance-plan-20260522.md`, `docs/reviews/p12-s1-plan-review-controller-judgment-20260522.md` | local docs-only plan | MiMo/GLM initial PASS_WITH_FINDINGS; targeted re-reviews PASS | P12-S1 implementation | implementation |
+| `P12-S1 ITEM_RULE renderer/audit compliance implementation/code review` | accepted | `docs/reviews/p12-s1-implementation-20260522.md`, `docs/reviews/p12-s1-code-review-controller-judgment-20260522.md` | local implementation change | controller verified diff check, targeted `81 passed`, adjacent `43 passed`, ruff passed, full `401 passed`; MiMo PASS; GLM PASS | post-P12-S1 planning | follow-up planning |
 
 ## Phase History Index
 
@@ -61,22 +63,20 @@ Resume checklist: confirm current gate and next entry point; confirm the next ac
 | P9 | done | [Archive: P9](#archive-p9) | P9 product contract and aggregate deepreview artifacts | `2bacdb3`, `ce603a0` recorded | full suite `377 passed` | review limitation documented |
 | P10 | merged | [Archive: P10](#archive-p10) | P10 plan/code/aggregate/PR artifacts | PR #6 merge `acc692c7e84c855398de86497b0d05f30b6f5ca5` | full suite `388 passed`, CI pass | `docs/repo-audit-20260521.md` excluded |
 | P11 | accepted | [Archive: P11](#archive-p11) | P11 plan/review/implementation/code-review/follow-up/P11-S2 artifacts | `5f5331b` | P11-S2 docs-only validation passed | closed |
-| P12 | in progress | [Archive: P12](#archive-p12) | `docs/reviews/post-p11-second-follow-up-planning-20260522.md`, `docs/reviews/p12-s1-plan-review-controller-judgment-20260522.md` | n/a | P12-S1 plan re-reviews PASS | P12-S1 implementation |
+| P12 | accepted | [Archive: P12](#archive-p12) | `docs/reviews/post-p11-second-follow-up-planning-20260522.md`, `docs/reviews/p12-s1-plan-review-controller-judgment-20260522.md`, `docs/reviews/p12-s1-code-review-controller-judgment-20260522.md` | pending local commit | full suite `401 passed` | post-P12-S1 planning |
 
-## P11 Current Phase Plan
+## P12 Current Phase Notes
 
-P11 goal: reduce `phaseflow` resume and handoff cost while preserving all gate evidence in the control record. P11-S1 is documentation-only: reorganize `docs/implementation-control.md`, keep same-file archive evidence, and make active state recoverable from the first screen.
+P12 goal: make ITEM_RULE deterministic compliance observable in the final renderer/audit path while preserving Fund Capability ownership and deterministic MVP boundaries. P12-S1 is accepted: renderer produces ITEM_RULE decisions/context from classified fund type, deterministic segments render only in target chapter bodies, and programmatic C2 audits renderer-produced decisions.
 
-Implementation guardrails:
+Post-P12-S1 guardrails:
 
-- Do not modify source code, tests, config, product behavior, `docs/design.md`, or `docs/repo-audit-20260521.md`.
-- Do not delete historical review artifacts or rewrite prior accepted facts.
+- Do not modify RR-13 source data or include `docs/repo-audit-20260521.md` unless a future scope explicitly accepts it.
 - Do not auto-resolve RR-13 duplicate `016492`.
-- Do not introduce Dayu runtime, Host, Engine, tool loop, prompt scene registry, or LLM writing.
-- Keep `Startup Packet` plus `Active Gate Ledger` under 80 lines.
-- Treat artifact existence checking as implementation acceptance validation, not resume routine.
+- Do not introduce Dayu runtime, Host, Engine, tool loop, prompt scene registry, or LLM writing as part of follow-up planning.
+- Keep ITEM_RULE evidence/extractor follow-ups separate from renderer/audit compliance unless a future plan explicitly owns those inputs.
 
-Success signals: first-screen recovery is short; `Phase History Index` links to unique phase-prefixed archive headings; exact artifact paths, commit hashes, PR links, validation results, and residual owners are preserved; design/control alignment rules are explicit.
+Success signals for the next step: post-P12-S1 follow-up planning selects the next product-safety slice from accepted residuals, records owners for deferred evidence/extractor items, and keeps current accepted P12-S1 behavior unchanged unless a new plan/review gate authorizes changes.
 
 ## Active Residuals
 
@@ -84,7 +84,7 @@ Success signals: first-screen recovery is short; `Phase History Index` links to 
 |---|---|---|
 | RR-13 duplicate `016492` | User / App source | Preserve as human-owned; do not modify CSV automatically |
 | `docs/repo-audit-20260521.md` | Controller / user | Keep excluded unless later scope explicitly accepts publication |
-| ITEM_RULE deterministic compliance | P12-S1 plan/review | Next product-safety phase; keep deterministic MVP boundaries |
+| P12-S1 evidence presentation follow-ups | Future evidence-display / extractor slice | Multi-anchor ITEM_RULE evidence display and real tracking-error / index methodology / constituents extraction remain out of P12-S1 scope |
 
 ## Evidence Preservation Rules
 
@@ -164,7 +164,7 @@ P11 control doc hygiene plan/review, implementation, code review, post-P11 plann
 
 ## Archive: P12
 
-P12 ITEM_RULE deterministic compliance planning starts from `docs/reviews/post-p11-second-follow-up-planning-20260522.md`. P12-S1 plan/review is accepted in `docs/reviews/p12-s1-plan-review-controller-judgment-20260522.md`. P12 must keep ITEM_RULE ownership in Fund Capability and preserve deterministic MVP boundaries.
+P12 ITEM_RULE deterministic compliance planning starts from `docs/reviews/post-p11-second-follow-up-planning-20260522.md`. P12-S1 plan/review is accepted in `docs/reviews/p12-s1-plan-review-controller-judgment-20260522.md`; implementation/code review is accepted in `docs/reviews/p12-s1-code-review-controller-judgment-20260522.md`. P12-S1 keeps ITEM_RULE ownership in Fund Capability and preserves deterministic MVP boundaries.
 
 ## Original Detailed Control Record
 

@@ -29,6 +29,11 @@ from fund_agent.fund.template.chapter_blocks import (
     split_rendered_chapter_blocks,
 )
 from fund_agent.fund.template.contracts import get_chapter_contract
+from fund_agent.fund.template.item_rules import (
+    TemplateItemRuleAuditContext,
+    TemplateItemRuleDecision,
+    evaluate_template_item_rules,
+)
 from fund_agent.fund.template.lens_application import (
     LensApplicationPlan,
     LensChapterApplication,
@@ -90,6 +95,8 @@ class TemplateRenderResult:
         evidence_anchors: 报告引用到的去重证据锚点。
         chapter_blocks: 按模板第 0-7 章切分的渲染章节块。
         lens_application_plan: preferred_lens 确定性应用计划；完全缺失基金身份时为 `None`。
+        item_rule_decisions: ITEM_RULE 确定性渲染/删除决策；完全缺失基金身份时为空。
+        item_rule_audit_context: ITEM_RULE 审计上下文，用于区分身份缺失路径和身份存在路径。
     """
 
     report_markdown: str
@@ -97,6 +104,8 @@ class TemplateRenderResult:
     evidence_anchors: tuple[EvidenceAnchor, ...]
     chapter_blocks: tuple[RenderedChapterBlock, ...]
     lens_application_plan: LensApplicationPlan | None
+    item_rule_decisions: tuple[TemplateItemRuleDecision, ...] = ()
+    item_rule_audit_context: TemplateItemRuleAuditContext = "identity_missing"
 
 
 def render_template_report(input_data: TemplateRenderInput) -> TemplateRenderResult:
@@ -114,12 +123,15 @@ def render_template_report(input_data: TemplateRenderInput) -> TemplateRenderRes
 
     _validate_final_judgment_decision(input_data.final_judgment_decision)
     lens_application_plan = _resolve_lens_application_plan(input_data.structured_data)
+    item_rule_decisions, item_rule_audit_context = _resolve_item_rule_decisions(
+        input_data.structured_data
+    )
     evidence_anchors = _collect_evidence_anchors(input_data)
     chapter_evidence_groups = _collect_chapter_evidence_groups(input_data)
     sections = (
         _render_chapter_0(input_data, lens_application_plan),
-        _render_chapter_1(input_data, lens_application_plan),
-        _render_chapter_2(input_data),
+        _render_chapter_1(input_data, lens_application_plan, item_rule_decisions),
+        _render_chapter_2(input_data, item_rule_decisions),
         _render_chapter_3(input_data),
         _render_chapter_4(input_data),
         _render_chapter_5(input_data),
@@ -142,10 +154,14 @@ def render_template_report(input_data: TemplateRenderInput) -> TemplateRenderRes
             derived_final_judgment=input_data.final_judgment_decision.derived_judgment,
             final_judgment_source=input_data.final_judgment_decision.source,
             chapter_blocks=chapter_blocks,
+            item_rule_decisions=item_rule_decisions,
+            item_rule_audit_context=item_rule_audit_context,
         ),
         evidence_anchors=evidence_anchors,
         chapter_blocks=chapter_blocks,
         lens_application_plan=lens_application_plan,
+        item_rule_decisions=item_rule_decisions,
+        item_rule_audit_context=item_rule_audit_context,
     )
 
 
@@ -187,6 +203,30 @@ def _resolve_lens_application_plan(
     if not isinstance(fund_type, str) or not fund_type.strip():
         raise ValueError("P1 结构化数据缺少有效 classified_fund_type，不能应用 preferred_lens")
     return build_lens_application_plan(fund_type=fund_type)  # type: ignore[arg-type]
+
+
+def _resolve_item_rule_decisions(
+    structured_data: StructuredFundDataBundle,
+) -> tuple[tuple[TemplateItemRuleDecision, ...], TemplateItemRuleAuditContext]:
+    """从结构化基金身份解析 ITEM_RULE 决策。
+
+    Args:
+        structured_data: P1 结构化基金数据包。
+
+    Returns:
+        ITEM_RULE 决策元组和审计上下文；完全缺失基金身份时返回空决策和 `identity_missing`。
+
+    Raises:
+        ValueError: 基金身份存在但缺少或包含不受支持的 `classified_fund_type` 时抛出。
+    """
+
+    identity = structured_data.basic_identity.value
+    if identity is None:
+        return (), "identity_missing"
+    fund_type = identity.get("classified_fund_type")
+    if not isinstance(fund_type, str) or not fund_type.strip():
+        raise ValueError("P1 结构化数据缺少有效 classified_fund_type，不能应用 ITEM_RULE")
+    return evaluate_template_item_rules(fund_type=fund_type, facets=()), "identity_present"  # type: ignore[arg-type]
 
 
 def _lens_chapter_application(
@@ -301,12 +341,14 @@ def _render_chapter_0(
 def _render_chapter_1(
     input_data: TemplateRenderInput,
     lens_application_plan: LensApplicationPlan | None,
+    item_rule_decisions: tuple[TemplateItemRuleDecision, ...],
 ) -> str:
     """渲染模板第 1 章“这只基金到底是什么产品”。
 
     Args:
         input_data: 模板渲染输入。
         lens_application_plan: preferred_lens 确定性应用计划；完全缺失基金身份时为 `None`。
+        item_rule_decisions: ITEM_RULE 确定性渲染/删除决策。
 
     Returns:
         第 1 章 Markdown。
@@ -338,16 +380,21 @@ def _render_chapter_1(
         f"- 收益来源假设：围绕基金类别 {_value_text(identity, 'fund_category')} 和业绩基准 {_value_text(benchmark, 'benchmark_text')} 观察。",
         f"- 成本底座：管理费 {_value_text(fee, 'management_fee')}，托管费 {_value_text(fee, 'custody_fee')}。",
         f"- 基金类型识别依据：{_join_values(identity.get('classification_basis'))}。",
-        _evidence_line(anchors),
     ]
+    content.extend(_render_item_rule_segments_for_chapter(1, item_rule_decisions, input_data))
+    content.append(_evidence_line(anchors))
     return "\n".join(content)
 
 
-def _render_chapter_2(input_data: TemplateRenderInput) -> str:
+def _render_chapter_2(
+    input_data: TemplateRenderInput,
+    item_rule_decisions: tuple[TemplateItemRuleDecision, ...],
+) -> str:
     """渲染模板第 2 章“R=A+B-C 收益归因”。
 
     Args:
         input_data: 模板渲染输入。
+        item_rule_decisions: ITEM_RULE 确定性渲染/删除决策。
 
     Returns:
         第 2 章 Markdown。
@@ -383,10 +430,187 @@ def _render_chapter_2(input_data: TemplateRenderInput) -> str:
             f"- 成本合理性判断：{_INSUFFICIENT_TEXT}，当前未提供同类成本中位数输入。",
             f"- R=A+B-C 综合评估：净超额 {_ratio_text(primary_rabc.net_excess_return) if primary_rabc else _INSUFFICIENT_TEXT}。",
             f"- 判断依据：{_join_values(input_data.alpha_judgment.reasons)}；风险提示：{_join_values(input_data.alpha_judgment.risks)}。",
-            _evidence_line(_collect_rabc_anchors(input_data.rabc_attributions)),
         ],
     )
+    lines.extend(_render_item_rule_segments_for_chapter(2, item_rule_decisions, input_data))
+    lines.append(_evidence_line(_collect_rabc_anchors(input_data.rabc_attributions)))
     return "\n".join(lines)
+
+
+def _render_item_rule_segments_for_chapter(
+    chapter_id: int,
+    item_rule_decisions: tuple[TemplateItemRuleDecision, ...],
+    input_data: TemplateRenderInput,
+) -> list[str]:
+    """按章节渲染已触发的 ITEM_RULE 段落。
+
+    Args:
+        chapter_id: 模板章节编号，见模板第 1/2 章 ITEM_RULE。
+        item_rule_decisions: ITEM_RULE 确定性渲染/删除决策。
+        input_data: 模板渲染输入。
+
+    Returns:
+        当前章节应渲染的 ITEM_RULE Markdown 段落列表。
+
+    Raises:
+        ValueError: 遇到未知的内置 ITEM_RULE 编号时抛出。
+    """
+
+    segments: list[str] = []
+    for decision in item_rule_decisions:
+        if decision.chapter_id != chapter_id or decision.status == "delete":
+            continue
+        segments.append(_render_item_rule_segment(decision, input_data))
+    return segments
+
+
+def _render_item_rule_segment(
+    decision: TemplateItemRuleDecision,
+    input_data: TemplateRenderInput,
+) -> str:
+    """渲染单个已触发 ITEM_RULE 的固定 Markdown 段落。
+
+    Args:
+        decision: ITEM_RULE 确定性渲染决策。
+        input_data: 模板渲染输入。
+
+    Returns:
+        固定 heading 与固定 bullet key 组成的段落 Markdown。
+
+    Raises:
+        ValueError: 遇到未知的内置 ITEM_RULE 编号时抛出。
+    """
+
+    if decision.rule_id == "chapter_1_index_constituents":
+        return _render_index_constituents_segment(input_data)
+    if decision.rule_id == "chapter_1_manager_philosophy":
+        return _render_manager_philosophy_segment(input_data)
+    if decision.rule_id == "chapter_2_alpha_yearly_breakdown":
+        return _render_alpha_yearly_breakdown_segment(input_data)
+    if decision.rule_id == "chapter_2_tracking_error_analysis":
+        return _render_tracking_error_segment(input_data)
+    raise ValueError(f"未知 ITEM_RULE 渲染规则：{decision.rule_id}")
+
+
+def _render_index_constituents_segment(input_data: TemplateRenderInput) -> str:
+    """渲染模板第 1 章指数编制规则与成分股段落。
+
+    Args:
+        input_data: 模板渲染输入。
+
+    Returns:
+        固定 Markdown 段落；基准证据仅证明指数引用，不证明编制方法或成分股。
+
+    Raises:
+        无显式抛出。
+    """
+
+    benchmark = input_data.structured_data.benchmark.value or {}
+    return "\n".join(
+        (
+            "#### 指数编制规则与成分股",
+            f"- 业绩基准引用：{_value_text(benchmark, 'benchmark_text')}。",
+            f"- 编制方法：{_INSUFFICIENT_TEXT}，当前输入未抽取指数编制方法。",
+            f"- 成分股：{_INSUFFICIENT_TEXT}，当前输入未抽取指数成分股。",
+            _item_rule_evidence_bullet(input_data.structured_data.benchmark.anchors),
+        )
+    )
+
+
+def _render_manager_philosophy_segment(input_data: TemplateRenderInput) -> str:
+    """渲染模板第 1 章基金经理投资哲学段落。
+
+    Args:
+        input_data: 模板渲染输入。
+
+    Returns:
+        固定 Markdown 段落；只消费 §4 披露策略，不推断基金经理动机。
+
+    Raises:
+        无显式抛出。
+    """
+
+    strategy = input_data.structured_data.manager_strategy_text.value or {}
+    return "\n".join(
+        (
+            "#### 基金经理投资哲学",
+            f"- 披露策略：{_value_text(strategy, 'strategy_summary', fallback=_MISSING_TEXT)}。",
+            f"- 可验证动作：{_INSUFFICIENT_TEXT}，当前输入仅保留披露原文，不推断投资哲学。",
+            _item_rule_evidence_bullet(input_data.structured_data.manager_strategy_text.anchors),
+        )
+    )
+
+
+def _render_alpha_yearly_breakdown_segment(input_data: TemplateRenderInput) -> str:
+    """渲染模板第 2 章超额收益分年度拆解段落。
+
+    Args:
+        input_data: 模板渲染输入。
+
+    Returns:
+        固定 Markdown 段落；多年度稳定性不足时显式保留数据不足。
+
+    Raises:
+        无显式抛出。
+    """
+
+    periods = ", ".join(attribution.period for attribution in input_data.rabc_attributions)
+    period_summary = periods if periods else _INSUFFICIENT_TEXT
+    return "\n".join(
+        (
+            "#### 超额收益分年度拆解",
+            f"- 可用周期：{period_summary}。",
+            f"- 分年度结论：{_INSUFFICIENT_TEXT}，当前输入未形成多年度完整序列时不得推断稳定性。",
+            _item_rule_evidence_bullet(_collect_rabc_anchors(input_data.rabc_attributions)),
+        )
+    )
+
+
+def _render_tracking_error_segment(input_data: TemplateRenderInput) -> str:
+    """渲染模板第 2 章跟踪误差分析段落。
+
+    Args:
+        input_data: 模板渲染输入。
+
+    Returns:
+        固定 Markdown 段落；跟踪误差在当前数据契约下保持数据不足。
+
+    Raises:
+        无显式抛出。
+    """
+
+    anchors = _dedupe_anchors(
+        (
+            *input_data.structured_data.benchmark.anchors,
+            *_collect_rabc_anchors(input_data.rabc_attributions),
+        )
+    )
+    return "\n".join(
+        (
+            "#### 跟踪误差分析",
+            f"- 跟踪误差：{_INSUFFICIENT_TEXT}，当前输入未抽取跟踪误差。",
+            "- 后续最小验证：补充跟踪误差披露或净值/指数日频序列后再计算。",
+            _item_rule_evidence_bullet(anchors),
+        )
+    )
+
+
+def _item_rule_evidence_bullet(anchors: tuple[EvidenceAnchor, ...]) -> str:
+    """渲染 ITEM_RULE 段落内的证据边界 bullet。
+
+    Args:
+        anchors: ITEM_RULE 段落可引用的证据锚点。
+
+    Returns:
+        固定 bullet 文本；不使用章节级 `> 📎 证据` 格式，避免破坏每章一条正文证据行契约。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if not anchors:
+        return f"- 证据边界：{_INSUFFICIENT_TEXT}，当前段落未携带独立证据锚点。"
+    return f"- 证据边界：{_body_anchor_reference(anchors[0])}。"
 
 
 def _render_chapter_3(input_data: TemplateRenderInput) -> str:
