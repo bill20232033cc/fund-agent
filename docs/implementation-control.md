@@ -76,6 +76,7 @@
 - 当前分支：`main`
 - 当前 gate：`P8 closed`
 - 下一 gate：`post-P8 planning`
+- Repo findings 收口：003（QDII basis 记录并发指数证据）已修复；005（CSV ValueError/FNFE 分离）已修复；006（alpha 空 observations MVP 注释）已文档化；004/008/009/010 低严重度保持 deferred。
 - P4 执行控制文档：`docs/implementation-control-p4.md`
 - 当前裁决：
   - P7 已完成并直接集成到 `main`。当前年报来源顺序为 EID/证监会资本市场统一信息披露平台主源，Eastmoney/akshare fallback，经 `FundDocumentRepository` 统一封装；source metadata/cache provenance 和 legacy cache compatibility 已接入。
@@ -1434,3 +1435,4 @@ P0（环境搭建）
 | 2026-05-20 | P6-S2 implementation/code review | ✅ passed after fix | implementation owner=AgentCodex；controller 裁决=`docs/reviews/p6-s2-code-review-controller-judgment-20260520.md`；MiMo/GLM reviews=`docs/reviews/code-review-20260520-134053.md`,`docs/reviews/code-review-20260520-134023.md`；renderer 标题来源已收口到 `CHAPTER_CONTRACT` manifest，新增 `RenderedChapterBlock`、public heading helper、fail-closed chapter splitter 和 `TemplateRenderResult.chapter_blocks`；混入非法一级标题测试覆盖缺口已修复；当前验证 targeted `29 passed`、full suite `221 passed`、ruff passed、diff check passed；当前 gate 为 `P6-S2 acceptance / next slice planning`，下一 gate 为 `P6-S3 plan/review` |
 | 2026-05-21 | P8-S3 source fallback policy implementation | ✅ accepted | controller self-review 通过；五类 taxonomy、table-driven fallback eligibility、结构化阻断异常、PDF 完整性异常、provenance 保留均符合计划验收标准；当前验证 `347 passed`、ruff passed；implementation commit=`93ae6ea` |
 | 2026-05-21 | post-P8-S3 follow-up planning | ✅ accepted | P8 三个核心交付物（must_answer audit / preferred_lens / source fallback）均已完成；artifact=`docs/reviews/post-p8-s3-follow-up-planning-20260521.md`；P8-S4 preflight quality gate 和 open repo findings (003/005/006) deferred 到 post-P8；当前 gate 为 `P8 aggregate readiness reconciliation`，下一 gate 为 `P8 closed` |
+| 2026-05-21 | P8 closed | ✅ done | P8 三个核心交付物全部完成；AgentController 后续提交 audit hardening (`90bb9d2`)、fund_type bond guard (`90bb9d2`)、preflight quality gate (`90bb9d2`)、docs/infra sync；controller 修复 finding 005（CSV ValueError/FNFE 分离）和 finding 006（alpha observations MVP 注释），commit=`b4aaaaa`；当前验证 `347 passed`、ruff passed；当前 gate 为 `P8 closed`，下一 gate 为 `post-P8 planning` |
