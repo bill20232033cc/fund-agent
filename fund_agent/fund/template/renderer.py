@@ -602,7 +602,8 @@ def _item_rule_evidence_bullet(anchors: tuple[EvidenceAnchor, ...]) -> str:
         anchors: ITEM_RULE 段落可引用的证据锚点。
 
     Returns:
-        固定 bullet 文本；不使用章节级 `> 📎 证据` 格式，避免破坏每章一条正文证据行契约。
+        固定 bullet 文本；渲染全部去重锚点，不使用章节级 `> 📎 证据` 格式，
+        避免破坏每章一条正文证据行契约。
 
     Raises:
         无显式抛出。
@@ -610,7 +611,10 @@ def _item_rule_evidence_bullet(anchors: tuple[EvidenceAnchor, ...]) -> str:
 
     if not anchors:
         return f"- 证据边界：{_INSUFFICIENT_TEXT}，当前段落未携带独立证据锚点。"
-    return f"- 证据边界：{_body_anchor_reference(anchors[0])}。"
+    anchor_references = tuple(
+        _body_anchor_reference(anchor) for anchor in _dedupe_anchors(anchors)
+    )
+    return f"- 证据边界：{'；'.join(anchor_references)}。"
 
 
 def _render_chapter_3(input_data: TemplateRenderInput) -> str:

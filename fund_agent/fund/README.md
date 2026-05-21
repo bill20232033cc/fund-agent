@@ -290,6 +290,7 @@ C2 当前只做确定性 marker / 元数据检查，不调用 LLM，不判断语
 - `conditional` 未触发时决策为 `delete_segment`；schema 同时支持 `optional`，其缺失策略为 `render_unavailable`
 - `rendered_segment_present(markdown, rule)` 只按唯一小节标记做字面量检查，不把“跟踪指数”等普通正文短语当作 ITEM_RULE 段落命中
 - renderer 当前按 `classified_fund_type` 和 `facets=()` 生成 `item_rule_decisions`：触发规则输出固定 heading + 固定 bullet 的确定性段落，未触发 `conditional` 删除整段
+- ITEM_RULE 段落内的 `证据边界` bullet 会在同一行渲染全部去重后的相关锚点，保留章节级 `> 📎 证据` 一章一条契约；这些锚点只表达 provenance，不证明跟踪误差、指数编制方法或成分股已经具备实质数据
 - 程序审计 C2 当前消费 renderer 传入的 `item_rule_decisions` 和 `item_rule_audit_context`，只在对应章节块正文中验证应渲染段落存在、应删除段落不存在；不重新从报告 prose 推断 facet
 - ITEM_RULE 当前不接入质量门禁、Service/UI/CLI 产品选项，也不改变 FQ5 语义
 

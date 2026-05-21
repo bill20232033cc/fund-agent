@@ -37,6 +37,10 @@ from fund_agent.fund.template import (
     render_template_report,
     split_rendered_chapter_blocks,
 )
+from fund_agent.fund.template.renderer import (
+    _body_anchor_reference,
+    _item_rule_evidence_bullet,
+)
 
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 _ITEM_RULE_MARKERS = (
@@ -45,6 +49,7 @@ _ITEM_RULE_MARKERS = (
     "#### 超额收益分年度拆解",
     "#### 跟踪误差分析",
 )
+_ITEM_RULE_EMPTY_EVIDENCE_BOUNDARY = "- 证据边界：数据不足，当前段落未携带独立证据锚点。"
 
 
 def _anchor(
@@ -531,6 +536,53 @@ def _render_input(
     )
 
 
+def _segment_lines(markdown: str, heading: str) -> tuple[str, ...]:
+    """提取指定 ITEM_RULE 小节的正文行。
+
+    Args:
+        markdown: 章节 Markdown 正文。
+        heading: ITEM_RULE 小节标题。
+
+    Returns:
+        小节行，包含标题行和标题后的 bullet 行。
+
+    Raises:
+        AssertionError: 当目标小节不存在时抛出。
+    """
+
+    lines = markdown.splitlines()
+    try:
+        start = lines.index(heading)
+    except ValueError as exc:
+        raise AssertionError(f"未找到 ITEM_RULE 小节：{heading}") from exc
+    end = len(lines)
+    for index in range(start + 1, len(lines)):
+        if lines[index].startswith("#### ") or lines[index].startswith("> 📎 证据"):
+            end = index
+            break
+    return tuple(lines[start:end])
+
+
+def _evidence_boundary_line(markdown: str, heading: str) -> str:
+    """提取指定 ITEM_RULE 小节的证据边界行。
+
+    Args:
+        markdown: 章节 Markdown 正文。
+        heading: ITEM_RULE 小节标题。
+
+    Returns:
+        `- 证据边界：` bullet 行。
+
+    Raises:
+        AssertionError: 当小节内没有证据边界行时抛出。
+    """
+
+    for line in _segment_lines(markdown, heading):
+        if line.startswith("- 证据边界："):
+            return line
+    raise AssertionError(f"ITEM_RULE 小节缺少证据边界行：{heading}")
+
+
 def test_render_template_report_contains_exact_eight_design_chapters() -> None:
     """验证渲染报告包含设计要求的 8 章。
 
@@ -1004,6 +1056,12 @@ def test_render_template_report_renders_item_rule_segments_with_fixed_bullets_an
     result = render_template_report(_render_input(fund_type="enhanced_index"))
     chapter_1 = result.chapter_blocks[1].body_markdown
     chapter_2 = result.chapter_blocks[2].body_markdown
+    input_data = _render_input(fund_type="enhanced_index")
+    benchmark_reference = _body_anchor_reference(input_data.structured_data.benchmark.anchors[0])
+    rabc_reference = _body_anchor_reference(input_data.rabc_attributions[0].anchors[0])
+    tracking_evidence_line = _evidence_boundary_line(chapter_2, "#### 跟踪误差分析")
+    index_evidence_line = _evidence_boundary_line(chapter_1, "#### 指数编制规则与成分股")
+    index_segment = _segment_lines(chapter_1, "#### 指数编制规则与成分股")
 
     assert "#### 指数编制规则与成分股\n- 业绩基准引用：" in chapter_1
     assert "- 编制方法：数据不足，当前输入未抽取指数编制方法。" in chapter_1
@@ -1012,6 +1070,63 @@ def test_render_template_report_renders_item_rule_segments_with_fixed_bullets_an
     assert "- 分年度结论：数据不足，当前输入未形成多年度完整序列时不得推断稳定性。" in chapter_2
     assert "#### 跟踪误差分析\n- 跟踪误差：数据不足，当前输入未抽取跟踪误差。" in chapter_2
     assert "- 后续最小验证：补充跟踪误差披露或净值/指数日频序列后再计算。" in chapter_2
+    assert benchmark_reference in tracking_evidence_line
+    assert rabc_reference in tracking_evidence_line
+    assert "；" in tracking_evidence_line
+    assert index_evidence_line.count(benchmark_reference) == 1
+    assert "；" not in index_evidence_line
+    assert not any(line.startswith("> 📎 证据") for line in index_segment)
+
+
+def test_render_template_report_renders_item_rule_empty_anchor_boundary_for_present_identity() -> None:
+    """验证身份存在但 ITEM_RULE 相关锚点为空时输出精确缺证边界。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当空锚点路径未输出精确缺证文本时抛出。
+    """
+
+    input_data = _render_input(fund_type="index_fund")
+    structured_data = replace(
+        input_data.structured_data,
+        benchmark=replace(input_data.structured_data.benchmark, anchors=()),
+    )
+    attribution = replace(input_data.rabc_attributions[0], anchors=())
+    result = render_template_report(
+        replace(input_data, structured_data=structured_data, rabc_attributions=(attribution,))
+    )
+
+    evidence_line = _evidence_boundary_line(result.chapter_blocks[2].body_markdown, "#### 跟踪误差分析")
+
+    assert result.item_rule_audit_context == "identity_present"
+    assert evidence_line == _ITEM_RULE_EMPTY_EVIDENCE_BOUNDARY
+
+
+def test_item_rule_evidence_bullet_deduplicates_duplicate_anchors() -> None:
+    """验证 ITEM_RULE 私有证据边界 helper 对重复锚点稳定去重。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当重复锚点被重复渲染时抛出。
+    """
+
+    anchor = _anchor("§2", "benchmark")
+    reference = _body_anchor_reference(anchor)
+
+    evidence_line = _item_rule_evidence_bullet((anchor, anchor))
+
+    assert evidence_line == f"- 证据边界：{reference}。"
+    assert evidence_line.count(reference) == 1
 
 
 def test_render_template_report_missing_data_path_is_explicit_and_audit_compatible() -> None:
