@@ -15,12 +15,12 @@
 | 项目 | 当前状态 |
 |------|----------|
 | 当前分支 | `main` |
-| 当前 gate | `P9 aggregate readiness accepted with reviewer availability blocker` |
-| 下一 entry point | `P9 aggregate deepreview（blocked on AgentDS/AgentGLM availability or user risk exception）` |
+| 当前 gate | `P9 aggregate deepreview accepted` |
+| 下一 entry point | `post-P9 follow-up planning` |
 | 设计真源 | `docs/design.md`，已按 `docs/design-update.md` reconciliation 收口 |
 | 近期设计裁决 | `docs/reviews/design-update-reconciliation-20260521.md`、`docs/reviews/implementation-control-update-reconciliation-20260521.md` |
 | P8 交付物 | `must_answer` audit routing、renderer `preferred_lens` deterministic application、source fallback taxonomy |
-| 当前残余风险 | P9 aggregate review coverage、repo hygiene、control doc hygiene |
+| 当前残余风险 | repo hygiene、control doc hygiene |
 
 当前控制文档仍是 phaseflow 的总控真源：详细 gate、artifact、review、commit、验证和 residual risk 记录保留在后文，不用摘要替代。`docs/implementation-control-update.md` 仅作为摘要候选输入；经 reconciliation 后只融合稳定 summary，不替换本文件。
 
@@ -37,7 +37,7 @@
 | P6 | 模板契约机器化（CHAPTER_CONTRACT / ITEM_RULE） | Post-P5 | ✅ done | P5 |
 | P7 | 年报来源迁移（EID 主源 + Eastmoney fallback） | Post-P6 | ✅ done | P6 |
 | P8 | 模板契约与来源策略加固（must_answer audit / preferred_lens / source fallback） | Post-P7 | ✅ done | P7 |
-| P9 | Analyze 产品契约加固（用户最小输入 + dev override 分离） | Post-P8 | 🟡 in progress | P8 |
+| P9 | Analyze 产品契约加固（用户最小输入 + dev override 分离） | Post-P8 | ✅ done | P8 |
 
 ### 1.1.1 能力域摘要
 
@@ -61,7 +61,7 @@
 | Repo hygiene | LICENSE、CI、`.gitignore`、默认路径配置需单独 slice | post-P8 planning |
 | Dependency strategy | Dayu 裁决为方法论参考，生产依赖移除；后续 runtime 能力必须项目内化 | closed by 2026-05-21 reconciliation |
 | Quality gate ROI | P9-S2 已接受：区分 gate not-run 与 correctness coverage gap；精选池成员缺 strict golden 覆盖输出 FQ0/info | closed by P9-S2 |
-| P9 aggregate review coverage | P9-S2 缺独立 Agent code review artifact；下一 gate 用 P9 aggregate readiness/deepreview 补偿验证 | P9 aggregate |
+| P9 aggregate review coverage | P9 aggregate deepreview 已接受；AgentDS 独立 PASS，AgentMiMo 补充 PASS 但记录 P9-S2 reviewer limitation | closed by P9 aggregate |
 | Control doc hygiene | 可读性需提升，但不能丢失 phaseflow recovery 证据 | 后续文档治理 slice |
 
 ### 1.2 里程碑
@@ -76,8 +76,8 @@
 ### 1.3 当前 Gate 与基线裁决（2026-05-21）
 
 - 当前分支：`main`
-- 当前 gate：`P9 aggregate readiness accepted with reviewer availability blocker`
-- 下一 gate：`P9 aggregate deepreview（blocked on AgentDS/AgentGLM availability or user risk exception）`
+- 当前 gate：`P9 aggregate deepreview accepted`
+- 下一 gate：`post-P9 follow-up planning`
 - Repo findings 收口：003（QDII basis 记录并发指数证据）已修复；005（CSV ValueError/FNFE 分离）已修复；006（alpha 空 observations MVP 注释）已文档化；004/008/009/010 低严重度保持 deferred。
 - P4 执行控制文档：`docs/implementation-control-p4.md`
 - 当前裁决：
@@ -100,6 +100,7 @@
   - P9-S2 implementation/code review 已接受，implementation commit=`ce603a0`，implementation artifact=`docs/reviews/p9-s2-implementation-20260521.md`，controller judgment=`docs/reviews/p9-s2-code-review-controller-judgment-20260521.md`。实现校准 quality gate 与 strict golden coverage 边界：`CorrectnessSummary.status` 保持 `available/unavailable`，新增 `coverage_scope` / `coverage_reason` / covered-missing fund codes / `coverage_required=false`；精选池成员缺 strict golden 覆盖或无可比字段输出带 metadata 的 `FQ0/info`，不再等同 `gate_not_run`；explicit correctness mismatch 仍为 `FQ1/block`；unknown unavailable coverage metadata fail closed；CLI 输出 fund-scoped `quality_gate_info` 且不改变退出码。当前验证 targeted `78 passed`、full suite `377 passed`、ruff passed、diff check passed。独立 Agent code review 未产出 durable artifact：AgentDS pane 卡在 compacting，AgentGLM 401，AgentCodex/AgentMiMo 参与实现不适合作为独立 reviewer；该 review limitation 已记录在 controller judgment。当前 gate 为 `P9-S2 accepted`，下一 gate 为 `post-P9-S2 follow-up planning`。
   - Post-P9-S2 follow-up planning 已接受，artifact=`docs/reviews/post-p9-s2-follow-up-planning-20260521.md`。P9-S1/P9-S2 已分别关闭 product analyze 最小输入/dev override 分离和 quality gate/golden coverage 校准；不再启动新的 P9 功能 slice。下一步为 `P9 aggregate readiness reconciliation`，随后进入 P9 aggregate deepreview；P9-S2 缺独立 Agent code review artifact 的限制必须作为 aggregate review 输入风险。
   - P9 aggregate readiness reconciliation 已接受，artifact=`docs/reviews/p9-aggregate-readiness-reconciliation-20260521.md`。P9 功能态已可进入 aggregate deepreview，但 reviewer availability 阻塞：AgentDS pane 在 P9-S2 review compacting 后未产出 artifact，AgentGLM 401，AgentCodex/AgentMiMo 参与 P9-S2 implementation 不适合作为独立 P9-S2 reviewer。下一步必须先恢复 AgentDS/AgentGLM 并取得两份独立 aggregate review，或由用户明确接受单 reviewer / controller-only 风险例外。
+  - P9 aggregate deepreview 已接受，controller judgment=`docs/reviews/p9-aggregate-deepreview-controller-judgment-20260521.md`，review artifacts=`docs/reviews/p9-aggregate-deepreview-ds-20260521.md`,`docs/reviews/p9-aggregate-deepreview-mimo-20260521.md`。AgentDS 独立 aggregate review 为 `PASS`；AgentMiMo 补充 review 为 `PASS`，但因参与 P9-S2 implementation 仍记录 reviewer limitation。Controller 复核后拒绝 DS 的 README `coverage_scope` LOW finding（当前 README 已包含 `no_comparable_fields`），拒绝 MiMo 的 `AuditRuleCode` C2 info finding（真实 `AuditRuleCode` 已包含 `C2`）。P9 无阻断 finding，当前 gate 为 `P9 aggregate deepreview accepted`，下一 gate 为 `post-P9 follow-up planning`。
   - Agent routing 补充：Procodex / AgentCodex 为 planning / implementation 首选；如遇网络或环境问题，AgentMiMo 可作为替补。但 MiMo 若参与某 slice 的 planning / implementation，则不得担任同 slice 独立 reviewer，应改用 AgentDS + AgentGLM。
   - P0 维持 `done`。历史上曾验证 `dayu` 依赖可导入；2026-05-21 架构裁决改为不保留外部 Dayu 生产依赖，相关 Host/Engine/tool-loop 能力如后续需要必须在项目内化实现。当前 `fund-agent` 处于 editable install，`fund-analysis --help` 可用，样本基金 `110011` 年报可下载，`pdfplumber` 可提取全文文本和表格。
   - P1 已完成并通过 aggregate review。
@@ -1455,3 +1456,4 @@ P0（环境搭建）
 | 2026-05-21 | P9-S2 implementation/code review | ✅ accepted with review limitation | implementation commit=`ce603a0`；implementation artifact=`docs/reviews/p9-s2-implementation-20260521.md`；controller judgment=`docs/reviews/p9-s2-code-review-controller-judgment-20260521.md`；实现将 strict golden coverage absence 校准为 `FQ0/info` 而非 `gate_not_run`，保留 mismatch `FQ1/block`，并补齐 unavailable coverage metadata fail-closed 测试；当前验证 targeted `78 passed`、full suite `377 passed`、ruff passed、diff check passed；独立 Agent code review artifact 未产出，原因已记录为 DS compacting 卡住、GLM 401、Codex/MiMo 参与实现；当前 gate 为 `P9-S2 accepted`，下一 gate 为 `post-P9-S2 follow-up planning` |
 | 2026-05-21 | post-P9-S2 follow-up planning | ✅ accepted | artifact=`docs/reviews/post-p9-s2-follow-up-planning-20260521.md`；P9-S1/P9-S2 已关闭产品契约核心缺口；不再开新 P9 功能 slice，下一步进入 P9 aggregate readiness/deepreview；P9-S2 review limitation 作为 aggregate risk 输入；当前 gate 为 `post-P9-S2 follow-up planning accepted`，下一 gate 为 `P9 aggregate readiness reconciliation` |
 | 2026-05-21 | P9 aggregate readiness reconciliation | 🟡 ready but blocked | artifact=`docs/reviews/p9-aggregate-readiness-reconciliation-20260521.md`；P9 功能态可进入 aggregate deepreview，但 reviewer availability 阻塞：AgentDS 未产出 durable review artifact，AgentGLM 401，AgentCodex/AgentMiMo 参与实现；下一步需恢复 AgentDS/AgentGLM 或用户接受单 reviewer / controller-only 风险例外 |
+| 2026-05-21 | P9 aggregate deepreview | ✅ accepted | controller judgment=`docs/reviews/p9-aggregate-deepreview-controller-judgment-20260521.md`；AgentDS review=`docs/reviews/p9-aggregate-deepreview-ds-20260521.md` 为独立 PASS；AgentMiMo review=`docs/reviews/p9-aggregate-deepreview-mimo-20260521.md` 为 PASS with reviewer limitation；controller 拒绝两个非阻断 finding（README 已含 `no_comparable_fields`，`AuditRuleCode` 已含 `C2`）；当前 gate 为 `P9 aggregate deepreview accepted`，下一 gate 为 `post-P9 follow-up planning` |
