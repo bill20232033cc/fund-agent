@@ -12,7 +12,12 @@ from fund_agent.fund.analysis import (
 )
 from fund_agent.fund.data.nav_data import NavDataResult
 from fund_agent.fund.data_extractor import StructuredFundDataBundle
-from fund_agent.fund.extractors.models import EvidenceAnchor, ExtractedField
+from fund_agent.fund.extractors.models import (
+    EvidenceAnchor,
+    ExtractedField,
+    IndexProfileValue,
+    TrackingErrorValue,
+)
 
 
 def _anchor(section_id: str, row_locator: str) -> EvidenceAnchor:
@@ -92,12 +97,25 @@ def _bundle(
     """
 
     placeholder = _field({}, section_id="§1", row_locator="placeholder")
+    missing_index_profile: ExtractedField[IndexProfileValue] = ExtractedField(
+        value=None,
+        anchors=(),
+        extraction_mode="missing",
+        note="fixture",
+    )
+    missing_tracking_error: ExtractedField[TrackingErrorValue] = ExtractedField(
+        value=None,
+        anchors=(),
+        extraction_mode="missing",
+        note="fixture",
+    )
     return StructuredFundDataBundle(
         fund_code="110011",
         report_year=2024,
         basic_identity=placeholder,
         product_profile=placeholder,
         benchmark=placeholder,
+        index_profile=missing_index_profile,
         fee_schedule=_field(fee_value, section_id="§2", row_locator="fee_schedule")
         if fee_value is not None
         else _field(None, section_id="§2", row_locator="fee_schedule", mode="missing"),
@@ -112,6 +130,7 @@ def _bundle(
         if nav_benchmark_value is not None
         else _field(None, section_id="§3", row_locator="nav_benchmark_performance", mode="missing"),
         investor_return=placeholder,
+        tracking_error=missing_tracking_error,
         share_change=placeholder,
         manager_alignment=placeholder,
         manager_strategy_text=placeholder,

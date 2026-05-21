@@ -4,15 +4,16 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from typing import Final
+from typing import Final, Literal
 
 from fund_agent.fund.documents.models import ParsedAnnualReport, ParsedTable
 from fund_agent.fund.extractors.models import (
     EvidenceAnchor,
     ExtractedField,
+    IndexProfileValue,
     ProfileExtractionResult,
 )
-from fund_agent.fund.fund_type import FundTypeClassification, classify_fund_type
+from fund_agent.fund.fund_type import FundType, FundTypeClassification, classify_fund_type
 
 _FIELD_PATTERNS: Final[dict[str, tuple[tuple[str, tuple[str, ...]], ...]]] = {
     "fund_name": (
@@ -67,6 +68,13 @@ _TABLE_FIELD_LABELS: Final[dict[str, tuple[str, ...]]] = {
     "custody_fee": ("托管费率", "托管费"),
 }
 _SECTION_TWO_TABLE_MIN_PAGE: Final[int] = 1
+_INDEX_APPLICABLE_FUND_TYPES: Final[frozenset[FundType]] = frozenset(
+    ("index_fund", "enhanced_index")
+)
+_COMPOSITE_BENCHMARK_SEPARATORS: Final[tuple[str, ...]] = ("＋", "+", "×", "*", "和", "及")
+_INDEX_NAME_PATTERN: Final[re.Pattern[str]] = re.compile(
+    r"(?P<name>[\u4e00-\u9fa5A-Za-z0-9]+(?:指数|Index|ETF))"
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -470,6 +478,176 @@ def _build_fee_schedule(report: ParsedAnnualReport) -> ExtractedField[dict[str, 
     )
 
 
+def _build_index_profile(
+    classification: FundTypeClassification,
+    benchmark: ExtractedField[dict[str, object]],
+) -> ExtractedField[IndexProfileValue]:
+    """构造指数画像字段，见模板第 1 章指数编制规则与成分股。
+
+    Args:
+        classification: 已完成的基金类型识别结果。
+        benchmark: 业绩比较基准字段。
+
+    Returns:
+        指数画像字段；非指数基金返回 `missing`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    fund_type = classification.classified_fund_type
+    if fund_type not in _INDEX_APPLICABLE_FUND_TYPES:
+        return ExtractedField(
+            value=None,
+            anchors=(),
+            extraction_mode="missing",
+            note="非指数基金不适用指数画像",
+        )
+    benchmark_text = _benchmark_text(benchmark)
+    if benchmark_text is None:
+        return ExtractedField(
+            value=IndexProfileValue(
+                benchmark_text=None,
+                benchmark_identity_status="missing",
+                benchmark_index_name=None,
+                benchmark_index_code=None,
+                benchmark_component_text=(),
+                methodology_availability="missing",
+                methodology_summary=None,
+                methodology_source_title=None,
+                constituents_availability="missing",
+                constituents_summary=None,
+                constituents_as_of_date=None,
+                source_tier="missing",
+                missing_reasons=("benchmark_missing",),
+            ),
+            anchors=(),
+            extraction_mode="missing",
+            note="指数基金未披露业绩比较基准，无法形成指数画像",
+        )
+    components = _benchmark_components(benchmark_text)
+    identity_status = _benchmark_identity_status(benchmark_text, components)
+    index_name = _benchmark_index_name(benchmark_text, identity_status)
+    return ExtractedField(
+        value=IndexProfileValue(
+            benchmark_text=benchmark_text,
+            benchmark_identity_status=identity_status,
+            benchmark_index_name=index_name,
+            benchmark_index_code=None,
+            benchmark_component_text=components,
+            methodology_availability="benchmark_only",
+            methodology_summary=None,
+            methodology_source_title=None,
+            constituents_availability="benchmark_only",
+            constituents_summary=None,
+            constituents_as_of_date=None,
+            source_tier="benchmark_context",
+            missing_reasons=("methodology_not_directly_disclosed", "constituents_not_directly_disclosed"),
+        ),
+        anchors=benchmark.anchors,
+        extraction_mode="direct",
+        note="仅业绩比较基准上下文；不得作为指数编制方法或成分股证据。",
+    )
+
+
+def _benchmark_text(benchmark: ExtractedField[dict[str, object]]) -> str | None:
+    """读取业绩比较基准文本。
+
+    Args:
+        benchmark: 业绩比较基准字段。
+
+    Returns:
+        非空基准文本；缺失时返回 `None`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if benchmark.value is None:
+        return None
+    value = benchmark.value.get("benchmark_text") or benchmark.value.get("benchmark")
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
+
+
+def _benchmark_components(benchmark_text: str) -> tuple[str, ...]:
+    """拆分复合业绩比较基准文本。
+
+    Args:
+        benchmark_text: 年报披露的业绩比较基准。
+
+    Returns:
+        基准组成文本；非复合时返回空元组。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if not any(separator in benchmark_text for separator in _COMPOSITE_BENCHMARK_SEPARATORS):
+        return ()
+    components = tuple(
+        part.strip()
+        for part in re.split(r"[＋+×*]|和|及", benchmark_text)
+        if part.strip()
+    )
+    return components or (benchmark_text,)
+
+
+def _benchmark_identity_status(
+    benchmark_text: str,
+    components: tuple[str, ...],
+) -> Literal["identified", "composite", "ambiguous", "missing"]:
+    """判断基准身份状态。
+
+    Args:
+        benchmark_text: 年报披露的业绩比较基准。
+        components: 复合基准组成文本。
+
+    Returns:
+        `identified`、`composite`、`ambiguous` 或 `missing`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if not benchmark_text.strip():
+        return "missing"
+    if len(components) > 1 or (
+        components and any(keyword in benchmark_text for keyword in ("存款", "债券", "中债"))
+    ):
+        return "composite"
+    if "或" in benchmark_text:
+        return "ambiguous"
+    return "identified"
+
+
+def _benchmark_index_name(
+    benchmark_text: str,
+    identity_status: Literal["identified", "composite", "ambiguous", "missing"],
+) -> str | None:
+    """从基准文本中提取可确定的指数名称。
+
+    Args:
+        benchmark_text: 年报披露的业绩比较基准。
+        identity_status: 基准身份状态。
+
+    Returns:
+        单一可确定指数名称；复合或模糊时返回 `None`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if identity_status != "identified":
+        return None
+    match = _INDEX_NAME_PATTERN.search(benchmark_text)
+    if match is None:
+        return None
+    return match.group("name")
+
+
 def extract_profile(report: ParsedAnnualReport) -> ProfileExtractionResult:
     """抽取基础画像与基金类型识别结果。
 
@@ -484,9 +662,11 @@ def extract_profile(report: ParsedAnnualReport) -> ProfileExtractionResult:
     """
 
     classification = classify_fund_type(report)
+    benchmark = _build_benchmark(report)
     return ProfileExtractionResult(
         basic_identity=_build_basic_identity(report, classification),
         product_profile=_build_product_profile(report),
-        benchmark=_build_benchmark(report),
+        benchmark=benchmark,
+        index_profile=_build_index_profile(classification, benchmark),
         fee_schedule=_build_fee_schedule(report),
     )

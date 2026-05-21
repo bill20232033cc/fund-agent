@@ -20,10 +20,12 @@ _MATRIX_FIELD_NAMES: tuple[str, ...] = (
     "basic_identity",
     "product_profile",
     "benchmark",
+    "index_profile",
     "fee_schedule",
     "turnover_rate",
     "nav_benchmark_performance",
     "investor_return",
+    "tracking_error",
     "share_change",
     "manager_alignment",
     "manager_strategy_text",
@@ -150,6 +152,7 @@ def _build_report(fund_code: str, fund_category: str) -> ParsedAnnualReport:
             "基金份额净值增长率：12.34%",
             "业绩比较基准收益率：10.01%",
             "加权平均投资者收益率：8.88%",
+            "报告期年化跟踪误差：1.23%",
             "§4 管理人报告",
             "投资策略：本基金报告期内保持均衡配置。",
             "风格定位：均衡偏价值。",
@@ -234,8 +237,8 @@ def _assert_bundle_shape(bundle: StructuredFundDataBundle) -> None:
 
 
 @pytest.mark.asyncio
-async def test_p1_sample_matrix_outputs_at_least_33_of_36_fields() -> None:
-    """验证 3 只样本基金的 12 项矩阵至少 33/36 通过。
+async def test_p1_sample_matrix_outputs_applicable_fields_without_source_leakage() -> None:
+    """验证 3 只样本基金的结构化矩阵保持可用且不越过注入边界。
 
     Args:
         无。
@@ -268,8 +271,11 @@ async def test_p1_sample_matrix_outputs_at_least_33_of_36_fields() -> None:
             if extracted_field.extraction_mode in {"direct", "estimated", "derived"}:
                 passed_cells += 1
 
-    assert passed_cells >= 33
-    assert passed_cells == 36
+    assert passed_cells == 38
+    bundles_by_code = {bundle.fund_code: bundle for bundle in bundles}
+    assert bundles_by_code["510300"].tracking_error.extraction_mode == "direct"
+    assert bundles_by_code["110011"].tracking_error.extraction_mode == "missing"
+    assert bundles_by_code["000171"].tracking_error.extraction_mode == "missing"
     assert repository.calls == [
         ("110011", 2024, True),
         ("510300", 2024, True),

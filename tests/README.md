@@ -11,11 +11,11 @@ CI 当前固定 Python 3.11，使用 `uv sync --extra dev --frozen` 安装锁定
 - `tests/fund/documents/test_cache.py`：文档缓存最小闭环测试，覆盖 PDF 元信息缓存、source metadata JSON、损坏来源元数据降级、parsed report 物化、损坏 parsed payload 回退未命中、legacy metadata 兼容和缓存失效回退
 - `tests/fund/pdf/test_downloader.py`：PDF 下载 helper 测试，验证内部缓存命中、损坏缓存刷新、非 PDF 响应拒绝、强制刷新下载和年报 URL 组装
 - `tests/fund/pdf/test_parser.py`：章节定位测试，覆盖 `§3` 正文命中、目录误判回归和偏移单调递增
-- `tests/fund/extractors/test_profile.py`：基础画像 extractor 测试，覆盖分类先行、`classified_fund_type` / `classification_basis` 稳定输出，以及费率/基准/规模/经理 anchor
-- `tests/fund/extractors/test_performance.py`：`§3` 表现 extractor 测试，覆盖冒号行与年度表现表中的净值增长率/基准收益率 anchor，以及投资者收益率 `direct / estimated / missing` 三态
+- `tests/fund/extractors/test_profile.py`：基础画像 extractor 测试，覆盖分类先行、`classified_fund_type` / `classification_basis` 稳定输出、纯指数/指数增强/非指数 `index_profile`，以及费率/基准/规模/经理 anchor
+- `tests/fund/extractors/test_performance.py`：`§3` 表现 extractor 测试，覆盖冒号行与年度表现表中的净值增长率/基准收益率 anchor、投资者收益率 `direct / estimated / missing` 三态，以及跟踪误差直接披露、目标值、模糊文本和标准差误用防护
 - `tests/fund/extractors/test_manager_ownership.py`：`§4/§8/§9` 管理人/持有人 extractor 测试，覆盖编号标题策略文本、换手率、持有披露表、跨页持有人结构和 `missing` 路径
 - `tests/fund/extractors/test_holdings_share_change.py`：`§8/§10` 持仓/份额 extractor 测试，覆盖前十大重仓、行业分布、净变动表、申购/赎回拆分表、多份额列选择、非 A 份额不默认 A 类、歧义多列表 missing、利润变动表误命中回归和表格型 anchor
-- `tests/fund/test_extraction_snapshot.py`：P4-S1/P5-S3 精选基金池字段级抽取快照测试，覆盖 CSV 校验、snapshot schema、`comparable_values` 白名单子字段、summary 重复代码标红、单基金失败继续和 `004393` known failure 捕获；使用 fake extractor，不触发真实网络或 PDF
+- `tests/fund/test_extraction_snapshot.py`：P4-S1/P5-S3/P13 精选基金池字段级抽取快照测试，覆盖 CSV 校验、snapshot schema、`comparable_values` 白名单子字段、`index_profile` / `tracking_error` observability 不进 comparable 分母、summary 重复代码标红、单基金失败继续和 `004393` known failure 捕获；使用 fake extractor，不触发真实网络或 PDF
 - `tests/fund/test_extraction_score.py`：P4-S2/P4-R10/P5-S2/P5-S3/P5-S4/P6-S5/P9-S2 字段级评分测试，覆盖 snapshot JSONL coverage / traceability / status / priority 映射、单基金质量汇总、`fund_quality` 模板契约适用性派生、`failed_funds` accounting、score 输出、最小 golden set 选择、correctness perfect match、mismatch、白名单缺失、旧 snapshot 兼容、skipped 分母处理和 golden coverage scope；不触发真实网络或 PDF
 - `tests/fund/test_golden_prefill.py`：correctness golden answer 预填底稿测试，覆盖模板基金代码识别、字段预填、证据 source 和跳过字段保留；使用 fake extractor，不触发真实网络或 PDF
 - `tests/fund/test_golden_answer.py`：人工审核后的 golden answer Markdown 转 JSON 与 strict JSON loader 测试，覆盖 strict 校验、跳过字段、转义竖线和机器可读 JSON 输出；不触发真实网络或 PDF
@@ -28,14 +28,14 @@ CI 当前固定 Python 3.11，使用 `uv sync --extra dev --frozen` 安装锁定
 - `tests/fund/analysis/test_alpha_judge.py`：超额收益性质判断测试，覆盖结构性、部分结构性、阶段性、不适用、样本不足和显式环境输入要求
 - `tests/fund/analysis/test_consistency_check.py`：言行一致性检验测试，覆盖 4 维度信号、红灯冲突和显式实际风格/仓位输入要求
 - `tests/fund/analysis/test_investor_return.py`：投资者获得感分析测试，覆盖行为损益、投资者收益缺失、追涨/抄底资金流向和份额字段缺失
-- `tests/fund/analysis/test_risk_check.py`：否决项检查与压力测试，覆盖清盘风险、基金经理任期、风格漂移、费率远超同类、指数跟踪误差、显式输入缺失、`-20%/-40%/-60%` 场景和基金类型阈值
+- `tests/fund/analysis/test_risk_check.py`：否决项检查与压力测试，覆盖清盘风险、基金经理任期、风格漂移、费率远超同类、指数跟踪误差 resolved authority、开发覆盖 fallback、QDII 不适用、显式输入缺失、`-20%/-40%/-60%` 场景和基金类型阈值
 - `tests/fund/analysis/test_checklist.py`：买入前检查清单测试，覆盖 7 问题顺序、红黄绿灰汇总、缺失显式输入、估值状态、资金期限阈值和异常否决项输入
 - `tests/fund/analysis/test_final_judgment.py`：最终判断派生策略测试，覆盖否决项、检查清单红灯、压力测试、quality gate block/not_run、黄灯/灰灯/数据不足、全绿值得持有、原因去重和 developer override 冲突记录
-- `tests/fund/audit/test_audit_programmatic.py`：程序审计测试，覆盖 P1/P2/P3/C2/L1/R1/R2 规则、每章最小证据行、required_output_items marker、must_not_cover 禁止 marker、ITEM_RULE 渲染/删除合规、章节切分 fallback、必需输入缺失、selected/derived/source 最终判断冲突、故意注入错误和未知检查清单信号
+- `tests/fund/audit/test_audit_programmatic.py`：程序审计测试，覆盖 P1/P2/P3/C2/L1/R1/R2 规则、每章最小证据行、required_output_items marker、must_not_cover 禁止 marker、ITEM_RULE 渲染/删除合规、跟踪误差和指数画像 deterministic source guard、章节切分 fallback、必需输入缺失、selected/derived/source 最终判断冲突、故意注入错误和未知检查清单信号
 - `tests/fund/template/test_contracts.py`：模板 CHAPTER_CONTRACT manifest 测试，覆盖 0-7 章完整性、设计标题、必需字段非空、所有标准基金类型 preferred_lens 解析和 fail-closed 校验
 - `tests/fund/template/test_lens_application.py`：preferred_lens 应用计划测试，覆盖所有标准基金类型 8 章 plan、default fallback 标记，以及非法基金类型、空章节、重复章节和越界章节 fail-closed
 - `tests/fund/template/test_item_rules.py`：模板 ITEM_RULE manifest 测试，覆盖四条 conditional 规则、源文案 fidelity、optional schema fixture、显式 facet/fund type 冲突 fail-closed 和唯一段落标记检查
-- `tests/fund/template/test_renderer.py`：模板渲染器测试，覆盖 8 章完整性、CHAPTER_CONTRACT 标题来源、渲染章节块、splitter fail-closed、正文与附录证据锚点格式、缺证章节显式输出、页码保留、非年报来源标注、preferred_lens 第 0/1 章确定性应用、ITEM_RULE 六类基金渲染/删除矩阵、ITEM_RULE 多锚点证据边界、程序审计输入兼容、缺失数据显式渲染、最终判断边界、禁用交易措辞和 README 同步
+- `tests/fund/template/test_renderer.py`：模板渲染器测试，覆盖 8 章完整性、CHAPTER_CONTRACT 标题来源、渲染章节块、splitter fail-closed、正文与附录证据锚点格式、缺证章节显式输出、页码保留、非年报来源标注、preferred_lens 第 0/1 章确定性应用、ITEM_RULE 六类基金渲染/删除矩阵、跟踪误差 structured_data 替换、benchmark-only 编制方法/成分股不足边界、ITEM_RULE 多锚点证据边界、程序审计输入兼容、缺失数据显式渲染、最终判断边界、禁用交易措辞和 README 同步
 - `tests/services/test_fund_analysis_service.py`：Service 编排测试，使用 fake extractor 避免网络/PDF 下载，覆盖 product mode 最小请求、developer override nested 契约、结构化抽取到渲染和程序审计的完整调用路径、fund_code 入口校验、quality gate `off / warn / block / not-run` 路径、结构化阻断异常、默认 gate run id 不覆盖，并验证不含 PDF 下载的单只基金分析低于 30 秒
 - `tests/services/test_extraction_score_service.py`：P4-S2/P5-S4 评分 Service 测试，覆盖显式参数转发、`errors_path` 转发、非法 snapshot 路径和非法 errors 路径拒绝
 - `tests/services/test_thermometer_service.py`：温度计 Service 测试，覆盖注入 fake adapter、显式 cache_dir/force_refresh 转发和非法缓存路径拒绝；不触发真实网络

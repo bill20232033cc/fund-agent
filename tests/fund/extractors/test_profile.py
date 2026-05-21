@@ -175,6 +175,13 @@ def test_extract_profile_classifies_before_general_field_builders(
         call_order.append("benchmark")
         return _dummy_field()
 
+    def _fake_build_index_profile(
+        _classification: FundTypeClassification,
+        _benchmark: ExtractedField[dict[str, object]],
+    ) -> ExtractedField[object]:
+        call_order.append("index_profile")
+        return ExtractedField(value=None, anchors=(), extraction_mode="missing", note="fixture")
+
     def _fake_build_fee_schedule(_report: ParsedAnnualReport) -> ExtractedField[dict[str, object]]:
         call_order.append("fee")
         return _dummy_field()
@@ -183,12 +190,13 @@ def test_extract_profile_classifies_before_general_field_builders(
     monkeypatch.setattr(profile_module, "_build_basic_identity", _fake_build_basic_identity)
     monkeypatch.setattr(profile_module, "_build_product_profile", _fake_build_product_profile)
     monkeypatch.setattr(profile_module, "_build_benchmark", _fake_build_benchmark)
+    monkeypatch.setattr(profile_module, "_build_index_profile", _fake_build_index_profile)
     monkeypatch.setattr(profile_module, "_build_fee_schedule", _fake_build_fee_schedule)
 
     result = extract_profile(report)
 
     assert isinstance(result, ProfileExtractionResult)
-    assert call_order == ["classify", "basic", "product", "benchmark", "fee"]
+    assert call_order == ["classify", "benchmark", "basic", "product", "index_profile", "fee"]
 
 
 def test_extract_profile_outputs_classification_basis_and_anchors_for_active_fund() -> None:
@@ -254,6 +262,131 @@ def test_extract_profile_classifies_multiple_fund_types_without_code_special_cas
     assert result.basic_identity.value is not None
     assert result.basic_identity.value["classified_fund_type"] == expected_type
     assert result.basic_identity.value["classification_basis"]
+
+
+def test_extract_profile_builds_pure_index_profile_from_benchmark_context() -> None:
+    """验证纯指数基金生成 Tier 1 指数画像但不声称编制方法或成分股。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当指数画像层级或证据边界不符合预期时抛出。
+    """
+
+    report = _build_report_from_fixture("index_fund_profile.txt", "510300")
+
+    result = extract_profile(report)
+
+    assert result.basic_identity.value is not None
+    assert result.basic_identity.value["classified_fund_type"] == "index_fund"
+    assert result.index_profile.extraction_mode == "direct"
+    assert result.index_profile.value is not None
+    assert result.index_profile.value.benchmark_text == "沪深300指数收益率"
+    assert result.index_profile.value.benchmark_identity_status == "identified"
+    assert result.index_profile.value.benchmark_index_name == "沪深300指数"
+    assert result.index_profile.value.methodology_availability == "benchmark_only"
+    assert result.index_profile.value.constituents_availability == "benchmark_only"
+    assert result.index_profile.anchors == result.benchmark.anchors
+
+
+def test_extract_profile_builds_composite_index_profile_for_enhanced_index() -> None:
+    """验证指数增强复合基准保留 composite 状态。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当复合基准被静默压成单一指数时抛出。
+    """
+
+    report = _build_report_from_fixture("index_enhanced_profile.txt", "161725")
+
+    result = extract_profile(report)
+
+    assert result.basic_identity.value is not None
+    assert result.basic_identity.value["classified_fund_type"] == "enhanced_index"
+    assert result.index_profile.value is not None
+    assert result.index_profile.value.benchmark_identity_status == "composite"
+    assert result.index_profile.value.benchmark_index_name is None
+    assert result.index_profile.value.benchmark_component_text
+
+
+def test_extract_profile_splits_composite_benchmark_with_chinese_and_multiply_separators() -> None:
+    """验证复合基准拆分覆盖 `和` 与 `×` 分隔符。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当复合基准被误判为单一指数时抛出。
+    """
+
+    report = _build_table_profile_report(
+        "510311",
+        ParsedTable(
+            page_number=5,
+            table_index=0,
+            headers=("基金名称", "示例沪深300指数证券投资基金"),
+            rows=(("基金简称", "示例沪深300指数A"), ("基金主代码", "510311")),
+        ),
+        ParsedTable(
+            page_number=5,
+            table_index=1,
+            headers=("投资目标", "紧密跟踪标的指数表现。"),
+            rows=(
+                ("投资范围", "投资于沪深300指数及中证500指数成份股。"),
+                ("投资策略", "采用完全复制法跟踪标的指数。"),
+                ("业绩比较基准", "沪深300指数收益率×80%和中证500指数收益率×20%"),
+            ),
+        ),
+    )
+
+    result = extract_profile(report)
+
+    assert result.basic_identity.value is not None
+    assert result.basic_identity.value["classified_fund_type"] == "index_fund"
+    assert result.index_profile.value is not None
+    assert result.index_profile.value.benchmark_identity_status == "composite"
+    assert result.index_profile.value.benchmark_index_name is None
+    assert result.index_profile.value.benchmark_component_text == (
+        "沪深300指数收益率",
+        "80%",
+        "中证500指数收益率",
+        "20%",
+    )
+
+
+def test_extract_profile_marks_non_index_profile_missing() -> None:
+    """验证非指数基金显式返回不适用的指数画像字段。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当非指数基金仍生成指数画像时抛出。
+    """
+
+    report = _build_report_from_fixture("active_fund_profile.txt", "110011")
+
+    result = extract_profile(report)
+
+    assert result.index_profile.extraction_mode == "missing"
+    assert result.index_profile.value is None
+    assert result.index_profile.anchors == ()
+    assert result.index_profile.note == "非指数基金不适用指数画像"
 
 
 def test_extract_profile_reads_real_section_two_key_value_tables() -> None:

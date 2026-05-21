@@ -10,10 +10,17 @@ from fund_agent.fund.documents import FundDocumentRepository
 from fund_agent.fund.documents.models import ParsedAnnualReport
 from fund_agent.fund.extractors import (
     ExtractedField,
+    IndexProfileValue,
+    TrackingErrorValue,
     extract_holdings_share_change,
     extract_manager_ownership,
     extract_performance,
     extract_profile,
+)
+from fund_agent.fund.fund_type import FundType
+
+_TRACKING_ERROR_APPLICABLE_FUND_TYPES: frozenset[FundType] = frozenset(
+    ("index_fund", "enhanced_index")
 )
 
 
@@ -70,10 +77,12 @@ class StructuredFundDataBundle:
         basic_identity: 基础身份信息。
         product_profile: 产品本质与投资范围摘要。
         benchmark: 业绩比较基准信息。
+        index_profile: 指数画像信息，见模板第 1 章“指数编制规则与成分股”。
         fee_schedule: 费率信息。
         turnover_rate: 年度换手率。
         nav_benchmark_performance: 净值增长率与基准收益率。
         investor_return: 投资者收益率披露或 fallback 状态。
+        tracking_error: 年报直接披露或后续计算的跟踪误差，见模板第 2 章 R=A+B-C。
         share_change: 份额变动。
         manager_alignment: 基金经理/从业人员持有原始披露。
         manager_strategy_text: 管理人报告策略原文。
@@ -87,10 +96,12 @@ class StructuredFundDataBundle:
     basic_identity: ExtractedField[dict[str, object]]
     product_profile: ExtractedField[dict[str, object]]
     benchmark: ExtractedField[dict[str, object]]
+    index_profile: ExtractedField[IndexProfileValue]
     fee_schedule: ExtractedField[dict[str, object]]
     turnover_rate: ExtractedField[dict[str, object]]
     nav_benchmark_performance: ExtractedField[dict[str, object]]
     investor_return: ExtractedField[dict[str, object]]
+    tracking_error: ExtractedField[TrackingErrorValue]
     share_change: ExtractedField[dict[str, object]]
     manager_alignment: ExtractedField[dict[str, object]]
     manager_strategy_text: ExtractedField[dict[str, object]]
@@ -164,10 +175,15 @@ class FundDataExtractor:
             basic_identity=profile_result.basic_identity,
             product_profile=profile_result.product_profile,
             benchmark=profile_result.benchmark,
+            index_profile=profile_result.index_profile,
             fee_schedule=profile_result.fee_schedule,
             turnover_rate=manager_ownership_result.turnover_rate,
             nav_benchmark_performance=performance_result.nav_benchmark_performance,
             investor_return=performance_result.investor_return,
+            tracking_error=_tracking_error_for_fund_type(
+                performance_result.tracking_error,
+                _classified_fund_type(profile_result.basic_identity),
+            ),
             share_change=holdings_share_change_result.share_change,
             manager_alignment=manager_ownership_result.manager_alignment,
             manager_strategy_text=manager_ownership_result.manager_strategy_text,
@@ -175,3 +191,59 @@ class FundDataExtractor:
             holder_structure=manager_ownership_result.holder_structure,
             nav_data=nav_data,
         )
+
+
+def _classified_fund_type(
+    basic_identity: ExtractedField[dict[str, object]],
+) -> FundType | None:
+    """从基础身份字段读取标准基金类型。
+
+    Args:
+        basic_identity: 基础身份字段。
+
+    Returns:
+        标准基金类型；缺失或非法时返回 `None`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if basic_identity.value is None:
+        return None
+    fund_type = basic_identity.value.get("classified_fund_type")
+    if fund_type in _TRACKING_ERROR_APPLICABLE_FUND_TYPES or fund_type in {
+        "active_fund",
+        "bond_fund",
+        "qdii_fund",
+        "fof_fund",
+    }:
+        return fund_type  # type: ignore[return-value]
+    return None
+
+
+def _tracking_error_for_fund_type(
+    tracking_error: ExtractedField[TrackingErrorValue],
+    fund_type: FundType | None,
+) -> ExtractedField[TrackingErrorValue]:
+    """按基金类型裁剪结构化跟踪误差适用性。
+
+    Args:
+        tracking_error: `§3` 直接披露跟踪误差字段。
+        fund_type: 标准基金类型。
+
+    Returns:
+        指数/指数增强基金保留字段；其他基金返回不适用 missing。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if fund_type in _TRACKING_ERROR_APPLICABLE_FUND_TYPES:
+        return tracking_error
+    note = "QDII 基金当前不适用 P13 跟踪误差规则" if fund_type == "qdii_fund" else "非指数基金不适用跟踪误差"
+    return ExtractedField(
+        value=None,
+        anchors=(),
+        extraction_mode="missing",
+        note=note,
+    )

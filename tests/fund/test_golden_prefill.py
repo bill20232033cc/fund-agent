@@ -4,7 +4,12 @@ from __future__ import annotations
 
 from fund_agent.fund.data.nav_data import NavDataResult
 from fund_agent.fund.data_extractor import StructuredFundDataBundle
-from fund_agent.fund.extractors import EvidenceAnchor, ExtractedField
+from fund_agent.fund.extractors import (
+    EvidenceAnchor,
+    ExtractedField,
+    IndexProfileValue,
+    TrackingErrorValue,
+)
 from fund_agent.fund.golden_prefill import run_golden_prefill
 
 
@@ -42,6 +47,18 @@ class _FakeGoldenExtractor:
             note="基金名称：测试基金",
         )
         missing_field = ExtractedField(value=None, anchors=(), extraction_mode="missing", note="fixture")
+        missing_index_profile: ExtractedField[IndexProfileValue] = ExtractedField(
+            value=None,
+            anchors=(),
+            extraction_mode="missing",
+            note="fixture",
+        )
+        missing_tracking_error: ExtractedField[TrackingErrorValue] = ExtractedField(
+            value=None,
+            anchors=(),
+            extraction_mode="missing",
+            note="fixture",
+        )
         return StructuredFundDataBundle(
             fund_code=fund_code,
             report_year=report_year,
@@ -88,9 +105,11 @@ class _FakeGoldenExtractor:
                 extraction_mode="direct",
             ),
             fee_schedule=missing_field,
+            index_profile=missing_index_profile,
             turnover_rate=missing_field,
             nav_benchmark_performance=missing_field,
             investor_return=missing_field,
+            tracking_error=missing_tracking_error,
             share_change=missing_field,
             manager_alignment=missing_field,
             manager_strategy_text=missing_field,

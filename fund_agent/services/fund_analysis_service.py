@@ -29,6 +29,7 @@ from fund_agent.fund.analysis import (
     check_consistency,
     derive_final_judgment,
     judge_alpha_nature,
+    resolve_tracking_error_for_risk,
     run_checklist,
     run_risk_checks,
     run_stress_test,
@@ -374,7 +375,12 @@ class FundAnalysisService:
             fund_type=fund_type,
             manager_tenure_months=resolved_contract.manager_tenure_months,
             peer_fee_median=resolved_contract.peer_fee_median,
-            tracking_error=resolved_contract.tracking_error,
+            tracking_error=resolve_tracking_error_for_risk(
+                tracking_error_field=structured_data.tracking_error,
+                developer_override=resolved_contract.tracking_error,
+                developer_override_enabled=resolved_contract.mode == "developer_override",
+                fund_type=fund_type,
+            ),
         )
         stress_test_result = run_stress_test(
             fund_type=fund_type,

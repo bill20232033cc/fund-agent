@@ -30,10 +30,12 @@ SNAPSHOT_FIELD_ORDER: Final[tuple[tuple[str, str], ...]] = (
     ("profile", "basic_identity"),
     ("profile", "product_profile"),
     ("profile", "benchmark"),
+    ("profile", "index_profile"),
     ("profile", "fee_schedule"),
     ("profile", "classified_fund_type"),
     ("performance", "nav_benchmark_performance"),
     ("performance", "investor_return"),
+    ("performance", "tracking_error"),
     ("manager", "manager_strategy_text"),
     ("manager", "turnover_rate"),
     ("manager", "manager_alignment"),
@@ -486,7 +488,7 @@ def build_snapshot_records(
         source_csv: 输出记录中的 CSV 路径文本。
 
     Returns:
-        14 个 P4-S1 字段级 snapshot 记录。
+        字段级 snapshot 记录；P13 新增指数画像和跟踪误差观测字段，但不进入可比值分母。
 
     Raises:
         无显式抛出。

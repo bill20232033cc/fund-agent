@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from decimal import Decimal
 from pathlib import Path
 
 from fund_agent.fund.documents.models import DocumentKey, ParsedAnnualReport, ParsedTable, ReportSection
@@ -92,6 +93,43 @@ def _build_report_with_tables(tables: tuple[ParsedTable, ...], fund_code: str) -
     )
 
 
+def _build_report_with_text_and_tables(
+    section_text: str,
+    tables: tuple[ParsedTable, ...],
+    fund_code: str,
+) -> ParsedAnnualReport:
+    """构造同时包含 `§3` 正文和表格的年报对象。
+
+    Args:
+        section_text: `§3` 正文。
+        tables: 表格元组。
+        fund_code: 基金代码。
+
+    Returns:
+        构造后的年报对象。
+
+    Raises:
+        无显式抛出。
+    """
+
+    raw_text = f"§3 主要财务指标、基金净值表现及利润分配情况\n{section_text}"
+    return ParsedAnnualReport(
+        key=DocumentKey(fund_code=fund_code, year=2024),
+        raw_text=raw_text,
+        sections={
+            "§3": ReportSection(
+                section_id="§3",
+                title="§3 主要财务指标、基金净值表现及利润分配情况",
+                start_offset=0,
+                end_offset=len(raw_text),
+                matched_rule="fixture",
+                confidence=1.0,
+            ),
+        },
+        tables=tables,
+    )
+
+
 def test_extract_performance_outputs_nav_and_benchmark_with_anchors() -> None:
     """验证 `§3` 能直接提取净值增长率与基准收益率，并带 anchor。
 
@@ -120,6 +158,195 @@ def test_extract_performance_outputs_nav_and_benchmark_with_anchors() -> None:
     assert all(anchor.note is not None for anchor in result.nav_benchmark_performance.anchors)
     anchor_labels = {anchor.row_locator for anchor in result.nav_benchmark_performance.anchors}
     assert {"nav_growth_rate", "benchmark_return_rate"} <= anchor_labels
+
+
+def test_extract_performance_outputs_direct_tracking_error_when_disclosed() -> None:
+    """验证年报直接披露实际跟踪误差时返回结构化字段。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当跟踪误差未被结构化抽取时抛出。
+    """
+
+    report = _build_report_from_fixture("performance_with_tracking_error.txt", "510300")
+
+    result = extract_performance(report)
+
+    assert result.tracking_error.extraction_mode == "direct"
+    assert result.tracking_error.value is not None
+    assert result.tracking_error.value.value == Decimal("0.0123")
+    assert result.tracking_error.value.value_text == "1.23%"
+    assert result.tracking_error.value.period_label == "报告期"
+    assert result.tracking_error.value.annualized is True
+    assert result.tracking_error.value.source_type == "direct_disclosure"
+    assert result.tracking_error.anchors[0].source_kind == "annual_report"
+    assert result.tracking_error.anchors[0].section_id == "§3"
+    assert result.tracking_error.anchors[0].row_locator == "tracking_error"
+
+
+def test_extract_performance_does_not_treat_tracking_error_target_as_observed() -> None:
+    """验证跟踪误差目标或限制文本不会被当作实际值。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当目标值被误抽取为实际跟踪误差时抛出。
+    """
+
+    report = _build_report_from_fixture("performance_with_tracking_error_target_only.txt", "510300")
+
+    result = extract_performance(report)
+
+    assert result.tracking_error.extraction_mode == "missing"
+    assert result.tracking_error.value is None
+    assert result.tracking_error.anchors == ()
+
+
+def test_extract_performance_fails_closed_on_ambiguous_tracking_error_text() -> None:
+    """验证实际值和目标值混杂时返回 ambiguous missing。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当模糊文本未 fail closed 时抛出。
+    """
+
+    report = _build_report_from_fixture("performance_with_tracking_error_ambiguous.txt", "510300")
+
+    result = extract_performance(report)
+
+    assert result.tracking_error.extraction_mode == "missing"
+    assert result.tracking_error.value is None
+    assert result.tracking_error.note == "tracking_error_ambiguous"
+
+
+def test_extract_performance_does_not_use_standard_deviation_as_tracking_error() -> None:
+    """验证净值或基准标准差不会被误认为跟踪误差。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当标准差被误抽取为跟踪误差时抛出。
+    """
+
+    report = _build_report_from_fixture("performance_with_standard_deviation_only.txt", "510300")
+
+    result = extract_performance(report)
+
+    assert result.tracking_error.extraction_mode == "missing"
+    assert result.tracking_error.value is None
+
+
+def test_extract_performance_outputs_tracking_error_from_annual_table() -> None:
+    """验证年报表现表中直接披露跟踪误差时可抽取。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当表格跟踪误差抽取失败时抛出。
+    """
+
+    table = ParsedTable(
+        page_number=9,
+        table_index=1,
+        headers=("阶段", "份额净值增长率①", "业绩比较基准收益率③", "年化跟踪误差"),
+        rows=(("过去一年", "17.32%", "14.45%", "1.11%"),),
+    )
+    report = _build_report_with_tables((table,), "510300")
+
+    result = extract_performance(report)
+
+    assert result.tracking_error.extraction_mode == "direct"
+    assert result.tracking_error.value is not None
+    assert result.tracking_error.value.value == Decimal("0.0111")
+    assert result.tracking_error.value.period_label == "过去一年"
+    assert result.tracking_error.anchors[0].table_id == "page-9-table-1"
+
+
+def test_extract_performance_keeps_table_match_when_text_discloses_same_tracking_error() -> None:
+    """验证正文和表格披露同一跟踪误差时保留表格锚点。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当一致双披露被误判为 ambiguous 时抛出。
+    """
+
+    table = ParsedTable(
+        page_number=9,
+        table_index=1,
+        headers=("阶段", "年化跟踪误差"),
+        rows=(("过去一年", "0.53%"),),
+    )
+    report = _build_report_with_text_and_tables(
+        "报告期年化跟踪误差为 0.53%。",
+        (table,),
+        "510300",
+    )
+
+    result = extract_performance(report)
+
+    assert result.tracking_error.extraction_mode == "direct"
+    assert result.tracking_error.value is not None
+    assert result.tracking_error.value.value == Decimal("0.0053")
+    assert result.tracking_error.anchors[0].table_id == "page-9-table-1"
+
+
+def test_extract_performance_marks_table_text_conflicting_tracking_error_as_ambiguous() -> None:
+    """验证正文和表格跟踪误差不一致时返回 ambiguous。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当冲突披露未 fail closed 时抛出。
+    """
+
+    table = ParsedTable(
+        page_number=9,
+        table_index=1,
+        headers=("阶段", "年化跟踪误差"),
+        rows=(("过去一年", "0.53%"),),
+    )
+    report = _build_report_with_text_and_tables(
+        "报告期年化跟踪误差为 0.71%。",
+        (table,),
+        "510300",
+    )
+
+    result = extract_performance(report)
+
+    assert result.tracking_error.extraction_mode == "missing"
+    assert result.tracking_error.value is None
+    assert result.tracking_error.note == "tracking_error_ambiguous"
 
 
 def test_extract_performance_outputs_nav_and_benchmark_from_annual_table() -> None:

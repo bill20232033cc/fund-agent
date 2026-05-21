@@ -13,7 +13,7 @@ from typing import Final, Literal
 
 from fund_agent.fund.analysis._ratios import parse_ratio
 from fund_agent.fund.analysis.consistency_check import ConsistencyCheckResult
-from fund_agent.fund.extractors.models import EvidenceAnchor, ExtractedField
+from fund_agent.fund.extractors.models import EvidenceAnchor, ExtractedField, TrackingErrorValue
 from fund_agent.fund.fund_type import FundType
 
 RiskCheckCode = Literal[
@@ -27,6 +27,20 @@ RiskCheckStatus = Literal["pass", "watch", "veto", "insufficient_data"]
 StressScenarioCode = Literal["minus_20", "minus_40", "minus_60"]
 StressSeverity = Literal["normal", "extreme", "historical_worst", "beyond_historical"]
 StressCapacityStatus = Literal["within_tolerance", "near_limit", "beyond_tolerance", "not_provided"]
+RiskTrackingErrorSource = Literal[
+    "direct_disclosure",
+    "calculated_from_series",
+    "developer_override",
+    "missing",
+    "not_applicable",
+]
+RiskTrackingErrorAuthority = Literal[
+    "capability_structured_data",
+    "developer_override",
+    "missing",
+    "not_applicable",
+]
+RiskTrackingErrorFieldMode = Literal["direct", "derived", "missing", "not_applicable"]
 
 _LIQUIDATION_THRESHOLD_YUAN: Final[Decimal] = Decimal("50000000")
 _MANAGER_TENURE_MONTHS_THRESHOLD: Final[int] = 6
@@ -108,6 +122,35 @@ class RiskCheckResult:
 
 
 @dataclass(frozen=True, slots=True)
+class ResolvedTrackingErrorForRisk:
+    """风险检查使用的跟踪误差解析结果，见模板第 6 章否决项。
+
+    Attributes:
+        value: 标准化小数比例。
+        value_text: 人类可读数值文本。
+        source_type: 跟踪误差来源类型。
+        authority: 当前风险检查采用的数据权威。
+        field_extraction_mode: Capability 字段抽取模式。
+        anchors: Capability 证据锚点；开发覆盖为空。
+        provenance_note: 来源说明。
+        missing_reason: 缺失原因。
+        conflict_note: 开发覆盖和 Capability 数据冲突说明。
+        is_product_evidence: 是否可作为产品证据。
+    """
+
+    value: Decimal | None
+    value_text: str | None
+    source_type: RiskTrackingErrorSource
+    authority: RiskTrackingErrorAuthority
+    field_extraction_mode: RiskTrackingErrorFieldMode
+    anchors: tuple[EvidenceAnchor, ...]
+    provenance_note: str
+    missing_reason: str | None
+    conflict_note: str | None
+    is_product_evidence: bool
+
+
+@dataclass(frozen=True, slots=True)
 class StressTestRule:
     """压力测试规则配置，见模板第 6 章。
 
@@ -178,7 +221,7 @@ def run_risk_checks(
     fund_type: FundType,
     manager_tenure_months: int | None = None,
     peer_fee_median: Decimal | str | int | float | None = None,
-    tracking_error: Decimal | str | int | float | None = None,
+    tracking_error: ResolvedTrackingErrorForRisk | None = None,
     rule: RiskCheckRule | None = None,
 ) -> RiskCheckResult:
     """执行 5 项否决条件检查，见模板第 6 章。
@@ -190,14 +233,14 @@ def run_risk_checks(
         fund_type: 标准化基金类型。
         manager_tenure_months: 基金经理管理本基金月数，需显式提供。
         peer_fee_median: 同类总费率中位数，需显式提供。
-        tracking_error: 指数基金跟踪误差，需显式提供。
+        tracking_error: 已解析的指数基金跟踪误差风险输入。
         rule: 规则配置。
 
     Returns:
         5 项否决检查汇总结果。
 
     Raises:
-        ValueError: 当显式费率或跟踪误差格式非法时抛出。
+        ValueError: 当显式费率格式非法时抛出。
     """
 
     active_rule = rule or RiskCheckRule()
@@ -206,7 +249,11 @@ def run_risk_checks(
         _check_manager_tenure(manager_tenure_months, active_rule),
         _check_style_drift(consistency_result),
         _check_excessive_fee(fee_schedule, peer_fee_median, active_rule),
-        _check_tracking_error(fund_type, tracking_error, active_rule),
+        _check_tracking_error(
+            fund_type,
+            tracking_error or _missing_tracking_error_for_risk(fund_type),
+            active_rule,
+        ),
     )
     veto_items = tuple(item for item in items if item.status == "veto")
     watch_items = tuple(item for item in items if item.status in {"watch", "insufficient_data"})
@@ -217,6 +264,78 @@ def run_risk_checks(
         veto_items=veto_items,
         watch_items=watch_items,
         next_minimum_verification=_next_minimum_verification(veto_items, watch_items),
+    )
+
+
+def resolve_tracking_error_for_risk(
+    *,
+    tracking_error_field: ExtractedField[TrackingErrorValue],
+    developer_override: Decimal | str | int | float | None,
+    developer_override_enabled: bool,
+    fund_type: FundType,
+) -> ResolvedTrackingErrorForRisk:
+    """解析风险检查的唯一跟踪误差输入，见模板第 6 章否决项。
+
+    Args:
+        tracking_error_field: Fund Capability 结构化跟踪误差字段。
+        developer_override: 开发模式显式覆盖值。
+        developer_override_enabled: 是否允许开发覆盖参与风险检查。
+        fund_type: 标准化基金类型。
+
+    Returns:
+        风险检查消费的解析对象。
+
+    Raises:
+        ValueError: 当开发覆盖格式非法时抛出。
+    """
+
+    if fund_type not in _INDEX_FUND_TYPES:
+        return _not_applicable_tracking_error_for_risk()
+    if (
+        tracking_error_field.extraction_mode in {"direct", "derived"}
+        and tracking_error_field.value is not None
+    ):
+        value = tracking_error_field.value
+        conflict_note = None
+        if developer_override_enabled and developer_override is not None:
+            conflict_note = "结构化跟踪误差优先于开发覆盖；开发覆盖未作为产品证据。"
+        return ResolvedTrackingErrorForRisk(
+            value=value.value,
+            value_text=value.value_text,
+            source_type=value.source_type,
+            authority="capability_structured_data",
+            field_extraction_mode=tracking_error_field.extraction_mode,  # type: ignore[arg-type]
+            anchors=tracking_error_field.anchors,
+            provenance_note=value.provenance_note,
+            missing_reason=None,
+            conflict_note=conflict_note,
+            is_product_evidence=True,
+        )
+    if developer_override_enabled and developer_override is not None:
+        parsed_override = parse_ratio(developer_override, field_name="tracking_error")
+        return ResolvedTrackingErrorForRisk(
+            value=parsed_override,
+            value_text=str(developer_override),
+            source_type="developer_override",
+            authority="developer_override",
+            field_extraction_mode="missing",
+            anchors=(),
+            provenance_note="开发覆盖仅用于本地风险检查夹具，不是产品证据。",
+            missing_reason=None,
+            conflict_note=None,
+            is_product_evidence=False,
+        )
+    return ResolvedTrackingErrorForRisk(
+        value=None,
+        value_text=None,
+        source_type="missing",
+        authority="missing",
+        field_extraction_mode="missing",
+        anchors=(),
+        provenance_note="未取得结构化跟踪误差。",
+        missing_reason=tracking_error_field.note or "缺少指数基金跟踪误差",
+        conflict_note=None,
+        is_product_evidence=False,
     )
 
 
@@ -484,50 +603,50 @@ def _check_excessive_fee(
 
 def _check_tracking_error(
     fund_type: FundType,
-    tracking_error: Decimal | str | int | float | None,
+    tracking_error: ResolvedTrackingErrorForRisk,
     rule: RiskCheckRule,
 ) -> RiskCheckItem:
     """检查指数基金跟踪误差。
 
     Args:
         fund_type: 基金类型。
-        tracking_error: 跟踪误差。
+        tracking_error: 已解析的跟踪误差风险输入。
         rule: 规则配置。
 
     Returns:
         跟踪误差检查结果。
 
     Raises:
-        ValueError: 当显式跟踪误差格式非法时抛出。
+        无显式抛出。
     """
 
     threshold = f"<= {rule.tracking_error_threshold}"
-    if fund_type not in _INDEX_FUND_TYPES:
+    if tracking_error.source_type == "not_applicable" or fund_type not in _INDEX_FUND_TYPES:
         return _risk_item(
             code="tracking_error",
             status="pass",
             current_value=None,
             threshold=threshold,
-            anchors=(),
+            anchors=tracking_error.anchors,
             reason="非指数基金不适用跟踪误差否决项。",
         )
-    if tracking_error is None:
+    if tracking_error.value is None:
         return _risk_item(
             code="tracking_error",
             status="insufficient_data",
             current_value=None,
             threshold=threshold,
-            anchors=(),
-            reason="缺少指数基金跟踪误差，不能判断跟踪误差否决项。",
+            anchors=tracking_error.anchors,
+            reason=tracking_error.missing_reason or "缺少指数基金跟踪误差，不能判断跟踪误差否决项。",
         )
-    parsed_tracking_error = parse_ratio(tracking_error, field_name="tracking_error")
+    parsed_tracking_error = tracking_error.value
     if parsed_tracking_error > rule.tracking_error_threshold:
         return _risk_item(
             code="tracking_error",
             status="veto",
             current_value=str(parsed_tracking_error),
             threshold=threshold,
-            anchors=(),
+            anchors=tracking_error.anchors,
             reason="指数基金跟踪误差超过 2%。",
         )
     return _risk_item(
@@ -535,8 +654,64 @@ def _check_tracking_error(
         status="pass",
         current_value=str(parsed_tracking_error),
         threshold=threshold,
-        anchors=(),
+        anchors=tracking_error.anchors,
         reason="指数基金跟踪误差未超过阈值。",
+    )
+
+
+def _missing_tracking_error_for_risk(fund_type: FundType) -> ResolvedTrackingErrorForRisk:
+    """构造调用方未传入解析对象时的保守默认值。
+
+    Args:
+        fund_type: 标准化基金类型。
+
+    Returns:
+        非指数基金返回不适用；指数基金返回缺失。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if fund_type not in _INDEX_FUND_TYPES:
+        return _not_applicable_tracking_error_for_risk()
+    return ResolvedTrackingErrorForRisk(
+        value=None,
+        value_text=None,
+        source_type="missing",
+        authority="missing",
+        field_extraction_mode="missing",
+        anchors=(),
+        provenance_note="调用方未提供跟踪误差解析对象。",
+        missing_reason="缺少指数基金跟踪误差，不能判断跟踪误差否决项。",
+        conflict_note=None,
+        is_product_evidence=False,
+    )
+
+
+def _not_applicable_tracking_error_for_risk() -> ResolvedTrackingErrorForRisk:
+    """构造非指数基金跟踪误差不适用对象。
+
+    Args:
+        无。
+
+    Returns:
+        跟踪误差不适用解析对象。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return ResolvedTrackingErrorForRisk(
+        value=None,
+        value_text=None,
+        source_type="not_applicable",
+        authority="not_applicable",
+        field_extraction_mode="not_applicable",
+        anchors=(),
+        provenance_note="非指数基金不适用跟踪误差否决项。",
+        missing_reason=None,
+        conflict_note=None,
+        is_product_evidence=False,
     )
 
 
