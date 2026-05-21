@@ -13,22 +13,23 @@
 | Field | State |
 |---|---|
 | Branch | `main` |
-| Current gate | `P11-S2 accepted` |
-| Next entry point | `post-P11 follow-up planning` |
-| Current phase | `P11 Control doc hygiene / recovery ergonomics` |
+| Current gate | `post-P11 follow-up planning accepted` |
+| Next entry point | `P12-S1 ITEM_RULE renderer/audit compliance plan/review` |
+| Current phase | `P12 ITEM_RULE deterministic compliance` |
 | Design truth | `docs/design.md` |
 | Control truth | `docs/implementation-control.md` |
 | Latest accepted planning artifact | `docs/reviews/p11-s1-control-doc-hygiene-recovery-plan-20260521.md` |
 | Latest follow-up planning artifact | `docs/reviews/post-p11-follow-up-planning-20260521.md` |
+| Latest post-P11 planning artifact | `docs/reviews/post-p11-second-follow-up-planning-20260522.md` |
 | Latest P11-S2 plan artifact | `docs/reviews/p11-s2-historical-summary-dedupe-plan-20260521.md` |
 | Plan reviews | `docs/reviews/p11-s1-plan-review-mimo-20260521.md`, `docs/reviews/p11-s1-plan-review-glm-20260521.md` |
 | Implementation artifact | `docs/reviews/p11-s2-implementation-20260521.md` |
 | Last merged PR | PR #6, merge commit `acc692c7e84c855398de86497b0d05f30b6f5ca5` |
-| Product baseline | P10 release-readiness merged; P11-S1 is documentation-only |
+| Product baseline | P10 release-readiness merged; P11 control-doc recovery accepted |
 | Open residuals | RR-13 duplicate `016492`, excluded `docs/repo-audit-20260521.md` |
 | Non-goal reminder | no source, tests, config, product behavior, runtime, Dayu Host/Engine/tool loop, or LLM writing changes |
 
-Resume checklist: confirm current gate and next entry point; confirm the next action is post-P11 follow-up planning, not implementation; keep source/product behavior out of scope; do not touch RR-13 source data or `docs/repo-audit-20260521.md`. Do not run artifact existence checks as routine resume work; they are a one-time acceptance gate after reference edits.
+Resume checklist: confirm current gate and next entry point; confirm the next action is P12-S1 plan/review, not implementation; keep RR-13 source data and `docs/repo-audit-20260521.md` out of scope; preserve deterministic MVP boundaries and do not introduce LLM audit, Host, Engine, or tool loop.
 
 ## Active Gate Ledger
 
@@ -40,6 +41,7 @@ Resume checklist: confirm current gate and next entry point; confirm the next ac
 | `post-P11 follow-up planning` | accepted | `docs/reviews/post-p11-follow-up-planning-20260521.md` | `5f5331b` | P11-S1 recovery accepted; remaining archive duplicate rows scoped to docs-only cleanup | P11-S2 | plan/review |
 | `P11-S2 historical summary dedupe plan/review` | accepted | `docs/reviews/p11-s2-historical-summary-dedupe-plan-20260521.md`, `docs/reviews/p11-s2-plan-review-controller-judgment-20260521.md` | local docs-only plan | MiMo/GLM initial PASS_WITH_FINDINGS; targeted re-reviews PASS | P11-S2 implementation | implementation |
 | `P11-S2 implementation/code review` | accepted | `docs/reviews/p11-s2-implementation-20260521.md`, `docs/reviews/p11-s2-code-review-controller-judgment-20260521.md` | local docs-only change | MiMo/GLM PASS_WITH_FINDINGS; Startup Packet residual bookkeeping fixed | post-P11 planning | follow-up planning |
+| `post-P11 follow-up planning accepted` | accepted | `docs/reviews/post-p11-second-follow-up-planning-20260522.md` | `ba77e02` | P11 recovery accepted; ITEM_RULE deterministic compliance selected as next product slice | P12-S1 | plan/review |
 
 ## Phase History Index
 
@@ -56,7 +58,8 @@ Resume checklist: confirm current gate and next entry point; confirm the next ac
 | P8 | done | [Archive: P8](#archive-p8) | P8-S1/S2/S3 plan and review artifacts | `90bb9d2`, `b4aaaaa` recorded | full suite `347 passed` | none active |
 | P9 | done | [Archive: P9](#archive-p9) | P9 product contract and aggregate deepreview artifacts | `2bacdb3`, `ce603a0` recorded | full suite `377 passed` | review limitation documented |
 | P10 | merged | [Archive: P10](#archive-p10) | P10 plan/code/aggregate/PR artifacts | PR #6 merge `acc692c7e84c855398de86497b0d05f30b6f5ca5` | full suite `388 passed`, CI pass | `docs/repo-audit-20260521.md` excluded |
-| P11 | accepted | [Archive: P11](#archive-p11) | P11 plan/review/implementation/code-review/follow-up/P11-S2 artifacts | `5f5331b` | P11-S2 docs-only validation passed | post-P11 planning |
+| P11 | accepted | [Archive: P11](#archive-p11) | P11 plan/review/implementation/code-review/follow-up/P11-S2 artifacts | `5f5331b` | P11-S2 docs-only validation passed | closed |
+| P12 | planned | [Archive: P12](#archive-p12) | `docs/reviews/post-p11-second-follow-up-planning-20260522.md` | n/a | planning gate selected | P12-S1 plan/review |
 
 ## P11 Current Phase Plan
 
@@ -79,7 +82,7 @@ Success signals: first-screen recovery is short; `Phase History Index` links to 
 |---|---|---|
 | RR-13 duplicate `016492` | User / App source | Preserve as human-owned; do not modify CSV automatically |
 | `docs/repo-audit-20260521.md` | Controller / user | Keep excluded unless later scope explicitly accepts publication |
-| Future product feature selection | Post-P11 / after P11-S2 | Deferred until control-doc recovery cleanup is accepted |
+| ITEM_RULE deterministic compliance | P12-S1 plan/review | Next product-safety phase; keep deterministic MVP boundaries |
 
 ## Evidence Preservation Rules
 
@@ -156,6 +159,10 @@ P10 repo hygiene, release readiness, PR #6 draft/merge gate, CI, excluded repo-a
 ## Archive: P11
 
 P11 control doc hygiene plan/review, implementation, code review, post-P11 planning, and P11-S2 implementation/code-review evidence is preserved in the startup packet, active ledger, this archive heading, `docs/reviews/p11-s1-implementation-20260521.md`, `docs/reviews/p11-s1-code-review-controller-judgment-20260521.md`, `docs/reviews/post-p11-follow-up-planning-20260521.md`, `docs/reviews/p11-s2-plan-review-controller-judgment-20260521.md`, and `docs/reviews/p11-s2-code-review-controller-judgment-20260521.md`.
+
+## Archive: P12
+
+P12 ITEM_RULE deterministic compliance planning starts from `docs/reviews/post-p11-second-follow-up-planning-20260522.md`. P12 must keep ITEM_RULE ownership in Fund Capability and preserve deterministic MVP boundaries.
 
 ## Original Detailed Control Record
 
@@ -1635,3 +1642,4 @@ P0（环境搭建）
 | 2026-05-21 | post-P11 follow-up planning | ✅ accepted | artifact=`docs/reviews/post-p11-follow-up-planning-20260521.md`；controller 裁决 P11-S1 已达成恢复目标，但历史 archive summary rows 仍有重复/陈旧表述，会降低后续 resume clarity；下一阶段继续保持 documentation-only，进入 `P11-S2 historical summary dedupe plan/review`；RR-13 duplicate `016492` 继续 human-owned，`docs/repo-audit-20260521.md` 继续排除，不启动产品功能 phase |
 | 2026-05-21 | P11-S2 historical summary dedupe plan/review | ✅ accepted | plan artifact=`docs/reviews/p11-s2-historical-summary-dedupe-plan-20260521.md`；controller judgment=`docs/reviews/p11-s2-plan-review-controller-judgment-20260521.md`；MiMo/GLM initial reviews 均为 `PASS_WITH_FINDINGS`，targeted re-review 均 `PASS`；计划接受 documentation-only cleanup，限定清理 stale summary rows 和旧 current-gate wording，保护 `docs/implementation-control.md:234` 到 `docs/implementation-control.md:264` 详细证据链不被压缩；mandatory reference check 纳入 implementation acceptance；当前 gate 为 `P11-S2 historical summary dedupe plan accepted`，下一 gate 为 `P11-S2 implementation` |
 | 2026-05-21 | P11-S2 implementation/code review | ✅ accepted | implementation artifact=`docs/reviews/p11-s2-implementation-20260521.md`；controller judgment=`docs/reviews/p11-s2-code-review-controller-judgment-20260521.md`；MiMo/GLM code reviews 均为 `PASS_WITH_FINDINGS`，唯一低风险 finding 为 Startup Packet 与 Active Residuals 对 historical duplicate summary rows 的临时不一致，controller 已在 acceptance bookkeeping 中移除 Startup Packet 残余项；docs-only cleanup 未压缩 `docs/implementation-control.md:234` 到 `docs/implementation-control.md:264` 证据链；当前验证 diff check passed、artifact reference check passed、mandatory reference check passed；当前 gate 为 `P11-S2 accepted`，下一 gate 为 `post-P11 follow-up planning` |
+| 2026-05-22 | post-P11 follow-up planning | ✅ accepted | artifact=`docs/reviews/post-p11-second-follow-up-planning-20260522.md`；P11 control-doc recovery 已关闭，RR-13 duplicate `016492` 与 `docs/repo-audit-20260521.md` 均为非阻断 residual；controller 裁决下一阶段进入 P12 ITEM_RULE deterministic compliance，首个 gate 为 `P12-S1 ITEM_RULE renderer/audit compliance plan/review`；P12 非目标包括 LLM audit、Evidence Confirm、RepairContract、Host/Engine/tool loop、RR-13 自动修复和 repo-audit 发布 |
