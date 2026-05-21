@@ -1,5 +1,6 @@
 """Service 层公共入口。"""
 
+from fund_agent.fund.analysis.final_judgment import FinalJudgment
 from fund_agent.services.extraction_snapshot_service import (
     ExtractionSnapshotRequest,
     ExtractionSnapshotService,
@@ -25,7 +26,8 @@ from fund_agent.services.thermometer_service import (
     ThermometerService,
 )
 from fund_agent.services.fund_analysis_service import (
-    FinalJudgment,
+    AnalyzeMode,
+    FundAnalysisDeveloperOverrides,
     FundAnalysisRequest,
     FundAnalysisResult,
     FundAnalysisService,
@@ -49,7 +51,9 @@ __all__ = [
     "QualityGateService",
     "ThermometerRequest",
     "ThermometerService",
+    "AnalyzeMode",
     "FinalJudgment",
+    "FundAnalysisDeveloperOverrides",
     "FundAnalysisRequest",
     "FundAnalysisResult",
     "FundAnalysisService",

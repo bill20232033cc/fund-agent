@@ -78,6 +78,11 @@ SCORE_JSON_FILENAME: Final[str] = "score.json"
 SCORE_MARKDOWN_FILENAME: Final[str] = "score.md"
 CORRECTNESS_STATUS_AVAILABLE: Final[str] = "available"
 CORRECTNESS_STATUS_UNAVAILABLE: Final[str] = "unavailable"
+CORRECTNESS_COVERAGE_NOT_CONFIGURED: Final[str] = "not_configured"
+CORRECTNESS_COVERAGE_FUND_NOT_COVERED: Final[str] = "fund_not_covered"
+CORRECTNESS_COVERAGE_NO_COMPARABLE_FIELDS: Final[str] = "no_comparable_fields"
+CORRECTNESS_COVERAGE_PARTIALLY_COVERED: Final[str] = "partially_covered"
+CORRECTNESS_COVERAGE_COVERED: Final[str] = "covered"
 CORRECTNESS_MATCH: Final[str] = "match"
 CORRECTNESS_MISMATCH: Final[str] = "mismatch"
 CORRECTNESS_UNAVAILABLE: Final[str] = "unavailable"
@@ -321,6 +326,11 @@ class CorrectnessSummary:
         skipped_records: golden 中明确 skipped 的记录数。
         accuracy_rate: matched_records / comparable_records。
         reason: 汇总说明。
+        coverage_scope: 当前 run 的 strict golden 覆盖范围。
+        coverage_reason: 覆盖范围的机器可读原因。
+        covered_fund_codes: 当前 run 中已有可比 golden 记录的基金代码。
+        missing_fund_codes: 当前 run 中缺少 correctness 覆盖的基金代码。
+        coverage_required: 当前策略是否要求 strict golden 覆盖；P9-S2 固定为 false。
         record_results: 字段级 correctness 明细。
     """
 
@@ -334,6 +344,11 @@ class CorrectnessSummary:
     skipped_records: int
     accuracy_rate: float | None
     reason: str
+    coverage_scope: str
+    coverage_reason: str
+    covered_fund_codes: tuple[str, ...]
+    missing_fund_codes: tuple[str, ...]
+    coverage_required: bool
     record_results: tuple[CorrectnessRecordResult, ...]
 
 
@@ -568,7 +583,9 @@ def score_fund_records(
     )
 
 
-def derive_fund_quality_records(records: Sequence[Mapping[str, object]]) -> tuple[FundQualityRow, ...]:
+def derive_fund_quality_records(
+    records: Sequence[Mapping[str, object]],
+) -> tuple[FundQualityRow, ...]:
     """从 snapshot 记录派生单基金质量判断。
 
     Args:
@@ -806,6 +823,11 @@ def compare_snapshot_correctness(
             skipped_records=0,
             accuracy_rate=None,
             reason="未提供 strict golden answer JSON；correctness 未接入。",
+            coverage_scope=CORRECTNESS_COVERAGE_NOT_CONFIGURED,
+            coverage_reason=CORRECTNESS_COVERAGE_NOT_CONFIGURED,
+            covered_fund_codes=(),
+            missing_fund_codes=_snapshot_fund_codes(records),
+            coverage_required=False,
             record_results=(),
         )
     golden_funds = load_golden_answer_json(golden_answer_path)
@@ -818,6 +840,11 @@ def compare_snapshot_correctness(
     mismatched_records = sum(1 for row in comparable if row.status == CORRECTNESS_MISMATCH)
     unavailable_records = sum(1 for row in record_results if row.status == CORRECTNESS_UNAVAILABLE)
     skipped_records = sum(len(fund.skipped_fields) for fund in golden_funds)
+    coverage_scope, coverage_reason, covered_fund_codes, missing_fund_codes = _correctness_coverage(
+        snapshot_fund_codes=_snapshot_fund_codes(records),
+        golden_funds=golden_funds,
+        record_results=record_results,
+    )
     return CorrectnessSummary(
         status=CORRECTNESS_STATUS_AVAILABLE,
         golden_answer_path=str(golden_answer_path),
@@ -829,6 +856,11 @@ def compare_snapshot_correctness(
         skipped_records=skipped_records,
         accuracy_rate=_optional_rate(matched_records, len(comparable)),
         reason="仅对 snapshot 显式暴露的可比字段做保守 normalize 后比对；不可比字段不进入分母。",
+        coverage_scope=coverage_scope,
+        coverage_reason=coverage_reason,
+        covered_fund_codes=covered_fund_codes,
+        missing_fund_codes=missing_fund_codes,
+        coverage_required=False,
         record_results=tuple(record_results),
     )
 
@@ -1276,9 +1308,7 @@ def _missing_fields_by_priority(
         priority = FIELD_PRIORITY_BY_NAME.get(field_name, UNKNOWN_FIELD_PRIORITY)
         if priority in missing_by_priority:
             missing_by_priority[priority].add(field_name)
-    return {
-        priority: tuple(sorted(fields)) for priority, fields in missing_by_priority.items()
-    }
+    return {priority: tuple(sorted(fields)) for priority, fields in missing_by_priority.items()}
 
 
 def _app_category_status(app_category: str | None, classified_fund_type: str | None) -> str:
@@ -1543,6 +1573,99 @@ def _optional_rate(numerator: int, denominator: int) -> float | None:
     if denominator == 0:
         return None
     return numerator / denominator
+
+
+def _snapshot_fund_codes(records: Sequence[Mapping[str, object]]) -> tuple[str, ...]:
+    """读取当前 snapshot run 中涉及的基金代码。
+
+    Args:
+        records: P4-S1 snapshot 记录。
+
+    Returns:
+        去重排序后的基金代码。
+
+    Raises:
+        ValueError: snapshot 记录缺少 `fund_code` 时抛出。
+    """
+
+    return tuple(sorted({_required_text(record, "fund_code") for record in records}))
+
+
+def _correctness_coverage(
+    *,
+    snapshot_fund_codes: tuple[str, ...],
+    golden_funds: Sequence[GoldenAnswerFund],
+    record_results: Sequence[CorrectnessRecordResult],
+) -> tuple[str, str, tuple[str, ...], tuple[str, ...]]:
+    """派生当前 run 的 strict golden 覆盖范围。
+
+    该函数只使用 strict golden answer 与当前 snapshot 的同源比对结果，不用
+    其它间接证据推断覆盖。见模板第 1 章产品本质和第 2 章 R=A+B-C 的
+    correctness oracle 边界。
+
+    Args:
+        snapshot_fund_codes: 当前 run 中的基金代码。
+        golden_funds: strict golden answer 中的基金集合。
+        record_results: 字段级 correctness 比对结果。
+
+    Returns:
+        `(coverage_scope, coverage_reason, covered_fund_codes, missing_fund_codes)`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if not snapshot_fund_codes:
+        return (
+            CORRECTNESS_COVERAGE_FUND_NOT_COVERED,
+            CORRECTNESS_COVERAGE_FUND_NOT_COVERED,
+            (),
+            (),
+        )
+    golden_codes = {fund.fund_code for fund in golden_funds}
+    comparable_codes = {
+        row.fund_code
+        for row in record_results
+        if row.fund_code in snapshot_fund_codes
+        and row.status in {CORRECTNESS_MATCH, CORRECTNESS_MISMATCH}
+    }
+    target_results = [row for row in record_results if row.fund_code in snapshot_fund_codes]
+    covered_fund_codes = tuple(sorted(comparable_codes))
+    missing_fund_codes = tuple(code for code in snapshot_fund_codes if code not in comparable_codes)
+    if all(code not in golden_codes for code in snapshot_fund_codes):
+        return (
+            CORRECTNESS_COVERAGE_FUND_NOT_COVERED,
+            CORRECTNESS_COVERAGE_FUND_NOT_COVERED,
+            (),
+            snapshot_fund_codes,
+        )
+    if target_results and not comparable_codes:
+        return (
+            CORRECTNESS_COVERAGE_NO_COMPARABLE_FIELDS,
+            CORRECTNESS_COVERAGE_NO_COMPARABLE_FIELDS,
+            (),
+            snapshot_fund_codes,
+        )
+    if missing_fund_codes:
+        return (
+            CORRECTNESS_COVERAGE_PARTIALLY_COVERED,
+            CORRECTNESS_COVERAGE_PARTIALLY_COVERED,
+            covered_fund_codes,
+            missing_fund_codes,
+        )
+    if any(row.status == CORRECTNESS_UNAVAILABLE for row in target_results):
+        return (
+            CORRECTNESS_COVERAGE_PARTIALLY_COVERED,
+            CORRECTNESS_COVERAGE_PARTIALLY_COVERED,
+            covered_fund_codes,
+            missing_fund_codes,
+        )
+    return (
+        CORRECTNESS_COVERAGE_COVERED,
+        CORRECTNESS_COVERAGE_COVERED,
+        covered_fund_codes,
+        missing_fund_codes,
+    )
 
 
 def _snapshot_actual_index(

@@ -13,6 +13,7 @@ from fund_agent.fund.data.nav_data import NavDataResult
 from fund_agent.fund.data_extractor import StructuredFundDataBundle
 from fund_agent.fund.extractors.models import EvidenceAnchor, ExtractedField
 from fund_agent.services import (
+    FundAnalysisDeveloperOverrides,
     FundAnalysisRequest,
     FundAnalysisService,
     QualityGateBlockedError,
@@ -20,6 +21,87 @@ from fund_agent.services import (
 )
 
 _P3_S8_MAX_ANALYSIS_SECONDS = 30.0
+
+
+def _developer_request(
+    *,
+    fund_code: str = "110011",
+    report_year: int = 2024,
+    equity_position: str | None = "80%",
+    actual_style: str | None = "均衡",
+    actual_equity_position: str | None = "70%",
+    manager_tenure_months: int | None = 24,
+    peer_fee_median: str | None = "1.00%",
+    tracking_error: str | None = None,
+    investment_amount: Decimal | str = Decimal("10000"),
+    max_tolerable_loss_rate: str | None = "50%",
+    valuation_state: str = "low",
+    user_money_horizon_years: int | None = 4,
+    current_stage: str | None = "规模稳定，继续观察结构性超额证据",
+    final_judgment_override: str | None = None,
+    force_refresh: bool = False,
+    quality_gate_policy: str | None = "off",
+    quality_gate_source_csv: Path | None = None,
+    quality_gate_output_dir: Path | None = None,
+    quality_gate_run_id: str | None = None,
+    quality_gate_golden_answer_path: Path | None = None,
+) -> FundAnalysisRequest:
+    """构造 developer override 模式 Service 请求。
+
+    Args:
+        fund_code: 基金代码。
+        report_year: 年报年份。
+        equity_position: R=A+B-C 显式股票仓位。
+        actual_style: 言行一致性显式风格。
+        actual_equity_position: 言行一致性显式股票仓位。
+        manager_tenure_months: 基金经理管理本基金月数。
+        peer_fee_median: 同类总费率中位数。
+        tracking_error: 指数基金跟踪误差。
+        investment_amount: 压力测试投入金额。
+        max_tolerable_loss_rate: 最大可承受亏损比例。
+        valuation_state: 估值状态。
+        user_money_horizon_years: 用户资金不用年限。
+        current_stage: 当前阶段与关键变化。
+        final_judgment_override: 开发覆盖最终判断。
+        force_refresh: 是否强制刷新。
+        quality_gate_policy: quality gate 策略。
+        quality_gate_source_csv: quality gate 精选基金池 CSV 路径。
+        quality_gate_output_dir: quality gate 输出目录。
+        quality_gate_run_id: quality gate 运行 ID。
+        quality_gate_golden_answer_path: strict golden answer JSON 路径。
+
+    Returns:
+        developer override 模式请求。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return FundAnalysisRequest(
+        fund_code=fund_code,
+        report_year=report_year,
+        investment_amount=investment_amount,
+        max_tolerable_loss_rate=max_tolerable_loss_rate,
+        valuation_state=valuation_state,  # type: ignore[arg-type]
+        user_money_horizon_years=user_money_horizon_years,
+        force_refresh=force_refresh,
+        mode="developer_override",
+        developer_overrides=FundAnalysisDeveloperOverrides(
+            equity_position=equity_position,
+            actual_style=actual_style,
+            actual_equity_position=actual_equity_position,
+            manager_tenure_months=manager_tenure_months,
+            peer_fee_median=peer_fee_median,
+            tracking_error=tracking_error,
+            current_stage=current_stage,
+            final_judgment_override=final_judgment_override,  # type: ignore[arg-type]
+            quality_gate_policy=quality_gate_policy,  # type: ignore[arg-type]
+            quality_gate_source_csv=quality_gate_source_csv,
+            quality_gate_output_dir=quality_gate_output_dir,
+            quality_gate_run_id=quality_gate_run_id,
+            quality_gate_golden_answer_path=quality_gate_golden_answer_path,
+        ),
+    )
 
 
 def _anchor(section_id: str, row_locator: str, *, table_id: str | None = None) -> EvidenceAnchor:
@@ -199,30 +281,13 @@ async def test_fund_analysis_service_builds_render_and_audit_path_with_fake_extr
     extractor = _FakeExtractor(_bundle())
     service = FundAnalysisService(extractor=extractor)
 
-    result = await service.analyze(
-        FundAnalysisRequest(
-            fund_code="110011",
-            report_year=2024,
-            equity_position="80%",
-            actual_style="均衡",
-            actual_equity_position="70%",
-            manager_tenure_months=24,
-            peer_fee_median="1.00%",
-            investment_amount=Decimal("10000"),
-            max_tolerable_loss_rate="50%",
-            valuation_state="low",
-            user_money_horizon_years=4,
-            current_stage="规模稳定，继续观察结构性超额证据",
-            final_judgment="worth_holding",
-            force_refresh=True,
-            quality_gate_policy="off",
-        )
-    )
+    result = await service.analyze(_developer_request(force_refresh=True))
 
     assert extractor.calls == [("110011", 2024, True)]
     assert result.audit_result.passed
     assert result.quality_gate_result is None
     assert result.quality_gate_not_run_reason == "policy=off"
+    assert result.final_judgment_decision.source == "derived"
     assert result.rabc_attribution.status == "computed"
     assert result.checklist_result.overall_signal in {"green", "yellow", "gray"}
     assert "# 0. 投资要点概览" in result.report_markdown
@@ -246,23 +311,7 @@ async def test_fund_analysis_service_completes_single_fund_under_p3_s8_limit_wit
 
     extractor = _FakeExtractor(_bundle())
     service = FundAnalysisService(extractor=extractor)
-    request = FundAnalysisRequest(
-        fund_code="110011",
-        report_year=2024,
-        equity_position="80%",
-        actual_style="均衡",
-        actual_equity_position="70%",
-        manager_tenure_months=24,
-        peer_fee_median="1.00%",
-        investment_amount=Decimal("10000"),
-        max_tolerable_loss_rate="50%",
-        valuation_state="low",
-        user_money_horizon_years=4,
-        current_stage="规模稳定，继续观察结构性超额证据",
-        final_judgment="worth_holding",
-        force_refresh=True,
-        quality_gate_policy="off",
-    )
+    request = _developer_request(force_refresh=True)
 
     started_at = perf_counter()
     result = await service.analyze(request)
@@ -293,7 +342,7 @@ async def test_fund_analysis_service_rejects_bundle_without_fund_type() -> None:
     service = FundAnalysisService(extractor=_FakeExtractor(broken_bundle))
 
     with pytest.raises(ValueError, match="classified_fund_type"):
-        await service.analyze(FundAnalysisRequest(fund_code="110011", quality_gate_policy="off"))
+        await service.analyze(_developer_request(fund_code="110011", quality_gate_policy="off"))
 
 
 @pytest.mark.asyncio
@@ -314,16 +363,8 @@ async def test_fund_analysis_service_warn_policy_keeps_report_and_gate_result(tm
     service = FundAnalysisService(extractor=extractor)
 
     result = await service.analyze(
-        FundAnalysisRequest(
+        _developer_request(
             fund_code="004393",
-            equity_position="80%",
-            actual_style="均衡",
-            actual_equity_position="70%",
-            manager_tenure_months=24,
-            peer_fee_median="1.00%",
-            max_tolerable_loss_rate="50%",
-            valuation_state="low",
-            user_money_horizon_years=4,
             quality_gate_policy="warn",
             quality_gate_source_csv=Path("docs/code_20260519.csv"),
             quality_gate_output_dir=tmp_path / "gate",
@@ -357,7 +398,7 @@ async def test_fund_analysis_service_block_policy_raises_structured_error(tmp_pa
 
     with pytest.raises(QualityGateBlockedError) as exc_info:
         await service.analyze(
-            FundAnalysisRequest(
+            _developer_request(
                 fund_code="004393",
                 quality_gate_policy="block",
                 quality_gate_source_csv=Path("docs/code_20260519.csv"),
@@ -392,16 +433,8 @@ async def test_fund_analysis_service_block_policy_fails_when_fund_absent_from_qu
 
     with pytest.raises(QualityGateNotRunBlockedError, match="质量 gate 未运行") as exc_info:
         await service.analyze(
-            FundAnalysisRequest(
+            _developer_request(
                 fund_code="110011",
-                equity_position="80%",
-                actual_style="均衡",
-                actual_equity_position="70%",
-                manager_tenure_months=24,
-                peer_fee_median="1.00%",
-                max_tolerable_loss_rate="50%",
-                valuation_state="low",
-                user_money_horizon_years=4,
                 quality_gate_policy="block",
                 quality_gate_source_csv=_source_csv(tmp_path, "004393"),
                 quality_gate_run_id="fixture-run",
@@ -430,7 +463,7 @@ async def test_fund_analysis_service_rejects_invalid_fund_code_before_extraction
     service = FundAnalysisService(extractor=extractor)
 
     with pytest.raises(ValueError, match="fund_code 必须是 6 位数字"):
-        await service.analyze(FundAnalysisRequest(fund_code="ABCDEF", quality_gate_policy="off"))
+        await service.analyze(_developer_request(fund_code="ABCDEF", quality_gate_policy="off"))
 
     assert extractor.calls == []
 
@@ -454,16 +487,8 @@ async def test_fund_analysis_service_warn_policy_keeps_not_run_reason_when_fund_
     service = FundAnalysisService(extractor=_FakeExtractor(_bundle()))
 
     result = await service.analyze(
-        FundAnalysisRequest(
+        _developer_request(
             fund_code="110011",
-            equity_position="80%",
-            actual_style="均衡",
-            actual_equity_position="70%",
-            manager_tenure_months=24,
-            peer_fee_median="1.00%",
-            max_tolerable_loss_rate="50%",
-            valuation_state="low",
-            user_money_horizon_years=4,
             quality_gate_policy="warn",
             quality_gate_source_csv=_source_csv(tmp_path, "004393"),
             quality_gate_run_id="fixture-run",
@@ -497,7 +522,7 @@ async def test_fund_analysis_service_rejects_explicit_missing_golden_answer_path
 
     with pytest.raises(FileNotFoundError, match="quality_gate_golden_answer_path"):
         await service.analyze(
-            FundAnalysisRequest(
+            _developer_request(
                 fund_code="004393",
                 quality_gate_policy="warn",
                 quality_gate_source_csv=Path("docs/code_20260519.csv"),
@@ -523,16 +548,8 @@ async def test_fund_analysis_service_default_gate_run_id_does_not_overwrite(tmp_
     """
 
     service = FundAnalysisService(extractor=_FakeExtractor(_bundle()))
-    request = FundAnalysisRequest(
+    request = _developer_request(
         fund_code="004393",
-        equity_position="80%",
-        actual_style="均衡",
-        actual_equity_position="70%",
-        manager_tenure_months=24,
-        peer_fee_median="1.00%",
-        max_tolerable_loss_rate="50%",
-        valuation_state="low",
-        user_money_horizon_years=4,
         quality_gate_policy="warn",
         quality_gate_source_csv=Path("docs/code_20260519.csv"),
         quality_gate_output_dir=None,

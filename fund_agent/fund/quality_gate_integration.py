@@ -12,6 +12,7 @@ from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
+from fund_agent.config.paths import DEFAULT_QUALITY_GATE_OUTPUT_ROOT
 from fund_agent.fund.data_extractor import StructuredFundDataBundle
 from fund_agent.fund.extraction_score import ExtractionScoreResult, write_extraction_score_records
 from fund_agent.fund.extraction_snapshot import (
@@ -21,8 +22,6 @@ from fund_agent.fund.extraction_snapshot import (
     validate_selected_fund_pool,
 )
 from fund_agent.fund.quality_gate import QualityGateResult, run_quality_gate
-
-DEFAULT_QUALITY_GATE_OUTPUT_ROOT = Path("reports/quality-gate-runs")
 
 
 @dataclass(frozen=True, slots=True)

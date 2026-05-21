@@ -36,7 +36,6 @@ from fund_agent.fund.template.lens_application import (
 )
 
 _RENDERER_EXPORTS = {
-    "TemplateFinalJudgment",
     "TemplateRenderInput",
     "TemplateRenderResult",
     "build_programmatic_audit_input",
@@ -71,7 +70,6 @@ __all__ = [
     "LensApplicationPlan",
     "LensChapterApplication",
     "TemplateContractManifest",
-    "TemplateFinalJudgment",
     "TemplateItemRule",
     "TemplateItemRuleDecision",
     "TemplateItemRuleDecisionStatus",

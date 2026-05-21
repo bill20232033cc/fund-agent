@@ -9,13 +9,17 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from decimal import Decimal
-from pathlib import Path
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Literal, Protocol
 
+from fund_agent.config.paths import DEFAULT_GOLDEN_ANSWER_JSON
 from fund_agent.fund.analysis import (
     ChecklistResult,
     ConsistencyCheckResult,
+    FinalJudgment,
+    FinalJudgmentDecision,
+    FinalJudgmentQualityGateStatus,
     InvestorExperienceResult,
     RabcAttribution,
     RiskCheckResult,
@@ -23,6 +27,7 @@ from fund_agent.fund.analysis import (
     analyze_investor_experience,
     calculate_r_abc_from_bundle,
     check_consistency,
+    derive_final_judgment,
     judge_alpha_nature,
     run_checklist,
     run_risk_checks,
@@ -34,13 +39,13 @@ from fund_agent.fund.extraction_snapshot import DEFAULT_SELECTED_FUNDS_CSV
 from fund_agent.fund.fund_type import FundType
 from fund_agent.fund.quality_gate import GATE_STATUS_BLOCK, QualityGateResult
 from fund_agent.fund.quality_gate_integration import check_quality_gate_fund_membership, run_quality_gate_for_bundle
-from fund_agent.fund.template import TemplateFinalJudgment, TemplateRenderInput, TemplateRenderResult, render_template_report
+from fund_agent.fund.template import TemplateRenderInput, TemplateRenderResult, render_template_report
 
 ValuationState = Literal["low", "fair", "high", "unavailable"]
 MoneyHorizon = Literal["long_enough", "uncertain", "too_short"]
-FinalJudgment = TemplateFinalJudgment
 QualityGatePolicy = Literal["off", "warn", "block"]
-DEFAULT_GOLDEN_ANSWER_PATH = Path("reports/golden-answers/golden-answer.json")
+AnalyzeMode = Literal["product", "developer_override"]
+DEFAULT_GOLDEN_ANSWER_PATH = DEFAULT_GOLDEN_ANSWER_JSON
 
 
 class _FundDataExtractor(Protocol):
@@ -73,26 +78,19 @@ class _FundDataExtractor(Protocol):
 
 
 @dataclass(frozen=True, slots=True)
-class FundAnalysisRequest:
-    """基金分析 Service 请求。
+class FundAnalysisDeveloperOverrides:
+    """开发覆盖参数，只能在 developer override mode 使用。
 
     Attributes:
-        fund_code: 基金代码。
-        report_year: 年报年份。
         equity_position: R=A+B-C 使用的显式股票仓位，见模板第 2 章。
         actual_style: 言行一致性使用的显式实际持仓风格，见模板第 3 章。
         actual_equity_position: 言行一致性使用的显式实际股票仓位，见模板第 3 章。
         manager_tenure_months: 基金经理管理本基金月数，见模板第 6 章。
         peer_fee_median: 同类总费率中位数，见模板第 6 章。
         tracking_error: 指数基金跟踪误差，见模板第 6 章。
-        investment_amount: 压力测试投入金额，见模板第 6 章。
-        max_tolerable_loss_rate: 最大可承受亏损比例，见模板第 6 章。
-        valuation_state: 估值状态，见 7 问题检查清单。
         money_horizon: 用户资金期限分类，见 7 问题检查清单。
-        user_money_horizon_years: 用户资金不用年限，见 7 问题检查清单。
         current_stage: 当前阶段与关键变化说明，见模板第 5 章。
-        final_judgment: 最终持有判断，见模板第 7 章。
-        force_refresh: 是否强制刷新底层数据。
+        final_judgment_override: 开发覆盖最终判断，见模板第 7 章。
         quality_gate_policy: 报告质量 gate 策略。
         quality_gate_source_csv: 精选基金池 CSV，用于取得 App 类别。
         quality_gate_output_dir: quality gate 显式输出目录。
@@ -100,27 +98,86 @@ class FundAnalysisRequest:
         quality_gate_golden_answer_path: strict golden answer JSON 路径。
     """
 
-    fund_code: str
-    report_year: int = 2024
     equity_position: Decimal | str | int | float | None = None
     actual_style: str | None = None
     actual_equity_position: Decimal | str | int | float | None = None
     manager_tenure_months: int | None = None
     peer_fee_median: Decimal | str | int | float | None = None
     tracking_error: Decimal | str | int | float | None = None
+    money_horizon: MoneyHorizon | None = None
+    current_stage: str | None = None
+    final_judgment_override: FinalJudgment | None = None
+    quality_gate_policy: QualityGatePolicy | None = None
+    quality_gate_source_csv: Path | None = None
+    quality_gate_output_dir: Path | None = None
+    quality_gate_run_id: str | None = None
+    quality_gate_golden_answer_path: Path | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class FundAnalysisRequest:
+    """基金分析 Service 请求。
+
+    Attributes:
+        fund_code: 基金代码。
+        report_year: 年报年份。
+        investment_amount: 压力测试投入金额，见模板第 6 章。
+        max_tolerable_loss_rate: 最大可承受亏损比例，见模板第 6 章。
+        valuation_state: 估值状态，见 7 问题检查清单。
+        user_money_horizon_years: 用户资金不用年限，见 7 问题检查清单。
+        force_refresh: 是否强制刷新底层数据。
+        mode: analyze 契约模式，默认 product。
+        developer_overrides: 开发覆盖参数；product mode 下必须为空。
+    """
+
+    fund_code: str
+    report_year: int = 2024
     investment_amount: Decimal | str | int | float = Decimal("10000")
     max_tolerable_loss_rate: Decimal | str | int | float | None = None
     valuation_state: ValuationState = "unavailable"
-    money_horizon: MoneyHorizon | None = None
     user_money_horizon_years: Decimal | str | int | float | None = None
-    current_stage: str | None = None
-    final_judgment: TemplateFinalJudgment = "needs_attention"
     force_refresh: bool = False
-    quality_gate_policy: QualityGatePolicy = "block"
-    quality_gate_source_csv: Path | None = DEFAULT_SELECTED_FUNDS_CSV
-    quality_gate_output_dir: Path | None = None
-    quality_gate_run_id: str | None = None
-    quality_gate_golden_answer_path: Path | None = DEFAULT_GOLDEN_ANSWER_PATH
+    mode: AnalyzeMode = "product"
+    developer_overrides: FundAnalysisDeveloperOverrides | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class ResolvedAnalyzeContract:
+    """Service 内部解析后的 analyze 契约。
+
+    Attributes:
+        mode: analyze 契约模式。
+        equity_position: R=A+B-C 使用的显式股票仓位，见模板第 2 章。
+        actual_style: 言行一致性使用的显式实际持仓风格，见模板第 3 章。
+        actual_equity_position: 言行一致性使用的显式实际股票仓位，见模板第 3 章。
+        manager_tenure_months: 基金经理管理本基金月数，见模板第 6 章。
+        peer_fee_median: 同类总费率中位数，见模板第 6 章。
+        tracking_error: 指数基金跟踪误差，见模板第 6 章。
+        money_horizon: 用户资金期限分类，见 7 问题检查清单。
+        current_stage: 当前阶段与关键变化说明，见模板第 5 章。
+        final_judgment_override: 开发覆盖最终判断，见模板第 7 章。
+        quality_gate_policy: 报告质量 gate 策略。
+        quality_gate_source_csv: 精选基金池 CSV，用于取得 App 类别。
+        quality_gate_output_dir: quality gate 显式输出目录。
+        quality_gate_run_id: quality gate 运行 ID。
+        quality_gate_golden_answer_path: strict golden answer JSON 路径。
+    """
+
+    mode: AnalyzeMode
+    equity_position: Decimal | str | int | float | None
+    actual_style: str | None
+    actual_equity_position: Decimal | str | int | float | None
+    manager_tenure_months: int | None
+    peer_fee_median: Decimal | str | int | float | None
+    tracking_error: Decimal | str | int | float | None
+    money_horizon: MoneyHorizon | None
+    current_stage: str | None
+    final_judgment_override: FinalJudgment | None
+    quality_gate_policy: QualityGatePolicy
+    quality_gate_source_csv: Path | None
+    quality_gate_output_dir: Path | None
+    quality_gate_run_id: str | None
+    quality_gate_golden_answer_path: Path | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -135,6 +192,7 @@ class FundAnalysisResult:
         risk_check_result: 否决项检查结果。
         stress_test_result: 压力测试结果。
         checklist_result: 7 问题检查清单结果。
+        final_judgment_decision: 最终判断选择契约。
         render_result: 模板渲染结果。
         audit_result: 程序审计结果。
         quality_gate_result: quality gate 结果；未运行时为空。
@@ -148,6 +206,7 @@ class FundAnalysisResult:
     risk_check_result: RiskCheckResult
     stress_test_result: StressTestResult
     checklist_result: ChecklistResult
+    final_judgment_decision: FinalJudgmentDecision
     render_result: TemplateRenderResult
     audit_result: ProgrammaticAuditResult
     quality_gate_result: QualityGateResult | None = None
@@ -259,11 +318,13 @@ class FundAnalysisService:
         Raises:
             ValueError: 当基金代码、年份、基金类型或审计结果非法时抛出。
             QualityGateBlockedError: 当 quality gate 在 block 策略下阻断报告时抛出。
+            QualityGateNotRunBlockedError: 当 quality gate 在 block 策略下未运行时抛出。
             Exception: 允许底层抽取器或 Capability 模块传播异常。
         """
 
-        _validate_request(request)
-        _check_pool_membership_before_extraction(request)
+        resolved_contract = _resolve_analyze_contract(request)
+        _validate_request(request, resolved_contract)
+        _check_pool_membership_before_extraction(request, resolved_contract)
         structured_data = await self._extractor.extract(
             request.fund_code,
             request.report_year,
@@ -271,18 +332,22 @@ class FundAnalysisService:
         )
         quality_gate_result, quality_gate_not_run_reason = _run_quality_gate_if_enabled(
             structured_data=structured_data,
-            request=request,
+            resolved_contract=resolved_contract,
         )
-        if request.quality_gate_policy == "block":
+        if resolved_contract.quality_gate_policy == "block":
             if quality_gate_result is None:
                 raise QualityGateNotRunBlockedError(quality_gate_not_run_reason or "unknown")
             if quality_gate_result.status == GATE_STATUS_BLOCK:
                 raise QualityGateBlockedError(quality_gate_result)
+        quality_gate_status = _resolve_final_judgment_quality_gate_status(
+            quality_gate_result=quality_gate_result,
+            quality_gate_not_run_reason=quality_gate_not_run_reason,
+        )
         fund_type = _extract_fund_type(structured_data)
         rabc_attribution = calculate_r_abc_from_bundle(
             structured_data,
             period=str(structured_data.report_year),
-            equity_position=request.equity_position,
+            equity_position=resolved_contract.equity_position,
         )
         # MVP 限制：judge_alpha_nature 需要 observations_from_attributions，
         # 但该函数要求 market_environments 和 source_confidences，
@@ -294,8 +359,8 @@ class FundAnalysisService:
             manager_strategy_text=structured_data.manager_strategy_text,
             holdings_snapshot=structured_data.holdings_snapshot,
             turnover_rate=structured_data.turnover_rate,
-            actual_style=request.actual_style,
-            actual_equity_position=request.actual_equity_position,
+            actual_style=resolved_contract.actual_style,
+            actual_equity_position=resolved_contract.actual_equity_position,
         )
         investor_experience = analyze_investor_experience(
             nav_benchmark_performance=structured_data.nav_benchmark_performance,
@@ -307,9 +372,9 @@ class FundAnalysisService:
             fee_schedule=structured_data.fee_schedule,
             consistency_result=consistency_result,
             fund_type=fund_type,
-            manager_tenure_months=request.manager_tenure_months,
-            peer_fee_median=request.peer_fee_median,
-            tracking_error=request.tracking_error,
+            manager_tenure_months=resolved_contract.manager_tenure_months,
+            peer_fee_median=resolved_contract.peer_fee_median,
+            tracking_error=resolved_contract.tracking_error,
         )
         stress_test_result = run_stress_test(
             fund_type=fund_type,
@@ -324,8 +389,16 @@ class FundAnalysisService:
             consistency_result=consistency_result,
             risk_check_result=risk_check_result,
             valuation_state=request.valuation_state,
-            money_horizon=request.money_horizon,
+            money_horizon=resolved_contract.money_horizon,
             user_money_horizon_years=request.user_money_horizon_years,
+        )
+        final_judgment_decision = derive_final_judgment(
+            checklist_result=checklist_result,
+            risk_check_result=risk_check_result,
+            stress_test_result=stress_test_result,
+            quality_gate_status=quality_gate_status,
+            quality_gate_not_run_reason=quality_gate_not_run_reason,
+            override_judgment=resolved_contract.final_judgment_override,
         )
         render_result = render_template_report(
             TemplateRenderInput(
@@ -337,8 +410,8 @@ class FundAnalysisService:
                 risk_check_result=risk_check_result,
                 stress_test_result=stress_test_result,
                 checklist_result=checklist_result,
-                final_judgment=request.final_judgment,
-                current_stage=request.current_stage,
+                final_judgment_decision=final_judgment_decision,
+                current_stage=resolved_contract.current_stage,
             )
         )
         audit_result = run_programmatic_audit(render_result.audit_input)
@@ -353,6 +426,7 @@ class FundAnalysisService:
             risk_check_result=risk_check_result,
             stress_test_result=stress_test_result,
             checklist_result=checklist_result,
+            final_judgment_decision=final_judgment_decision,
             render_result=render_result,
             audit_result=audit_result,
             quality_gate_result=quality_gate_result,
@@ -360,11 +434,78 @@ class FundAnalysisService:
         )
 
 
-def _validate_request(request: FundAnalysisRequest) -> None:
+def _resolve_analyze_contract(request: FundAnalysisRequest) -> ResolvedAnalyzeContract:
+    """解析 analyze 产品契约和开发覆盖契约。
+
+    Args:
+        request: 基金分析请求。
+
+    Returns:
+        Service 内部使用的解析后契约。
+
+    Raises:
+        ValueError: 当模式非法或 product mode 携带开发覆盖时抛出。
+    """
+
+    if request.mode not in {"product", "developer_override"}:
+        raise ValueError("mode 必须是 product / developer_override")
+    if request.mode == "product":
+        if request.developer_overrides is not None:
+            raise ValueError("product mode 不允许 developer_overrides")
+        return ResolvedAnalyzeContract(
+            mode="product",
+            equity_position=None,
+            actual_style=None,
+            actual_equity_position=None,
+            manager_tenure_months=None,
+            peer_fee_median=None,
+            tracking_error=None,
+            money_horizon=None,
+            current_stage=None,
+            final_judgment_override=None,
+            quality_gate_policy="block",
+            quality_gate_source_csv=DEFAULT_SELECTED_FUNDS_CSV,
+            quality_gate_output_dir=None,
+            quality_gate_run_id=None,
+            quality_gate_golden_answer_path=DEFAULT_GOLDEN_ANSWER_PATH,
+        )
+    overrides = request.developer_overrides or FundAnalysisDeveloperOverrides()
+    return ResolvedAnalyzeContract(
+        mode="developer_override",
+        equity_position=overrides.equity_position,
+        actual_style=overrides.actual_style,
+        actual_equity_position=overrides.actual_equity_position,
+        manager_tenure_months=overrides.manager_tenure_months,
+        peer_fee_median=overrides.peer_fee_median,
+        tracking_error=overrides.tracking_error,
+        money_horizon=overrides.money_horizon,
+        current_stage=overrides.current_stage,
+        final_judgment_override=overrides.final_judgment_override,
+        quality_gate_policy=overrides.quality_gate_policy or "block",
+        quality_gate_source_csv=(
+            DEFAULT_SELECTED_FUNDS_CSV
+            if overrides.quality_gate_source_csv is None
+            else overrides.quality_gate_source_csv
+        ),
+        quality_gate_output_dir=overrides.quality_gate_output_dir,
+        quality_gate_run_id=overrides.quality_gate_run_id,
+        quality_gate_golden_answer_path=(
+            DEFAULT_GOLDEN_ANSWER_PATH
+            if overrides.quality_gate_golden_answer_path is None
+            else overrides.quality_gate_golden_answer_path
+        ),
+    )
+
+
+def _validate_request(
+    request: FundAnalysisRequest,
+    resolved_contract: ResolvedAnalyzeContract,
+) -> None:
     """校验 Service 请求的基础字段。
 
     Args:
         request: 基金分析请求。
+        resolved_contract: 解析后的 analyze 契约。
 
     Returns:
         无返回值。
@@ -380,19 +521,25 @@ def _validate_request(request: FundAnalysisRequest) -> None:
         raise ValueError("fund_code 必须是 6 位数字")
     if request.report_year <= 0:
         raise ValueError("report_year 必须为正整数")
-    if request.quality_gate_policy not in {"off", "warn", "block"}:
+    if resolved_contract.quality_gate_policy not in {"off", "warn", "block"}:
         raise ValueError("quality_gate_policy 必须是 off / warn / block")
-    if request.quality_gate_run_id is not None and not request.quality_gate_run_id.strip():
+    if (
+        resolved_contract.quality_gate_run_id is not None
+        and not resolved_contract.quality_gate_run_id.strip()
+    ):
         raise ValueError("quality_gate_run_id 不能为空")
     if (
-        request.quality_gate_output_dir is not None
-        and request.quality_gate_output_dir.exists()
-        and not request.quality_gate_output_dir.is_dir()
+        resolved_contract.quality_gate_output_dir is not None
+        and resolved_contract.quality_gate_output_dir.exists()
+        and not resolved_contract.quality_gate_output_dir.is_dir()
     ):
         raise ValueError("quality_gate_output_dir 必须是目录")
 
 
-def _check_pool_membership_before_extraction(request: FundAnalysisRequest) -> None:
+def _check_pool_membership_before_extraction(
+    request: FundAnalysisRequest,
+    resolved_contract: ResolvedAnalyzeContract,
+) -> None:
     """在抽取前轻量检查基金是否在精选池中。
 
     仅当 quality gate policy 为 block 时生效。不在池中时提前阻断，
@@ -400,6 +547,7 @@ def _check_pool_membership_before_extraction(request: FundAnalysisRequest) -> No
 
     Args:
         request: 基金分析请求。
+        resolved_contract: 解析后的 analyze 契约。
 
     Returns:
         无返回值。
@@ -408,12 +556,12 @@ def _check_pool_membership_before_extraction(request: FundAnalysisRequest) -> No
         QualityGateNotRunBlockedError: 基金不在精选池中时抛出。
     """
 
-    if request.quality_gate_policy != "block":
+    if resolved_contract.quality_gate_policy != "block":
         return
-    if request.quality_gate_source_csv is None:
+    if resolved_contract.quality_gate_source_csv is None:
         return
     not_run_reason = check_quality_gate_fund_membership(
-        source_csv=request.quality_gate_source_csv,
+        source_csv=resolved_contract.quality_gate_source_csv,
         fund_code=request.fund_code,
     )
     if not_run_reason is not None:
@@ -423,13 +571,13 @@ def _check_pool_membership_before_extraction(request: FundAnalysisRequest) -> No
 def _run_quality_gate_if_enabled(
     *,
     structured_data: StructuredFundDataBundle,
-    request: FundAnalysisRequest,
+    resolved_contract: ResolvedAnalyzeContract,
 ) -> tuple[QualityGateResult | None, str | None]:
     """按请求策略运行输入质量 gate。
 
     Args:
         structured_data: 已抽取的结构化基金数据包，避免重复读取年报。
-        request: 基金分析请求。
+        resolved_contract: 解析后的 analyze 契约。
 
     Returns:
         `(quality_gate_result, not_run_reason)`。
@@ -438,19 +586,46 @@ def _run_quality_gate_if_enabled(
         Exception: 允许 Capability quality gate 传播 JSON 或写文件异常。
     """
 
-    if request.quality_gate_policy == "off":
+    if resolved_contract.quality_gate_policy == "off":
         return None, "policy=off"
-    if request.quality_gate_source_csv is None:
+    if resolved_contract.quality_gate_source_csv is None:
         return None, "quality_gate_source_csv not provided"
-    golden_answer_path = _resolve_golden_answer_path(request.quality_gate_golden_answer_path)
+    golden_answer_path = _resolve_golden_answer_path(resolved_contract.quality_gate_golden_answer_path)
     integration_result = run_quality_gate_for_bundle(
         bundle=structured_data,
-        source_csv=request.quality_gate_source_csv,
-        output_dir=request.quality_gate_output_dir,
-        run_id=request.quality_gate_run_id or _default_quality_gate_run_id(structured_data),
+        source_csv=resolved_contract.quality_gate_source_csv,
+        output_dir=resolved_contract.quality_gate_output_dir,
+        run_id=resolved_contract.quality_gate_run_id or _default_quality_gate_run_id(structured_data),
         golden_answer_path=golden_answer_path,
     )
     return integration_result.quality_gate_result, integration_result.not_run_reason
+
+
+def _resolve_final_judgment_quality_gate_status(
+    *,
+    quality_gate_result: QualityGateResult | None,
+    quality_gate_not_run_reason: str | None,
+) -> FinalJudgmentQualityGateStatus:
+    """把 Service quality gate 执行结果归一化为最终判断输入。
+
+    Args:
+        quality_gate_result: quality gate 运行结果。
+        quality_gate_not_run_reason: quality gate 未运行原因。
+
+    Returns:
+        `derive_final_judgment` 可消费的 gate 状态。
+
+    Raises:
+        ValueError: 当 gate 状态未知或结果与未运行原因同时存在时抛出。
+    """
+
+    if quality_gate_result is not None and quality_gate_not_run_reason is not None:
+        raise ValueError("quality_gate_result 与 quality_gate_not_run_reason 不能同时存在")
+    if quality_gate_result is None:
+        return "not_run"
+    if quality_gate_result.status in {"pass", "warn", "block"}:
+        return quality_gate_result.status  # type: ignore[return-value]
+    raise ValueError("quality_gate_result.status 必须是 pass / warn / block")
 
 
 def _resolve_golden_answer_path(path: Path | None) -> Path | None:

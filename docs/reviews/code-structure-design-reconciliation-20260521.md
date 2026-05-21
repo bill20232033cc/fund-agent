@@ -29,13 +29,13 @@ Current code remains a deterministic UI / Service / Fund Capability application.
 |---|---|---|
 | `fund_agent/fund/tools/__init__.py` empty package | rejected | Remove empty package; no current tool runtime exists |
 | Empty prompt folders under `fund_agent/config/prompts` | rejected as current architecture | Leave untracked/local; do not document as implemented |
-| Dayu dependency in `pyproject.toml` | accepted only as supply-chain / candidate risk | Do not imply Host/Engine integration |
+| Dayu dependency in `pyproject.toml` | rejected after user architecture decision | Remove dependency; keep Dayu only as methodology reference |
 
 ## Deferred Design Questions
 
 | Topic | Reason |
 |---|---|
-| Whether to remove `dayu-agent` dependency | Needs dependency strategy slice; current code does not import `dayu` |
+| Whether to remove `dayu-agent` dependency | Resolved: remove it; future runtime capabilities must be internalized |
 | Whether to introduce runtime prompt manifests | Requires Application/Runtime design slice; current MVP does not need it |
 | Whether to add a generic tool layer | Requires Engine/Runtime design slice; current Fund tools should remain plain Capability functions |
 
@@ -48,4 +48,4 @@ Current code remains a deterministic UI / Service / Fund Capability application.
 
 ## Residual Risk
 
-`pyproject.toml` still depends on `dayu-agent` while current production code does not import it. This is a dependency strategy issue, not evidence of implemented runtime architecture.
+`dayu-agent` should not remain a production dependency. Current production code does not import `dayu`; future Host/Engine/tool-loop capabilities should be implemented inside `fund_agent` behind project-owned contracts.

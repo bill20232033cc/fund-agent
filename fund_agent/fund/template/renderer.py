@@ -10,11 +10,12 @@ from __future__ import annotations
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from decimal import Decimal
-from typing import Final, Literal
+from typing import Final
 
 from fund_agent.fund.analysis.alpha_judge import AlphaJudgment
 from fund_agent.fund.analysis.checklist import ChecklistResult
 from fund_agent.fund.analysis.consistency_check import ConsistencyCheckResult
+from fund_agent.fund.analysis.final_judgment import FinalJudgment, FinalJudgmentDecision
 from fund_agent.fund.analysis.investor_return import InvestorExperienceResult
 from fund_agent.fund.analysis.r_abc import RabcAttribution
 from fund_agent.fund.analysis.risk_check import RiskCheckResult, StressTestResult
@@ -34,9 +35,7 @@ from fund_agent.fund.template.lens_application import (
     build_lens_application_plan,
 )
 
-TemplateFinalJudgment = Literal["worth_holding", "needs_attention", "suggest_replace"]
-
-_FINAL_JUDGMENT_TEXT: Final[dict[TemplateFinalJudgment, str]] = {
+_FINAL_JUDGMENT_TEXT: Final[dict[FinalJudgment, str]] = {
     "worth_holding": "值得持有",
     "needs_attention": "需要关注",
     "suggest_replace": "建议替换",
@@ -65,7 +64,7 @@ class TemplateRenderInput:
         risk_check_result: 否决项检查结果，用于模板第 6 章。
         stress_test_result: 压力测试结果，用于模板第 6 章。
         checklist_result: 7 问题检查清单结果，用于模板第 7 章和 R1/R2 审计。
-        final_judgment: 显式最终判断，只允许值得持有、需要关注、建议替换三类。
+        final_judgment_decision: 最终判断选择契约，包含 selected/derived/source。
         current_stage: 当前阶段与关键变化说明；缺失时模板第 5 章显式写数据不足。
     """
 
@@ -77,7 +76,7 @@ class TemplateRenderInput:
     risk_check_result: RiskCheckResult
     stress_test_result: StressTestResult
     checklist_result: ChecklistResult
-    final_judgment: TemplateFinalJudgment
+    final_judgment_decision: FinalJudgmentDecision
     current_stage: str | None = None
 
 
@@ -113,7 +112,7 @@ def render_template_report(input_data: TemplateRenderInput) -> TemplateRenderRes
         ValueError: 当最终判断不在允许集合内，或渲染文本包含禁用投资建议词时抛出。
     """
 
-    _validate_final_judgment(input_data.final_judgment)
+    _validate_final_judgment_decision(input_data.final_judgment_decision)
     lens_application_plan = _resolve_lens_application_plan(input_data.structured_data)
     evidence_anchors = _collect_evidence_anchors(input_data)
     chapter_evidence_groups = _collect_chapter_evidence_groups(input_data)
@@ -139,7 +138,9 @@ def render_template_report(input_data: TemplateRenderInput) -> TemplateRenderRes
             report_markdown=report_markdown,
             rabc_attributions=input_data.rabc_attributions,
             checklist_result=input_data.checklist_result,
-            final_judgment=input_data.final_judgment,
+            final_judgment=input_data.final_judgment_decision.selected_judgment,
+            derived_final_judgment=input_data.final_judgment_decision.derived_judgment,
+            final_judgment_source=input_data.final_judgment_decision.source,
             chapter_blocks=chapter_blocks,
         ),
         evidence_anchors=evidence_anchors,
@@ -276,7 +277,7 @@ def _render_chapter_0(
     fund_name = _value_text(identity, "fund_name")
     fund_code = _value_text(identity, "fund_code", fallback=input_data.structured_data.fund_code)
     fund_type = _value_text(identity, "classified_fund_type")
-    judgment_text = _FINAL_JUDGMENT_TEXT[input_data.final_judgment]
+    judgment_text = _FINAL_JUDGMENT_TEXT[input_data.final_judgment_decision.selected_judgment]
     primary_rabc = _primary_rabc(input_data.rabc_attributions)
     net_excess = _ratio_text(primary_rabc.net_excess_return) if primary_rabc else _INSUFFICIENT_TEXT
     watch_variable_text = _lens_watch_variable_text(lens_application_plan)
@@ -541,7 +542,8 @@ def _render_chapter_7(input_data: TemplateRenderInput) -> str:
 
     lines = [
         get_template_chapter_heading(7),
-        f"- 最终判断：{_FINAL_JUDGMENT_TEXT[input_data.final_judgment]}。",
+        f"- 最终判断：{_FINAL_JUDGMENT_TEXT[input_data.final_judgment_decision.selected_judgment]}。",
+        f"- 判断来源：{_final_judgment_source_text(input_data.final_judgment_decision)}",
         f"- 支撑判断的核心依据：检查清单汇总为 {input_data.checklist_result.overall_signal} / {input_data.checklist_result.overall_status}。",
         f"- 当前最容易看错的地方：{_INSUFFICIENT_TEXT}，需要继续核对证据锚点和缺失字段。",
         f"- 下一轮最小验证计划：{input_data.checklist_result.next_minimum_verification}",
@@ -1109,20 +1111,41 @@ def _sentence_body(text: str) -> str:
     return stripped_text.rstrip("。！？；;,.，")
 
 
-def _validate_final_judgment(final_judgment: TemplateFinalJudgment) -> None:
-    """校验最终判断是否落在允许集合内。
+def _final_judgment_source_text(decision: FinalJudgmentDecision) -> str:
+    """渲染最终判断来源说明。
 
     Args:
-        final_judgment: 最终判断。
+        decision: 最终判断选择契约。
+
+    Returns:
+        面向报告的来源说明。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if decision.source == "developer_override":
+        derived_text = _FINAL_JUDGMENT_TEXT[decision.derived_judgment]
+        return f"开发覆盖；系统派生判断为 {derived_text}。"
+    return "系统根据检查清单、否决项、压力测试与质量 gate 派生。"
+
+
+def _validate_final_judgment_decision(decision: FinalJudgmentDecision) -> None:
+    """校验最终判断选择契约是否落在允许集合内。
+
+    Args:
+        decision: 最终判断选择契约。
 
     Returns:
         无返回值。
 
     Raises:
-        ValueError: 当最终判断不在允许集合内时抛出。
+        ValueError: 当 selected 或 derived 判断不在允许集合内时抛出。
     """
 
-    if final_judgment not in _FINAL_JUDGMENT_TEXT:
+    if decision.selected_judgment not in _FINAL_JUDGMENT_TEXT:
+        raise ValueError("final_judgment 只能是 worth_holding / needs_attention / suggest_replace")
+    if decision.derived_judgment not in _FINAL_JUDGMENT_TEXT:
         raise ValueError("final_judgment 只能是 worth_holding / needs_attention / suggest_replace")
 
 

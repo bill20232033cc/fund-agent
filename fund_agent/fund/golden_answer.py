@@ -14,10 +14,11 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Final
 
-DEFAULT_GOLDEN_REVIEWED_MARKDOWN: Final[Path] = Path(
-    "reports/golden-answers/golden-answer-prefill.md"
+from fund_agent.config.paths import (
+    DEFAULT_GOLDEN_ANSWER_JSON,
+    DEFAULT_GOLDEN_REVIEWED_MARKDOWN,
 )
-DEFAULT_GOLDEN_ANSWER_JSON: Final[Path] = Path("reports/golden-answers/golden-answer.json")
+
 GOLDEN_ANSWER_SCHEMA_VERSION: Final[str] = "fund-agent.golden-answer.v1"
 _FUND_HEADING_PATTERN: Final[re.Pattern[str]] = re.compile(
     r"^##\s+(?P<code>\d{6})\s+(?P<title>.+?)\s*$"

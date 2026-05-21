@@ -8,6 +8,11 @@ from pathlib import Path
 from fund_agent.fund.extraction_score import (
     CORRECTNESS_MATCH,
     CORRECTNESS_MISMATCH,
+    CORRECTNESS_COVERAGE_COVERED,
+    CORRECTNESS_COVERAGE_FUND_NOT_COVERED,
+    CORRECTNESS_COVERAGE_NO_COMPARABLE_FIELDS,
+    CORRECTNESS_COVERAGE_NOT_CONFIGURED,
+    CORRECTNESS_COVERAGE_PARTIALLY_COVERED,
     CORRECTNESS_STATUS_AVAILABLE,
     CORRECTNESS_STATUS_UNAVAILABLE,
     CORRECTNESS_UNAVAILABLE,
@@ -220,7 +225,9 @@ def test_derive_fund_quality_records_resolves_all_standard_fund_types() -> None:
         assert row.preferred_lens_unresolved_chapter_ids == ()
 
 
-def test_derive_fund_quality_records_marks_conflicting_fund_type_without_first_row_fallback() -> None:
+def test_derive_fund_quality_records_marks_conflicting_fund_type_without_first_row_fallback() -> (
+    None
+):
     """验证同一基金多行基金类型冲突时不取第一行静默通过。
 
     Args:
@@ -576,7 +583,7 @@ def test_compare_snapshot_correctness_perfect_match_and_skipped_denominator(tmp_
             value_present=True,
             anchor_present=True,
             comparable_values={"fund_name": "测试基金"},
-        )
+        ),
     ]
 
     summary = compare_snapshot_correctness(records=records, golden_answer_path=golden_path)
@@ -589,9 +596,195 @@ def test_compare_snapshot_correctness_perfect_match_and_skipped_denominator(tmp_
     assert summary.unavailable_records == 0
     assert summary.skipped_records == 1
     assert summary.accuracy_rate == 1.0
+    assert summary.coverage_scope == CORRECTNESS_COVERAGE_COVERED
+    assert summary.coverage_reason == CORRECTNESS_COVERAGE_COVERED
+    assert summary.covered_fund_codes == ("004393",)
+    assert summary.missing_fund_codes == ()
+    assert summary.coverage_required is False
     statuses = {(row.field_name, row.sub_field): row.status for row in summary.record_results}
     assert statuses[("classified_fund_type", "fund_type")] == CORRECTNESS_MATCH
     assert statuses[("basic_identity", "fund_name")] == CORRECTNESS_MATCH
+
+
+def test_compare_snapshot_correctness_without_golden_path_is_not_configured() -> None:
+    """验证未配置 strict golden path 时输出 not_configured coverage。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 coverage 状态不符合 P9-S2 契约时抛出。
+    """
+
+    summary = compare_snapshot_correctness(
+        records=[
+            _snapshot_record(
+                "profile",
+                "classified_fund_type",
+                value_present=True,
+                anchor_present=True,
+            )
+        ],
+        golden_answer_path=None,
+    )
+
+    assert summary.status == CORRECTNESS_STATUS_UNAVAILABLE
+    assert summary.coverage_scope == CORRECTNESS_COVERAGE_NOT_CONFIGURED
+    assert summary.coverage_reason == CORRECTNESS_COVERAGE_NOT_CONFIGURED
+    assert summary.missing_fund_codes == ("004393",)
+    assert summary.record_results == ()
+
+
+def test_compare_snapshot_correctness_malformed_existing_golden_file_fails_closed(
+    tmp_path: Path,
+) -> None:
+    """验证已有 malformed golden 文件不会退化成 not_configured。
+
+    Args:
+        tmp_path: pytest 临时目录 fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 malformed strict golden 被静默降级时抛出。
+    """
+
+    golden_path = tmp_path / "golden-answer.json"
+    golden_path.write_text("{ malformed", encoding="utf-8")
+
+    try:
+        compare_snapshot_correctness(
+            records=[
+                _snapshot_record(
+                    "profile",
+                    "classified_fund_type",
+                    value_present=True,
+                    anchor_present=True,
+                )
+            ],
+            golden_answer_path=golden_path,
+        )
+    except json.JSONDecodeError:
+        return
+    raise AssertionError("expected malformed golden file to fail closed")
+
+
+def test_compare_snapshot_correctness_missing_explicit_golden_file_fails_closed(
+    tmp_path: Path,
+) -> None:
+    """验证显式 golden 路径缺失时抛出 FileNotFoundError。
+
+    Args:
+        tmp_path: pytest 临时目录 fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当缺失路径被误判为 not_configured 时抛出。
+    """
+
+    try:
+        compare_snapshot_correctness(
+            records=[
+                _snapshot_record(
+                    "profile",
+                    "classified_fund_type",
+                    value_present=True,
+                    anchor_present=True,
+                )
+            ],
+            golden_answer_path=tmp_path / "missing.json",
+        )
+    except FileNotFoundError:
+        return
+    raise AssertionError("expected missing explicit golden file to fail closed")
+
+
+def test_compare_snapshot_correctness_marks_current_fund_not_covered(tmp_path: Path) -> None:
+    """验证 golden 文件存在但当前基金缺记录时为 fund_not_covered。
+
+    Args:
+        tmp_path: pytest 临时目录 fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当当前基金覆盖缺口未被识别时抛出。
+    """
+
+    golden_path = _golden_answer_json(tmp_path, expected_fund_type="active_fund")
+    records = [
+        _snapshot_record(
+            "profile",
+            "classified_fund_type",
+            fund_code="000216",
+            value_present=True,
+            anchor_present=True,
+            comparable_values={"fund_type": "active_fund"},
+        )
+    ]
+
+    summary = compare_snapshot_correctness(records=records, golden_answer_path=golden_path)
+
+    assert summary.status == CORRECTNESS_STATUS_AVAILABLE
+    assert summary.coverage_scope == CORRECTNESS_COVERAGE_FUND_NOT_COVERED
+    assert summary.coverage_reason == CORRECTNESS_COVERAGE_FUND_NOT_COVERED
+    assert summary.covered_fund_codes == ()
+    assert summary.missing_fund_codes == ("000216",)
+
+
+def test_compare_snapshot_correctness_marks_current_fund_no_comparable_fields(
+    tmp_path: Path,
+) -> None:
+    """验证当前基金有 golden 记录但无可比字段时为 no_comparable_fields。
+
+    Args:
+        tmp_path: pytest 临时目录 fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当不可比 coverage 缺口未被识别时抛出。
+    """
+
+    golden_path = _golden_answer_json_from_records(
+        tmp_path,
+        records=[
+            {
+                "fund_code": "004393",
+                "field_name": "fee_schedule",
+                "sub_field": "management_fee",
+                "expected_value": "1.20%",
+                "confidence": "high",
+                "source": "年报2024 §2 page-5",
+            }
+        ],
+    )
+    records = [
+        _snapshot_record(
+            "fee",
+            "fee_schedule",
+            value_present=True,
+            anchor_present=True,
+            comparable_values={},
+        )
+    ]
+
+    summary = compare_snapshot_correctness(records=records, golden_answer_path=golden_path)
+
+    assert summary.status == CORRECTNESS_STATUS_AVAILABLE
+    assert summary.comparable_records == 0
+    assert summary.unavailable_records == 1
+    assert summary.coverage_scope == CORRECTNESS_COVERAGE_NO_COMPARABLE_FIELDS
+    assert summary.coverage_reason == CORRECTNESS_COVERAGE_NO_COMPARABLE_FIELDS
+    assert summary.missing_fund_codes == ("004393",)
 
 
 def test_compare_snapshot_correctness_keeps_legacy_classification_compatibility(
@@ -623,7 +816,7 @@ def test_compare_snapshot_correctness_keeps_legacy_classification_compatibility(
             "basic_identity",
             value_present=False,
             anchor_present=False,
-        )
+        ),
     ]
 
     summary = compare_snapshot_correctness(records=records, golden_answer_path=golden_path)
@@ -631,6 +824,7 @@ def test_compare_snapshot_correctness_keeps_legacy_classification_compatibility(
     assert summary.comparable_records == 1
     assert summary.matched_records == 1
     assert summary.unavailable_records == 1
+    assert summary.coverage_scope == CORRECTNESS_COVERAGE_PARTIALLY_COVERED
     statuses = {(row.field_name, row.sub_field): row.status for row in summary.record_results}
     assert statuses[("classified_fund_type", "fund_type")] == CORRECTNESS_MATCH
     assert statuses[("basic_identity", "fund_name")] == CORRECTNESS_UNAVAILABLE
@@ -789,6 +983,9 @@ def test_run_extraction_score_writes_correctness_mismatch(tmp_path: Path) -> Non
         if row["status"] == CORRECTNESS_MISMATCH
     ]
     assert score_payload["correctness"]["status"] == CORRECTNESS_STATUS_AVAILABLE
+    assert score_payload["correctness"]["coverage_scope"] == CORRECTNESS_COVERAGE_PARTIALLY_COVERED
+    assert score_payload["correctness"]["coverage_required"] is False
+    assert score_payload["correctness"]["covered_fund_codes"] == ["004393"]
     assert score_payload["correctness"]["comparable_records"] == 1
     assert score_payload["correctness"]["mismatched_records"] == 1
     assert mismatch_rows[0]["expected_value"] == "active_fund"
@@ -906,7 +1103,9 @@ def _golden_answer_json(
             "source": "年报2024 §2 page-5",
         },
     ]
-    return _golden_answer_json_from_records(tmp_path, records=records, skipped_fields=skipped_fields)
+    return _golden_answer_json_from_records(
+        tmp_path, records=records, skipped_fields=skipped_fields
+    )
 
 
 def _golden_answer_json_from_records(

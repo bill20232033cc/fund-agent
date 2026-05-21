@@ -277,6 +277,7 @@ def build_analyze_command(
         fund.code,
         "--report-year",
         str(report_year),
+        "--dev-override",
         "--equity-position",
         "80%",
         "--actual-style",

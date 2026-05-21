@@ -2,6 +2,13 @@
 .venv/
 __pycache__/
 *.pyc
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+dist/
+build/
+*.egg-info/
 
 cache/
 .claude/
@@ -10,6 +17,10 @@ cache/
 report-*.md
 reports/extraction-snapshots/
 reports/quality-gate-runs/
+# reports/golden-answers/ contains curated fixtures and is intentionally tracked.
+
+# Binary source audit inputs stay local unless converted to Markdown review artifacts.
+docs/*.docx
 
 # Local tmux / launchd automation helpers.
 launchd/

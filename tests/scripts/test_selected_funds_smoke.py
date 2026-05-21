@@ -108,6 +108,7 @@ def test_build_analyze_command_uses_explicit_mvp_inputs() -> None:
 
     assert command[:3] == [".venv/bin/fund-analysis", "analyze", "004393"]
     assert "--report-year" in command
+    assert "--dev-override" in command
     assert "--equity-position" in command
     assert "--actual-style" in command
     assert "--manager-tenure-months" in command

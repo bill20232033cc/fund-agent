@@ -18,7 +18,9 @@ from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Final
 
-THERMOMETER_CACHE_ROOT: Final[Path] = Path("cache/thermometer")
+from fund_agent.config.paths import DEFAULT_THERMOMETER_CACHE_ROOT
+
+THERMOMETER_CACHE_ROOT: Final[Path] = DEFAULT_THERMOMETER_CACHE_ROOT
 THERMOMETER_CACHE_FILENAME: Final[str] = "thermometer.json"
 THERMOMETER_DATA_URL: Final[str] = "https://youzhiyouxing.cn/data"
 THERMOMETER_MACRO_URL: Final[str] = "https://youzhiyouxing.cn/data/macro"
