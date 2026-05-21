@@ -15,12 +15,12 @@
 | 项目 | 当前状态 |
 |------|----------|
 | 当前分支 | `main` |
-| 当前 gate | `P8 closed` |
-| 下一 entry point | `post-P8 planning` |
+| 当前 gate | `post-P8 planning accepted` |
+| 下一 entry point | `P9-S1 analyze product contract plan/review` |
 | 设计真源 | `docs/design.md`，已按 `docs/design-update.md` reconciliation 收口 |
 | 近期设计裁决 | `docs/reviews/design-update-reconciliation-20260521.md`、`docs/reviews/implementation-control-update-reconciliation-20260521.md` |
 | P8 交付物 | `must_answer` audit routing、renderer `preferred_lens` deterministic application、source fallback taxonomy |
-| 当前残余风险 | product contract、repo hygiene、quality gate / golden coverage ROI |
+| 当前残余风险 | P9 product contract、repo hygiene、quality gate / golden coverage ROI |
 
 当前控制文档仍是 phaseflow 的总控真源：详细 gate、artifact、review、commit、验证和 residual risk 记录保留在后文，不用摘要替代。`docs/implementation-control-update.md` 仅作为摘要候选输入；经 reconciliation 后只融合稳定 summary，不替换本文件。
 
@@ -37,6 +37,7 @@
 | P6 | 模板契约机器化（CHAPTER_CONTRACT / ITEM_RULE） | Post-P5 | ✅ done | P5 |
 | P7 | 年报来源迁移（EID 主源 + Eastmoney fallback） | Post-P6 | ✅ done | P6 |
 | P8 | 模板契约与来源策略加固（must_answer audit / preferred_lens / source fallback） | Post-P7 | ✅ done | P7 |
+| P9 | Analyze 产品契约加固（用户最小输入 + dev override 分离） | Post-P8 | 🟡 planning | P8 |
 
 ### 1.1.1 能力域摘要
 
@@ -56,7 +57,7 @@
 
 | 类别 | 状态 | Owner / Destination |
 |------|------|---------------------|
-| Product contract | `analyze` 用户最小输入 vs dev override 参数仍需设计 | post-P8 planning |
+| Product contract | `analyze` 用户最小输入 vs dev override 参数进入 P9-S1 plan/review；`final_judgment` 派生策略需设计 | P9-S1 |
 | Repo hygiene | LICENSE、CI、`.gitignore`、默认路径配置需单独 slice | post-P8 planning |
 | Dependency strategy | Dayu 裁决为方法论参考，生产依赖移除；后续 runtime 能力必须项目内化 | closed by 2026-05-21 reconciliation |
 | Quality gate ROI | golden coverage 与 gate 复杂度需继续校准 | post-P8 planning |
@@ -74,8 +75,8 @@
 ### 1.3 当前 Gate 与基线裁决（2026-05-21）
 
 - 当前分支：`main`
-- 当前 gate：`P8 closed`
-- 下一 gate：`post-P8 planning`
+- 当前 gate：`post-P8 planning accepted`
+- 下一 gate：`P9-S1 analyze product contract plan/review`
 - Repo findings 收口：003（QDII basis 记录并发指数证据）已修复；005（CSV ValueError/FNFE 分离）已修复；006（alpha 空 observations MVP 注释）已文档化；004/008/009/010 低严重度保持 deferred。
 - P4 执行控制文档：`docs/implementation-control-p4.md`
 - 当前裁决：
@@ -90,6 +91,8 @@
   - P8-S2 renderer preferred_lens application implementation 已完成并通过 controller code review，implementation commit=`6dbf6ca`，review artifact=`docs/reviews/code-review-20260521-060057.md`。实现新增 Capability-owned `LensApplicationPlan`，renderer 仅在第 0/1 章确定性 slot 应用 normalized lens labels，不渲染 raw `TemplateLensRule.statements`，并保持 `ProgrammaticAuditInput` 形状不变；当前验证 targeted `67 passed`、full suite `344 passed`、ruff passed、diff check passed；下一 gate 为 `post-P8-S2 follow-up planning`。
   - Post-P8-S2 follow-up planning 已接受，artifact=`docs/reviews/post-p8-s2-follow-up-planning-20260521.md`。P8-S1/P8-S2 已分别关闭 `must_answer` contract-routing 与 renderer `preferred_lens` deterministic application residual；下一优先级裁决为 `P8-S3 source fallback policy design`，目标是在 Fund Capability document source 层显式定义 EID/Eastmoney 来源错误分类、fallback eligibility 与 fallback-blocked provenance，避免官方来源 schema drift / identity mismatch / integrity error 被商业站 fallback 静默掩盖。
   - P8-S3 source fallback policy design plan/review 已通过，plan artifact=`docs/reviews/p8-s3-source-fallback-policy-plan-20260521.md`，review artifact=`docs/reviews/plan-review-20260521-060952.md`。计划裁决为：在 Fund Capability document source 层新增五类来源失败 taxonomy、table-driven fallback eligibility 和 fallback-blocked structured exception；`not_found/unavailable` 可 fallback，`schema_drift/identity_mismatch/integrity_error` 必须 fail closed 并保留 source/category/message provenance；下一 gate 为 `P8-S3 implementation`。
+  - Post-P8 planning 已接受，artifact=`docs/reviews/post-p8-planning-20260521.md`。P9 第一优先级裁决为 `analyze` 产品契约加固：区分普通用户最小输入与 developer override，设计最终判断派生策略，并保持 UI / Service / Capability 边界；当前 gate 为 `post-P8 planning accepted`，下一 gate 为 `P9-S1 analyze product contract plan/review`。
+  - Agent routing 补充：Procodex / AgentCodex 为 planning / implementation 首选；如遇网络或环境问题，AgentMiMo 可作为替补。但 MiMo 若参与某 slice 的 planning / implementation，则不得担任同 slice 独立 reviewer，应改用 AgentDS + AgentGLM。
   - P0 维持 `done`。历史上曾验证 `dayu` 依赖可导入；2026-05-21 架构裁决改为不保留外部 Dayu 生产依赖，相关 Host/Engine/tool-loop 能力如后续需要必须在项目内化实现。当前 `fund-agent` 处于 editable install，`fund-analysis --help` 可用，样本基金 `110011` 年报可下载，`pdfplumber` 可提取全文文本和表格。
   - P1 已完成并通过 aggregate review。
   - P2 已完成并通过 aggregate deepreview。
@@ -1436,3 +1439,4 @@ P0（环境搭建）
 | 2026-05-21 | P8-S3 source fallback policy implementation | ✅ accepted | controller self-review 通过；五类 taxonomy、table-driven fallback eligibility、结构化阻断异常、PDF 完整性异常、provenance 保留均符合计划验收标准；当前验证 `347 passed`、ruff passed；implementation commit=`93ae6ea` |
 | 2026-05-21 | post-P8-S3 follow-up planning | ✅ accepted | P8 三个核心交付物（must_answer audit / preferred_lens / source fallback）均已完成；artifact=`docs/reviews/post-p8-s3-follow-up-planning-20260521.md`；P8-S4 preflight quality gate 和 open repo findings (003/005/006) deferred 到 post-P8；当前 gate 为 `P8 aggregate readiness reconciliation`，下一 gate 为 `P8 closed` |
 | 2026-05-21 | P8 closed | ✅ done | P8 三个核心交付物全部完成；AgentController 后续提交 audit hardening (`90bb9d2`)、fund_type bond guard (`90bb9d2`)、preflight quality gate (`90bb9d2`)、docs/infra sync；controller 修复 finding 005（CSV ValueError/FNFE 分离）和 finding 006（alpha observations MVP 注释），commit=`b4aaaaa`；当前验证 `347 passed`、ruff passed；当前 gate 为 `P8 closed`，下一 gate 为 `post-P8 planning` |
+| 2026-05-21 | post-P8 planning | ✅ accepted | controller 裁决 P9 第一优先级为 `analyze` 产品契约加固，artifact=`docs/reviews/post-p8-planning-20260521.md`；近期收口包括移除外部 `dayu-agent` 依赖、刷新 `uv.lock`、对齐 `AGENTS.md`/`CLAUDE.md`、明确第 5/6 章模板边界；Procodex/AgentCodex 网络问题时 AgentMiMo 可作为 planning/implementation 替补，但同 slice review 改用 AgentDS + AgentGLM；当前 gate 为 `post-P8 planning accepted`，下一 gate 为 `P9-S1 analyze product contract plan/review` |
