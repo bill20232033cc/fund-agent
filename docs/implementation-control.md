@@ -15,8 +15,8 @@
 | 项目 | 当前状态 |
 |------|----------|
 | 当前分支 | `main` |
-| 当前 gate | `P10 merged` |
-| 下一 entry point | `post-P10 follow-up planning` |
+| 当前 gate | `post-P10 follow-up planning accepted` |
+| 下一 entry point | `P11-S1 control doc hygiene and recovery plan/review` |
 | 设计真源 | `docs/design.md`，已按 `docs/design-update.md` reconciliation 收口 |
 | 近期设计裁决 | `docs/reviews/design-update-reconciliation-20260521.md`、`docs/reviews/implementation-control-update-reconciliation-20260521.md` |
 | P8 交付物 | `must_answer` audit routing、renderer `preferred_lens` deterministic application、source fallback taxonomy |
@@ -39,6 +39,7 @@
 | P8 | 模板契约与来源策略加固（must_answer audit / preferred_lens / source fallback） | Post-P7 | ✅ done | P7 |
 | P9 | Analyze 产品契约加固（用户最小输入 + dev override 分离） | Post-P8 | ✅ done | P8 |
 | P10 | Repo hygiene / release readiness | Post-P9 | ✅ merged | P9 |
+| P11 | Control doc hygiene / recovery ergonomics | Post-P10 | 🟡 planned | P10 |
 
 ### 1.1.1 能力域摘要
 
@@ -60,6 +61,7 @@
 |------|------|---------------------|
 | Product contract | P9-S1 已接受：用户最小输入、developer override 分离、final judgment 派生与 R2 审计已收口 | closed by P9-S1 |
 | Repo hygiene | P10 已通过 PR #6 squash merge 到 `main` | closed by P10 |
+| Control doc hygiene | P11-S1 下一阶段：先做 plan/review，目标是降低 phaseflow recovery 成本且保留审计证据 | P11-S1 plan/review |
 | Dependency strategy | Dayu 裁决为方法论参考，生产依赖移除；后续 runtime 能力必须项目内化 | closed by 2026-05-21 reconciliation |
 | Quality gate ROI | P9-S2 已接受：区分 gate not-run 与 correctness coverage gap；精选池成员缺 strict golden 覆盖输出 FQ0/info | closed by P9-S2 |
 | P9 aggregate review coverage | P9 aggregate deepreview 已接受；AgentDS 独立 PASS，AgentMiMo 补充 PASS 但记录 P9-S2 reviewer limitation | closed by P9 aggregate |
@@ -78,8 +80,8 @@
 ### 1.3 当前 Gate 与基线裁决（2026-05-21）
 
 - 当前分支：`main`
-- 当前 gate：`P10 merged`
-- 下一 gate：`post-P10 follow-up planning`
+- 当前 gate：`post-P10 follow-up planning accepted`
+- 下一 gate：`P11-S1 control doc hygiene and recovery plan/review`
 - Repo findings 收口：003（QDII basis 记录并发指数证据）已修复；005（CSV ValueError/FNFE 分离）已修复；006（alpha 空 observations MVP 注释）已文档化；004/008/009/010 低严重度保持 deferred。
 - P4 执行控制文档：`docs/implementation-control-p4.md`
 - 当前裁决：
@@ -111,6 +113,7 @@
   - P10 acceptance / ready-to-open-draft-PR reconciliation 已接受，artifact=`docs/reviews/p10-acceptance-ready-to-open-draft-pr-reconciliation-20260521.md`。PR inclusion/exclusion set 已明确；`docs/repo-audit-20260521.md` 和本地 `.docx` 审计输入排除，P10 release-readiness 代码、文档和 review artifacts 纳入；accepted local commit=`e9b622d`；当前 gate 为 `ready-to-open-draft-PR`，下一 gate 为 `draft PR gate（需用户授权）`。
   - P10 draft PR gate 已接受，artifact=`docs/reviews/p10-draft-pr-gate-reconciliation-20260521.md`。Draft PR #6 已创建：`https://github.com/bill20232033cc/fund-agent/pull/6`，branch=`p10-release-readiness`，head=`eb43dc3`；GitHub state=`OPEN`、draft=`true`、mergeable=`MERGEABLE`，Actions run `26234941272` pass；PR-level reviews `docs/reviews/pr-6-review-mimo-20260521.md` 和 `docs/reviews/pr-6-review-glm-20260521.md` 均无阻断 finding。初始 CI dev override 输出不稳定已由 `eb43dc3` 修复；`docs/repo-audit-20260521.md` 继续排除。当前 gate 为 `draft-PR-pass`，下一 gate 为 `merge gate（需用户额外授权）`。
   - P10 merge gate 已接受，artifact=`docs/reviews/p10-merge-gate-reconciliation-20260521.md`。PR #6 已 squash merge 到 `main`：`https://github.com/bill20232033cc/fund-agent/pull/6`；merge commit=`acc692c7e84c855398de86497b0d05f30b6f5ca5`，mergedAt=`2026-05-21T15:39:33Z`；本地 `main` 已对齐 `origin/main`。因远端 squash merge 与本地 pre-squash 线性历史分叉，controller 先保留备份分支 `backup/p10-pre-squash-main` 指向 `469a268`，再将本地 `main` 对齐到 `origin/main`。当前 gate 为 `P10 merged`，下一 gate 为 `post-P10 follow-up planning`。
+  - Post-P10 follow-up planning 已接受，artifact=`docs/reviews/post-p10-follow-up-planning-20260521.md`。P10 已关闭 repo release-readiness 风险；下一阶段不继续扩产品功能，优先进入 `P11 control doc hygiene / recovery ergonomics`，目标是降低 phaseflow resume / handoff 成本并保留全部 gate 证据。RR-13 duplicate `016492` 继续 human-owned，`docs/repo-audit-20260521.md` 继续本地排除，`fund_agent/fund/tools/` 空目录 concerns 不启动代码 phase，因 design truth 已声明当前无 Fund tool runtime。当前 gate 为 `post-P10 follow-up planning accepted`，下一 gate 为 `P11-S1 control doc hygiene and recovery plan/review`。
   - Agent routing 补充：Procodex / AgentCodex 为 planning / implementation 首选；如遇网络或环境问题，AgentMiMo 可作为替补。但 MiMo 若参与某 slice 的 planning / implementation，则不得担任同 slice 独立 reviewer，应改用 AgentDS + AgentGLM。
   - P0 维持 `done`。历史上曾验证 `dayu` 依赖可导入；2026-05-21 架构裁决改为不保留外部 Dayu 生产依赖，相关 Host/Engine/tool-loop 能力如后续需要必须在项目内化实现。当前 `fund-agent` 处于 editable install，`fund-analysis --help` 可用，样本基金 `110011` 年报可下载，`pdfplumber` 可提取全文文本和表格。
   - P1 已完成并通过 aggregate review。
@@ -1475,3 +1478,4 @@ P0（环境搭建）
 | 2026-05-21 | P10 acceptance / ready-to-open-draft-PR reconciliation | ✅ accepted | artifact=`docs/reviews/p10-acceptance-ready-to-open-draft-pr-reconciliation-20260521.md`；P10 PR inclusion/exclusion set 已明确，repo-audit 输入和本地 `.docx` 排除；accepted local commit=`e9b622d`；当前 gate 为 `ready-to-open-draft-PR`，下一 gate 为 `draft PR gate（需用户授权）` |
 | 2026-05-21 | P10 draft PR gate | ✅ draft-PR-pass | Draft PR 6 已创建：`https://github.com/bill20232033cc/fund-agent/pull/6`；branch=`p10-release-readiness`，head=`eb43dc3`；controller reconciliation=`docs/reviews/p10-draft-pr-gate-reconciliation-20260521.md`；PR-level reviews `docs/reviews/pr-6-review-mimo-20260521.md`、`docs/reviews/pr-6-review-glm-20260521.md` 均无阻断 finding；GitHub state=`OPEN`、draft=`true`、mergeable=`MERGEABLE`，Actions run `26234941272` pass；初始 CI failure 已由 `eb43dc3` 修复；下一 gate 为 `merge gate（需用户额外授权）` |
 | 2026-05-21 | P10 merge gate | ✅ merged | PR 6 已 squash merge 到 `main`：`https://github.com/bill20232033cc/fund-agent/pull/6`；merge commit=`acc692c7e84c855398de86497b0d05f30b6f5ca5`，mergedAt=`2026-05-21T15:39:33Z`；controller reconciliation=`docs/reviews/p10-merge-gate-reconciliation-20260521.md`；本地 `main` 已对齐 `origin/main`；pre-squash 本地线性历史保留在 `backup/p10-pre-squash-main`；当前 gate 为 `P10 merged`，下一 gate 为 `post-P10 follow-up planning` |
+| 2026-05-21 | post-P10 follow-up planning | ✅ accepted | artifact=`docs/reviews/post-p10-follow-up-planning-20260521.md`；controller 裁决下一阶段优先做 P11 control doc hygiene / recovery ergonomics，先进入 plan/review，不改产品主链路；RR-13 继续 human-owned，`docs/repo-audit-20260521.md` 继续本地排除；当前 gate 为 `post-P10 follow-up planning accepted`，下一 gate 为 `P11-S1 control doc hygiene and recovery plan/review` |
