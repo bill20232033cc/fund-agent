@@ -13,8 +13,8 @@
 | Field | State |
 |---|---|
 | Branch | `main` |
-| Current gate | `post-P12 planning accepted` |
-| Next entry point | `release/maintenance closeout and main-branch readiness reconciliation` |
+| Current gate | `maintenance-ready` |
+| Next entry point | `next phase selection` |
 | Current phase | `P12 ITEM_RULE deterministic compliance` |
 | Design truth | `docs/design.md` |
 | Control truth | `docs/implementation-control.md` |
@@ -33,12 +33,13 @@
 | Latest P12 aggregate artifacts | `docs/reviews/p12-aggregate-deepreview-mimo-20260522.md`, `docs/reviews/p12-aggregate-deepreview-glm-20260522.md`, `docs/reviews/p12-aggregate-deepreview-controller-judgment-20260522.md` |
 | Latest P12 closeout artifact | `docs/reviews/p12-main-branch-closeout-20260522.md` |
 | Latest post-P12 planning artifacts | `docs/reviews/post-p12-planning-20260522.md`, `docs/reviews/post-p12-plan-review-mimo-20260522.md`, `docs/reviews/post-p12-plan-review-glm-20260522.md`, `docs/reviews/post-p12-plan-rereview-mimo-20260522.md`, `docs/reviews/post-p12-plan-rereview-glm-20260522.md`, `docs/reviews/post-p12-plan-review-controller-judgment-20260522.md` |
+| Latest release/maintenance closeout artifacts | `docs/reviews/post-p12-release-maintenance-closeout-20260522.md`, `docs/reviews/post-p12-release-maintenance-closeout-review-mimo-20260522.md` |
 | Last merged PR | PR #6, merge commit `acc692c7e84c855398de86497b0d05f30b6f5ca5` |
-| Product baseline | P10 release-readiness merged; P11 control-doc recovery accepted; P12 closed on main; post-P12 planning accepted |
+| Product baseline | P10 release-readiness merged; P11 control-doc recovery accepted; P12 closed on main; post-P12 release lane maintenance-ready |
 | Open residuals | RR-13 duplicate `016492`, excluded `docs/repo-audit-20260521.md`, future P13 tracking-error/index-data candidates, future E1-E3/Evidence Confirm, repo-hygiene candidates D-1/D-8-C5/C-9 |
 | Non-goal reminder | do not introduce Dayu Host/Engine/tool loop, LLM writing, or external runtime dependency |
 
-Resume checklist: confirm current gate and next entry point; confirm the next action is release/maintenance closeout and main-branch readiness reconciliation; keep RR-13 source data and `docs/repo-audit-20260521.md` excluded unless explicitly scoped; preserve deterministic MVP boundaries and do not introduce LLM audit, Host, Engine, or tool loop.
+Resume checklist: confirm current gate and next entry point; current release lane is maintenance-ready; choose the next phase explicitly before implementation; keep RR-13 source data and `docs/repo-audit-20260521.md` excluded unless explicitly scoped; preserve deterministic MVP boundaries and do not introduce LLM audit, Host, Engine, or tool loop.
 
 ## Active Gate Ledger
 
@@ -59,6 +60,7 @@ Resume checklist: confirm current gate and next entry point; confirm the next ac
 | `P12 aggregate deepreview` | accepted | `docs/reviews/p12-aggregate-deepreview-mimo-20260522.md`, `docs/reviews/p12-aggregate-deepreview-glm-20260522.md`, `docs/reviews/p12-aggregate-deepreview-controller-judgment-20260522.md` | local review artifacts | aggregate range `ba77e02..HEAD`; MiMo PASS; GLM PASS; controller verified diff check, targeted `83 passed`, adjacent `43 passed`, ruff passed, full `403 passed` | P12 main-branch closeout | closeout reconciliation |
 | `P12 main-branch closeout reconciliation` | accepted | `docs/reviews/p12-main-branch-closeout-20260522.md` | local closeout artifact | P12 commits already on `main`; no retroactive draft PR gate applicable | post-P12 planning | follow-up planning |
 | `post-P12 planning` | accepted | `docs/reviews/post-p12-planning-20260522.md`, `docs/reviews/post-p12-plan-review-controller-judgment-20260522.md` | local docs-only plan | MiMo/GLM initial `PASS_WITH_FINDINGS`; targeted re-reviews `PASS`; all 7 findings closed | release/maintenance closeout | closeout |
+| `post-P12 release/maintenance closeout` | accepted | `docs/reviews/post-p12-release-maintenance-closeout-20260522.md`, `docs/reviews/post-p12-release-maintenance-closeout-review-mimo-20260522.md` | local docs-only closeout | controller validation passed: branch `main`, `pytest` 403 passed, ruff passed, diff check passed; MiMo closeout review PASS | maintenance-ready / next phase selection | next phase selection |
 
 ## Phase History Index
 
@@ -76,7 +78,7 @@ Resume checklist: confirm current gate and next entry point; confirm the next ac
 | P9 | done | [Archive: P9](#archive-p9) | P9 product contract and aggregate deepreview artifacts | `2bacdb3`, `ce603a0` recorded | full suite `377 passed` | review limitation documented |
 | P10 | merged | [Archive: P10](#archive-p10) | P10 plan/code/aggregate/PR artifacts | PR #6 merge `acc692c7e84c855398de86497b0d05f30b6f5ca5` | full suite `388 passed`, CI pass | `docs/repo-audit-20260521.md` excluded |
 | P11 | accepted | [Archive: P11](#archive-p11) | P11 plan/review/implementation/code-review/follow-up/P11-S2 artifacts | `5f5331b` | P11-S2 docs-only validation passed | closed |
-| P12 | closed on main; post-P12 planning accepted | [Archive: P12](#archive-p12) | `docs/reviews/post-p11-second-follow-up-planning-20260522.md`, `docs/reviews/p12-s1-plan-review-controller-judgment-20260522.md`, `docs/reviews/p12-s1-code-review-controller-judgment-20260522.md`, `docs/reviews/p12-s2-plan-review-controller-judgment-20260522.md`, `docs/reviews/p12-s2-code-review-controller-judgment-20260522.md`, `docs/reviews/post-p12-s2-follow-up-plan-review-controller-judgment-20260522.md`, `docs/reviews/p12-aggregate-deepreview-controller-judgment-20260522.md`, `docs/reviews/p12-main-branch-closeout-20260522.md`, `docs/reviews/post-p12-plan-review-controller-judgment-20260522.md` | `69d5b3e` | full suite `403 passed`; aggregate PASS/PASS; post-P12 plan re-reviews PASS/PASS | release/maintenance closeout |
+| P12 | closed on main; post-P12 release lane maintenance-ready | [Archive: P12](#archive-p12) | `docs/reviews/post-p11-second-follow-up-planning-20260522.md`, `docs/reviews/p12-s1-plan-review-controller-judgment-20260522.md`, `docs/reviews/p12-s1-code-review-controller-judgment-20260522.md`, `docs/reviews/p12-s2-plan-review-controller-judgment-20260522.md`, `docs/reviews/p12-s2-code-review-controller-judgment-20260522.md`, `docs/reviews/post-p12-s2-follow-up-plan-review-controller-judgment-20260522.md`, `docs/reviews/p12-aggregate-deepreview-controller-judgment-20260522.md`, `docs/reviews/p12-main-branch-closeout-20260522.md`, `docs/reviews/post-p12-plan-review-controller-judgment-20260522.md`, `docs/reviews/post-p12-release-maintenance-closeout-20260522.md` | `69d5b3e` | full suite `403 passed`; aggregate PASS/PASS; post-P12 plan re-reviews PASS/PASS; release closeout review PASS | next phase selection |
 
 ## P12 Current Phase Notes
 
@@ -89,7 +91,7 @@ Post-P12-S1 guardrails:
 - Do not introduce Dayu runtime, Host, Engine, tool loop, prompt scene registry, or LLM writing as part of follow-up planning.
 - Keep ITEM_RULE evidence/extractor follow-ups separate from renderer/audit compliance unless a future plan explicitly owns those inputs.
 
-Success signals for the next step: release/maintenance closeout confirms main-branch readiness, records repo-audit disposition without publishing the untracked file, keeps residuals owner-assigned, and does not reopen P12 unless a regression is found.
+Success signals for the next step: next phase selection chooses an explicit P13 product/data phase, audit architecture phase, or repo-hygiene phase before any implementation starts; P12 remains closed unless a regression is found.
 
 ## Active Residuals
 
@@ -180,7 +182,7 @@ P11 control doc hygiene plan/review, implementation, code review, post-P11 plann
 
 ## Archive: P12
 
-P12 ITEM_RULE deterministic compliance planning starts from `docs/reviews/post-p11-second-follow-up-planning-20260522.md`. P12-S1 plan/review is accepted in `docs/reviews/p12-s1-plan-review-controller-judgment-20260522.md`; implementation/code review is accepted in `docs/reviews/p12-s1-code-review-controller-judgment-20260522.md`. P12-S2 plan/review is accepted in `docs/reviews/p12-s2-plan-review-controller-judgment-20260522.md`; implementation/code review is accepted in `docs/reviews/p12-s2-code-review-controller-judgment-20260522.md`. P12 aggregate deepreview is accepted in `docs/reviews/p12-aggregate-deepreview-controller-judgment-20260522.md`; main-branch closeout is recorded in `docs/reviews/p12-main-branch-closeout-20260522.md`. Post-P12 planning is accepted in `docs/reviews/post-p12-plan-review-controller-judgment-20260522.md` and selects release/maintenance closeout before any P13 product phase. P12 keeps ITEM_RULE ownership in Fund Capability and preserves deterministic MVP boundaries.
+P12 ITEM_RULE deterministic compliance planning starts from `docs/reviews/post-p11-second-follow-up-planning-20260522.md`. P12-S1 plan/review is accepted in `docs/reviews/p12-s1-plan-review-controller-judgment-20260522.md`; implementation/code review is accepted in `docs/reviews/p12-s1-code-review-controller-judgment-20260522.md`. P12-S2 plan/review is accepted in `docs/reviews/p12-s2-plan-review-controller-judgment-20260522.md`; implementation/code review is accepted in `docs/reviews/p12-s2-code-review-controller-judgment-20260522.md`. P12 aggregate deepreview is accepted in `docs/reviews/p12-aggregate-deepreview-controller-judgment-20260522.md`; main-branch closeout is recorded in `docs/reviews/p12-main-branch-closeout-20260522.md`. Post-P12 planning is accepted in `docs/reviews/post-p12-plan-review-controller-judgment-20260522.md` and selects release/maintenance closeout before any P13 product phase. Release/maintenance closeout is accepted in `docs/reviews/post-p12-release-maintenance-closeout-20260522.md`; the current lane is maintenance-ready. P12 keeps ITEM_RULE ownership in Fund Capability and preserves deterministic MVP boundaries.
 
 ## Original Detailed Control Record
 
