@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import asdict
+from decimal import Decimal
 from pathlib import Path
 
 import pytest
@@ -191,6 +192,59 @@ def test_build_snapshot_records_contains_required_schema_and_all_fields() -> Non
     assert records_by_name["fee_schedule"].comparable_values == {}
 
 
+def test_build_snapshot_records_serializes_index_quality_dataclass_comparable_values() -> None:
+    """验证指数质量 dataclass 值会写入稳定可比子字段。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 dataclass 子字段未进入 comparable_values 时抛出。
+    """
+
+    bundle = _build_bundle("510300", "index_fund", include_index_quality=True)
+    selected_fund = SelectedFundRecord(
+        line_number=3,
+        fund_name="沪深300ETF",
+        fund_code="510300",
+        app_category="国内股票类",
+    )
+
+    records = build_snapshot_records(
+        bundle=bundle,
+        selected_fund=selected_fund,
+        run_id="unit-run",
+        extraction_timestamp="2026-05-19T00:00:00+00:00",
+        source_csv="docs/code_20260519.csv",
+    )
+
+    records_by_name = {record.field_name: record for record in records}
+    assert records_by_name["index_profile"].comparable_values == {
+        "benchmark_text": "沪深300指数收益率",
+        "benchmark_identity_status": "identified",
+        "benchmark_index_name": "沪深300指数",
+        "benchmark_index_code": "000300",
+        "methodology_availability": "benchmark_only",
+        "constituents_availability": "benchmark_only",
+        "source_tier": "benchmark_context",
+    }
+    assert records_by_name["tracking_error"].comparable_values == {
+        "value_text": "1.23%",
+        "period_label": "报告期",
+        "annualized": "True",
+        "source_type": "direct_disclosure",
+        "calculation_method": "disclosed",
+        "benchmark_identity_status": "identified",
+        "benchmark_index_name": "沪深300指数",
+        "benchmark_index_code": "000300",
+        "frequency": "annual_report_period",
+        "input_period_complete": "False",
+    }
+
+
 @pytest.mark.asyncio
 async def test_run_snapshot_summary_highlights_duplicates_and_continues_failures(tmp_path: Path) -> None:
     """验证 summary 标红重复代码，且单基金失败继续写 errors.jsonl。
@@ -287,12 +341,18 @@ async def test_004393_known_failure_classification_is_captured(tmp_path: Path) -
     assert "known_failure:P4-S1" in result.summary_path.read_text(encoding="utf-8")
 
 
-def _build_bundle(fund_code: str, classified_fund_type: str) -> StructuredFundDataBundle:
+def _build_bundle(
+    fund_code: str,
+    classified_fund_type: str,
+    *,
+    include_index_quality: bool = False,
+) -> StructuredFundDataBundle:
     """构造测试用结构化基金数据包。
 
     Args:
         fund_code: 基金代码。
         classified_fund_type: fake 分类结果。
+        include_index_quality: 是否填充指数画像和跟踪误差 dataclass 值。
 
     Returns:
         fake 结构化基金数据包。
@@ -313,6 +373,73 @@ def _build_bundle(fund_code: str, classified_fund_type: str) -> StructuredFundDa
         extraction_mode="missing",
         note="fixture tracking error missing",
     )
+    index_profile = missing_index_profile
+    tracking_error = missing_tracking_error
+    if include_index_quality:
+        index_profile = ExtractedField(
+            value=IndexProfileValue(
+                benchmark_text="沪深300指数收益率",
+                benchmark_identity_status="identified",
+                benchmark_index_name="沪深300指数",
+                benchmark_index_code="000300",
+                benchmark_component_text=(),
+                methodology_availability="benchmark_only",
+                methodology_summary=None,
+                methodology_source_title=None,
+                constituents_availability="benchmark_only",
+                constituents_summary=None,
+                constituents_as_of_date=None,
+                source_tier="benchmark_context",
+                missing_reasons=(),
+            ),
+            anchors=(
+                EvidenceAnchor(
+                    source_kind="annual_report",
+                    document_year=2024,
+                    section_id="§2",
+                    page_number=3,
+                    table_id="page-3-table-0",
+                    row_locator="benchmark",
+                    note="业绩比较基准：沪深300指数收益率",
+                ),
+            ),
+            extraction_mode="direct",
+        )
+        tracking_error = ExtractedField(
+            value=TrackingErrorValue(
+                value=Decimal("0.0123"),
+                value_text="1.23%",
+                unit="ratio",
+                period_label="报告期",
+                period_start=None,
+                period_end=None,
+                annualized=True,
+                source_type="direct_disclosure",
+                calculation_method="disclosed",
+                benchmark_identity_status="identified",
+                benchmark_index_name="沪深300指数",
+                benchmark_index_code="000300",
+                fund_series_source=None,
+                index_series_source=None,
+                observation_count=None,
+                frequency="annual_report_period",
+                annualization_factor=None,
+                input_period_complete=False,
+                provenance_note="年报直接披露。",
+            ),
+            anchors=(
+                EvidenceAnchor(
+                    source_kind="annual_report",
+                    document_year=2024,
+                    section_id="§3",
+                    page_number=6,
+                    table_id=None,
+                    row_locator="tracking_error",
+                    note="报告期年化跟踪误差：1.23%",
+                ),
+            ),
+            extraction_mode="direct",
+        )
     return StructuredFundDataBundle(
         fund_code=fund_code,
         report_year=2024,
@@ -328,7 +455,7 @@ def _build_bundle(fund_code: str, classified_fund_type: str) -> StructuredFundDa
         ),
         product_profile=_field({"investment_scope": "股票等"}, "investment_scope"),
         benchmark=_field({"benchmark_text": "沪深300指数收益率"}, "benchmark"),
-        index_profile=missing_index_profile,
+        index_profile=index_profile,
         fee_schedule=_field({"management_fee": "1.20%", "custody_fee": "0.20%"}, "fee_schedule"),
         turnover_rate=_field(None, "turnover_rate", extraction_mode="missing", note="fixture missing"),
         nav_benchmark_performance=_field({"nav_growth_rate": "1%", "benchmark_return_rate": "0.5%"}, "performance"),
@@ -338,7 +465,7 @@ def _build_bundle(fund_code: str, classified_fund_type: str) -> StructuredFundDa
             extraction_mode="missing",
             note="fixture investor return missing",
         ),
-        tracking_error=missing_tracking_error,
+        tracking_error=tracking_error,
         share_change=_field({"beginning_share": "1", "ending_share": "2", "net_change": "1"}, "share_change"),
         manager_alignment=_field(None, "manager_alignment", extraction_mode="missing", note="fixture missing"),
         manager_strategy_text=_field({"strategy_summary": "精选个股"}, "manager_strategy_text"),

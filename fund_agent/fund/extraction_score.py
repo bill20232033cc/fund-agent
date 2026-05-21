@@ -45,6 +45,8 @@ FIELD_PRIORITY_BY_NAME: Final[dict[str, str]] = {
     "fee_schedule": "P0",
     "manager_strategy_text": "P0",
     "product_profile": "P1",
+    "index_profile": "P1",
+    "tracking_error": "P1",
     "turnover_rate": "P1",
     "holder_structure": "P1",
     "manager_alignment": "P1",
@@ -95,6 +97,11 @@ PREFERRED_LENS_STATUS_RESOLVED: Final[str] = "resolved"
 PREFERRED_LENS_STATUS_NOT_APPLICABLE: Final[str] = "not_applicable"
 PREFERRED_LENS_STATUS_MISMATCH: Final[str] = "mismatch"
 SUPPORTED_CONTRACT_FUND_TYPES: Final[tuple[str, ...]] = tuple(get_args(FundType))
+INDEX_QUALITY_FIELD_NAMES: Final[tuple[str, ...]] = ("index_profile", "tracking_error")
+INDEX_QUALITY_APPLICABLE_FUND_TYPES: Final[tuple[str, ...]] = (
+    "index_fund",
+    "enhanced_index",
+)
 APP_CATEGORY_ALLOWED_FUND_TYPES: Final[dict[str, tuple[str, ...]]] = {
     "国内股票类": ("active_fund", "index_fund", "enhanced_index"),
     "国内债券类": ("bond_fund",),
@@ -535,7 +542,7 @@ def score_snapshot_records(
 
     _validate_thresholds(thresholds)
     counters: dict[tuple[str, str], _FieldScoreCounter] = {}
-    for record in records:
+    for record in _scorable_records(records):
         field_group = _required_text(record, "field_group")
         field_name = _required_text(record, "field_name")
         key = (field_group, field_name)
@@ -1106,7 +1113,21 @@ def _build_fund_score_row(
         ValueError: snapshot 记录缺少字段名或字段组时抛出。
     """
 
-    field_scores = _score_records_for_single_fund(records, thresholds=thresholds)
+    classified_fund_type, _fund_type_reason = _unique_optional_text(
+        records,
+        "classified_fund_type",
+    )
+    scorable_records = _scorable_records(
+        records,
+        classified_fund_type=classified_fund_type,
+        use_record_fund_type=False,
+    )
+    field_scores = _score_records_for_single_fund(
+        scorable_records,
+        thresholds=thresholds,
+        classified_fund_type=classified_fund_type,
+        use_record_fund_type=False,
+    )
     p0_failed_fields = tuple(
         row.field_name for row in field_scores if row.priority == "P0" and row.status == STATUS_FAIL
     )
@@ -1121,7 +1142,7 @@ def _build_fund_score_row(
         fund_code=fund_code,
         fund_name=_first_optional_text(records, "fund_name"),
         app_category=_first_optional_text(records, "app_category"),
-        records=len(records),
+        records=len(scorable_records),
         p0_status=p0_status,
         p1_status=p1_status,
         status=_aggregate_status((*p0_rows, *p1_rows)),
@@ -1134,12 +1155,16 @@ def _score_records_for_single_fund(
     records: Sequence[Mapping[str, object]],
     *,
     thresholds: ScoreThresholds,
+    classified_fund_type: str | None = None,
+    use_record_fund_type: bool = True,
 ) -> tuple[FieldScoreRow, ...]:
     """计算单只基金内部的字段级评分。
 
     Args:
         records: 单只基金的 snapshot 记录。
         thresholds: 显式评分阈值。
+        classified_fund_type: 已解析的单基金类型，用于一致过滤指数质量字段。
+        use_record_fund_type: 已解析类型为空时是否回看单条记录类型。
 
     Returns:
         字段级评分行。
@@ -1149,7 +1174,11 @@ def _score_records_for_single_fund(
     """
 
     counters: dict[tuple[str, str], _FieldScoreCounter] = {}
-    for record in records:
+    for record in _scorable_records(
+        records,
+        classified_fund_type=classified_fund_type,
+        use_record_fund_type=use_record_fund_type,
+    ):
         field_group = _required_text(record, "field_group")
         field_name = _required_text(record, "field_name")
         key = (field_group, field_name)
@@ -1211,7 +1240,16 @@ def _build_fund_quality_row(
     fund_name, fund_name_reason = _unique_optional_text(records, "fund_name")
     app_category, app_category_reason = _unique_optional_text(records, "app_category")
     classified_fund_type, fund_type_reason = _unique_optional_text(records, "classified_fund_type")
-    missing_fields = _missing_fields_by_priority(records)
+    scorable_records = _scorable_records(
+        records,
+        classified_fund_type=classified_fund_type,
+        use_record_fund_type=False,
+    )
+    missing_fields = _missing_fields_by_priority(
+        scorable_records,
+        classified_fund_type=classified_fund_type,
+        use_record_fund_type=False,
+    )
     app_category_status = _app_category_status(app_category, classified_fund_type)
     contract_applicability = _derive_contract_applicability(
         classified_fund_type=classified_fund_type,
@@ -1219,9 +1257,9 @@ def _build_fund_quality_row(
         app_category_status=app_category_status,
         fund_type_reason=fund_type_reason,
     )
-    total_field_count = len(records)
+    total_field_count = len(scorable_records)
     missing_field_count = sum(
-        1 for record in records if not _truthy_bool(record.get("value_present"))
+        1 for record in scorable_records if not _truthy_bool(record.get("value_present"))
     )
     reasons = [
         fund_name_reason,
@@ -1287,11 +1325,16 @@ def _unique_optional_text(
 
 def _missing_fields_by_priority(
     records: Sequence[Mapping[str, object]],
+    *,
+    classified_fund_type: str | None = None,
+    use_record_fund_type: bool = True,
 ) -> dict[str, tuple[str, ...]]:
     """按字段优先级统计缺失字段。
 
     Args:
         records: 单基金 snapshot 记录。
+        classified_fund_type: 已解析的单基金类型，用于一致过滤非适用指数质量字段。
+        use_record_fund_type: 已解析类型为空时是否回看单条记录类型。
 
     Returns:
         P0/P1 缺失字段名映射。
@@ -1301,7 +1344,11 @@ def _missing_fields_by_priority(
     """
 
     missing_by_priority: dict[str, set[str]] = {PRIORITY_P0: set(), PRIORITY_P1: set()}
-    for record in records:
+    for record in _scorable_records(
+        records,
+        classified_fund_type=classified_fund_type,
+        use_record_fund_type=use_record_fund_type,
+    ):
         field_name = _required_text(record, "field_name")
         if _truthy_bool(record.get("value_present")):
             continue
@@ -1309,6 +1356,69 @@ def _missing_fields_by_priority(
         if priority in missing_by_priority:
             missing_by_priority[priority].add(field_name)
     return {priority: tuple(sorted(fields)) for priority, fields in missing_by_priority.items()}
+
+
+def _scorable_records(
+    records: Sequence[Mapping[str, object]],
+    *,
+    classified_fund_type: str | None = None,
+    use_record_fund_type: bool = True,
+) -> tuple[Mapping[str, object], ...]:
+    """过滤非适用指数质量字段后的评分记录。
+
+    Args:
+        records: snapshot 记录集合。
+        classified_fund_type: 已解析的单基金类型；为空时使用记录自身类型。
+        use_record_fund_type: 已解析类型为空时是否回看单条记录类型。
+
+    Returns:
+        参与 coverage、traceability 和缺失分母的记录。
+
+    Raises:
+        ValueError: 指数质量记录缺少 `field_name` 时抛出。
+    """
+
+    return tuple(
+        record
+        for record in records
+        if not _is_non_applicable_index_quality_record(
+            record,
+            classified_fund_type=classified_fund_type,
+            use_record_fund_type=use_record_fund_type,
+        )
+    )
+
+
+def _is_non_applicable_index_quality_record(
+    record: Mapping[str, object],
+    *,
+    classified_fund_type: str | None = None,
+    use_record_fund_type: bool = True,
+) -> bool:
+    """判断记录是否为当前基金类型下不适用的指数质量字段。
+
+    Args:
+        record: snapshot 字段记录。
+        classified_fund_type: 已解析的单基金类型；为空时读取记录上的类型。
+        use_record_fund_type: 已解析类型为空时是否回看单条记录类型。
+
+    Returns:
+        非指数基金的 `index_profile` / `tracking_error` 返回 `True`；
+        指数基金、增强指数基金和未知基金类型保持 `False`，继续保守评分。
+
+    Raises:
+        ValueError: 指数质量记录缺少 `field_name` 时抛出。
+    """
+
+    field_name = _required_text(record, "field_name")
+    if field_name not in INDEX_QUALITY_FIELD_NAMES:
+        return False
+    fund_type = classified_fund_type
+    if fund_type is None and use_record_fund_type:
+        fund_type = _optional_record_text(record, "classified_fund_type")
+    if fund_type is None:
+        return False
+    return fund_type not in INDEX_QUALITY_APPLICABLE_FUND_TYPES
 
 
 def _app_category_status(app_category: str | None, classified_fund_type: str | None) -> str:

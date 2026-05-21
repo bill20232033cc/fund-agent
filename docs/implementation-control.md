@@ -13,8 +13,8 @@
 | Field | State |
 |---|---|
 | Branch | `docs/post-p13-follow-up-planning` |
-| Current gate | `P14-S1 index_profile / tracking_error quality-denominator implementation` |
-| Next entry point | `P14-S1 implementation` |
+| Current gate | `P14-S1 aggregate deepreview` |
+| Next entry point | `P14-S1 aggregate deepreview` |
 | Current phase | `P14 quality-denominator coverage for P13 structured fields` |
 | Design truth | `docs/design.md` |
 | Control truth | `docs/implementation-control.md` |
@@ -42,12 +42,13 @@
 | Latest P13 closeout artifact | `docs/reviews/p13-main-branch-closeout-20260522.md` |
 | Latest post-P13 planning artifacts | `docs/reviews/post-p13-follow-up-planning-20260522.md`, `docs/reviews/post-p13-follow-up-plan-review-mimo-20260522.md`, `docs/reviews/post-p13-follow-up-plan-review-glm-20260522.md`, `docs/reviews/post-p13-follow-up-plan-rereview-mimo-20260522.md`, `docs/reviews/post-p13-follow-up-plan-rereview-glm-20260522.md`, `docs/reviews/post-p13-follow-up-plan-review-controller-judgment-20260522.md` |
 | Latest P14-S1 plan artifacts | `docs/reviews/p14-s1-index-profile-tracking-error-quality-denominator-plan-20260522.md`, `docs/reviews/p14-s1-plan-review-mimo-20260522.md`, `docs/reviews/p14-s1-plan-review-glm-20260522.md`, `docs/reviews/p14-s1-plan-rereview-mimo-20260522.md`, `docs/reviews/p14-s1-plan-rereview-glm-20260522.md`, `docs/reviews/p14-s1-plan-review-controller-judgment-20260522.md` |
+| Latest P14-S1 implementation artifacts | `docs/reviews/p14-s1-index-profile-tracking-error-quality-denominator-implementation-20260522.md`, `docs/reviews/p14-s1-code-review-mimo-20260522.md`, `docs/reviews/p14-s1-code-review-glm-20260522.md`, `docs/reviews/p14-s1-code-rereview-mimo-20260522.md`, `docs/reviews/p14-s1-code-rereview-glm-20260522.md`, `docs/reviews/p14-s1-code-review-controller-judgment-20260522.md` |
 | Last merged PR | PR 7, merge commit `e2d8d381b93c8d1f547836a921ea8991f1a055d8` |
 | Product baseline | P10 release-readiness merged; P11 control-doc recovery accepted; P12 closed on main; post-P12 release lane maintenance-ready; P13 direct tracking-error disclosure merged |
 | Open residuals | RR-13 duplicate `016492`, excluded `docs/repo-audit-20260521.md`, future P13 tracking-error/index-data candidates, future E1-E3/Evidence Confirm, repo-hygiene candidates D-1/D-8-C5/C-9 |
 | Non-goal reminder | do not introduce Dayu Host/Engine/tool loop, LLM writing, or external runtime dependency |
 
-Resume checklist: confirm current gate and next entry point; next specialist work is P14-S1 implementation following `docs/reviews/p14-s1-plan-review-controller-judgment-20260522.md`; do not delete branches, comment externally, create/modify external issues, or touch RR-13 / `docs/repo-audit-20260521.md` without explicit user authorization; preserve deterministic MVP boundaries and do not introduce LLM audit, Host, Engine, tool loop, Evidence Confirm execution, calculated index series, methodology extraction, constituents extraction, or QDII subtype redesign.
+Resume checklist: confirm current gate and next entry point; next specialist work is P14-S1 aggregate deepreview following `docs/reviews/p14-s1-code-review-controller-judgment-20260522.md`; do not delete branches, comment externally, create/modify external issues, or touch RR-13 / `docs/repo-audit-20260521.md` without explicit user authorization; preserve deterministic MVP boundaries and do not introduce LLM audit, Host, Engine, tool loop, Evidence Confirm execution, calculated index series, methodology extraction, constituents extraction, or QDII subtype redesign.
 
 ## Active Gate Ledger
 
@@ -77,6 +78,7 @@ Resume checklist: confirm current gate and next entry point; next specialist wor
 | `P13 main-branch closeout` | accepted | `docs/reviews/p13-main-branch-closeout-20260522.md` | PR 7 merge `e2d8d381b93c8d1f547836a921ea8991f1a055d8` | PR 7 merged; CI and PR reviews passed before merge | P13 residuals assigned to future phases / user | post-P13 follow-up planning / next phase selection |
 | `post-P13 follow-up planning / next phase selection` | accepted | `docs/reviews/post-p13-follow-up-planning-20260522.md`, `docs/reviews/post-p13-follow-up-plan-review-controller-judgment-20260522.md` | `1908a4f` | MiMo/GLM initial `PASS_WITH_FINDINGS`; targeted re-reviews `PASS`; controller `git diff --check HEAD` passed | P14-S1 plan/review | plan/review |
 | `P14-S1 index_profile / tracking_error quality-denominator plan-review` | accepted | `docs/reviews/p14-s1-index-profile-tracking-error-quality-denominator-plan-20260522.md`, `docs/reviews/p14-s1-plan-review-controller-judgment-20260522.md` | `c7d0ec8` | MiMo/GLM initial `PASS_WITH_FINDINGS`; targeted re-reviews `PASS`; controller `git diff --check HEAD` passed | P14-S1 implementation | implementation |
+| `P14-S1 index_profile / tracking_error quality-denominator implementation/code review` | accepted | `docs/reviews/p14-s1-index-profile-tracking-error-quality-denominator-implementation-20260522.md`, `docs/reviews/p14-s1-code-review-controller-judgment-20260522.md` | local accepted implementation commit pending | controller verified snapshot `5 passed`, score/quality `46 passed`, golden `5 passed`, sample matrix `1 passed`, service/quality integration `9 passed`, ruff passed, full suite `428 passed`, diff check passed; MiMo PASS; GLM PASS_WITH_FINDINGS then targeted re-review PASS/PASS | P14-S1 aggregate deepreview | aggregate review |
 
 ## Phase History Index
 
@@ -96,7 +98,7 @@ Resume checklist: confirm current gate and next entry point; next specialist wor
 | P11 | accepted | [Archive: P11](#archive-p11) | P11 plan/review/implementation/code-review/follow-up/P11-S2 artifacts | `5f5331b` | P11-S2 docs-only validation passed | closed |
 | P12 / next selection | accepted | [Archive: P12](#archive-p12) | `docs/reviews/post-p11-second-follow-up-planning-20260522.md`, `docs/reviews/p12-s1-plan-review-controller-judgment-20260522.md`, `docs/reviews/p12-s1-code-review-controller-judgment-20260522.md`, `docs/reviews/p12-s2-plan-review-controller-judgment-20260522.md`, `docs/reviews/p12-aggregate-deepreview-controller-judgment-20260522.md`, `docs/reviews/p12-main-branch-closeout-20260522.md`, `docs/reviews/post-p12-release-maintenance-closeout-20260522.md`, `docs/reviews/next-phase-selection-controller-judgment-20260522.md` | `69d5b3e` | full suite `403 passed`; aggregate PASS/PASS; release closeout review PASS; next selection reviews pass-with-risks/PASS | P13-S1 plan/review |
 | P13 | merged | [Archive: P13](#archive-p13) | `docs/reviews/p13-s1-tracking-error-index-data-plan-20260522.md`, `docs/reviews/p13-s1-plan-review-controller-judgment-20260522.md`, `docs/reviews/p13-tracking-error-code-review-controller-judgment-20260522.md`, `docs/reviews/p13-aggregate-deepreview-controller-judgment-20260522.md`, `docs/reviews/p13-pr-review-controller-judgment-20260522.md`, `docs/reviews/p13-main-branch-closeout-20260522.md`, `docs/reviews/post-p13-follow-up-plan-review-controller-judgment-20260522.md` | PR 7 merge `e2d8d381b93c8d1f547836a921ea8991f1a055d8` | full suite `424 passed`; code re-reviews PASS/PASS; aggregate PASS/PASS; PR reviews PASS/PASS; PR CI passed; post-P13 planning re-reviews PASS/PASS | P14-S1 plan/review |
-| P14-S1 | plan accepted | [Archive: P14](#archive-p14) | `docs/reviews/p14-s1-index-profile-tracking-error-quality-denominator-plan-20260522.md`, `docs/reviews/p14-s1-plan-review-controller-judgment-20260522.md` | `c7d0ec8` | plan re-reviews PASS/PASS; controller diff check passed | P14-S1 implementation |
+| P14-S1 | implementation accepted | [Archive: P14](#archive-p14) | `docs/reviews/p14-s1-index-profile-tracking-error-quality-denominator-plan-20260522.md`, `docs/reviews/p14-s1-plan-review-controller-judgment-20260522.md`, `docs/reviews/p14-s1-index-profile-tracking-error-quality-denominator-implementation-20260522.md`, `docs/reviews/p14-s1-code-review-controller-judgment-20260522.md` | local accepted implementation commit pending | full suite `428 passed`; ruff passed; code re-reviews PASS/PASS | P14-S1 aggregate deepreview |
 
 ## P12 Current Phase Notes
 
@@ -210,7 +212,7 @@ P13 starts with source-contract planning for direct tracking-error disclosure, s
 
 ## Archive: P14
 
-P14 starts with `index_profile` / `tracking_error` quality-denominator coverage for P13 structured fields. P14-S1 plan/review is accepted in `docs/reviews/p14-s1-plan-review-controller-judgment-20260522.md`: the approved implementation keeps `ExtractionMode` unchanged, makes `index_profile` and `tracking_error` conditional P1 quality fields for `index_fund` / `enhanced_index`, excludes non-index fund types from the denominator for these fields, adds scalar comparable sub-fields, and gates production golden correctness on existing reviewed evidence. Non-goals remain calculated tracking error, external index adapters, methodology/constituents extraction, QDII subtype redesign, E1/E2/E3, Evidence Confirm, Dayu runtime, RR-13 data, and `docs/repo-audit-20260521.md`.
+P14 starts with `index_profile` / `tracking_error` quality-denominator coverage for P13 structured fields. P14-S1 plan/review is accepted in `docs/reviews/p14-s1-plan-review-controller-judgment-20260522.md`: the approved implementation keeps `ExtractionMode` unchanged, makes `index_profile` and `tracking_error` conditional P1 quality fields for `index_fund` / `enhanced_index`, excludes non-index fund types from the denominator for these fields, adds scalar comparable sub-fields, and gates production golden correctness on existing reviewed evidence. P14-S1 implementation/code review is accepted in `docs/reviews/p14-s1-code-review-controller-judgment-20260522.md`: `index_profile` / `tracking_error` now enter quality denominator only for index and enhanced-index funds, unknown/conflicting fund type stays conservative, dataclass comparable/golden prefill paths share a Fund Capability value helper, reviewed `001548` `index_profile` golden rows were added, and `161725` enhanced-index fixture covers the direct disclosure path. Non-goals remain calculated tracking error, external index adapters, methodology/constituents extraction, QDII subtype redesign, E1/E2/E3, Evidence Confirm, Dayu runtime, RR-13 data, and `docs/repo-audit-20260521.md`.
 
 ## Original Detailed Control Record
 

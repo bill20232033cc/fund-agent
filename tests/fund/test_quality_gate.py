@@ -70,7 +70,7 @@ def test_run_quality_gate_warns_failed_p1_without_blocking(tmp_path: Path) -> No
             {
                 "field_scores": [
                     _field_score("basic_identity", "P0", "pass", 1.0, 1.0),
-                    _field_score("holdings_snapshot", "P1", "fail", 0.0, 0.0),
+                    _field_score("tracking_error", "P1", "fail", 0.0, 0.0),
                 ],
                 "correctness": {"status": "not_implemented"},
             },
@@ -83,7 +83,7 @@ def test_run_quality_gate_warns_failed_p1_without_blocking(tmp_path: Path) -> No
 
     assert result.status == GATE_STATUS_WARN
     assert any(
-        issue.severity == "warn" and issue.field_name == "holdings_snapshot"
+        issue.severity == "warn" and issue.field_name == "tracking_error"
         for issue in result.issues
     )
     assert any(issue.severity == "info" and issue.rule_code == "FQ0" for issue in result.issues)

@@ -2,7 +2,7 @@
   "schema_version": "fund-agent.golden-answer.v1",
   "source_markdown": "reports/golden-answers/golden-answer-prefill-reviewed.md",
   "fund_count": 6,
-  "record_count": 121,
+  "record_count": 125,
   "funds": [
     {
       "fund_code": "004393",
@@ -941,6 +941,38 @@
           "field_name": "benchmark",
           "sub_field": "benchmark_name",
           "expected_value": "上证50指数收益率×95%＋银行活期存款利率（税后） ×5%",
+          "confidence": "high",
+          "source": "年报2024 §2 page-6 page-6-table-0 benchmark"
+        },
+        {
+          "fund_code": "001548",
+          "field_name": "index_profile",
+          "sub_field": "benchmark_text",
+          "expected_value": "上证50指数收益率×95%＋银行活期存款利率（税后） ×5%",
+          "confidence": "high",
+          "source": "年报2024 §2 page-6 page-6-table-0 benchmark"
+        },
+        {
+          "fund_code": "001548",
+          "field_name": "index_profile",
+          "sub_field": "benchmark_identity_status",
+          "expected_value": "identified",
+          "confidence": "high",
+          "source": "年报2024 §2 page-6 page-6-table-0 benchmark"
+        },
+        {
+          "fund_code": "001548",
+          "field_name": "index_profile",
+          "sub_field": "benchmark_index_name",
+          "expected_value": "上证50指数",
+          "confidence": "high",
+          "source": "年报2024 §2 page-6 page-6-table-0 benchmark"
+        },
+        {
+          "fund_code": "001548",
+          "field_name": "index_profile",
+          "sub_field": "source_tier",
+          "expected_value": "benchmark_context",
           "confidence": "high",
           "source": "年报2024 §2 page-6 page-6-table-0 benchmark"
         },
@@ -1920,6 +1952,38 @@
       "field_name": "benchmark",
       "sub_field": "benchmark_name",
       "expected_value": "上证50指数收益率×95%＋银行活期存款利率（税后） ×5%",
+      "confidence": "high",
+      "source": "年报2024 §2 page-6 page-6-table-0 benchmark"
+    },
+    {
+      "fund_code": "001548",
+      "field_name": "index_profile",
+      "sub_field": "benchmark_text",
+      "expected_value": "上证50指数收益率×95%＋银行活期存款利率（税后） ×5%",
+      "confidence": "high",
+      "source": "年报2024 §2 page-6 page-6-table-0 benchmark"
+    },
+    {
+      "fund_code": "001548",
+      "field_name": "index_profile",
+      "sub_field": "benchmark_identity_status",
+      "expected_value": "identified",
+      "confidence": "high",
+      "source": "年报2024 §2 page-6 page-6-table-0 benchmark"
+    },
+    {
+      "fund_code": "001548",
+      "field_name": "index_profile",
+      "sub_field": "benchmark_index_name",
+      "expected_value": "上证50指数",
+      "confidence": "high",
+      "source": "年报2024 §2 page-6 page-6-table-0 benchmark"
+    },
+    {
+      "fund_code": "001548",
+      "field_name": "index_profile",
+      "sub_field": "source_tier",
+      "expected_value": "benchmark_context",
       "confidence": "high",
       "source": "年报2024 §2 page-6 page-6-table-0 benchmark"
     },
