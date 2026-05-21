@@ -6,7 +6,7 @@
 UI CLI -> Service use case -> Fund Capability
 ```
 
-当前代码不接入 Dayu Host、Engine、tool loop、scene registry 或 LLM prompt runtime。
+当前代码不接入外部 Dayu Host、Engine、tool loop、scene registry 或 LLM prompt runtime。后续如需要这些能力，应在本项目内按当前边界实现，不通过外部 Dayu API 包装主链路。
 
 ## 当前包边界
 
@@ -23,7 +23,7 @@ UI CLI -> Service use case -> Fund Capability
 - Service 可编排 Capability 的公开函数和数据对象，不承载基金领域规则。
 - Fund Capability 拥有基金类型判断、CHAPTER_CONTRACT、preferred_lens、ITEM_RULE、证据锚点和审计规则。
 - 文档读取只通过 `FundDocumentRepository.load_annual_report(...)` 进入生产路径。
-- Dayu runtime 相关 Host/Engine/Prompting 能力属于后续候选，不是当前主链路事实。
+- Dayu 相关 Host/Engine/Prompting 只作为方法论参考，不是安装依赖或当前主链路事实。
 
 ## 阅读顺序
 

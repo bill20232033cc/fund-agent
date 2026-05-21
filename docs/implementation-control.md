@@ -20,7 +20,7 @@
 | 设计真源 | `docs/design.md`，已按 `docs/design-update.md` reconciliation 收口 |
 | 近期设计裁决 | `docs/reviews/design-update-reconciliation-20260521.md`、`docs/reviews/implementation-control-update-reconciliation-20260521.md` |
 | P8 交付物 | `must_answer` audit routing、renderer `preferred_lens` deterministic application、source fallback taxonomy |
-| 当前残余风险 | product contract、repo hygiene、Dayu dependency strategy、quality gate / golden coverage ROI |
+| 当前残余风险 | product contract、repo hygiene、quality gate / golden coverage ROI |
 
 当前控制文档仍是 phaseflow 的总控真源：详细 gate、artifact、review、commit、验证和 residual risk 记录保留在后文，不用摘要替代。`docs/implementation-control-update.md` 仅作为摘要候选输入；经 reconciliation 后只融合稳定 summary，不替换本文件。
 
@@ -58,7 +58,7 @@
 |------|------|---------------------|
 | Product contract | `analyze` 用户最小输入 vs dev override 参数仍需设计 | post-P8 planning |
 | Repo hygiene | LICENSE、CI、`.gitignore`、默认路径配置需单独 slice | post-P8 planning |
-| Dependency strategy | Dayu 仍是声明依赖，主链路未接入 runtime；供应链策略待裁决 | post-P8 planning |
+| Dependency strategy | Dayu 裁决为方法论参考，生产依赖移除；后续 runtime 能力必须项目内化 | closed by 2026-05-21 reconciliation |
 | Quality gate ROI | golden coverage 与 gate 复杂度需继续校准 | post-P8 planning |
 | Control doc hygiene | 可读性需提升，但不能丢失 phaseflow recovery 证据 | 后续文档治理 slice |
 
@@ -90,7 +90,7 @@
   - P8-S2 renderer preferred_lens application implementation 已完成并通过 controller code review，implementation commit=`6dbf6ca`，review artifact=`docs/reviews/code-review-20260521-060057.md`。实现新增 Capability-owned `LensApplicationPlan`，renderer 仅在第 0/1 章确定性 slot 应用 normalized lens labels，不渲染 raw `TemplateLensRule.statements`，并保持 `ProgrammaticAuditInput` 形状不变；当前验证 targeted `67 passed`、full suite `344 passed`、ruff passed、diff check passed；下一 gate 为 `post-P8-S2 follow-up planning`。
   - Post-P8-S2 follow-up planning 已接受，artifact=`docs/reviews/post-p8-s2-follow-up-planning-20260521.md`。P8-S1/P8-S2 已分别关闭 `must_answer` contract-routing 与 renderer `preferred_lens` deterministic application residual；下一优先级裁决为 `P8-S3 source fallback policy design`，目标是在 Fund Capability document source 层显式定义 EID/Eastmoney 来源错误分类、fallback eligibility 与 fallback-blocked provenance，避免官方来源 schema drift / identity mismatch / integrity error 被商业站 fallback 静默掩盖。
   - P8-S3 source fallback policy design plan/review 已通过，plan artifact=`docs/reviews/p8-s3-source-fallback-policy-plan-20260521.md`，review artifact=`docs/reviews/plan-review-20260521-060952.md`。计划裁决为：在 Fund Capability document source 层新增五类来源失败 taxonomy、table-driven fallback eligibility 和 fallback-blocked structured exception；`not_found/unavailable` 可 fallback，`schema_drift/identity_mismatch/integrity_error` 必须 fail closed 并保留 source/category/message provenance；下一 gate 为 `P8-S3 implementation`。
-  - P0 维持 `done`。已验证 `dayu` 依赖可导入、`fund-agent` 处于 editable install、`fund-analysis --help` 可用、样本基金 `110011` 年报可下载、`pdfplumber` 可提取全文文本和表格。
+  - P0 维持 `done`。历史上曾验证 `dayu` 依赖可导入；2026-05-21 架构裁决改为不保留外部 Dayu 生产依赖，相关 Host/Engine/tool-loop 能力如后续需要必须在项目内化实现。当前 `fund-agent` 处于 editable install，`fund-analysis --help` 可用，样本基金 `110011` 年报可下载，`pdfplumber` 可提取全文文本和表格。
   - P1 已完成并通过 aggregate review。
   - P2 已完成并通过 aggregate deepreview。
   - P3 已完成并合入 `main`。
@@ -430,7 +430,7 @@
 
 **退出条件**
 
-- [x] `dayu-agent` 包可正常安装且 import 通过（`dayu.engine`、`dayu.host`、`dayu.config`）
+- [x] 历史 P0 曾验证 `dayu-agent` 包可安装；2026-05-21 裁决为移除外部 Dayu 生产依赖，能力按需内化
 - [x] 四层架构目录结构就位（ui/services/fund/config）
 - [x] `pyproject.toml` 配置完成且 `pip install -e .` 无报错
 - [x] 选定 3-5 只样本基金并记录分析基准
@@ -442,9 +442,9 @@
 
 | Slice | 任务 | 验证方式 |
 |-------|------|---------|
-| P0-S1 | 安装 dayu-agent 依赖，验证 Engine/Host/Config 可用 | `python -c "from dayu.engine import AsyncAgent; from dayu.host import Host"` 通过 |
+| P0-S1 | 历史验证 dayu-agent 依赖可用；后续裁决为不保留生产依赖 | 2026-05-21 dependency reconciliation 移除外部 Dayu 依赖 |
 | P0-S2 | 创建项目骨架目录结构（ui/services/fund/config） | `ls fund_agent/` 输出符合 design.md |
-| P0-S3 | 编写 `pyproject.toml`（含 dayu-agent 依赖 + pdfplumber 等） | `pip install -e .` 无报错 |
+| P0-S3 | 编写 `pyproject.toml`（pdfplumber/httpx/akshare/typer/rich 等生产依赖） | `pip install -e .` 无报错 |
 | P0-S4 | 选定样本基金（从有知有行严选基金池） | 记录基金代码和手动分析结果 |
 | P0-S5 | 实现 `fund/pdf/downloader.py` 基础版 | 能下载巨潮网年报 PDF |
 | P0-S6 | 实现 `fund/pdf/parser.py` 基础版 | 能读取 PDF 文本和表格 |
@@ -467,7 +467,7 @@
 - 已验证 `fund-agent==0.1.0` 以 editable install 方式安装在当前虚拟环境中，`fund-analysis --help` 可直接运行。
 - 已验证样本基金基线存在：`docs/sample-funds.md` 已记录主动权益、指数、债券三类样本。
 - 已验证样本年报下载与解析链路：`110011` 的 2024 年年报可下载，且可提取约 70K 字全文与 99 个表格。
-- 当前未把 `pip install -e .` 的重放网络波动记为代码阻塞；下载 `dayu-agent` wheel 时可能受 GitHub 可达性影响。
+- 2026-05-21 已移除外部 `dayu-agent` 生产依赖，`pip install -e .` 不再需要下载该 wheel。
 
 ---
 
@@ -1270,7 +1270,7 @@ P0（环境搭建）
 | RR-2 | 超额收益性质判断主观性强 | P2 | MVP 用规则引擎 | 否 |
 | RR-3 | 审计规则过严导致频繁阻断 | P2 | MVP 仅启用程序审计 | 否 |
 | RR-4 | 温度计爬虫被封锁 | P3/v2 | P5-S7 已提供 read-only Service/CLI、24h 缓存、7 天 stale fallback 与 `unavailable=True`；自动映射为 `valuation_state` 仍 deferred，除非先有同源估值规则 | 是（如被封锁且无可用缓存需人工确认） |
-| RR-5 | `dayu-agent` wheel 下载受 GitHub 可达性影响 | P0/P1 | 当前虚拟环境已安装，可继续开发；新环境安装待镜像化或替代分发方案 | 否 |
+| RR-5 | `dayu-agent` wheel 下载受 GitHub 可达性影响 | P0/P1 | 已关闭：2026-05-21 裁决移除外部 Dayu 生产依赖；后续 Host/Engine/tool-loop 能力必须项目内化 | 否 |
 | RR-6 | 模板禁用交易措辞使用 substring 匹配，未来合法短语可能误报 | P3/v2 | P2 当前输出已测试通过；P3 若调整模板措辞需同步审查 | 否 |
 | RR-7 | 缺证附录当前为章节级，不是 item 级证据确认 | v2 | MVP 先保证章节级可追溯，Evidence Confirm 层后续细化 | 否 |
 | RR-8 | CLI 端到端真实 PDF/网络路径尚未覆盖 | P3/v2 | P3-S3 用 3 只样本基金 deterministic 端到端矩阵验证 Service/CLI/Capability 主链路；真实 PDF/network smoke 移交 P5-S7 / post-MVP infra validation | 否 |

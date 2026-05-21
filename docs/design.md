@@ -19,11 +19,11 @@
 
 | 原则 | 说明 |
 |------|------|
-| 确定性 MVP 主链路 | 当前 `fund-analysis analyze` 不依赖 LLM 写作或 Dayu Host/Engine，由结构化抽取、确定性分析、模板渲染、程序审计和质量 gate 组成 |
+| 确定性 MVP 主链路 | 当前 `fund-analysis analyze` 不依赖 LLM 写作或外部 Dayu Host/Engine，由结构化抽取、确定性分析、模板渲染、程序审计和 quality gate 组成 |
 | 好资产 + 好价格 + 长期持有 | 有知有行核心理念：分析报告回答"好不好"，检查清单回答"该不该买" |
 | 证据可审计 | 每条断言必须关联到年报具体章节，计算必须可追溯 |
 | 模板驱动而非自由生成 | MVP 阶段用模板填充，避免 LLM 幻觉；v2 引入 LLM 写作 |
-| 分层解耦 | 当前主链路为 UI / Service / Fund Capability 三层；Host/Engine/Agent runtime 只作为 v2 候选 |
+| 分层解耦 | 当前主链路为 UI / Service / Fund Capability 三层；Host/Engine/Agent runtime 能力如后续需要，应在本项目内按边界内化实现 |
 | 基金类型判断优先 | 必须先识别标准基金类型，再应用对应 `preferred_lens` 与 `ITEM_RULE` |
 
 ### 1.3 非目标
@@ -33,7 +33,7 @@
 - 不做温度计自建（MVP 使用缓存数据）
 - 不做组合管理（v2 阶段）
 - 不输出买卖建议或仓位比例
-- 不把 Dayu Host/Engine/tool loop 作为 MVP 主链路依赖
+- 不把外部 Dayu Host/Engine/tool loop 作为主链路依赖或运行时接口
 
 ---
 
@@ -51,9 +51,9 @@ UI（CLI）→ Service（用例编排）→ Fund Capability（基金领域能力
 | **Service** | 用例编排、参数校验、调用 Capability、组合报告与 quality gate | `fund_agent/services/*.py` |
 | **Capability** | 基金文档仓库、提取、分析、模板、审计、quality gate、外部数据 adapter | `fund_agent/fund/` |
 | **Config** | 当前仅保留配置命名空间占位，不参与主链路装配 | `fund_agent/config/` |
-| **Host/Engine** | v2 候选托管执行层；当前未接入主链路 | `dayu-agent` 依赖存在，但 `fund-analysis analyze` 不经过 `dayu.host` / `dayu.engine` |
+| **Host/Engine** | 当前不存在生产运行时；后续如需要，应在 `fund_agent` 内按项目边界实现 | 当前无外部 `dayu-agent` 依赖，`fund-analysis analyze` 不经过 `dayu.host` / `dayu.engine` |
 
-> **当前边界（2026-05-21）**：`fund-analysis analyze` 直接通过 `FundAnalysisService` 编排 `fund_agent/fund` Capability。Dayu 仍作为 Host/Engine/Prompting/Config 的架构参考和后续接入候选；当前代码没有自建或接入通用 tool loop / Host session / Agent runtime。
+> **当前边界（2026-05-21）**：`fund-analysis analyze` 直接通过 `FundAnalysisService` 编排 `fund_agent/fund` Capability。Dayu 只作为方法论和历史审计研究参考，不作为安装依赖、运行时接口或后续外部 API 包装目标；当前代码没有自建或接入通用 tool loop / Host session / Agent runtime。
 
 > **目录事实裁决（2026-05-21）**：`fund_agent/config` 的存在不代表 prompt manifest、scene registry 或 Dayu config runtime 已接入；空目录或本地未跟踪 prompt skeleton 不能作为设计事实。空的 `fund_agent/fund/tools` 包已移除，当前没有通用 Fund tool runtime。
 
@@ -388,16 +388,15 @@ Golden Answer pipeline 由预填底稿、人工复核、strict JSON 构建和 co
 
 ---
 
-## 8. Dayu-Agent 依赖状态
+## 8. Dayu-Agent 方法论内化状态
 
-| Dayu-Agent 模块 | 当前状态 | 说明 |
+| 能力域 | 当前状态 | 说明 |
 |---|---|---|
-| `dayu.engine` | 后续候选 | 当前 CLI/Service 主链路未接入 tool loop、runner、trace 或 ToolRegistry |
-| `dayu.host` | 后续候选 | 当前未接入 Host session/run 生命周期 |
-| `dayu.contracts` | 后续候选 | 当前未使用 ExecutionContract / AppEvent 作为主链路契约 |
-| `dayu.prompting` | 后续候选 | 当前模板契约在 `fund_agent/fund/template` typed manifest 中维护 |
-| `dayu.config` | 依赖候选 | 当前 `fund_agent/config` 只是占位命名空间，主链路不依赖 dayu config、scene 或 prompt manifest 装配 |
-| 审计机制 | 架构借鉴 | 当前已实现 deterministic programmatic audit；LLM audit / Evidence Confirm 后续再接 |
+| Engine / tool loop | 未实现；不依赖外部 Dayu | 后续如需要 runner、trace、ToolRegistry，应在项目内实现，不通过外部 Dayu API 包装 |
+| Host / session lifecycle | 未实现；不依赖外部 Dayu | 当前 CLI/Service 主链路无需 Host session/run 生命周期 |
+| Contracts / events | 方法论参考 | 当前主链路使用 `FundAnalysisRequest`、`TemplateRenderInput`、`ProgrammaticAuditInput` 等项目内契约 |
+| Prompting / config | 方法论参考 | 当前模板契约在 `fund_agent/fund/template` typed manifest 中维护，`fund_agent/config` 只是占位命名空间 |
+| 审计机制 | 已部分内化 | 当前已实现 deterministic programmatic audit；LLM audit / Evidence Confirm 后续若做，应按项目边界内化 |
 
 ---
 
@@ -405,7 +404,7 @@ Golden Answer pipeline 由预填底稿、人工复核、strict JSON 构建和 co
 
 | 决策 | 选择 | 备选方案 | 理由 |
 |------|------|---------|------|
-| 架构模式 | 当前主链路为三层确定性管线（UI/Service/Capability） | 当前即接入 Dayu Host/Engine | MVP 不依赖 LLM 写作和 tool loop，更容易保持证据可审计；Dayu runtime 留作 v2 候选 |
+| 架构模式 | 当前主链路为三层确定性管线（UI/Service/Capability） | 当前即接入外部 Dayu Host/Engine | MVP 不依赖 LLM 写作和外部 tool loop，更容易保持证据可审计；后续 runtime 能力按项目边界内化 |
 | 输出格式 | 8 章定性模板 | 一页纸报告 | 信息更完整，覆盖全链路 |
 | 超额收益判断 | 区分结构性 vs 阶段性 | 仅计算 A=R-B | 第一性原理：可持续能力 vs 运气 |
 | 检查清单位置 | 独立模块并由报告消费结果 | 只嵌入报告 | 检查清单是行为干预工具，应可被 Service/UI 独立复用 |

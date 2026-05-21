@@ -2,7 +2,7 @@
 
 `fund_agent/config` 当前只是配置命名空间占位，保留给后续稳定配置入口使用。
 
-当前主链路没有运行时 prompt manifest、scene registry 或 Dayu config 装配：
+当前主链路没有运行时 prompt manifest、scene registry 或外部 Dayu config 装配：
 
 - `fund-analysis analyze` 不读取 `config/prompts`
 - Service 不解析 scene 或 task prompt
