@@ -89,7 +89,9 @@ def analyze(
     ] = "unavailable",
     money_horizon: Annotated[
         str | None,
-        typer.Option("--money-horizon", help="开发覆盖：资金期限分类 long_enough/uncertain/too_short"),
+        typer.Option(
+            "--money-horizon", help="开发覆盖：资金期限分类 long_enough/uncertain/too_short"
+        ),
     ] = None,
     user_money_horizon_years: Annotated[
         str | None, typer.Option("--user-money-horizon-years", help="用户资金不用年限")
@@ -126,7 +128,9 @@ def analyze(
     ] = None,
     quality_gate_golden_answer_path: Annotated[
         Path | None,
-        typer.Option("--quality-gate-golden-answer-path", help="开发覆盖：strict golden answer JSON 路径"),
+        typer.Option(
+            "--quality-gate-golden-answer-path", help="开发覆盖：strict golden answer JSON 路径"
+        ),
     ] = None,
 ) -> None:
     """对指定基金执行完整分析，输出 8 章 Markdown 体检报告。
@@ -236,9 +240,7 @@ def thermometer(
     force_refresh: Annotated[
         bool, typer.Option("--force-refresh", help="强制刷新温度计公开页面数据")
     ] = False,
-    output_json: Annotated[
-        bool, typer.Option("--json", help="以 JSON 输出温度计快照摘要")
-    ] = False,
+    output_json: Annotated[bool, typer.Option("--json", help="以 JSON 输出温度计快照摘要")] = False,
 ) -> None:
     """查询有知有行温度计快照。
 
@@ -893,11 +895,46 @@ def _echo_quality_gate_summary(result) -> None:  # type: ignore[no-untyped-def]
         gate = result.quality_gate_result
         typer.echo(f"quality_gate_status: {gate.status}", err=True)
         typer.echo(f"quality_gate_issues: {len(gate.issues)}", err=True)
+        for info_line in _quality_gate_info_lines(gate):
+            typer.echo(f"quality_gate_info: {info_line}", err=True)
         typer.echo(f"quality_gate_json: {gate.gate_json_path}", err=True)
         typer.echo(f"quality_gate_md: {gate.gate_markdown_path}", err=True)
         return
     if result.quality_gate_not_run_reason:
         typer.echo(f"quality gate not run: {result.quality_gate_not_run_reason}", err=True)
+
+
+def _quality_gate_info_lines(gate) -> tuple[str, ...]:  # type: ignore[no-untyped-def]
+    """生成 fund-scoped correctness coverage informational stderr 行。
+
+    Args:
+        gate: quality gate 结果对象。
+
+    Returns:
+        需要写入 stderr 的简短 info 行。
+
+    Raises:
+        无显式抛出。
+    """
+
+    lines: list[str] = []
+    coverage_reasons = {
+        "not_configured",
+        "fund_not_covered",
+        "no_comparable_fields",
+        "field_not_comparable",
+    }
+    for issue in gate.issues:
+        if getattr(issue, "rule_code", None) != "FQ0":
+            continue
+        if getattr(issue, "severity", None) != "info":
+            continue
+        reason = getattr(issue, "reason", None)
+        fund_code = getattr(issue, "fund_code", None)
+        if reason not in coverage_reasons or not fund_code:
+            continue
+        lines.append(f"strict golden answer not covered for fund_code {fund_code} reason={reason}")
+    return tuple(lines)
 
 
 if __name__ == "__main__":

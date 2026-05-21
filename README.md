@@ -166,7 +166,7 @@ fund-analysis extraction-score \
   --golden-answer-path reports/golden-answers/golden-answer.json
 ```
 
-默认输出到 snapshot 所在目录，包含 `score.json`、`score.md` 和 `golden_set.json`。`score.json` 同时包含字段级 `field_scores`、单基金 `fund_scores`、`fund_quality`、`failed_funds` 和 `correctness`。Correctness 只对 snapshot `comparable_values` 显式暴露的可比 golden 子字段做保守 normalize 后比较，skipped 和不可比记录不进入分母；提供 `--errors-path` 时，`errors.jsonl` 中的完全失败基金会进入 `failed_funds` 并由 quality gate 阻断；未提供 `--golden-answer-path` 时只输出 `FQ0/info` 所需 skeleton。最小 golden set 固定包含 `004393`，并暂时排除货币基金类。
+默认输出到 snapshot 所在目录，包含 `score.json`、`score.md` 和 `golden_set.json`。`score.json` 同时包含字段级 `field_scores`、单基金 `fund_scores`、`fund_quality`、`failed_funds` 和 `correctness`。Correctness 只对 snapshot `comparable_values` 显式暴露的可比 golden 子字段做保守 normalize 后比较，skipped 和不可比记录不进入分母；`correctness.status` 只表达 `available / unavailable`，`coverage_scope` 进一步区分 `not_configured / fund_not_covered / no_comparable_fields / partially_covered / covered`。提供 `--errors-path` 时，`errors.jsonl` 中的完全失败基金会进入 `failed_funds` 并由 quality gate 阻断；未提供 `--golden-answer-path` 时只输出 `FQ0/info` 所需 metadata。最小 golden set 固定包含 `004393`，并暂时排除货币基金类。
 
 生成 correctness golden answer 自动预填底稿：
 
@@ -196,9 +196,9 @@ fund-analysis quality-gate \
   --score-path reports/extraction-snapshots/p4-s3b-004393-controller-final-score/score.json
 ```
 
-默认输出到 `score.json` 所在目录，包含 `quality_gate.json` 和 `quality_gate.md`。当前 gate 消费 coverage / traceability / `fund_quality` / `failed_funds` / correctness：字段级或单基金 P0 fail 会阻断，单基金 issue 会保留 `fund_code`；P1 fail 会警告；App 类别与基金类型明确冲突或 strict golden answer mismatch 会触发 `FQ1/block`；字段缺失率达到阈值会触发 FQ4；基金类型无法解析 preferred_lens 会触发 FQ5；完全失败基金会触发 FQ6；correctness 未接入时只记录 `FQ0/info`。
+默认输出到 `score.json` 所在目录，包含 `quality_gate.json` 和 `quality_gate.md`。当前 gate 消费 coverage / traceability / `fund_quality` / `failed_funds` / correctness：字段级或单基金 P0 fail 会阻断，单基金 issue 会保留 `fund_code`；P1 fail 会警告；App 类别与基金类型明确冲突或 strict golden answer mismatch 会触发 `FQ1/block`；字段缺失率达到阈值会触发 FQ4；基金类型无法解析 preferred_lens 会触发 FQ5；完全失败基金会触发 FQ6；strict golden answer 未配置、当前基金未覆盖或当前基金无可比字段时记录带 `reason` / `coverage_scope` / `fund_code` 的 `FQ0/info`，不等同于 gate 未运行。
 
-`fund-analysis analyze` 默认也会运行 quality gate。若 gate 状态为 `block` 或 gate 未运行，默认策略会非零退出并在 stderr 输出结构化原因，不输出完整报告。`--quality-gate-policy warn/off` 仅可在 `--dev-override` 模式下用于开发验证。
+`fund-analysis analyze` 默认也会运行 quality gate，product mode 使用 `docs/code_20260519.csv` 作为精选池 membership source，并使用默认 strict golden answer 路径。若 gate 状态为 `block` 或 gate 未运行，默认策略会非零退出并在 stderr 输出结构化原因，不输出完整报告；精选池成员缺 strict golden 覆盖时仍会输出报告，并在 stderr 增加 `quality_gate_info: ...`。`--quality-gate-policy warn/off` 仅可在 `--dev-override` 模式下用于开发验证。
 
 ## 真实精选基金池 Smoke
 

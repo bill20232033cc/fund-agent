@@ -76,6 +76,11 @@ def test_extraction_score_service_delegates_explicit_params(monkeypatch, tmp_pat
                 skipped_records=0,
                 accuracy_rate=None,
                 reason="fixture",
+                coverage_scope="not_configured",
+                coverage_reason="not_configured",
+                covered_fund_codes=(),
+                missing_fund_codes=(),
+                coverage_required=False,
                 record_results=(),
             ),
         )

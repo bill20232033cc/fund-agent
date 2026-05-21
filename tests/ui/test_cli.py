@@ -9,8 +9,12 @@ from pathlib import Path
 
 from typer.testing import CliRunner
 
-from fund_agent.fund.data.thermometer import MacroTemperature, MarketTemperature, ThermometerSnapshot
-from fund_agent.fund.quality_gate import QualityGateResult
+from fund_agent.fund.data.thermometer import (
+    MacroTemperature,
+    MarketTemperature,
+    ThermometerSnapshot,
+)
+from fund_agent.fund.quality_gate import QualityGateIssue, QualityGateResult
 from fund_agent.services import QualityGateBlockedError, QualityGateNotRunBlockedError
 from fund_agent.ui import cli
 
@@ -65,6 +69,42 @@ class _FakeWarnService:
         return _FakeResult(
             report_markdown="# 0. 投资要点概览\n",
             quality_gate_result=_fake_quality_gate_result(status="warn"),
+        )
+
+
+class _FakeInfoService:
+    """CLI 测试用带 quality gate informational issue 的 Service。"""
+
+    async def analyze(self, request):  # type: ignore[no-untyped-def]
+        """返回携带 FQ0/info coverage issue 的 fake 报告。
+
+        Args:
+            request: CLI 构造的 Service 请求。
+
+        Returns:
+            fake Service 返回值。
+
+        Raises:
+            无显式抛出。
+        """
+
+        return _FakeResult(
+            report_markdown="# 0. 投资要点概览\n",
+            quality_gate_result=_fake_quality_gate_result(
+                status="pass",
+                issues=(
+                    QualityGateIssue(
+                        rule_code="FQ0",
+                        severity="info",
+                        fund_code="000216",
+                        field_name=None,
+                        priority=None,
+                        message="strict golden answer 尚未覆盖",
+                        reason="fund_not_covered",
+                        coverage_scope="fund_not_covered",
+                    ),
+                ),
+            ),
         )
 
 
@@ -125,7 +165,11 @@ class _FailingService:
         raise RuntimeError("fixture failure")
 
 
-def _fake_quality_gate_result(*, status: str) -> QualityGateResult:
+def _fake_quality_gate_result(
+    *,
+    status: str,
+    issues: tuple[object, ...] = (object(), object()),
+) -> QualityGateResult:
     """构造 CLI 分析路径使用的 fake quality gate 结果。
 
     Args:
@@ -144,7 +188,7 @@ def _fake_quality_gate_result(*, status: str) -> QualityGateResult:
         gate_json_path=Path("quality-output/quality_gate.json"),
         gate_markdown_path=Path("quality-output/quality_gate.md"),
         status=status,
-        issues=(object(), object()),
+        issues=issues,
     )
 
 
@@ -453,14 +497,14 @@ def test_analyze_cli_calls_service_and_prints_report(monkeypatch) -> None:  # ty
 
     result = runner.invoke(
         cli.app,
-            [
-                "analyze",
-                "110011",
-                "--report-year",
-                "2024",
-                "--dev-override",
-                "--equity-position",
-                "80%",
+        [
+            "analyze",
+            "110011",
+            "--report-year",
+            "2024",
+            "--dev-override",
+            "--equity-position",
+            "80%",
             "--actual-style",
             "均衡",
             "--actual-equity-position",
@@ -543,6 +587,35 @@ def test_analyze_cli_prints_quality_gate_summary_to_stderr(monkeypatch) -> None:
     assert result.output.endswith("# 0. 投资要点概览\n")
     assert "quality_gate_status: warn" in result.output
     assert "quality_gate_json: quality-output/quality_gate.json" in result.output
+
+
+def test_analyze_cli_prints_quality_gate_info_for_missing_golden_coverage(
+    monkeypatch,
+) -> None:  # type: ignore[no-untyped-def]
+    """验证 fund-scoped FQ0/info 会输出 concise quality_gate_info 行。
+
+    Args:
+        monkeypatch: pytest monkeypatch fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 info 行缺失或 exit code 被改变时抛出。
+    """
+
+    monkeypatch.setattr(cli, "FundAnalysisService", _FakeInfoService)
+    runner = CliRunner()
+
+    result = runner.invoke(cli.app, ["analyze", "000216"])
+
+    assert result.exit_code == 0
+    assert result.output.endswith("# 0. 投资要点概览\n")
+    assert "quality_gate_status: pass" in result.output
+    assert (
+        "quality_gate_info: strict golden answer not covered for fund_code 000216 "
+        "reason=fund_not_covered"
+    ) in result.output
 
 
 def test_analyze_cli_default_product_request(monkeypatch) -> None:  # type: ignore[no-untyped-def]
