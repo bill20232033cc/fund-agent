@@ -43,6 +43,10 @@
 
 - **对基金文档的存取**，都应该只通过统一的文档仓库接口，禁止直接操作文件系统。
 
+- **生产年报 PDF 访问必须经过 `FundDocumentRepository`**。年报来源编排属于 Fund Capability documents 层内部实现，Service、UI、Engine、renderer、quality gate 不得直接调用具体来源、PDF cache 或下载 helper。
+
+- **年报来源 fallback 必须显式按失败分类决策**：`not_found`、`unavailable` 才允许 fallback；`schema_drift`、`identity_mismatch`、`integrity_error` 必须 fail-closed，禁止被 Eastmoney fallback 静默掩盖。
+
 - **禁止把显式参数放在 extra_payload 里传递**，所有参数必须显式声明。
 
 - **基金类型判断优先于通用分析**：必须先识别基金类型（指数/主动/债券/QDII/FOF），再应用对应的 preferred_lens。
@@ -194,6 +198,20 @@
 3. **按模板 8 章结构执行分析**，每章遵循 CHAPTER_CONTRACT
 4. **执行审计检查**（P1/P2/E1/E2/E3/C1/L1/L2/R1/R2）
 5. **生成证据锚点**，确保所有判断可溯源
+
+### 年报来源 fallback 策略
+
+| 失败类别 | 含义 | 是否允许 fallback |
+|---------|------|------------------|
+| `not_found` | 来源正常响应但没有目标基金/年份年报 | 是 |
+| `unavailable` | 网络、超时、服务端或本地依赖临时不可用 | 是 |
+| `schema_drift` | 官方来源响应结构、字段或附件形态偏离契约 | 否 |
+| `identity_mismatch` | 返回候选与基金代码、基金 ID、年份或报告类型矛盾 | 否 |
+| `integrity_error` | PDF Content-Type、文件头或写入内容完整性失败 | 否 |
+
+- fallback 成功时必须保留 `metadata.fallback_used=True`。
+- fallback 被阻断时必须保留来源、失败类别、错误信息和原始异常 cause。
+- eligible 失败全部耗尽时保持当前最终异常语义，不把 unavailable 误报为 not-found。
 
 ### 禁止事项
 
