@@ -172,23 +172,27 @@ def analyze(
         typer.Exit: 分析失败时以非零状态退出。
     """
 
-    developer_overrides = _build_developer_overrides(
-        dev_override=dev_override,
-        equity_position=equity_position,
-        actual_style=actual_style,
-        actual_equity_position=actual_equity_position,
-        manager_tenure_months=manager_tenure_months,
-        peer_fee_median=peer_fee_median,
-        tracking_error=tracking_error,
-        money_horizon=money_horizon,
-        current_stage=current_stage,
-        final_judgment_override=final_judgment_override,
-        quality_gate_policy=quality_gate_policy,
-        quality_gate_source_csv=quality_gate_source_csv,
-        quality_gate_output_dir=quality_gate_output_dir,
-        quality_gate_run_id=quality_gate_run_id,
-        quality_gate_golden_answer_path=quality_gate_golden_answer_path,
-    )
+    try:
+        developer_overrides = _build_developer_overrides(
+            dev_override=dev_override,
+            equity_position=equity_position,
+            actual_style=actual_style,
+            actual_equity_position=actual_equity_position,
+            manager_tenure_months=manager_tenure_months,
+            peer_fee_median=peer_fee_median,
+            tracking_error=tracking_error,
+            money_horizon=money_horizon,
+            current_stage=current_stage,
+            final_judgment_override=final_judgment_override,
+            quality_gate_policy=quality_gate_policy,
+            quality_gate_source_csv=quality_gate_source_csv,
+            quality_gate_output_dir=quality_gate_output_dir,
+            quality_gate_run_id=quality_gate_run_id,
+            quality_gate_golden_answer_path=quality_gate_golden_answer_path,
+        )
+    except typer.BadParameter as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(code=2) from exc
     request = FundAnalysisRequest(
         fund_code=fund_code,
         report_year=report_year,
