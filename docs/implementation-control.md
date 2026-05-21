@@ -15,12 +15,12 @@
 | 项目 | 当前状态 |
 |------|----------|
 | 当前分支 | `main` |
-| 当前 gate | `P9-S1 accepted` |
-| 下一 entry point | `post-P9-S1 follow-up planning` |
+| 当前 gate | `post-P9-S1 follow-up planning accepted` |
+| 下一 entry point | `P9-S2 quality gate / golden coverage calibration plan/review` |
 | 设计真源 | `docs/design.md`，已按 `docs/design-update.md` reconciliation 收口 |
 | 近期设计裁决 | `docs/reviews/design-update-reconciliation-20260521.md`、`docs/reviews/implementation-control-update-reconciliation-20260521.md` |
 | P8 交付物 | `must_answer` audit routing、renderer `preferred_lens` deterministic application、source fallback taxonomy |
-| 当前残余风险 | P9 product contract、repo hygiene、quality gate / golden coverage ROI |
+| 当前残余风险 | quality gate / golden coverage ROI、repo hygiene、control doc hygiene |
 
 当前控制文档仍是 phaseflow 的总控真源：详细 gate、artifact、review、commit、验证和 residual risk 记录保留在后文，不用摘要替代。`docs/implementation-control-update.md` 仅作为摘要候选输入；经 reconciliation 后只融合稳定 summary，不替换本文件。
 
@@ -60,7 +60,7 @@
 | Product contract | P9-S1 已接受：用户最小输入、developer override 分离、final judgment 派生与 R2 审计已收口 | closed by P9-S1 |
 | Repo hygiene | LICENSE、CI、`.gitignore`、默认路径配置需单独 slice | post-P8 planning |
 | Dependency strategy | Dayu 裁决为方法论参考，生产依赖移除；后续 runtime 能力必须项目内化 | closed by 2026-05-21 reconciliation |
-| Quality gate ROI | golden coverage 与 gate 复杂度需继续校准 | post-P8 planning |
+| Quality gate ROI | P9-S2 进入计划：校准 product mode 默认 quality gate 与 golden coverage 的可用性边界 | P9-S2 |
 | Control doc hygiene | 可读性需提升，但不能丢失 phaseflow recovery 证据 | 后续文档治理 slice |
 
 ### 1.2 里程碑
@@ -75,8 +75,8 @@
 ### 1.3 当前 Gate 与基线裁决（2026-05-21）
 
 - 当前分支：`main`
-- 当前 gate：`P9-S1 accepted`
-- 下一 gate：`post-P9-S1 follow-up planning`
+- 当前 gate：`post-P9-S1 follow-up planning accepted`
+- 下一 gate：`P9-S2 quality gate / golden coverage calibration plan/review`
 - Repo findings 收口：003（QDII basis 记录并发指数证据）已修复；005（CSV ValueError/FNFE 分离）已修复；006（alpha 空 observations MVP 注释）已文档化；004/008/009/010 低严重度保持 deferred。
 - P4 执行控制文档：`docs/implementation-control-p4.md`
 - 当前裁决：
@@ -94,6 +94,7 @@
   - Post-P8 planning 已接受，artifact=`docs/reviews/post-p8-planning-20260521.md`。P9 第一优先级裁决为 `analyze` 产品契约加固：区分普通用户最小输入与 developer override，设计最终判断派生策略，并保持 UI / Service / Capability 边界；当前 gate 为 `post-P8 planning accepted`，下一 gate 为 `P9-S1 analyze product contract plan/review`。
   - P9-S1 analyze product contract plan/review 已接受，plan artifact=`docs/reviews/p9-s1-analyze-product-contract-plan-20260521.md`，controller judgment=`docs/reviews/p9-s1-plan-review-controller-judgment-20260521.md`，re-review artifacts=`docs/reviews/p9-s1-plan-rereview-mimo-20260521.md`,`docs/reviews/p9-s1-plan-rereview-ds-20260521.md`。计划裁决为：默认 `analyze` 仅暴露普通用户最小输入，developer-only 参数必须经 `--dev-override` 进入 nested override；最终判断在 Fund Capability 派生，renderer/audit/service 只 import 单一定义点；quality gate block/not_run 由 Service 状态机在派生前处理。当前 gate 为 `P9-S1 implementation`，下一 gate 为 `P9-S1 code review`。
   - P9-S1 implementation/code review 已接受，implementation commit=`2bacdb3`，implementation artifact=`docs/reviews/p9-s1-implementation-20260521.md`，controller judgment=`docs/reviews/p9-s1-code-review-controller-judgment-20260521.md`，review artifacts=`docs/reviews/p9-s1-code-review-mimo-20260521.md`,`docs/reviews/p9-s1-code-review-ds-20260521.md`。实现新增 Capability-owned final judgment policy、product 最小请求契约、nested developer override、Service quality gate 状态机、renderer/audit selected/derived/source 契约和 R2 冲突审计；当前验证 full suite `365 passed`、ruff passed、diff check passed；当前 gate 为 `P9-S1 accepted`，下一 gate 为 `post-P9-S1 follow-up planning`。
+  - Post-P9-S1 follow-up planning 已接受，artifact=`docs/reviews/post-p9-s1-follow-up-planning-20260521.md`。P9-S1 让 product mode 更严格依赖 quality gate fail-closed，而当前 golden answer 覆盖集中在 `004393`，默认精选池更广；下一优先级裁决为 `P9-S2 quality gate / golden coverage calibration plan/review`，目标是校准 product 默认 quality gate 与 golden coverage 的可用性边界，不放松 `--dev-override` 隔离。
   - Agent routing 补充：Procodex / AgentCodex 为 planning / implementation 首选；如遇网络或环境问题，AgentMiMo 可作为替补。但 MiMo 若参与某 slice 的 planning / implementation，则不得担任同 slice 独立 reviewer，应改用 AgentDS + AgentGLM。
   - P0 维持 `done`。历史上曾验证 `dayu` 依赖可导入；2026-05-21 架构裁决改为不保留外部 Dayu 生产依赖，相关 Host/Engine/tool-loop 能力如后续需要必须在项目内化实现。当前 `fund-agent` 处于 editable install，`fund-analysis --help` 可用，样本基金 `110011` 年报可下载，`pdfplumber` 可提取全文文本和表格。
   - P1 已完成并通过 aggregate review。
@@ -1444,3 +1445,4 @@ P0（环境搭建）
 | 2026-05-21 | post-P8 planning | ✅ accepted | controller 裁决 P9 第一优先级为 `analyze` 产品契约加固，artifact=`docs/reviews/post-p8-planning-20260521.md`；近期收口包括移除外部 `dayu-agent` 依赖、刷新 `uv.lock`、对齐 `AGENTS.md`/`CLAUDE.md`、明确第 5/6 章模板边界；Procodex/AgentCodex 网络问题时 AgentMiMo 可作为 planning/implementation 替补，但同 slice review 改用 AgentDS + AgentGLM；当前 gate 为 `post-P8 planning accepted`，下一 gate 为 `P9-S1 analyze product contract plan/review` |
 | 2026-05-21 | P9-S1 analyze product contract plan/review | ✅ accepted | plan artifact=`docs/reviews/p9-s1-analyze-product-contract-plan-20260521.md`；controller judgment=`docs/reviews/p9-s1-plan-review-controller-judgment-20260521.md`；MiMo/DS re-review artifacts 均 PASS；计划接受 product 最小输入、developer override nested contract、Capability-owned final judgment policy、Service quality gate state machine 和 R2 audit conflict contract；当前 gate 为 `P9-S1 implementation`，下一 gate 为 `P9-S1 code review` |
 | 2026-05-21 | P9-S1 implementation/code review | ✅ accepted | implementation commit=`2bacdb3`；implementation artifact=`docs/reviews/p9-s1-implementation-20260521.md`；MiMo/DS code review 均为 `PASS_WITH_FINDINGS` 且无阻断；controller judgment=`docs/reviews/p9-s1-code-review-controller-judgment-20260521.md`；当前验证 full suite `365 passed`、ruff passed、diff check passed；当前 gate 为 `P9-S1 accepted`，下一 gate 为 `post-P9-S1 follow-up planning` |
+| 2026-05-21 | post-P9-S1 follow-up planning | ✅ accepted | controller 裁决下一阶段第一优先级为 P9-S2 quality gate / golden coverage calibration；artifact=`docs/reviews/post-p9-s1-follow-up-planning-20260521.md`；当前 gate 为 `post-P9-S1 follow-up planning accepted`，下一 gate 为 `P9-S2 quality gate / golden coverage calibration plan/review` |
