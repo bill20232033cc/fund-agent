@@ -173,8 +173,10 @@ def _selected_fund_for_bundle(
     try:
         funds = load_selected_funds(source_csv)
         validation = validate_selected_fund_pool(funds)
-    except (FileNotFoundError, ValueError) as exc:
-        return None, f"quality gate source csv unavailable: {exc}"
+    except FileNotFoundError:
+        return None, "quality gate source csv not found"
+    except ValueError as exc:
+        return None, f"quality gate source csv format error: {exc}"
     if validation.has_blocking_errors:
         return None, "quality gate source csv has blocking validation errors"
     for fund in funds:

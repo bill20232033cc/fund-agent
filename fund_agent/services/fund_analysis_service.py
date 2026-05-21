@@ -284,6 +284,10 @@ class FundAnalysisService:
             period=str(structured_data.report_year),
             equity_position=request.equity_position,
         )
+        # MVP 限制：judge_alpha_nature 需要 observations_from_attributions，
+        # 但该函数要求 market_environments 和 source_confidences，
+        # 当前 Service 层无法提供这些外部输入，故传空元组，
+        # alpha judgment 将返回 insufficient_data。
         alpha_judgment = judge_alpha_nature((), fund_type=fund_type)
         consistency_result = check_consistency(
             product_profile=structured_data.product_profile,
