@@ -12,6 +12,7 @@ from decimal import Decimal
 from typing import Final, Literal
 
 from fund_agent.fund.analysis.checklist import ChecklistItem, ChecklistResult
+from fund_agent.fund.analysis.final_judgment import FinalJudgment, FinalJudgmentSource
 from fund_agent.fund.analysis.r_abc import RabcAttribution
 from fund_agent.fund.audit.contract_rules import (
     ContractMustAnswerCoverageRule,
@@ -29,7 +30,6 @@ from fund_agent.fund.template.contracts import load_template_contract_manifest
 AuditRuleCode = Literal["P1", "P2", "P3", "C2", "L1", "R1", "R2"]
 AuditSeverity = Literal["blocker", "reviewable"]
 AuditStatus = Literal["pass", "fail"]
-FinalJudgment = Literal["worth_holding", "needs_attention", "suggest_replace"]
 
 _MIN_CONTENT_LENGTH: Final[int] = 10
 _L1_TOLERANCE: Final[Decimal] = Decimal("0.0001")
@@ -91,7 +91,9 @@ class ProgrammaticAuditInput:
         report_markdown: 已渲染报告 Markdown，用于 P1/P2/P3 结构审计。
         rabc_attributions: R=A+B-C 归因结果，用于 L1 计算闭合审计。
         checklist_result: 检查清单结果，用于 R1/R2 规则审计。
-        final_judgment: 最终判断，用于 R2 与检查清单信号一致性审计。
+        final_judgment: 最终 selected 判断，用于 R2 与检查清单信号一致性审计。
+        derived_final_judgment: Capability 派生判断，用于 R2 source 冲突审计。
+        final_judgment_source: selected 判断来源，用于区分系统派生与开发覆盖。
         required_chapter_titles: 必要章节标题列表。
         chapter_blocks: 已渲染章节块，用于 P3 每章证据和 C2 契约审计。
     """
@@ -100,6 +102,8 @@ class ProgrammaticAuditInput:
     rabc_attributions: tuple[RabcAttribution, ...] = ()
     checklist_result: ChecklistResult | None = None
     final_judgment: FinalJudgment | None = None
+    derived_final_judgment: FinalJudgment | None = None
+    final_judgment_source: FinalJudgmentSource | None = None
     required_chapter_titles: tuple[str, ...] = _REQUIRED_CHAPTER_TITLES
     chapter_blocks: tuple[RenderedChapterBlock, ...] = ()
 
@@ -126,7 +130,12 @@ def run_programmatic_audit(input_data: ProgrammaticAuditInput) -> ProgrammaticAu
         *_audit_contract_conformance(chapter_blocks),
         *_audit_rabc_closure(input_data.rabc_attributions),
         *_audit_checklist_rules(input_data.checklist_result),
-        *_audit_final_judgment(input_data.checklist_result, input_data.final_judgment),
+        *_audit_final_judgment(
+            input_data.checklist_result,
+            input_data.final_judgment,
+            input_data.derived_final_judgment,
+            input_data.final_judgment_source,
+        ),
     )
     return ProgrammaticAuditResult(
         passed=not issues,
@@ -179,6 +188,22 @@ def _audit_required_inputs(input_data: ProgrammaticAuditInput) -> tuple[AuditIss
                 code="R2",
                 message="缺少显式最终判断，无法执行 R2 判定一致性审计。",
                 location="final_judgment",
+            ),
+        )
+    if input_data.derived_final_judgment is None:
+        issues.append(
+            _issue(
+                code="R2",
+                message="缺少系统派生最终判断，无法执行 R2 判定一致性审计。",
+                location="derived_final_judgment",
+            ),
+        )
+    if input_data.final_judgment_source is None:
+        issues.append(
+            _issue(
+                code="R2",
+                message="缺少最终判断来源，无法执行 R2 判定一致性审计。",
+                location="final_judgment_source",
             ),
         )
     return tuple(issues)
@@ -549,12 +574,16 @@ def _audit_checklist_rules(checklist_result: ChecklistResult | None) -> tuple[Au
 def _audit_final_judgment(
     checklist_result: ChecklistResult | None,
     final_judgment: FinalJudgment | None,
+    derived_final_judgment: FinalJudgment | None,
+    final_judgment_source: FinalJudgmentSource | None,
 ) -> tuple[AuditIssue, ...]:
     """执行 R2 最终判定一致性审计。
 
     Args:
         checklist_result: 检查清单结果。
-        final_judgment: 最终判断。
+        final_judgment: selected 最终判断。
+        derived_final_judgment: 系统派生最终判断。
+        final_judgment_source: selected 判断来源。
 
     Returns:
         R2 审计问题。
@@ -563,10 +592,36 @@ def _audit_final_judgment(
         无显式抛出。
     """
 
+    issues: list[AuditIssue] = []
+    if final_judgment is not None and derived_final_judgment is not None:
+        if final_judgment_source == "derived" and final_judgment != derived_final_judgment:
+            issues.append(
+                _issue(
+                    code="R2",
+                    message="系统派生路径下 selected 判断必须等于 derived 判断。",
+                    location="final_judgment",
+                ),
+            )
+        elif final_judgment_source == "developer_override" and final_judgment != derived_final_judgment:
+            issues.append(
+                _issue(
+                    code="R2",
+                    message="开发覆盖与系统派生判断冲突。",
+                    location="final_judgment",
+                ),
+            )
+        elif final_judgment_source not in {"derived", "developer_override", None}:
+            issues.append(
+                _issue(
+                    code="R2",
+                    message="最终判断来源必须是 derived 或 developer_override。",
+                    location="final_judgment_source",
+                ),
+            )
     if checklist_result is None or final_judgment is None:
-        return ()
+        return tuple(issues)
     if checklist_result.red_items and final_judgment != "suggest_replace":
-        return (
+        issues.append(
             _issue(
                 code="R2",
                 message="存在红灯检查项时，最终判断不能是值得持有或仅需关注。",
@@ -574,14 +629,14 @@ def _audit_final_judgment(
             ),
         )
     if checklist_result.overall_signal == "green" and final_judgment == "suggest_replace":
-        return (
+        issues.append(
             _issue(
                 code="R2",
                 message="检查清单全绿时，最终判断不应建议替换。",
                 location="final_judgment",
             ),
         )
-    return ()
+    return tuple(issues)
 
 
 def _extract_headings(report_markdown: str) -> tuple[str, ...]:

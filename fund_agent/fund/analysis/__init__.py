@@ -19,6 +19,13 @@ from fund_agent.fund.analysis.consistency_check import (
     ConsistencyRule,
     check_consistency,
 )
+from fund_agent.fund.analysis.final_judgment import (
+    FinalJudgment,
+    FinalJudgmentDecision,
+    FinalJudgmentQualityGateStatus,
+    FinalJudgmentSource,
+    derive_final_judgment,
+)
 from fund_agent.fund.analysis.investor_return import (
     BehaviorGapResult,
     FundFlowResult,
@@ -56,6 +63,10 @@ __all__ = [
     "ConsistencyCheckResult",
     "ConsistencyDimensionResult",
     "ConsistencyRule",
+    "FinalJudgment",
+    "FinalJudgmentDecision",
+    "FinalJudgmentQualityGateStatus",
+    "FinalJudgmentSource",
     "FundFlowResult",
     "InvestorExperienceResult",
     "RabcAttribution",
@@ -72,6 +83,7 @@ __all__ = [
     "calculate_r_abc_from_bundle",
     "calculate_r_abc_series",
     "check_consistency",
+    "derive_final_judgment",
     "judge_alpha_nature",
     "judge_fund_flow",
     "observations_from_attributions",

@@ -20,8 +20,8 @@ UI CLI -> Service use case -> Fund Capability
 ## 稳定边界
 
 - UI 只调用 Service，不直接读取年报、PDF、cache 或 Fund 内部 helper。
-- Service 可编排 Capability 的公开函数和数据对象，不承载基金领域规则。
-- Fund Capability 拥有基金类型判断、CHAPTER_CONTRACT、preferred_lens、ITEM_RULE、证据锚点和审计规则。
+- Service 可编排 Capability 的公开函数和数据对象，不承载基金领域规则；`analyze` 只在 Service 层解析 product mode / developer override mode、归一化 quality gate 状态并处理 block/not-run 阻断。
+- Fund Capability 拥有基金类型判断、CHAPTER_CONTRACT、preferred_lens、ITEM_RULE、证据锚点、最终判断派生和审计规则。
 - 文档读取只通过 `FundDocumentRepository.load_annual_report(...)` 进入生产路径。
 - Dayu 相关 Host/Engine/Prompting 只作为方法论参考，不是安装依赖或当前主链路事实。
 

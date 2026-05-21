@@ -160,6 +160,8 @@ def _rendered_audit_input(
         rabc_attributions=render_result.audit_input.rabc_attributions,
         checklist_result=render_result.audit_input.checklist_result,
         final_judgment=render_result.audit_input.final_judgment,
+        derived_final_judgment=render_result.audit_input.derived_final_judgment,
+        final_judgment_source=render_result.audit_input.final_judgment_source,
         chapter_blocks=chapter_blocks,
     )
 
@@ -184,6 +186,8 @@ def test_run_programmatic_audit_passes_complete_inputs() -> None:
             rabc_attributions=(_rabc(),),
             checklist_result=_checklist("green"),
             final_judgment="worth_holding",
+            derived_final_judgment="worth_holding",
+            final_judgment_source="derived",
             chapter_blocks=render_result.chapter_blocks,
         ),
     )
@@ -319,6 +323,8 @@ def test_run_programmatic_audit_detects_malformed_explicit_chapter_blocks() -> N
             rabc_attributions=render_result.audit_input.rabc_attributions,
             checklist_result=render_result.audit_input.checklist_result,
             final_judgment=render_result.audit_input.final_judgment,
+            derived_final_judgment=render_result.audit_input.derived_final_judgment,
+            final_judgment_source=render_result.audit_input.final_judgment_source,
             chapter_blocks=(broken_heading_block, *render_result.chapter_blocks[1:]),
         )
     )
@@ -332,6 +338,8 @@ def test_run_programmatic_audit_detects_malformed_explicit_chapter_blocks() -> N
             rabc_attributions=render_result.audit_input.rabc_attributions,
             checklist_result=render_result.audit_input.checklist_result,
             final_judgment=render_result.audit_input.final_judgment,
+            derived_final_judgment=render_result.audit_input.derived_final_judgment,
+            final_judgment_source=render_result.audit_input.final_judgment_source,
             chapter_blocks=render_result.chapter_blocks[:-1],
         )
     )
@@ -672,6 +680,66 @@ def test_run_programmatic_audit_requires_final_judgment_for_r2() -> None:
     assert any(issue.code == "R2" and issue.location == "final_judgment" for issue in result.issues)
 
 
+def test_run_programmatic_audit_requires_derived_final_judgment_for_r2() -> None:
+    """验证缺少系统派生最终判断会触发 R2 输入缺失问题。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当缺少派生判断未触发 R2 时抛出。
+    """
+
+    result = run_programmatic_audit(
+        ProgrammaticAuditInput(
+            report_markdown=_complete_report(),
+            rabc_attributions=(_rabc(),),
+            checklist_result=_checklist("green"),
+            final_judgment="worth_holding",
+            final_judgment_source="derived",
+        ),
+    )
+
+    assert not result.passed
+    assert any(
+        issue.code == "R2" and issue.location == "derived_final_judgment"
+        for issue in result.issues
+    )
+
+
+def test_run_programmatic_audit_requires_final_judgment_source_for_r2() -> None:
+    """验证缺少最终判断来源会触发 R2 输入缺失问题。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当缺少来源未触发 R2 时抛出。
+    """
+
+    result = run_programmatic_audit(
+        ProgrammaticAuditInput(
+            report_markdown=_complete_report(),
+            rabc_attributions=(_rabc(),),
+            checklist_result=_checklist("green"),
+            final_judgment="worth_holding",
+            derived_final_judgment="worth_holding",
+        ),
+    )
+
+    assert not result.passed
+    assert any(
+        issue.code == "R2" and issue.location == "final_judgment_source"
+        for issue in result.issues
+    )
+
+
 def test_run_programmatic_audit_detects_rabc_closure_error() -> None:
     """验证 L1 能检测 R=A+B-C 不闭合。
 
@@ -777,8 +845,62 @@ def test_run_programmatic_audit_detects_final_judgment_conflict() -> None:
         ProgrammaticAuditInput(
             checklist_result=_checklist("red"),
             final_judgment="worth_holding",
+            derived_final_judgment="worth_holding",
+            final_judgment_source="derived",
         ),
     )
 
     assert not result.passed
     assert any(issue.code == "R2" for issue in result.issues)
+
+
+def test_run_programmatic_audit_detects_derived_selected_conflict() -> None:
+    """验证 derived 来源下 selected/derived 不一致触发 R2。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 derived 冲突未触发 R2 时抛出。
+    """
+
+    result = run_programmatic_audit(
+        ProgrammaticAuditInput(
+            checklist_result=_checklist("green"),
+            final_judgment="needs_attention",
+            derived_final_judgment="worth_holding",
+            final_judgment_source="derived",
+        ),
+    )
+
+    assert not result.passed
+    assert any("selected 判断必须等于 derived 判断" in issue.message for issue in result.issues)
+
+
+def test_run_programmatic_audit_detects_developer_override_conflict() -> None:
+    """验证 developer override 来源下 selected/derived 不一致触发 R2。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当开发覆盖冲突未触发 R2 时抛出。
+    """
+
+    result = run_programmatic_audit(
+        ProgrammaticAuditInput(
+            checklist_result=_checklist("green"),
+            final_judgment="needs_attention",
+            derived_final_judgment="worth_holding",
+            final_judgment_source="developer_override",
+        ),
+    )
+
+    assert not result.passed
+    assert any("开发覆盖与系统派生判断冲突" in issue.message for issue in result.issues)

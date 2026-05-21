@@ -28,16 +28,17 @@
 - `tests/fund/analysis/test_investor_return.py`：投资者获得感分析测试，覆盖行为损益、投资者收益缺失、追涨/抄底资金流向和份额字段缺失
 - `tests/fund/analysis/test_risk_check.py`：否决项检查与压力测试，覆盖清盘风险、基金经理任期、风格漂移、费率远超同类、指数跟踪误差、显式输入缺失、`-20%/-40%/-60%` 场景和基金类型阈值
 - `tests/fund/analysis/test_checklist.py`：买入前检查清单测试，覆盖 7 问题顺序、红黄绿灰汇总、缺失显式输入、估值状态、资金期限阈值和异常否决项输入
-- `tests/fund/audit/test_audit_programmatic.py`：程序审计测试，覆盖 P1/P2/P3/C2/L1/R1/R2 规则、每章最小证据行、required_output_items marker、must_not_cover 禁止 marker、章节切分 fallback、必需输入缺失、故意注入错误和未知检查清单信号
+- `tests/fund/analysis/test_final_judgment.py`：最终判断派生策略测试，覆盖否决项、检查清单红灯、压力测试、quality gate block/not_run、黄灯/灰灯/数据不足、全绿值得持有、原因去重和 developer override 冲突记录
+- `tests/fund/audit/test_audit_programmatic.py`：程序审计测试，覆盖 P1/P2/P3/C2/L1/R1/R2 规则、每章最小证据行、required_output_items marker、must_not_cover 禁止 marker、章节切分 fallback、必需输入缺失、selected/derived/source 最终判断冲突、故意注入错误和未知检查清单信号
 - `tests/fund/template/test_contracts.py`：模板 CHAPTER_CONTRACT manifest 测试，覆盖 0-7 章完整性、设计标题、必需字段非空、所有标准基金类型 preferred_lens 解析和 fail-closed 校验
 - `tests/fund/template/test_lens_application.py`：preferred_lens 应用计划测试，覆盖所有标准基金类型 8 章 plan、default fallback 标记，以及非法基金类型、空章节、重复章节和越界章节 fail-closed
 - `tests/fund/template/test_item_rules.py`：模板 ITEM_RULE manifest 测试，覆盖四条 conditional 规则、源文案 fidelity、optional schema fixture、显式 facet/fund type 冲突 fail-closed 和唯一段落标记检查
 - `tests/fund/template/test_renderer.py`：模板渲染器测试，覆盖 8 章完整性、CHAPTER_CONTRACT 标题来源、渲染章节块、splitter fail-closed、正文与附录证据锚点格式、缺证章节显式输出、页码保留、非年报来源标注、preferred_lens 第 0/1 章确定性应用、程序审计输入兼容、缺失数据显式渲染、最终判断边界、禁用交易措辞和 README 同步
-- `tests/services/test_fund_analysis_service.py`：Service 编排测试，使用 fake extractor 避免网络/PDF 下载，覆盖结构化抽取到渲染和程序审计的完整调用路径、fund_code 入口校验、quality gate `off / warn / block / not-run` 路径、结构化阻断异常、默认 gate run id 不覆盖，并验证不含 PDF 下载的单只基金分析低于 30 秒
+- `tests/services/test_fund_analysis_service.py`：Service 编排测试，使用 fake extractor 避免网络/PDF 下载，覆盖 product mode 最小请求、developer override nested 契约、结构化抽取到渲染和程序审计的完整调用路径、fund_code 入口校验、quality gate `off / warn / block / not-run` 路径、结构化阻断异常、默认 gate run id 不覆盖，并验证不含 PDF 下载的单只基金分析低于 30 秒
 - `tests/services/test_extraction_score_service.py`：P4-S2/P5-S4 评分 Service 测试，覆盖显式参数转发、`errors_path` 转发、非法 snapshot 路径和非法 errors 路径拒绝
 - `tests/services/test_thermometer_service.py`：温度计 Service 测试，覆盖注入 fake adapter、显式 cache_dir/force_refresh 转发和非法缓存路径拒绝；不触发真实网络
-- `tests/ui/test_cli.py`：Typer CLI 测试，覆盖 `analyze` 调用 Service 并输出 Markdown、quality gate 参数转发、gate summary/blocked 信息输出、失败非零退出、`thermometer` plain/JSON/unavailable 输出，以及 `checklist` 不输出误导性成功文本
-- `tests/scripts/test_selected_funds_smoke.py`：有知有行精选基金池 smoke 脚本测试，覆盖 CSV 数据质量、分层抽样、指定代码、CLI 命令构造和 `quality_gate_status` 记录；命令显式使用 `--quality-gate-policy warn`，测试不触发真实网络
+- `tests/ui/test_cli.py`：Typer CLI 测试，覆盖 `analyze` product mode 最小请求、developer override 参数门禁、nested override 构造、gate summary/blocked 信息输出、失败非零退出、`thermometer` plain/JSON/unavailable 输出，以及 `checklist` 不输出误导性成功文本
+- `tests/scripts/test_selected_funds_smoke.py`：有知有行精选基金池 smoke 脚本测试，覆盖 CSV 数据质量、分层抽样、指定代码、CLI 命令构造和 `quality_gate_status` 记录；命令显式使用 `--dev-override --quality-gate-policy warn`，测试不触发真实网络
 - `tests/fund/integration/test_p1_sample_matrix.py`：P1 样本矩阵测试，验证 3 只样本基金 12 项结构化数据达到 `36/36`
 - `tests/fund/integration/test_p3_cli_e2e_matrix.py`：P3 CLI 端到端矩阵测试，验证 3 只样本基金经 Typer CLI、Service、P1/P2 Capability、模板渲染和程序审计输出完整 8 章报告，并显式断言 P1/P2/P3/L1/R1/R2 全部审计规则执行通过、每章正文证据行和附录来源锚点完整
 - `tests/fixtures/fund/extractors/profile/*.txt`：基础画像最小文本夹具，当前覆盖主动权益、增强指数、债券三类样本

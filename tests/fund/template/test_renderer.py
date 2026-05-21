@@ -15,6 +15,7 @@ from fund_agent.fund.analysis import (
     ChecklistResult,
     ConsistencyCheckResult,
     ConsistencyDimensionResult,
+    FinalJudgmentDecision,
     FundFlowResult,
     InvestorExperienceResult,
     RabcAttribution,
@@ -492,7 +493,7 @@ def _render_input(
 
     Args:
         missing: 是否构造缺失数据路径。
-        final_judgment: 最终判断。
+        final_judgment: 最终 selected 判断。
         fund_type: classified_fund_type fixture 值。
 
     Returns:
@@ -511,7 +512,14 @@ def _render_input(
         risk_check_result=_risk_check(),
         stress_test_result=_stress_test(fund_type=fund_type),
         checklist_result=_checklist("gray" if missing else "green"),
-        final_judgment=final_judgment,  # type: ignore[arg-type]
+        final_judgment_decision=FinalJudgmentDecision(
+            selected_judgment=final_judgment,  # type: ignore[arg-type]
+            derived_judgment=final_judgment,  # type: ignore[arg-type]
+            source="derived",
+            override_judgment=None,
+            reasons=("fixture",),
+            conflict_reasons=(),
+        ),
         current_stage=None if missing else "规模稳定，收益归因仍需跨期观察",
     )
 
@@ -951,6 +959,8 @@ def test_render_template_report_missing_data_path_is_explicit_and_audit_compatib
     assert "数据不足" in result.report_markdown
     assert result.lens_application_plan is None
     assert result.audit_input.final_judgment == "needs_attention"
+    assert result.audit_input.derived_final_judgment == "needs_attention"
+    assert result.audit_input.final_judgment_source == "derived"
     assert audit_result.passed
 
 
@@ -1054,4 +1064,9 @@ def test_render_template_report_keeps_l1_r1_r2_structured_inputs_unmodified() ->
 
     assert result.audit_input.rabc_attributions == input_data.rabc_attributions
     assert result.audit_input.checklist_result == modified_checklist
-    assert result.audit_input.final_judgment == input_data.final_judgment
+    assert result.audit_input.final_judgment == input_data.final_judgment_decision.selected_judgment
+    assert (
+        result.audit_input.derived_final_judgment
+        == input_data.final_judgment_decision.derived_judgment
+    )
+    assert result.audit_input.final_judgment_source == input_data.final_judgment_decision.source

@@ -453,13 +453,14 @@ def test_analyze_cli_calls_service_and_prints_report(monkeypatch) -> None:  # ty
 
     result = runner.invoke(
         cli.app,
-        [
-            "analyze",
-            "110011",
-            "--report-year",
-            "2024",
-            "--equity-position",
-            "80%",
+            [
+                "analyze",
+                "110011",
+                "--report-year",
+                "2024",
+                "--dev-override",
+                "--equity-position",
+                "80%",
             "--actual-style",
             "均衡",
             "--actual-equity-position",
@@ -499,14 +500,20 @@ def test_analyze_cli_calls_service_and_prints_report(monkeypatch) -> None:  # ty
     assert _FakeService.last_request is not None
     assert _FakeService.last_request.fund_code == "110011"
     assert _FakeService.last_request.report_year == 2024
-    assert _FakeService.last_request.equity_position == "80%"
-    assert _FakeService.last_request.final_judgment == "worth_holding"
+    assert _FakeService.last_request.mode == "developer_override"
+    assert _FakeService.last_request.developer_overrides is not None
+    assert _FakeService.last_request.developer_overrides.equity_position == "80%"
+    assert _FakeService.last_request.developer_overrides.final_judgment_override == "worth_holding"
     assert _FakeService.last_request.force_refresh is True
-    assert _FakeService.last_request.quality_gate_policy == "warn"
-    assert _FakeService.last_request.quality_gate_source_csv == Path("docs/code_20260519.csv")
-    assert _FakeService.last_request.quality_gate_output_dir == Path("quality-output")
-    assert _FakeService.last_request.quality_gate_run_id == "fixture-run"
-    assert _FakeService.last_request.quality_gate_golden_answer_path == Path(
+    assert _FakeService.last_request.developer_overrides.quality_gate_policy == "warn"
+    assert _FakeService.last_request.developer_overrides.quality_gate_source_csv == Path(
+        "docs/code_20260519.csv"
+    )
+    assert _FakeService.last_request.developer_overrides.quality_gate_output_dir == Path(
+        "quality-output"
+    )
+    assert _FakeService.last_request.developer_overrides.quality_gate_run_id == "fixture-run"
+    assert _FakeService.last_request.developer_overrides.quality_gate_golden_answer_path == Path(
         "reports/golden-answers/golden-answer.json"
     )
 
@@ -527,12 +534,90 @@ def test_analyze_cli_prints_quality_gate_summary_to_stderr(monkeypatch) -> None:
     monkeypatch.setattr(cli, "FundAnalysisService", _FakeWarnService)
     runner = CliRunner()
 
-    result = runner.invoke(cli.app, ["analyze", "110011", "--quality-gate-policy", "warn"])
+    result = runner.invoke(
+        cli.app,
+        ["analyze", "110011", "--dev-override", "--quality-gate-policy", "warn"],
+    )
 
     assert result.exit_code == 0
     assert result.output.endswith("# 0. 投资要点概览\n")
     assert "quality_gate_status: warn" in result.output
     assert "quality_gate_json: quality-output/quality_gate.json" in result.output
+
+
+def test_analyze_cli_default_product_request(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    """验证 analyze 默认构造 product mode 最小请求。
+
+    Args:
+        monkeypatch: pytest monkeypatch fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 CLI 默认请求携带开发覆盖时抛出。
+    """
+
+    _FakeService.last_request = None
+    monkeypatch.setattr(cli, "FundAnalysisService", _FakeService)
+    runner = CliRunner()
+
+    result = runner.invoke(cli.app, ["analyze", "110011"])
+
+    assert result.exit_code == 0
+    assert _FakeService.last_request is not None
+    assert _FakeService.last_request.mode == "product"
+    assert _FakeService.last_request.developer_overrides is None
+
+
+def test_analyze_cli_rejects_dev_options_without_dev_override(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    """验证开发参数未配 `--dev-override` 会统一失败。
+
+    Args:
+        monkeypatch: pytest monkeypatch fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当开发参数静默生效时抛出。
+    """
+
+    _FakeService.last_request = None
+    monkeypatch.setattr(cli, "FundAnalysisService", _FakeService)
+    runner = CliRunner()
+
+    result = runner.invoke(cli.app, ["analyze", "110011", "--equity-position", "80%"])
+
+    assert result.exit_code != 0
+    assert "--dev-override" in result.output
+    assert "--equity-position" in result.output
+    assert _FakeService.last_request is None
+
+
+def test_analyze_cli_rejects_quality_gate_policy_without_dev_override(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    """验证 quality gate warn/off 只允许开发覆盖模式。
+
+    Args:
+        monkeypatch: pytest monkeypatch fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 product mode 可关闭 gate 时抛出。
+    """
+
+    _FakeService.last_request = None
+    monkeypatch.setattr(cli, "FundAnalysisService", _FakeService)
+    runner = CliRunner()
+
+    result = runner.invoke(cli.app, ["analyze", "110011", "--quality-gate-policy", "off"])
+
+    assert result.exit_code != 0
+    assert "--dev-override" in result.output
+    assert "--quality-gate-policy" in result.output
+    assert _FakeService.last_request is None
 
 
 def test_analyze_cli_structured_quality_gate_block(monkeypatch) -> None:  # type: ignore[no-untyped-def]

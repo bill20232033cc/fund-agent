@@ -18,20 +18,7 @@ fund-analysis --help
 5 分钟跑通一只基金：
 
 ```bash
-fund-analysis analyze 004393 \
-  --report-year 2024 \
-  --equity-position 80% \
-  --actual-style 均衡 \
-  --actual-equity-position 70% \
-  --manager-tenure-months 24 \
-  --peer-fee-median 1.00% \
-  --investment-amount 10000 \
-  --max-tolerable-loss-rate 50% \
-  --valuation-state low \
-  --user-money-horizon-years 4 \
-  --current-stage 估值较低但需继续跟踪境外市场波动。 \
-  --final-judgment worth_holding \
-  --quality-gate-policy warn
+fund-analysis analyze 004393 --report-year 2024
 ```
 
 命令成功后会把完整 Markdown 报告写到 stdout，quality gate 摘要写到 stderr。需要保存报告时可使用 shell 重定向：
@@ -84,25 +71,13 @@ fund-analysis quality-gate \
 | 参数 | 用途 |
 |------|------|
 | `--report-year` | 年报年份，默认 `2024` |
-| `--equity-position` | R=A+B-C 使用的显式股票仓位，如 `80%` |
-| `--actual-style` | 言行一致性检查使用的实际持仓风格 |
-| `--actual-equity-position` | 言行一致性检查使用的实际股票仓位 |
-| `--manager-tenure-months` | 基金经理管理本基金月数 |
-| `--peer-fee-median` | 同类总费率中位数，如 `1.00%` |
-| `--tracking-error` | 指数基金跟踪误差，如 `1.50%` |
 | `--investment-amount` | 压力测试投入金额，默认 `10000` |
 | `--max-tolerable-loss-rate` | 最大可承受亏损比例，如 `50%` |
 | `--valuation-state` | 估值状态：`low` / `fair` / `high` / `unavailable` |
-| `--money-horizon` | 资金期限分类：`long_enough` / `uncertain` / `too_short` |
 | `--user-money-horizon-years` | 用户资金不用年限 |
-| `--current-stage` | 当前阶段与关键变化说明 |
-| `--final-judgment` | `worth_holding` / `needs_attention` / `suggest_replace` |
 | `--force-refresh` | 强制刷新底层数据 |
-| `--quality-gate-policy` | 报告质量 gate 策略：`block` / `warn` / `off`，默认 `block` |
-| `--quality-gate-source-csv` | 精选基金池 CSV，默认 `docs/code_20260519.csv` |
-| `--quality-gate-output-dir` | quality gate 输出目录；为空时自动生成不覆盖的运行目录 |
-| `--quality-gate-run-id` | quality gate 运行 ID；为空时自动生成 |
-| `--quality-gate-golden-answer-path` | strict golden answer JSON 路径，默认 `reports/golden-answers/golden-answer.json` |
+
+`analyze` 默认是 product mode：最终判断由 Fund Capability 根据检查清单、否决项、压力测试和 quality gate 派生；R=A+B-C 股票仓位、言行一致性实际风格、经理任期、同类费率、跟踪误差、当前阶段、最终判断覆盖和 quality gate `warn/off` 等夹具参数仅供开发验证使用，必须显式传 `--dev-override`。
 
 ## 输出内容
 
@@ -223,7 +198,7 @@ fund-analysis quality-gate \
 
 默认输出到 `score.json` 所在目录，包含 `quality_gate.json` 和 `quality_gate.md`。当前 gate 消费 coverage / traceability / `fund_quality` / `failed_funds` / correctness：字段级或单基金 P0 fail 会阻断，单基金 issue 会保留 `fund_code`；P1 fail 会警告；App 类别与基金类型明确冲突或 strict golden answer mismatch 会触发 `FQ1/block`；字段缺失率达到阈值会触发 FQ4；基金类型无法解析 preferred_lens 会触发 FQ5；完全失败基金会触发 FQ6；correctness 未接入时只记录 `FQ0/info`。
 
-`fund-analysis analyze` 默认也会运行 quality gate。若 gate 状态为 `block`，默认策略会非零退出并在 stderr 输出 `quality_gate.json` / `quality_gate.md` 路径，不输出完整报告；使用 `--quality-gate-policy warn` 可保留报告输出并只在 stderr 提示；使用 `--quality-gate-policy off` 会明确跳过 gate。
+`fund-analysis analyze` 默认也会运行 quality gate。若 gate 状态为 `block` 或 gate 未运行，默认策略会非零退出并在 stderr 输出结构化原因，不输出完整报告。`--quality-gate-policy warn/off` 仅可在 `--dev-override` 模式下用于开发验证。
 
 ## 真实精选基金池 Smoke
 
@@ -252,7 +227,7 @@ fund-analysis quality-gate \
   --output-dir reports/smoke/selected-1x
 ```
 
-真实运行的 smoke 命令会显式传入 `--quality-gate-policy warn`，用于观察真实 PDF/network/report-rendering 路径，同时仍在 stderr 记录质量 gate 状态；生产 `fund-analysis analyze` 默认 `block` 策略不受影响。`results.jsonl` 和 `summary.md` 会分别记录进程退出状态与 `quality_gate_status`，避免把“链路跑完”误读为“质量 gate 通过”。
+真实运行的 smoke 命令会显式传入 `--dev-override --quality-gate-policy warn`，用于观察真实 PDF/network/report-rendering 路径，同时仍在 stderr 记录质量 gate 状态；生产 `fund-analysis analyze` 默认 `block` 策略不受影响。`results.jsonl` 和 `summary.md` 会分别记录进程退出状态与 `quality_gate_status`，避免把“链路跑完”误读为“质量 gate 通过”。
 
 输出目录会包含每只基金的 Markdown 报告、stderr、`results.jsonl` 和 `summary.md`。当前 CSV 有 56 条记录、55 个唯一基金代码，`016492` 重复，需要人工确认后再启用 `--strict`。
 
