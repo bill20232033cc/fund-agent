@@ -13,8 +13,8 @@
 | Field | State |
 |---|---|
 | Branch | `main` |
-| Current gate | `P11-S2 historical summary dedupe plan accepted` |
-| Next entry point | `P11-S2 implementation` |
+| Current gate | `P11-S2 accepted` |
+| Next entry point | `post-P11 follow-up planning` |
 | Current phase | `P11 Control doc hygiene / recovery ergonomics` |
 | Design truth | `docs/design.md` |
 | Control truth | `docs/implementation-control.md` |
@@ -22,13 +22,13 @@
 | Latest follow-up planning artifact | `docs/reviews/post-p11-follow-up-planning-20260521.md` |
 | Latest P11-S2 plan artifact | `docs/reviews/p11-s2-historical-summary-dedupe-plan-20260521.md` |
 | Plan reviews | `docs/reviews/p11-s1-plan-review-mimo-20260521.md`, `docs/reviews/p11-s1-plan-review-glm-20260521.md` |
-| Implementation artifact | `docs/reviews/p11-s1-implementation-20260521.md` |
+| Implementation artifact | `docs/reviews/p11-s2-implementation-20260521.md` |
 | Last merged PR | PR #6, merge commit `acc692c7e84c855398de86497b0d05f30b6f5ca5` |
 | Product baseline | P10 release-readiness merged; P11-S1 is documentation-only |
-| Open residuals | RR-13 duplicate `016492`, excluded `docs/repo-audit-20260521.md`, historical duplicate summary rows |
+| Open residuals | RR-13 duplicate `016492`, excluded `docs/repo-audit-20260521.md` |
 | Non-goal reminder | no source, tests, config, product behavior, runtime, Dayu Host/Engine/tool loop, or LLM writing changes |
 
-Resume checklist: confirm current gate and next entry point; confirm the next action is P11-S2 implementation, not planning; keep source/product behavior out of scope; implementation may edit only `docs/implementation-control.md` plus its implementation artifact; do not touch RR-13 source data or `docs/repo-audit-20260521.md`. Do not run artifact existence checks as routine resume work; they are a one-time acceptance gate after reference edits.
+Resume checklist: confirm current gate and next entry point; confirm the next action is post-P11 follow-up planning, not implementation; keep source/product behavior out of scope; do not touch RR-13 source data or `docs/repo-audit-20260521.md`. Do not run artifact existence checks as routine resume work; they are a one-time acceptance gate after reference edits.
 
 ## Active Gate Ledger
 
@@ -39,6 +39,7 @@ Resume checklist: confirm current gate and next entry point; confirm the next ac
 | `P11-S1 implementation/code review` | accepted | `docs/reviews/p11-s1-implementation-20260521.md`, `docs/reviews/p11-s1-code-review-controller-judgment-20260521.md` | local docs-only change | diff check and artifact reference check passed; MiMo PASS, GLM PASS_WITH_FINDINGS accepted | post-P11 planning | follow-up planning |
 | `post-P11 follow-up planning` | accepted | `docs/reviews/post-p11-follow-up-planning-20260521.md` | `5f5331b` | P11-S1 recovery accepted; remaining archive duplicate rows scoped to docs-only cleanup | P11-S2 | plan/review |
 | `P11-S2 historical summary dedupe plan/review` | accepted | `docs/reviews/p11-s2-historical-summary-dedupe-plan-20260521.md`, `docs/reviews/p11-s2-plan-review-controller-judgment-20260521.md` | local docs-only plan | MiMo/GLM initial PASS_WITH_FINDINGS; targeted re-reviews PASS | P11-S2 implementation | implementation |
+| `P11-S2 implementation/code review` | accepted | `docs/reviews/p11-s2-implementation-20260521.md`, `docs/reviews/p11-s2-code-review-controller-judgment-20260521.md` | local docs-only change | MiMo/GLM PASS_WITH_FINDINGS; Startup Packet residual bookkeeping fixed | post-P11 planning | follow-up planning |
 
 ## Phase History Index
 
@@ -55,7 +56,7 @@ Resume checklist: confirm current gate and next entry point; confirm the next ac
 | P8 | done | [Archive: P8](#archive-p8) | P8-S1/S2/S3 plan and review artifacts | `90bb9d2`, `b4aaaaa` recorded | full suite `347 passed` | none active |
 | P9 | done | [Archive: P9](#archive-p9) | P9 product contract and aggregate deepreview artifacts | `2bacdb3`, `ce603a0` recorded | full suite `377 passed` | review limitation documented |
 | P10 | merged | [Archive: P10](#archive-p10) | P10 plan/code/aggregate/PR artifacts | PR #6 merge `acc692c7e84c855398de86497b0d05f30b6f5ca5` | full suite `388 passed`, CI pass | `docs/repo-audit-20260521.md` excluded |
-| P11 | in progress | [Archive: P11](#archive-p11) | P11 plan/review/implementation/code-review/follow-up/P11-S2 artifacts | `5f5331b` | P11-S2 plan re-reviews PASS | P11-S2 implementation |
+| P11 | accepted | [Archive: P11](#archive-p11) | P11 plan/review/implementation/code-review/follow-up/P11-S2 artifacts | `5f5331b` | P11-S2 docs-only validation passed | post-P11 planning |
 
 ## P11 Current Phase Plan
 
@@ -78,7 +79,6 @@ Success signals: first-screen recovery is short; `Phase History Index` links to 
 |---|---|---|
 | RR-13 duplicate `016492` | User / App source | Preserve as human-owned; do not modify CSV automatically |
 | `docs/repo-audit-20260521.md` | Controller / user | Keep excluded unless later scope explicitly accepts publication |
-| Historical duplicate summary rows | P11-S2 implementation | GLM INFO finding; does not affect active Startup Packet or current control truth, but should be cleaned before new product phase |
 | Future product feature selection | Post-P11 / after P11-S2 | Deferred until control-doc recovery cleanup is accepted |
 
 ## Evidence Preservation Rules
@@ -155,23 +155,25 @@ P10 repo hygiene, release readiness, PR #6 draft/merge gate, CI, excluded repo-a
 
 ## Archive: P11
 
-P11 control doc hygiene plan/review, implementation, code review, post-P11 planning, and P11-S2 plan/review evidence is preserved in the startup packet, active ledger, this archive heading, `docs/reviews/p11-s1-implementation-20260521.md`, `docs/reviews/p11-s1-code-review-controller-judgment-20260521.md`, `docs/reviews/post-p11-follow-up-planning-20260521.md`, and `docs/reviews/p11-s2-plan-review-controller-judgment-20260521.md`.
+P11 control doc hygiene plan/review, implementation, code review, post-P11 planning, and P11-S2 implementation/code-review evidence is preserved in the startup packet, active ledger, this archive heading, `docs/reviews/p11-s1-implementation-20260521.md`, `docs/reviews/p11-s1-code-review-controller-judgment-20260521.md`, `docs/reviews/post-p11-follow-up-planning-20260521.md`, `docs/reviews/p11-s2-plan-review-controller-judgment-20260521.md`, and `docs/reviews/p11-s2-code-review-controller-judgment-20260521.md`.
 
 ## Original Detailed Control Record
 
-### Historical Snapshot Before P11-S1（2026-05-21）
+### Historical Snapshot Before P11-S1 Implementation（2026-05-21）
 
-| 项目 | 当前状态 |
+This snapshot records the pre-P11-S1 implementation state only. It is not current gate truth; use `Startup Packet` and `Active Gate Ledger` for current state.
+
+| 项目 | 历史状态 |
 |------|----------|
-| 当前分支 | `main` |
-| 当前 gate | `P11-S1 plan accepted` |
-| 下一 entry point | `P11-S1 implementation` |
+| 当时分支 | `main` |
+| 当时 gate | `P11-S1 plan accepted` |
+| 当时下一 entry point | `P11-S1 implementation` |
 | 设计真源 | `docs/design.md`，已按 `docs/design-update.md` reconciliation 收口 |
 | 近期设计裁决 | `docs/reviews/design-update-reconciliation-20260521.md`、`docs/reviews/implementation-control-update-reconciliation-20260521.md` |
 | P8 交付物 | `must_answer` audit routing、renderer `preferred_lens` deterministic application、source fallback taxonomy |
-| 当前残余风险 | repo hygiene、control doc hygiene、RR-13 精选池 CSV 重复待人工裁决 |
+| 当时残余风险 | repo hygiene、control doc hygiene、RR-13 精选池 CSV 重复待人工裁决 |
 
-当前控制文档仍是 phaseflow 的总控真源：详细 gate、artifact、review、commit、验证和 residual risk 记录保留在后文，不用摘要替代。`docs/implementation-control-update.md` 仅作为摘要候选输入；经 reconciliation 后只融合稳定 summary，不替换本文件。
+本历史快照所在控制文档仍是 phaseflow 的总控真源：详细 gate、artifact、review、commit、验证和 residual risk 记录保留在后文，不用摘要替代。`docs/implementation-control-update.md` 仅作为摘要候选输入；经 reconciliation 后只融合稳定 summary，不替换本文件。
 
 ### 1.1 Phase 列表
 
@@ -209,13 +211,12 @@ P11 control doc hygiene plan/review, implementation, code review, post-P11 plann
 | 类别 | 状态 | Owner / Destination |
 |------|------|---------------------|
 | Product contract | P9-S1 已接受：用户最小输入、developer override 分离、final judgment 派生与 R2 审计已收口 | closed by P9-S1 |
-| Repo hygiene | P10 已通过 PR #6 squash merge 到 `main` | closed by P10 |
-| Control doc hygiene | P11-S1 plan/review 已接受；下一步文档实现，必须保持 documentation-only | P11-S1 implementation |
+| Repo hygiene | P10 已通过 PR #6 squash merge 到 `main`；`docs/repo-audit-20260521.md` 继续排除，除非后续 scope 明确接受发布 | closed by P10 / repo-audit remains excluded |
+| Control doc hygiene | P11-S1 recovery 已接受；P11-S2 historical summary dedupe 以 documentation-only 方式清理旧摘要重复和陈旧 gate 表述，证据链保留 | closed by P11-S2 implementation |
 | Dependency strategy | Dayu 裁决为方法论参考，生产依赖移除；后续 runtime 能力必须项目内化 | closed by 2026-05-21 reconciliation |
 | Quality gate ROI | P9-S2 已接受：区分 gate not-run 与 correctness coverage gap；精选池成员缺 strict golden 覆盖输出 FQ0/info | closed by P9-S2 |
 | P9 aggregate review coverage | P9 aggregate deepreview 已接受；AgentDS 独立 PASS，AgentMiMo 补充 PASS 但记录 P9-S2 reviewer limitation | closed by P9 aggregate |
-| Repo hygiene | 下一阶段 P10-S1：LICENSE、CI、`.gitignore` / artifact policy、默认路径配置策略、未跟踪文件处置 | P10-S1 plan/review |
-| Control doc hygiene | 可读性需提升，但不能丢失 phaseflow recovery 证据 | 后续文档治理 slice |
+| RR-13 duplicate `016492` | 精选基金池 CSV 源数据身份冲突保持人工裁决，不由代码或文档清理自动修复 | User / App source |
 
 ### 1.2 里程碑
 
@@ -226,11 +227,11 @@ P11 control doc hygiene plan/review, implementation, code review, post-P11 plann
 | M3: 分析引擎可用 | Week 4 中 | P2 | R=A+B-C 计算正确，言行一致性检验输出信号 |
 | M4: MVP 交付 | Week 5 结束 | P3 | `fund-analysis <code>` 输出完整 8 章报告 |
 
-### 1.3 当前 Gate 与基线裁决（2026-05-21）
+### 1.3 P11-S1 前历史 Gate 与基线裁决（2026-05-21）
 
-- 当前分支：`main`
-- 当前 gate：`P11-S1 plan accepted`
-- 下一 gate：`P11-S1 implementation`
+- 当时分支：`main`
+- 当时 gate：`P11-S1 plan accepted`
+- 当时下一 gate：`P11-S1 implementation`
 - Repo findings 收口：003（QDII basis 记录并发指数证据）已修复；005（CSV ValueError/FNFE 分离）已修复；006（alpha 空 observations MVP 注释）已文档化；004/008/009/010 低严重度保持 deferred。
 - P4 执行控制文档：`docs/implementation-control-p4.md`
 - 当前裁决：
@@ -1633,3 +1634,4 @@ P0（环境搭建）
 | 2026-05-21 | P11-S1 implementation/code review | ✅ accepted | implementation artifact=`docs/reviews/p11-s1-implementation-20260521.md`；controller judgment=`docs/reviews/p11-s1-code-review-controller-judgment-20260521.md`；MiMo code review PASS，GLM code review PASS_WITH_FINDINGS；GLM F1 archive heading ambiguity 已修复为 historical snapshot，GLM F2 historical duplicate summary rows deferred；docs-only reorg 增加 Startup Packet、Active Gate Ledger、Phase History Index、Evidence Preservation Rules 和 Archive P0-P11 anchors；当前验证 diff check passed、artifact reference check passed、first-screen budget under 80 lines；当前 gate 为 `P11-S1 accepted`，下一 gate 为 `post-P11 follow-up planning` |
 | 2026-05-21 | post-P11 follow-up planning | ✅ accepted | artifact=`docs/reviews/post-p11-follow-up-planning-20260521.md`；controller 裁决 P11-S1 已达成恢复目标，但历史 archive summary rows 仍有重复/陈旧表述，会降低后续 resume clarity；下一阶段继续保持 documentation-only，进入 `P11-S2 historical summary dedupe plan/review`；RR-13 duplicate `016492` 继续 human-owned，`docs/repo-audit-20260521.md` 继续排除，不启动产品功能 phase |
 | 2026-05-21 | P11-S2 historical summary dedupe plan/review | ✅ accepted | plan artifact=`docs/reviews/p11-s2-historical-summary-dedupe-plan-20260521.md`；controller judgment=`docs/reviews/p11-s2-plan-review-controller-judgment-20260521.md`；MiMo/GLM initial reviews 均为 `PASS_WITH_FINDINGS`，targeted re-review 均 `PASS`；计划接受 documentation-only cleanup，限定清理 stale summary rows 和旧 current-gate wording，保护 `docs/implementation-control.md:234` 到 `docs/implementation-control.md:264` 详细证据链不被压缩；mandatory reference check 纳入 implementation acceptance；当前 gate 为 `P11-S2 historical summary dedupe plan accepted`，下一 gate 为 `P11-S2 implementation` |
+| 2026-05-21 | P11-S2 implementation/code review | ✅ accepted | implementation artifact=`docs/reviews/p11-s2-implementation-20260521.md`；controller judgment=`docs/reviews/p11-s2-code-review-controller-judgment-20260521.md`；MiMo/GLM code reviews 均为 `PASS_WITH_FINDINGS`，唯一低风险 finding 为 Startup Packet 与 Active Residuals 对 historical duplicate summary rows 的临时不一致，controller 已在 acceptance bookkeeping 中移除 Startup Packet 残余项；docs-only cleanup 未压缩 `docs/implementation-control.md:234` 到 `docs/implementation-control.md:264` 证据链；当前验证 diff check passed、artifact reference check passed、mandatory reference check passed；当前 gate 为 `P11-S2 accepted`，下一 gate 为 `post-P11 follow-up planning` |
