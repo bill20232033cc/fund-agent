@@ -25,6 +25,22 @@ SOURCE_NAME = "akshare_legulegu_index_pe_pb"
 ISO_DATE_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 
+def is_supported_index_code(index_code: str) -> bool:
+    """判断自建指数温度计是否支持指定指数代码。
+
+    Args:
+        index_code: 已完成格式规范化的 6 位指数代码。
+
+    Returns:
+        支持返回 True，否则返回 False。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return index_code in SUPPORTED_INDEX_SYMBOLS
+
+
 class ThermometerDataSource(Protocol):
     """温度计 PE/PB 历史数据源协议。"""
 

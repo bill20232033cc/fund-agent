@@ -15,7 +15,9 @@ from fund_agent.fund.data.thermometer import (
     MarketTemperature,
     ThermometerSnapshot,
 )
+from fund_agent.fund.data.thermometer_cache import ThermometerHistoryCache
 from fund_agent.fund.data.thermometer_types import ThermometerBatchResult, ThermometerReading
+from fund_agent.fund.data.thermometer_types import PePbHistory, PePbPoint
 from fund_agent.fund.quality_gate import QualityGateIssue, QualityGateResult
 from fund_agent.services import QualityGateBlockedError, QualityGateNotRunBlockedError
 from fund_agent.ui import cli
@@ -593,6 +595,35 @@ def _partial_unavailable_thermometer_batch_result() -> ThermometerBatchResult:
     )
 
 
+def _cli_index_history(index_code: str, index_name: str) -> PePbHistory:
+    """构造 CLI 真实 Service cache 测试使用的 PE/PB 历史。
+
+    Args:
+        index_code: 指数代码。
+        index_name: 指数名称。
+
+    Returns:
+        满足温度计计算最小样本要求的历史序列。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return PePbHistory(
+        index_code=index_code,
+        index_name=index_name,
+        source="fixture",
+        points=tuple(
+            PePbPoint(
+                date=f"2026-05-{day:02d}",
+                pe=Decimal(day),
+                pb=Decimal(day) / Decimal("10"),
+            )
+            for day in range(1, 31)
+        ),
+    )
+
+
 def test_analyze_cli_calls_service_and_prints_report(monkeypatch) -> None:  # type: ignore[no-untyped-def]
     """验证 analyze 命令调用 Service 并输出 Markdown。
 
@@ -1115,6 +1146,53 @@ def test_thermometer_cli_partial_unavailable_batch_json_exits_zero(monkeypatch) 
     assert payload["readings"][1]["index_code"] == "999999"
     assert payload["readings"][1]["unavailable"] is True
     assert _FakeThermometerService.last_request.index_codes == ("000300", "999999")
+
+
+def test_thermometer_cli_unsupported_batch_item_ignores_fresh_cache_json(
+    tmp_path: Path,
+) -> None:
+    """验证 CLI 真实 Service 不会让 unsupported 指数 fresh cache 绕过支持性校验。
+
+    Args:
+        tmp_path: pytest 临时目录 fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 CLI 返回伪造缓存中的 available 读数时抛出。
+    """
+
+    cache = ThermometerHistoryCache(root_dir=tmp_path)
+    cache.save(_cli_index_history(index_code="000300", index_name="沪深300"))
+    cache.save(_cli_index_history(index_code="999999", index_name="伪造指数"))
+    runner = CliRunner()
+
+    result = runner.invoke(
+        cli.app,
+        [
+            "thermometer",
+            "--index",
+            "000300,999999",
+            "--cache-dir",
+            str(tmp_path),
+            "--json",
+        ],
+    )
+
+    assert result.exit_code == 0
+    payload = json.loads(result.output)
+    assert payload["requested_index_codes"] == ["000300", "999999"]
+    assert payload["partial_unavailable"] is True
+    assert payload["unavailable_count"] == 1
+    assert payload["readings"][0]["index_code"] == "000300"
+    assert payload["readings"][0]["unavailable"] is False
+    assert payload["readings"][0]["cached"] is True
+    assert payload["readings"][1]["index_code"] == "999999"
+    assert payload["readings"][1]["unavailable"] is True
+    assert payload["readings"][1]["cached"] is False
+    assert payload["readings"][1]["temperature"] is None
+    assert "暂不支持指数：999999" in str(payload["readings"][1]["unavailable_reason"])
 
 
 @pytest.mark.parametrize(

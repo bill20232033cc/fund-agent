@@ -300,6 +300,48 @@ def test_thermometer_service_batch_marks_well_formed_unsupported_item_unavailabl
     assert "暂不支持指数" in str(result.readings[1].unavailable_reason)
 
 
+def test_thermometer_service_rejects_unsupported_batch_item_before_fresh_cache(
+    tmp_path: Path,
+) -> None:
+    """验证 unsupported 指数即使存在 fresh cache 也不会返回 cached available。
+
+    Args:
+        tmp_path: pytest 临时目录 fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 unsupported code 绕过支持性校验读取缓存时抛出。
+    """
+
+    cache = ThermometerHistoryCache(root_dir=tmp_path)
+    cache.save(_index_history(index_code="999999", index_name="伪造指数"))
+    source = _FakeIndexSource(
+        histories={"000300": _index_history(index_code="000300", index_name="沪深300")}
+    )
+    service = ThermometerService(
+        index_source=source,
+        history_cache_factory=lambda cache_dir: ThermometerHistoryCache(root_dir=tmp_path),
+    )
+
+    result = asyncio.run(
+        service.run(ThermometerRequest(cache_dir=tmp_path, index_codes=("000300", "999999")))
+    )
+
+    assert isinstance(result, ThermometerBatchResult)
+    assert source.index_codes == ["000300"]
+    assert result.partial_unavailable is True
+    assert result.unavailable_count == 1
+    assert result.readings[0].index_code == "000300"
+    assert result.readings[0].unavailable is False
+    assert result.readings[1].index_code == "999999"
+    assert result.readings[1].unavailable is True
+    assert result.readings[1].cached is False
+    assert result.readings[1].temperature is None
+    assert "暂不支持指数：999999" in str(result.readings[1].unavailable_reason)
+
+
 def test_thermometer_service_batch_marks_all_failed_items_unavailable(tmp_path: Path) -> None:
     """验证批量请求所有指数失败时返回整体 unavailable 数据态。
 

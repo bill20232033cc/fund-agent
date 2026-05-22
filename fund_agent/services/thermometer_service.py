@@ -25,6 +25,7 @@ from fund_agent.fund.data.thermometer_cache import ThermometerHistoryCache
 from fund_agent.fund.data.thermometer_source import (
     AkshareIndexThermometerSource,
     ThermometerSourceError,
+    is_supported_index_code,
 )
 
 
@@ -211,6 +212,13 @@ class ThermometerService:
         Raises:
             ValueError: 指数代码格式非法时抛出。
         """
+
+        if not is_supported_index_code(index_code):
+            return ThermometerUnavailable(
+                index_code=index_code,
+                index_name=index_code,
+                reason=f"自建温度计数据不可用：暂不支持指数：{index_code}",
+            ).to_reading()
 
         cache = self._history_cache_factory(request.cache_dir)
         if not request.force_refresh:
