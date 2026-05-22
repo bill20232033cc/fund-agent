@@ -150,6 +150,32 @@ def test_akshare_index_source_fails_closed_on_date_schema_drift() -> None:
         asyncio.run(source.load_index_history("000300"))
 
 
+@pytest.mark.parametrize(
+    "date_text",
+    ["2026-05-22T00:00:00", "2026-05-22 00:00:00", "2026-05-22abc"],
+)
+def test_akshare_index_source_rejects_non_strict_iso_date_strings(date_text: str) -> None:
+    """验证带时间或尾随字符的日期字符串会 fail-closed。
+
+    Args:
+        date_text: 待验证的非严格 ISO 日期字符串。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当非严格日期字符串未被拒绝时抛出。
+    """
+
+    source = AkshareIndexThermometerSource(
+        pe_fetcher=lambda symbol: _FakeFrame([{"日期": date_text, "滚动市盈率中位数": "20"}]),
+        pb_fetcher=lambda symbol: _FakeFrame([{"日期": date_text, "市净率中位数": "2"}]),
+    )
+
+    with pytest.raises(ThermometerSourceError, match="ISO"):
+        asyncio.run(source.load_index_history("000300"))
+
+
 def test_akshare_index_source_accepts_date_objects() -> None:
     """验证 date 对象可标准化为 ISO 日期。
 

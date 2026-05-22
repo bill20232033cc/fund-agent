@@ -219,14 +219,13 @@ def _normalize_date(value: object) -> str:
     text = str(value).strip()
     if not text:
         raise ThermometerSourceError("指数估值数据日期为空")
-    candidate = text[:10]
-    if not ISO_DATE_PATTERN.fullmatch(candidate):
+    if not ISO_DATE_PATTERN.fullmatch(text):
         raise ThermometerSourceError(f"指数估值数据日期不是 ISO 格式：{value}")
     try:
-        datetime.strptime(candidate, "%Y-%m-%d")
+        datetime.strptime(text, "%Y-%m-%d")
     except ValueError as exc:
         raise ThermometerSourceError(f"指数估值数据日期非法：{value}") from exc
-    return candidate
+    return text
 
 
 def _to_decimal(value: object, *, field_name: str) -> Decimal:
