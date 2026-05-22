@@ -29,6 +29,8 @@ def parse_ratio(value: object, *, field_name: str) -> Decimal:
 
     if value is None:
         raise ValueError(f"{field_name} 不能为空")
+    if isinstance(value, bool):
+        raise ValueError(f"{field_name} 不能为布尔值")
     if isinstance(value, Decimal):
         return value
     if isinstance(value, int | float):

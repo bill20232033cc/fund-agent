@@ -328,14 +328,17 @@ def _render_chapter_0(
     fund_name = _value_text(identity, "fund_name")
     fund_code = _value_text(identity, "fund_code", fallback=input_data.structured_data.fund_code)
     fund_type = _value_text(identity, "classified_fund_type")
+    fund_manager = _value_text(identity, "fund_manager")
+    fund_scale = _value_text(identity, "fund_scale")
+    inception_date = _value_text(identity, "inception_date")
     judgment_text = _FINAL_JUDGMENT_TEXT[input_data.final_judgment_decision.selected_judgment]
     primary_rabc = _primary_rabc(input_data.rabc_attributions)
     net_excess = _ratio_text(primary_rabc.net_excess_return) if primary_rabc else _INSUFFICIENT_TEXT
     watch_variable_text = _lens_watch_variable_text(lens_application_plan)
     content = [
         get_template_chapter_heading(0),
-        f"- 基金：{fund_name}（{fund_code}）。",
-        f"- 基金类型：{fund_type}。",
+        f"- 这是什么基金：{fund_name}（{fund_code}），{fund_type}。",
+        f"- 基金简介：基金经理 {fund_manager}；管理规模 {fund_scale}；成立时间 {inception_date}。",
         f"- 最终判断：{judgment_text}；检查清单汇总为 {input_data.checklist_result.overall_signal} / {input_data.checklist_result.overall_status}。",
         f"- 当前业绩与运作状态：R=A+B-C 净超额 {net_excess}；超额性质 {input_data.alpha_judgment.nature}。",
         f"- 支撑当前动作的最主要理由：检查清单汇总为 {input_data.checklist_result.overall_signal} / {input_data.checklist_result.overall_status}。",

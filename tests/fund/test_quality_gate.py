@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from fund_agent.fund.quality_gate import (
     GATE_STATUS_BLOCK,
     GATE_STATUS_PASS,
@@ -747,6 +749,69 @@ def test_run_quality_gate_keeps_old_score_without_fund_quality_compatible(tmp_pa
 
     assert result.status == GATE_STATUS_PASS
     assert any("fund_quality" in issue.message for issue in result.issues)
+
+
+def test_run_quality_gate_rejects_bool_field_score_numeric_rates(tmp_path: Path) -> None:
+    """验证 field_scores 数值字段拒绝 bool。
+
+    Args:
+        tmp_path: pytest 临时目录 fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 bool 数值字段未被拒绝时抛出。
+    """
+
+    score_path = tmp_path / "score.json"
+    score_path.write_text(
+        json.dumps(
+            {
+                "field_scores": [
+                    _field_score("classified_fund_type", "P0", "pass", True, 1.0),
+                ],
+                "correctness": {"status": "unavailable"},
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="field_scores\\[0\\]\\.coverage_rate 必须是数值"):
+        run_quality_gate(score_path=score_path)
+
+
+def test_run_quality_gate_rejects_bool_fund_quality_numeric_rates(tmp_path: Path) -> None:
+    """验证 fund_quality 数值字段拒绝 bool。
+
+    Args:
+        tmp_path: pytest 临时目录 fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 bool 数值字段未被拒绝时抛出。
+    """
+
+    score_path = tmp_path / "score.json"
+    score_path.write_text(
+        json.dumps(
+            {
+                "field_scores": [_field_score("classified_fund_type", "P0", "pass", 1.0, 1.0)],
+                "fund_quality": [
+                    _fund_quality(missing_field_rate=True),
+                ],
+                "correctness": {"status": "unavailable"},
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="fund_quality\\[0\\]\\.missing_field_rate 必须是数值"):
+        run_quality_gate(score_path=score_path)
 
 
 def test_run_quality_gate_blocks_failed_funds_as_fq6(tmp_path: Path) -> None:

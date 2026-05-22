@@ -16,6 +16,7 @@ from fund_agent.fund.extractors.models import EvidenceAnchor
 from fund_agent.fund.audit.contract_rules import (
     ContractAuditCoverageManifest,
     ContractMustAnswerCoverageRule,
+    ContractMustNotCoverCoverageRule,
     ContractRequiredItemRule,
     ProgrammaticContractRules,
     load_contract_audit_coverage_manifest,
@@ -793,6 +794,38 @@ def test_programmatic_contract_rules_cover_manifest_and_fail_closed_for_invalid_
         validate_programmatic_contract_rules(broken_rules)
 
 
+def test_programmatic_contract_rules_fail_closed_for_uncovered_must_not_cover() -> None:
+    """验证 must_not_cover manifest 条目未声明程序或非程序覆盖时 fail closed。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当缺失 must_not_cover 覆盖未被拒绝时抛出。
+    """
+
+    rules = load_programmatic_contract_rules()
+    uncovered_rule = next(
+        rule
+        for rule in rules.forbidden_contents
+        if rule.item_text == "不输出“证据与出处”小节。"
+    )
+    broken_rules = ProgrammaticContractRules(
+        required_items=rules.required_items,
+        forbidden_contents=tuple(
+            rule
+            for rule in rules.forbidden_contents
+            if rule is not uncovered_rule
+        ),
+    )
+
+    with pytest.raises(ValueError, match="must_not_cover 未被覆盖规则覆盖"):
+        validate_programmatic_contract_rules(broken_rules)
+
+
 def test_contract_audit_coverage_manifest_covers_every_must_answer() -> None:
     """验证 must_answer 审计覆盖清单完整覆盖模板问题。
 
@@ -831,6 +864,151 @@ def test_contract_audit_coverage_manifest_covers_every_must_answer() -> None:
         and rule.coverage_kind == "structured_data_availability"
         for rule in coverage_manifest.must_answer_coverages
     )
+
+
+def test_contract_audit_coverage_manifest_covers_every_must_not_cover() -> None:
+    """验证 must_not_cover 由程序 forbidden marker 或显式非程序路由完整覆盖。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 must_not_cover 覆盖不完整时抛出。
+    """
+
+    coverage_manifest = load_contract_audit_coverage_manifest()
+    rules = load_programmatic_contract_rules()
+    template_manifest = load_template_contract_manifest()
+    manifest_items = {
+        (chapter.chapter_id, item)
+        for chapter in template_manifest.chapters
+        for item in chapter.must_not_cover
+    }
+    programmatic_items = {
+        (rule.chapter_id, rule.item_text)
+        for rule in rules.forbidden_contents
+    }
+    non_programmatic_items = {
+        (rule.chapter_id, rule.item_text)
+        for rule in coverage_manifest.must_not_cover_coverages
+    }
+
+    assert programmatic_items | non_programmatic_items == manifest_items
+    assert programmatic_items.isdisjoint(non_programmatic_items)
+    assert len(coverage_manifest.must_not_cover_coverages) == 24
+
+
+def test_contract_audit_coverage_manifest_fails_closed_for_missing_must_not_cover_route() -> None:
+    """验证删除 must_not_cover 非程序覆盖路由会 fail closed。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当缺失 must_not_cover 覆盖未被拒绝时抛出。
+    """
+
+    coverage_manifest = load_contract_audit_coverage_manifest()
+    broken_manifest = ContractAuditCoverageManifest(
+        must_answer_coverages=coverage_manifest.must_answer_coverages,
+        must_not_cover_coverages=coverage_manifest.must_not_cover_coverages[:-1],
+    )
+
+    with pytest.raises(ValueError, match="must_not_cover 未被覆盖规则覆盖"):
+        validate_contract_audit_coverage_manifest(broken_manifest)
+
+
+def test_contract_audit_coverage_manifest_fails_closed_for_duplicate_must_not_cover_route() -> None:
+    """验证重复声明 must_not_cover 非程序覆盖路由会 fail closed。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当重复 must_not_cover 覆盖未被拒绝时抛出。
+    """
+
+    coverage_manifest = load_contract_audit_coverage_manifest()
+    first_rule = coverage_manifest.must_not_cover_coverages[0]
+    broken_manifest = ContractAuditCoverageManifest(
+        must_answer_coverages=coverage_manifest.must_answer_coverages,
+        must_not_cover_coverages=(
+            first_rule,
+            *coverage_manifest.must_not_cover_coverages,
+        ),
+    )
+
+    with pytest.raises(ValueError, match="must_not_cover 覆盖规则重复"):
+        validate_contract_audit_coverage_manifest(broken_manifest)
+
+
+def test_contract_audit_coverage_manifest_fails_closed_for_unknown_must_not_cover_route() -> None:
+    """验证 must_not_cover 非程序覆盖引用未知条目会 fail closed。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当未知 must_not_cover 覆盖未被拒绝时抛出。
+    """
+
+    coverage_manifest = load_contract_audit_coverage_manifest()
+    broken_manifest = ContractAuditCoverageManifest(
+        must_answer_coverages=coverage_manifest.must_answer_coverages,
+        must_not_cover_coverages=(
+            *coverage_manifest.must_not_cover_coverages,
+            ContractMustNotCoverCoverageRule(
+                0,
+                "不存在的 must_not_cover",
+                "narrative_guidance",
+                "fixture",
+            ),
+        ),
+    )
+
+    with pytest.raises(ValueError, match="must_not_cover 覆盖规则未匹配 manifest"):
+        validate_contract_audit_coverage_manifest(broken_manifest)
+
+
+def test_chapter_0_required_items_use_distinct_markers() -> None:
+    """验证第 0 章“一句话”和“基金简介”使用可独立审计的 marker。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当两个 required item 共用 marker 时抛出。
+    """
+
+    rules = load_programmatic_contract_rules()
+    rules_by_item = {
+        rule.item_text: rule
+        for rule in rules.required_items
+        if rule.chapter_id == 0
+    }
+    what_rule = rules_by_item["一句话这是什么基金"]
+    intro_rule = rules_by_item["基金简介"]
+    render_result = render_template_report(_render_input())
+    chapter_0 = render_result.chapter_blocks[0].body_markdown
+
+    assert set(what_rule.markers_any).isdisjoint(intro_rule.markers_any)
+    assert any(marker in chapter_0 for marker in what_rule.markers_any)
+    assert any(marker in chapter_0 for marker in intro_rule.markers_any)
 
 
 def test_contract_audit_coverage_manifest_fails_closed_for_missing_rule() -> None:

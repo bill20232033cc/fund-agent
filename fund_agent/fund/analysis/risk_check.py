@@ -980,6 +980,8 @@ def _parse_decimal(value: Decimal | str | int | float, *, field_name: str) -> De
         ValueError: 当输入为空或无法解析为数值时抛出。
     """
 
+    if isinstance(value, bool):
+        raise ValueError(f"{field_name} 不能为布尔值")
     if isinstance(value, Decimal):
         return value
     if isinstance(value, int | float):

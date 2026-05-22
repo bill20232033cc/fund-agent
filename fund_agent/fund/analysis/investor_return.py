@@ -387,6 +387,8 @@ def _parse_decimal(value: object, *, field_name: str) -> Decimal:
 
     if value is None:
         raise ValueError(f"{field_name} 不能为空")
+    if isinstance(value, bool):
+        raise ValueError(f"{field_name} 不能为布尔值")
     text = str(value).replace(",", "").strip()
     if not text:
         raise ValueError(f"{field_name} 不能为空")

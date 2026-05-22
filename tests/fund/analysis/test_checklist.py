@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from decimal import Decimal
 
+import pytest
+
 from fund_agent.fund.analysis import (
     BehaviorGapResult,
     ChecklistRule,
@@ -386,6 +388,31 @@ def test_run_checklist_uses_configured_money_horizon_threshold() -> None:
     money_horizon_item = result.items[-1]
     assert money_horizon_item.code == "money_horizon"
     assert money_horizon_item.signal == "yellow"
+
+
+def test_run_checklist_rejects_bool_money_horizon_years() -> None:
+    """验证用户资金年限拒绝 bool，避免被当作 0/1 年。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 bool 未被拒绝时抛出。
+    """
+
+    with pytest.raises(ValueError, match="不能为布尔值"):
+        run_checklist(
+            rabc_attribution=_rabc(),
+            manager_alignment=_manager_alignment(),
+            investor_experience=_investor_experience("positive"),
+            consistency_result=_consistency("green"),
+            risk_check_result=_risk_result("pass"),
+            valuation_state="low",
+            user_money_horizon_years=True,
+        )
 
 
 def test_run_checklist_handles_inconsistent_veto_result_without_crashing() -> None:
