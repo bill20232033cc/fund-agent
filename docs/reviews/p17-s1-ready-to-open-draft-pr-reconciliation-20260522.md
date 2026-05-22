@@ -4,7 +4,7 @@
 
 `READY_TO_OPEN_DRAFT_PR_PENDING_USER_AUTHORIZATION`
 
-P17-S1 is locally ready for a draft PR. The branch is `main`, upstream is `origin/main`, and local `main` is 7 commits ahead of `origin/main`. The current gate is local reconciliation only; pushing, creating a draft PR, commenting on GitHub, marking ready, merging, or deleting branches still requires explicit user authorization.
+P17-S1 plus the accepted thermometer design-direction correction is locally ready for a draft PR. The branch is `main`, upstream is `origin/main`, and local `main` is 9 commits ahead of `origin/main`. The current gate is local reconciliation only; pushing, creating a draft PR, commenting on GitHub, marking ready, merging, or deleting branches still requires explicit user authorization.
 
 ## Included Commits
 
@@ -17,10 +17,12 @@ P17-S1 is locally ready for a draft PR. The branch is `main`, upstream is `origi
 | `40e8175` | `docs: record p17 s1 implementation commit` | Backfills implementation commit hash in control truth. |
 | `2327309` | `docs: accept p17 s1 aggregate review` | Records aggregate deepreview artifacts and moves control state to this reconciliation gate. |
 | `2b34713` | `docs: prepare p17 s1 draft pr` | Records this PR inclusion/exclusion reconciliation and moves control state to draft PR gate pending user authorization. |
+| `6768792` | `docs: finalize p17 s1 pr readiness record` | Backfills readiness reconciliation bookkeeping after artifact creation. |
+| `8d73e3a` | `docs: accept self owned thermometer direction` | Updates design/control truth to accept future project-owned thermometer and pauses stale draft PR readiness. |
 
 ## Included File Set
 
-`origin/main..HEAD` contains 27 tracked files:
+`origin/main..HEAD` contains 28 tracked files:
 
 - `README.md`
 - `docs/design-control-alignment-guide.md`
@@ -49,6 +51,7 @@ P17-S1 is locally ready for a draft PR. The branch is `main`, upstream is `origi
 - `docs/reviews/p17-s1-aggregate-deepreview-glm-20260522.md`
 - `docs/reviews/p17-s1-aggregate-deepreview-controller-judgment-20260522.md`
 - `docs/reviews/p17-s1-ready-to-open-draft-pr-reconciliation-20260522.md`
+- `docs/reviews/thermometer-self-owned-design-direction-20260522.md`
 
 ## Explicitly Excluded Local Files
 
@@ -63,8 +66,9 @@ These local untracked drafts are not part of the PR inclusion set and must remai
 - No production golden rows or selected CSV/RR-13 data were changed.
 - No Service/UI/Runtime/Engine/source orchestration/document adapter/PDF/cache helper files were changed.
 - No Dayu runtime, LLM audit, Evidence Confirm, calculated tracking error, external index series, methodology extraction, or constituents extraction was introduced.
+- `docs/design.md` v2.2 now accepts future project-owned thermometer calculation as a design direction while preserving the current public-page query as transitional current behavior.
 - Annual-report access remains via `ParsedAnnualReport` inputs to Fund Capability extractor; no direct PDF/cache/source access was introduced by P17-S1.
-- `docs/design.md` v2.1 remains the design truth and `docs/implementation-control.md` remains the control truth.
+- `docs/design.md` v2.2 remains the design truth and `docs/implementation-control.md` remains the control truth.
 
 ## Validation
 
@@ -92,6 +96,8 @@ git diff --check origin/main..HEAD
 | Residual | Owner | Handling |
 |---|---|---|
 | P17-S1 note precision/test residuals | Future note precision / classifier alignment / test pass | Standard-deviation-only diagnostic, `年化` mixed-row note precision, benchmark-only table-context alignment, and table-level mixed/`§2` mixed tests are accepted as future non-blocking refinements. |
+| Self-owned thermometer | Future thermometer design/implementation phase | Define market/index coverage, source datasets, formulas, percentile windows, cache semantics, failure taxonomy, fixtures, and tests. |
+| Thermometer-to-`valuation_state` mapping | Future mapping design gate if selected | Do not silently connect thermometer values to analysis/checklist judgment; preserve explicit user input until a dedicated gate changes it. |
 | Production `tracking_error` golden rows for `001548` and P16 enhanced-index candidates | Future evidence-backed golden gate | Still blocked without reviewed direct observed disclosure evidence. |
 | RR-13 duplicate `016492` | User / App source | Preserve as human-owned; do not edit source CSV automatically. |
 | Excluded local drafts | Controller / user | Keep out of PR unless explicitly scoped. |
