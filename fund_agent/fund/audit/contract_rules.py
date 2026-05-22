@@ -480,12 +480,28 @@ def load_contract_audit_coverage_manifest() -> ContractAuditCoverageManifest:
         ValueError: 覆盖规则缺失、重复、引用未知条目或类型字段无效时抛出。
     """
 
-    manifest = ContractAuditCoverageManifest(
+    manifest = _build_contract_audit_coverage_manifest()
+    validate_contract_audit_coverage_manifest(manifest)
+    return manifest
+
+
+def _build_contract_audit_coverage_manifest() -> ContractAuditCoverageManifest:
+    """构造 CHAPTER_CONTRACT 审计覆盖路由清单。
+
+    Args:
+        无。
+
+    Returns:
+        未校验的审计覆盖路由清单。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return ContractAuditCoverageManifest(
         must_answer_coverages=_MUST_ANSWER_COVERAGE_RULES,
         must_not_cover_coverages=_MUST_NOT_COVER_COVERAGE_RULES,
     )
-    validate_contract_audit_coverage_manifest(manifest)
-    return manifest
 
 
 def load_programmatic_contract_rules() -> ProgrammaticContractRules:
@@ -503,7 +519,6 @@ def load_programmatic_contract_rules() -> ProgrammaticContractRules:
         forbidden_contents=_FORBIDDEN_CONTENT_RULES,
     )
     validate_programmatic_contract_rules(rules)
-    load_contract_audit_coverage_manifest()
     return rules
 
 
@@ -523,21 +538,22 @@ def validate_programmatic_contract_rules(rules: ProgrammaticContractRules) -> No
     manifest = load_template_contract_manifest()
     _validate_required_item_rules(rules.required_items, manifest)
     _validate_forbidden_content_rules(rules.forbidden_contents, manifest)
-    coverage_manifest = load_contract_audit_coverage_manifest()
-    _validate_must_not_cover_coverage_rules(
-        coverage_manifest,
-        manifest,
-        rules.forbidden_contents,
+    validate_contract_audit_coverage_manifest(
+        _build_contract_audit_coverage_manifest(),
+        forbidden_content_rules=rules.forbidden_contents,
     )
 
 
 def validate_contract_audit_coverage_manifest(
     coverage_manifest: ContractAuditCoverageManifest,
+    *,
+    forbidden_content_rules: tuple[ContractForbiddenContentRule, ...] = _FORBIDDEN_CONTENT_RULES,
 ) -> None:
     """校验 CHAPTER_CONTRACT 审计覆盖路由清单。
 
     Args:
         coverage_manifest: 待校验的 must_answer 覆盖清单。
+        forbidden_content_rules: 当前程序 forbidden marker 规则集合。
 
     Returns:
         校验通过时返回 `None`。
@@ -566,7 +582,11 @@ def validate_contract_audit_coverage_manifest(
         missing_text = "、".join(f"{chapter_id}:{question}" for chapter_id, question in sorted(missing_questions))
         raise ValueError(f"must_answer 未被覆盖规则覆盖：{missing_text}")
 
-    _validate_must_not_cover_coverage_rules(coverage_manifest, template_manifest)
+    _validate_must_not_cover_coverage_rules(
+        coverage_manifest,
+        template_manifest,
+        forbidden_content_rules,
+    )
 
 
 def _manifest_must_answer_questions(
