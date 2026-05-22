@@ -152,10 +152,17 @@ def test_akshare_index_source_fails_closed_on_date_schema_drift() -> None:
 
 @pytest.mark.parametrize(
     "date_text",
-    ["2026-05-22T00:00:00", "2026-05-22 00:00:00", "2026-05-22abc"],
+    [
+        "2026-05-22T00:00:00",
+        "2026-05-22 00:00:00",
+        "2026-05-22abc",
+        " 2026-05-22",
+        "2026-05-22 ",
+        " 2026-05-22 ",
+    ],
 )
 def test_akshare_index_source_rejects_non_strict_iso_date_strings(date_text: str) -> None:
-    """验证带时间或尾随字符的日期字符串会 fail-closed。
+    """验证带时间、尾随字符或首尾空白的日期字符串会 fail-closed。
 
     Args:
         date_text: 待验证的非严格 ISO 日期字符串。

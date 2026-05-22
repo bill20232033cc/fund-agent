@@ -216,7 +216,7 @@ def _normalize_date(value: object) -> str:
         return value.date().isoformat()
     if isinstance(value, date):
         return value.isoformat()
-    text = str(value).strip()
+    text = str(value)
     if not text:
         raise ThermometerSourceError("指数估值数据日期为空")
     if not ISO_DATE_PATTERN.fullmatch(text):
