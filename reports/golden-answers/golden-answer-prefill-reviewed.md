@@ -206,3 +206,63 @@
 | share_change | beginning_share | 980,186,937.75 | high | 年报2024 §10 page-77 page-77-table-1 share_change |
 | share_change | ending_share | 909,956,981.34 | high | 年报2024 §10 page-77 page-77-table-1 share_change |
 | share_change | net_change | -70,229,956.41 | high | 年报2024 §10 page-77 page-77-table-1 share_change |
+
+---
+
+## 004194 招商中证1000指数增强A（国内股票类）
+
+| field | sub_field | expected_value | confidence | source |
+|---|---|---|---|---|
+| index_profile | benchmark_text | 中证1000指数收益率×95%+同期银行活期存款利率（税后）×5% | high | 年报2024 §2 page-5 page-5-table-1 benchmark |
+| index_profile | benchmark_identity_status | composite | high | 年报2024 §2 page-5 page-5-table-1 benchmark |
+| index_profile | methodology_availability | benchmark_only | high | 年报2024 §2 page-5 page-5-table-1 benchmark |
+| index_profile | constituents_availability | benchmark_only | high | 年报2024 §2 page-5 page-5-table-1 benchmark |
+| index_profile | source_tier | benchmark_context | high | 年报2024 §2 page-5 page-5-table-1 benchmark |
+
+---
+
+## 005313 万家中证1000指数增强A（国内股票类）
+
+| field | sub_field | expected_value | confidence | source |
+|---|---|---|---|---|
+| index_profile | benchmark_text | 中证1000指数收益率*95%＋一年期人民币定期存款利率（税后）*5% | high | 年报2024 §2 page-5 page-5-table-1 benchmark |
+| index_profile | benchmark_identity_status | composite | high | 年报2024 §2 page-5 page-5-table-1 benchmark |
+| index_profile | methodology_availability | benchmark_only | high | 年报2024 §2 page-5 page-5-table-1 benchmark |
+| index_profile | constituents_availability | benchmark_only | high | 年报2024 §2 page-5 page-5-table-1 benchmark |
+| index_profile | source_tier | benchmark_context | high | 年报2024 §2 page-5 page-5-table-1 benchmark |
+
+---
+
+## 017644 博道中证1000指数增强A（国内股票类）
+
+| field | sub_field | expected_value | confidence | source |
+|---|---|---|---|---|
+| index_profile | benchmark_text | 中证1000指数收益率×95%+同期银行活期存款利率(税后)×5% | high | 年报2024 §2 page-6 page-6-table-0 benchmark |
+| index_profile | benchmark_identity_status | composite | high | 年报2024 §2 page-6 page-6-table-0 benchmark |
+| index_profile | methodology_availability | benchmark_only | high | 年报2024 §2 page-6 page-6-table-0 benchmark |
+| index_profile | constituents_availability | benchmark_only | high | 年报2024 §2 page-6 page-6-table-0 benchmark |
+| index_profile | source_tier | benchmark_context | high | 年报2024 §2 page-6 page-6-table-0 benchmark |
+
+---
+
+## 019918 招商中证2000指数增强A（国内股票类）
+
+| field | sub_field | expected_value | confidence | source |
+|---|---|---|---|---|
+| index_profile | benchmark_text | 中证2000指数收益率*95%+中国人民银行人民币活期存款利率（税后）*5% | high | 年报2024 §2 page-5 page-5-table-1 benchmark |
+| index_profile | benchmark_identity_status | composite | high | 年报2024 §2 page-5 page-5-table-1 benchmark |
+| index_profile | methodology_availability | benchmark_only | high | 年报2024 §2 page-5 page-5-table-1 benchmark |
+| index_profile | constituents_availability | benchmark_only | high | 年报2024 §2 page-5 page-5-table-1 benchmark |
+| index_profile | source_tier | benchmark_context | high | 年报2024 §2 page-5 page-5-table-1 benchmark |
+
+---
+
+## 019923 华泰柏瑞中证2000指数增强A（国内股票类）
+
+| field | sub_field | expected_value | confidence | source |
+|---|---|---|---|---|
+| index_profile | benchmark_text | 中证2000指数收益率×95%＋人民币活期存款税后利率×5% | high | 年报2024 §2 page-6 page-6-table-0 benchmark |
+| index_profile | benchmark_identity_status | composite | high | 年报2024 §2 page-6 page-6-table-0 benchmark |
+| index_profile | methodology_availability | benchmark_only | high | 年报2024 §2 page-6 page-6-table-0 benchmark |
+| index_profile | constituents_availability | benchmark_only | high | 年报2024 §2 page-6 page-6-table-0 benchmark |
+| index_profile | source_tier | benchmark_context | high | 年报2024 §2 page-6 page-6-table-0 benchmark |

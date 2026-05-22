@@ -183,6 +183,62 @@ def test_run_quality_gate_blocks_correctness_mismatch_as_fq1(tmp_path: Path) -> 
     assert payload["issues"][0]["expected_value"] == "active_fund"
 
 
+def test_run_quality_gate_blocks_composite_index_profile_scalar_mismatch(
+    tmp_path: Path,
+) -> None:
+    """验证复合指数画像 scalar mismatch 通过 FQ1 阻断。
+
+    Args:
+        tmp_path: pytest 临时目录 fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 index_profile correctness mismatch 未阻断时抛出。
+    """
+
+    score_path = tmp_path / "score.json"
+    score_path.write_text(
+        json.dumps(
+            {
+                "field_scores": [_field_score("index_profile", "P1", "pass", 1.0, 1.0)],
+                "fund_scores": [_fund_score("004194", "pass", "pass")],
+                "correctness": {
+                    "status": "available",
+                    "record_results": [
+                        {
+                            "fund_code": "004194",
+                            "field_name": "index_profile",
+                            "sub_field": "source_tier",
+                            "status": "mismatch",
+                            "expected_value": "benchmark_context",
+                            "actual_value": "missing",
+                            "normalized_expected": "benchmark_context",
+                            "normalized_actual": "missing",
+                            "reason": "保守 normalize 后不一致。",
+                            "confidence": "high",
+                            "source": "年报2024 §2 page-5 page-5-table-1 benchmark",
+                        }
+                    ],
+                },
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    result = run_quality_gate(score_path=score_path)
+    issue = next(issue for issue in result.issues if issue.rule_code == "FQ1")
+
+    assert result.status == GATE_STATUS_BLOCK
+    assert issue.fund_code == "004194"
+    assert issue.field_name == "index_profile"
+    assert "index_profile.source_tier" in issue.message
+    assert issue.expected_value == "benchmark_context"
+    assert issue.actual_value == "missing"
+
+
 def test_run_quality_gate_reports_correctness_fund_not_covered_as_fq0_info(
     tmp_path: Path,
 ) -> None:

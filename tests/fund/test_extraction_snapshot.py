@@ -245,6 +245,50 @@ def test_build_snapshot_records_serializes_index_quality_dataclass_comparable_va
     }
 
 
+def test_build_snapshot_records_omits_composite_index_null_and_tuple_values() -> None:
+    """验证复合指数画像只序列化可比 scalar，保留不补单一指数名。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 tuple/null 字段进入 comparable_values 时抛出。
+    """
+
+    bundle = _build_bundle("004194", "enhanced_index", include_composite_index_profile=True)
+    selected_fund = SelectedFundRecord(
+        line_number=38,
+        fund_name="招商中证1000指数增强A",
+        fund_code="004194",
+        app_category="国内股票类",
+    )
+
+    records = build_snapshot_records(
+        bundle=bundle,
+        selected_fund=selected_fund,
+        run_id="unit-run",
+        extraction_timestamp="2026-05-19T00:00:00+00:00",
+        source_csv="docs/code_20260519.csv",
+    )
+
+    comparable_values = {
+        record.field_name: record.comparable_values for record in records
+    }["index_profile"]
+    assert comparable_values == {
+        "benchmark_text": "中证1000指数收益率×95%+同期银行活期存款利率（税后）×5%",
+        "benchmark_identity_status": "composite",
+        "methodology_availability": "benchmark_only",
+        "constituents_availability": "benchmark_only",
+        "source_tier": "benchmark_context",
+    }
+    assert "benchmark_index_name" not in comparable_values
+    assert "benchmark_index_code" not in comparable_values
+    assert "benchmark_component_text" not in comparable_values
+
+
 @pytest.mark.asyncio
 async def test_run_snapshot_summary_highlights_duplicates_and_continues_failures(tmp_path: Path) -> None:
     """验证 summary 标红重复代码，且单基金失败继续写 errors.jsonl。
@@ -346,6 +390,7 @@ def _build_bundle(
     classified_fund_type: str,
     *,
     include_index_quality: bool = False,
+    include_composite_index_profile: bool = False,
 ) -> StructuredFundDataBundle:
     """构造测试用结构化基金数据包。
 
@@ -353,6 +398,7 @@ def _build_bundle(
         fund_code: 基金代码。
         classified_fund_type: fake 分类结果。
         include_index_quality: 是否填充指数画像和跟踪误差 dataclass 值。
+        include_composite_index_profile: 是否填充复合基准指数画像 fixture。
 
     Returns:
         fake 结构化基金数据包。
@@ -375,6 +421,8 @@ def _build_bundle(
     )
     index_profile = missing_index_profile
     tracking_error = missing_tracking_error
+    if include_index_quality and include_composite_index_profile:
+        raise ValueError("include_index_quality 与 include_composite_index_profile 不能同时启用")
     if include_index_quality:
         index_profile = ExtractedField(
             value=IndexProfileValue(
@@ -405,6 +453,40 @@ def _build_bundle(
             ),
             extraction_mode="direct",
         )
+    if include_composite_index_profile:
+        index_profile = ExtractedField(
+            value=IndexProfileValue(
+                benchmark_text="中证1000指数收益率×95%+同期银行活期存款利率（税后）×5%",
+                benchmark_identity_status="composite",
+                benchmark_index_name=None,
+                benchmark_index_code=None,
+                benchmark_component_text=("中证1000指数收益率", "95%", "同期银行活期存款利率（税后）", "5%"),
+                methodology_availability="benchmark_only",
+                methodology_summary=None,
+                methodology_source_title=None,
+                constituents_availability="benchmark_only",
+                constituents_summary=None,
+                constituents_as_of_date=None,
+                source_tier="benchmark_context",
+                missing_reasons=(
+                    "methodology_not_directly_disclosed",
+                    "constituents_not_directly_disclosed",
+                ),
+            ),
+            anchors=(
+                EvidenceAnchor(
+                    source_kind="annual_report",
+                    document_year=2024,
+                    section_id="§2",
+                    page_number=5,
+                    table_id="page-5-table-1",
+                    row_locator="benchmark",
+                    note="业绩比较基准：中证1000指数收益率×95%+同期银行活期存款利率（税后）×5%",
+                ),
+            ),
+            extraction_mode="direct",
+        )
+    if include_index_quality:
         tracking_error = ExtractedField(
             value=TrackingErrorValue(
                 value=Decimal("0.0123"),

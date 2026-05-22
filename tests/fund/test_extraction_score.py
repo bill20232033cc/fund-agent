@@ -1128,6 +1128,112 @@ def test_compare_snapshot_correctness_handles_index_quality_comparable_fields(
     assert statuses[("tracking_error", "value_text")] == CORRECTNESS_MATCH
 
 
+def test_compare_snapshot_correctness_matches_composite_index_profile_scalars(
+    tmp_path: Path,
+) -> None:
+    """验证复合指数画像 golden 只按计划内 scalar 子字段匹配。
+
+    Args:
+        tmp_path: pytest 临时目录 fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当非计划字段进入 correctness 分母或 scalar 不匹配时抛出。
+    """
+
+    golden_path = _golden_answer_json_from_records(
+        tmp_path,
+        records=_composite_index_profile_golden_records("004194"),
+    )
+    records = [
+        _snapshot_record(
+            "profile",
+            "index_profile",
+            fund_code="004194",
+            classified_fund_type="enhanced_index",
+            value_present=True,
+            anchor_present=True,
+            comparable_values={
+                "benchmark_text": "中证1000指数收益率×95%+同期银行活期存款利率（税后）×5%",
+                "benchmark_identity_status": "composite",
+                "methodology_availability": "benchmark_only",
+                "constituents_availability": "benchmark_only",
+                "source_tier": "benchmark_context",
+            },
+        )
+    ]
+
+    summary = compare_snapshot_correctness(records=records, golden_answer_path=golden_path)
+    result_keys = {
+        (row.field_name, row.sub_field, row.status) for row in summary.record_results
+    }
+
+    assert summary.status == CORRECTNESS_STATUS_AVAILABLE
+    assert summary.coverage_scope == CORRECTNESS_COVERAGE_COVERED
+    assert summary.comparable_records == 5
+    assert summary.matched_records == 5
+    assert summary.mismatched_records == 0
+    assert summary.unavailable_records == 0
+    assert result_keys == {
+        ("index_profile", "benchmark_text", CORRECTNESS_MATCH),
+        ("index_profile", "benchmark_identity_status", CORRECTNESS_MATCH),
+        ("index_profile", "methodology_availability", CORRECTNESS_MATCH),
+        ("index_profile", "constituents_availability", CORRECTNESS_MATCH),
+        ("index_profile", "source_tier", CORRECTNESS_MATCH),
+    }
+
+
+def test_compare_snapshot_correctness_flags_composite_index_scalar_mismatch(
+    tmp_path: Path,
+) -> None:
+    """验证复合指数画像 scalar golden 会捕获 correctness 退化。
+
+    Args:
+        tmp_path: pytest 临时目录 fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 source_tier mismatch 未进入 FQ1 输入时抛出。
+    """
+
+    golden_path = _golden_answer_json_from_records(
+        tmp_path,
+        records=_composite_index_profile_golden_records("004194"),
+    )
+    records = [
+        _snapshot_record(
+            "profile",
+            "index_profile",
+            fund_code="004194",
+            classified_fund_type="enhanced_index",
+            value_present=True,
+            anchor_present=True,
+            comparable_values={
+                "benchmark_text": "中证1000指数收益率×95%+同期银行活期存款利率（税后）×5%",
+                "benchmark_identity_status": "composite",
+                "methodology_availability": "benchmark_only",
+                "constituents_availability": "benchmark_only",
+                "source_tier": "missing",
+            },
+        )
+    ]
+
+    summary = compare_snapshot_correctness(records=records, golden_answer_path=golden_path)
+    mismatch = next(row for row in summary.record_results if row.status == CORRECTNESS_MISMATCH)
+
+    assert summary.comparable_records == 5
+    assert summary.matched_records == 4
+    assert summary.mismatched_records == 1
+    assert mismatch.field_name == "index_profile"
+    assert mismatch.sub_field == "source_tier"
+    assert mismatch.expected_value == "benchmark_context"
+    assert mismatch.actual_value == "missing"
+
+
 def test_run_extraction_score_writes_correctness_mismatch(tmp_path: Path) -> None:
     """验证 run_extraction_score 会把 strict golden answer mismatch 写入 score.json。
 
@@ -1318,6 +1424,7 @@ def _golden_answer_json_from_records(
     """
 
     path = tmp_path / "golden-answer.json"
+    fund_code = records[0]["fund_code"] if records else "004393"
     path.write_text(
         json.dumps(
             {
@@ -1327,7 +1434,7 @@ def _golden_answer_json_from_records(
                 "record_count": len(records),
                 "funds": [
                     {
-                        "fund_code": "004393",
+                        "fund_code": fund_code,
                         "title": "测试基金（国内股票类）",
                         "records": records,
                         "skipped_fields": skipped_fields or [],
@@ -1340,6 +1447,63 @@ def _golden_answer_json_from_records(
         encoding="utf-8",
     )
     return path
+
+
+def _composite_index_profile_golden_records(fund_code: str) -> list[dict[str, str]]:
+    """构造 P16-S2 复合指数画像测试用 golden records。
+
+    Args:
+        fund_code: 基金代码。
+
+    Returns:
+        只包含计划内 scalar 子字段的 strict golden records。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return [
+        {
+            "fund_code": fund_code,
+            "field_name": "index_profile",
+            "sub_field": "benchmark_text",
+            "expected_value": "中证1000指数收益率×95%+同期银行活期存款利率（税后）×5%",
+            "confidence": "high",
+            "source": "年报2024 §2 page-5 page-5-table-1 benchmark",
+        },
+        {
+            "fund_code": fund_code,
+            "field_name": "index_profile",
+            "sub_field": "benchmark_identity_status",
+            "expected_value": "composite",
+            "confidence": "high",
+            "source": "年报2024 §2 page-5 page-5-table-1 benchmark",
+        },
+        {
+            "fund_code": fund_code,
+            "field_name": "index_profile",
+            "sub_field": "methodology_availability",
+            "expected_value": "benchmark_only",
+            "confidence": "high",
+            "source": "年报2024 §2 page-5 page-5-table-1 benchmark",
+        },
+        {
+            "fund_code": fund_code,
+            "field_name": "index_profile",
+            "sub_field": "constituents_availability",
+            "expected_value": "benchmark_only",
+            "confidence": "high",
+            "source": "年报2024 §2 page-5 page-5-table-1 benchmark",
+        },
+        {
+            "fund_code": fund_code,
+            "field_name": "index_profile",
+            "sub_field": "source_tier",
+            "expected_value": "benchmark_context",
+            "confidence": "high",
+            "source": "年报2024 §2 page-5 page-5-table-1 benchmark",
+        },
+    ]
 
 
 def _csv_codes(source_csv: Path) -> set[str]:
