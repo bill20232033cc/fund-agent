@@ -8,6 +8,8 @@ from decimal import Decimal
 import pytest
 
 from fund_agent.fund.analysis import ChecklistItem, ChecklistResult, RabcAttribution
+from fund_agent.fund.analysis.valuation_state import ValuationStateResolution
+from fund_agent.fund.extractors.models import EvidenceAnchor
 from fund_agent.fund.audit.contract_rules import (
     ContractAuditCoverageManifest,
     ContractMustAnswerCoverageRule,
@@ -23,6 +25,7 @@ from fund_agent.fund.template.item_rules import get_template_item_rule
 from fund_agent.fund.audit import ProgrammaticAuditInput, run_programmatic_audit
 from fund_agent.fund.template import render_template_report, split_rendered_chapter_blocks
 from tests.fund.template.test_renderer import _render_input, _tracking_error_field
+from tests.fund.template.test_renderer import _thermometer_valuation_resolution
 
 
 def _complete_report() -> str:
@@ -129,6 +132,75 @@ def _checklist(signal: str = "green") -> ChecklistResult:
     )
 
 
+def _external_anchor() -> EvidenceAnchor:
+    """构造温度计 external_api 锚点。
+
+    Args:
+        无。
+
+    Returns:
+        温度计锚点。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return EvidenceAnchor(
+        source_kind="external_api",
+        document_year=None,
+        section_id="thermometer",
+        page_number=None,
+        table_id="fixture_source",
+        row_locator="000300:2024-12-31",
+        note="fixture thermometer",
+    )
+
+
+def _checklist_with_valuation(
+    resolution: ValuationStateResolution,
+    *,
+    signal: str = "green",
+    anchors: tuple[EvidenceAnchor, ...] | None = None,
+) -> ChecklistResult:
+    """构造 valuation item 已投影 resolution 的检查清单。
+
+    Args:
+        resolution: 估值状态真源。
+        signal: valuation item 信号。
+        anchors: 覆盖锚点。
+
+    Returns:
+        检查清单结果。
+
+    Raises:
+        无显式抛出。
+    """
+
+    checklist = _checklist("green")
+    valuation_item = next(item for item in checklist.items if item.code == "valuation")
+    projected = replace(
+        valuation_item,
+        signal=signal,  # type: ignore[arg-type]
+        status={"green": "pass", "yellow": "watch", "red": "block", "gray": "insufficient_data"}[
+            signal
+        ],  # type: ignore[arg-type]
+        anchors=resolution.anchors if anchors is None else anchors,
+        reason=resolution.reason,
+    )
+    projected_items = tuple(
+        projected if item.code == "valuation" else item for item in checklist.items
+    )
+    return replace(
+        checklist,
+        items=projected_items,
+        overall_signal=signal,  # type: ignore[arg-type]
+        overall_status={"green": "pass", "yellow": "watch", "red": "block", "gray": "insufficient_data"}[
+            signal
+        ],  # type: ignore[arg-type]
+        red_items=(projected,) if signal == "red" else (),
+        yellow_items=(projected,) if signal == "yellow" else (),
+        gray_items=(projected,) if signal == "gray" else (),
+    )
 def _rendered_audit_input(
     *,
     report_markdown: str | None = None,
@@ -1221,3 +1293,158 @@ def test_run_programmatic_audit_detects_developer_override_conflict() -> None:
 
     assert not result.passed
     assert any("开发覆盖与系统派生判断冲突" in issue.message for issue in result.issues)
+
+
+def test_run_programmatic_audit_passes_automatic_valuation_resolution() -> None:
+    """验证 R1 使用结构化估值真源审计自动温度计证据。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 完整自动估值证据未通过 R1 时抛出。
+    """
+
+    resolution = _thermometer_valuation_resolution()
+    result = run_programmatic_audit(
+        ProgrammaticAuditInput(
+            report_markdown=f"fixture\n{resolution.disclaimer}",
+            rabc_attributions=(_rabc(),),
+            checklist_result=_checklist_with_valuation(resolution),
+            final_judgment="worth_holding",
+            derived_final_judgment="worth_holding",
+            final_judgment_source="derived",
+            valuation_state_resolution=resolution,
+        ),
+    )
+
+    assert not any(issue.code == "R1" for issue in result.issues)
+
+
+def test_run_programmatic_audit_detects_automatic_valuation_without_external_anchor() -> None:
+    """验证自动估值缺少 external_api 锚点会触发 R1。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 缺少 external_api 锚点未触发 R1 时抛出。
+    """
+
+    resolution = replace(_thermometer_valuation_resolution(), anchors=())
+    result = run_programmatic_audit(
+        ProgrammaticAuditInput(
+            report_markdown=f"fixture\n{resolution.disclaimer}",
+            checklist_result=_checklist_with_valuation(resolution),
+            final_judgment="worth_holding",
+            derived_final_judgment="worth_holding",
+            final_judgment_source="derived",
+            valuation_state_resolution=resolution,
+        ),
+    )
+
+    assert any(issue.code == "R1" and "external_api" in issue.message for issue in result.issues)
+
+
+def test_run_programmatic_audit_detects_automatic_valuation_missing_fields() -> None:
+    """验证自动估值缺少温度、日期或窗口字段会触发 R1。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 缺字段未触发 R1 时抛出。
+    """
+
+    resolution = replace(_thermometer_valuation_resolution(), temperature=None, data_date=None)
+    result = run_programmatic_audit(
+        ProgrammaticAuditInput(
+            report_markdown=f"fixture\n{resolution.disclaimer}",
+            checklist_result=_checklist_with_valuation(resolution),
+            final_judgment="worth_holding",
+            derived_final_judgment="worth_holding",
+            final_judgment_source="derived",
+            valuation_state_resolution=resolution,
+        ),
+    )
+
+    assert any(issue.code == "R1" and "temperature" in issue.message for issue in result.issues)
+    assert any(issue.code == "R1" and "data_date" in issue.message for issue in result.issues)
+
+
+def test_run_programmatic_audit_detects_missing_thermometer_disclaimer() -> None:
+    """验证温度计被调用但报告未展示免责声明时触发 R1。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 缺少免责声明未触发 R1 时抛出。
+    """
+
+    resolution = _thermometer_valuation_resolution()
+    result = run_programmatic_audit(
+        ProgrammaticAuditInput(
+            report_markdown="fixture without disclaimer",
+            checklist_result=_checklist_with_valuation(resolution),
+            final_judgment="worth_holding",
+            derived_final_judgment="worth_holding",
+            final_judgment_source="derived",
+            valuation_state_resolution=resolution,
+        ),
+    )
+
+    assert any(issue.code == "R1" and "免责声明" in issue.message for issue in result.issues)
+
+
+def test_run_programmatic_audit_allows_explicit_high_without_thermometer_fields() -> None:
+    """验证显式 high 不要求温度计字段。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 显式输入被误要求温度计字段时抛出。
+    """
+
+    anchor = EvidenceAnchor(
+        source_kind="derived",
+        document_year=None,
+        section_id="user_input",
+        page_number=None,
+        table_id=None,
+        row_locator="valuation_state",
+        note="fixture explicit high",
+    )
+    resolution = ValuationStateResolution(
+        state="high",
+        source="explicit_user_input",
+        reason="用户显式输入当前估值状态为 high。",
+        anchors=(anchor,),
+    )
+    result = run_programmatic_audit(
+        ProgrammaticAuditInput(
+            checklist_result=_checklist_with_valuation(resolution, signal="red"),
+            final_judgment="suggest_replace",
+            derived_final_judgment="suggest_replace",
+            final_judgment_source="derived",
+            valuation_state_resolution=resolution,
+        ),
+    )
+
+    assert not any(issue.code == "R1" for issue in result.issues)

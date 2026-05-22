@@ -24,23 +24,33 @@ from fund_agent.fund.analysis import (
     RabcAttribution,
     RiskCheckResult,
     StressTestResult,
+    THERMOMETER_REPORT_DISCLAIMER,
     analyze_investor_experience,
+    build_explicit_valuation_resolution,
+    build_thermometer_valuation_resolution,
+    build_unavailable_valuation_resolution,
     calculate_r_abc_from_bundle,
     check_consistency,
     derive_final_judgment,
     judge_alpha_nature,
+    resolve_valuation_index_target,
     resolve_tracking_error_for_risk,
     run_checklist,
     run_risk_checks,
     run_stress_test,
+    ValuationStateResolution,
 )
+from fund_agent.fund.analysis.thermometer_calculator import ThermometerCalculationError
 from fund_agent.fund.audit import ProgrammaticAuditResult, run_programmatic_audit
+from fund_agent.fund.data.thermometer import ThermometerSnapshot
+from fund_agent.fund.data.thermometer_types import ThermometerBatchResult, ThermometerReading
 from fund_agent.fund.data_extractor import FundDataExtractor, StructuredFundDataBundle
 from fund_agent.fund.extraction_snapshot import DEFAULT_SELECTED_FUNDS_CSV
 from fund_agent.fund.fund_type import FundType
 from fund_agent.fund.quality_gate import GATE_STATUS_BLOCK, QualityGateResult
 from fund_agent.fund.quality_gate_integration import check_quality_gate_fund_membership, run_quality_gate_for_bundle
 from fund_agent.fund.template import TemplateRenderInput, TemplateRenderResult, render_template_report
+from fund_agent.services.thermometer_service import ThermometerRequest, ThermometerService as IndexThermometerService
 
 ValuationState = Literal["low", "fair", "high", "unavailable"]
 MoneyHorizon = Literal["long_enough", "uncertain", "too_short"]
@@ -75,6 +85,31 @@ class _FundDataExtractor(Protocol):
 
         Raises:
             Exception: 允许具体抽取器传播异常。
+        """
+
+
+class _ThermometerService(Protocol):
+    """自建温度计 Service 协议。
+
+    该协议用于 P19-S3 自动估值路径测试注入 fake provider。Service 层只调用
+    自建指数温度计请求，不使用公开页 `FundThermometerAdapter` 作为分析真源。
+    """
+
+    async def run(
+        self,
+        request: ThermometerRequest,
+    ) -> ThermometerSnapshot | ThermometerReading | ThermometerBatchResult:
+        """执行温度计查询。
+
+        Args:
+            request: 显式温度计请求。
+
+        Returns:
+            温度计结果；P19-S3 自动路径只接受 `ThermometerReading`。
+
+        Raises:
+            ThermometerCalculationError: 自建温度计计算或数据质量错误。
+            Exception: 允许具体实现传播其他契约错误。
         """
 
 
@@ -124,7 +159,8 @@ class FundAnalysisRequest:
         report_year: 年报年份。
         investment_amount: 压力测试投入金额，见模板第 6 章。
         max_tolerable_loss_rate: 最大可承受亏损比例，见模板第 6 章。
-        valuation_state: 估值状态，见 7 问题检查清单。
+        valuation_state: 估值状态，见 7 问题检查清单；`None` 表示允许自动温度计解析。
+        thermometer_cache_dir: 自动温度计缓存目录。
         user_money_horizon_years: 用户资金不用年限，见 7 问题检查清单。
         force_refresh: 是否强制刷新底层数据。
         mode: analyze 契约模式，默认 product。
@@ -135,7 +171,8 @@ class FundAnalysisRequest:
     report_year: int = 2024
     investment_amount: Decimal | str | int | float = Decimal("10000")
     max_tolerable_loss_rate: Decimal | str | int | float | None = None
-    valuation_state: ValuationState = "unavailable"
+    valuation_state: ValuationState | None = None
+    thermometer_cache_dir: Path | None = None
     user_money_horizon_years: Decimal | str | int | float | None = None
     force_refresh: bool = False
     mode: AnalyzeMode = "product"
@@ -193,6 +230,7 @@ class FundAnalysisResult:
         risk_check_result: 否决项检查结果。
         stress_test_result: 压力测试结果。
         checklist_result: 7 问题检查清单结果。
+        valuation_state_resolution: 估值状态结构化真源。
         final_judgment_decision: 最终判断选择契约。
         render_result: 模板渲染结果。
         audit_result: 程序审计结果。
@@ -207,6 +245,7 @@ class FundAnalysisResult:
     risk_check_result: RiskCheckResult
     stress_test_result: StressTestResult
     checklist_result: ChecklistResult
+    valuation_state_resolution: ValuationStateResolution
     final_judgment_decision: FinalJudgmentDecision
     render_result: TemplateRenderResult
     audit_result: ProgrammaticAuditResult
@@ -292,11 +331,16 @@ class FundAnalysisService:
     领域判断、审计和模板规则均保留在 `fund_agent.fund`。
     """
 
-    def __init__(self, extractor: _FundDataExtractor | None = None) -> None:
+    def __init__(
+        self,
+        extractor: _FundDataExtractor | None = None,
+        thermometer_service: _ThermometerService | None = None,
+    ) -> None:
         """初始化基金分析 Service。
 
         Args:
             extractor: P1 结构化抽取器；未提供时使用默认 `FundDataExtractor`。
+            thermometer_service: 自建温度计 Service；未提供时使用默认实现。
 
         Returns:
             无返回值。
@@ -306,6 +350,7 @@ class FundAnalysisService:
         """
 
         self._extractor = extractor or FundDataExtractor()
+        self._thermometer_service = thermometer_service or IndexThermometerService()
 
     async def analyze(self, request: FundAnalysisRequest) -> FundAnalysisResult:
         """执行单只基金完整分析并生成 8 章报告。
@@ -388,13 +433,19 @@ class FundAnalysisService:
             max_tolerable_loss_rate=request.max_tolerable_loss_rate,
             anchors=structured_data.basic_identity.anchors,
         )
+        valuation_state_resolution = await self._resolve_valuation_state(
+            request=request,
+            structured_data=structured_data,
+            fund_type=fund_type,
+        )
         checklist_result = run_checklist(
             rabc_attribution=rabc_attribution,
             manager_alignment=structured_data.manager_alignment,
             investor_experience=investor_experience,
             consistency_result=consistency_result,
             risk_check_result=risk_check_result,
-            valuation_state=request.valuation_state,
+            valuation_state=valuation_state_resolution.state,
+            valuation_resolution=valuation_state_resolution,
             money_horizon=resolved_contract.money_horizon,
             user_money_horizon_years=request.user_money_horizon_years,
         )
@@ -416,6 +467,7 @@ class FundAnalysisService:
                 risk_check_result=risk_check_result,
                 stress_test_result=stress_test_result,
                 checklist_result=checklist_result,
+                valuation_state_resolution=valuation_state_resolution,
                 final_judgment_decision=final_judgment_decision,
                 current_stage=resolved_contract.current_stage,
             )
@@ -432,12 +484,69 @@ class FundAnalysisService:
             risk_check_result=risk_check_result,
             stress_test_result=stress_test_result,
             checklist_result=checklist_result,
+            valuation_state_resolution=valuation_state_resolution,
             final_judgment_decision=final_judgment_decision,
             render_result=render_result,
             audit_result=audit_result,
             quality_gate_result=quality_gate_result,
             quality_gate_not_run_reason=quality_gate_not_run_reason,
         )
+
+    async def _resolve_valuation_state(
+        self,
+        *,
+        request: FundAnalysisRequest,
+        structured_data: StructuredFundDataBundle,
+        fund_type: FundType,
+    ) -> ValuationStateResolution:
+        """解析检查清单第 6 问估值状态，见模板第 7 章。
+
+        Args:
+            request: 基金分析请求。
+            structured_data: P1 结构化基金数据。
+            fund_type: 已识别基金类型。
+
+        Returns:
+            估值状态结构化真源。
+
+        Raises:
+            ValueError: 温度计 provider 返回不符合 P19-S3 自动路径契约的结果时抛出。
+        """
+
+        if request.valuation_state is not None:
+            return build_explicit_valuation_resolution(request.valuation_state)
+
+        target = resolve_valuation_index_target(
+            fund_type=fund_type,
+            index_profile=structured_data.index_profile,
+            benchmark=structured_data.benchmark,
+        )
+        if target.status != "mapped" or target.index_code is None:
+            return build_unavailable_valuation_resolution(target)
+
+        try:
+            result = await self._thermometer_service.run(
+                ThermometerRequest(
+                    cache_dir=request.thermometer_cache_dir,
+                    force_refresh=request.force_refresh,
+                    index_code=target.index_code,
+                )
+            )
+        except ThermometerCalculationError as exc:
+            return ValuationStateResolution(
+                state="unavailable",
+                source="unavailable_thermometer",
+                reason=f"自动估值不可用：自建温度计计算失败：{exc}",
+                anchors=target.anchors,
+                disclaimer_required=True,
+                index_code=target.index_code,
+                index_name=target.index_name,
+                unavailable_reason=f"自建温度计计算失败：{exc}",
+                disclaimer=THERMOMETER_REPORT_DISCLAIMER,
+            )
+        if not isinstance(result, ThermometerReading):
+            raise ValueError("自动估值温度计 provider 必须返回 ThermometerReading")
+        return build_thermometer_valuation_resolution(result)
 
 
 def _resolve_analyze_contract(request: FundAnalysisRequest) -> ResolvedAnalyzeContract:

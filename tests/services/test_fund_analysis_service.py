@@ -9,7 +9,10 @@ from time import perf_counter
 
 import pytest
 
+from fund_agent.fund.analysis.thermometer_calculator import ThermometerCalculationError
 from fund_agent.fund.data.nav_data import NavDataResult
+from fund_agent.fund.data.thermometer import ThermometerSnapshot
+from fund_agent.fund.data.thermometer_types import ThermometerBatchResult, ThermometerReading
 from fund_agent.fund.data_extractor import StructuredFundDataBundle
 from fund_agent.fund.extractors.models import (
     EvidenceAnchor,
@@ -24,6 +27,7 @@ from fund_agent.services import (
     QualityGateBlockedError,
     QualityGateNotRunBlockedError,
 )
+from fund_agent.services.thermometer_service import ThermometerRequest
 
 _P3_S8_MAX_ANALYSIS_SECONDS = 30.0
 
@@ -40,7 +44,7 @@ def _developer_request(
     tracking_error: str | None = None,
     investment_amount: Decimal | str = Decimal("10000"),
     max_tolerable_loss_rate: str | None = "50%",
-    valuation_state: str = "low",
+    valuation_state: str | None = "low",
     user_money_horizon_years: int | None = 4,
     current_stage: str | None = "规模稳定，继续观察结构性超额证据",
     final_judgment_override: str | None = None,
@@ -283,6 +287,126 @@ class _FakeExtractor:
         return replace(self.bundle, fund_code=fund_code, report_year=report_year)
 
 
+class _FakeThermometerService:
+    """Service 测试用 fake 自建温度计。"""
+
+    def __init__(self, result: object | Exception) -> None:
+        """初始化 fake 温度计。
+
+        Args:
+            result: 运行时返回值或待抛异常。
+
+        Returns:
+            无返回值。
+
+        Raises:
+            无显式抛出。
+        """
+
+        self.result = result
+        self.calls: list[ThermometerRequest] = []
+
+    async def run(self, request: ThermometerRequest) -> object:
+        """记录请求并返回 fake 结果。
+
+        Args:
+            request: 温度计请求。
+
+        Returns:
+            fake 结果。
+
+        Raises:
+            Exception: 当初始化传入异常时抛出。
+        """
+
+        self.calls.append(request)
+        if isinstance(self.result, Exception):
+            raise self.result
+        return self.result
+
+
+def _reading(
+    *,
+    state: str = "low",
+    unavailable: bool = False,
+) -> ThermometerReading:
+    """构造自建温度计读数。
+
+    Args:
+        state: 估值状态候选。
+        unavailable: 是否不可用。
+
+    Returns:
+        温度计读数。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return ThermometerReading(
+        index_code="000300",
+        index_name="沪深300",
+        temperature=None if unavailable else Decimal("20.00"),
+        pe_percentile=None if unavailable else Decimal("10.00"),
+        pb_percentile=None if unavailable else Decimal("30.00"),
+        valuation_state_candidate=state,  # type: ignore[arg-type]
+        data_date=None if unavailable else "2024-12-31",
+        lookback_start=None if unavailable else "2014-12-31",
+        lookback_end=None if unavailable else "2024-12-31",
+        source="akshare_index_value_hist_funddb",
+        cached=False,
+        stale=False,
+        unavailable=unavailable,
+        unavailable_reason="fixture unavailable" if unavailable else None,
+        fetched_at="2025-01-01T00:00:00Z",
+    )
+
+
+def _index_bundle() -> StructuredFundDataBundle:
+    """构造支持自动估值的指数基金数据包。
+
+    Args:
+        无。
+
+    Returns:
+        指数基金结构化数据包。
+
+    Raises:
+        无显式抛出。
+    """
+
+    bundle = _bundle()
+    identity = dict(bundle.basic_identity.value or {})
+    identity["classified_fund_type"] = "index_fund"
+    identity["fund_category"] = "股票指数"
+    index_profile = ExtractedField(
+        value=IndexProfileValue(
+            benchmark_text="沪深300指数收益率",
+            benchmark_identity_status="identified",
+            benchmark_index_name="沪深300指数",
+            benchmark_index_code=None,
+            benchmark_component_text=("沪深300指数收益率",),
+            methodology_availability="missing",
+            methodology_summary=None,
+            methodology_source_title=None,
+            constituents_availability="missing",
+            constituents_summary=None,
+            constituents_as_of_date=None,
+            source_tier="benchmark_context",
+            missing_reasons=(),
+        ),
+        anchors=(_anchor("§2", "index_profile"),),
+        extraction_mode="derived",
+        note=None,
+    )
+    return replace(
+        bundle,
+        basic_identity=replace(bundle.basic_identity, value=identity),
+        benchmark=_field({"benchmark_text": "沪深300指数收益率"}, "§2", "benchmark"),
+        index_profile=index_profile,
+    )
+
+
 @pytest.mark.asyncio
 async def test_fund_analysis_service_builds_render_and_audit_path_with_fake_extractor() -> None:
     """验证 Service 串起抽取、分析、渲染和程序审计。
@@ -312,6 +436,209 @@ async def test_fund_analysis_service_builds_render_and_audit_path_with_fake_extr
     assert "# 0. 投资要点概览" in result.report_markdown
     assert "# 7. 是否值得持有——最终判断" in result.report_markdown
     assert "## 证据与出处" in result.report_markdown
+
+
+@pytest.mark.asyncio
+async def test_fund_analysis_service_explicit_valuation_suppresses_thermometer() -> None:
+    """验证显式估值输入不会调用温度计。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 显式输入仍调用温度计时抛出。
+    """
+
+    thermometer = _FakeThermometerService(_reading())
+    service = FundAnalysisService(extractor=_FakeExtractor(_index_bundle()), thermometer_service=thermometer)
+
+    result = await service.analyze(_developer_request(valuation_state="high"))
+
+    assert thermometer.calls == []
+    assert result.valuation_state_resolution.source == "explicit_user_input"
+    assert result.valuation_state_resolution.state == "high"
+
+
+@pytest.mark.asyncio
+async def test_fund_analysis_service_explicit_unavailable_keeps_manual_gray() -> None:
+    """验证显式 unavailable 是手动灰灯且不调用温度计。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 显式 unavailable 调用温度计或未灰灯时抛出。
+    """
+
+    thermometer = _FakeThermometerService(_reading())
+    service = FundAnalysisService(extractor=_FakeExtractor(_index_bundle()), thermometer_service=thermometer)
+
+    result = await service.analyze(_developer_request(valuation_state="unavailable"))
+
+    valuation_item = next(item for item in result.checklist_result.items if item.code == "valuation")
+    assert thermometer.calls == []
+    assert result.valuation_state_resolution.source == "explicit_user_input"
+    assert valuation_item.signal == "gray"
+
+
+@pytest.mark.asyncio
+async def test_fund_analysis_service_auto_calls_self_owned_thermometer_for_supported_index(
+    tmp_path: Path,
+) -> None:
+    """验证缺省估值输入时支持指数基金会调用自建温度计。
+
+    Args:
+        tmp_path: pytest 临时目录。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 自动路径未调用温度计或请求字段错误时抛出。
+    """
+
+    thermometer = _FakeThermometerService(_reading(state="low"))
+    service = FundAnalysisService(extractor=_FakeExtractor(_index_bundle()), thermometer_service=thermometer)
+
+    request = replace(
+        _developer_request(
+            valuation_state=None,
+            force_refresh=True,
+            quality_gate_policy="off",
+        ),
+        thermometer_cache_dir=tmp_path,
+    )
+    result = await service.analyze(request)
+
+    assert len(thermometer.calls) == 1
+    assert thermometer.calls[0].index_code == "000300"
+    assert thermometer.calls[0].cache_dir == tmp_path
+    assert thermometer.calls[0].force_refresh is True
+    assert result.valuation_state_resolution.source == "self_owned_thermometer"
+    assert result.valuation_state_resolution.state == "low"
+    assert "本温度计基于有知有行公开方法论独立计算" in result.report_markdown
+
+
+@pytest.mark.asyncio
+async def test_fund_analysis_service_unsupported_fund_type_does_not_call_thermometer() -> None:
+    """验证主动基金默认自动路径返回灰灯且不调用温度计。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 不支持基金类型调用温度计时抛出。
+    """
+
+    thermometer = _FakeThermometerService(_reading())
+    service = FundAnalysisService(extractor=_FakeExtractor(_bundle()), thermometer_service=thermometer)
+
+    result = await service.analyze(_developer_request(valuation_state=None))
+
+    assert thermometer.calls == []
+    assert result.valuation_state_resolution.source == "unavailable_mapping"
+    assert result.valuation_state_resolution.state == "unavailable"
+
+
+@pytest.mark.asyncio
+async def test_fund_analysis_service_thermometer_unavailable_reading_keeps_gray() -> None:
+    """验证温度计不可用读数转为灰灯并保留来源。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 不可用读数未转灰灯时抛出。
+    """
+
+    thermometer = _FakeThermometerService(_reading(state="unavailable", unavailable=True))
+    service = FundAnalysisService(extractor=_FakeExtractor(_index_bundle()), thermometer_service=thermometer)
+
+    result = await service.analyze(_developer_request(valuation_state=None))
+
+    assert len(thermometer.calls) == 1
+    assert result.valuation_state_resolution.source == "unavailable_thermometer"
+    assert result.valuation_state_resolution.state == "unavailable"
+    assert result.valuation_state_resolution.unavailable_reason == "fixture unavailable"
+
+
+@pytest.mark.asyncio
+async def test_fund_analysis_service_thermometer_calculation_error_becomes_unavailable() -> None:
+    """验证自建温度计计算错误转灰灯而不是公开页 fallback。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 计算错误未保留 unavailable reason 时抛出。
+    """
+
+    thermometer = _FakeThermometerService(ThermometerCalculationError("fixture calculation error"))
+    service = FundAnalysisService(extractor=_FakeExtractor(_index_bundle()), thermometer_service=thermometer)
+
+    result = await service.analyze(_developer_request(valuation_state=None))
+
+    assert result.valuation_state_resolution.source == "unavailable_thermometer"
+    assert result.valuation_state_resolution.state == "unavailable"
+    assert "fixture calculation error" in (result.valuation_state_resolution.unavailable_reason or "")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "bad_result",
+    (
+        None,
+        ThermometerBatchResult(readings=(), requested_index_codes=(), generated_at=None),
+        ThermometerSnapshot(
+            as_of_text=None,
+            as_of_date=None,
+            market=None,
+            indexes=(),
+            macro=None,
+            source="fixture",
+            cached=False,
+            stale=False,
+            fetched_at="2025-01-01T00:00:00Z",
+            unavailable=False,
+            unavailable_reason=None,
+        ),
+    ),
+)
+async def test_fund_analysis_service_thermometer_contract_errors_fail_closed(
+    bad_result: object,
+) -> None:
+    """验证 provider 返回非单指数读数时 fail-closed。
+
+    Args:
+        bad_result: 非法 provider 返回值。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: contract error 未 fail-closed 时抛出。
+    """
+
+    thermometer = _FakeThermometerService(bad_result)
+    service = FundAnalysisService(extractor=_FakeExtractor(_index_bundle()), thermometer_service=thermometer)
+
+    with pytest.raises(ValueError, match="ThermometerReading"):
+        await service.analyze(_developer_request(valuation_state=None))
 
 
 @pytest.mark.asyncio

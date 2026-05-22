@@ -14,8 +14,10 @@ from fund_agent.fund.analysis import (
     RabcAttribution,
     RiskCheckItem,
     RiskCheckResult,
+    build_explicit_valuation_resolution,
     run_checklist,
 )
+from fund_agent.fund.analysis.valuation_state import ValuationStateResolution
 from fund_agent.fund.extractors.models import EvidenceAnchor, ExtractedField
 
 
@@ -189,6 +191,30 @@ def _risk_result(overall_status: str = "pass") -> RiskCheckResult:
         veto_items=(item,) if overall_status == "veto" else (),
         watch_items=(item,) if overall_status == "watch" else (),
         next_minimum_verification="fixture",
+    )
+
+
+def _external_anchor() -> EvidenceAnchor:
+    """构造温度计外部数据锚点。
+
+    Args:
+        无。
+
+    Returns:
+        external_api 证据锚点。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return EvidenceAnchor(
+        source_kind="external_api",
+        document_year=None,
+        section_id="thermometer",
+        page_number=None,
+        table_id="fixture_source",
+        row_locator="000300:2024-12-31",
+        note="fixture thermometer",
     )
 
 
@@ -396,3 +422,74 @@ def test_run_checklist_handles_inconsistent_veto_result_without_crashing() -> No
     survival_item = next(item for item in result.items if item.code == "survival")
     assert survival_item.signal == "red"
     assert "unknown" in survival_item.reason
+
+
+def test_run_checklist_uses_valuation_resolution_as_projection_truth() -> None:
+    """验证第 6 问使用 valuation resolution 的状态、原因和锚点。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 检查清单未投影 resolution 时抛出。
+    """
+
+    anchor = _external_anchor()
+    resolution = ValuationStateResolution(
+        state="high",
+        source="self_owned_thermometer",
+        reason="自建温度计 fixture 高估。",
+        anchors=(anchor,),
+        disclaimer_required=True,
+        index_code="000300",
+        index_name="沪深300",
+    )
+
+    result = run_checklist(
+        rabc_attribution=_rabc(),
+        manager_alignment=_manager_alignment(),
+        investor_experience=_investor_experience("positive"),
+        consistency_result=_consistency("green"),
+        risk_check_result=_risk_result("pass"),
+        valuation_state="low",
+        valuation_resolution=resolution,
+        user_money_horizon_years=4,
+    )
+
+    valuation_item = next(item for item in result.items if item.code == "valuation")
+    assert valuation_item.signal == "red"
+    assert valuation_item.status == "block"
+    assert valuation_item.anchors == (anchor,)
+    assert valuation_item.reason == "自建温度计 fixture 高估。"
+
+
+def test_run_checklist_explicit_unavailable_resolution_keeps_gray() -> None:
+    """验证显式 unavailable 保留手动灰灯且携带 user_input 锚点。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 显式 unavailable 未灰灯时抛出。
+    """
+
+    result = run_checklist(
+        rabc_attribution=_rabc(),
+        manager_alignment=_manager_alignment(),
+        investor_experience=_investor_experience("positive"),
+        consistency_result=_consistency("green"),
+        risk_check_result=_risk_result("pass"),
+        valuation_resolution=build_explicit_valuation_resolution("unavailable"),
+        user_money_horizon_years=4,
+    )
+
+    valuation_item = next(item for item in result.items if item.code == "valuation")
+    assert valuation_item.signal == "gray"
+    assert valuation_item.anchors[0].source_kind == "derived"
+    assert valuation_item.anchors[0].section_id == "user_input"

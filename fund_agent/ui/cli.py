@@ -91,9 +91,19 @@ def analyze(
         typer.Option("--max-tolerable-loss-rate", help="最大可承受亏损比例，如 40%"),
     ] = None,
     valuation_state: Annotated[
-        str,
-        typer.Option("--valuation-state", help="估值状态：low/fair/high/unavailable"),
-    ] = "unavailable",
+        str | None,
+        typer.Option(
+            "--valuation-state",
+            help=(
+                "估值状态：low/fair/high/unavailable；不传则尝试自建温度计自动估值；"
+                "传 unavailable 则手动灰灯且不调用温度计"
+            ),
+        ),
+    ] = None,
+    thermometer_cache_dir: Annotated[
+        Path | None,
+        typer.Option("--thermometer-cache-dir", help="analyze 自动估值使用的自建温度计缓存目录"),
+    ] = None,
     money_horizon: Annotated[
         str | None,
         typer.Option(
@@ -154,7 +164,8 @@ def analyze(
         tracking_error: 指数基金跟踪误差。
         investment_amount: 压力测试投入金额。
         max_tolerable_loss_rate: 最大可承受亏损比例。
-        valuation_state: 估值状态。
+        valuation_state: 估值状态；缺省时允许自动温度计估值。
+        thermometer_cache_dir: 自动温度计缓存目录。
         money_horizon: 用户资金期限分类。
         user_money_horizon_years: 用户资金不用年限。
         current_stage: 当前阶段与关键变化说明。
@@ -200,6 +211,7 @@ def analyze(
         investment_amount=investment_amount,
         max_tolerable_loss_rate=max_tolerable_loss_rate,
         valuation_state=_valuation_state(valuation_state),
+        thermometer_cache_dir=thermometer_cache_dir,
         user_money_horizon_years=user_money_horizon_years,
         force_refresh=force_refresh,
         mode="developer_override" if dev_override else "product",
@@ -548,19 +560,21 @@ def quality_gate(
     typer.echo(f"issues: {len(result.issues)}")
 
 
-def _valuation_state(value: str) -> ValuationState:
+def _valuation_state(value: str | None) -> ValuationState | None:
     """校验估值状态选项。
 
     Args:
-        value: CLI 输入的估值状态。
+        value: CLI 输入的估值状态；`None` 表示允许自动温度计估值。
 
     Returns:
-        合法估值状态。
+        合法估值状态或 `None`。
 
     Raises:
         typer.BadParameter: 当取值不在允许集合内时抛出。
     """
 
+    if value is None:
+        return None
     allowed = {"low", "fair", "high", "unavailable"}
     if value not in allowed:
         raise typer.BadParameter(f"valuation_state 必须是 {', '.join(sorted(allowed))}")

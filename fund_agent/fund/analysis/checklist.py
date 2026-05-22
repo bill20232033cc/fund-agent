@@ -14,6 +14,10 @@ from fund_agent.fund.analysis.consistency_check import ConsistencyCheckResult
 from fund_agent.fund.analysis.investor_return import InvestorExperienceResult
 from fund_agent.fund.analysis.r_abc import RabcAttribution
 from fund_agent.fund.analysis.risk_check import RiskCheckResult
+from fund_agent.fund.analysis.valuation_state import (
+    ValuationStateResolution,
+    build_explicit_valuation_resolution,
+)
 from fund_agent.fund.extractors.models import EvidenceAnchor, ExtractedField
 
 ChecklistQuestionCode = Literal[
@@ -98,6 +102,7 @@ def run_checklist(
     consistency_result: ConsistencyCheckResult,
     risk_check_result: RiskCheckResult,
     valuation_state: ValuationState = "unavailable",
+    valuation_resolution: ValuationStateResolution | None = None,
     money_horizon: MoneyHorizon | None = None,
     user_money_horizon_years: Decimal | str | int | float | None = None,
     rule: ChecklistRule | None = None,
@@ -111,6 +116,7 @@ def run_checklist(
         consistency_result: P2-S3 言行一致性结果。
         risk_check_result: P2-S5 否决项检查结果。
         valuation_state: 当前估值状态，由温度计或调用方显式提供。
+        valuation_resolution: 估值状态结构化真源；提供时优先于 `valuation_state`。
         money_horizon: 用户资金期限分类，由调用方显式提供。
         user_money_horizon_years: 用户资金不用年限；提供时优先转换为资金期限分类。
         rule: 检查清单规则配置。
@@ -134,7 +140,7 @@ def run_checklist(
         _check_investor_return(investor_experience),
         _check_consistency(consistency_result),
         _check_survival(risk_check_result),
-        _check_valuation(valuation_state),
+        _check_valuation(valuation_state, valuation_resolution=valuation_resolution),
         _check_money_horizon(resolved_horizon),
     )
     return _build_checklist_result(items)
@@ -413,11 +419,16 @@ def _check_survival(risk_check_result: RiskCheckResult) -> ChecklistItem:
     )
 
 
-def _check_valuation(valuation_state: ValuationState) -> ChecklistItem:
+def _check_valuation(
+    valuation_state: ValuationState,
+    *,
+    valuation_resolution: ValuationStateResolution | None,
+) -> ChecklistItem:
     """检查当前估值位置，见检查清单第 6 问。
 
     Args:
         valuation_state: 当前估值状态。
+        valuation_resolution: 估值状态结构化真源。
 
     Returns:
         第 6 问检查结果。
@@ -426,37 +437,57 @@ def _check_valuation(valuation_state: ValuationState) -> ChecklistItem:
         无显式抛出。
     """
 
-    if valuation_state == "low":
+    resolution = valuation_resolution or build_explicit_valuation_resolution(valuation_state)
+    if resolution.state == "low":
         return _item(
             code="valuation",
             signal="green",
             status="pass",
-            anchors=(),
-            reason="温度计或调用方输入显示当前估值偏低。",
+            anchors=resolution.anchors,
+            reason=_valuation_reason(resolution, "当前估值偏低。"),
         )
-    if valuation_state == "fair":
+    if resolution.state == "fair":
         return _item(
             code="valuation",
             signal="yellow",
             status="watch",
-            anchors=(),
-            reason="温度计或调用方输入显示当前估值处于合理区间。",
+            anchors=resolution.anchors,
+            reason=_valuation_reason(resolution, "当前估值处于合理区间。"),
         )
-    if valuation_state == "high":
+    if resolution.state == "high":
         return _item(
             code="valuation",
             signal="red",
             status="block",
-            anchors=(),
-            reason="温度计或调用方输入显示当前估值偏高。",
+            anchors=resolution.anchors,
+            reason=_valuation_reason(resolution, "当前估值偏高。"),
         )
     return _item(
         code="valuation",
         signal="gray",
         status="insufficient_data",
-        anchors=(),
-        reason="温度计数据暂时不可用，请手动确认。",
+        anchors=resolution.anchors,
+        reason=_valuation_reason(resolution, "自动估值不可用，请手动确认。"),
     )
+
+
+def _valuation_reason(resolution: ValuationStateResolution, fallback: str) -> str:
+    """渲染检查清单第 6 问原因文本，见模板第 7 章。
+
+    Args:
+        resolution: 估值状态结构化真源。
+        fallback: 缺少原因时的兜底文本。
+
+    Returns:
+        检查清单原因文本。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if resolution.reason.strip():
+        return resolution.reason
+    return fallback
 
 
 def _check_money_horizon(money_horizon: MoneyHorizon | None) -> ChecklistItem:

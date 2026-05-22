@@ -23,6 +23,7 @@ from fund_agent.fund.analysis import (
     RiskCheckResult,
     StressScenarioResult,
     StressTestResult,
+    ValuationStateResolution,
 )
 from fund_agent.fund.audit import run_programmatic_audit
 from fund_agent.fund.data.nav_data import NavDataResult
@@ -581,12 +582,58 @@ def _checklist(signal: str = "green") -> ChecklistResult:
     )
 
 
+def _thermometer_valuation_resolution() -> ValuationStateResolution:
+    """构造温度计估值状态真源。
+
+    Args:
+        无。
+
+    Returns:
+        温度计来源估值状态。
+
+    Raises:
+        无显式抛出。
+    """
+
+    anchor = EvidenceAnchor(
+        source_kind="external_api",
+        document_year=None,
+        section_id="thermometer",
+        page_number=None,
+        table_id="fixture_source",
+        row_locator="000300:2024-12-31",
+        note="fixture thermometer",
+    )
+    return ValuationStateResolution(
+        state="low",
+        source="self_owned_thermometer",
+        reason="自建温度计 fixture 低估。",
+        anchors=(anchor,),
+        disclaimer_required=True,
+        index_code="000300",
+        index_name="沪深300",
+        temperature=Decimal("20.00"),
+        pe_percentile=Decimal("10.00"),
+        pb_percentile=Decimal("30.00"),
+        data_date="2024-12-31",
+        lookback_start="2014-12-31",
+        lookback_end="2024-12-31",
+        thermometer_source="fixture_source",
+        cached=False,
+        stale=False,
+        disclaimer=(
+            "本温度计基于有知有行公开方法论独立计算，非有知有行官方数据。"
+            "计算方法：等权 PE/PB 中位数历史分位数综合。"
+            "与有知有行官方温度计可能存在合理偏差，仅供投资前风险检查参考。"
+        ),
+    )
 def _render_input(
     *,
     missing: bool = False,
     final_judgment: str = "worth_holding",
     fund_type: str = "active_fund",
     tracking_error: ExtractedField[TrackingErrorValue] | None = None,
+    valuation_state_resolution: ValuationStateResolution | None = None,
 ) -> TemplateRenderInput:
     """构造模板渲染输入。
 
@@ -595,6 +642,7 @@ def _render_input(
         final_judgment: 最终 selected 判断。
         fund_type: classified_fund_type fixture 值。
         tracking_error: 显式跟踪误差字段。
+        valuation_state_resolution: 估值状态结构化真源。
 
     Returns:
         模板渲染输入。
@@ -625,6 +673,7 @@ def _render_input(
             reasons=("fixture",),
             conflict_reasons=(),
         ),
+        valuation_state_resolution=valuation_state_resolution,
         current_stage=None if missing else "规模稳定，收益归因仍需跨期观察",
     )
 
@@ -1425,3 +1474,41 @@ def test_render_template_report_keeps_l1_r1_r2_structured_inputs_unmodified() ->
         == input_data.final_judgment_decision.derived_judgment
     )
     assert result.audit_input.final_judgment_source == input_data.final_judgment_decision.source
+
+
+def test_render_template_report_outputs_thermometer_disclaimer_and_anchor() -> None:
+    """验证调用自建温度计时报告正文和附录展示免责声明与锚点。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 免责声明或 external_api 锚点缺失时抛出。
+    """
+
+    resolution = _thermometer_valuation_resolution()
+    checklist = _checklist("green")
+    valuation_item = next(item for item in checklist.items if item.code == "valuation")
+    projected_item = replace(
+        valuation_item,
+        anchors=resolution.anchors,
+        reason=resolution.reason,
+    )
+    checklist = replace(
+        checklist,
+        items=tuple(projected_item if item.code == "valuation" else item for item in checklist.items),
+    )
+    input_data = replace(
+        _render_input(valuation_state_resolution=resolution),
+        checklist_result=checklist,
+    )
+
+    result = render_template_report(input_data)
+
+    assert resolution.disclaimer in result.report_markdown
+    assert "外部数据(external_api)§thermometer表fixture_source行000300:2024-12-31" in result.report_markdown
+    assert result.audit_input.valuation_state_resolution == resolution
+    assert all(term not in resolution.disclaimer for term in ("买入", "卖出", "仓位比例", "收益预测"))

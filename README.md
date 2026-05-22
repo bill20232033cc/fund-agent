@@ -79,11 +79,14 @@ fund-analysis thermometer --index 000300,000905 --json
 | `--report-year` | 年报年份，默认 `2024` |
 | `--investment-amount` | 压力测试投入金额，默认 `10000` |
 | `--max-tolerable-loss-rate` | 最大可承受亏损比例，如 `50%` |
-| `--valuation-state` | 估值状态：`low` / `fair` / `high` / `unavailable` |
+| `--valuation-state` | 手动估值状态：`low` / `fair` / `high` / `unavailable`；不传时尝试自建温度计自动估值 |
+| `--thermometer-cache-dir` | `analyze` 自动估值使用的自建温度计缓存目录 |
 | `--user-money-horizon-years` | 用户资金不用年限 |
 | `--force-refresh` | 强制刷新底层数据 |
 
 `analyze` 默认是 product mode：最终判断由 Fund Capability 根据检查清单、否决项、压力测试和 quality gate 派生；R=A+B-C 股票仓位、言行一致性实际风格、经理任期、同类费率、跟踪误差、当前阶段、最终判断覆盖和 quality gate `warn/off` 等夹具参数仅供开发验证使用，必须显式传 `--dev-override`。
+
+`fund-analysis analyze FUND_CODE` 不传 `--valuation-state` 时，会先识别基金类型，再仅对 `index_fund` / `enhanced_index` 且业绩基准可精确映射到沪深300 `000300` 或中证500 `000905` 的基金调用项目内自建温度计。主动、债券、QDII、FOF、缺少基准、复合基准不确定、派生/策略/行业指数或未支持指数都会保持 `unavailable` 灰灯且不调用温度计。显式传 `--valuation-state unavailable` 会恢复旧的手动灰灯路径，并且不调用温度计；显式传 `low/fair/high` 也同样优先于自动估值。
 
 ## 输出内容
 
@@ -110,6 +113,7 @@ fund-analysis thermometer --index 000300,000905 --json
 - 统一年报仓库入口：`FundDocumentRepository.load_annual_report(...)`
 - P1 结构化抽取：基金类型、产品画像、表现、经理/持有人、持仓和份额变化
 - P2 分析：R=A+B-C、超额性质、言行一致性、投资者获得感、风险检查、压力测试、7 问题检查清单
+- `analyze` 自动估值：仅对沪深300/中证500指数基金或指数增强基金使用自建温度计生成第 6 问估值状态
 - 8 章 Markdown 模板渲染
 - 程序审计规则：P1/P2/P3/L1/R1/R2
 - 有知有行温度计 data adapter
@@ -130,7 +134,7 @@ fund-analysis thermometer --index 000300,000905 --json
 
 明确非目标：
 
-- 温度计数据不自动映射为 `analyze --valuation-state`；分析报告仍要求用户显式传入估值状态
+- 全 A 市场温度计、主动基金持仓估值、债券/QDII/FOF 估值状态自动判断
 
 ## 本地验证
 
@@ -171,7 +175,7 @@ fund-analysis thermometer --index 000300,000905
 fund-analysis thermometer --index 000300,000905 --json
 ```
 
-该命令只输出温度计摘要。上游不可用会以 `unavailable: true` 或批量结果里的单项 `unavailable: true` 表示并正常退出；malformed `--index` 参数退出 2，运行异常退出 1。当前不会把温度计数值自动映射为 `analyze --valuation-state`，分析报告仍需要显式传入 `--valuation-state`。
+该命令只输出温度计摘要。上游不可用会以 `unavailable: true` 或批量结果里的单项 `unavailable: true` 表示并正常退出；malformed `--index` 参数退出 2，运行异常退出 1。`analyze` 自动估值只使用这里的自建指数温度计单指数路径，不使用有知有行公开页快照作为分析真源。
 
 ## 精选基金池抽取快照
 

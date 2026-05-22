@@ -665,6 +665,8 @@ def test_analyze_cli_calls_service_and_prints_report(monkeypatch) -> None:  # ty
             "50%",
             "--valuation-state",
             "low",
+            "--thermometer-cache-dir",
+            "cache/thermometer-fixture",
             "--user-money-horizon-years",
             "4",
             "--current-stage",
@@ -694,6 +696,8 @@ def test_analyze_cli_calls_service_and_prints_report(monkeypatch) -> None:  # ty
     assert _FakeService.last_request.developer_overrides is not None
     assert _FakeService.last_request.developer_overrides.equity_position == "80%"
     assert _FakeService.last_request.developer_overrides.final_judgment_override == "worth_holding"
+    assert _FakeService.last_request.valuation_state == "low"
+    assert _FakeService.last_request.thermometer_cache_dir == Path("cache/thermometer-fixture")
     assert _FakeService.last_request.force_refresh is True
     assert _FakeService.last_request.developer_overrides.quality_gate_policy == "warn"
     assert _FakeService.last_request.developer_overrides.quality_gate_source_csv == Path(
@@ -787,6 +791,7 @@ def test_analyze_cli_default_product_request(monkeypatch) -> None:  # type: igno
     assert _FakeService.last_request is not None
     assert _FakeService.last_request.mode == "product"
     assert _FakeService.last_request.developer_overrides is None
+    assert _FakeService.last_request.valuation_state is None
 
 
 def test_analyze_cli_rejects_dev_options_without_dev_override(monkeypatch) -> None:  # type: ignore[no-untyped-def]
@@ -912,6 +917,78 @@ def test_analyze_cli_exits_nonzero_with_clear_message(monkeypatch) -> None:  # t
 
     assert result.exit_code == 1
     assert "分析失败：fixture failure" in result.output
+
+
+def test_analyze_cli_explicit_unavailable_is_forwarded(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    """验证显式 unavailable 作为手动灰灯转发给 Service。
+
+    Args:
+        monkeypatch: pytest monkeypatch fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: unavailable 未显式转发时抛出。
+    """
+
+    _FakeService.last_request = None
+    monkeypatch.setattr(cli, "FundAnalysisService", _FakeService)
+    runner = CliRunner()
+
+    result = runner.invoke(cli.app, ["analyze", "110011", "--valuation-state", "unavailable"])
+
+    assert result.exit_code == 0
+    assert _FakeService.last_request is not None
+    assert _FakeService.last_request.valuation_state == "unavailable"
+
+
+def test_analyze_cli_help_documents_auto_valuation_and_opt_out() -> None:
+    """验证 analyze help 说明缺省自动估值和 unavailable opt-out。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: help 文案缺少 P19-S3 契约时抛出。
+    """
+
+    runner = CliRunner()
+
+    result = runner.invoke(cli.app, ["analyze", "--help"])
+
+    assert result.exit_code == 0
+    assert "缺省时允许自动温度计估值" in result.output
+    assert "unavailable" in result.output
+    assert "则手动灰灯且不调用温度计" in result.output
+    assert "--thermometer-cache-dir" in result.output
+
+
+def test_analyze_cli_invalid_valuation_exits_2(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    """验证非法估值状态返回参数错误。
+
+    Args:
+        monkeypatch: pytest monkeypatch fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 非法估值状态未被拒绝时抛出。
+    """
+
+    _FakeService.last_request = None
+    monkeypatch.setattr(cli, "FundAnalysisService", _FakeService)
+    runner = CliRunner()
+
+    result = runner.invoke(cli.app, ["analyze", "110011", "--valuation-state", "cold"])
+
+    assert result.exit_code == 2
+    assert "valuation_state 必须是" in result.output
+    assert _FakeService.last_request is None
 
 
 def test_checklist_cli_is_not_misleading_placeholder() -> None:
