@@ -25,7 +25,7 @@
 - [ ] P18 已合入 main（或决定并行开发）
 - [ ] design.md 已更新至 v2.2（§1.3、§6.3、§10、§11）
 - [ ] `p19-thermometer-technical-proposal.md` 已通过 plan review
-- [ ] akshare 数据可用性验证通过（能获取全 A 股 PE/PB 数据）
+- [ ] akshare 数据可用性验证通过：全 A PB 已有可用候选；全 A PE 历史必须找到可验证来源，或 P19-S1 scope 变更已通过 design/control gate
 
 ### Exit Criteria（可验证）
 
@@ -45,7 +45,8 @@
 #### P19-S1 全市场温度计 MVP
 
 - [ ] `ThermometerDataSource` Protocol 定义完成
-- [ ] akshare 全 A 股 PE/PB 数据获取实现并通过测试
+- [ ] akshare 全 A PB 数据获取实现并通过测试
+- [ ] 全 A PE 历史来源已验证，或 S1 scope 变更已通过 design/control gate
 - [ ] `ThermometerCalculator` PE/PB 等权中位数计算通过测试
 - [ ] 历史分位数计算正确（使用已知 fixture 数据验证）
 - [ ] `ThermometerReading` dataclass 定义完成
@@ -89,7 +90,7 @@
 
 | 依赖 | 说明 |
 |------|------|
-| akshare | 全 A 股 PE/PB 数据源（项目已有依赖） |
+| akshare | 全 A PB、分市场 PE/PB、宽基指数 PE/PB 候选数据源（项目已有依赖）；全 A PE 历史仍需验证 |
 | pandas | 数据处理（项目已有依赖） |
 | pyarrow 或 fastparquet | parquet 缓存格式（需新增依赖） |
 
@@ -97,7 +98,7 @@
 
 | 风险 | Owner | 处理方式 |
 |------|-------|----------|
-| akshare 全 A 股 PE/PB 接口稳定性 | Capability | 封装 Protocol，支持多源切换 |
+| akshare 全 A 股 PE/PB 接口稳定性 | Capability | 全 A PB 可走 `stock_a_all_pb()`；全 A PE 历史仍需 plan fix；封装 Protocol，支持多源切换 |
 | 等权计算与有知有行结果偏差 | P19-S1 验证 | 文档标注"方法论复现"，方向一致即可 |
 | 历史数据首次下载耗时长 | P19-S1 | 缓存 + 增量更新 |
 | 中证指数 API 访问限制 | P19-S2 | akshare fallback |

@@ -63,11 +63,12 @@
 
 | 数据源 | 用途 | 获取方式 | 可行性 |
 |--------|------|----------|--------|
-| **akshare** | 全 A 股 PE/PB 日频数据 | `ak.stock_a_lg_indicator()` 或类似接口 | ✅ 免费、开源、已作为项目依赖 |
-| **中证指数官方** | 指数级 PE/PB（宽基/行业） | CSIndex API | ✅ 免费，需申请 |
-| **东方财富** | 个股 PE/PB | akshare 封装 | ✅ 已有 fallback 经验 |
+| **akshare / 乐咕乐股封装** | 全 A 股 PB 历史、分市场 PE/PB、核心指数 PE/PB | `stock_a_all_pb()`、`stock_market_pe_lg()`、`stock_market_pb_lg()`、`stock_index_pe_lg()`、`stock_index_pb_lg()` | ✅ 已在 akshare 1.18.60 验证存在；部分接口已实际返回数据 |
+| **akshare / 中证指数封装** | 指数级估值短窗口 | `stock_zh_index_value_csindex()` | ⚠️ 已验证存在，但本地样本仅 20 行且无 PB 列，不能单独支撑历史温度 |
+| **东方财富实时行情** | 当日全 A 个股 PE/PB 候选 | `stock_zh_a_spot_em()` | ⚠️ 本地调用出现 `ProxyError`，只能作为待验证 fallback |
+| **未找到** | 全 A PE 历史 | 待确认 | ❌ `stock_a_lg_indicator()` 在 akshare 1.18.60 不存在；全 A PE 历史仍是 P19-S1 blocker |
 
-**推荐方案**：以 akshare 为主数据源，中证指数官方为指数级数据补充源。
+**修正后推荐方案**：P19-S1 不能直接按"全 A PE/PB 历史均现成"实施。先完成数据源 plan fix：全 A PB 走 `stock_a_all_pb()`；核心宽基指数 PE/PB 走 `stock_index_pe_lg()` / `stock_index_pb_lg()`；全 A PE 历史必须找到可验证来源，或明确把全市场 MVP 收窄为 PB-only / 指数先行的独立设计变更。
 
 ---
 
@@ -238,6 +239,8 @@ fund-analysis analyze 004393 --report-year 2024
 # → 无需手动传入 --valuation-state
 ```
 
+> **Gate 修正**：上述自动集成只属于 P19-S3。P19-S1/S2 只允许提供自建温度计读数与 CLI 输出，不得静默改变 `fund-analysis analyze` 的默认估值输入。
+
 ### 5.3 与 Quality Gate 集成
 
 温度计数据不直接参与 quality gate，但 `valuation_state` 作为分析输入影响最终判断：
@@ -250,39 +253,39 @@ fund-analysis analyze 004393 --report-year 2024
 
 ### 6.1 akshare 数据获取
 
-```python
-# 全市场等权 PE/PB（核心）
-# akshare 提供 A 股市场整体估值指标
-import akshare as ak
+本地 akshare 1.18.60 验证结果：
 
-# 方案 A：通过个股数据聚合
-df = ak.stock_zh_a_spot_em()  # 全 A 股实时行情（含 PE/PB）
-pe_median = df["市盈率-动态"].median()  # 等权中位数
-pb_median = df["市净率"].median()
+| 接口 | 用途 | 状态 |
+|------|------|------|
+| `stock_a_all_pb()` | 全 A PB 历史，含 `middlePB` / `equalWeightAveragePB` / 历史分位 | ✅ 实测 5184 行，2005-01-04 至 2026-05-22 |
+| `stock_market_pe_lg(symbol="上证")` | 分市场 PE 历史 | ⚠️ 实测可返回，但不是全 A；样本仅 330 行 |
+| `stock_market_pb_lg(symbol="上证")` | 分市场 PB 历史 | ✅ 实测 5191 行 |
+| `stock_zh_a_spot_em()` | 当日全 A 个股实时 PE/PB 候选 | ⚠️ 本地实测 `ProxyError`，不能作为唯一生产路径 |
+| `stock_a_lg_indicator()` | 原方案引用的全 A 指标接口 | ❌ akshare 1.18.60 不存在 |
 
-# 方案 B：通过指数估值接口（如果 akshare 提供）
-# 需要验证 akshare 是否有全市场等权估值接口
-```
+P19-S1 实施前必须解决：全 A PE 历史来源、字段名、缺失过滤、分位数窗口和首次回填成本。不能用 `stock_zh_a_spot_em()` 的当日快照替代 10-15 年历史序列。
 
 ### 6.2 中证指数数据获取
 
-```python
-# 中证指数官方 API
-# https://www.csindex.com.cn/zh-CN/indices/index-detail/000300
-# 提供 PE/PB 等估值指标的历史数据
+本地 akshare 1.18.60 验证结果：
 
-# 或通过 akshare 封装
-import akshare as ak
-df = ak.index_value_hist_funddb(symbol="沪深300")  # 历史估值
-```
+| 接口 | 用途 | 状态 |
+|------|------|------|
+| `stock_index_pe_lg(symbol="沪深300")` | 指数 PE 历史 | ✅ 实测 5130 行，含等权/滚动/中位 PE |
+| `stock_index_pb_lg(symbol="沪深300")` | 指数 PB 历史 | ✅ 实测 5130 行，含等权/中位 PB |
+| `stock_zh_index_value_csindex(symbol="000300")` | 中证指数估值短窗口 | ⚠️ 实测 20 行，仅 PE/股息率，无 PB |
+| `index_value_hist_funddb()` | 原方案引用接口 | ❌ akshare 1.18.60 不存在 |
+
+宽基指数 P19-S2 的数据源可行性强于全市场 P19-S1。若全 A PE 历史继续不可得，允许后续 plan fix 讨论是否先做 P19-S2 指数温度计，再回到全市场温度计。
 
 ### 6.3 历史数据回填
 
 | 数据 | 所需历史长度 | 来源 | 预估数据量 |
 |------|-------------|------|-----------|
-| 万得全 A PE/PB | ~10-15 年（两轮牛熊） | akshare 个股聚合 | ~5000 只 × 15 年 × 250 交易日 |
-| 沪深300 PE/PB | ~10-15 年 | 中证指数 / akshare | ~15 年 × 250 交易日 |
-| 中证500 PE/PB | ~10-15 年 | 中证指数 / akshare | ~15 年 × 250 交易日 |
+| 全 A PB | ~20 年 | `stock_a_all_pb()` | 约 5k 行，低成本 |
+| 全 A PE | ~10-15 年（两轮牛熊） | 未确认 | blocker；如果逐股重建，约 5000 只 × 15 年 × 250 交易日 |
+| 沪深300 PE/PB | ~20 年 | `stock_index_pe_lg()` / `stock_index_pb_lg()` | 约 5k 行 + 5k 行，低成本 |
+| 中证500 PE/PB | ~20 年 | `stock_index_pe_lg()` / `stock_index_pb_lg()` | 待按同接口验证，预期低成本 |
 
 ---
 
@@ -290,8 +293,10 @@ df = ak.index_value_hist_funddb(symbol="沪深300")  # 历史估值
 
 | 风险 | 影响 | 缓解措施 |
 |------|------|----------|
-| akshare 接口变更 | 数据获取失败 | 封装 DataSource Protocol，支持多源切换 |
-| 全市场 PE/PB 计算量大 | 首次运行慢 | 增量缓存 + parquet 格式 |
+| akshare 原方案接口不存在 | 实现无法启动 | 使用已验证接口重写数据源计划；缺失全 A PE 作为 blocker |
+| 全 A PE 历史不可得 | 无法按 PE+PB 复现全市场温度 | 找到可验证来源，或经设计 gate 收窄 MVP |
+| akshare / 东方财富实时接口不稳定 | 当日数据获取失败 | 明确 unavailable / retry / cache 语义，不作为唯一生产真源 |
+| 全市场 PE/PB 计算量大 | 首次运行慢 | 先估算数据体量；parquet 依赖需单独接受 |
 | 等权 vs 市值加权差异 | 与有知有行结果不完全一致 | 文档明确标注"方法论复现，非精确复制" |
 | 历史数据缺失 | 分位数计算偏差 | 标注有效数据起始日，不足时扩大回溯期 |
 | 有知有行未公开精确算法 | 无法 100% 复现 | 以公开描述为准，接受合理偏差 |
@@ -328,9 +333,10 @@ df = ak.index_value_hist_funddb(symbol="沪深300")  # 历史估值
 
 ### Phase P19-S1: 全市场温度计 MVP
 
-**目标**：实现万得全 A 全市场温度计算
+**目标**：实现全市场温度计 MVP，但 implementation 前必须先解决全 A PE 历史数据来源；若无法解决，应先形成设计变更，把 S1 收窄为 PB-only 验证或调整为指数温度计先行。
 
 **Exit Criteria**：
+- [ ] 全 A PE 历史来源已验证，或 S1 scope 变更已通过 design/control gate
 - [ ] 全市场 PE/PB 等权中位数计算通过单元测试
 - [ ] 历史分位数计算正确（使用已知数据验证）
 - [ ] CLI `fund-analysis thermometer` 输出全市场温度
