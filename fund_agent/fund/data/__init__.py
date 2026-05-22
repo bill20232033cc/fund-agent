@@ -12,6 +12,7 @@ from fund_agent.fund.data.thermometer import (
 from fund_agent.fund.data.thermometer_types import (
     PePbHistory,
     PePbPoint,
+    ThermometerBatchResult,
     ThermometerReading,
     ThermometerUnavailable,
 )
@@ -25,6 +26,7 @@ __all__ = [
     "NavDataResult",
     "PePbHistory",
     "PePbPoint",
+    "ThermometerBatchResult",
     "ThermometerReading",
     "ThermometerSnapshot",
     "ThermometerUnavailable",

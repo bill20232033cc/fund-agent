@@ -43,7 +43,7 @@ from fund_agent.services import (
     ThermometerService,
     ValuationState,
 )
-from fund_agent.fund.data.thermometer_types import ThermometerReading
+from fund_agent.fund.data.thermometer_types import ThermometerBatchResult, ThermometerReading
 
 app = typer.Typer(help="基金行为教练 Agent — 买入前专业级基金体检报告")
 DEFAULT_GOLDEN_TEMPLATE = DEFAULT_GOLDEN_TEMPLATE_PATH
@@ -246,7 +246,7 @@ def checklist(
 def thermometer(
     index_code: Annotated[
         str | None,
-        typer.Option("--index", help="自建温度计指数代码；P19-S1 支持 000300"),
+        typer.Option("--index", help="自建温度计指数代码；支持 000300、000905 或逗号分隔批量"),
     ] = None,
     cache_dir: Annotated[
         Path | None,
@@ -260,7 +260,7 @@ def thermometer(
     """查询温度计快照或自建指数温度计读数。
 
     Args:
-        index_code: 自建温度计指数代码；为空时保留当前公开页查询。
+        index_code: 自建温度计指数代码；为空时保留当前公开页查询；逗号分隔时批量查询。
         cache_dir: 温度计缓存目录。
         force_refresh: 是否强制刷新。
         output_json: 是否输出 JSON。
@@ -273,15 +273,20 @@ def thermometer(
     """
 
     try:
+        parsed_index_code, parsed_index_codes = _parse_index_option(index_code)
         snapshot = asyncio.run(
             ThermometerService().run(
                 ThermometerRequest(
                     cache_dir=cache_dir,
                     force_refresh=force_refresh,
-                    index_code=index_code,
+                    index_code=parsed_index_code,
+                    index_codes=parsed_index_codes,
                 )
             )
         )
+    except ValueError as exc:
+        typer.echo(f"温度计请求参数错误：{exc}", err=True)
+        raise typer.Exit(code=2) from exc
     except Exception as exc:
         typer.echo(f"温度计查询失败：{exc}", err=True)
         raise typer.Exit(code=1) from exc
@@ -798,6 +803,8 @@ def _thermometer_snapshot_payload(snapshot) -> dict[str, object]:  # type: ignor
 
     if isinstance(snapshot, ThermometerReading):
         return _thermometer_reading_payload(snapshot)
+    if isinstance(snapshot, ThermometerBatchResult):
+        return _thermometer_batch_payload(snapshot)
 
     market = snapshot.market
     macro = snapshot.macro
@@ -822,6 +829,32 @@ def _thermometer_snapshot_payload(snapshot) -> dict[str, object]:  # type: ignor
             if macro and macro.ten_year_treasury_yield is not None
             else None
         ),
+    }
+
+
+def _thermometer_batch_payload(batch: ThermometerBatchResult) -> dict[str, object]:
+    """把批量自建温度计读数转换为 CLI 输出 payload。
+
+    Args:
+        batch: 批量温度计结果。
+
+    Returns:
+        可 JSON 序列化的批量摘要 payload。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return {
+        "source": batch.source,
+        "requested_index_codes": list(batch.requested_index_codes),
+        "result_count": len(batch.readings),
+        "unavailable": batch.unavailable,
+        "partial_unavailable": batch.partial_unavailable,
+        "unavailable_count": batch.unavailable_count,
+        "generated_at": batch.generated_at,
+        "disclaimer": batch.disclaimer,
+        "readings": [_thermometer_reading_payload(reading) for reading in batch.readings],
     }
 
 
@@ -875,8 +908,41 @@ def _echo_thermometer_snapshot(payload: dict[str, object]) -> None:
         无显式抛出。
     """
 
+    readings = payload.get("readings")
     for key, value in payload.items():
+        if key == "readings":
+            continue
         typer.echo(f"{key}: {_format_cli_value(value)}")
+    if isinstance(readings, list):
+        for reading in readings:
+            if not isinstance(reading, dict):
+                continue
+            typer.echo("")
+            typer.echo(f"[{_format_cli_value(reading.get('index_code'))}]")
+            for key, value in reading.items():
+                if key in {"source", "index_code", "disclaimer"}:
+                    continue
+                typer.echo(f"{key}: {_format_cli_value(value)}")
+
+
+def _parse_index_option(index_code: str | None) -> tuple[str | None, tuple[str, ...] | None]:
+    """解析 CLI `--index` 选项为显式 Service 请求字段。
+
+    Args:
+        index_code: CLI 原始指数选项。
+
+    Returns:
+        单指数代码或批量指数代码；未传入时两者都为空。
+
+    Raises:
+        无显式抛出；指数形态校验由 Service 统一处理。
+    """
+
+    if index_code is None:
+        return None, None
+    if "," not in index_code:
+        return index_code, None
+    return None, tuple(index_code.split(","))
 
 
 def _format_cli_value(value: object) -> str:
@@ -894,6 +960,8 @@ def _format_cli_value(value: object) -> str:
 
     if isinstance(value, bool):
         return "true" if value else "false"
+    if isinstance(value, list | tuple):
+        return ",".join(str(item) for item in value)
     if value is None:
         return ""
     return str(value)

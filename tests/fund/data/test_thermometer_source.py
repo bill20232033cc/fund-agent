@@ -49,11 +49,49 @@ class _FakeFrame:
         return self._records
 
 
-def test_akshare_index_source_merges_pe_pb_rows() -> None:
+class _RecordingFetcher:
+    """记录 akshare symbol 的 fake fetcher。"""
+
+    def __init__(self, records: list[dict[str, object]]) -> None:
+        """初始化 fake fetcher。
+
+        Args:
+            records: 待返回的 records 数据。
+
+        Returns:
+            无返回值。
+
+        Raises:
+            无显式抛出。
+        """
+
+        self.records = records
+        self.symbols: list[str] = []
+
+    def __call__(self, symbol: str) -> _FakeFrame:
+        """记录 symbol 并返回 fake frame。
+
+        Args:
+            symbol: akshare 指数名称。
+
+        Returns:
+            fake frame。
+
+        Raises:
+            无显式抛出。
+        """
+
+        self.symbols.append(symbol)
+        return _FakeFrame(self.records)
+
+
+@pytest.mark.parametrize(("index_code", "index_name"), [("000300", "沪深300"), ("000905", "中证500")])
+def test_akshare_index_source_merges_pe_pb_rows(index_code: str, index_name: str) -> None:
     """验证数据源把 akshare-shaped PE/PB 表合并为历史序列。
 
     Args:
-        无。
+        index_code: 待验证的指数代码。
+        index_name: 指数名称。
 
     Returns:
         无返回值。
@@ -62,25 +100,27 @@ def test_akshare_index_source_merges_pe_pb_rows() -> None:
         AssertionError: 当合并结果不符合契约时抛出。
     """
 
-    source = AkshareIndexThermometerSource(
-        pe_fetcher=lambda symbol: _FakeFrame(
-            [
-                {"日期": "2026-05-21", "滚动市盈率中位数": "20.5"},
-                {"日期": "2026-05-22", "滚动市盈率中位数": "21.5"},
-            ]
-        ),
-        pb_fetcher=lambda symbol: _FakeFrame(
-            [
-                {"日期": "2026-05-22", "市净率中位数": "2.2"},
-                {"日期": "2026-05-21", "市净率中位数": "2.1"},
-            ]
-        ),
+    pe_fetcher = _RecordingFetcher(
+        [
+            {"日期": "2026-05-21", "滚动市盈率中位数": "20.5"},
+            {"日期": "2026-05-22", "滚动市盈率中位数": "21.5"},
+        ]
+    )
+    pb_fetcher = _RecordingFetcher(
+        [
+            {"日期": "2026-05-22", "市净率中位数": "2.2"},
+            {"日期": "2026-05-21", "市净率中位数": "2.1"},
+        ]
     )
 
-    history = asyncio.run(source.load_index_history("000300"))
+    source = AkshareIndexThermometerSource(pe_fetcher=pe_fetcher, pb_fetcher=pb_fetcher)
 
-    assert history.index_code == "000300"
-    assert history.index_name == "沪深300"
+    history = asyncio.run(source.load_index_history(index_code))
+
+    assert pe_fetcher.symbols == [index_name]
+    assert pb_fetcher.symbols == [index_name]
+    assert history.index_code == index_code
+    assert history.index_name == index_name
     assert history.source == "akshare_legulegu_index_pe_pb"
     assert [point.date for point in history.points] == ["2026-05-21", "2026-05-22"]
     assert history.points[-1].pe == Decimal("21.5")
@@ -88,7 +128,7 @@ def test_akshare_index_source_merges_pe_pb_rows() -> None:
 
 
 def test_akshare_index_source_rejects_unsupported_index() -> None:
-    """验证 P19-S1 只支持沪深300。
+    """验证 well-formed 但未纳入覆盖范围的指数仍由数据源拒绝。
 
     Args:
         无。
@@ -103,7 +143,7 @@ def test_akshare_index_source_rejects_unsupported_index() -> None:
     source = AkshareIndexThermometerSource()
 
     with pytest.raises(ThermometerSourceError, match="暂不支持"):
-        asyncio.run(source.load_index_history("000905"))
+        asyncio.run(source.load_index_history("999999"))
 
 
 def test_akshare_index_source_fails_closed_on_schema_drift() -> None:

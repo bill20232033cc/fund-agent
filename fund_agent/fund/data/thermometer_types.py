@@ -91,6 +91,31 @@ class ThermometerReading:
 
 
 @dataclass(frozen=True, slots=True)
+class ThermometerBatchResult:
+    """自建温度计批量读数。
+
+    Attributes:
+        readings: 按规范化请求顺序返回的指数温度计读数。
+        requested_index_codes: preserve-order de-duplication 后的指数代码序列。
+        generated_at: 批量结果生成时间。
+        source: 批量温度计来源标识。
+        unavailable: 是否全部指数不可用。
+        partial_unavailable: 是否存在部分指数不可用。
+        unavailable_count: 不可用指数数量。
+        disclaimer: 非官方独立计算免责说明。
+    """
+
+    readings: tuple[ThermometerReading, ...]
+    requested_index_codes: tuple[str, ...]
+    generated_at: str | None
+    source: str = "self_owned_index_thermometer_batch"
+    unavailable: bool = False
+    partial_unavailable: bool = False
+    unavailable_count: int = 0
+    disclaimer: str = THERMOMETER_DISCLAIMER
+
+
+@dataclass(frozen=True, slots=True)
 class ThermometerUnavailable:
     """自建温度计不可用结果。
 

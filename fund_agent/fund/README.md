@@ -304,12 +304,12 @@ C2 当前只做确定性 marker / 元数据检查，不调用 LLM，不判断语
 - 缓存位于 `cache/thermometer/thermometer.json`，24 小时内复用 fresh cache；抓取或解析失败时可回退到 7 天内 stale cache；无缓存时返回 `unavailable=True`
 - 当前公开页快照已接入 `ThermometerService` 和 `fund-analysis thermometer`，但只作为过渡查询能力，不作为 P19 自建温度计生产真源
 
-自建温度计 P19-S1 位于 `fund_agent/fund/data/thermometer_types.py`、`fund_agent/fund/data/thermometer_source.py`、`fund_agent/fund/data/thermometer_cache.py` 和 `fund_agent/fund/analysis/thermometer_calculator.py`：
+自建温度计 P19-S1/S2 位于 `fund_agent/fund/data/thermometer_types.py`、`fund_agent/fund/data/thermometer_source.py`、`fund_agent/fund/data/thermometer_cache.py` 和 `fund_agent/fund/analysis/thermometer_calculator.py`：
 
-- 当前支持 `fund-analysis thermometer --index 000300` 查询沪深300指数温度
+- 当前支持 `fund-analysis thermometer --index 000300` 查询沪深300指数温度，支持 `fund-analysis thermometer --index 000300,000905` 批量查询沪深300和中证500
 - 数据源通过 akshare 乐咕乐股指数 PE/PB 接口获取 `滚动市盈率中位数` 和 `市净率中位数`
 - 计算器使用 PE/PB 历史分位数各 50% 生成温度和 `low/fair/high` 候选状态
-- 缓存使用版本化 JSON，路径为 `cache/thermometer/index/000300_history.json`
+- 缓存使用版本化 JSON，按指数隔离为 `cache/thermometer/index/<index_code>_history.json`
 - 数据源失败时返回 `unavailable` 数据态或复用可用缓存，不 fallback 到有知有行公开页面
 - 当前不接入 `fund-analysis analyze` 自动估值状态；全 A 市场温度计等待 P19-S5 / all-A PE source gate
 

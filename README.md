@@ -66,8 +66,8 @@ fund-analysis quality-gate \
 # 查询温度计公开页快照
 fund-analysis thermometer
 
-# 查询自建沪深300指数温度计
-fund-analysis thermometer --index 000300 --json
+# 查询自建宽基指数温度计
+fund-analysis thermometer --index 000300,000905 --json
 ```
 
 当前 `fund-analysis checklist FUND_CODE` 是占位命令，尚未接入 Service。请使用 `fund-analysis analyze FUND_CODE` 生成包含检查清单的完整报告。
@@ -114,7 +114,7 @@ fund-analysis thermometer --index 000300 --json
 - 程序审计规则：P1/P2/P3/L1/R1/R2
 - 有知有行温度计 data adapter
 - 有知有行温度计 Service/CLI 查询入口：`fund-analysis thermometer`
-- 自建沪深300指数温度计 CLI 查询入口：`fund-analysis thermometer --index 000300`
+- 自建宽基指数温度计 CLI 查询入口：`fund-analysis thermometer --index 000300`、`fund-analysis thermometer --index 000300,000905`
 - 精选基金池字段级抽取快照：`snapshot.jsonl`、`summary.md`、`errors.jsonl`
 - 精选基金池字段级评分：`score.json`、`score.md`、`golden_set.json`
 - Correctness golden answer 预填底稿：`fund-analysis golden-prefill`
@@ -162,14 +162,16 @@ fund-analysis thermometer --json
 fund-analysis thermometer --force-refresh --cache-dir cache/thermometer
 ```
 
-指定 `--index 000300` 时，命令查询项目内自建沪深300指数温度计，不依赖有知有行页面抓取：
+指定 `--index` 时，命令查询项目内自建宽基指数温度计，不依赖有知有行页面抓取。当前支持沪深300 `000300` 和中证500 `000905`，可用逗号分隔批量查询：
 
 ```bash
 fund-analysis thermometer --index 000300
 fund-analysis thermometer --index 000300 --json
+fund-analysis thermometer --index 000300,000905
+fund-analysis thermometer --index 000300,000905 --json
 ```
 
-该命令只输出温度计摘要。上游不可用会以 `unavailable: true` 表示并正常退出；只有参数校验或运行异常才非零退出。当前不会把温度计数值自动映射为 `analyze --valuation-state`，分析报告仍需要显式传入 `--valuation-state`。
+该命令只输出温度计摘要。上游不可用会以 `unavailable: true` 或批量结果里的单项 `unavailable: true` 表示并正常退出；malformed `--index` 参数退出 2，运行异常退出 1。当前不会把温度计数值自动映射为 `analyze --valuation-state`，分析报告仍需要显式传入 `--valuation-state`。
 
 ## 精选基金池抽取快照
 

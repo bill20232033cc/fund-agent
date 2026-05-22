@@ -16,8 +16,8 @@ from typing import Protocol
 
 from fund_agent.fund.data.thermometer_types import PePbHistory, PePbPoint
 
-SUPPORTED_INDEX_SYMBOLS: dict[str, str] = {"000300": "沪深300"}
-INDEX_NAMES: dict[str, str] = {"000300": "沪深300"}
+SUPPORTED_INDEX_SYMBOLS: dict[str, str] = {"000300": "沪深300", "000905": "中证500"}
+INDEX_NAMES: dict[str, str] = {"000300": "沪深300", "000905": "中证500"}
 PE_COLUMN = "滚动市盈率中位数"
 PB_COLUMN = "市净率中位数"
 DATE_COLUMN = "日期"
@@ -66,7 +66,7 @@ class AkshareIndexThermometerSource:
         """读取指数 PE/PB 历史。
 
         Args:
-            index_code: 指数代码；P19-S1 仅支持 `000300`。
+            index_code: 指数代码；P19-S2 支持 `000300` 和 `000905`。
 
         Returns:
             规整后的 PE/PB 历史序列。
