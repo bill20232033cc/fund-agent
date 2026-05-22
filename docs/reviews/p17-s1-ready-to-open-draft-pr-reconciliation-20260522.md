@@ -4,9 +4,11 @@
 
 `READY_TO_OPEN_DRAFT_PR_PENDING_USER_AUTHORIZATION`
 
-P17-S1 plus the accepted thermometer design-direction correction is locally ready for a draft PR. The branch is `main`, upstream is `origin/main`, and local `main` is 9 commits ahead of `origin/main`. The current gate is local reconciliation only; pushing, creating a draft PR, commenting on GitHub, marking ready, merging, or deleting branches still requires explicit user authorization.
+P17-S1 plus the accepted thermometer design-direction correction is locally ready for a draft PR. The branch is `main`, upstream is `origin/main`, and the exact ahead count should be read from `git rev-list --count origin/main..HEAD` at draft-PR execution time because readiness bookkeeping commits can change it. The current gate is local reconciliation only; pushing, creating a draft PR, commenting on GitHub, marking ready, merging, or deleting branches still requires explicit user authorization.
 
 ## Included Commits
+
+The core local commits at the latest readiness refresh are:
 
 | Commit | Summary | Role |
 |---|---|---|
@@ -19,10 +21,13 @@ P17-S1 plus the accepted thermometer design-direction correction is locally read
 | `2b34713` | `docs: prepare p17 s1 draft pr` | Records this PR inclusion/exclusion reconciliation and moves control state to draft PR gate pending user authorization. |
 | `6768792` | `docs: finalize p17 s1 pr readiness record` | Backfills readiness reconciliation bookkeeping after artifact creation. |
 | `8d73e3a` | `docs: accept self owned thermometer direction` | Updates design/control truth to accept future project-owned thermometer and pauses stale draft PR readiness. |
+| `db63f19` | `docs: refresh p17 pr readiness after thermometer decision` | Refreshes readiness artifact and control state after the thermometer design-direction correction. |
+
+If additional local readiness-bookkeeping commits are added after this artifact is edited, refresh the final list with `git log --oneline --reverse origin/main..HEAD` before pushing.
 
 ## Included File Set
 
-`origin/main..HEAD` contains 28 tracked files:
+`origin/main..HEAD` currently contains the tracked files below; refresh with `git diff --name-only origin/main..HEAD` before push if more local bookkeeping commits are added:
 
 - `README.md`
 - `docs/design-control-alignment-guide.md`
