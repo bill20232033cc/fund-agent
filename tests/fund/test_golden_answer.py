@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import pytest
 
@@ -12,6 +13,44 @@ from fund_agent.fund.golden_answer import (
     load_golden_answer_json,
     parse_golden_answer_markdown,
 )
+
+_P16_S2_INDEX_PROFILE_GOLDEN_ROWS = {
+    "004194": {
+        "benchmark_text": "中证1000指数收益率×95%+同期银行活期存款利率（税后）×5%",
+        "benchmark_identity_status": "composite",
+        "methodology_availability": "benchmark_only",
+        "constituents_availability": "benchmark_only",
+        "source_tier": "benchmark_context",
+    },
+    "005313": {
+        "benchmark_text": "中证1000指数收益率*95%＋一年期人民币定期存款利率（税后）*5%",
+        "benchmark_identity_status": "composite",
+        "methodology_availability": "benchmark_only",
+        "constituents_availability": "benchmark_only",
+        "source_tier": "benchmark_context",
+    },
+    "017644": {
+        "benchmark_text": "中证1000指数收益率×95%+同期银行活期存款利率(税后)×5%",
+        "benchmark_identity_status": "composite",
+        "methodology_availability": "benchmark_only",
+        "constituents_availability": "benchmark_only",
+        "source_tier": "benchmark_context",
+    },
+    "019918": {
+        "benchmark_text": "中证2000指数收益率*95%+中国人民银行人民币活期存款利率（税后）*5%",
+        "benchmark_identity_status": "composite",
+        "methodology_availability": "benchmark_only",
+        "constituents_availability": "benchmark_only",
+        "source_tier": "benchmark_context",
+    },
+    "019923": {
+        "benchmark_text": "中证2000指数收益率×95%＋人民币活期存款税后利率×5%",
+        "benchmark_identity_status": "composite",
+        "methodology_availability": "benchmark_only",
+        "constituents_availability": "benchmark_only",
+        "source_tier": "benchmark_context",
+    },
+}
 
 
 def test_parse_golden_answer_markdown_outputs_strict_records() -> None:
@@ -166,3 +205,70 @@ def test_load_golden_answer_json_reuses_strict_schema(tmp_path) -> None:
     assert len(funds) == 1
     assert funds[0].records[0].field_name == "classified_fund_type"
     assert funds[0].records[0].expected_value == "active_fund"
+
+
+def test_reviewed_golden_answer_contains_only_planned_p16_s2_index_profile_rows() -> None:
+    """验证 P16-S2 增强指数 golden rows 只覆盖计划内 scalar 子字段。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 strict rows 缺失、越界或 composite 语义被补值时抛出。
+    """
+
+    funds = {
+        fund.fund_code: fund
+        for fund in load_golden_answer_json(Path("reports/golden-answers/golden-answer.json"))
+    }
+    for fund_code, expected_rows in _P16_S2_INDEX_PROFILE_GOLDEN_ROWS.items():
+        actual_rows = {
+            record.sub_field: record
+            for record in funds[fund_code].records
+            if record.field_name == "index_profile"
+        }
+        assert set(actual_rows) == set(expected_rows)
+        for sub_field, expected_value in expected_rows.items():
+            assert actual_rows[sub_field].expected_value == expected_value
+            assert actual_rows[sub_field].confidence == "high"
+            assert "\n" not in actual_rows[sub_field].expected_value
+        assert "benchmark_index_name" not in actual_rows
+        assert "benchmark_index_code" not in actual_rows
+        assert "benchmark_component_text" not in actual_rows
+        assert not any(
+            record.field_name == "tracking_error" for record in funds[fund_code].records
+        )
+
+
+def test_reviewed_golden_answer_preserves_001548_index_profile_rows() -> None:
+    """验证 P16-S2 未改写既有 001548 指数画像 golden rows。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 001548 既有 row 被删除或改写时抛出。
+    """
+
+    funds = {
+        fund.fund_code: fund
+        for fund in load_golden_answer_json(Path("reports/golden-answers/golden-answer.json"))
+    }
+    rows = {
+        record.sub_field: record.expected_value
+        for record in funds["001548"].records
+        if record.field_name == "index_profile"
+    }
+
+    assert rows == {
+        "benchmark_text": "上证50指数收益率×95%＋银行活期存款利率（税后） ×5%",
+        "benchmark_identity_status": "identified",
+        "benchmark_index_name": "上证50指数",
+        "source_tier": "benchmark_context",
+    }
