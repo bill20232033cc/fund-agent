@@ -2,8 +2,8 @@
 
 > **版本**: v2.2
 > **日期**: 2026-05-22
-> **状态**: 已按 2026-05-22 设计更新输入融合，并按 P14 / P15 / P16 / post-P16 / thermometer self-owned direction 设计对齐裁决校正
-> **变更摘要**: v2.2 统一温度计口径：当前公开页查询是过渡实现，长期应开发项目内自建温度计；自动映射 `valuation_state` 仍需独立规则设计
+> **状态**: 已回写 P19 温度计独立开发决策，并保留当前代码事实与 P17 边界裁决
+> **变更摘要**: v2.2 统一温度计口径：当前公开页查询是过渡实现；P19 设计目标是在项目内基于公开方法论自建温度计；自动映射 `valuation_state` 只能在 P19-S3 独立 gate 后接入
 > **关联文档**: `docs/implementation-control.md`（实施总控）、`fund-agent-mvp-plan.md`（MVP 计划书）、`docs/fund-analysis-template-draft.md`（定性模板 v2）、`docs/audit-alignment.md`（审计机制对照研究）
 
 ⚠️ **重要声明**：本文档记录已接受的设计意图和当前实现事实。若本文档、实施总控和代码发生冲突，以当前代码事实与最新 control-doc reconciliation artifact 为准，并应及时回写本文档；不得长期保留“设计未来”口径冒充已实现状态。
@@ -31,8 +31,8 @@
 
 - 不做全市场横向比较（MVP 在精选基金池内做质量门控）
 - 不做实时行为偏差检测（改为买入前检查清单）
-- 不把当前有知有行公开页面抓取视为长期温度计真源（当前只读查询是过渡能力；后续应在本项目内开发自建温度计计算与数据契约）
-- 不把温度计数值隐式自动映射为 `valuation_state`（映射阈值、适用范围、证据来源和缺失策略必须单独设计并通过 gate）
+- 不把当前有知有行公开页面抓取视为长期温度计真源（当前只读查询是过渡能力；P19 已决策在本项目内开发自建温度计计算与数据契约）
+- 不把温度计数值隐式自动映射为 `valuation_state`（自动映射只能在 P19-S3 或后续专门 gate 中设计并通过；必须保留用户显式输入优先级、缺失灰灯/不可用语义和审计证据）
 - 不做组合管理（v2 阶段）
 - 不输出买卖建议或仓位比例
 - 不把外部 Dayu Host/Engine/tool loop 作为主链路依赖或运行时接口（pyproject.toml 已移除 dayu-agent 依赖）
@@ -479,12 +479,14 @@ C（Cost）= 管理费 + 托管费 + 换手率 × 0.3%
 | 基金年报 PDF | EID/证监会资本市场统一信息披露平台主源 + Eastmoney fallback | httpx 下载 | `documents/sources.py` |
 | 基金净值序列 | 天天基金 / akshare | API | `data/nav_data.py` |
 | 温度计快照（当前） | 有知有行公开页面 | httpx + HTML 解析 | `data/thermometer.py` |
-| 自建温度计（后续方向） | 项目内定义的数据源与计算口径 | 待设计；必须显式记录输入、公式、缓存、失败语义与证据来源 | 待后续 phase |
+| 自建温度计（P19 设计目标） | akshare（全 A 股 PE/PB）+ 中证指数官方或 akshare 指数估值接口（指数级 PE/PB） | akshare API + httpx 官方接口；经 Protocol 封装 | `data/thermometer_source.py`, `analysis/thermometer_calculator.py`, `data/thermometer_cache.py`, `data/thermometer_types.py` |
 | 精选基金池 | 手动维护 CSV | 文件读取 | `extraction_snapshot.py` |
 
-当前温度计能力通过 `ThermometerService` 与 `fund-analysis thermometer` CLI 暴露，只做有知有行公开页只读查询与缓存复用。这是过渡实现，不是长期设计终点。后续应开发项目内自建温度计能力，至少明确指数/市场覆盖范围、估值指标、分位数窗口、数据源可靠性、缓存策略、不可用状态和测试夹具。
+当前温度计能力通过 `ThermometerService` 与 `fund-analysis thermometer` CLI 暴露，只做有知有行公开页只读查询与缓存复用。这是过渡实现，不是长期设计终点。P19 应开发项目内自建温度计能力，至少明确指数/市场覆盖范围、估值指标、分位数窗口、数据源可靠性、缓存策略、不可用状态和测试夹具。
 
-即使自建温度计落地，也不得默认把温度计数值自动映射为买入前检查清单的 `valuation_state`，也不得静默参与 `fund-analysis analyze` 默认分析判断；映射规则必须单独设计，并保留用户显式输入优先级、缺失时灰灯/不可用语义和审计证据。
+> **温度计独立开发（P19）**：温度计基于有知有行公开方法论独立计算，不依赖有知有行页面抓取作为生产数据真源。核心算法为 A 股市场或指数成分的等权 PE/PB 中位数历史分位数综合。CLI 和报告输出必须标注"基于有知有行公开方法论独立计算，非有知有行官方数据"。详见 §11。
+
+即使自建温度计落地，也不得在 P19-S1/P19-S2 默认把温度计数值自动映射为买入前检查清单的 `valuation_state`，也不得静默参与 `fund-analysis analyze` 默认分析判断；自动映射规则必须在 P19-S3 或后续专门 gate 中单独设计、实现和审查，并保留用户显式输入优先级、缺失时灰灯/不可用语义和审计证据。
 
 ### 6.4 年报章节映射
 
@@ -663,7 +665,7 @@ Golden Answer pipeline 由预填底稿、人工复核、strict JSON 构建和 co
 |------|------|----------|
 | `fund-analysis analyze` | 主分析入口 | 已实现；默认运行 quality gate，低质量以结构化错误阻断 |
 | `fund-analysis checklist` | 独立检查清单入口 | 占位；当前提示用户先使用 `analyze` 并以非零状态退出 |
-| `fund-analysis thermometer` | 温度计查询 | 当前已实现有知有行公开页 read-only 查询；后续应迁移为项目内自建温度计口径；不自动映射估值状态 |
+| `fund-analysis thermometer` | 温度计查询 | 当前已实现有知有行公开页 read-only 查询；P19 迁移为项目内自建温度计口径；P19-S3 前不自动映射估值状态 |
 | `fund-analysis extraction-snapshot` | 精选基金池字段级抽取快照 | 已实现 |
 | `fund-analysis extraction-score` | 字段级 coverage / traceability / correctness 评分 | 已实现 |
 | `fund-analysis golden-prefill` | Golden answer 预填底稿 | 已实现 |
@@ -721,6 +723,7 @@ fund-agent/
 │   │   │   ├── risk_check.py            # 否决项检查 + 压力测试
 │   │   │   ├── checklist.py             # 7 问题检查清单
 │   │   │   ├── final_judgment.py        # P10 最终判断推导（worth_holding/needs_attention/suggest_replace）
+│   │   │   ├── thermometer_calculator.py # P19 目标：温度计纯计算器
 │   │   │   └── _ratios.py               # 内部比率计算工具
 │   │   ├── audit/                       # 审计机制
 │   │   │   ├── __init__.py              # 导出 run_programmatic_audit
@@ -740,7 +743,10 @@ fund-agent/
 │   │   ├── data/                        # 外部数据获取
 │   │   │   ├── __init__.py
 │   │   │   ├── nav_data.py              # 净值数据（天天基金/akshare）
-│   │   │   └── thermometer.py           # 温度计（有知有行公开页面）
+│   │   │   ├── thermometer.py           # 当前温度计（有知有行公开页面过渡适配器）
+│   │   │   ├── thermometer_source.py    # P19 目标：自建温度计数据源
+│   │   │   ├── thermometer_cache.py     # P19 目标：自建温度计历史缓存
+│   │   │   └── thermometer_types.py     # P19 目标：自建温度计结构化类型
 │   └── config/
 │       ├── __init__.py
 │       └── paths.py                     # P10 路径常量（DEFAULT_SELECTED_FUNDS_CSV 等）
@@ -821,8 +827,115 @@ fund-agent/
 | 来源失败分类 | P8-S3 五类失败 + fallback 资格判定 | 统一 fallback 策略 | 区分"可重试失败"与"契约违背"，防止错误传播 |
 | ITEM_RULE 审计 | P12 后渲染校验（`rendered_segment_present`） | 仅前置校验 | 确保渲染后内容符合 ITEM_RULE 约束 |
 | 跟踪误差披露 | P13/P14/P15 分阶段推进 | 可选且不可观测 | 指数基金核心指标；P13 建立结构化直接披露路径，P14 将其纳入指数/增强指数条件质量分母，P15 先获取 reviewed direct evidence，再决定是否进入 production golden |
+| 温度计数据来源 | P19 使用 akshare + 中证指数官方或 akshare 指数估值接口 | 有知有行页面抓取作为长期真源 | 独立可控，不依赖第三方页面结构变化；当前公开页查询仅作为过渡/对比验证输入 |
+| 温度计计算方法 | 基于有知有行公开方法论复现 | 自创估值算法 | 与项目投资方法论一致，结果方向可解释；不声称官方精确复刻 |
+| 温度计加权方式 | 等权中位数 | 市值加权 | 对齐有知有行公开说明，反映全市场公司层面的估值分布 |
+| 温度计到 `valuation_state` | P19-S3 独立 gate 后才可自动映射 | S1/S2 完成后静默接入 `analyze` | 自动影响报告判断属于分析输入变更，必须单独审查阈值、适用范围、缺失语义和用户显式输入优先级 |
 
-## 11. Plan Review 设计边界检查
+## 11. 温度计设计
+
+### 11.1 设计决策
+
+| 决策 | 选择 | 备选方案 | 理由 |
+|------|------|---------|------|
+| 数据来源 | akshare + 中证指数官方或 akshare 指数估值接口 | 有知有行页面抓取 | 独立可控，不依赖第三方页面结构 |
+| 计算方法 | 有知有行公开方法论复现 | 自创算法 | 与项目投资理念一致，便于解释 |
+| 加权方式 | 等权中位数 | 市值加权 | 与有知有行公开说明一致 |
+| 考察周期 | 两轮完整牛熊周期的动态窗口；P19-S1 必须先验证可取得历史长度 | 固定 10 年且不验证数据覆盖 | 兼顾方法论一致性和数据可得性 |
+| 综合方式 | PE 分位 + PB 分位各 50% | PE 单指标 | 同时覆盖盈利和净资产估值 |
+| 精确度目标 | 方向一致，数值合理偏差 | 精确复现 | 有知有行未公开精确算法，不能伪造精确一致性 |
+
+### 11.2 核心算法
+
+```text
+输入：A 股市场或目标指数成分的当日 PE、PB + 历史 PE/PB 序列
+
+1. PE 等权中位数 = median(样本内有效 PE)
+2. PB 等权中位数 = median(样本内有效 PB)
+3. PE 分位数 = percentile_rank(当日 PE 中位数, 历史 PE 中位数序列)
+4. PB 分位数 = percentile_rank(当日 PB 中位数, 历史 PB 中位数序列)
+5. 综合温度 = (PE 分位数 + PB 分位数) / 2
+6. 估值状态候选 = low(≤30) / fair(30~70) / high(≥70)
+```
+
+P19-S1/S2 只产出温度计读数和估值状态候选，不自动写入 `fund-analysis analyze`；P19-S3 才允许设计并实现自动映射。
+
+### 11.3 温度区间定义
+
+| 温度区间 | 范围 | 估值状态候选 | `ValuationState` | 投资含义 |
+|----------|------|--------------|------------------|----------|
+| 低估 | 0° ~ 30° | 低估 | `low` | 适合纳入买入前检查 |
+| 中估 | 30° ~ 70° | 中估 | `fair` | 需要结合基金质量和资金期限 |
+| 高估 | 70° ~ 100° | 高估 | `high` | 买入前应重点审查风险 |
+
+温度计不得输出"买入""卖出"或仓位比例，只能作为检查清单估值输入。
+
+### 11.4 支持指数与 Phase
+
+| 优先级 | 指数 | 代码 | Phase |
+|--------|------|------|-------|
+| P0 | 万得全 A / 全 A 市场 | `wind_all_a` | P19-S1 |
+| P0 | 沪深 300 | `000300` | P19-S2 |
+| P0 | 中证 500 | `000905` | P19-S2 |
+| P1 | 创业板指 | `399006` | P19-S4 |
+| P1 | 科创 50 | `000688` | P19-S4 |
+| P1 | 中证红利 | `000922` | P19-S4 |
+| P1 | 中证消费 | `000932` | P19-S4 |
+| P1 | 中证医药 | `000933` | P19-S4 |
+
+P19 plan review 必须先验证 akshare 全 A 股 PE/PB 数据可用性、字段稳定性、缺失过滤规则和首次历史回填成本；不能仅凭接口名称进入实现。
+
+### 11.5 模块边界
+
+| 层级 | 模块 | 职责 | 边界约束 |
+|------|------|------|---------|
+| UI | `fund_agent/ui/cli.py` | `fund-analysis thermometer` 命令入口 | 只依赖 Service 层，不直接调用 akshare 或 Capability 计算器 |
+| Service | `ThermometerService` | 编排请求、缓存策略、数据源选择和输出模型 | 可调用 Capability，不直接访问 akshare、官方接口或文件缓存细节 |
+| Capability | `ThermometerCalculator` | PE/PB 分位数计算、温度综合、估值状态候选映射 | 纯计算，无 IO |
+| Capability | `ThermometerDataSource` | 从 akshare/中证指数获取 PE/PB 数据 | 只返回结构化数据，不缓存，不参与 UI/Service 输出格式 |
+| Capability | `ThermometerCache` | 历史数据缓存、增量更新 | 只负责存储，不计算，不决定估值状态 |
+
+现有 `ThermometerService` 应作为 Service 编排入口复用并演进；现有 `FundThermometerAdapter` 只能作为过渡公开页适配器或对比验证输入，P19 生产真源不得依赖它。
+
+### 11.6 核心类型
+
+| 类型 | 说明 |
+|------|------|
+| `ThermometerReading` | 单次温度读数：指数代码、指数名称、PE/PB 分位、综合温度、估值状态候选、数据日期、回溯窗口 |
+| `ThermometerBatchResult` | 批量温度结果：多个读数、计算时间、数据来源 |
+| `PePbHistory` | PE/PB 历史序列：日期、PE、PB、样本数量、有效样本数量 |
+| `ValuationState` | `Literal["low", "fair", "high", "unavailable"]`；自动写入 `analyze` 仅限 P19-S3 后 |
+
+### 11.7 与 `analyze` 的集成
+
+P19-S1/S2 不改变 `fund-analysis analyze` 默认行为。P19-S3 可在独立 gate 中设计并实现自动集成：
+
+- 指数基金：优先使用其跟踪指数温度；
+- 主动基金：如使用业绩基准温度，必须先定义基准到支持指数的映射和不确定性策略；
+- QDII、债券、FOF 或无可用指数映射：返回 `unavailable`，检查清单第 6 题标记为灰灯；
+- 用户显式传入 `--valuation-state` 时必须优先于自动温度计结果；
+- 自动映射必须在审计输入中保留温度值、数据日期、来源、指数代码、回溯窗口和 unavailable 原因。
+
+### 11.8 免责标注
+
+CLI 和报告输出中必须包含等价说明：
+
+```text
+本温度计基于有知有行公开方法论独立计算，非有知有行官方数据。
+计算方法：等权 PE/PB 中位数历史分位数综合。
+与有知有行官方温度计可能存在合理偏差，仅供买入前检查参考。
+```
+
+### 11.9 非目标
+
+- 不依赖有知有行页面抓取作为生产温度计真源；
+- 不追求与有知有行温度计数值精确一致；
+- 不提供短期择时信号；
+- 不支持非 A 股市场温度计算，QDII 默认 `unavailable`；
+- 不预测未来市场走势；
+- 不输出买卖建议或仓位比例。
+
+## 12. Plan Review 设计边界检查
 
 每个后续 plan review 必须显式检查：
 
