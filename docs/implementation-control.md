@@ -6,7 +6,7 @@
 > **MVP 计划书**: `fund-agent-mvp-plan.md`
 > **定性模板**: `docs/fund-analysis-template-draft.md`
 > **P4 质量体系**: `docs/implementation-control-p4.md`
-> **当前状态**: P19 data-source plan fix 部分接受但仍阻塞 implementation；下一 gate 是 P19 all-A PE source decision；P0-P17 已合入主线并在下方台账归档
+> **当前状态**: P19 all-A PE source decision 已裁决；P19-S1 scope 改为沪深300指数温度计 MVP，implementation 仍需进入 P19-S1 corrected plan review；P0-P17 已合入主线并在下方台账归档
 
 ---
 
@@ -15,8 +15,8 @@
 | Field | State |
 |---|---|
 | Branch | `main` |
-| Current gate | `P19 plan fix still blocked before implementation` |
-| Next entry point | `P19 plan fix / all-A PE source decision` |
+| Current gate | `P19-S1 corrected plan review before implementation` |
+| Next entry point | `P19-S1 corrected index thermometer MVP plan/review` |
 | Current phase | `P19 thermometer independent development planning` |
 | Design truth | `docs/design.md` (v2.2) |
 | Control truth | `docs/implementation-control.md` |
@@ -77,14 +77,15 @@
 | Latest P19 design/control artifacts | `docs/reviews/p19-design-update-20260522.md`, `docs/reviews/p19-control-update-20260522.md` |
 | Latest P19 plan review artifacts | `docs/reviews/p19-plan-review-20260522.md`, `docs/reviews/p19-plan-review-findings-20260522.md` |
 | Latest P19 plan fix artifact | `docs/reviews/p19-plan-fix-data-source-20260522.md` |
+| Latest P19 source decision artifact | `docs/reviews/p19-all-a-pe-source-decision-20260522.md` |
 | Scoped 2026-05-22 inputs | local input drafts `docs/design0522.md` and `docs/implementation-control0522.md`, plus scoped audit input `docs/repo-audit-20260522.md`; these are update inputs, not replacement truth documents |
 | Last merged PR | PR 11, merge commit `5c54994b9e7232e6144e730fff6d83d5c8ab80fb` |
 | Product baseline | P10 release-readiness merged; P11 control-doc recovery accepted; P12 closed on main; post-P12 release lane maintenance-ready; P13 direct tracking-error disclosure merged; P14-S1 index quality denominators merged; P16 enhanced-index `index_profile` benchmark-context golden rows merged; P17 tracking_error fail-closed notes and thermometer design direction merged |
 | External repo state | Current open issues: 0; PR 5 remains open and requires explicit external-action authorization to close or comment |
-| Open residuals | RR-13 duplicate `016492`, excluded `docs/repo-audit-20260521.md`, production `tracking_error` golden rows remain blocked for `001548` and P16-S1 enhanced-index candidates, future source-metadata retry with `force_refresh=True` if selected, P17-S1 accepted low-risk note precision/test residuals, P19-F1 fixed in plan docs but P19-F2/F3 still block implementation until all-A PE source or scope change is accepted, P19-S3 thermometer-to-`valuation_state` mapping remains a separate gate, future index methodology/constituents extraction, future calculated tracking-error/index-data candidates, future E1-E3/Evidence Confirm, repo-hygiene candidates D-1/D-8-C5/C-9, scoped 2026-05-22 control/repo-audit follow-ups, design-boundary checklist must appear in future plan reviews |
+| Open residuals | RR-13 duplicate `016492`, excluded `docs/repo-audit-20260521.md`, production `tracking_error` golden rows remain blocked for `001548` and P16-S1 enhanced-index candidates, future source-metadata retry with `force_refresh=True` if selected, P17-S1 accepted low-risk note precision/test residuals, P19 all-A PE source remains unresolved and full all-A market thermometer moves to P19-S5 / all-A PE source gate, P19-S1/S2 must harden akshare retry/cache/unavailable semantics, P19-S3 thermometer-to-`valuation_state` mapping remains a separate gate, future index methodology/constituents extraction, future calculated tracking-error/index-data candidates, future E1-E3/Evidence Confirm, repo-hygiene candidates D-1/D-8-C5/C-9, scoped 2026-05-22 control/repo-audit follow-ups, design-boundary checklist must appear in future plan reviews |
 | Non-goal reminder | do not introduce Dayu Host/Engine/tool loop, LLM writing, or external runtime dependency |
 
-Resume checklist: confirm current gate and next entry point; P17-S1 was merged through PR 11 at merge commit `5c54994b9e7232e6144e730fff6d83d5c8ab80fb`; local `main` is aligned to `origin/main` after preserving `backup/p17-pre-squash-main`; P19 input artifacts are `docs/p19-thermometer-technical-proposal.md`, `docs/design-md-v22-changes.md`, and `docs/p19-phase-definition.md`; `docs/design.md` v2.2 has been fused with P19 thermometer design in `docs/reviews/p19-design-update-20260522.md`; P19 plan review is recorded in `docs/reviews/p19-plan-review-20260522.md` with findings in `docs/reviews/p19-plan-review-findings-20260522.md`; P19 data-source plan fix is recorded in `docs/reviews/p19-plan-fix-data-source-20260522.md`; current gate remains blocked before implementation because all-A PE history is still unproven and `stock_zh_a_spot_em()` failed locally with `ProxyError`; next entry point is P19 all-A PE source decision: either find a verified source or explicitly change P19-S1 scope; `ThermometerService` remains the Service entry point to evolve, while current `FundThermometerAdapter` is only a public-page transitional adapter or comparison input; P19-S1/S2 must not automatically map temperature into `fund-analysis analyze`; P19-S3 is the earliest gate allowed to design automatic `valuation_state` mapping; future plan reviews must include design-boundary checks; do not delete branches, close/comment on unrelated PRs/issues, or modify external GitHub state without explicit user authorization; P16-S1 evidence acquisition remains accepted as `PARTIAL_ACCEPTED_INDEX_PROFILE_ONLY`; P15-S1A evidence acquisition remains accepted with `BLOCKED_NO_DIRECT_DISCLOSURE_EVIDENCE`; production `tracking_error` golden remains blocked for `001548` and all five P16 enhanced-index candidates; `161725` remains fixture-only; do not read or include `docs/repo-audit-20260521.md`; touching RR-13, editing source CSV, or adding unplanned golden rows still requires explicit user authorization; preserve deterministic MVP boundaries and do not introduce LLM audit, Host, Engine, tool loop, Evidence Confirm execution, calculated index series, external index adapters beyond P19 thermometer data-source protocols, methodology extraction, constituents extraction, QDII subtype redesign, or unsupported coverage targets.
+Resume checklist: confirm current gate and next entry point; P17-S1 was merged through PR 11 at merge commit `5c54994b9e7232e6144e730fff6d83d5c8ab80fb`; local `main` is aligned to `origin/main` after preserving `backup/p17-pre-squash-main`; P19 input artifacts are `docs/p19-thermometer-technical-proposal.md`, `docs/design-md-v22-changes.md`, and `docs/p19-phase-definition.md`; `docs/design.md` v2.2 has been fused with P19 thermometer design in `docs/reviews/p19-design-update-20260522.md`; P19 plan review is recorded in `docs/reviews/p19-plan-review-20260522.md` with findings in `docs/reviews/p19-plan-review-findings-20260522.md`; P19 data-source plan fix is recorded in `docs/reviews/p19-plan-fix-data-source-20260522.md`; P19 all-A PE source decision is recorded in `docs/reviews/p19-all-a-pe-source-decision-20260522.md`; current gate is P19-S1 corrected plan review before implementation because all-A PE history remains unproven and P19-S1 scope has changed to 沪深300指数温度计 MVP; all-A market thermometer is deferred to P19-S5 / all-A PE source gate; `ThermometerService` remains the Service entry point to evolve, while current `FundThermometerAdapter` is only a public-page transitional adapter or comparison input; P19-S1/S2 must not automatically map temperature into `fund-analysis analyze`; P19-S3 is the earliest gate allowed to design automatic `valuation_state` mapping; future plan reviews must include design-boundary checks; do not delete branches, close/comment on unrelated PRs/issues, or modify external GitHub state without explicit user authorization; P16-S1 evidence acquisition remains accepted as `PARTIAL_ACCEPTED_INDEX_PROFILE_ONLY`; P15-S1A evidence acquisition remains accepted with `BLOCKED_NO_DIRECT_DISCLOSURE_EVIDENCE`; production `tracking_error` golden remains blocked for `001548` and all five P16 enhanced-index candidates; `161725` remains fixture-only; do not read or include `docs/repo-audit-20260521.md`; touching RR-13, editing source CSV, or adding unplanned golden rows still requires explicit user authorization; preserve deterministic MVP boundaries and do not introduce LLM audit, Host, Engine, tool loop, Evidence Confirm execution, calculated index series, external index adapters beyond P19 thermometer data-source protocols, methodology extraction, constituents extraction, QDII subtype redesign, or unsupported coverage targets.
 
 ## 2026-05-22 Design Alignment Guide Handling
 
@@ -117,7 +118,8 @@ P19 is opened from the latest incoming materials `docs/p19-thermometer-technical
 - P19-S1/S2 may build self-owned thermometer readings and CLI behavior, but must not silently change `fund-analysis analyze`.
 - P19-S3 is the earliest gate allowed to design automatic thermometer-to-`valuation_state` mapping.
 - Existing `ThermometerService` should be evolved as the Service entry point; existing `FundThermometerAdapter` remains transitional public-page functionality or comparison input, not the P19 production truth source.
-- Plan review must verify akshare all-A PE/PB data availability, historical coverage, field stability, first-run backfill cost, cache dependency choice, and acceptable deviation against Youzhiyouxing before implementation.
+- Original plan review had to verify akshare all-A PE/PB data availability, historical coverage, field stability, first-run backfill cost, cache dependency choice, and acceptable deviation against Youzhiyouxing before implementation.
+- P19 all-A PE source decision has since found no verified all-A PE historical source in akshare 1.18.60 or directly probed matching Legulegu endpoints; P19-S1 is therefore corrected to an index thermometer MVP, and all-A market thermometer moves to P19-S5 / all-A PE source gate.
 
 ## Phase P19: 温度计独立开发
 
@@ -138,16 +140,16 @@ P19 is opened from the latest incoming materials `docs/p19-thermometer-technical
 - [x] P17 已合入 main；P18 不作为 P19 的前置阻塞项，除非后续规划重新定义 P18。
 - [x] `docs/design.md` 已融合 P19 温度计设计（§1.3、§6.3、§10、§11、§12）。
 - [x] P19 输入材料已进入 `docs/`：`p19-thermometer-technical-proposal.md`、`design-md-v22-changes.md`、`p19-phase-definition.md`。
-- [ ] `docs/reviews/p19-plan-review-20260522.md` 完成并通过 controller 裁决。
-- [ ] akshare 数据可用性验证通过：能获取全 A 股 PE/PB 字段、明确字段名、缺失过滤规则、历史覆盖和首次回填成本。
+- [x] `docs/reviews/p19-plan-review-20260522.md` 完成并通过 controller 裁决，结论为 implementation blocked until data-source plan fix。
+- [x] P19 all-A PE source decision 完成：全 A PB 可用，全 A PE 历史未找到可验证来源；P19-S1 scope 改为沪深300指数温度计 MVP。
 
 ### Exit Criteria（可验证）
 
 #### P19 整体
 
-- [ ] 全市场温度（万得全 A / 全 A 市场）计算通过单元测试。
 - [ ] 沪深300、中证500 温度计算通过单元测试。
-- [ ] CLI `fund-analysis thermometer` 输出全市场温度和指定指数温度。
+- [ ] CLI `fund-analysis thermometer --index 000300` 输出沪深300温度。
+- [ ] CLI `fund-analysis thermometer --index 000300,000905` 输出批量指数温度。
 - [ ] CLI `fund-analysis thermometer --json` 输出结构化 JSON。
 - [ ] P19-S3 后，`fund-analysis analyze` 自动获取温度并映射为 `valuation_state`，且用户显式输入优先。
 - [ ] 3 只样本基金 CLI 端到端测试通过。
@@ -156,19 +158,20 @@ P19 is opened from the latest incoming materials `docs/p19-thermometer-technical
 - [ ] ruff 检查通过。
 - [ ] 与有知有行页面温度方向对比验证通过；数值偏差只作为合理性信号，不作为精确复刻承诺。
 
-#### P19-S1 全市场温度计 MVP
+#### P19-S1 沪深300指数温度计 MVP
 
 - [ ] `ThermometerDataSource` Protocol 定义完成。
-- [ ] akshare 全 A 股 PE/PB 数据获取实现并通过测试。
-- [ ] `ThermometerCalculator` PE/PB 等权中位数计算通过测试。
+- [ ] 沪深300 PE/PB 历史数据获取实现并通过 fixture 测试。
+- [ ] `ThermometerCalculator` PE/PB 分位数和综合温度计算通过测试。
 - [ ] 历史分位数计算正确（使用已知 fixture 数据验证）。
 - [ ] `ThermometerReading` dataclass 定义完成。
 - [ ] 缓存机制工作正常；parquet 依赖选择必须先经 plan review 接受。
-- [ ] CLI `fund-analysis thermometer` 输出全市场温度。
+- [ ] CLI `fund-analysis thermometer --index 000300` 输出沪深300温度。
+- [ ] 数据源失败时输出 `unavailable`，不 fallback 到有知有行页面抓取。
 
 #### P19-S2 宽基指数温度计
 
-- [ ] 沪深300、中证500 PE/PB 历史数据获取实现。
+- [ ] 中证500 PE/PB 历史数据获取实现。
 - [ ] 指数级温度计算通过单元测试。
 - [ ] CLI 支持指定指数查询（`--index 000300`）。
 - [ ] CLI 支持批量查询（`--index 000300,000905`）。
@@ -187,6 +190,14 @@ P19 is opened from the latest incoming materials `docs/p19-thermometer-technical
 - [ ] 创业板指、科创50、中证红利、中证消费、中证医药温度计算通过测试。
 - [ ] CLI 批量查询覆盖所有支持的指数。
 
+#### P19-S5 全 A 市场温度计
+
+- [ ] 全 A PE 历史来源通过验证，包含字段、历史覆盖、缺失规则和使用许可。
+- [ ] 全 A PB `stock_a_all_pb()` 字段语义已冻结为 fixture。
+- [ ] 全 A PE/PB 历史数据获取实现并通过测试。
+- [ ] CLI `fund-analysis thermometer` 默认输出全 A 市场温度。
+- [ ] 与有知有行页面温度方向对比验证通过。
+
 ### Hard Constraints（明确不做）
 
 - 不依赖有知有行页面抓取作为生产温度计真源。
@@ -204,7 +215,7 @@ P19 is opened from the latest incoming materials `docs/p19-thermometer-technical
 
 | 依赖 | 说明 |
 |------|------|
-| akshare | 全 A 股 PE/PB 和指数估值候选数据源；项目已有依赖，但接口和字段仍需验证 |
+| akshare | 全 A PB、分市场 PE/PB、宽基指数 PE/PB 候选数据源；项目已有依赖；全 A PE 历史仍未找到可验证来源 |
 | pandas | 数据处理；项目已有依赖 |
 | pyarrow 或 fastparquet | parquet 缓存候选依赖；是否新增必须由 P19 plan review 接受 |
 
@@ -212,10 +223,10 @@ P19 is opened from the latest incoming materials `docs/p19-thermometer-technical
 
 | 风险 | Owner | 处理方式 |
 |------|-------|----------|
-| akshare 全 A 股 PE/PB 接口稳定性 | P19 plan review / Capability | 先验证真实接口、字段、缺失行为和历史覆盖，再进入 implementation |
-| 等权计算与有知有行结果偏差 | P19-S1 验证 | 标注"方法论复现，非官方数据"；方向一致是主目标 |
-| 历史数据首次下载耗时长 | P19-S1 | 先估算耗时与存储量，再决定缓存格式和增量策略 |
-| 中证指数 API 访问限制 | P19-S2 | 以 Protocol 封装，明确 fallback 和 unavailable 语义 |
+| akshare 全 A 股 PE/PB 接口稳定性 | P19-S5 / Capability | 全 A PB 可用；全 A PE 历史未找到可验证来源；不能实现全 A PE+PB 温度计前置于 source gate |
+| 等权计算与有知有行结果偏差 | P19-S1/S2 验证 | 标注"方法论复现，非官方数据"；方向一致是主目标 |
+| 历史数据首次下载耗时长 | P19-S1/S5 | 指数温度计约 5k 行级别低成本；全 A 若逐股重建必须另行接受耗时、存储量和增量策略 |
+| akshare / 乐咕乐股访问抖动 | P19-S1/S2 | 以 Protocol 封装，明确 retry/cache/unavailable 语义；禁止 fallback 到有知有行页面抓取 |
 | 自动 `valuation_state` 影响报告判断 | P19-S3 | 单独 gate，保留用户显式输入优先级和审计证据 |
 
 ### Non-goal Reminder
@@ -227,8 +238,8 @@ P19 is opened from the latest incoming materials `docs/p19-thermometer-technical
 
 ### Resume Checklist
 
-- 确认当前 gate 是 P19 plan review。
-- 先完成 akshare 数据可用性和历史回填成本验证。
+- 确认当前 gate 是 P19-S1 corrected plan review。
+- P19-S1 scope 已改为沪深300指数温度计 MVP；全 A 市场温度计等待 P19-S5 / all-A PE source gate。
 - 计划审查必须回答 `ThermometerService` / `FundThermometerAdapter` 复用策略、首次历史下载耗时和存储量预估、等权计算与有知有行结果偏差接受标准。
 - P19-S1/S2 不接入 `fund-analysis analyze` 自动估值；P19-S3 才处理自动 `valuation_state`。
 - 不修改外部 GitHub 状态（PR/issue）除非显式授权。
@@ -311,6 +322,7 @@ Rejected or corrected from the input:
 | `P19 design/control update` | accepted / pending plan review | `docs/reviews/p19-design-update-20260522.md`, `docs/reviews/p19-control-update-20260522.md` | local docs update | `docs/design.md` v2.2 fused with P19 thermometer design; `docs/implementation-control.md` opened P19; controller corrected P19-S3 automatic valuation mapping as separate gate and required akshare feasibility validation before implementation | P19 plan review | data-source feasibility + plan review |
 | `P19 plan review / data-source feasibility` | blocked before implementation | `docs/reviews/p19-plan-review-20260522.md`, `docs/reviews/p19-plan-review-findings-20260522.md` | local review artifacts | akshare `1.18.60` verified in `.venv`; proposed `stock_a_lg_indicator` and `index_value_hist_funddb` are missing; `stock_a_all_pb` works for all-A PB; index PE/PB APIs work for 沪深300; all-A PE history is unproven; `stock_zh_a_spot_em` failed with `ProxyError`; parquet dependency not declared | P19 plan fix | data-source plan correction |
 | `P19 data-source plan fix` | partial accepted / still blocked | `docs/reviews/p19-plan-fix-data-source-20260522.md` | local plan docs update | `docs/p19-thermometer-technical-proposal.md` and `docs/p19-phase-definition.md` corrected to remove missing-interface assumptions; all-A PB and broad-index PE/PB paths documented as verified candidates; all-A PE history remains unresolved | all-A PE source decision | find source or change P19-S1 scope |
+| `P19 all-A PE source decision` | accepted / scope changed | `docs/reviews/p19-all-a-pe-source-decision-20260522.md` | local plan docs update | Direct akshare/Legulegu checks found no verified all-A PE historical source; PB-only all-A output rejected as incomplete; P19-S1 changed to 沪深300指数温度计 MVP, P19-S2 to 中证500, and full all-A market thermometer moved to P19-S5 / all-A PE source gate | P19-S1 corrected plan review | index thermometer MVP plan/review |
 
 ## Phase History Index
 
@@ -342,11 +354,11 @@ Rejected or corrected from the input:
 | Thermometer self-owned design direction | accepted | [Archive: P17](#archive-p17) | `docs/reviews/thermometer-self-owned-design-direction-20260522.md` | `8d73e3a` | `docs/design.md` v2.2 accepts future project-owned thermometer and preserves explicit `valuation_state` gate | draft PR gate pending user authorization |
 | P17 draft PR gate / PR review | accepted | [Archive: P17](#archive-p17) | `https://github.com/bill20232033cc/fund-agent/pull/11`, `docs/reviews/p17-pr-review-mimo-20260522.md`, `docs/reviews/p17-pr-review-glm-20260522.md`, `docs/reviews/p17-pr-review-controller-judgment-20260522.md` | local PR review artifacts pending push | PR #11 is draft/open, mergeState `CLEAN`, CI `test` success; MiMo/GLM `PASS_WITH_FINDINGS`; controller accepted no blockers | merge / mark-ready gate requires explicit authorization |
 | P17 merge / main closeout | merged | [Archive: P17](#archive-p17) | `docs/reviews/p17-main-branch-closeout-20260522.md`, `https://github.com/bill20232033cc/fund-agent/pull/11` | PR 11 merge `5c54994b9e7232e6144e730fff6d83d5c8ab80fb` | PR #11 merged by squash; local `main` aligned to `origin/main` | post-P17 follow-up planning |
-| P19 thermometer independent development | blocked before implementation | [Archive: P19](#archive-p19) | `docs/p19-thermometer-technical-proposal.md`, `docs/design-md-v22-changes.md`, `docs/p19-phase-definition.md`, `docs/reviews/p19-design-update-20260522.md`, `docs/reviews/p19-control-update-20260522.md`, `docs/reviews/p19-plan-review-20260522.md`, `docs/reviews/p19-plan-review-findings-20260522.md`, `docs/reviews/p19-plan-fix-data-source-20260522.md` | local docs update | Design/control fused; missing-interface assumptions fixed; all-A PE history remains unresolved | P19 all-A PE source decision |
+| P19 thermometer independent development | scope corrected / plan review pending | [Archive: P19](#archive-p19) | `docs/p19-thermometer-technical-proposal.md`, `docs/design-md-v22-changes.md`, `docs/p19-phase-definition.md`, `docs/reviews/p19-design-update-20260522.md`, `docs/reviews/p19-control-update-20260522.md`, `docs/reviews/p19-plan-review-20260522.md`, `docs/reviews/p19-plan-review-findings-20260522.md`, `docs/reviews/p19-plan-fix-data-source-20260522.md`, `docs/reviews/p19-all-a-pe-source-decision-20260522.md` | local docs update | Design/control fused; missing-interface assumptions fixed; all-A PE history unresolved and moved to P19-S5; P19-S1 corrected to 沪深300指数温度计 MVP | P19-S1 corrected plan review |
 
 ## Archive: P19
 
-P19 starts from `docs/p19-thermometer-technical-proposal.md`, `docs/design-md-v22-changes.md`, and `docs/p19-phase-definition.md`. The design update is accepted with corrections in `docs/reviews/p19-design-update-20260522.md`: current `docs/design.md` was already v2.2 after P17, so P19 is a v2.2 fusion; P19-S1/S2 may build self-owned thermometer readings and CLI behavior but must not silently change `fund-analysis analyze`; P19-S3 is the earliest gate allowed to design automatic thermometer-to-`valuation_state` mapping; existing `ThermometerService` remains the Service entry point, while `FundThermometerAdapter` remains a transitional public-page adapter or comparison input. P19 control update is recorded in `docs/reviews/p19-control-update-20260522.md`. P19 plan review is recorded in `docs/reviews/p19-plan-review-20260522.md` with findings in `docs/reviews/p19-plan-review-findings-20260522.md`; implementation was blocked because proposed akshare functions were missing, all-A PE history was unproven, and realtime all-A spot fallback failed locally with `ProxyError`. P19 data-source plan fix is recorded in `docs/reviews/p19-plan-fix-data-source-20260522.md`: missing-interface assumptions were removed from the proposal, all-A PB and broad-index PE/PB verified candidates were documented, but all-A PE history remains unresolved. The next gate is P19 all-A PE source decision.
+P19 starts from `docs/p19-thermometer-technical-proposal.md`, `docs/design-md-v22-changes.md`, and `docs/p19-phase-definition.md`. The design update is accepted with corrections in `docs/reviews/p19-design-update-20260522.md`: current `docs/design.md` was already v2.2 after P17, so P19 is a v2.2 fusion; P19-S1/S2 may build self-owned thermometer readings and CLI behavior but must not silently change `fund-analysis analyze`; P19-S3 is the earliest gate allowed to design automatic thermometer-to-`valuation_state` mapping; existing `ThermometerService` remains the Service entry point, while `FundThermometerAdapter` remains a transitional public-page adapter or comparison input. P19 control update is recorded in `docs/reviews/p19-control-update-20260522.md`. P19 plan review is recorded in `docs/reviews/p19-plan-review-20260522.md` with findings in `docs/reviews/p19-plan-review-findings-20260522.md`; implementation was blocked because proposed akshare functions were missing, all-A PE history was unproven, and realtime all-A spot fallback failed locally with `ProxyError`. P19 data-source plan fix is recorded in `docs/reviews/p19-plan-fix-data-source-20260522.md`: missing-interface assumptions were removed from the proposal, all-A PB and broad-index PE/PB verified candidates were documented, but all-A PE history remained unresolved. P19 all-A PE source decision is recorded in `docs/reviews/p19-all-a-pe-source-decision-20260522.md`: no verified all-A PE historical source was found, PB-only all-A output was rejected as an incomplete thermometer, P19-S1 was corrected to 沪深300指数温度计 MVP, and full all-A market thermometer moved to P19-S5 / all-A PE source gate. The next gate is P19-S1 corrected plan review.
 
 ## P12 Current Phase Notes
 
@@ -376,7 +388,7 @@ Success signals for the next step: P14-S1 plan defines exact FQ2 priority, compa
 | Future E1-E3 / Evidence Confirm | Future audit architecture phase | Keep separate from deterministic closeout and do not introduce LLM/Dayu runtime without a dedicated design |
 | Future evidence-display / ITEM_RULE cleanup | Future evidence-display or rule-addition slice | Long-anchor truncation/grouping, future ITEM_RULE expansion, and duplicate chapter-mismatch C2 noise remain out of P12 scope |
 | Repo-hygiene candidates D-1, D-8/C-5, C-9 | Future repo-hygiene phase if selected | Keep as open candidates from `docs/repo-audit-20260521.md`; do not mark them fully covered by P10/P11/P12 |
-| P19 thermometer data feasibility | P19 plan review | Verify akshare all-A PE/PB interface, field names, missing-value behavior, historical coverage, first-run backfill cost, cache dependency choice, and acceptable Youzhiyouxing deviation before implementation |
+| P19 thermometer data feasibility | P19-S1 / P19-S5 plan review | For P19-S1/S2 verify supported index PE/PB fields, cache choice, retry/unavailable behavior, and acceptable Youzhiyouxing deviation; for P19-S5 separately verify all-A PE source before any all-market implementation |
 | P19 automatic `valuation_state` integration | P19-S3 | Keep out of P19-S1/S2; preserve user explicit input priority, unavailable gray-light semantics, and audit evidence before changing `fund-analysis analyze` |
 | P13-S1 planning constraints | P13-S1 plan/review | Resolve tracking-error authority, service override migration, external index adapter upper bound, methodology/constituents availability, positive acceptance criteria, and index fixture strategy before implementation |
 | P13 implementation residuals | P13 implementation / future P13 follow-up | Direct disclosure may proceed; calculated tracking error, external index series, methodology extraction, constituents extraction, and golden-answer promotion remain out of first implementation unless explicitly re-scoped |

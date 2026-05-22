@@ -10,8 +10,7 @@
 
 ### Goal
 
-独立实现温度计功能，基于有知有行公开方法论复现，不依赖有知有行页面抓取。
-为 `fund-analysis analyze` 提供估值状态（low/fair/high）自动判断能力。
+独立实现温度计功能，基于有知有行公开方法论复现，不依赖有知有行页面抓取。P19-S1/S2 先交付项目内自建指数温度计和 CLI 读数；P19-S3 才允许在独立 gate 中为 `fund-analysis analyze` 提供估值状态（low/fair/high/unavailable）自动判断能力。全 A 市场温度计保留为目标，但必须等待全 A PE 历史来源验证后进入 P19-S5 / all-A PE source gate。
 
 ### Design Truth Update
 
@@ -25,37 +24,37 @@
 - [ ] P18 已合入 main（或决定并行开发）
 - [ ] design.md 已更新至 v2.2（§1.3、§6.3、§10、§11）
 - [ ] `p19-thermometer-technical-proposal.md` 已通过 plan review
-- [ ] akshare 数据可用性验证通过：全 A PB 已有可用候选；全 A PE 历史必须找到可验证来源，或 P19-S1 scope 变更已通过 design/control gate
+- [x] akshare 数据可用性裁决完成：全 A PB 已有可用候选；全 A PE 历史未找到可验证来源；P19-S1 scope 改为沪深 300 指数温度计 MVP
 
 ### Exit Criteria（可验证）
 
 #### P19 整体
 
-- [ ] 全市场温度（万得全 A）计算通过单元测试
 - [ ] 沪深300、中证500 温度计算通过单元测试
-- [ ] CLI `fund-analysis thermometer` 输出全市场温度和指定指数温度
+- [ ] CLI `fund-analysis thermometer --index 000300` 输出沪深300温度
+- [ ] CLI `fund-analysis thermometer --index 000300,000905` 输出批量指数温度
 - [ ] CLI `fund-analysis thermometer --json` 输出结构化 JSON
-- [ ] `fund-analysis analyze` 自动获取温度并映射为 `--valuation-state`
+- [ ] P19-S3 后，`fund-analysis analyze` 自动获取支持指数温度并映射为 `valuation_state`，且用户显式输入优先
 - [ ] 3 只样本基金 CLI 端到端测试通过
 - [ ] 程序审计 P1/P2/P3/C2/L1/R1/R2 全部通过
 - [ ] 全量测试套件通过（`pytest -q`）
 - [ ] ruff 检查通过
 - [ ] 与有知有行页面温度方向对比验证通过（低估/中估/高估方向一致）
 
-#### P19-S1 全市场温度计 MVP
+#### P19-S1 沪深300指数温度计 MVP
 
 - [ ] `ThermometerDataSource` Protocol 定义完成
-- [ ] akshare 全 A PB 数据获取实现并通过测试
-- [ ] 全 A PE 历史来源已验证，或 S1 scope 变更已通过 design/control gate
-- [ ] `ThermometerCalculator` PE/PB 等权中位数计算通过测试
+- [ ] 沪深300 PE/PB 历史数据获取实现并通过 fixture 测试
+- [ ] `ThermometerCalculator` PE/PB 分位数和综合温度计算通过测试
 - [ ] 历史分位数计算正确（使用已知 fixture 数据验证）
 - [ ] `ThermometerReading` dataclass 定义完成
-- [ ] 缓存机制工作正常（parquet 格式，增量更新）
-- [ ] CLI `fund-analysis thermometer` 输出全市场温度
+- [ ] 缓存机制工作正常（parquet 格式或接受的替代格式，增量更新）
+- [ ] CLI `fund-analysis thermometer --index 000300` 输出沪深300温度
+- [ ] 数据源失败时输出 `unavailable`，不 fallback 到有知有行页面抓取
 
 #### P19-S2 宽基指数温度计
 
-- [ ] 沪深300、中证500 PE/PB 历史数据获取实现
+- [ ] 中证500 PE/PB 历史数据获取实现
 - [ ] 指数级温度计算通过单元测试
 - [ ] CLI 支持指定指数查询（`--index 000300`）
 - [ ] CLI 支持批量查询（`--index 000300,000905`）
@@ -73,6 +72,14 @@
 
 - [ ] 创业板指、科创50、中证红利、中证消费、中证医药 温度计算通过测试
 - [ ] CLI 批量查询覆盖所有支持的指数
+
+#### P19-S5 全 A 市场温度计
+
+- [ ] 全 A PE 历史来源通过验证，包含字段、历史覆盖、缺失规则和使用许可
+- [ ] 全 A PB `stock_a_all_pb()` 字段语义已冻结为 fixture
+- [ ] 全 A PE/PB 历史数据获取实现并通过测试
+- [ ] CLI `fund-analysis thermometer` 默认输出全 A 市场温度
+- [ ] 与有知有行页面温度方向对比验证通过
 
 ### Hard Constraints（明确不做）
 
@@ -98,10 +105,10 @@
 
 | 风险 | Owner | 处理方式 |
 |------|-------|----------|
-| akshare 全 A 股 PE/PB 接口稳定性 | Capability | 全 A PB 可走 `stock_a_all_pb()`；全 A PE 历史仍需 plan fix；封装 Protocol，支持多源切换 |
+| akshare 全 A 股 PE/PB 接口稳定性 | Capability | 全 A PB 可走 `stock_a_all_pb()`；全 A PE 历史未找到可验证来源；全 A 市场温度计移至 P19-S5 / all-A PE source gate |
 | 等权计算与有知有行结果偏差 | P19-S1 验证 | 文档标注"方法论复现"，方向一致即可 |
-| 历史数据首次下载耗时长 | P19-S1 | 缓存 + 增量更新 |
-| 中证指数 API 访问限制 | P19-S2 | akshare fallback |
+| 历史数据首次下载耗时长 | P19-S1/S5 | 指数温度计低成本；全 A 若逐股重建必须另行接受耗时、存储量和增量策略 |
+| akshare / 乐咕乐股访问抖动 | P19-S1/S2 | Protocol 封装、fixture 测试、retry/cache/unavailable 语义；禁止 fallback 到有知有行页面抓取 |
 
 ### Non-goal Reminder
 
@@ -114,5 +121,6 @@
 - 确认当前 gate 和 next entry point
 - P18 已合入 main 或决定并行
 - design.md 已更新至 v2.2
+- P19-S1 已改为沪深300指数温度计 MVP；全 A 市场温度计等待 P19-S5 / all-A PE source gate
 - 不修改外部 GitHub 状态（PR/issue）除非显式授权
 - 保持确定性 MVP 边界
