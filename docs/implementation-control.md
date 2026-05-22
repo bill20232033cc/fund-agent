@@ -1,10 +1,12 @@
 # 基金行为教练 Agent —— 实施总控文档
 
-> **版本**: v1.0
-> **日期**: 2026-05-16
+> **版本**: v1.1
+> **日期**: 2026-05-22
 > **设计真源**: `docs/design.md`
 > **MVP 计划书**: `fund-agent-mvp-plan.md`
-> **定性模板**: `fund-analysis-template-draft.md`
+> **定性模板**: `docs/fund-analysis-template-draft.md`
+> **P4 质量体系**: `docs/implementation-control-p4.md`
+> **当前状态**: P15-S1A `tracking_error` evidence-acquisition implementation；P0-P14 已合入主线并在下方台账归档
 
 ---
 
@@ -49,12 +51,33 @@
 | Latest post-P14 planning artifacts | `docs/reviews/post-p14-follow-up-planning-20260522.md`, `docs/reviews/post-p14-follow-up-plan-review-mimo-20260522.md`, `docs/reviews/post-p14-follow-up-plan-review-glm-20260522.md`, `docs/reviews/post-p14-follow-up-plan-review-controller-judgment-20260522.md` |
 | Latest P15-S1 plan artifacts | `docs/reviews/p15-s1-production-tracking-error-golden-evidence-plan-20260522.md`, `docs/reviews/p15-s1-plan-review-mimo-20260522.md`, `docs/reviews/p15-s1-plan-review-glm-20260522.md`, `docs/reviews/p15-s1-plan-review-controller-judgment-20260522.md` |
 | Latest P15-S1A plan artifacts | `docs/reviews/p15-s1a-tracking-error-source-contract-evidence-acquisition-plan-20260522.md`, `docs/reviews/p15-s1a-plan-review-mimo-20260522.md`, `docs/reviews/p15-s1a-plan-review-glm-20260522.md`, `docs/reviews/p15-s1a-plan-review-controller-judgment-20260522.md` |
+| Latest design/control fusion artifacts | `docs/reviews/repo-audit-20260522-controller-judgment.md`, `docs/reviews/implementation-control0522-controller-judgment.md` |
+| Scoped 2026-05-22 inputs | local input drafts `docs/design0522.md` and `docs/implementation-control0522.md`, plus scoped audit input `docs/repo-audit-20260522.md`; these are update inputs, not replacement truth documents |
 | Last merged PR | PR 9, merge commit `746bfda7975e7c6922e80ab8c7a3e89cba3c6822` |
 | Product baseline | P10 release-readiness merged; P11 control-doc recovery accepted; P12 closed on main; post-P12 release lane maintenance-ready; P13 direct tracking-error disclosure merged; P14-S1 index quality denominators merged |
-| Open residuals | RR-13 duplicate `016492`, excluded `docs/repo-audit-20260521.md`, P15-S1A tracking_error evidence acquisition, enhanced-index production golden expansion, future index methodology/constituents extraction, future calculated tracking-error/index-data candidates, future E1-E3/Evidence Confirm, repo-hygiene candidates D-1/D-8-C5/C-9 |
+| External repo state | Current open issues: 0; PR 5 remains open and requires explicit external-action authorization to close or comment |
+| Open residuals | RR-13 duplicate `016492`, excluded `docs/repo-audit-20260521.md`, P15-S1A tracking_error evidence acquisition, enhanced-index production golden expansion, future index methodology/constituents extraction, future calculated tracking-error/index-data candidates, future E1-E3/Evidence Confirm, repo-hygiene candidates D-1/D-8-C5/C-9, scoped 2026-05-22 control/repo-audit follow-ups |
 | Non-goal reminder | do not introduce Dayu Host/Engine/tool loop, LLM writing, or external runtime dependency |
 
 Resume checklist: confirm current gate and next entry point; next specialist work is P15-S1A `tracking_error` evidence-acquisition implementation; implementation may only create the reviewed evidence artifact for `001548` 2024 annual-report direct observed `tracking_error` disclosure, using `FundDocumentRepository` / `FundDataExtractor` boundaries, and must not edit production golden rows; do not read or include `docs/repo-audit-20260521.md`; deleting branches, commenting externally, creating/modifying external issues, touching RR-13, editing source CSV, or adding golden rows still requires explicit user authorization; preserve deterministic MVP boundaries and do not introduce LLM audit, Host, Engine, tool loop, Evidence Confirm execution, calculated index series, external index adapters, methodology extraction, constituents extraction, or QDII subtype redesign.
+
+## 2026-05-22 Control Fusion Summary
+
+Local input draft `docs/implementation-control0522.md` is accepted as a scoped control-update input, not as a wholesale replacement for this control truth. The useful first-principles contribution is a compact P0-P14 capability and debt summary; the unsafe part is treating the project as idle after P14 and overwriting the active P15-S1A gate.
+
+Accepted into this control record:
+
+- Header metadata now reflects the current design truth, template path, P4 quality-control document, and P15-S1A active status.
+- P0-P14 are treated as merged/mainline baseline, while detailed proof remains in the existing Active Gate Ledger, Phase History Index, and Archive sections.
+- Current repo state is recorded separately from phase history: open issues are currently 0; PR 5 remains open and cannot be closed without explicit external-action authorization.
+- Technical-debt items from the 2026-05-22 inputs are tracked as future repo-hygiene candidates and must be re-verified from code before source edits.
+
+Rejected or corrected from the input:
+
+- Do not replace the Startup Packet with a static "MVP stable / v2 planning" state; current phaseflow truth is P15-S1A evidence-acquisition implementation.
+- Do not reintroduce external Dayu-Agent runtime as a v2 default. Dayu remains methodology/reference only; future runner, trace, tool registry, or LLM audit must be designed inside project boundaries.
+- Do not use PR counts, commit counts, or old PR status as control facts unless verified against GitHub at the time of the gate.
+- Do not collapse durable review artifacts or historical gate evidence into a short summary; phaseflow resume requires preserved artifact paths, commits, validation, residual owners, and reviewer limitations.
 
 ## Active Gate Ledger
 
