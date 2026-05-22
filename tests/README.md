@@ -12,7 +12,7 @@ CI 当前固定 Python 3.11，使用 `uv sync --extra dev --frozen` 安装锁定
 - `tests/fund/pdf/test_downloader.py`：PDF 下载 helper 测试，验证内部缓存命中、损坏缓存刷新、非 PDF 响应拒绝、强制刷新下载和年报 URL 组装
 - `tests/fund/pdf/test_parser.py`：章节定位测试，覆盖 `§3` 正文命中、目录误判回归和偏移单调递增
 - `tests/fund/extractors/test_profile.py`：基础画像 extractor 测试，覆盖分类先行、`classified_fund_type` / `classification_basis` 稳定输出、纯指数/指数增强/非指数 `index_profile`，以及费率/基准/规模/经理 anchor
-- `tests/fund/extractors/test_performance.py`：`§3` 表现 extractor 测试，覆盖冒号行与年度表现表中的净值增长率/基准收益率 anchor、投资者收益率 `direct / estimated / missing` 三态，以及跟踪误差直接披露、目标值、模糊文本和标准差误用防护
+- `tests/fund/extractors/test_performance.py`：`§3` 表现 extractor 测试，覆盖冒号行与年度表现表中的净值增长率/基准收益率 anchor、投资者收益率 `direct / estimated / missing` 三态，以及跟踪误差直接披露、目标/限制、mixed actual/target、manager narrative、benchmark-only、standard-deviation-only、unparseable、table/text inconsistency、多候选、表格多候选、`§2` fallback 和早期 blocker 后继续扫描
 - `tests/fund/extractors/test_manager_ownership.py`：`§4/§8/§9` 管理人/持有人 extractor 测试，覆盖编号标题策略文本、换手率、持有披露表、跨页持有人结构和 `missing` 路径
 - `tests/fund/extractors/test_holdings_share_change.py`：`§8/§10` 持仓/份额 extractor 测试，覆盖前十大重仓、行业分布、净变动表、申购/赎回拆分表、多份额列选择、非 A 份额不默认 A 类、歧义多列表 missing、利润变动表误命中回归和表格型 anchor
 - `tests/fund/test_extraction_snapshot.py`：P4-S1/P5-S3/P13/P14-S1 精选基金池字段级抽取快照测试，覆盖 CSV 校验、snapshot schema、`comparable_values` 白名单子字段、`index_profile` / `tracking_error` dataclass 子字段序列化、summary 重复代码标红、单基金失败继续和 `004393` known failure 捕获；使用 fake extractor，不触发真实网络或 PDF

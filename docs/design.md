@@ -1,8 +1,9 @@
 # 基金行为教练 Agent —— 设计真源文档
 
-> **版本**: v2.0
+> **版本**: v2.2
 > **日期**: 2026-05-22
-> **状态**: 已按 2026-05-22 设计更新输入融合，并按 P14 / P15 总控事实校正
+> **状态**: 已按 2026-05-22 设计更新输入融合，并按 P14 / P15 / P16 / post-P16 / thermometer self-owned direction 设计对齐裁决校正
+> **变更摘要**: v2.2 统一温度计口径：当前公开页查询是过渡实现，长期应开发项目内自建温度计；自动映射 `valuation_state` 仍需独立规则设计
 > **关联文档**: `docs/implementation-control.md`（实施总控）、`fund-agent-mvp-plan.md`（MVP 计划书）、`docs/fund-analysis-template-draft.md`（定性模板 v2）、`docs/audit-alignment.md`（审计机制对照研究）
 
 ⚠️ **重要声明**：本文档记录已接受的设计意图和当前实现事实。若本文档、实施总控和代码发生冲突，以当前代码事实与最新 control-doc reconciliation artifact 为准，并应及时回写本文档；不得长期保留“设计未来”口径冒充已实现状态。
@@ -30,7 +31,8 @@
 
 - 不做全市场横向比较（MVP 在精选基金池内做质量门控）
 - 不做实时行为偏差检测（改为买入前检查清单）
-- 不做温度计自建（MVP 使用有知有行公开页面数据 + 缓存）
+- 不把当前有知有行公开页面抓取视为长期温度计真源（当前只读查询是过渡能力；后续应在本项目内开发自建温度计计算与数据契约）
+- 不把温度计数值隐式自动映射为 `valuation_state`（映射阈值、适用范围、证据来源和缺失策略必须单独设计并通过 gate）
 - 不做组合管理（v2 阶段）
 - 不输出买卖建议或仓位比例
 - 不把外部 Dayu Host/Engine/tool loop 作为主链路依赖或运行时接口（pyproject.toml 已移除 dayu-agent 依赖）
@@ -476,8 +478,13 @@ C（Cost）= 管理费 + 托管费 + 换手率 × 0.3%
 |------|------|---------|---------|
 | 基金年报 PDF | EID/证监会资本市场统一信息披露平台主源 + Eastmoney fallback | httpx 下载 | `documents/sources.py` |
 | 基金净值序列 | 天天基金 / akshare | API | `data/nav_data.py` |
-| 温度计数据 | 有知有行公开页面 | httpx + HTML 解析 | `data/thermometer.py` |
+| 温度计快照（当前） | 有知有行公开页面 | httpx + HTML 解析 | `data/thermometer.py` |
+| 自建温度计（后续方向） | 项目内定义的数据源与计算口径 | 待设计；必须显式记录输入、公式、缓存、失败语义与证据来源 | 待后续 phase |
 | 精选基金池 | 手动维护 CSV | 文件读取 | `extraction_snapshot.py` |
+
+当前温度计能力通过 `ThermometerService` 与 `fund-analysis thermometer` CLI 暴露，只做有知有行公开页只读查询与缓存复用。这是过渡实现，不是长期设计终点。后续应开发项目内自建温度计能力，至少明确指数/市场覆盖范围、估值指标、分位数窗口、数据源可靠性、缓存策略、不可用状态和测试夹具。
+
+即使自建温度计落地，也不得默认把温度计数值自动映射为买入前检查清单的 `valuation_state`，也不得静默参与 `fund-analysis analyze` 默认分析判断；映射规则必须单独设计，并保留用户显式输入优先级、缺失时灰灯/不可用语义和审计证据。
 
 ### 6.4 年报章节映射
 
@@ -650,6 +657,19 @@ Golden Answer pipeline 由预填底稿、人工复核、strict JSON 构建和 co
 以下结构用于说明当前主要模块边界，不作为逐文件 inventory；新增 helper、review artifact 和运行产物以代码与
 `docs/implementation-control.md` 为准。
 
+### 9.0 CLI 命令清单
+
+| 命令 | 功能 | 当前状态 |
+|------|------|----------|
+| `fund-analysis analyze` | 主分析入口 | 已实现；默认运行 quality gate，低质量以结构化错误阻断 |
+| `fund-analysis checklist` | 独立检查清单入口 | 占位；当前提示用户先使用 `analyze` 并以非零状态退出 |
+| `fund-analysis thermometer` | 温度计查询 | 当前已实现有知有行公开页 read-only 查询；后续应迁移为项目内自建温度计口径；不自动映射估值状态 |
+| `fund-analysis extraction-snapshot` | 精选基金池字段级抽取快照 | 已实现 |
+| `fund-analysis extraction-score` | 字段级 coverage / traceability / correctness 评分 | 已实现 |
+| `fund-analysis golden-prefill` | Golden answer 预填底稿 | 已实现 |
+| `fund-analysis golden-build` | Golden answer Markdown 到 strict JSON 构建 | 已实现 |
+| `fund-analysis quality-gate` | 对 score JSON 运行质量门控 | 已实现 |
+
 ```text
 fund-agent/
 ├── fund_agent/
@@ -792,7 +812,7 @@ fund-agent/
 | 年报来源 | EID/证监会资本市场统一信息披露平台主源 + Eastmoney fallback | Eastmoney 作为同级主源 | 官方来源优先；schema drift、identity mismatch、integrity error 必须 fail-closed |
 | 审计策略 | MVP 程序审计（P1/P2/P3/C2/L1/R1/R2） | 三层全实现 | 降低复杂度，v2 引入 LLM 审计 |
 | 质量门控 | FQ0-FQ6 规则 + golden answer correctness | 无质量门控 | 确保精选基金池抽取质量可量化追踪 |
-| 温度计 | 有知有行公开页面 + httpx | 自建计算 | 数据源依赖有知有行，自建留到 v3 |
+| 温度计 | 当前保留有知有行公开页面 read-only 查询；后续开发项目内自建计算口径 | 永久依赖有知有行页面抓取 | 公开页抓取不是长期稳定真源；自建能力必须在项目边界内定义数据源、公式、缓存、失败语义和审计证据 |
 | 依赖注入 | Protocol + 构造函数默认值 | 框架级 DI | 轻量级，不引入额外依赖，测试友好 |
 | ITEM_RULE | 代码内硬编码 manifest | 外部 YAML 配置 | 规则数量少（4 条），代码内定义可获类型检查 |
 | 模板渲染 | 纯 Python 函数 | Jinja2 / LLM | MVP 确定性管线，避免模板引擎或 LLM 幻觉 |
@@ -801,3 +821,13 @@ fund-agent/
 | 来源失败分类 | P8-S3 五类失败 + fallback 资格判定 | 统一 fallback 策略 | 区分"可重试失败"与"契约违背"，防止错误传播 |
 | ITEM_RULE 审计 | P12 后渲染校验（`rendered_segment_present`） | 仅前置校验 | 确保渲染后内容符合 ITEM_RULE 约束 |
 | 跟踪误差披露 | P13/P14/P15 分阶段推进 | 可选且不可观测 | 指数基金核心指标；P13 建立结构化直接披露路径，P14 将其纳入指数/增强指数条件质量分母，P15 先获取 reviewed direct evidence，再决定是否进入 production golden |
+
+## 11. Plan Review 设计边界检查
+
+每个后续 plan review 必须显式检查：
+
+- 是否违反 §1.3 非目标；
+- 是否保持 UI / Service / Capability / Runtime / Engine 边界；
+- 生产年报访问是否仍只通过 `FundDocumentRepository` / `FundDataExtractor`；
+- 是否引入外部 Dayu runtime、LLM 写作、Evidence Confirm、计算型 tracking error、外部指数适配器或隐藏在 `extra_payload` 的显式参数；
+- success signal 是否可验证，且不会激励在缺少直接证据时错误接受数据。

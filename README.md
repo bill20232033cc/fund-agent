@@ -118,9 +118,12 @@ fund-analysis quality-gate \
 
 尚未接入：
 
-- 温度计数据自动映射为 `analyze --valuation-state`
 - 独立 `fund-analysis checklist` Service 命令
 - 真实 PDF/network 路径的普通 pytest gate；当前保留为显式 `--run` smoke
+
+明确非目标：
+
+- 温度计数据不自动映射为 `analyze --valuation-state`；分析报告仍要求用户显式传入估值状态
 
 ## 本地验证
 
