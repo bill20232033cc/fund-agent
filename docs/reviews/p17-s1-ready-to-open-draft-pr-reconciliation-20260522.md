@@ -4,7 +4,7 @@
 
 `READY_TO_OPEN_DRAFT_PR_PENDING_USER_AUTHORIZATION`
 
-P17-S1 is locally ready for a draft PR. The branch is `main`, upstream is `origin/main`, and local `main` is 6 commits ahead of `origin/main`. The current gate is local reconciliation only; pushing, creating a draft PR, commenting on GitHub, marking ready, merging, or deleting branches still requires explicit user authorization.
+P17-S1 is locally ready for a draft PR. The branch is `main`, upstream is `origin/main`, and local `main` is 7 commits ahead of `origin/main`. The current gate is local reconciliation only; pushing, creating a draft PR, commenting on GitHub, marking ready, merging, or deleting branches still requires explicit user authorization.
 
 ## Included Commits
 
@@ -16,10 +16,11 @@ P17-S1 is locally ready for a draft PR. The branch is `main`, upstream is `origi
 | `d069862` | `fix: harden tracking error ambiguity notes` | Implements P17-S1 extractor hardening, focused tests, tests README sync, code review artifacts, and controller judgment. |
 | `40e8175` | `docs: record p17 s1 implementation commit` | Backfills implementation commit hash in control truth. |
 | `2327309` | `docs: accept p17 s1 aggregate review` | Records aggregate deepreview artifacts and moves control state to this reconciliation gate. |
+| `2b34713` | `docs: prepare p17 s1 draft pr` | Records this PR inclusion/exclusion reconciliation and moves control state to draft PR gate pending user authorization. |
 
 ## Included File Set
 
-`origin/main..HEAD` contains 26 tracked files:
+`origin/main..HEAD` contains 27 tracked files:
 
 - `README.md`
 - `docs/design-control-alignment-guide.md`
@@ -47,6 +48,7 @@ P17-S1 is locally ready for a draft PR. The branch is `main`, upstream is `origi
 - `docs/reviews/p17-s1-aggregate-deepreview-mimo-20260522.md`
 - `docs/reviews/p17-s1-aggregate-deepreview-glm-20260522.md`
 - `docs/reviews/p17-s1-aggregate-deepreview-controller-judgment-20260522.md`
+- `docs/reviews/p17-s1-ready-to-open-draft-pr-reconciliation-20260522.md`
 
 ## Explicitly Excluded Local Files
 
