@@ -72,6 +72,10 @@ _INDEX_APPLICABLE_FUND_TYPES: Final[frozenset[FundType]] = frozenset(
     ("index_fund", "enhanced_index")
 )
 _COMPOSITE_BENCHMARK_SEPARATORS: Final[tuple[str, ...]] = ("＋", "+", "×", "*", "和", "及")
+_BENCHMARK_NEWLINE_RUN_PATTERN: Final[re.Pattern[str]] = re.compile(
+    r"[ \t\f\v]*(?:\r\n|\r|\n)+[ \t\f\v]*"
+)
+_ASCII_WORD_CHAR_PATTERN: Final[re.Pattern[str]] = re.compile(r"[A-Za-z0-9]")
 _INDEX_NAME_PATTERN: Final[re.Pattern[str]] = re.compile(
     r"(?P<name>[\u4e00-\u9fa5A-Za-z0-9]+(?:指数|Index|ETF))"
 )
@@ -259,6 +263,139 @@ def _table_id(table: ParsedTable) -> str:
     return f"page-{table.page_number}-table-{table.table_index}"
 
 
+def _previous_non_space_char(value: str, end_index: int) -> str | None:
+    """读取指定位置之前最近的非空白字符。
+
+    Args:
+        value: 原始文本。
+        end_index: 向前查找的结束下标。
+
+    Returns:
+        找到时返回单个字符，否则返回 `None`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    for index in range(end_index - 1, -1, -1):
+        if not value[index].isspace():
+            return value[index]
+    return None
+
+
+def _next_non_space_char(value: str, start_index: int) -> str | None:
+    """读取指定位置之后最近的非空白字符。
+
+    Args:
+        value: 原始文本。
+        start_index: 向后查找的起始下标。
+
+    Returns:
+        找到时返回单个字符，否则返回 `None`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    for index in range(start_index, len(value)):
+        if not value[index].isspace():
+            return value[index]
+    return None
+
+
+def _is_ascii_word_char(value: str | None) -> bool:
+    """判断字符是否属于需要用空格隔开的 ASCII 词元。
+
+    Args:
+        value: 待判断字符。
+
+    Returns:
+        属于 ASCII 字母或数字时返回 `True`，否则返回 `False`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return value is not None and _ASCII_WORD_CHAR_PATTERN.fullmatch(value) is not None
+
+
+def _benchmark_newline_replacement(value: str, match: re.Match[str]) -> str:
+    """判断单个基准文本换行片段应删除还是替换为空格。
+
+    Args:
+        value: 原始业绩比较基准文本。
+        match: 换行片段匹配结果。
+
+    Returns:
+        两侧均为 ASCII 词元时返回一个空格，否则返回空字符串。
+
+    Raises:
+        无显式抛出。
+    """
+
+    previous_char = _previous_non_space_char(value, match.start())
+    next_char = _next_non_space_char(value, match.end())
+    if _is_ascii_word_char(previous_char) and _is_ascii_word_char(next_char):
+        return " "
+    return ""
+
+
+def _normalize_benchmark_text(value: str) -> str:
+    """规范化业绩比较基准中的 PDF 表格视觉换行，见模板第 1 章产品本质。
+
+    Args:
+        value: 年报披露的业绩比较基准文本。
+
+    Returns:
+        去除视觉换行后的业绩比较基准文本；非换行空格与标点变体保持不变。
+
+    Raises:
+        无显式抛出。
+    """
+
+    normalized_parts: list[str] = []
+    last_index = 0
+    for match in _BENCHMARK_NEWLINE_RUN_PATTERN.finditer(value):
+        normalized_parts.append(value[last_index : match.start()])
+        normalized_parts.append(_benchmark_newline_replacement(value, match))
+        last_index = match.end()
+    normalized_parts.append(value[last_index:])
+    return "".join(normalized_parts).strip()
+
+
+def _normalize_benchmark_matched_field(matched_field: _MatchedField) -> _MatchedField:
+    """创建业绩比较基准专用的规范化命中结果。
+
+    Args:
+        matched_field: 原始字段命中结果。
+
+    Returns:
+        值和锚点备注同步规范化后的新命中结果；原对象不被修改。
+
+    Raises:
+        无显式抛出。
+    """
+
+    normalized_value = _normalize_benchmark_text(matched_field.value)
+    if normalized_value == matched_field.value:
+        return matched_field
+    normalized_line = matched_field.matched_line.replace(
+        matched_field.value,
+        normalized_value,
+        1,
+    )
+    if normalized_line == matched_field.matched_line:
+        normalized_line = _normalize_benchmark_text(matched_field.matched_line)
+    return _MatchedField(
+        field_name=matched_field.field_name,
+        value=normalized_value,
+        section_id=matched_field.section_id,
+        matched_line=normalized_line,
+        page_number=matched_field.page_number,
+        table_id=matched_field.table_id,
+    )
+
+
 def _build_anchor(report: ParsedAnnualReport, matched_field: _MatchedField) -> EvidenceAnchor:
     """根据字段命中结果构造证据锚点。
 
@@ -437,6 +574,7 @@ def _build_benchmark(report: ParsedAnnualReport) -> ExtractedField[dict[str, obj
     matched_field = _extract_field(report, "benchmark")
     if matched_field is None:
         return _missing_field("§2 未披露业绩比较基准")
+    matched_field = _normalize_benchmark_matched_field(matched_field)
     return ExtractedField(
         value={"benchmark_text": matched_field.value},
         anchors=(_build_anchor(report, matched_field),),

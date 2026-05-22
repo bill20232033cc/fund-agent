@@ -318,6 +318,96 @@ def test_extract_profile_builds_composite_index_profile_for_enhanced_index() -> 
     assert result.index_profile.value.benchmark_component_text
 
 
+@pytest.mark.parametrize(
+    ("fund_code", "raw_benchmark_text", "expected_benchmark_text"),
+    (
+        (
+            "017644",
+            "中证1000指数收益率×95%+同期银行活期存款利\n率(税后)×5%",
+            "中证1000指数收益率×95%+同期银行活期存款利率(税后)×5%",
+        ),
+        (
+            "019918",
+            "中证2000指数收益率*95%+中国人民银行人民币活期存款利率（税后）\n*5%",
+            "中证2000指数收益率*95%+中国人民银行人民币活期存款利率（税后）*5%",
+        ),
+        (
+            "004194",
+            "中证1000指数收益率×95%+同期银行活期存款利率（税后）×5%",
+            "中证1000指数收益率×95%+同期银行活期存款利率（税后）×5%",
+        ),
+        (
+            "005313",
+            "中证1000指数收益率*95%＋一年期人民币定期存款利率（税后）*5%",
+            "中证1000指数收益率*95%＋一年期人民币定期存款利率（税后）*5%",
+        ),
+        (
+            "019923",
+            "中证2000指数收益率×95%＋人民币活期存款税后利率×5%",
+            "中证2000指数收益率×95%＋人民币活期存款税后利率×5%",
+        ),
+    ),
+)
+def test_extract_profile_normalizes_benchmark_text_newlines_only_for_benchmark_path(
+    fund_code: str,
+    raw_benchmark_text: str,
+    expected_benchmark_text: str,
+) -> None:
+    """验证基准文本路径会清理 PDF 表格视觉换行并保留指数画像语义。
+
+    Args:
+        fund_code: 基金代码。
+        raw_benchmark_text: 表格中原始业绩比较基准。
+        expected_benchmark_text: 期望输出的业绩比较基准。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当基准文本、锚点或复合基准语义漂移时抛出。
+    """
+
+    report = _build_table_profile_report(
+        fund_code,
+        ParsedTable(
+            page_number=5,
+            table_index=0,
+            headers=("基金名称", "示例中证指数增强型证券投资基金"),
+            rows=(("基金简称", "示例中证指数增强A"), ("基金主代码", fund_code)),
+        ),
+        ParsedTable(
+            page_number=5,
+            table_index=1,
+            headers=("投资目标", "在控制跟踪误差的基础上追求超越标的指数的增强收益。"),
+            rows=(
+                ("投资范围", "本基金主要投资于标的指数成份股及备选成份股。"),
+                ("投资策略", "采用指数增强策略，力争获得超越标的指数的收益。"),
+                ("业绩比较基准", raw_benchmark_text),
+            ),
+        ),
+    )
+
+    result = extract_profile(report)
+
+    assert result.benchmark.value == {"benchmark_text": expected_benchmark_text}
+    benchmark_anchor = result.benchmark.anchors[0]
+    assert benchmark_anchor.note == f"业绩比较基准：{expected_benchmark_text}"
+    assert benchmark_anchor.section_id == "§2"
+    assert benchmark_anchor.page_number == 5
+    assert benchmark_anchor.table_id == "page-5-table-1"
+    assert benchmark_anchor.row_locator == "benchmark"
+    assert result.index_profile.value is not None
+    assert result.index_profile.value.benchmark_text == expected_benchmark_text
+    assert result.index_profile.value.benchmark_identity_status == "composite"
+    assert result.index_profile.value.benchmark_index_name is None
+    assert result.index_profile.value.benchmark_component_text == profile_module._benchmark_components(
+        expected_benchmark_text
+    )
+    assert result.index_profile.value.methodology_availability == "benchmark_only"
+    assert result.index_profile.value.constituents_availability == "benchmark_only"
+    assert result.index_profile.value.source_tier == "benchmark_context"
+
+
 def test_extract_profile_splits_composite_benchmark_with_chinese_and_multiply_separators() -> None:
     """验证复合基准拆分覆盖 `和` 与 `×` 分隔符。
 
