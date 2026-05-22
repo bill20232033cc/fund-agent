@@ -24,6 +24,10 @@
 | product_profile | investment_scope | | | |
 | product_profile | style_positioning | | | |
 | benchmark | benchmark_name | | | |
+| index_profile | benchmark_text | | | |
+| index_profile | benchmark_identity_status | | | |
+| index_profile | benchmark_index_name | | | |
+| index_profile | source_tier | | | |
 | fee_schedule | — | — | — | 当前 slice 不处理 |
 | classified_fund_type | fund_type | | | |
 | nav_benchmark_performance | nav_growth_rate | | | |

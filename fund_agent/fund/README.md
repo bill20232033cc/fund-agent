@@ -94,8 +94,8 @@ chapter_lens = resolve_preferred_lens(chapter_id=2, fund_type="active_fund")
 - 读取 `docs/code_20260519.csv` 的“基金名称 / 基金代码 / 类别”三列，并校验名称非空、6 位代码、类别非空和重复代码
 - 只通过 `FundDataExtractor.extract(...)` 获取结构化数据包，不直接读取 PDF、cache 或底层解析文件
 - 将 `StructuredFundDataBundle` 拆成 16 个字段级记录：`basic_identity`、`product_profile`、`benchmark`、`index_profile`、`fee_schedule`、`classified_fund_type`、`nav_benchmark_performance`、`investor_return`、`tracking_error`、`manager_strategy_text`、`turnover_rate`、`manager_alignment`、`holder_structure`、`holdings_snapshot`、`share_change`、`nav_data`
-- 每条记录包含 `comparable_values`，只暴露 correctness 可直接比较的白名单子字段；当前覆盖 `basic_identity`、`benchmark`、`nav_benchmark_performance` 和 `classified_fund_type` 的稳定标量子字段
-- `index_profile` 和 `tracking_error` 在当前 snapshot 中只作为 observability 字段记录抽取状态、锚点和 note，不进入 `comparable_values`、FQ2 分母或 golden correctness 分母
+- 每条记录包含 `comparable_values`，只暴露 correctness 可直接比较的白名单子字段；当前覆盖 `basic_identity`、`benchmark`、`index_profile`、`nav_benchmark_performance`、`tracking_error` 和 `classified_fund_type` 的稳定标量子字段
+- `index_profile` 和 `tracking_error` 对 `index_fund` / `enhanced_index` 作为条件 P1 字段进入 FQ2 coverage、traceability 和单基金缺失分母；非指数基金从这些指数质量字段分母中排除，未知基金类型继续保守计分
 - 输出 `snapshot.jsonl`、`summary.md` 和 `errors.jsonl`；单只基金失败时继续后续基金并记录错误
 - snapshot 只记录当前 extractor 的真实输出，不为特定基金覆盖字段值；`004393` 曾被误判为 `index_fund` 的问题已在 P4-S3a 修复为 `active_fund`
 
@@ -116,7 +116,7 @@ chapter_lens = resolve_preferred_lens(chapter_id=2, fund_type="active_fund")
 
 - 读取 `docs/golden-answer-template.md` 中的基金代码和字段行
 - 只通过 `FundDataExtractor.extract(...)` 获取结构化数据包，不直接读取 PDF、cache 或底层解析文件
-- 自动填入 `expected_value`、`confidence` 和 `source`
+- 自动填入 `expected_value`、`confidence` 和 `source`；字段值可以是 dict 或 dataclass
 - 输出 Markdown 底稿；该输出是 silver label，不能直接作为最终 golden answer
 
 `build_golden_answer_json()` 返回 `GoldenAnswerBuildResult`，当前用于把人工审核后的 Markdown 转成 strict JSON：
@@ -347,6 +347,7 @@ C2 当前只做确定性 marker / 元数据检查，不调用 LLM，不判断语
 - `data/`：外部数据适配器。当前包含 `FundNavDataAdapter` 与自身 `nav_cache`。
 - `extractors/`：章节级结构化提取能力。当前已落地基础画像、`§3` 表现、管理人/持有人、持仓/份额 extractor。
 - `data_extractor.py`：P1 façade，聚合文档仓库、净值适配器和章节 extractor。
+- `_value_utils.py`：Fund Capability 内部结构化值 helper，把 dict/dataclass 抽取值规范化为子字段映射。
 - `extraction_snapshot.py`：P4-S1 字段级抽取快照能力，消费 `FundDataExtractor` 并写出 JSONL/summary/errors。
 - `extraction_score.py`：P4-S2 字段级评分与最小 golden set 选择能力，只消费 snapshot JSONL 和精选基金池 CSV。
 - `fund_type.py`：基金类型识别规则，供 extractor 先行消费。

@@ -19,6 +19,7 @@ from fund_agent.config.paths import (
     DEFAULT_EXTRACTION_SNAPSHOT_ROOT,
     DEFAULT_SELECTED_FUNDS_CSV as _DEFAULT_SELECTED_FUNDS_CSV,
 )
+from fund_agent.fund._value_utils import value_mapping
 from fund_agent.fund.data.nav_data import NavDataResult
 from fund_agent.fund.data_extractor import FundDataExtractor, StructuredFundDataBundle
 from fund_agent.fund.extractors import EvidenceAnchor, ExtractedField
@@ -55,7 +56,28 @@ COMPARABLE_SUB_FIELDS_BY_FIELD: Final[dict[str, tuple[str, ...]]] = {
         "classified_fund_type",
     ),
     "benchmark": ("benchmark_name", "benchmark_text"),
+    "index_profile": (
+        "benchmark_text",
+        "benchmark_identity_status",
+        "benchmark_index_name",
+        "benchmark_index_code",
+        "methodology_availability",
+        "constituents_availability",
+        "source_tier",
+    ),
     "nav_benchmark_performance": ("nav_growth_rate", "benchmark_return_rate"),
+    "tracking_error": (
+        "value_text",
+        "period_label",
+        "annualized",
+        "source_type",
+        "calculation_method",
+        "benchmark_identity_status",
+        "benchmark_index_name",
+        "benchmark_index_code",
+        "frequency",
+        "input_period_complete",
+    ),
     "classified_fund_type": ("fund_type",),
 }
 _EXTRACTION_MODE_DIRECT: Final[str] = "direct"
@@ -779,7 +801,7 @@ def _extract_classification_basis(bundle: StructuredFundDataBundle) -> tuple[str
 
 def _build_extracted_field_record(
     *,
-    extracted_field: ExtractedField[dict[str, object]],
+    extracted_field: ExtractedField[object],
     bundle: StructuredFundDataBundle,
     selected_fund: SelectedFundRecord,
     run_id: str,
@@ -1009,7 +1031,7 @@ def _snapshot_record(
 
 def _comparable_values_for_field(
     field_name: str,
-    value: dict[str, object] | None,
+    value: object,
 ) -> dict[str, str]:
     """从抽取字段值中提取 correctness 可比子字段。
 
@@ -1025,15 +1047,16 @@ def _comparable_values_for_field(
     """
 
     allowed_sub_fields = COMPARABLE_SUB_FIELDS_BY_FIELD.get(field_name)
-    if allowed_sub_fields is None or value is None:
+    mapped_value = value_mapping(value)
+    if allowed_sub_fields is None or mapped_value is None:
         return {}
     comparable_values: dict[str, str] = {}
     for sub_field in allowed_sub_fields:
-        comparable_value = _comparable_scalar(value.get(sub_field))
+        comparable_value = _comparable_scalar(mapped_value.get(sub_field))
         if comparable_value is not None:
             comparable_values[sub_field] = comparable_value
     if field_name == "benchmark" and "benchmark_name" not in comparable_values:
-        benchmark_text = _comparable_scalar(value.get("benchmark_text"))
+        benchmark_text = _comparable_scalar(mapped_value.get("benchmark_text"))
         if benchmark_text is not None:
             comparable_values["benchmark_name"] = benchmark_text
     return comparable_values

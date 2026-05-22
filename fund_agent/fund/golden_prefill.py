@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Final, Protocol
 
 from fund_agent.config.paths import DEFAULT_GOLDEN_PREFILL_OUTPUT, DEFAULT_GOLDEN_TEMPLATE_PATH
+from fund_agent.fund._value_utils import value_mapping
 from fund_agent.fund.data_extractor import FundDataExtractor, StructuredFundDataBundle
 from fund_agent.fund.extractors import EvidenceAnchor, ExtractedField
 
@@ -279,7 +280,7 @@ def _resolve_prefill_value(bundle: StructuredFundDataBundle, field: str, sub_fie
 def _field_from_bundle(
     bundle: StructuredFundDataBundle,
     field: str,
-) -> ExtractedField[dict[str, object]] | None:
+) -> ExtractedField[object] | None:
     """按模板字段名读取结构化字段。
 
     Args:
@@ -301,7 +302,11 @@ def _field_from_bundle(
     return None
 
 
-def _sub_field_value(extracted_field: ExtractedField[dict[str, object]], field: str, sub_field: str) -> object | None:
+def _sub_field_value(
+    extracted_field: ExtractedField[object],
+    field: str,
+    sub_field: str,
+) -> object | None:
     """从 `ExtractedField.value` 中读取子字段值。
 
     Args:
@@ -316,18 +321,19 @@ def _sub_field_value(extracted_field: ExtractedField[dict[str, object]], field: 
         无显式抛出。
     """
 
-    if extracted_field.value is None:
+    mapped_value = value_mapping(extracted_field.value)
+    if mapped_value is None:
         return None
     if field == "classified_fund_type" and sub_field == "fund_type":
-        return extracted_field.value.get("classified_fund_type")
+        return mapped_value.get("classified_fund_type")
     value_key = _SUB_FIELD_ALIASES.get((field, sub_field), sub_field)
-    value = extracted_field.value.get(value_key)
+    value = mapped_value.get(value_key)
     if value in (None, ""):
         return None
     return value
 
 
-def _anchor_for_sub_field(extracted_field: ExtractedField[dict[str, object]], sub_field: str) -> EvidenceAnchor | None:
+def _anchor_for_sub_field(extracted_field: ExtractedField[object], sub_field: str) -> EvidenceAnchor | None:
     """为子字段选择最贴近的证据锚点。
 
     Args:
@@ -377,7 +383,7 @@ def _source_from_anchor(anchor: EvidenceAnchor | None) -> str:
 
 
 def _confidence_for_value(
-    extracted_field: ExtractedField[dict[str, object]],
+    extracted_field: ExtractedField[object],
     value: object,
     source: str,
 ) -> str:

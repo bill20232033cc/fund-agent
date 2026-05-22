@@ -186,6 +186,10 @@
 | product_profile | investment_scope | — | — | 当前证据不足，人工复核后补充 |
 | product_profile | style_positioning | 本基金为ETF联接基金，且目标ETF为股票型指数基金，因此本基金的预期风险与预期收益高于混合型基金、债券型基金与货币市场基金。本基金主要通过投资于目标ETF实现对标的指数的紧密跟踪，具有与标的指数相似的风险收益特征。 | high | 年报2024 §2 page-6 page-6-table-0 style_positioning |
 | benchmark | benchmark_name | 上证50指数收益率×95%＋银行活期存款利率（税后） ×5% | high | 年报2024 §2 page-6 page-6-table-0 benchmark |
+| index_profile | benchmark_text | 上证50指数收益率×95%＋银行活期存款利率（税后） ×5% | high | 年报2024 §2 page-6 page-6-table-0 benchmark |
+| index_profile | benchmark_identity_status | identified | high | 年报2024 §2 page-6 page-6-table-0 benchmark |
+| index_profile | benchmark_index_name | 上证50指数 | high | 年报2024 §2 page-6 page-6-table-0 benchmark |
+| index_profile | source_tier | benchmark_context | high | 年报2024 §2 page-6 page-6-table-0 benchmark |
 | fee_schedule | — | — | — | 当前 slice 不处理 |
 | classified_fund_type | fund_type | index_fund | high | 年报2024 §2 page-5 page-5-table-0 fund_name |
 | nav_benchmark_performance | nav_growth_rate | -2.33% | high | 年报2024 §3 page-9 page-9-table-1 nav_growth_rate |
