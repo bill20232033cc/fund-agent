@@ -54,10 +54,48 @@ _TRACKING_ERROR_ACTUAL_KEYWORDS: Final[tuple[str, ...]] = (
     "报告期",
     "本报告期",
     "过去一年",
-    "年化",
 )
 _TRACKING_ERROR_VALUE_PATTERN: Final[re.Pattern[str]] = re.compile(
     r"(?P<value>[-+]?\d+(?:,\d{3})*(?:\.\d+)?)\s*%"
+)
+_TRACKING_ERROR_NOTE_TARGET_OR_LIMIT: Final[str] = "tracking_error_target_or_limit"
+_TRACKING_ERROR_NOTE_MANAGER_NARRATIVE: Final[str] = "tracking_error_manager_narrative"
+_TRACKING_ERROR_NOTE_BENCHMARK_ONLY: Final[str] = "tracking_error_benchmark_only"
+_TRACKING_ERROR_NOTE_STANDARD_DEVIATION_ONLY: Final[str] = "tracking_error_standard_deviation_only"
+_TRACKING_ERROR_NOTE_MIXED_ACTUAL_AND_TARGET: Final[str] = "tracking_error_mixed_actual_and_target"
+_TRACKING_ERROR_NOTE_UNPARSEABLE: Final[str] = "tracking_error_unparseable"
+_TRACKING_ERROR_NOTE_INCOMPLETE_ANCHOR: Final[str] = "tracking_error_incomplete_anchor"
+_TRACKING_ERROR_NOTE_TABLE_TEXT_INCONSISTENT: Final[str] = "tracking_error_table_text_inconsistent"
+_TRACKING_ERROR_NOTE_MULTI_MATCH: Final[str] = "tracking_error_multi_match"
+_TRACKING_ERROR_NOTE_MISSING: Final[str] = "年报未直接披露跟踪误差"
+_TRACKING_ERROR_BLOCKER_PRECEDENCE: Final[tuple[str, ...]] = (
+    _TRACKING_ERROR_NOTE_TABLE_TEXT_INCONSISTENT,
+    _TRACKING_ERROR_NOTE_MULTI_MATCH,
+    _TRACKING_ERROR_NOTE_INCOMPLETE_ANCHOR,
+    _TRACKING_ERROR_NOTE_UNPARSEABLE,
+    _TRACKING_ERROR_NOTE_MIXED_ACTUAL_AND_TARGET,
+    _TRACKING_ERROR_NOTE_TARGET_OR_LIMIT,
+    _TRACKING_ERROR_NOTE_MANAGER_NARRATIVE,
+    _TRACKING_ERROR_NOTE_BENCHMARK_ONLY,
+    _TRACKING_ERROR_NOTE_STANDARD_DEVIATION_ONLY,
+    _TRACKING_ERROR_NOTE_MISSING,
+)
+_TRACKING_ERROR_MANAGER_NARRATIVE_KEYWORDS: Final[tuple[str, ...]] = (
+    "基金经理",
+    "投资经理",
+    "组合管理",
+    "投资管理",
+    "管理组合",
+)
+_TRACKING_ERROR_BENCHMARK_ONLY_KEYWORDS: Final[tuple[str, ...]] = (
+    "业绩比较基准",
+    "比较基准",
+    "基准指数",
+)
+_STANDARD_DEVIATION_KEYWORDS: Final[tuple[str, ...]] = (
+    "净值增长率标准差",
+    "基准收益率标准差",
+    "业绩比较基准收益率标准差",
 )
 
 
@@ -118,6 +156,19 @@ class _MatchedTrackingError:
     table: ParsedTable | None = None
     row_label: str | None = None
     matched_header: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class _TrackingErrorExtractionOutcome:
+    """跟踪误差抽取路径结果，见模板第 2 章 R=A+B-C。
+
+    Attributes:
+        match: 直接披露命中结果。
+        blocker_note: 未能采信时的最具体 fail-closed 原因。
+    """
+
+    match: _MatchedTrackingError | None
+    blocker_note: str | None = None
 
 
 def _extract_field(report: ParsedAnnualReport, field_name: str) -> _MatchedField | None:
@@ -354,21 +405,22 @@ def _extract_tracking_error(report: ParsedAnnualReport) -> ExtractedField[Tracki
         无显式抛出。
     """
 
-    if _has_ambiguous_tracking_error_text(report):
-        return _missing_tracking_error("tracking_error_ambiguous")
-    table_match = _extract_tracking_error_from_tables(report)
-    text_match = _extract_tracking_error_from_text(report)
-    if table_match is not None and text_match is not None:
-        match = _select_consistent_tracking_error_match(table_match, text_match)
+    table_outcome = _extract_tracking_error_from_tables(report)
+    text_outcome = _extract_tracking_error_from_text(report)
+    blocker_note = _select_tracking_error_blocker_note(
+        (table_outcome.blocker_note, text_outcome.blocker_note)
+    )
+    if table_outcome.match is not None and text_outcome.match is not None:
+        match = _select_consistent_tracking_error_match(table_outcome.match, text_outcome.match)
         if match is None:
-            return _missing_tracking_error("tracking_error_ambiguous")
+            return _missing_tracking_error(_TRACKING_ERROR_NOTE_TABLE_TEXT_INCONSISTENT)
     else:
-        match = table_match or text_match
+        match = table_outcome.match or text_outcome.match
     if match is None:
-        return _missing_tracking_error("年报未直接披露跟踪误差")
+        return _missing_tracking_error(blocker_note or _TRACKING_ERROR_NOTE_MISSING)
     value = _parse_percent_ratio(match.value_text)
     if value is None:
-        return _missing_tracking_error("tracking_error_unparseable")
+        return _missing_tracking_error(_TRACKING_ERROR_NOTE_UNPARSEABLE)
     anchor = _build_tracking_error_anchor(report, match)
     return ExtractedField(
         value=TrackingErrorValue(
@@ -424,33 +476,41 @@ def _select_consistent_tracking_error_match(
     return table_match
 
 
-def _extract_tracking_error_from_tables(report: ParsedAnnualReport) -> _MatchedTrackingError | None:
+def _extract_tracking_error_from_tables(report: ParsedAnnualReport) -> _TrackingErrorExtractionOutcome:
     """从 `§3` 表格中提取实际跟踪误差。
 
     Args:
         report: 已解析年报对象。
 
     Returns:
-        命中结果；不存在或语义模糊时返回 `None`。
+        包含直接命中或具体 blocker note 的抽取结果。
 
     Raises:
         无显式抛出。
     """
 
     matches: list[_MatchedTrackingError] = []
+    blocker_notes: list[str] = []
     for table in report.tables:
         header_index = _find_tracking_error_header_index(table.headers)
         if header_index is None:
+            note = _classify_tracking_error_nonmatch_context(_table_text(table))
+            if note is not None:
+                blocker_notes.append(note)
             continue
         period_index = _find_header_index(table.headers, ("阶段",))
         for row in table.rows:
             value = _cell_at(row, header_index)
-            if value is None or _parse_percent_ratio(value) is None:
+            context = " ".join((*table.headers, *row))
+            if value is None:
+                continue
+            if _parse_percent_ratio(value) is None:
+                blocker_notes.append(_TRACKING_ERROR_NOTE_UNPARSEABLE)
+                continue
+            if _tracking_error_context_is_target_or_ambiguous(context):
+                blocker_notes.append(_classify_tracking_error_target_context(context))
                 continue
             row_label = _cell_at(row, period_index) or "报告期"
-            context = " ".join((*table.headers, *row))
-            if _tracking_error_context_is_target_or_ambiguous(context):
-                continue
             matches.append(
                 _MatchedTrackingError(
                     value_text=value,
@@ -463,40 +523,52 @@ def _extract_tracking_error_from_tables(report: ParsedAnnualReport) -> _MatchedT
                 )
             )
     if len(matches) > 1:
-        return None
+        return _TrackingErrorExtractionOutcome(match=None, blocker_note=_TRACKING_ERROR_NOTE_MULTI_MATCH)
     if not matches:
-        return None
-    return matches[0]
+        return _TrackingErrorExtractionOutcome(
+            match=None,
+            blocker_note=_select_tracking_error_blocker_note(tuple(blocker_notes)),
+        )
+    return _TrackingErrorExtractionOutcome(match=matches[0])
 
 
-def _extract_tracking_error_from_text(report: ParsedAnnualReport) -> _MatchedTrackingError | None:
+def _extract_tracking_error_from_text(report: ParsedAnnualReport) -> _TrackingErrorExtractionOutcome:
     """从 `§3` 优先、`§2` 兜底的正文中提取实际跟踪误差。
 
     Args:
         report: 已解析年报对象。
 
     Returns:
-        命中结果；不存在或语义模糊时返回 `None`。
+        包含直接命中或具体 blocker note 的抽取结果。
 
     Raises:
         无显式抛出。
     """
 
     matches: list[_MatchedTrackingError] = []
+    blocker_notes: list[str] = []
     for section_id in ("§3", "§2"):
         section_text = report.get_section_text(section_id)
         if not section_text:
             continue
         for line in section_text.splitlines():
             normalized_line = line.strip()
+            if not _line_mentions_tracking_error(normalized_line):
+                note = _classify_tracking_error_nonmatch_context(normalized_line)
+                if note is not None:
+                    blocker_notes.append(note)
+                continue
             if not _line_has_tracking_error_value(normalized_line):
+                note = _classify_tracking_error_line_without_parseable_value(normalized_line)
+                if note is not None:
+                    blocker_notes.append(note)
                 continue
             if _tracking_error_context_is_target_or_ambiguous(normalized_line):
-                if _has_actual_tracking_error_signal(normalized_line):
-                    return None
+                blocker_notes.append(_classify_tracking_error_target_context(normalized_line))
                 continue
             value_text = _extract_percent_text(normalized_line)
             if value_text is None:
+                blocker_notes.append(_TRACKING_ERROR_NOTE_UNPARSEABLE)
                 continue
             matches.append(
                 _MatchedTrackingError(
@@ -508,38 +580,13 @@ def _extract_tracking_error_from_text(report: ParsedAnnualReport) -> _MatchedTra
                 )
             )
     if len(matches) > 1:
-        return None
+        return _TrackingErrorExtractionOutcome(match=None, blocker_note=_TRACKING_ERROR_NOTE_MULTI_MATCH)
     if not matches:
-        return None
-    return matches[0]
-
-
-def _has_ambiguous_tracking_error_text(report: ParsedAnnualReport) -> bool:
-    """判断年报是否存在实际值与目标值混杂的跟踪误差文本。
-
-    Args:
-        report: 已解析年报对象。
-
-    Returns:
-        同一行同时出现实际披露信号和目标控制语义时返回 `True`。
-
-    Raises:
-        无显式抛出。
-    """
-
-    for section_id in ("§3", "§2"):
-        section_text = report.get_section_text(section_id)
-        if not section_text:
-            continue
-        for line in section_text.splitlines():
-            normalized_line = line.strip()
-            if (
-                _line_has_tracking_error_value(normalized_line)
-                and _tracking_error_context_is_target_or_ambiguous(normalized_line)
-                and _has_actual_tracking_error_signal(normalized_line)
-            ):
-                return True
-    return False
+        return _TrackingErrorExtractionOutcome(
+            match=None,
+            blocker_note=_select_tracking_error_blocker_note(tuple(blocker_notes)),
+        )
+    return _TrackingErrorExtractionOutcome(match=matches[0])
 
 
 def _find_tracking_error_header_index(headers: tuple[str, ...]) -> int | None:
@@ -564,6 +611,43 @@ def _find_tracking_error_header_index(headers: tuple[str, ...]) -> int | None:
     return None
 
 
+def _select_tracking_error_blocker_note(notes: tuple[str | None, ...]) -> str | None:
+    """按固定优先级选择跟踪误差 fail-closed note。
+
+    Args:
+        notes: 各抽取路径记录的 blocker note。
+
+    Returns:
+        命中优先级最高的 note；没有有效 note 时返回 `None`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    available_notes = {note for note in notes if note is not None}
+    for note in _TRACKING_ERROR_BLOCKER_PRECEDENCE:
+        if note in available_notes:
+            return note
+    return None
+
+
+def _line_mentions_tracking_error(line: str) -> bool:
+    """判断文本行是否提到跟踪误差语义。
+
+    Args:
+        line: 年报正文行。
+
+    Returns:
+        包含跟踪误差或跟踪偏离度语义时返回 `True`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    normalized_line = _compact_text(line)
+    return any(keyword in normalized_line for keyword in _TRACKING_ERROR_KEYWORDS)
+
+
 def _line_has_tracking_error_value(line: str) -> bool:
     """判断文本行是否包含跟踪误差数值。
 
@@ -577,10 +661,132 @@ def _line_has_tracking_error_value(line: str) -> bool:
         无显式抛出。
     """
 
+    return _line_mentions_tracking_error(line) and _extract_percent_text(line) is not None
+
+
+def _classify_tracking_error_nonmatch_context(text: str) -> str | None:
+    """分类未形成候选值的跟踪误差相关上下文。
+
+    Args:
+        text: 表格或正文上下文。
+
+    Returns:
+        可确定的 blocker note；无法确定时返回 `None`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    normalized_text = _compact_text(text)
+    if any(keyword in normalized_text for keyword in _STANDARD_DEVIATION_KEYWORDS):
+        return _TRACKING_ERROR_NOTE_STANDARD_DEVIATION_ONLY
+    if not any(keyword in normalized_text for keyword in _TRACKING_ERROR_KEYWORDS):
+        return None
+    if _tracking_error_context_is_target_or_ambiguous(normalized_text):
+        return _classify_tracking_error_target_context(normalized_text)
+    if _is_manager_tracking_error_narrative(normalized_text):
+        return _TRACKING_ERROR_NOTE_MANAGER_NARRATIVE
+    return None
+
+
+def _classify_tracking_error_line_without_parseable_value(line: str) -> str | None:
+    """分类提到跟踪误差但没有可解析百分比值的正文行。
+
+    Args:
+        line: 年报正文行。
+
+    Returns:
+        可确定的 blocker note；无法确定时返回 `None`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if _tracking_error_context_is_target_or_ambiguous(line):
+        return _classify_tracking_error_target_context(line)
+    if _line_has_unparseable_tracking_error_value(line):
+        return _TRACKING_ERROR_NOTE_UNPARSEABLE
+    if _is_manager_tracking_error_narrative(line):
+        return _TRACKING_ERROR_NOTE_MANAGER_NARRATIVE
+    if _is_benchmark_only_tracking_error_context(line):
+        return _TRACKING_ERROR_NOTE_BENCHMARK_ONLY
+    return None
+
+
+def _classify_tracking_error_target_context(text: str) -> str:
+    """把目标/限制上下文细分为纯目标或实际目标混杂。
+
+    Args:
+        text: 表格或正文上下文。
+
+    Returns:
+        具体 blocker note。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if _has_actual_tracking_error_signal(text):
+        return _TRACKING_ERROR_NOTE_MIXED_ACTUAL_AND_TARGET
+    return _TRACKING_ERROR_NOTE_TARGET_OR_LIMIT
+
+
+def _line_has_unparseable_tracking_error_value(line: str) -> bool:
+    """判断文本是否像直接披露但数值不可解析。
+
+    Args:
+        line: 年报正文行。
+
+    Returns:
+        出现实际披露信号和常见占位百分号时返回 `True`。
+
+    Raises:
+        无显式抛出。
+    """
+
     normalized_line = _compact_text(line)
+    return _has_actual_tracking_error_signal(normalized_line) and any(
+        token in normalized_line for token in ("--%", "-%", "—%", "不适用", "未披露")
+    )
+
+
+def _is_manager_tracking_error_narrative(text: str) -> bool:
+    """判断是否为基金经理或组合管理层面的跟踪误差叙事。
+
+    Args:
+        text: 年报正文行。
+
+    Returns:
+        同时提到跟踪误差和明确管理叙事信号时返回 `True`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    normalized_text = _compact_text(text)
+    return any(keyword in normalized_text for keyword in _TRACKING_ERROR_KEYWORDS) and any(
+        keyword in normalized_text for keyword in _TRACKING_ERROR_MANAGER_NARRATIVE_KEYWORDS
+    )
+
+
+def _is_benchmark_only_tracking_error_context(text: str) -> bool:
+    """判断是否为仅围绕业绩基准的跟踪误差上下文。
+
+    Args:
+        text: 年报正文行。
+
+    Returns:
+        明确提到基准和跟踪误差、但没有本基金实际披露信号时返回 `True`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    normalized_text = _compact_text(text)
     return (
-        any(keyword in normalized_line for keyword in _TRACKING_ERROR_KEYWORDS)
-        and _extract_percent_text(line) is not None
+        any(keyword in normalized_text for keyword in _TRACKING_ERROR_KEYWORDS)
+        and any(keyword in normalized_text for keyword in _TRACKING_ERROR_BENCHMARK_ONLY_KEYWORDS)
+        and not _has_actual_tracking_error_signal(normalized_text)
     )
 
 
