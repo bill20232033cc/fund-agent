@@ -15,6 +15,7 @@ LOW_THRESHOLD: Final[Decimal] = Decimal("30")
 HIGH_THRESHOLD: Final[Decimal] = Decimal("70")
 PERCENT_SCALE: Final[Decimal] = Decimal("100")
 DISPLAY_QUANT: Final[Decimal] = Decimal("0.01")
+MIN_HISTORY_POINTS: Final[int] = 30
 
 
 class ThermometerCalculationError(ValueError):
@@ -41,8 +42,10 @@ def calculate_thermometer_reading(
         ThermometerCalculationError: 历史序列为空或包含非法值时抛出。
     """
 
-    if not history.points:
-        raise ThermometerCalculationError("PE/PB 历史序列为空")
+    if len(history.points) < MIN_HISTORY_POINTS:
+        raise ThermometerCalculationError(
+            f"PE/PB 历史序列样本不足：至少需要 {MIN_HISTORY_POINTS} 个共同日期"
+        )
 
     pe_values = tuple(point.pe for point in history.points)
     pb_values = tuple(point.pb for point in history.points)

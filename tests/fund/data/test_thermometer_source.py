@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import date
 from decimal import Decimal
 
 import pytest
@@ -125,3 +126,48 @@ def test_akshare_index_source_fails_closed_on_schema_drift() -> None:
 
     with pytest.raises(ThermometerSourceError, match="缺少字段"):
         asyncio.run(source.load_index_history("000300"))
+
+
+def test_akshare_index_source_fails_closed_on_date_schema_drift() -> None:
+    """验证日期格式漂移会 fail-closed。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当日期 schema drift 未被拒绝时抛出。
+    """
+
+    source = AkshareIndexThermometerSource(
+        pe_fetcher=lambda symbol: _FakeFrame([{"日期": "20260522", "滚动市盈率中位数": "20"}]),
+        pb_fetcher=lambda symbol: _FakeFrame([{"日期": "20260522", "市净率中位数": "2"}]),
+    )
+
+    with pytest.raises(ThermometerSourceError, match="ISO"):
+        asyncio.run(source.load_index_history("000300"))
+
+
+def test_akshare_index_source_accepts_date_objects() -> None:
+    """验证 date 对象可标准化为 ISO 日期。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 date 对象未被标准化时抛出。
+    """
+
+    source = AkshareIndexThermometerSource(
+        pe_fetcher=lambda symbol: _FakeFrame([{"日期": date(2026, 5, 22), "滚动市盈率中位数": "20"}]),
+        pb_fetcher=lambda symbol: _FakeFrame([{"日期": date(2026, 5, 22), "市净率中位数": "2"}]),
+    )
+
+    history = asyncio.run(source.load_index_history("000300"))
+
+    assert history.points[0].date == "2026-05-22"

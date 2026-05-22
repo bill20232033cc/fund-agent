@@ -20,7 +20,10 @@ from fund_agent.fund.data import (
     ThermometerUnavailable,
 )
 from fund_agent.fund.data.thermometer_cache import ThermometerHistoryCache
-from fund_agent.fund.data.thermometer_source import AkshareIndexThermometerSource
+from fund_agent.fund.data.thermometer_source import (
+    AkshareIndexThermometerSource,
+    ThermometerSourceError,
+)
 
 
 class _ThermometerAdapter(Protocol):
@@ -185,9 +188,7 @@ class ThermometerService:
 
         try:
             history = await self._index_source.load_index_history(index_code)
-            history = cache.save(history)
-            return calculate_thermometer_reading(history, cached=False, stale=False)
-        except Exception as exc:
+        except ThermometerSourceError as exc:
             cached = cache.load(index_code, allow_stale=True)
             if cached is not None:
                 return calculate_thermometer_reading(
@@ -200,6 +201,11 @@ class ThermometerService:
                 index_name=index_code,
                 reason=f"自建温度计数据不可用：{exc}",
             ).to_reading()
+        try:
+            saved_history = cache.save(history)
+        except OSError:
+            saved_history = history
+        return calculate_thermometer_reading(saved_history, cached=False, stale=False)
 
 
 def _default_adapter_factory(cache_dir: Path | None) -> FundThermometerAdapter:

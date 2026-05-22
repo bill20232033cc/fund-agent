@@ -31,7 +31,7 @@ def test_thermometer_history_cache_persists_and_loads_fresh_history(tmp_path) ->
     assert cached is not None
     assert cached.stale is False
     assert cached.history.index_code == "000300"
-    assert cached.history.points[-1].pe == Decimal("20")
+    assert cached.history.points[-1].pe == Decimal("30")
     assert cached.history.fetched_at == saved.fetched_at
 
 
@@ -99,8 +99,12 @@ def _history() -> PePbHistory:
         index_code="000300",
         index_name="沪深300",
         source="fixture",
-        points=(
-            PePbPoint(date="2026-05-21", pe=Decimal("10"), pb=Decimal("1")),
-            PePbPoint(date="2026-05-22", pe=Decimal("20"), pb=Decimal("2")),
+        points=tuple(
+            PePbPoint(
+                date=f"2026-05-{day:02d}",
+                pe=Decimal(day),
+                pb=Decimal(day) / Decimal("10"),
+            )
+            for day in range(1, 31)
         ),
     )

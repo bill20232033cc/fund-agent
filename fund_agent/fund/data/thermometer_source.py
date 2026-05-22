@@ -9,7 +9,9 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
+import re
 from typing import Protocol
 
 from fund_agent.fund.data.thermometer_types import PePbHistory, PePbPoint
@@ -20,6 +22,7 @@ PE_COLUMN = "滚动市盈率中位数"
 PB_COLUMN = "市净率中位数"
 DATE_COLUMN = "日期"
 SOURCE_NAME = "akshare_legulegu_index_pe_pb"
+ISO_DATE_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 
 class ThermometerDataSource(Protocol):
@@ -209,12 +212,21 @@ def _normalize_date(value: object) -> str:
 
     if value is None:
         raise ThermometerSourceError("指数估值数据日期为空")
-    if hasattr(value, "isoformat"):
-        return str(value.isoformat())[:10]
+    if isinstance(value, datetime):
+        return value.date().isoformat()
+    if isinstance(value, date):
+        return value.isoformat()
     text = str(value).strip()
     if not text:
         raise ThermometerSourceError("指数估值数据日期为空")
-    return text[:10]
+    candidate = text[:10]
+    if not ISO_DATE_PATTERN.fullmatch(candidate):
+        raise ThermometerSourceError(f"指数估值数据日期不是 ISO 格式：{value}")
+    try:
+        datetime.strptime(candidate, "%Y-%m-%d")
+    except ValueError as exc:
+        raise ThermometerSourceError(f"指数估值数据日期非法：{value}") from exc
+    return candidate
 
 
 def _to_decimal(value: object, *, field_name: str) -> Decimal:

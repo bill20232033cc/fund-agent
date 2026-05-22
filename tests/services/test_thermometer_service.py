@@ -16,6 +16,7 @@ from fund_agent.fund.data.thermometer import (
     ThermometerSnapshot,
 )
 from fund_agent.fund.data.thermometer_cache import ThermometerHistoryCache
+from fund_agent.fund.data.thermometer_source import ThermometerSourceError
 from fund_agent.fund.data.thermometer_types import PePbHistory, PePbPoint
 from fund_agent.services import ThermometerRequest, ThermometerService
 
@@ -94,6 +95,25 @@ class _FakeIndexSource:
         if self.exc is not None:
             raise self.exc
         return self.history
+
+
+class _FailingSaveThermometerHistoryCache(ThermometerHistoryCache):
+    """保存失败的温度计历史缓存。"""
+
+    def save(self, history: PePbHistory) -> PePbHistory:
+        """模拟缓存写入失败。
+
+        Args:
+            history: 待保存历史。
+
+        Returns:
+            不返回。
+
+        Raises:
+            OSError: 始终抛出。
+        """
+
+        raise OSError("read-only cache")
 
 
 def test_thermometer_service_delegates_to_injected_adapter(tmp_path: Path) -> None:
@@ -211,7 +231,7 @@ def test_thermometer_service_uses_stale_index_cache_when_source_fails(tmp_path: 
     payload["cache_updated_at"] = (datetime.now(timezone.utc) - timedelta(days=2)).isoformat()
     cache_path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
     service = ThermometerService(
-        index_source=_FakeIndexSource(exc=RuntimeError("network down")),
+        index_source=_FakeIndexSource(exc=ThermometerSourceError("network down")),
         history_cache_factory=lambda cache_dir: ThermometerHistoryCache(root_dir=tmp_path),
     )
 
@@ -238,7 +258,7 @@ def test_thermometer_service_returns_unavailable_without_index_cache(tmp_path: P
     """
 
     service = ThermometerService(
-        index_source=_FakeIndexSource(exc=RuntimeError("network down")),
+        index_source=_FakeIndexSource(exc=ThermometerSourceError("network down")),
         history_cache_factory=lambda cache_dir: ThermometerHistoryCache(root_dir=tmp_path),
     )
 
@@ -247,6 +267,53 @@ def test_thermometer_service_returns_unavailable_without_index_cache(tmp_path: P
     assert result.unavailable is True
     assert result.valuation_state_candidate == "unavailable"
     assert "network down" in str(result.unavailable_reason)
+
+
+def test_thermometer_service_uses_fresh_history_when_cache_save_fails(tmp_path: Path) -> None:
+    """验证缓存写失败不掩盖已成功取得的新鲜数据。
+
+    Args:
+        tmp_path: pytest 临时目录 fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当缓存写失败导致 unavailable 时抛出。
+    """
+
+    service = ThermometerService(
+        index_source=_FakeIndexSource(),
+        history_cache_factory=lambda cache_dir: _FailingSaveThermometerHistoryCache(root_dir=tmp_path),
+    )
+
+    result = asyncio.run(service.run(ThermometerRequest(cache_dir=tmp_path, index_code="000300")))
+
+    assert result.unavailable is False
+    assert result.cached is False
+    assert result.temperature == Decimal("100.00")
+
+
+def test_thermometer_service_propagates_calculation_contract_error(tmp_path: Path) -> None:
+    """验证计算契约错误不会被 stale cache 掩盖。
+
+    Args:
+        tmp_path: pytest 临时目录 fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当计算错误被包装为 unavailable 时抛出。
+    """
+
+    service = ThermometerService(
+        index_source=_FakeIndexSource(history=_short_index_history()),
+        history_cache_factory=lambda cache_dir: ThermometerHistoryCache(root_dir=tmp_path),
+    )
+
+    with pytest.raises(ValueError, match="样本不足"):
+        asyncio.run(service.run(ThermometerRequest(cache_dir=tmp_path, index_code="000300")))
 
 
 def _available_snapshot() -> ThermometerSnapshot:
@@ -301,8 +368,33 @@ def _index_history() -> PePbHistory:
         index_code="000300",
         index_name="沪深300",
         source="fixture",
-        points=(
-            PePbPoint(date="2026-05-20", pe=Decimal("10"), pb=Decimal("1")),
-            PePbPoint(date="2026-05-21", pe=Decimal("20"), pb=Decimal("2")),
+        points=tuple(
+            PePbPoint(
+                date=f"2026-05-{day:02d}",
+                pe=Decimal(day),
+                pb=Decimal(day) / Decimal("10"),
+            )
+            for day in range(1, 31)
         ),
+    )
+
+
+def _short_index_history() -> PePbHistory:
+    """构造样本不足的自建指数温度计历史。
+
+    Args:
+        无。
+
+    Returns:
+        样本不足的 PE/PB 历史。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return PePbHistory(
+        index_code="000300",
+        index_name="沪深300",
+        source="fixture",
+        points=(PePbPoint(date="2026-05-01", pe=Decimal("1"), pb=Decimal("0.1")),),
     )

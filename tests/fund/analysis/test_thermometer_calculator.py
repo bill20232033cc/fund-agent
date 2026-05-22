@@ -48,16 +48,9 @@ def test_calculate_thermometer_reading_maps_thresholds() -> None:
         AssertionError: 当读数不符合预期时抛出。
     """
 
-    history = PePbHistory(
-        index_code="000300",
-        index_name="沪深300",
-        source="fixture",
+    history = _history_with_points(
+        count=30,
         fetched_at="2026-05-23T00:00:00+00:00",
-        points=(
-            PePbPoint(date="2026-05-20", pe=Decimal("10"), pb=Decimal("1")),
-            PePbPoint(date="2026-05-21", pe=Decimal("20"), pb=Decimal("2")),
-            PePbPoint(date="2026-05-22", pe=Decimal("30"), pb=Decimal("3")),
-        ),
     )
 
     reading = calculate_thermometer_reading(history)
@@ -67,8 +60,8 @@ def test_calculate_thermometer_reading_maps_thresholds() -> None:
     assert reading.pe_percentile == Decimal("100.00")
     assert reading.pb_percentile == Decimal("100.00")
     assert reading.valuation_state_candidate == "high"
-    assert reading.data_date == "2026-05-22"
-    assert reading.lookback_start == "2026-05-20"
+    assert reading.data_date == "2026-05-30"
+    assert reading.lookback_start == "2026-05-01"
 
 
 def test_calculate_thermometer_reading_rejects_empty_history() -> None:
@@ -86,7 +79,26 @@ def test_calculate_thermometer_reading_rejects_empty_history() -> None:
 
     history = PePbHistory(index_code="000300", index_name="沪深300", points=(), source="fixture")
 
-    with pytest.raises(ThermometerCalculationError, match="为空"):
+    with pytest.raises(ThermometerCalculationError, match="样本不足"):
+        calculate_thermometer_reading(history)
+
+
+def test_calculate_thermometer_reading_rejects_insufficient_history() -> None:
+    """验证历史样本不足时 fail-closed。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当样本不足未被拒绝时抛出。
+    """
+
+    history = _history_with_points(count=1)
+
+    with pytest.raises(ThermometerCalculationError, match="样本不足"):
         calculate_thermometer_reading(history)
 
 
@@ -103,15 +115,39 @@ def test_calculate_thermometer_reading_rejects_non_positive_values() -> None:
         AssertionError: 当非法估值未被拒绝时抛出。
     """
 
-    history = PePbHistory(
-        index_code="000300",
-        index_name="沪深300",
-        source="fixture",
-        points=(
-            PePbPoint(date="2026-05-20", pe=Decimal("0"), pb=Decimal("1")),
-            PePbPoint(date="2026-05-21", pe=Decimal("20"), pb=Decimal("2")),
-        ),
-    )
+    points = list(_history_with_points(count=30).points)
+    points[0] = PePbPoint(date=points[0].date, pe=Decimal("0"), pb=points[0].pb)
+    history = PePbHistory(index_code="000300", index_name="沪深300", source="fixture", points=tuple(points))
 
     with pytest.raises(ThermometerCalculationError, match="非正值"):
         calculate_thermometer_reading(history)
+
+
+def _history_with_points(count: int, fetched_at: str | None = None) -> PePbHistory:
+    """构造指定长度的测试历史。
+
+    Args:
+        count: 历史点数量。
+        fetched_at: 抓取时间。
+
+    Returns:
+        测试历史。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return PePbHistory(
+        index_code="000300",
+        index_name="沪深300",
+        source="fixture",
+        fetched_at=fetched_at,
+        points=tuple(
+            PePbPoint(
+                date=f"2026-05-{day:02d}",
+                pe=Decimal(day),
+                pb=Decimal(day) / Decimal("10"),
+            )
+            for day in range(1, count + 1)
+        ),
+    )
