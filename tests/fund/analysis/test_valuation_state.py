@@ -250,6 +250,44 @@ def test_resolve_valuation_index_target_uses_supported_code_when_present() -> No
     assert target.index_code == "000300"
 
 
+@pytest.mark.parametrize(
+    ("index_code", "text"),
+    (
+        ("000300", "沪深300价值指数收益率"),
+        ("000905", "中证500质量成长指数收益率"),
+    ),
+)
+def test_resolve_valuation_index_target_rejects_supported_code_text_conflicts(
+    index_code: str,
+    text: str,
+) -> None:
+    """验证支持指数代码不能绕过同源派生指数文本冲突。
+
+    Args:
+        index_code: benchmark_index_code 候选。
+        text: 同源基准文本。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 派生指数文本被代码优先路径误映射时抛出。
+    """
+
+    target = resolve_valuation_index_target(
+        fund_type="index_fund",
+        index_profile=_index_profile(
+            benchmark_text=text,
+            benchmark_index_code=index_code,
+            components=(text,),
+        ),
+        benchmark=_benchmark(text),
+    )
+
+    assert target.status == "unsupported_index"
+    assert target.index_code is None
+
+
 def test_build_resolution_constructors_preserve_structured_truth() -> None:
     """验证显式、不可用、温度计 resolution 字段完整。
 

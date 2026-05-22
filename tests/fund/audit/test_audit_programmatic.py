@@ -8,7 +8,10 @@ from decimal import Decimal
 import pytest
 
 from fund_agent.fund.analysis import ChecklistItem, ChecklistResult, RabcAttribution
-from fund_agent.fund.analysis.valuation_state import ValuationStateResolution
+from fund_agent.fund.analysis.valuation_state import (
+    ValuationStateResolution,
+    build_thermometer_failure_anchor,
+)
 from fund_agent.fund.extractors.models import EvidenceAnchor
 from fund_agent.fund.audit.contract_rules import (
     ContractAuditCoverageManifest,
@@ -1407,6 +1410,95 @@ def test_run_programmatic_audit_detects_missing_thermometer_disclaimer() -> None
     )
 
     assert any(issue.code == "R1" and "免责声明" in issue.message for issue in result.issues)
+
+
+def test_run_programmatic_audit_accepts_unavailable_thermometer_failure_anchor() -> None:
+    """验证不可用温度计计算失败锚点满足 R1 provenance。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: failure anchor 被误判缺失时抛出。
+    """
+
+    reason = "自建温度计计算失败：fixture calculation error"
+    resolution = ValuationStateResolution(
+        state="unavailable",
+        source="unavailable_thermometer",
+        reason=f"自动估值不可用：{reason}",
+        anchors=(
+            build_thermometer_failure_anchor(
+                index_code="000300",
+                index_name="沪深300",
+                unavailable_reason=reason,
+            ),
+        ),
+        disclaimer_required=False,
+        index_code="000300",
+        index_name="沪深300",
+        unavailable_reason=reason,
+    )
+    result = run_programmatic_audit(
+        ProgrammaticAuditInput(
+            checklist_result=_checklist_with_valuation(resolution, signal="gray"),
+            final_judgment="needs_attention",
+            derived_final_judgment="needs_attention",
+            final_judgment_source="derived",
+            valuation_state_resolution=resolution,
+        ),
+    )
+
+    assert not any(issue.code == "R1" for issue in result.issues)
+
+
+def test_run_programmatic_audit_detects_unavailable_thermometer_missing_failure_anchor() -> None:
+    """验证不可用温度计缺少失败 provenance 锚点时触发 R1。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 缺失 failure anchor 未触发 R1 时抛出。
+    """
+
+    reason = "自建温度计计算失败：fixture calculation error"
+    benchmark_anchor = EvidenceAnchor(
+        source_kind="annual_report",
+        document_year=2024,
+        section_id="§2",
+        page_number=None,
+        table_id=None,
+        row_locator="benchmark",
+        note="fixture benchmark",
+    )
+    resolution = ValuationStateResolution(
+        state="unavailable",
+        source="unavailable_thermometer",
+        reason=f"自动估值不可用：{reason}",
+        anchors=(benchmark_anchor,),
+        disclaimer_required=False,
+        index_code="000300",
+        index_name="沪深300",
+        unavailable_reason=reason,
+    )
+    result = run_programmatic_audit(
+        ProgrammaticAuditInput(
+            checklist_result=_checklist_with_valuation(resolution, signal="gray"),
+            final_judgment="needs_attention",
+            derived_final_judgment="needs_attention",
+            final_judgment_source="derived",
+            valuation_state_resolution=resolution,
+        ),
+    )
+
+    assert any(issue.code == "R1" and "thermometer failure" in issue.message for issue in result.issues)
 
 
 def test_run_programmatic_audit_allows_explicit_high_without_thermometer_fields() -> None:

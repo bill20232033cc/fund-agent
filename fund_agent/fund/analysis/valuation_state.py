@@ -187,12 +187,17 @@ def resolve_valuation_index_target(
 
     profile_value = index_profile.value
     if profile_value is not None and profile_value.benchmark_index_code:
-        code_target = _target_from_supported_code(
-            profile_value.benchmark_index_code,
-            anchors=anchors,
-        )
-        if code_target is not None:
-            return code_target
+        code_rule = _rule_for_supported_code(profile_value.benchmark_index_code)
+        if code_rule is not None:
+            compatibility = _validate_code_text_compatibility(
+                rule=code_rule,
+                index_profile=index_profile,
+                benchmark=benchmark,
+                anchors=anchors,
+            )
+            if compatibility is not None:
+                return compatibility
+            return _target_from_rule(code_rule, anchors=anchors)
         return ValuationIndexTarget(
             status="unsupported_index",
             index_code=None,
@@ -390,19 +395,49 @@ def build_thermometer_valuation_resolution(
     )
 
 
-def _target_from_supported_code(
-    index_code: str,
+def build_thermometer_failure_anchor(
     *,
-    anchors: tuple[EvidenceAnchor, ...],
-) -> ValuationIndexTarget | None:
-    """按支持指数代码构造映射目标。
+    index_code: str,
+    index_name: str,
+    unavailable_reason: str,
+) -> EvidenceAnchor:
+    """构造自建温度计失败派生锚点，见模板第 7 章第 6 问。
+
+    Args:
+        index_code: 目标指数代码。
+        index_name: 目标指数名称。
+        unavailable_reason: 温度计不可用原因。
+
+    Returns:
+        记录温度计失败 provenance 的 derived 锚点。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return EvidenceAnchor(
+        source_kind="derived",
+        document_year=None,
+        section_id="thermometer",
+        page_number=None,
+        table_id="self_owned_thermometer",
+        row_locator=f"{index_code}:calculation_error",
+        note=(
+            f"self_owned_thermometer failure；index_code={index_code}；"
+            f"index_name={index_name}；unavailable_reason={unavailable_reason}；"
+            f"{THERMOMETER_REPORT_DISCLAIMER}"
+        ),
+    )
+
+
+def _rule_for_supported_code(index_code: str) -> ValuationIndexMappingRule | None:
+    """按支持指数代码查找映射规则。
 
     Args:
         index_code: 指数代码。
-        anchors: 业绩基准证据锚点。
 
     Returns:
-        支持时返回映射目标，否则返回 `None`。
+        支持时返回映射规则，否则返回 `None`。
 
     Raises:
         无显式抛出。
@@ -411,13 +446,109 @@ def _target_from_supported_code(
     stripped = index_code.strip()
     for rule in VALUATION_INDEX_MAPPING_RULES:
         if stripped == rule.index_code:
-            return ValuationIndexTarget(
-                status="mapped",
-                index_code=rule.index_code,
-                index_name=rule.index_name,
-                reason=f"指数画像已精确识别为 {rule.index_name}（{rule.index_code}）。",
-                anchors=anchors,
-            )
+            return rule
+    return None
+
+
+def _target_from_rule(
+    rule: ValuationIndexMappingRule,
+    *,
+    anchors: tuple[EvidenceAnchor, ...],
+) -> ValuationIndexTarget:
+    """按支持指数规则构造映射目标。
+
+    Args:
+        rule: 指数映射规则。
+        anchors: 业绩基准证据锚点。
+
+    Returns:
+        映射目标。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return ValuationIndexTarget(
+        status="mapped",
+        index_code=rule.index_code,
+        index_name=rule.index_name,
+        reason=f"指数画像已精确识别为 {rule.index_name}（{rule.index_code}）。",
+        anchors=anchors,
+    )
+
+
+def _validate_code_text_compatibility(
+    *,
+    rule: ValuationIndexMappingRule,
+    index_profile: ExtractedField[IndexProfileValue],
+    benchmark: ExtractedField[dict[str, object]],
+    anchors: tuple[EvidenceAnchor, ...],
+) -> ValuationIndexTarget | None:
+    """校验 benchmark_index_code 与同源基准文本是否兼容。
+
+    Args:
+        rule: benchmark_index_code 命中的支持指数规则。
+        index_profile: 指数画像字段。
+        benchmark: 业绩基准字段。
+        anchors: 基准证据锚点。
+
+    Returns:
+        不兼容时返回 fail-closed target；兼容或无文本时返回 `None`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    components = _benchmark_components(index_profile=index_profile, benchmark=benchmark)
+    if not components:
+        return None
+
+    exact_rule_seen = False
+    unsupported_equity_seen = False
+    uncertain_component_seen = False
+    other_supported_rule_seen = False
+    for component in components:
+        normalized = _normalize_component_identity(component)
+        if not normalized:
+            continue
+        component_rule = _rule_for_exact_alias(normalized)
+        if component_rule is not None:
+            if component_rule.index_code == rule.index_code:
+                exact_rule_seen = True
+            else:
+                other_supported_rule_seen = True
+            continue
+        if _is_cash_or_bond_component(normalized):
+            continue
+        if _looks_like_supported_derived_index(normalized) or _looks_like_equity_index(normalized):
+            unsupported_equity_seen = True
+            continue
+        uncertain_component_seen = True
+
+    if other_supported_rule_seen or (exact_rule_seen and (unsupported_equity_seen or uncertain_component_seen)):
+        return ValuationIndexTarget(
+            status="ambiguous_benchmark",
+            index_code=None,
+            index_name=None,
+            reason="基准指数代码与同源基准文本存在歧义，自动估值不可用。",
+            anchors=anchors,
+        )
+    if unsupported_equity_seen:
+        return ValuationIndexTarget(
+            status="unsupported_index",
+            index_code=None,
+            index_name=None,
+            reason="基准指数代码对应文本包含派生、策略、行业或未支持权益指数，自动估值不可用。",
+            anchors=anchors,
+        )
+    if uncertain_component_seen:
+        return ValuationIndexTarget(
+            status="ambiguous_benchmark",
+            index_code=None,
+            index_name=None,
+            reason="基准指数代码对应文本包含无法精确归类的基准成分，自动估值不可用。",
+            anchors=anchors,
+        )
     return None
 
 

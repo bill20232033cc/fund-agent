@@ -1098,6 +1098,8 @@ def _audit_valuation_resolution_fields(
                     location="valuation_state_resolution.reason",
                 )
             )
+        if resolution.source == "unavailable_thermometer":
+            issues.extend(_audit_unavailable_thermometer_anchor(resolution))
     if resolution.disclaimer_required:
         if not resolution.disclaimer:
             issues.append(
@@ -1116,6 +1118,43 @@ def _audit_valuation_resolution_fields(
                 )
             )
     return issues
+
+
+def _audit_unavailable_thermometer_anchor(
+    resolution: ValuationStateResolution,
+) -> list[AuditIssue]:
+    """审计不可用温度计路径是否保留失败 provenance 锚点。
+
+    Args:
+        resolution: 估值状态结构化真源。
+
+    Returns:
+        R1 问题列表。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if any(anchor.source_kind == "external_api" and anchor.section_id == "thermometer" for anchor in resolution.anchors):
+        return []
+    unavailable_reason = resolution.unavailable_reason or resolution.reason
+    for anchor in resolution.anchors:
+        if (
+            anchor.source_kind == "derived"
+            and anchor.section_id == "thermometer"
+            and anchor.row_locator is not None
+            and anchor.row_locator.endswith(":calculation_error")
+            and anchor.note is not None
+            and unavailable_reason in anchor.note
+        ):
+            return []
+    return [
+        _issue(
+            code="R1",
+            message="不可用温度计路径必须携带 external_api 温度计锚点或包含失败原因的 derived thermometer failure 锚点。",
+            location="valuation_state_resolution.anchors",
+        )
+    ]
 
 
 def _missing_available_thermometer_fields(

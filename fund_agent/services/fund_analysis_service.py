@@ -27,6 +27,7 @@ from fund_agent.fund.analysis import (
     THERMOMETER_REPORT_DISCLAIMER,
     analyze_investor_experience,
     build_explicit_valuation_resolution,
+    build_thermometer_failure_anchor,
     build_thermometer_valuation_resolution,
     build_unavailable_valuation_resolution,
     calculate_r_abc_from_bundle,
@@ -533,19 +534,32 @@ class FundAnalysisService:
                 )
             )
         except ThermometerCalculationError as exc:
+            unavailable_reason = f"自建温度计计算失败：{exc}"
             return ValuationStateResolution(
                 state="unavailable",
                 source="unavailable_thermometer",
-                reason=f"自动估值不可用：自建温度计计算失败：{exc}",
-                anchors=target.anchors,
+                reason=f"自动估值不可用：{unavailable_reason}",
+                anchors=(
+                    *target.anchors,
+                    build_thermometer_failure_anchor(
+                        index_code=target.index_code,
+                        index_name=target.index_name or target.index_code,
+                        unavailable_reason=unavailable_reason,
+                    ),
+                ),
                 disclaimer_required=True,
                 index_code=target.index_code,
                 index_name=target.index_name,
-                unavailable_reason=f"自建温度计计算失败：{exc}",
+                unavailable_reason=unavailable_reason,
                 disclaimer=THERMOMETER_REPORT_DISCLAIMER,
             )
         if not isinstance(result, ThermometerReading):
             raise ValueError("自动估值温度计 provider 必须返回 ThermometerReading")
+        if result.index_code != target.index_code:
+            raise ValueError(
+                f"自动估值温度计返回指数与目标不一致：target={target.index_code}, "
+                f"result={result.index_code}"
+            )
         return build_thermometer_valuation_resolution(result)
 
 

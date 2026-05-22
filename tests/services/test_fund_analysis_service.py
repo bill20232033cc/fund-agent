@@ -329,12 +329,16 @@ def _reading(
     *,
     state: str = "low",
     unavailable: bool = False,
+    index_code: str = "000300",
+    index_name: str = "沪深300",
 ) -> ThermometerReading:
     """构造自建温度计读数。
 
     Args:
         state: 估值状态候选。
         unavailable: 是否不可用。
+        index_code: 指数代码。
+        index_name: 指数名称。
 
     Returns:
         温度计读数。
@@ -344,8 +348,8 @@ def _reading(
     """
 
     return ThermometerReading(
-        index_code="000300",
-        index_name="沪深300",
+        index_code=index_code,
+        index_name=index_name,
         temperature=None if unavailable else Decimal("20.00"),
         pe_percentile=None if unavailable else Decimal("10.00"),
         pb_percentile=None if unavailable else Decimal("30.00"),
@@ -596,6 +600,38 @@ async def test_fund_analysis_service_thermometer_calculation_error_becomes_unava
     assert result.valuation_state_resolution.source == "unavailable_thermometer"
     assert result.valuation_state_resolution.state == "unavailable"
     assert "fixture calculation error" in (result.valuation_state_resolution.unavailable_reason or "")
+    failure_anchor = result.valuation_state_resolution.anchors[-1]
+    assert failure_anchor.source_kind == "derived"
+    assert failure_anchor.section_id == "thermometer"
+    assert failure_anchor.row_locator == "000300:calculation_error"
+    assert "self_owned_thermometer failure" in (failure_anchor.note or "")
+    assert result.valuation_state_resolution.unavailable_reason in (failure_anchor.note or "")
+
+
+@pytest.mark.asyncio
+async def test_fund_analysis_service_thermometer_identity_mismatch_fails_closed() -> None:
+    """验证温度计返回指数与目标指数不一致时 fail-closed。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 错配指数未触发 ValueError 时抛出。
+    """
+
+    thermometer = _FakeThermometerService(
+        _reading(index_code="000905", index_name="中证500")
+    )
+    service = FundAnalysisService(
+        extractor=_FakeExtractor(_index_bundle()),
+        thermometer_service=thermometer,
+    )
+
+    with pytest.raises(ValueError, match="返回指数与目标不一致"):
+        await service.analyze(_developer_request(valuation_state=None))
 
 
 @pytest.mark.asyncio
