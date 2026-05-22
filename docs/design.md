@@ -1,8 +1,9 @@
 # 基金行为教练 Agent —— 设计真源文档
 
-> **版本**: v2.0
+> **版本**: v2.1
 > **日期**: 2026-05-22
-> **状态**: 已按 2026-05-22 设计更新输入融合，并按 P14 / P15 总控事实校正
+> **状态**: 已按 2026-05-22 设计更新输入融合，并按 P14 / P15 / P16 / post-P16 设计对齐裁决校正
+> **变更摘要**: v2.1 澄清温度计只读查询边界，补充当前 CLI 命令清单，并要求后续 plan review 显式检查设计边界
 > **关联文档**: `docs/implementation-control.md`（实施总控）、`fund-agent-mvp-plan.md`（MVP 计划书）、`docs/fund-analysis-template-draft.md`（定性模板 v2）、`docs/audit-alignment.md`（审计机制对照研究）
 
 ⚠️ **重要声明**：本文档记录已接受的设计意图和当前实现事实。若本文档、实施总控和代码发生冲突，以当前代码事实与最新 control-doc reconciliation artifact 为准，并应及时回写本文档；不得长期保留“设计未来”口径冒充已实现状态。
@@ -30,7 +31,7 @@
 
 - 不做全市场横向比较（MVP 在精选基金池内做质量门控）
 - 不做实时行为偏差检测（改为买入前检查清单）
-- 不做温度计自建（MVP 使用有知有行公开页面数据 + 缓存）
+- 不做温度计自建计算（MVP 只查询有知有行公开页面数据并复用本地缓存；不自行计算温度值，不自动映射为 `valuation_state`）
 - 不做组合管理（v2 阶段）
 - 不输出买卖建议或仓位比例
 - 不把外部 Dayu Host/Engine/tool loop 作为主链路依赖或运行时接口（pyproject.toml 已移除 dayu-agent 依赖）
@@ -479,6 +480,8 @@ C（Cost）= 管理费 + 托管费 + 换手率 × 0.3%
 | 温度计数据 | 有知有行公开页面 | httpx + HTML 解析 | `data/thermometer.py` |
 | 精选基金池 | 手动维护 CSV | 文件读取 | `extraction_snapshot.py` |
 
+温度计能力通过 `ThermometerService` 与 `fund-analysis thermometer` CLI 暴露，只做只读查询与缓存复用；它不把温度计数值自动映射为买入前检查清单的 `valuation_state`，也不参与 `fund-analysis analyze` 默认分析判断。
+
 ### 6.4 年报章节映射
 
 | 年报章节 | 内容 | 用于 |
@@ -650,6 +653,19 @@ Golden Answer pipeline 由预填底稿、人工复核、strict JSON 构建和 co
 以下结构用于说明当前主要模块边界，不作为逐文件 inventory；新增 helper、review artifact 和运行产物以代码与
 `docs/implementation-control.md` 为准。
 
+### 9.0 CLI 命令清单
+
+| 命令 | 功能 | 当前状态 |
+|------|------|----------|
+| `fund-analysis analyze` | 主分析入口 | 已实现；默认运行 quality gate，低质量以结构化错误阻断 |
+| `fund-analysis checklist` | 独立检查清单入口 | 占位；当前提示用户先使用 `analyze` 并以非零状态退出 |
+| `fund-analysis thermometer` | 有知有行温度计只读查询 | 已实现；支持 plain / JSON 输出、显式缓存目录、强制刷新；不自动映射估值状态 |
+| `fund-analysis extraction-snapshot` | 精选基金池字段级抽取快照 | 已实现 |
+| `fund-analysis extraction-score` | 字段级 coverage / traceability / correctness 评分 | 已实现 |
+| `fund-analysis golden-prefill` | Golden answer 预填底稿 | 已实现 |
+| `fund-analysis golden-build` | Golden answer Markdown 到 strict JSON 构建 | 已实现 |
+| `fund-analysis quality-gate` | 对 score JSON 运行质量门控 | 已实现 |
+
 ```text
 fund-agent/
 ├── fund_agent/
@@ -801,3 +817,13 @@ fund-agent/
 | 来源失败分类 | P8-S3 五类失败 + fallback 资格判定 | 统一 fallback 策略 | 区分"可重试失败"与"契约违背"，防止错误传播 |
 | ITEM_RULE 审计 | P12 后渲染校验（`rendered_segment_present`） | 仅前置校验 | 确保渲染后内容符合 ITEM_RULE 约束 |
 | 跟踪误差披露 | P13/P14/P15 分阶段推进 | 可选且不可观测 | 指数基金核心指标；P13 建立结构化直接披露路径，P14 将其纳入指数/增强指数条件质量分母，P15 先获取 reviewed direct evidence，再决定是否进入 production golden |
+
+## 11. Plan Review 设计边界检查
+
+每个后续 plan review 必须显式检查：
+
+- 是否违反 §1.3 非目标；
+- 是否保持 UI / Service / Capability / Runtime / Engine 边界；
+- 生产年报访问是否仍只通过 `FundDocumentRepository` / `FundDataExtractor`；
+- 是否引入外部 Dayu runtime、LLM 写作、Evidence Confirm、计算型 tracking error、外部指数适配器或隐藏在 `extra_payload` 的显式参数；
+- success signal 是否可验证，且不会激励在缺少直接证据时错误接受数据。
