@@ -62,6 +62,12 @@ fund-analysis golden-build \
 # 基于 score.json 生成报告质量 gate
 fund-analysis quality-gate \
   --score-path reports/extraction-snapshots/p4-s3b-004393-controller-final-score/score.json
+
+# 查询温度计公开页快照
+fund-analysis thermometer
+
+# 查询自建沪深300指数温度计
+fund-analysis thermometer --index 000300 --json
 ```
 
 当前 `fund-analysis checklist FUND_CODE` 是占位命令，尚未接入 Service。请使用 `fund-analysis analyze FUND_CODE` 生成包含检查清单的完整报告。
@@ -108,6 +114,7 @@ fund-analysis quality-gate \
 - 程序审计规则：P1/P2/P3/L1/R1/R2
 - 有知有行温度计 data adapter
 - 有知有行温度计 Service/CLI 查询入口：`fund-analysis thermometer`
+- 自建沪深300指数温度计 CLI 查询入口：`fund-analysis thermometer --index 000300`
 - 精选基金池字段级抽取快照：`snapshot.jsonl`、`summary.md`、`errors.jsonl`
 - 精选基金池字段级评分：`score.json`、`score.md`、`golden_set.json`
 - Correctness golden answer 预填底稿：`fund-analysis golden-prefill`
@@ -155,7 +162,14 @@ fund-analysis thermometer --json
 fund-analysis thermometer --force-refresh --cache-dir cache/thermometer
 ```
 
-该命令只输出温度计快照摘要。上游不可用会以 `unavailable: true` 表示并正常退出；只有参数校验或运行异常才非零退出。当前不会把温度计数值自动映射为 `low/fair/high`，分析报告仍需要显式传入 `--valuation-state`。
+指定 `--index 000300` 时，命令查询项目内自建沪深300指数温度计，不依赖有知有行页面抓取：
+
+```bash
+fund-analysis thermometer --index 000300
+fund-analysis thermometer --index 000300 --json
+```
+
+该命令只输出温度计摘要。上游不可用会以 `unavailable: true` 表示并正常退出；只有参数校验或运行异常才非零退出。当前不会把温度计数值自动映射为 `analyze --valuation-state`，分析报告仍需要显式传入 `--valuation-state`。
 
 ## 精选基金池抽取快照
 

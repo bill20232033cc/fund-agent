@@ -14,6 +14,7 @@ from fund_agent.fund.data.thermometer import (
     MarketTemperature,
     ThermometerSnapshot,
 )
+from fund_agent.fund.data.thermometer_types import ThermometerReading
 from fund_agent.fund.quality_gate import QualityGateIssue, QualityGateResult
 from fund_agent.services import QualityGateBlockedError, QualityGateNotRunBlockedError
 from fund_agent.ui import cli
@@ -478,6 +479,38 @@ def _unavailable_thermometer_snapshot() -> ThermometerSnapshot:
     )
 
 
+def _available_thermometer_reading() -> ThermometerReading:
+    """构造可用自建温度计读数。
+
+    Args:
+        无。
+
+    Returns:
+        自建温度计读数。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return ThermometerReading(
+        index_code="000300",
+        index_name="沪深300",
+        temperature=Decimal("42.50"),
+        pe_percentile=Decimal("40.00"),
+        pb_percentile=Decimal("45.00"),
+        valuation_state_candidate="fair",
+        data_date="2026-05-22",
+        lookback_start="2005-04-08",
+        lookback_end="2026-05-22",
+        source="akshare_legulegu_index_pe_pb",
+        cached=False,
+        stale=False,
+        unavailable=False,
+        unavailable_reason=None,
+        fetched_at="2026-05-23T00:00:00+00:00",
+    )
+
+
 def test_analyze_cli_calls_service_and_prints_report(monkeypatch) -> None:  # type: ignore[no-untyped-def]
     """验证 analyze 命令调用 Service 并输出 Markdown。
 
@@ -847,6 +880,68 @@ def test_thermometer_cli_prints_json_for_unavailable_snapshot(monkeypatch) -> No
     assert payload["unavailable"] is True
     assert payload["unavailable_reason"] == "network down"
     assert payload["market_temperature"] is None
+
+
+def test_thermometer_cli_prints_index_reading_json(monkeypatch, tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """验证 thermometer --index JSON 输出自建温度计读数并转发参数。
+
+    Args:
+        monkeypatch: pytest monkeypatch fixture。
+        tmp_path: pytest 临时目录 fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 JSON 输出或参数转发不符合契约时抛出。
+    """
+
+    _FakeThermometerService.last_request = None
+    _FakeThermometerService.snapshot = _available_thermometer_reading()
+    monkeypatch.setattr(cli, "ThermometerService", _FakeThermometerService)
+    runner = CliRunner()
+
+    result = runner.invoke(
+        cli.app,
+        ["thermometer", "--index", "000300", "--cache-dir", str(tmp_path), "--json"],
+    )
+
+    assert result.exit_code == 0
+    payload = json.loads(result.output)
+    assert payload["index_code"] == "000300"
+    assert payload["index_name"] == "沪深300"
+    assert payload["temperature"] == "42.50"
+    assert payload["valuation_state_candidate"] == "fair"
+    assert "非有知有行官方数据" in payload["disclaimer"]
+    assert _FakeThermometerService.last_request is not None
+    assert _FakeThermometerService.last_request.index_code == "000300"
+    assert _FakeThermometerService.last_request.cache_dir == tmp_path
+
+
+def test_thermometer_cli_prints_index_reading_plain(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    """验证 thermometer --index plain 输出自建温度计读数。
+
+    Args:
+        monkeypatch: pytest monkeypatch fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 plain 输出不符合契约时抛出。
+    """
+
+    _FakeThermometerService.last_request = None
+    _FakeThermometerService.snapshot = _available_thermometer_reading()
+    monkeypatch.setattr(cli, "ThermometerService", _FakeThermometerService)
+    runner = CliRunner()
+
+    result = runner.invoke(cli.app, ["thermometer", "--index", "000300"])
+
+    assert result.exit_code == 0
+    assert "index_code: 000300" in result.output
+    assert "temperature: 42.50" in result.output
+    assert "valuation_state_candidate: fair" in result.output
 
 
 def test_thermometer_cli_exits_nonzero_on_service_error(monkeypatch) -> None:  # type: ignore[no-untyped-def]

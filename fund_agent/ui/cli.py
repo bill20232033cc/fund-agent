@@ -43,6 +43,7 @@ from fund_agent.services import (
     ThermometerService,
     ValuationState,
 )
+from fund_agent.fund.data.thermometer_types import ThermometerReading
 
 app = typer.Typer(help="基金行为教练 Agent — 买入前专业级基金体检报告")
 DEFAULT_GOLDEN_TEMPLATE = DEFAULT_GOLDEN_TEMPLATE_PATH
@@ -243,6 +244,10 @@ def checklist(
 
 @app.command("thermometer")
 def thermometer(
+    index_code: Annotated[
+        str | None,
+        typer.Option("--index", help="自建温度计指数代码；P19-S1 支持 000300"),
+    ] = None,
     cache_dir: Annotated[
         Path | None,
         typer.Option("--cache-dir", help="温度计缓存目录；不传则使用默认 cache/thermometer"),
@@ -252,9 +257,10 @@ def thermometer(
     ] = False,
     output_json: Annotated[bool, typer.Option("--json", help="以 JSON 输出温度计快照摘要")] = False,
 ) -> None:
-    """查询有知有行温度计快照。
+    """查询温度计快照或自建指数温度计读数。
 
     Args:
+        index_code: 自建温度计指数代码；为空时保留当前公开页查询。
         cache_dir: 温度计缓存目录。
         force_refresh: 是否强制刷新。
         output_json: 是否输出 JSON。
@@ -269,7 +275,11 @@ def thermometer(
     try:
         snapshot = asyncio.run(
             ThermometerService().run(
-                ThermometerRequest(cache_dir=cache_dir, force_refresh=force_refresh)
+                ThermometerRequest(
+                    cache_dir=cache_dir,
+                    force_refresh=force_refresh,
+                    index_code=index_code,
+                )
             )
         )
     except Exception as exc:
@@ -786,6 +796,9 @@ def _thermometer_snapshot_payload(snapshot) -> dict[str, object]:  # type: ignor
         无显式抛出。
     """
 
+    if isinstance(snapshot, ThermometerReading):
+        return _thermometer_reading_payload(snapshot)
+
     market = snapshot.market
     macro = snapshot.macro
     return {
@@ -809,6 +822,43 @@ def _thermometer_snapshot_payload(snapshot) -> dict[str, object]:  # type: ignor
             if macro and macro.ten_year_treasury_yield is not None
             else None
         ),
+    }
+
+
+def _thermometer_reading_payload(reading: ThermometerReading) -> dict[str, object]:
+    """把自建温度计读数转换为 CLI 输出 payload。
+
+    Args:
+        reading: 自建温度计读数。
+
+    Returns:
+        可 JSON 序列化的摘要 payload。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return {
+        "source": reading.source,
+        "cached": reading.cached,
+        "stale": reading.stale,
+        "unavailable": reading.unavailable,
+        "unavailable_reason": reading.unavailable_reason,
+        "index_code": reading.index_code,
+        "index_name": reading.index_name,
+        "temperature": str(reading.temperature) if reading.temperature is not None else None,
+        "pe_percentile": (
+            str(reading.pe_percentile) if reading.pe_percentile is not None else None
+        ),
+        "pb_percentile": (
+            str(reading.pb_percentile) if reading.pb_percentile is not None else None
+        ),
+        "valuation_state_candidate": reading.valuation_state_candidate,
+        "data_date": reading.data_date,
+        "lookback_start": reading.lookback_start,
+        "lookback_end": reading.lookback_end,
+        "fetched_at": reading.fetched_at,
+        "disclaimer": reading.disclaimer,
     }
 
 

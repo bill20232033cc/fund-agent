@@ -23,6 +23,8 @@ CI 当前固定 Python 3.11，使用 `uv sync --extra dev --frozen` 安装锁定
 - `tests/fund/test_quality_gate_integration.py`：P5-S1/P9-S2 单基金 quality gate adapter 测试，覆盖从已抽取 `StructuredFundDataBundle` 生成 snapshot/score/gate 产物、精选池成员缺 golden coverage 仍运行 gate，以及基金不在精选池时返回 not-run reason；不触发真实网络或 PDF
 - `tests/fund/data/test_nav_data.py`：净值数据适配器测试，覆盖 `nav_cache` 命中和强制刷新
 - `tests/fund/data/test_thermometer.py`：有知有行温度计适配器测试，覆盖全市场/指数/宏观解析、24h 缓存复用、强制刷新、抓取失败 stale fallback、无缓存 unavailable 和 malformed HTML
+- `tests/fund/data/test_thermometer_source.py`：自建指数温度计 akshare 数据源测试，覆盖沪深300 PE/PB 表合并、不支持指数和 schema drift fail-closed
+- `tests/fund/data/test_thermometer_cache.py`：自建指数温度计 JSON 缓存测试，覆盖 fresh cache、stale policy 和损坏缓存降级
 - `tests/fund/analysis/test_ratios.py`：分析模块公共比例解析测试，覆盖披露文本百分比解析、数值型输入已标准化契约、保留的显式数值百分比归一 helper 和非法输入 fail-closed
 - `tests/fund/analysis/test_r_abc.py`：R=A+B-C 收益归因测试，覆盖公式闭合、P1 字段解析、证据锚点传递和缺失输入路径
 - `tests/fund/analysis/test_alpha_judge.py`：超额收益性质判断测试，覆盖结构性、部分结构性、阶段性、不适用、样本不足和显式环境输入要求
@@ -31,6 +33,7 @@ CI 当前固定 Python 3.11，使用 `uv sync --extra dev --frozen` 安装锁定
 - `tests/fund/analysis/test_risk_check.py`：否决项检查与压力测试，覆盖清盘风险、基金经理任期、风格漂移、费率远超同类、指数跟踪误差 resolved authority、开发覆盖 fallback、QDII 不适用、显式输入缺失、`-20%/-40%/-60%` 场景和基金类型阈值
 - `tests/fund/analysis/test_checklist.py`：买入前检查清单测试，覆盖 7 问题顺序、红黄绿灰汇总、缺失显式输入、估值状态、资金期限阈值和异常否决项输入
 - `tests/fund/analysis/test_final_judgment.py`：最终判断派生策略测试，覆盖否决项、检查清单红灯、压力测试、quality gate block/not_run、黄灯/灰灯/数据不足、全绿值得持有、原因去重和 developer override 冲突记录
+- `tests/fund/analysis/test_thermometer_calculator.py`：自建温度计纯计算器测试，覆盖 PE/PB 百分位、综合温度、阈值映射、空历史和非法估值 fail-closed
 - `tests/fund/audit/test_audit_programmatic.py`：程序审计测试，覆盖 P1/P2/P3/C2/L1/R1/R2 规则、每章最小证据行、required_output_items marker、must_not_cover 禁止 marker、ITEM_RULE 渲染/删除合规、跟踪误差和指数画像 deterministic source guard、章节切分 fallback、必需输入缺失、selected/derived/source 最终判断冲突、故意注入错误和未知检查清单信号
 - `tests/fund/template/test_contracts.py`：模板 CHAPTER_CONTRACT manifest 测试，覆盖 0-7 章完整性、设计标题、必需字段非空、所有标准基金类型 preferred_lens 解析和 fail-closed 校验
 - `tests/fund/template/test_lens_application.py`：preferred_lens 应用计划测试，覆盖所有标准基金类型 8 章 plan、default fallback 标记，以及非法基金类型、空章节、重复章节和越界章节 fail-closed
@@ -38,8 +41,8 @@ CI 当前固定 Python 3.11，使用 `uv sync --extra dev --frozen` 安装锁定
 - `tests/fund/template/test_renderer.py`：模板渲染器测试，覆盖 8 章完整性、CHAPTER_CONTRACT 标题来源、渲染章节块、splitter fail-closed、正文与附录证据锚点格式、缺证章节显式输出、页码保留、非年报来源标注、preferred_lens 第 0/1 章确定性应用、ITEM_RULE 六类基金渲染/删除矩阵、跟踪误差 structured_data 替换、benchmark-only 编制方法/成分股不足边界、ITEM_RULE 多锚点证据边界、程序审计输入兼容、缺失数据显式渲染、最终判断边界、禁用交易措辞和 README 同步
 - `tests/services/test_fund_analysis_service.py`：Service 编排测试，使用 fake extractor 避免网络/PDF 下载，覆盖 product mode 最小请求、developer override nested 契约、结构化抽取到渲染和程序审计的完整调用路径、fund_code 入口校验、quality gate `off / warn / block / not-run` 路径、结构化阻断异常、默认 gate run id 不覆盖，并验证不含 PDF 下载的单只基金分析低于 30 秒
 - `tests/services/test_extraction_score_service.py`：P4-S2/P5-S4 评分 Service 测试，覆盖显式参数转发、`errors_path` 转发、非法 snapshot 路径和非法 errors 路径拒绝
-- `tests/services/test_thermometer_service.py`：温度计 Service 测试，覆盖注入 fake adapter、显式 cache_dir/force_refresh 转发和非法缓存路径拒绝；不触发真实网络
-- `tests/ui/test_cli.py`：Typer CLI 测试，覆盖 `analyze` product mode 最小请求、developer override 参数门禁、nested override 构造、gate summary/blocked/info 信息输出、失败非零退出、`thermometer` plain/JSON/unavailable 输出，以及 `checklist` 不输出误导性成功文本
+- `tests/services/test_thermometer_service.py`：温度计 Service 测试，覆盖注入 fake adapter、显式 cache_dir/force_refresh 转发、非法缓存路径拒绝、自建 `--index 000300` 路由、stale cache fallback 和 unavailable；不触发真实网络
+- `tests/ui/test_cli.py`：Typer CLI 测试，覆盖 `analyze` product mode 最小请求、developer override 参数门禁、nested override 构造、gate summary/blocked/info 信息输出、失败非零退出、`thermometer` 公开页 plain/JSON/unavailable 输出、自建 `--index 000300` plain/JSON 输出，以及 `checklist` 不输出误导性成功文本
 - `tests/scripts/test_selected_funds_smoke.py`：有知有行精选基金池 smoke 脚本测试，覆盖 CSV 数据质量、分层抽样、指定代码、CLI 命令构造和 `quality_gate_status` 记录；命令显式使用 `--dev-override --quality-gate-policy warn`，测试不触发真实网络
 - `tests/config/test_paths.py`：仓库默认路径迁移守卫测试，覆盖 `fund_agent.config.paths` 默认值、导入隔离、旧常量别名、CLI 历史 score fixture 排除和散落 `Path("docs|reports|cache/...")` 默认值扫描
 - `tests/test_repo_hygiene.py`：仓库发布卫生测试，覆盖 MIT License、`pyproject.toml` license、GitHub Actions CI 命令和 `.gitignore` artifact policy
@@ -65,7 +68,9 @@ pytest tests/fund/test_extraction_snapshot.py -q
 pytest tests/fund/test_extraction_score.py -q
 pytest tests/fund/data/test_nav_data.py -q
 pytest tests/fund/data/test_thermometer.py -q
+pytest tests/fund/data/test_thermometer_source.py tests/fund/data/test_thermometer_cache.py -q
 pytest tests/fund/analysis/test_ratios.py -q
+pytest tests/fund/analysis/test_thermometer_calculator.py -q
 pytest tests/fund/analysis/test_r_abc.py -q
 pytest tests/fund/analysis/test_alpha_judge.py -q
 pytest tests/fund/analysis/test_consistency_check.py -q
