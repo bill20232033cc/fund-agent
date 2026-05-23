@@ -168,6 +168,28 @@ def test_akshare_index_source_fails_closed_on_schema_drift() -> None:
         asyncio.run(source.load_index_history("000300"))
 
 
+def test_akshare_index_source_rejects_bool_valuation_values() -> None:
+    """验证估值字段拒绝 bool，避免被 Decimal 当作字符串兜底。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 bool 估值字段未被拒绝时抛出。
+    """
+
+    source = AkshareIndexThermometerSource(
+        pe_fetcher=lambda symbol: _FakeFrame([{"日期": "2026-05-22", "滚动市盈率中位数": True}]),
+        pb_fetcher=lambda symbol: _FakeFrame([{"日期": "2026-05-22", "市净率中位数": "2"}]),
+    )
+
+    with pytest.raises(ThermometerSourceError, match="不能为布尔值"):
+        asyncio.run(source.load_index_history("000300"))
+
+
 def test_akshare_index_source_fails_closed_on_date_schema_drift() -> None:
     """验证日期格式漂移会 fail-closed。
 

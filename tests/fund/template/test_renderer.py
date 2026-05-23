@@ -196,6 +196,7 @@ def _bundle(
             "fund_category": "混合型",
             "fund_scale": "10.00亿元",
             "fund_manager": "张三",
+            "inception_date": "2020-01-15",
             "classified_fund_type": fund_type,
             "classification_basis": ("基金类别：混合型",),
         },
@@ -753,6 +754,24 @@ def test_render_template_report_contains_exact_eight_design_chapters() -> None:
     assert all(title in result.report_markdown for title in chapter_titles)
     assert result.report_markdown.count("\n# ") == 7
     assert result.report_markdown.startswith("# 0. 投资要点概览")
+
+
+def test_render_template_report_renders_chapter_0_profile_with_inception_date() -> None:
+    """验证第 0 章基金简介渲染已披露成立时间。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当基金简介未渲染成立时间时抛出。
+    """
+
+    result = render_template_report(_render_input())
+
+    assert "- 基金简介：基金经理 张三；管理规模 10.00亿元；成立时间 2020-01-15。" in result.report_markdown
 
 
 def test_render_template_report_exposes_contract_aligned_chapter_blocks() -> None:

@@ -403,16 +403,17 @@ def test_run_checklist_rejects_bool_money_horizon_years() -> None:
         AssertionError: 当 bool 未被拒绝时抛出。
     """
 
-    with pytest.raises(ValueError, match="不能为布尔值"):
-        run_checklist(
-            rabc_attribution=_rabc(),
-            manager_alignment=_manager_alignment(),
-            investor_experience=_investor_experience("positive"),
-            consistency_result=_consistency("green"),
-            risk_check_result=_risk_result("pass"),
-            valuation_state="low",
-            user_money_horizon_years=True,
-        )
+    for value in (True, False):
+        with pytest.raises(ValueError, match="不能为布尔值"):
+            run_checklist(
+                rabc_attribution=_rabc(),
+                manager_alignment=_manager_alignment(),
+                investor_experience=_investor_experience("positive"),
+                consistency_result=_consistency("green"),
+                risk_check_result=_risk_result("pass"),
+                valuation_state="low",
+                user_money_horizon_years=value,
+            )
 
 
 def test_run_checklist_handles_inconsistent_veto_result_without_crashing() -> None:

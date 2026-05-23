@@ -260,6 +260,8 @@ def _to_decimal(value: object, *, field_name: str) -> Decimal:
 
     if value is None:
         raise ThermometerSourceError(f"{field_name} 为空")
+    if isinstance(value, bool):
+        raise ThermometerSourceError(f"{field_name} 不能为布尔值")
     try:
         return Decimal(str(value))
     except (InvalidOperation, ValueError) as exc:
