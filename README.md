@@ -143,7 +143,7 @@ CI 使用 Python 3.11，并执行以下发布就绪检查：
 ```bash
 uv sync --extra dev --frozen
 uv run ruff check .
-uv run pytest -q
+uv run pytest --cov=fund_agent --cov-report=term-missing --cov-fail-under=50 -q
 ```
 
 本地也可以按关注范围运行较小的测试集：
@@ -269,7 +269,7 @@ fund-analysis quality-gate \
 
 ## 仓库产物策略
 
-仓库采用 MIT License。发布基础验证由 GitHub Actions 执行 Python 3.11 下的 `uv sync --extra dev --frozen`、`uv run ruff check .` 和 `uv run pytest -q`。
+仓库采用 MIT License。发布基础验证由 GitHub Actions 执行 Python 3.11 下的 `uv sync --extra dev --frozen`、`uv run ruff check .` 和 `uv run pytest --cov=fund_agent --cov-report=term-missing --cov-fail-under=50 -q`。
 
 当前会跟踪人工维护或可复核的输入产物，例如 `docs/code_20260519.csv`、`docs/golden-answer-template.md` 和 `reports/golden-answers/` 下的 curated golden answer 文件。运行时生成物保持本地：`cache/`、`reports/extraction-snapshots/`、`reports/quality-gate-runs/`、`report-*.md` 和 `docs/*.docx` 不纳入默认版本控制。
 

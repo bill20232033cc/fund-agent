@@ -2,7 +2,7 @@
 
 当前测试按 Capability 边界分层，新增用例应跟随实现所在目录组织，并优先覆盖当前稳定公共契约，而不是偶然实现细节。
 
-CI 当前固定 Python 3.11，使用 `uv sync --extra dev --frozen` 安装锁定依赖，并运行 `uv run ruff check .` 与 `uv run pytest -q`。本地验证发布就绪时应优先复用同一组命令。
+CI 当前固定 Python 3.11，使用 `uv sync --extra dev --frozen` 安装锁定依赖，并运行 `uv run ruff check .` 与 `uv run pytest --cov=fund_agent --cov-report=term-missing --cov-fail-under=50 -q`。本地验证发布就绪时应优先复用同一组命令。
 
 ## 当前目录
 
@@ -116,7 +116,7 @@ fund-analysis thermometer --index wind_all_a,000300,000905 --force-refresh --jso
 覆盖率 gate：
 
 ```bash
-pytest tests/fund/data tests/fund/documents tests/fund/extractors tests/fund/integration tests/fund/template tests/fund/audit tests/fund/analysis tests/services tests/ui --cov=fund_agent --cov-report=term-missing --cov-fail-under=50 -q
+uv run pytest --cov=fund_agent --cov-report=term-missing --cov-fail-under=50 -q
 ```
 
 该命令要求安装 dev 依赖中的 `pytest-cov`。当前 P3-S7 gate 要求总覆盖率不低于 50%。
@@ -126,7 +126,7 @@ pytest tests/fund/data tests/fund/documents tests/fund/extractors tests/fund/int
 ```bash
 uv sync --extra dev --frozen
 uv run ruff check .
-uv run pytest -q
+uv run pytest --cov=fund_agent --cov-report=term-missing --cov-fail-under=50 -q
 ```
 
 性能 gate：
