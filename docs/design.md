@@ -2,8 +2,8 @@
 
 > **版本**: v2.2
 > **日期**: 2026-05-23
-> **状态**: 已按 `AGENTS.md` 统一规则真源、六层模块边界、P19 温度计集成事实、工程基线和 Dayu 参考材料吸收范围
-> **变更摘要**: v2.2 当前修订确认 `AGENTS.md` 是 Agent 规则唯一权威入口；设计文档是代码设计真源但不得覆盖 `AGENTS.md`；模块边界统一为 UI / Application / Runtime / Service / Engine / Capability；P19-S3 后温度计只在 exact benchmark identity 范围自动映射 `valuation_state`；吸收 `dayu-agent` `pyproject.toml` 的 Python 3.11、setuptools、元数据、可选依赖、pytest/ruff/black 工程基线，并吸收 Dayu README / Host / Engine / Fins / Config / CONTRIBUTING 手册中的可迁移工程纪律，但不引入外部 Dayu 运行时依赖。
+> **状态**: 已按 `AGENTS.md` 统一规则真源、六层模块边界、P19 全 A/指数温度计集成事实、工程基线和 Dayu 参考材料吸收范围
+> **变更摘要**: v2.2 当前修订确认 `AGENTS.md` 是 Agent 规则唯一权威入口；设计文档是代码设计真源但不得覆盖 `AGENTS.md`；模块边界统一为 UI / Application / Runtime / Service / Engine / Capability；P19-S3 后 `analyze` 只在 exact benchmark identity 命中 `000300` / `000905` 时自动映射 `valuation_state`；P19-S5 后 `fund-analysis thermometer` 默认使用项目内自建全 A `wind_all_a` PE/PB 温度计；`fund-analysis checklist` 作为独立 Application 用例复用 Service 确定性分析核心；吸收 `dayu-agent` `pyproject.toml` 的 Python 3.11、setuptools、元数据、可选依赖、pytest/ruff/black 与包资源声明纪律，并吸收 Dayu README / Host / Engine / Fins / Config / CONTRIBUTING 手册中的可迁移工程纪律；当前确定性主链路不依赖外部 Dayu runtime、Host、Engine、tool loop 或外部 Dayu API，后续如需要相关能力必须在本项目边界内化实现。
 > **关联文档**: `docs/implementation-control.md`（实施总控）、`fund-agent-mvp-plan.md`（MVP 计划书）、`docs/fund-analysis-template-draft.md`（定性模板 v2）、`docs/audit-alignment.md`（审计机制对照研究）
 
 ⚠️ **重要声明**：`AGENTS.md` 是本仓库所有 Agent 执行规则的唯一权威入口；本文档是其下位的设计真源。若本文档、实施总控、README 或代码与 `AGENTS.md` 冲突，必须先按 `AGENTS.md` 修正方案和实现，再回写本文档；不得长期保留“设计未来”口径冒充已实现状态。
@@ -20,11 +20,11 @@
 
 | 原则 | 说明 |
 |------|------|
-| 确定性 MVP 主链路 | 当前 `fund-analysis analyze` 不依赖 LLM 写作或外部 Dayu Host/Engine，由结构化抽取、确定性分析、模板渲染、程序审计和 quality gate 组成 |
+| 确定性 MVP 主链路 | 当前 `fund-analysis analyze` 与 `fund-analysis checklist` 不依赖 LLM 写作或 Dayu Host/Engine 调度，由结构化抽取、确定性分析、模板渲染、程序审计和 quality gate 组成 |
 | 好资产 + 好价格 + 长期持有 | 有知有行核心理念：分析报告回答"好不好"，检查清单回答"该不该买" |
 | 证据可审计 | 每条断言必须关联到年报具体章节，计算必须可追溯 |
 | 模板驱动而非自由生成 | MVP 阶段用模板填充，避免 LLM 幻觉；v2 引入 LLM 写作 |
-| 分层解耦 | 设计边界统一为 UI / Application / Runtime / Service / Engine / Capability。当前确定性 CLI 路径中仍存在 UI 直接调用 Service 的历史实现，应作为 release-maintenance 边界债收口；任何新增场景、prompt manifest、tool loop 或 runner 能力必须先落在 Application/Runtime/Engine 对应边界内 |
+| 分层解耦 | 设计边界统一为 UI / Application / Runtime / Service / Engine / Capability。当前确定性 CLI 路径经 Application facade 调用 Service，Service 编排 `fund_agent/fund` Capability；任何新增场景、prompt manifest、tool loop 或 runner 能力必须先落在 Application / Runtime / Engine 对应边界内 |
 | 基金类型判断优先 | 必须先识别标准基金类型，再应用对应 `preferred_lens` 与 `ITEM_RULE` |
 | 工程基线可复现 | Python `>=3.11`；打包、元数据、测试、lint、format 和可选开发依赖以 `pyproject.toml` 为单一入口；吸收 Dayu 工程化、配置、贡献和边界纪律，但不吸收 Dayu 运行时 |
 
@@ -36,7 +36,7 @@
 - 不把温度计数值无边界地映射为 `valuation_state`。P19-S3 后只允许在 exact benchmark identity 命中当前支持指数时自动映射；用户显式输入始终优先，缺失、主动/债券/QDII/FOF、派生指数、多个权益指数或无法精确归类基准必须保持 `unavailable` 灰灯，并保留审计证据。
 - 不做组合管理（v2 阶段）
 - 不输出买卖建议或仓位比例
-- 不把外部 Dayu Host/Engine/tool loop 作为主链路依赖或运行时接口（pyproject.toml 已移除 dayu-agent 依赖）
+- 不在当前确定性 `analyze` / `checklist` 主链路中临时拼接外部 Dayu runtime、tool loop 或 LLM 写作。若后续需要 Agent 化路径，Runtime / Engine 能力必须在本项目内按六层边界内化实现，并先完成契约、依赖声明、事件流、ToolTrace、失败语义和测试 gate。
 
 ---
 
@@ -44,42 +44,45 @@
 
 ### 2.1 架构边界
 
-```
+```text
 UI → Application → Service / Runtime → Engine / Capability
 ```
 
 | 层级 | 职责 | 实现 | 边界约束 |
 |------|------|------|---------|
-| **UI** | 用户交互界面、报告渲染、可视化展示 | 当前为 `fund_agent/ui/cli.py`（Typer） | 只依赖 Application 层接口；不得直接调用 Engine 或 Capability |
-| **Application** | 用例编排、场景定义、prompt 组装、用户会话管理 | 当前 deterministic CLI 路径尚未独立成包，是 release-maintenance 边界债 | 可调用 Service 和 Runtime；不得直接调用 Capability |
-| **Runtime** | Agent 生命周期、`system_prompt` 渲染、scene 注册、工具绑定 | 当前未接入通用 Agent runtime | 管理 tool loop / runner / trace / facts / ToolRegistry；不得实现基金知识 |
+| **UI** | 用户交互界面、报告渲染、可视化展示 | 当前为 `fund_agent/ui/cli.py`（Typer） | 只依赖 Application 层接口；不得直接调用 Service、Engine 或 Capability |
+| **Application** | 用例编排、场景定义、prompt 组装、用户会话管理 | `fund_agent/application/` | 可调用 Service 和 Runtime；不得直接调用 Capability，不承载基金领域规则 |
+| **Runtime** | Agent 生命周期管理、`system_prompt` 渲染、scene 注册、工具绑定 | 当前未接入通用 Agent runtime | 管理 tool loop / runner / trace / facts / ToolRegistry 的生命周期装配；不得实现基金知识或工具具体实现 |
 | **Service** | 跨领域协调、工作流编排、报告生成 | `fund_agent/services/` | 协调 Engine 和 Capability；不得直接读取年报文件/PDF/cache 或具体来源 |
 | **Engine** | Tool 执行框架、ToolTrace、状态机、事件流 | 当前未接入通用 Engine 包 | 提供稳定工具调用契约；不得理解基金领域知识 |
 | **Capability** | 基金领域知识、文档仓库、结构化抽取、分析引擎、模板渲染、审计规则、质量门控 | `fund_agent/fund/` | 理解基金类型、财报章节、投资规则、有知有行方法论 |
 | **Config** | 默认配置与路径常量 | `fund_agent/config/paths.py` | 不读取 prompt manifest、scene registry 或 runtime 状态 |
 
-> **当前实现裁决**：MVP 阶段采用纯 Python 确定性管线，不依赖 LLM。当前 CLI 仍存在 UI 直接调用 Service 的历史路径；这不是未来架构许可，只能作为待收口实现事实记录。任何新增场景、prompt manifest、scene registry、system prompt、tool loop、runner、trace、facts 或 ToolRegistry 能力必须先进入 Application/Runtime/Engine 边界。
+> **当前实现裁决**：MVP 阶段采用纯 Python 确定性管线，不依赖 LLM。RM-B2 后，当前 CLI 生产路径走 UI → Application → Service → Capability；Runtime / Engine 尚未接入。任何新增 scene registry、system prompt、session/run/cancel/resume/outbox 能力必须先进入 Application / Runtime；任何新增 tool loop、runner、ToolRegistry、ToolTrace 或 context budget 能力必须先进入 Engine。
 
-> **Dayu 裁决**：`pyproject.toml` 不得重新引入 `dayu-agent` 依赖。Dayu-Agent 只作为方法论、历史审计研究、工程基线和手册纪律参考，不作为安装依赖、运行时接口、Host/Engine/tool loop 或外部 Dayu API 包装目标。后续如需要 runner、trace、ToolRegistry、session/run/cancel/resume/outbox 或 scene runtime 能力，应在本项目内按上述边界内化实现。
+> **Dayu 裁决**：Dayu 只作为方法论、历史研究、工程基线和手册纪律参考。当前生产主链路不得依赖外部 `dayu-agent` 运行时、Host、Engine、tool loop 或外部 Dayu API；后续如需要相关能力，必须在本项目内按现有六层边界内化实现，并通过独立 gate 声明依赖、契约、生命周期边界、ToolTrace/事件流、失败语义和测试。
 
-> **Dayu 手册映射裁决**：Dayu 的 `UI -> Service -> Host -> Agent` 只能作为分工参考，不能覆盖本项目 `UI -> Application -> Service / Runtime -> Engine / Capability`。Dayu Host 的生命周期治理原则只能映射到本项目未来 Runtime；Dayu Engine 的 tool loop / runner / trace 原则只能映射到本项目未来 Engine；Dayu Fins 只能类比 `fund_agent/fund` Capability；Dayu config 手册只提供“默认配置 + workspace 覆盖 + prompt 资产分层”的配置纪律；Dayu CONTRIBUTING 只提供第一性原理、root cause 同源、边界说明、测试与文档同步的贡献纪律。
+> **Dayu 手册映射裁决**：Dayu UI 经验只能映射到本项目 UI；Dayu Service 经验只能映射到本项目 Application + Service；Dayu Host 经验只能作为本项目未来 Runtime 设计参考；Dayu Agent/Engine 经验只能作为本项目未来 Engine 设计参考；Dayu Fins 只能类比 `fund_agent/fund` Capability；Dayu config 手册只提供“默认配置 + workspace 覆盖 + prompt 资产分层”的配置纪律；Dayu CONTRIBUTING 提供第一性原理、root cause 同源、边界说明、测试与文档同步的贡献纪律。
 
-> **目录事实裁决**：`fund_agent/config` 的存在不代表 prompt manifest、scene registry 或 Dayu config runtime 已接入；当前没有通用 Fund tool runtime。空目录、本地未跟踪草案或审计输入不能单独作为设计事实。
+> **显式参数裁决**：Dayu 手册中的 `extra_payloads` 只能作为未来 provider 扩展参数参考；本项目任何业务参数、基金代码、年份、估值状态、缓存策略、来源选择、scene、tool 或审计开关都必须在 typed request / contract / config 中显式声明，禁止塞进 `extra_payload` 或自由 dict。
 
-### 2.2 执行链路
+> **目录事实裁决**：`fund_agent/config` 的存在不代表 prompt manifest、scene registry 或 Dayu config runtime 已接入；当前尚未创建 `fund_agent/runtime` 或 `fund_agent/engine` 通用执行包。空目录、本地未跟踪草案或审计输入不能单独作为设计事实。
+
+### 2.2 当前确定性执行链路
 
 ```
 CLI（Typer app）
-  → FundAnalysisService.analyze(request)
-    → FundDataExtractor.extract(fund_code, year)  # P1 结构化抽取
-      → FundDocumentRepository.load_annual_report()  # 文档仓库
-        → documents layer source orchestration and cache internals
-      → extract_profile / extract_performance / ...  # 章节 extractor
-      → FundNavDataAdapter.load_nav_data()  # 净值数据
-    → run_quality_gate_for_bundle(bundle)  # 质量门控（可选，在 P2 分析之前）
-    → judge_alpha_nature / calculate_r_abc / check_consistency / ...  # P2 分析计算
-    → render_template_report(render_input)  # 模板渲染
-    → run_programmatic_audit(audit_input)  # 程序审计
+  → FundAnalysisUseCase.analyze/checklist(request)
+    → FundAnalysisService.analyze/checklist(request)
+      → FundDataExtractor.extract(fund_code, year)  # P1 结构化抽取
+        → FundDocumentRepository.load_annual_report()  # 文档仓库
+          → documents layer source orchestration and cache internals
+        → extract_profile / extract_performance / ...  # 章节 extractor
+        → FundNavDataAdapter.load_nav_data()  # 净值数据
+      → run_quality_gate_for_bundle(bundle)  # 质量门控（可选，在 P2 分析之前）
+      → judge_alpha_nature / calculate_r_abc / check_consistency / ...  # P2 分析计算
+      → render_template_report(render_input)  # analyze 专用模板渲染
+      → run_programmatic_audit(audit_input)  # analyze 专用程序审计
   → stdout 输出报告 Markdown
 ```
 
@@ -105,18 +108,20 @@ CLI（Typer app）
 | `FundAnalysisDeveloperOverrides` | 开发覆盖参数（最终判断、股票仓位、实际风格等） |
 | `QualityGatePolicy` | `Literal["off", "warn", "block"]` |
 
-`quality_gate_policy=block` 是 `analyze` 默认策略；低质量或 not-run gate 以结构化异常阻断并由 CLI 返回退出码 2。当前没有 `ExecutionContract` / `AgentInput` / scene preparation 主链路。
+`quality_gate_policy=block` 是 `analyze` 默认策略；低质量或 not-run gate 以结构化异常阻断并由 CLI 返回退出码 2。当前没有 Runtime run / Engine tool loop / scene preparation 主链路。
+
+> **边界裁决**：上图描述当前代码事实。当前尚未接入 Runtime / Engine 调度；在没有明确 session/run/tool-loop 需求前，不应空造 Runtime 或 Engine 包，也不应引入未使用的外部 Dayu runtime 依赖。
 
 ### 2.3 核心契约
 
 | 契约 | 方向 | 说明 |
 |------|------|------|
-| `FundAnalysisRequest` | UI → Service | 基金代码、年报年份、分析参数、质量 gate 策略；开发覆盖参数通过 `FundAnalysisDeveloperOverrides` 且只能在 `developer_override` mode 生效 |
-| `FundAnalysisResult` | Service → UI | 报告 Markdown、最终判断选择契约、质量 gate 摘要、审计结果 |
+| `FundAnalysisRequest` | UI → Application → Service | 基金代码、年报年份、分析参数、质量 gate 策略；开发覆盖参数通过 `FundAnalysisDeveloperOverrides` 且只能在 `developer_override` mode 生效 |
+| `FundAnalysisResult` | Service → Application → UI | 报告 Markdown、最终判断选择契约、质量 gate 摘要、审计结果 |
 | `ValuationState` | Service 类型 | `Literal["low", "fair", "high", "unavailable"]` |
 | `MoneyHorizon` | Service 类型 | `Literal["long_enough", "uncertain", "too_short"]` |
 | `StructuredFundDataBundle` | Capability 内部 | P1 结构化数据包，聚合结构化年报抽取字段与 `NavDataResult` |
-| `FinalJudgmentDecision` | Capability → Service/renderer/audit | 根据检查清单、否决项、压力测试和质量 gate 派生；开发覆盖只改变 `selected`，冲突交给 R2 审计 |
+| `FinalJudgmentDecision` | Capability → Service/renderer/audit | 根据检查清单、否决项、压力测试和 quality gate 派生；开发覆盖只改变 `selected`，冲突交给 R2 审计 |
 | `TemplateRenderInput` | Service → Capability renderer | P1/P2 结构化结果、`FinalJudgmentDecision`、当前阶段说明 |
 | `TemplateRenderResult` | Capability renderer → Service | 8 章 Markdown、程序审计输入、章节块、lens 应用计划 |
 | `ProgrammaticAuditInput` / `ProgrammaticAuditResult` | Capability renderer ↔ Capability audit | 程序审计输入与结果，覆盖章节结构、证据、R=A+B-C、检查清单和 selected/derived/source 最终判断一致性 |
@@ -487,10 +492,10 @@ C（Cost）= 管理费 + 托管费 + 换手率 × 0.3%
 | 基金年报 PDF | EID/证监会资本市场统一信息披露平台主源 + Eastmoney fallback | httpx 下载 | `documents/sources.py` |
 | 基金净值序列 | 天天基金 / akshare | API | `data/nav_data.py` |
 | 温度计公开页适配器（过渡/对比） | 有知有行公开页面 | httpx + HTML 解析 | `data/thermometer.py` |
-| 自建温度计（当前生产方向） | akshare 指数估值接口；全 A PB 可用、全 A PE source gate 未关闭 | akshare API；经 Protocol 封装 | `data/thermometer_source.py`, `analysis/thermometer_calculator.py`, `data/thermometer_cache.py`, `data/thermometer_types.py` |
+| 自建温度计（当前生产方向） | akshare 指数估值接口；全 A 使用 `stock_a_ttm_lyr()` 的 `middlePETTM` 与 `stock_a_all_pb()` 的 `middlePB` | akshare API；经 Protocol 封装 | `data/thermometer_source.py`, `analysis/thermometer_calculator.py`, `data/thermometer_cache.py`, `data/thermometer_types.py` |
 | 精选基金池 | 手动维护 CSV | 文件读取 | `extraction_snapshot.py` |
 
-当前温度计能力通过 `ThermometerService` 与 `fund-analysis thermometer` CLI 暴露。P19 已把沪深 300（`000300`）和中证 500（`000905`）的自建指数温度计作为当前生产方向；有知有行公开页适配器只能作为过渡查询、对比验证或历史兼容输入，不得作为生产真源。
+当前温度计能力通过 `ThermometerService` 与 `fund-analysis thermometer` CLI 暴露。P19 已把沪深 300（`000300`）、中证 500（`000905`）和全 A 市场（`wind_all_a`）的自建温度计作为当前生产方向；CLI 未传 `--index` 时默认查询 `wind_all_a`。有知有行公开页适配器只能作为过渡查询、对比验证或历史兼容输入，不得作为生产真源。
 
 > **温度计独立开发（P19）**：温度计基于有知有行公开方法论独立计算，不依赖有知有行页面抓取作为生产数据真源。核心算法为 A 股市场或指数成分的等权 PE/PB 中位数历史分位数综合。CLI 和报告输出必须标注"基于有知有行公开方法论独立计算，非有知有行官方数据"。详见 §11。
 
@@ -672,8 +677,8 @@ Golden Answer pipeline 由预填底稿、人工复核、strict JSON 构建和 co
 | 命令 | 功能 | 当前状态 |
 |------|------|----------|
 | `fund-analysis analyze` | 主分析入口 | 已实现；默认运行 quality gate，低质量以结构化错误阻断 |
-| `fund-analysis checklist` | 独立检查清单入口 | 占位；当前提示用户先使用 `analyze` 并以非零状态退出 |
-| `fund-analysis thermometer` | 温度计查询 | 当前已实现项目内自建指数温度计，支持 `000300` / `000905` 与批量 JSON 输出；公开页适配器只作过渡/对比输入 |
+| `fund-analysis checklist` | 独立检查清单入口 | 已实现；复用 `FundAnalysisService` 的分析核心，输出 7 问清单、估值来源、最终判断和下一步最小验证问题 |
+| `fund-analysis thermometer` | 温度计查询 | 当前已实现项目内自建温度计；默认输出全 A `wind_all_a`，支持 `000300` / `000905` 与批量 JSON 输出；公开页适配器只作过渡/对比输入 |
 | `fund-analysis extraction-snapshot` | 精选基金池字段级抽取快照 | 已实现 |
 | `fund-analysis extraction-score` | 字段级 coverage / traceability / correctness 评分 | 已实现 |
 | `fund-analysis golden-prefill` | Golden answer 预填底稿 | 已实现 |
@@ -686,10 +691,12 @@ fund-agent/
 │   ├── __init__.py
 │   ├── ui/                              # UI 层
 │   │   ├── __init__.py
-│   │   └── cli.py                       # Typer CLI 入口（当前仍有直接 Service 编排债）
-│   ├── application/                     # Application 层（目标边界；当前待落地）
-│   ├── runtime/                         # Runtime 层（目标边界；当前未接入 Agent runtime）
-│   ├── engine/                          # Engine 层（目标边界；当前未接入通用工具执行框架）
+│   │   └── cli.py                       # Typer CLI 入口
+│   ├── application/                     # Application 层薄 use-case facade
+│   │   ├── __init__.py
+│   │   └── use_cases.py
+│   ├── runtime/                         # Runtime 层（目标包；当前未接入 Agent runtime）
+│   ├── engine/                          # Engine 层（目标包；当前未接入通用工具执行框架）
 │   ├── services/                        # Service 层（7 个服务）
 │   │   ├── __init__.py                  # 公共导出（Request/Result/Service 类型）
 │   │   ├── fund_analysis_service.py     # 主分析用例编排
@@ -699,7 +706,7 @@ fund-agent/
 │   │   ├── golden_prefill_service.py
 │   │   ├── golden_answer_service.py
 │   │   └── thermometer_service.py
-│   ├── fund/                            # Capability 层
+│   ├── fund/                            # Capability 层基金领域能力包
 │   │   ├── __init__.py
 │   │   ├── fund_type.py                 # 基金类型识别（FundType + classify_fund_type）
 │   │   ├── data_extractor.py            # P1 结构化数据 façade（FundDataExtractor）
@@ -734,7 +741,7 @@ fund-agent/
 │   │   │   ├── risk_check.py            # 否决项检查 + 压力测试
 │   │   │   ├── checklist.py             # 7 问题检查清单
 │   │   │   ├── final_judgment.py        # P10 最终判断推导（worth_holding/needs_attention/suggest_replace）
-│   │   │   ├── thermometer_calculator.py # P19 目标：温度计纯计算器
+│   │   │   ├── thermometer_calculator.py # P19 温度计纯计算器
 │   │   │   └── _ratios.py               # 内部比率计算工具
 │   │   ├── audit/                       # 审计机制
 │   │   │   ├── __init__.py              # 导出 run_programmatic_audit
@@ -755,9 +762,9 @@ fund-agent/
 │   │   │   ├── __init__.py
 │   │   │   ├── nav_data.py              # 净值数据（天天基金/akshare）
 │   │   │   ├── thermometer.py           # 当前温度计（有知有行公开页面过渡适配器）
-│   │   │   ├── thermometer_source.py    # P19 目标：自建温度计数据源
-│   │   │   ├── thermometer_cache.py     # P19 目标：自建温度计历史缓存
-│   │   │   └── thermometer_types.py     # P19 目标：自建温度计结构化类型
+│   │   │   ├── thermometer_source.py    # P19 自建温度计数据源
+│   │   │   ├── thermometer_cache.py     # P19 自建温度计历史缓存
+│   │   │   └── thermometer_types.py     # P19 自建温度计结构化类型
 │   └── config/
 │       ├── __init__.py
 │       └── paths.py                     # P10 路径常量（DEFAULT_SELECTED_FUNDS_CSV 等）
@@ -811,17 +818,20 @@ fund-agent/
 |------|----------|
 | Python | `requires-python >=3.11`，支持 Python 3.11/3.12 生态窗口 |
 | 打包 | 使用 PEP 621 项目元数据；构建后端为 setuptools；只打包 `fund_agent*`，排除 `tests*`、`docs*`、`reports*`、`scripts*`、`workspace*`、`cache*` |
+| 包内资源 | 当前 `fund_agent` 包内没有非 Python 资源需要分发；未来如新增默认 prompt、配置、模板、fixture、asset 或 render 资源，必须在 `[tool.setuptools.package-data]` 显式声明，不能依赖隐式包含 |
 | 依赖声明 | 生产依赖必须显式列入 `dependencies`；用于当前生产代码的 pandas 必须声明为 `pandas>=2.1.4,<4.0.0`；不允许把显式能力藏在额外 payload 或隐式环境中 |
 | 可选依赖 | `test` 放测试工具链；`dev` 汇总测试、lint、format、类型检查工具；浏览器/Web/微信/外部 Dayu runtime 不作为默认或可选生产目标，除非后续 gate 重新设计并通过 |
 | 工具配置 | pytest、ruff、black 的入口在 `pyproject.toml`；测试与 README 可补充使用说明，但不另立冲突真源 |
 | 脚本入口 | 当前唯一用户入口为 `fund-analysis = fund_agent.ui.cli:app` |
+| License | 项目元数据使用 `license = "MIT"`；发布卫生测试要求仓库根目录存在 MIT `LICENSE` 文件。当前工作区如只保留 `LICENSE.md` 或删除 `LICENSE`，必须作为 repo hygiene 阻塞处理，而不是修改测试去迁就 |
 
 | Dayu-Agent 模块 | pyproject.toml | 代码导入 | 说明 |
 |---|---|---|---|
-| `dayu-agent` 包 | ❌ 已移除 | ❌ 零导入 | P9: pyproject.toml 已移除 dayu-agent 依赖，MVP 纯 Python 实现 |
-| Engine/Host/Prompting/Config | — | ❌ 未使用 | 如需接入 runner、trace、prompt 或 scene 能力，必须在本项目 Application/Runtime/Engine 边界内化 |
+| 外部 Dayu Host / runtime | ❌ 当前不声明 | ❌ 当前确定性主链路未使用 | 生命周期治理手册只作为 Runtime 设计参考；如需相关能力必须先在本项目 Runtime 边界内化设计 |
+| 外部 Dayu Engine / tool loop | ❌ 当前不声明 | ❌ 当前确定性主链路未使用 | tool loop、runner 和 trace 手册只作为 Engine 设计参考；如需相关能力必须先在本项目 Engine 边界内化设计 |
+| Prompting/Config | — | ❌ 未使用 | 如需接入 prompt、scene 或 workspace override，必须先进入 Application / Runtime / Config 边界设计 |
 | 审计机制架构 | — | 🔧 借鉴 | audit→confirm→repair 三阶段架构参考，代码独立实现 |
-| `dayu.fins` 分层 | — | 📐 参考 | Processor/Repository/Pipeline 分层思想只能作为方法论参考，不覆盖 AGENTS.md 六层边界 |
+| `dayu.fins` 分层 | — | 📐 参考 | Processor/Repository/Pipeline 分层思想只能作为 Capability 领域能力参考，不单独成为系统层 |
 
 ---
 
@@ -829,7 +839,8 @@ fund-agent/
 
 | 决策 | 选择 | 备选方案 | 理由 |
 |------|------|---------|------|
-| 架构模式 | 六层边界（UI/Application/Runtime/Service/Engine/Capability），当前确定性实现仍有 UI→Service 历史路径待收口 | 外部 Dayu Host/Engine 主链路或继续承认三层为目标架构 | MVP 不依赖 LLM，确定性管线更可靠；AGENTS.md 已将六层作为唯一边界，后续 runtime 能力必须在本项目边界内化 |
+| 架构模式 | 六层边界 UI/Application/Runtime/Service/Engine/Capability | 外部 Dayu Host/Engine 主链路或继续承认三层为目标架构 | `AGENTS.md` 已将六层作为唯一边界；MVP 不依赖 LLM，确定性管线更可靠；后续 runtime 能力必须在本项目边界内化 |
+| Dayu Host/Engine 参考 | 只吸收工程纪律和设计经验，不接入外部 runtime | 复制 Dayu 运行时或用外部 Dayu API 包装主链路 | 避免过早扩大依赖面，并保持能力在本项目边界内化 |
 | CLI 框架 | Typer | Click / argparse | 类型注解友好，与 FastAPI 生态一致 |
 | 输出格式 | 8 章定性模板 | 一页纸报告 | 信息更完整，覆盖全链路 |
 | 超额收益判断 | 区分结构性 vs 阶段性 | 仅计算 A=R-B | 第一性原理：可持续能力 vs 运气 |
@@ -840,17 +851,17 @@ fund-agent/
 | 年报来源 | EID/证监会资本市场统一信息披露平台主源 + Eastmoney fallback | Eastmoney 作为同级主源 | 官方来源优先；schema drift、identity mismatch、integrity error 必须 fail-closed |
 | 审计策略 | MVP 程序审计（P1/P2/P3/C2/L1/R1/R2） | 三层全实现 | 降低复杂度，v2 引入 LLM 审计 |
 | 质量门控 | FQ0-FQ6 规则 + golden answer correctness | 无质量门控 | 确保精选基金池抽取质量可量化追踪 |
-| 温度计 | 当前保留有知有行公开页面 read-only 查询；后续开发项目内自建计算口径 | 永久依赖有知有行页面抓取 | 公开页抓取不是长期稳定真源；自建能力必须在项目边界内定义数据源、公式、缓存、失败语义和审计证据 |
+| 温度计 | 当前生产方向为项目内自建温度计；CLI 默认全 A `wind_all_a`，并支持 `000300` / `000905` | 永久依赖有知有行页面抓取 | 公开页抓取不是长期稳定真源；自建能力必须在项目边界内定义数据源、公式、缓存、失败语义和审计证据 |
 | 依赖注入 | Protocol + 构造函数默认值 | 框架级 DI | 轻量级，不引入额外依赖，测试友好 |
 | ITEM_RULE | 代码内硬编码 manifest | 外部 YAML 配置 | 规则数量少（4 条），代码内定义可获类型检查 |
 | 模板渲染 | 纯 Python 函数 | Jinja2 / LLM | MVP 确定性管线，避免模板引擎或 LLM 幻觉 |
-| Dayu-Agent 依赖 | P9 完全移除 | 保留声明但不使用 | 零导入证明无实际依赖，清理技术债 |
-| Dayu 工程要求吸收 | 吸收 Python 3.11、setuptools、项目元数据、依赖分组、pytest/ruff/black 配置理念 | 复制 Dayu 运行时依赖或入口 | 工程可复现性值得吸收；外部 Host/Engine/tool loop 与本项目边界冲突 |
+| Dayu-Agent 依赖 | 当前确定性主链路不声明；未来如需引入必须独立 gate 改变依赖政策 | 一次性复制 Dayu 全量运行时依赖或入口 | 避免过早扩大依赖面，并保持能力在本项目边界内化 |
+| Dayu 工程要求吸收 | 吸收 Python 3.11、setuptools、项目元数据、依赖分组、pytest/ruff/black 配置和包资源声明纪律 | 复制 Dayu Web/browser/wechat 入口 | 工程可复现性值得吸收；入口能力必须由本项目需求驱动 |
 | 最终判断推导 | P10 程序化推导 + 开发者覆盖模式 | 纯人工判断 | 结构化输入 → 确定性输出，覆盖模式记录审计线索 |
 | 来源失败分类 | P8-S3 五类失败 + fallback 资格判定 | 统一 fallback 策略 | 区分"可重试失败"与"契约违背"，防止错误传播 |
 | ITEM_RULE 审计 | P12 后渲染校验（`rendered_segment_present`） | 仅前置校验 | 确保渲染后内容符合 ITEM_RULE 约束 |
 | 跟踪误差披露 | P13/P14/P15 分阶段推进 | 可选且不可观测 | 指数基金核心指标；P13 建立结构化直接披露路径，P14 将其纳入指数/增强指数条件质量分母，P15 先获取 reviewed direct evidence，再决定是否进入 production golden |
-| 温度计数据来源 | P19 使用 akshare + 中证指数官方或 akshare 指数估值接口 | 有知有行页面抓取作为长期真源 | 独立可控，不依赖第三方页面结构变化；当前公开页查询仅作为过渡/对比验证输入 |
+| 温度计数据来源 | P19 使用 akshare 指数估值接口；全 A 使用 `stock_a_ttm_lyr()` + `stock_a_all_pb()` | 有知有行页面抓取作为长期真源 | 独立可控，不依赖第三方页面结构变化；当前公开页查询仅作为过渡/对比验证输入 |
 | 温度计计算方法 | 基于有知有行公开方法论复现 | 自创估值算法 | 与项目投资方法论一致，结果方向可解释；不声称官方精确复刻 |
 | 温度计加权方式 | 等权中位数 | 市值加权 | 对齐有知有行公开说明，反映全市场公司层面的估值分布 |
 | 温度计到 `valuation_state` | P19-S3 已完成受控自动映射；仅 exact benchmark identity 命中支持指数时生效 | S1/S2 完成后静默接入 `analyze` 或所有基金泛化映射 | 自动影响报告判断属于分析输入变更；当前仅接受 `000300` / `000905` 精确指数映射，其他场景保持 `unavailable` |
@@ -899,21 +910,22 @@ fund-agent/
 |--------|------|------|-------|
 | P0 | 沪深 300 | `000300` | P19-S1 |
 | P0 | 中证 500 | `000905` | P19-S2 |
-| P0 | 万得全 A / 全 A 市场 | `wind_all_a` | P19-S5 / all-A PE source gate 后 |
+| P0 | 万得全 A / 全 A 市场 | `wind_all_a` | P19-S5 已实现；CLI 默认 |
 | P1 | 创业板指 | `399006` | P19-S4 |
 | P1 | 科创 50 | `000688` | P19-S4 |
 | P1 | 中证红利 | `000922` | P19-S4 |
 | P1 | 中证消费 | `000932` | P19-S4 |
 | P1 | 中证医药 | `000933` | P19-S4 |
 
-P19 data-source review 已确认 akshare 1.18.60 可取得全 A PB 历史，但尚未找到可验证的全 A PE 历史来源；直接把 P19-S1 定义为"全市场 PE+PB 温度计"会违反可验证性原则。因此 P19-S1 改为先实现沪深 300 指数温度计和通用 PE/PB 计算、缓存、CLI 契约；P19-S2 扩展中证 500；全 A 市场温度计保留为设计目标，但必须在 all-A PE source gate 通过后才能进入实现。不能用 PB-only 结果冒充完整温度计，也不能用有知有行公开页面抓取作为生产真源。
+P19 初始 data-source review 曾因缺少可验证全 A PE 历史而阻断全 A 实现；P19-S5 后续 source feasibility 已验证 `akshare.stock_a_ttm_lyr()` 的 `middlePETTM` 与 `akshare.stock_a_all_pb()` 的 `middlePB` 存在 4828 个共同日期，并被接受为全 A PE/PB source contract。当前 `fund-analysis thermometer` 未传 `--index` 时默认查询 `wind_all_a`；`fund-analysis analyze` 的自动估值仍只限 P19-S3 接受的 exact `000300` / `000905` benchmark identity，不因全 A CLI 默认而泛化到主动、债券、QDII、FOF 或 ambiguous benchmark。
 
 ### 11.5 模块边界
 
 | 层级 | 模块 | 职责 | 边界约束 |
 |------|------|------|---------|
-| UI | `fund_agent/ui/cli.py` | `fund-analysis thermometer` 命令入口 | 只依赖 Service 层，不直接调用 akshare 或 Capability 计算器 |
-| Service | `ThermometerService` | 编排请求、缓存策略、数据源选择和输出模型 | 可调用 Capability，不直接访问 akshare、官方接口或文件缓存细节 |
+| UI | `fund_agent/ui/cli.py` | `fund-analysis thermometer` 命令入口 | 只调用 Application，不直接调用 akshare、Service 或 Capability 计算器 |
+| Application | `ThermometerUseCase` | UI-facing 用例 facade | 只委托 Service，不实现温度计规则 |
+| Service | `ThermometerService` | 编排请求、缓存策略、数据源选择和输出模型 | 可调用 Capability 公开能力；不直接访问 akshare、官方接口或文件缓存细节 |
 | Capability | `ThermometerCalculator` | PE/PB 分位数计算、温度综合、估值状态候选映射 | 纯计算，无 IO |
 | Capability | `ThermometerDataSource` | 从 akshare/中证指数获取 PE/PB 数据 | 只返回结构化数据，不缓存，不参与 UI/Service 输出格式 |
 | Capability | `ThermometerCache` | 历史数据缓存、增量更新 | 只负责存储，不计算，不决定估值状态 |
@@ -963,8 +975,10 @@ CLI 和报告输出中必须包含等价说明：
 每个后续 plan review 必须显式检查：
 
 - 是否违反 §1.3 非目标；
-- 是否保持 UI / Application / Runtime / Service / Engine / Capability 边界；
+- 是否保持 UI / Application / Runtime / Service / Engine / Capability 六层边界；
 - 生产年报访问是否仍只通过 `FundDocumentRepository` / `FundDataExtractor`；
-- 是否引入外部 Dayu runtime、LLM 写作、Evidence Confirm、计算型 tracking error、外部指数适配器或隐藏在 `extra_payload` 的显式参数；
-- 是否遵守 `pyproject.toml` 工程基线：Python `>=3.11`、setuptools 打包、显式生产依赖、`test`/`dev` 可选依赖、pytest/ruff/black 配置入口；
+- 是否在当前确定性主链路中误拼接外部 Dayu runtime、tool loop、LLM 写作、Evidence Confirm、计算型 tracking error、外部指数适配器或隐藏在 `extra_payload` 的显式参数；如计划进入 Runtime/Engine 路径，是否在本项目边界内声明契约、事件流、ToolTrace、失败语义和测试；
+- 是否遵守 `pyproject.toml` 工程基线：Python `>=3.11`、setuptools 打包、显式生产依赖、`test`/`dev` 可选依赖、pytest/ruff/black 配置入口、包内非 Python 资源必须经 `[tool.setuptools.package-data]` 声明；
+- 是否保持 License/repo hygiene：`pyproject.toml` license 与根目录 MIT `LICENSE` 文件一致，不能通过放宽测试掩盖仓库发布卫生问题；
+- 是否仍以 `AGENTS.md` 六层边界为规则真源，不重新引入外部 Dayu runtime 或三层口径；
 - success signal 是否可验证，且不会激励在缺少直接证据时错误接受数据。
