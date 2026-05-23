@@ -23,9 +23,11 @@ from fund_agent.fund.data import (
 )
 from fund_agent.fund.data.thermometer_cache import ThermometerHistoryCache
 from fund_agent.fund.data.thermometer_source import (
-    AkshareIndexThermometerSource,
+    ALL_A_MARKET_CODE,
+    AkshareThermometerSource,
     ThermometerSourceError,
-    is_supported_index_code,
+    classify_thermometer_code,
+    thermometer_display_name,
 )
 
 
@@ -67,13 +69,13 @@ class _ThermometerAdapterFactory(Protocol):
 
 
 class _IndexThermometerSource(Protocol):
-    """自建指数温度计数据源协议。"""
+    """自建温度计数据源协议。"""
 
     async def load_index_history(self, index_code: str) -> PePbHistory:
-        """读取指定指数 PE/PB 历史。
+        """读取指定指数或市场 PE/PB 历史。
 
         Args:
-            index_code: 指数代码。
+            index_code: 指数或市场代码。
 
         Returns:
             PE/PB 历史序列。
@@ -107,8 +109,8 @@ class ThermometerRequest:
     Attributes:
         cache_dir: 温度计缓存目录；为空时使用 Capability 默认目录。
         force_refresh: 是否绕过 fresh cache 强制抓取。
-        index_code: 指定单个自建指数温度计代码；为空时保留当前公开页快照行为。
-        index_codes: 指定多个自建指数温度计代码；与 `index_code` 互斥。
+        index_code: 指定单个自建温度计代码；为空时默认查询全 A 市场。
+        index_codes: 指定多个自建温度计代码；与 `index_code` 互斥。
     """
 
     cache_dir: Path | None = None
@@ -130,7 +132,7 @@ class ThermometerService:
 
         Args:
             adapter_factory: 可注入适配器工厂；未提供时创建默认 `FundThermometerAdapter`。
-            index_source: 可注入自建指数温度计数据源；未提供时使用 akshare 数据源。
+            index_source: 可注入自建温度计数据源；未提供时使用 akshare 复合数据源。
             history_cache_factory: 可注入历史缓存工厂；未提供时使用 JSON 历史缓存。
 
         Returns:
@@ -141,7 +143,7 @@ class ThermometerService:
         """
 
         self._adapter_factory = adapter_factory or _default_adapter_factory
-        self._index_source = index_source or AkshareIndexThermometerSource()
+        self._index_source = index_source or AkshareThermometerSource()
         self._history_cache_factory = history_cache_factory or ThermometerHistoryCache
 
     async def run(
@@ -153,7 +155,7 @@ class ThermometerService:
             request: 显式温度计查询参数，不使用 `extra_payload`。
 
         Returns:
-            温度计快照；上游不可用时由 Capability 返回 `unavailable=True`。
+            温度计快照或自建温度计读数；上游不可用时返回 `unavailable=True`。
 
         Raises:
             ValueError: 请求参数非法时抛出。
@@ -171,11 +173,11 @@ class ThermometerService:
     async def _load_index_batch(
         self, request: ThermometerRequest, index_codes: tuple[str, ...]
     ) -> ThermometerBatchResult:
-        """读取批量自建指数温度计读数。
+        """读取批量自建温度计读数。
 
         Args:
             request: 温度计请求。
-            index_codes: Service 规范化后的指数代码序列。
+            index_codes: Service 规范化后的指数或市场代码序列。
 
         Returns:
             批量温度计读数。
@@ -200,24 +202,24 @@ class ThermometerService:
     async def _load_index_reading(
         self, request: ThermometerRequest, index_code: str
     ) -> ThermometerReading:
-        """读取自建指数温度计读数。
+        """读取自建温度计读数。
 
         Args:
             request: 温度计请求。
-            index_code: Service 规范化后的指数代码。
+            index_code: Service 规范化后的指数或市场代码。
 
         Returns:
             自建指数温度计读数；数据不可用时返回 unavailable 读数。
 
         Raises:
-            ValueError: 指数代码格式非法时抛出。
+            ValueError: 温度计代码格式非法时抛出。
         """
 
-        if not is_supported_index_code(index_code):
+        if classify_thermometer_code(index_code) == "unsupported":
             return ThermometerUnavailable(
                 index_code=index_code,
-                index_name=index_code,
-                reason=f"自建温度计数据不可用：暂不支持指数：{index_code}",
+                index_name=thermometer_display_name(index_code),
+                reason=f"自建温度计数据不可用：暂不支持温度计代码：{index_code}",
             ).to_reading()
 
         cache = self._history_cache_factory(request.cache_dir)
@@ -242,7 +244,7 @@ class ThermometerService:
                 )
             return ThermometerUnavailable(
                 index_code=index_code,
-                index_name=index_code,
+                index_name=thermometer_display_name(index_code),
                 reason=f"自建温度计数据不可用：{exc}",
             ).to_reading()
         try:
@@ -283,10 +285,10 @@ def _normalize_request(request: ThermometerRequest) -> _NormalizedThermometerReq
         request: 温度计查询请求。
 
     Returns:
-        规范化后的单指数或批量指数字段。
+        规范化后的单代码或批量代码字段。
 
     Raises:
-        ValueError: 当缓存路径、请求状态机或指数代码非法时抛出。
+        ValueError: 当缓存路径、请求状态机或温度计代码非法时抛出。
     """
 
     if request.cache_dir is not None and request.cache_dir.exists() and not request.cache_dir.is_dir():
@@ -299,21 +301,21 @@ def _normalize_request(request: ThermometerRequest) -> _NormalizedThermometerReq
     if request.index_code is not None:
         index_codes = _normalize_index_codes((request.index_code,), field_name="index_code")
         return _NormalizedThermometerRequest(index_code=index_codes[0], index_codes=None)
-    return _NormalizedThermometerRequest(index_code=None, index_codes=None)
+    return _NormalizedThermometerRequest(index_code=ALL_A_MARKET_CODE, index_codes=None)
 
 
 def _normalize_index_codes(index_codes: tuple[str, ...], *, field_name: str) -> tuple[str, ...]:
-    """规范化指数代码序列。
+    """规范化温度计代码序列。
 
     Args:
-        index_codes: 原始指数代码序列。
+        index_codes: 原始温度计代码序列。
         field_name: 错误信息使用的字段名。
 
     Returns:
-        preserve-order de-duplication 后的指数代码序列。
+        preserve-order de-duplication 后的温度计代码序列。
 
     Raises:
-        ValueError: 指数代码为空或不是 6 位数字时抛出。
+        ValueError: 温度计代码为空、不是 `wind_all_a` 且不是 6 位 ASCII 数字时抛出。
     """
 
     if not index_codes:
@@ -324,12 +326,28 @@ def _normalize_index_codes(index_codes: tuple[str, ...], *, field_name: str) -> 
     for index_code in index_codes:
         text = index_code.strip()
         if not text:
-            raise ValueError(f"{field_name} 不能包含空指数代码")
-        if not text.isdigit() or len(text) != 6:
-            raise ValueError(f"{field_name} 必须是 6 位数字")
+            raise ValueError(f"{field_name} 不能包含空温度计代码")
+        if text != ALL_A_MARKET_CODE and not _is_six_ascii_digits(text):
+            raise ValueError(f"{field_name} 必须是 wind_all_a 或 6 位 ASCII 数字")
         if text not in seen:
             normalized.append(text)
             seen.add(text)
     if not normalized:
         raise ValueError(f"{field_name} 不能为空")
     return tuple(normalized)
+
+
+def _is_six_ascii_digits(value: str) -> bool:
+    """判断字符串是否为 6 位 ASCII 数字。
+
+    Args:
+        value: 待验证字符串。
+
+    Returns:
+        是 6 位 ASCII 数字返回 True，否则返回 False。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return len(value) == 6 and all("0" <= char <= "9" for char in value)
