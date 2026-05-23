@@ -366,11 +366,22 @@ def _reading(
     )
 
 
-def _index_bundle() -> StructuredFundDataBundle:
+def _index_bundle(
+    *,
+    fund_type: str = "index_fund",
+    benchmark_text: str = "沪深300指数收益率",
+    benchmark_index_name: str = "沪深300指数",
+    benchmark_index_code: str | None = None,
+    benchmark_component_text: tuple[str, ...] | None = None,
+) -> StructuredFundDataBundle:
     """构造支持自动估值的指数基金数据包。
 
     Args:
-        无。
+        fund_type: P1 已识别的基金类型。
+        benchmark_text: 业绩比较基准文本。
+        benchmark_index_name: 指数画像中的基准指数名称。
+        benchmark_index_code: 指数画像中的基准指数代码。
+        benchmark_component_text: 指数画像中的基准成分文本。
 
     Returns:
         指数基金结构化数据包。
@@ -381,15 +392,16 @@ def _index_bundle() -> StructuredFundDataBundle:
 
     bundle = _bundle()
     identity = dict(bundle.basic_identity.value or {})
-    identity["classified_fund_type"] = "index_fund"
-    identity["fund_category"] = "股票指数"
+    identity["classified_fund_type"] = fund_type
+    identity["fund_category"] = "股票指数" if fund_type in {"index_fund", "enhanced_index"} else "混合型"
+    components = benchmark_component_text or (benchmark_text,)
     index_profile = ExtractedField(
         value=IndexProfileValue(
-            benchmark_text="沪深300指数收益率",
+            benchmark_text=benchmark_text,
             benchmark_identity_status="identified",
-            benchmark_index_name="沪深300指数",
-            benchmark_index_code=None,
-            benchmark_component_text=("沪深300指数收益率",),
+            benchmark_index_name=benchmark_index_name,
+            benchmark_index_code=benchmark_index_code,
+            benchmark_component_text=components,
             methodology_availability="missing",
             methodology_summary=None,
             methodology_source_title=None,
@@ -406,7 +418,7 @@ def _index_bundle() -> StructuredFundDataBundle:
     return replace(
         bundle,
         basic_identity=replace(bundle.basic_identity, value=identity),
-        benchmark=_field({"benchmark_text": "沪深300指数收益率"}, "§2", "benchmark"),
+        benchmark=_field({"benchmark_text": benchmark_text}, "§2", "benchmark"),
         index_profile=index_profile,
     )
 
@@ -508,7 +520,10 @@ async def test_fund_analysis_service_auto_calls_self_owned_thermometer_for_suppo
     """
 
     thermometer = _FakeThermometerService(_reading(state="low"))
-    service = FundAnalysisService(extractor=_FakeExtractor(_index_bundle()), thermometer_service=thermometer)
+    service = FundAnalysisService(
+        extractor=_FakeExtractor(_index_bundle(benchmark_index_code="000300")),
+        thermometer_service=thermometer,
+    )
 
     request = replace(
         _developer_request(
@@ -527,6 +542,115 @@ async def test_fund_analysis_service_auto_calls_self_owned_thermometer_for_suppo
     assert result.valuation_state_resolution.source == "self_owned_thermometer"
     assert result.valuation_state_resolution.state == "low"
     assert "本温度计基于有知有行公开方法论独立计算" in result.report_markdown
+
+
+@pytest.mark.asyncio
+async def test_fund_analysis_service_auto_calls_self_owned_thermometer_for_supported_500_index() -> None:
+    """验证中证500 exact identity 会调用对应自建温度计。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 自动路径未请求中证500温度计时抛出。
+    """
+
+    thermometer = _FakeThermometerService(
+        _reading(
+            state="fair",
+            index_code="000905",
+            index_name="中证500",
+        )
+    )
+    service = FundAnalysisService(
+        extractor=_FakeExtractor(
+            _index_bundle(
+                fund_type="enhanced_index",
+                benchmark_text="中证500指数收益率",
+                benchmark_index_name="中证500指数",
+                benchmark_index_code="000905",
+            )
+        ),
+        thermometer_service=thermometer,
+    )
+
+    result = await service.analyze(_developer_request(valuation_state=None))
+
+    assert len(thermometer.calls) == 1
+    assert thermometer.calls[0].index_code == "000905"
+    assert result.valuation_state_resolution.source == "self_owned_thermometer"
+    assert result.valuation_state_resolution.state == "fair"
+
+
+@pytest.mark.asyncio
+async def test_fund_analysis_service_unsupported_exact_index_does_not_call_thermometer() -> None:
+    """验证不支持的 exact benchmark code 保持灰灯且不调用温度计。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 不支持指数仍调用温度计时抛出。
+    """
+
+    thermometer = _FakeThermometerService(_reading())
+    service = FundAnalysisService(
+        extractor=_FakeExtractor(
+            _index_bundle(
+                benchmark_text="创业板指收益率",
+                benchmark_index_name="创业板指",
+                benchmark_index_code="399006",
+            )
+        ),
+        thermometer_service=thermometer,
+    )
+
+    result = await service.analyze(_developer_request(valuation_state=None))
+
+    assert thermometer.calls == []
+    assert result.valuation_state_resolution.source == "unavailable_mapping"
+    assert result.valuation_state_resolution.state == "unavailable"
+    assert "399006" in (result.valuation_state_resolution.unavailable_reason or "")
+
+
+@pytest.mark.asyncio
+async def test_fund_analysis_service_ambiguous_supported_indices_do_not_call_thermometer() -> None:
+    """验证多个支持权益指数的复合基准 fail-closed 且不调用温度计。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 歧义基准仍调用温度计时抛出。
+    """
+
+    thermometer = _FakeThermometerService(_reading())
+    service = FundAnalysisService(
+        extractor=_FakeExtractor(
+            _index_bundle(
+                benchmark_text="沪深300指数收益率*50%+中证500指数收益率*50%",
+                benchmark_index_name="复合宽基指数",
+                benchmark_component_text=("沪深300指数收益率*50%", "中证500指数收益率*50%"),
+            )
+        ),
+        thermometer_service=thermometer,
+    )
+
+    result = await service.analyze(_developer_request(valuation_state=None))
+
+    assert thermometer.calls == []
+    assert result.valuation_state_resolution.source == "unavailable_mapping"
+    assert result.valuation_state_resolution.state == "unavailable"
+    assert "多个支持的权益指数" in (result.valuation_state_resolution.unavailable_reason or "")
 
 
 @pytest.mark.asyncio

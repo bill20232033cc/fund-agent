@@ -3,13 +3,16 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from decimal import Decimal
 
 from typer.testing import CliRunner
 
 from fund_agent.fund.data.nav_data import NavDataResult
+from fund_agent.fund.data.thermometer_types import ThermometerReading
 from fund_agent.fund.data_extractor import FundDataExtractor
 from fund_agent.fund.documents.models import DocumentKey, ParsedAnnualReport, ParsedTable, ReportSection
 from fund_agent.services import FundAnalysisRequest, FundAnalysisResult, FundAnalysisService
+from fund_agent.services.thermometer_service import ThermometerRequest
 from fund_agent.ui import cli
 
 
@@ -128,6 +131,59 @@ class _FakeNavProvider:
             records=[{"date": "2024-12-31", "nav": "1.2345"}],
             source="p3-cli-fixture",
             cached=False,
+        )
+
+
+class _FakeThermometerService:
+    """P19-S6 CLI 自动估值测试用自建温度计 fake。"""
+
+    def __init__(self) -> None:
+        """初始化 fake 温度计。
+
+        Args:
+            无。
+
+        Returns:
+            无返回值。
+
+        Raises:
+            无显式抛出。
+        """
+
+        self.calls: list[ThermometerRequest] = []
+
+    async def run(self, request: ThermometerRequest) -> ThermometerReading:
+        """记录请求并返回匹配请求指数的温度计读数。
+
+        Args:
+            request: Service 组装出的显式温度计请求。
+
+        Returns:
+            可用的自建温度计读数。
+
+        Raises:
+            AssertionError: 当测试误传批量请求或缺少指数代码时抛出。
+        """
+
+        assert request.index_code is not None
+        assert request.index_codes is None
+        self.calls.append(request)
+        return ThermometerReading(
+            index_code=request.index_code,
+            index_name="沪深300" if request.index_code == "000300" else request.index_code,
+            temperature=Decimal("32.58"),
+            pe_percentile=Decimal("24.29"),
+            pb_percentile=Decimal("40.86"),
+            valuation_state_candidate="fair",
+            data_date="2026-05-22",
+            lookback_start="2005-04-08",
+            lookback_end="2026-05-22",
+            source="p19-s6-cli-fixture",
+            cached=True,
+            stale=False,
+            unavailable=False,
+            unavailable_reason=None,
+            fetched_at="2026-05-23T08:03:37Z",
         )
 
 
@@ -309,6 +365,25 @@ _EXPECTED_APPENDIX_EVIDENCE_FRAGMENTS: tuple[str, ...] = (
     "年报2024§9表未定位行manager_holding",
     "年报2024§10表page-58-table-0行share_change",
 )
+
+
+def _without_valuation_state(cli_args: tuple[str, ...]) -> tuple[str, ...]:
+    """从 CLI 参数中移除显式估值状态，触发自动估值路径。
+
+    Args:
+        cli_args: 原始 CLI 参数。
+
+    Returns:
+        移除 `--valuation-state` 及其取值后的 CLI 参数。
+
+    Raises:
+        AssertionError: 当参数列表缺少 `--valuation-state` 时抛出。
+    """
+
+    args = list(cli_args)
+    option_index = args.index("--valuation-state")
+    del args[option_index : option_index + 2]
+    return tuple(args)
 
 
 def _build_report(case: _SampleFundCase) -> ParsedAnnualReport:
@@ -575,3 +650,46 @@ def test_p3_cli_outputs_complete_reports_for_three_sample_funds(monkeypatch) -> 
         assert result.audit_result.issues == ()
     assert repository.calls == [(case.fund_code, 2024, True) for case in _SAMPLE_CASES]
     assert nav_provider.calls == [(case.fund_code, True) for case in _SAMPLE_CASES]
+
+
+def test_p19_s6_cli_auto_valuation_uses_exact_index_thermometer(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    """验证 CLI 端到端缺省估值输入会按 exact benchmark 调用自建温度计。
+
+    Args:
+        monkeypatch: pytest 提供的运行时打补丁工具。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 CLI 未走自动估值或请求指数错误时抛出。
+    """
+
+    case = next(sample for sample in _SAMPLE_CASES if sample.fund_code == "510300")
+    repository = _FakeRepository({case.fund_code: _build_report(case)})
+    nav_provider = _FakeNavProvider()
+    thermometer = _FakeThermometerService()
+    service = FundAnalysisService(
+        extractor=FundDataExtractor(repository=repository, nav_provider=nav_provider),
+        thermometer_service=thermometer,
+    )
+    recording_service = _RecordingService(service)
+    monkeypatch.setattr(cli, "FundAnalysisService", lambda: recording_service)
+    runner = CliRunner()
+
+    result = runner.invoke(cli.app, ("analyze", case.fund_code, *_without_valuation_state(case.cli_args)))
+
+    assert result.exit_code == 0, result.output
+    assert len(thermometer.calls) == 1
+    assert thermometer.calls[0].index_code == "000300"
+    assert thermometer.calls[0].force_refresh is True
+    assert len(recording_service.results) == 1
+    analysis_result = recording_service.results[0]
+    assert analysis_result.valuation_state_resolution.source == "self_owned_thermometer"
+    assert analysis_result.valuation_state_resolution.state == "fair"
+    assert analysis_result.audit_result.passed
+    assert "本温度计基于有知有行公开方法论独立计算" in result.output
+    assert "外部数据(external_api)§thermometer" in result.output
+    _assert_complete_evidence_contract(result.output)
+    assert repository.calls == [(case.fund_code, 2024, True)]
+    assert nav_provider.calls == [(case.fund_code, True)]
