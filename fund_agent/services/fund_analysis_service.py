@@ -337,6 +337,17 @@ class _AnalysisCoreResult:
     quality_gate_not_run_reason: str | None
 
 
+@dataclass(frozen=True, slots=True)
+class _ValidatedRequest:
+    """Service 内部校验后的请求事实。
+
+    Attributes:
+        fund_code: 已规范化的 6 位基金代码。
+    """
+
+    fund_code: str
+
+
 class QualityGateBlockedError(ValueError):
     """quality gate 阻断报告输出的结构化异常。
 
@@ -589,10 +600,13 @@ class FundAnalysisService:
         """
 
         resolved_contract = _resolve_analyze_contract(request)
-        _validate_request(request, resolved_contract)
-        _check_pool_membership_before_extraction(request, resolved_contract)
+        validated_request = _validate_request(request, resolved_contract)
+        _check_pool_membership_before_extraction(
+            validated_request=validated_request,
+            resolved_contract=resolved_contract,
+        )
         structured_data = await self._extractor.extract(
-            request.fund_code,
+            validated_request.fund_code,
             request.report_year,
             force_refresh=request.force_refresh,
         )
@@ -759,7 +773,7 @@ def _resolve_analyze_contract(request: FundAnalysisRequest) -> ResolvedAnalyzeCo
 def _validate_request(
     request: FundAnalysisRequest,
     resolved_contract: ResolvedAnalyzeContract,
-) -> None:
+) -> _ValidatedRequest:
     """校验 Service 请求的基础字段。
 
     Args:
@@ -767,7 +781,7 @@ def _validate_request(
         resolved_contract: 解析后的 analyze 契约。
 
     Returns:
-        无返回值。
+        规范化后的请求事实。
 
     Raises:
         ValueError: 当基金代码或年报年份非法时抛出。
@@ -793,10 +807,12 @@ def _validate_request(
         and not resolved_contract.quality_gate_output_dir.is_dir()
     ):
         raise ValueError("quality_gate_output_dir 必须是目录")
+    return _ValidatedRequest(fund_code=normalized_fund_code)
 
 
 def _check_pool_membership_before_extraction(
-    request: FundAnalysisRequest,
+    *,
+    validated_request: _ValidatedRequest,
     resolved_contract: ResolvedAnalyzeContract,
 ) -> None:
     """在抽取前轻量检查基金是否在精选池中。
@@ -805,7 +821,7 @@ def _check_pool_membership_before_extraction(
     避免浪费昂贵的年报抽取 I/O。
 
     Args:
-        request: 基金分析请求。
+        validated_request: 已规范化的请求事实。
         resolved_contract: 解析后的 analyze 契约。
 
     Returns:
@@ -821,7 +837,7 @@ def _check_pool_membership_before_extraction(
         return
     not_run_reason = check_quality_gate_fund_membership(
         source_csv=resolved_contract.quality_gate_source_csv,
-        fund_code=request.fund_code,
+        fund_code=validated_request.fund_code,
     )
     if not_run_reason is not None:
         raise QualityGateNotRunBlockedError(not_run_reason)
