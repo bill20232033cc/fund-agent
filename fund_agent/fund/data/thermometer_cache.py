@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Final
 
 from fund_agent.config.paths import DEFAULT_THERMOMETER_CACHE_ROOT
+from fund_agent.fund.data.thermometer_source import classify_thermometer_code
 from fund_agent.fund.data.thermometer_types import PePbHistory, PePbPoint
 
 THERMOMETER_HISTORY_CACHE_SCHEMA_VERSION: Final[int] = 1
@@ -56,7 +57,7 @@ class ThermometerHistoryCache:
         """读取缓存。
 
         Args:
-            index_code: 指数代码。
+            index_code: 指数或市场代码。
             allow_stale: 是否允许 24 小时以上、7 天以内的 stale cache。
 
         Returns:
@@ -65,6 +66,9 @@ class ThermometerHistoryCache:
         Raises:
             无显式抛出。
         """
+
+        if classify_thermometer_code(index_code) == "unsupported":
+            return None
 
         path = self._path_for(index_code)
         if not path.exists():
@@ -90,6 +94,7 @@ class ThermometerHistoryCache:
             写入 `fetched_at` 后的历史序列。
 
         Raises:
+            ValueError: 温度计代码不受支持时抛出。
             OSError: 目录创建或写入失败时抛出。
         """
 
@@ -111,19 +116,24 @@ class ThermometerHistoryCache:
         return history_to_save
 
     def _path_for(self, index_code: str) -> Path:
-        """生成指数缓存路径。
+        """生成温度计缓存路径。
 
         Args:
-            index_code: 指数代码。
+            index_code: 指数或市场代码。
 
         Returns:
             缓存文件路径。
 
         Raises:
-            无显式抛出。
+            ValueError: 温度计代码不受支持时抛出。
         """
 
-        return self.root_dir / "index" / f"{index_code}_history.json"
+        code_kind = classify_thermometer_code(index_code)
+        if code_kind == "index":
+            return self.root_dir / "index" / f"{index_code}_history.json"
+        if code_kind == "market":
+            return self.root_dir / "market" / f"{index_code}_history.json"
+        raise ValueError(f"不支持的温度计缓存代码：{index_code}")
 
 
 def _history_to_payload(history: PePbHistory, *, cache_updated_at: str) -> dict[str, object]:

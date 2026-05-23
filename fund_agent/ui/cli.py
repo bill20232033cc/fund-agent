@@ -258,21 +258,24 @@ def checklist(
 def thermometer(
     index_code: Annotated[
         str | None,
-        typer.Option("--index", help="自建温度计指数代码；支持 000300、000905 或逗号分隔批量"),
+        typer.Option(
+            "--index",
+            help="自建温度计代码；支持 wind_all_a、000300、000905 或逗号分隔批量",
+        ),
     ] = None,
     cache_dir: Annotated[
         Path | None,
         typer.Option("--cache-dir", help="温度计缓存目录；不传则使用默认 cache/thermometer"),
     ] = None,
     force_refresh: Annotated[
-        bool, typer.Option("--force-refresh", help="强制刷新温度计公开页面数据")
+        bool, typer.Option("--force-refresh", help="强制刷新自有温度计历史数据")
     ] = False,
     output_json: Annotated[bool, typer.Option("--json", help="以 JSON 输出温度计快照摘要")] = False,
 ) -> None:
-    """查询温度计快照或自建指数温度计读数。
+    """查询自建市场或指数温度计读数。
 
     Args:
-        index_code: 自建温度计指数代码；为空时保留当前公开页查询；逗号分隔时批量查询。
+        index_code: 自建温度计代码；为空时由 Service 默认路由到全 A 市场；逗号分隔时批量查询。
         cache_dir: 温度计缓存目录。
         force_refresh: 是否强制刷新。
         output_json: 是否输出 JSON。

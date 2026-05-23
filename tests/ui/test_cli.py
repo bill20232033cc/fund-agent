@@ -11,11 +11,6 @@ import pytest
 from typer.main import get_command
 from typer.testing import CliRunner
 
-from fund_agent.fund.data.thermometer import (
-    MacroTemperature,
-    MarketTemperature,
-    ThermometerSnapshot,
-)
 from fund_agent.fund.data.thermometer_cache import ThermometerHistoryCache
 from fund_agent.fund.data.thermometer_types import ThermometerBatchResult, ThermometerReading
 from fund_agent.fund.data.thermometer_types import PePbHistory, PePbPoint
@@ -398,7 +393,7 @@ class _FakeThermometerService:
         """
 
         type(self).last_request = request
-        return type(self).snapshot or _available_thermometer_snapshot()
+        return type(self).snapshot or _available_all_a_thermometer_reading()
 
 
 class _FailingThermometerService:
@@ -418,69 +413,6 @@ class _FailingThermometerService:
         """
 
         raise RuntimeError("thermometer fixture failure")
-
-
-def _available_thermometer_snapshot() -> ThermometerSnapshot:
-    """构造可用温度计快照。
-
-    Args:
-        无。
-
-    Returns:
-        可用温度计快照。
-
-    Raises:
-        无显式抛出。
-    """
-
-    return ThermometerSnapshot(
-        as_of_text="2026-05-20",
-        as_of_date="2026-05-20",
-        market=MarketTemperature(
-            value=Decimal("32.5"),
-            valuation_band="偏低",
-            trend_text="低估",
-        ),
-        indexes=(),
-        macro=MacroTemperature(
-            bond_temperature=Decimal("55.5"),
-            ten_year_treasury_yield=Decimal("2.1"),
-        ),
-        source="youzhiyouxing",
-        cached=False,
-        stale=False,
-        unavailable=False,
-        unavailable_reason=None,
-        fetched_at="2026-05-20T00:00:00+00:00",
-    )
-
-
-def _unavailable_thermometer_snapshot() -> ThermometerSnapshot:
-    """构造不可用温度计快照。
-
-    Args:
-        无。
-
-    Returns:
-        不可用温度计快照。
-
-    Raises:
-        无显式抛出。
-    """
-
-    return ThermometerSnapshot(
-        as_of_text=None,
-        as_of_date=None,
-        market=None,
-        indexes=(),
-        macro=None,
-        source="youzhiyouxing",
-        cached=False,
-        stale=False,
-        unavailable=True,
-        unavailable_reason="network down",
-        fetched_at=None,
-    )
 
 
 def _available_thermometer_reading() -> ThermometerReading:
@@ -512,6 +444,70 @@ def _available_thermometer_reading() -> ThermometerReading:
         unavailable=False,
         unavailable_reason=None,
         fetched_at="2026-05-23T00:00:00+00:00",
+    )
+
+
+def _available_all_a_thermometer_reading() -> ThermometerReading:
+    """构造可用全 A 市场温度计读数。
+
+    Args:
+        无。
+
+    Returns:
+        全 A 市场温度计读数。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return ThermometerReading(
+        index_code="wind_all_a",
+        index_name="万得全 A / 全 A 市场",
+        temperature=Decimal("35.25"),
+        pe_percentile=Decimal("30.00"),
+        pb_percentile=Decimal("40.50"),
+        valuation_state_candidate="fair",
+        data_date="2026-05-22",
+        lookback_start="2005-01-04",
+        lookback_end="2026-05-22",
+        source="akshare_legulegu_all_a_pe_pb",
+        cached=False,
+        stale=False,
+        unavailable=False,
+        unavailable_reason=None,
+        fetched_at="2026-05-23T00:00:00+00:00",
+    )
+
+
+def _unavailable_all_a_thermometer_reading() -> ThermometerReading:
+    """构造不可用全 A 市场温度计读数。
+
+    Args:
+        无。
+
+    Returns:
+        不可用全 A 市场温度计读数。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return ThermometerReading(
+        index_code="wind_all_a",
+        index_name="万得全 A / 全 A 市场",
+        temperature=None,
+        pe_percentile=None,
+        pb_percentile=None,
+        valuation_state_candidate="unavailable",
+        data_date=None,
+        lookback_start=None,
+        lookback_end=None,
+        source="self_owned_thermometer",
+        cached=False,
+        stale=False,
+        unavailable=True,
+        unavailable_reason="network down",
+        fetched_at=None,
     )
 
 
@@ -550,6 +546,29 @@ def _available_thermometer_batch_result() -> ThermometerBatchResult:
                 unavailable_reason=None,
                 fetched_at="2026-05-23T00:00:00+00:00",
             ),
+        ),
+    )
+
+
+def _available_all_a_mixed_batch_result() -> ThermometerBatchResult:
+    """构造全 A 与指数混合批量自建温度计结果。
+
+    Args:
+        无。
+
+    Returns:
+        混合批量温度计结果。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return ThermometerBatchResult(
+        requested_index_codes=("wind_all_a", "000300"),
+        generated_at="2026-05-23T00:00:00+00:00",
+        readings=(
+            _available_all_a_thermometer_reading(),
+            _available_thermometer_reading(),
         ),
     )
 
@@ -975,6 +994,30 @@ def test_analyze_cli_help_documents_auto_valuation_and_opt_out() -> None:
     assert "--thermometer-cache-dir" in option_names
 
 
+def test_thermometer_cli_help_documents_all_a_and_self_owned_history() -> None:
+    """验证 thermometer help 说明全 A 代码和自有历史数据刷新语义。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: help 文案缺少 P19-S5 契约时抛出。
+    """
+
+    runner = CliRunner()
+
+    result = runner.invoke(cli.app, ["thermometer", "--help"], env={"COLUMNS": "120"})
+
+    assert result.exit_code == 0
+    assert "wind_all_a" in result.output
+    assert "000300" in result.output
+    assert "000905" in result.output
+    assert "自有温度计历史数据" in result.output
+
+
 def test_analyze_cli_invalid_valuation_exits_2(monkeypatch) -> None:  # type: ignore[no-untyped-def]
     """验证非法估值状态返回参数错误。
 
@@ -1021,7 +1064,7 @@ def test_checklist_cli_is_not_misleading_placeholder() -> None:
 
 
 def test_thermometer_cli_prints_plain_summary(monkeypatch, tmp_path) -> None:  # type: ignore[no-untyped-def]
-    """验证 thermometer 命令输出 plain text 摘要并转发显式参数。
+    """验证 thermometer 命令默认输出全 A plain text 摘要并转发显式参数。
 
     Args:
         monkeypatch: pytest monkeypatch fixture。
@@ -1031,11 +1074,11 @@ def test_thermometer_cli_prints_plain_summary(monkeypatch, tmp_path) -> None:  #
         无返回值。
 
     Raises:
-        AssertionError: 当 CLI 输出或参数转发不符合契约时抛出。
+        AssertionError: 当全 A 输出或参数转发不符合契约时抛出。
     """
 
     _FakeThermometerService.last_request = None
-    _FakeThermometerService.snapshot = _available_thermometer_snapshot()
+    _FakeThermometerService.snapshot = _available_all_a_thermometer_reading()
     monkeypatch.setattr(cli, "ThermometerService", _FakeThermometerService)
     runner = CliRunner()
 
@@ -1045,16 +1088,58 @@ def test_thermometer_cli_prints_plain_summary(monkeypatch, tmp_path) -> None:  #
     )
 
     assert result.exit_code == 0
-    assert "source: youzhiyouxing" in result.output
+    assert "index_code: wind_all_a" in result.output
+    assert "index_name: 万得全 A / 全 A 市场" in result.output
+    assert "source: akshare_legulegu_all_a_pe_pb" in result.output
     assert "unavailable: false" in result.output
-    assert "market_temperature: 32.5" in result.output
+    assert "temperature: 35.25" in result.output
+    assert "pe_percentile: 30.00" in result.output
+    assert "pb_percentile: 40.50" in result.output
+    assert "valuation_state_candidate: fair" in result.output
+    assert "disclaimer: 本温度计基于有知有行公开方法论独立计算，非有知有行官方数据。" in result.output
     assert _FakeThermometerService.last_request is not None
     assert _FakeThermometerService.last_request.cache_dir == tmp_path
     assert _FakeThermometerService.last_request.force_refresh is True
+    assert _FakeThermometerService.last_request.index_code is None
+    assert _FakeThermometerService.last_request.index_codes is None
 
 
-def test_thermometer_cli_prints_json_for_unavailable_snapshot(monkeypatch) -> None:  # type: ignore[no-untyped-def]
-    """验证 thermometer JSON 输出覆盖 unavailable 数据态且退出 0。
+def test_thermometer_cli_no_arg_json_delegates_default_to_service(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    """验证 thermometer 无参数 JSON 输出全 A 读数且默认路由归 Service 所有。
+
+    Args:
+        monkeypatch: pytest monkeypatch fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 JSON 输出或默认请求不符合契约时抛出。
+    """
+
+    _FakeThermometerService.last_request = None
+    _FakeThermometerService.snapshot = _available_all_a_thermometer_reading()
+    monkeypatch.setattr(cli, "ThermometerService", _FakeThermometerService)
+    runner = CliRunner()
+
+    result = runner.invoke(cli.app, ["thermometer", "--json"])
+
+    assert result.exit_code == 0
+    payload = json.loads(result.output)
+    assert payload["index_code"] == "wind_all_a"
+    assert payload["index_name"] == "万得全 A / 全 A 市场"
+    assert payload["temperature"] == "35.25"
+    assert payload["pe_percentile"] == "30.00"
+    assert payload["pb_percentile"] == "40.50"
+    assert payload["valuation_state_candidate"] == "fair"
+    assert "非有知有行官方数据" in payload["disclaimer"]
+    assert _FakeThermometerService.last_request is not None
+    assert _FakeThermometerService.last_request.index_code is None
+    assert _FakeThermometerService.last_request.index_codes is None
+
+
+def test_thermometer_cli_prints_json_for_unavailable_all_a_reading(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    """验证 thermometer JSON 输出覆盖全 A unavailable 数据态且退出 0。
 
     Args:
         monkeypatch: pytest monkeypatch fixture。
@@ -1067,7 +1152,7 @@ def test_thermometer_cli_prints_json_for_unavailable_snapshot(monkeypatch) -> No
     """
 
     _FakeThermometerService.last_request = None
-    _FakeThermometerService.snapshot = _unavailable_thermometer_snapshot()
+    _FakeThermometerService.snapshot = _unavailable_all_a_thermometer_reading()
     monkeypatch.setattr(cli, "ThermometerService", _FakeThermometerService)
     runner = CliRunner()
 
@@ -1075,9 +1160,42 @@ def test_thermometer_cli_prints_json_for_unavailable_snapshot(monkeypatch) -> No
 
     assert result.exit_code == 0
     payload = json.loads(result.output)
+    assert payload["index_code"] == "wind_all_a"
     assert payload["unavailable"] is True
     assert payload["unavailable_reason"] == "network down"
-    assert payload["market_temperature"] is None
+    assert payload["temperature"] is None
+    assert payload["pe_percentile"] is None
+    assert payload["pb_percentile"] is None
+
+
+def test_thermometer_cli_prints_all_a_reading_json(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    """验证 thermometer --index wind_all_a JSON 输出全 A 市场读数。
+
+    Args:
+        monkeypatch: pytest monkeypatch fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 JSON 输出或参数转发不符合契约时抛出。
+    """
+
+    _FakeThermometerService.last_request = None
+    _FakeThermometerService.snapshot = _available_all_a_thermometer_reading()
+    monkeypatch.setattr(cli, "ThermometerService", _FakeThermometerService)
+    runner = CliRunner()
+
+    result = runner.invoke(cli.app, ["thermometer", "--index", "wind_all_a", "--json"])
+
+    assert result.exit_code == 0
+    payload = json.loads(result.output)
+    assert payload["index_code"] == "wind_all_a"
+    assert payload["index_name"] == "万得全 A / 全 A 市场"
+    assert payload["source"] == "akshare_legulegu_all_a_pe_pb"
+    assert _FakeThermometerService.last_request is not None
+    assert _FakeThermometerService.last_request.index_code == "wind_all_a"
+    assert _FakeThermometerService.last_request.index_codes is None
 
 
 def test_thermometer_cli_prints_index_reading_json(monkeypatch, tmp_path) -> None:  # type: ignore[no-untyped-def]
@@ -1175,6 +1293,38 @@ def test_thermometer_cli_prints_batch_reading_json(monkeypatch) -> None:  # type
     assert _FakeThermometerService.last_request.index_codes == ("000300", "000905")
 
 
+def test_thermometer_cli_prints_all_a_mixed_batch_reading_json(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    """验证 thermometer --index 支持全 A 与指数混合批量 JSON 输出。
+
+    Args:
+        monkeypatch: pytest monkeypatch fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当混合批量 JSON 输出不符合契约时抛出。
+    """
+
+    _FakeThermometerService.last_request = None
+    _FakeThermometerService.snapshot = _available_all_a_mixed_batch_result()
+    monkeypatch.setattr(cli, "ThermometerService", _FakeThermometerService)
+    runner = CliRunner()
+
+    result = runner.invoke(cli.app, ["thermometer", "--index", "wind_all_a,000300", "--json"])
+
+    assert result.exit_code == 0
+    payload = json.loads(result.output)
+    assert payload["requested_index_codes"] == ["wind_all_a", "000300"]
+    assert payload["result_count"] == 2
+    assert payload["readings"][0]["index_code"] == "wind_all_a"
+    assert payload["readings"][0]["index_name"] == "万得全 A / 全 A 市场"
+    assert payload["readings"][1]["index_code"] == "000300"
+    assert _FakeThermometerService.last_request is not None
+    assert _FakeThermometerService.last_request.index_code is None
+    assert _FakeThermometerService.last_request.index_codes == ("wind_all_a", "000300")
+
+
 def test_thermometer_cli_prints_batch_reading_plain(monkeypatch) -> None:  # type: ignore[no-untyped-def]
     """验证 thermometer --index 批量 plain 输出。
 
@@ -1233,10 +1383,10 @@ def test_thermometer_cli_partial_unavailable_batch_json_exits_zero(monkeypatch) 
     assert _FakeThermometerService.last_request.index_codes == ("000300", "999999")
 
 
-def test_thermometer_cli_unsupported_batch_item_ignores_fresh_cache_json(
+def test_thermometer_cli_unsupported_batch_item_returns_unavailable_json(
     tmp_path: Path,
 ) -> None:
-    """验证 CLI 真实 Service 不会让 unsupported 指数 fresh cache 绕过支持性校验。
+    """验证 CLI 真实 Service 对 unsupported 指数返回单项 unavailable。
 
     Args:
         tmp_path: pytest 临时目录 fixture。
@@ -1245,12 +1395,11 @@ def test_thermometer_cli_unsupported_batch_item_ignores_fresh_cache_json(
         无返回值。
 
     Raises:
-        AssertionError: 当 CLI 返回伪造缓存中的 available 读数时抛出。
+        AssertionError: 当 CLI 未返回单项 unavailable 读数时抛出。
     """
 
     cache = ThermometerHistoryCache(root_dir=tmp_path)
     cache.save(_cli_index_history(index_code="000300", index_name="沪深300"))
-    cache.save(_cli_index_history(index_code="999999", index_name="伪造指数"))
     runner = CliRunner()
 
     result = runner.invoke(
@@ -1277,13 +1426,14 @@ def test_thermometer_cli_unsupported_batch_item_ignores_fresh_cache_json(
     assert payload["readings"][1]["unavailable"] is True
     assert payload["readings"][1]["cached"] is False
     assert payload["readings"][1]["temperature"] is None
-    assert "暂不支持指数：999999" in str(payload["readings"][1]["unavailable_reason"])
+    assert "暂不支持温度计代码：999999" in str(payload["readings"][1]["unavailable_reason"])
 
 
 @pytest.mark.parametrize(
     "index_option",
     [
         "000300,abc",
+        "wind_all_a,abc",
         "000300,",
         ",000905",
         "   ",
