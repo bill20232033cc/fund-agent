@@ -5,15 +5,16 @@
 - Work unit: P19-S5 all-A market thermometer default
 - Branch: `phase/p19-s5-all-a-pe-source-gate`
 - Pull request: https://github.com/bill20232033cc/fund-agent/pull/13
-- Head commit: `bac6491b9952efbf6d3b4d565526c46a834768a9`
+- Head commit: `a025c1704072a76898dfedd2af0a1321e3852fbc`
 - Gate: draft-PR-pass closeout bookkeeping
 
 ## Current State
 
-PR 13 remains a draft PR. The branch is pushed and the PR review gate has passed:
+PR 13 has been marked ready for review. The branch is pushed and the PR review gate has passed:
 
 - GitHub Actions `test`: SUCCESS
 - GitHub merge state: CLEAN
+- GitHub draft state: ready for review
 - AgentDS PR review: PASS
 - AgentGLM PR review: PASS
 - Controller PR review judgment: accepted with zero blocking findings
@@ -40,7 +41,7 @@ P19-S4 exact-index PE/PB sources remain deferred and are outside P19-S5.
 
 ## External-State Boundary
 
-This closeout does not merge, approve, mark ready for review, request reviewers, delete branches, comment on GitHub, modify issues, or touch unrelated PRs.
+This closeout does not merge, approve, request reviewers, delete branches, comment on GitHub, modify issues, or touch unrelated PRs.
 
 Those actions require separate explicit user authorization.
 
