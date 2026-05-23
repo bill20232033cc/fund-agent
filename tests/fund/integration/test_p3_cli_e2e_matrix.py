@@ -559,8 +559,8 @@ def test_p3_cli_outputs_complete_reports_for_three_sample_funds(monkeypatch) -> 
         for chapter_index in range(8):
             assert f"# {chapter_index}." in result.output
         assert "## 证据与出处" in result.output
-        assert f"基金：{case.fund_name}（{case.fund_code}）" in result.output
-        assert f"基金类型：{case.expected_type}" in result.output
+        assert f"这是什么基金：{case.fund_name}（{case.fund_code}），{case.expected_type}" in result.output
+        assert "基金简介：" in result.output
         assert "产品本质：未披露" not in result.output
         assert "业绩基准 未披露" not in result.output
         assert "表page-5-table-0" in result.output

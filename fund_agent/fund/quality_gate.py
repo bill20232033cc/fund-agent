@@ -989,7 +989,7 @@ def _required_quality_number(row: Mapping[str, object], key: str, index: int) ->
     """
 
     value = row.get(key)
-    if not isinstance(value, int | float):
+    if isinstance(value, bool) or not isinstance(value, int | float):
         raise ValueError(f"fund_quality[{index}].{key} 必须是数值")
     return float(value)
 
@@ -1177,7 +1177,7 @@ def _required_number(row: Mapping[str, object], key: str, index: int) -> float:
     """
 
     value = row.get(key)
-    if not isinstance(value, int | float):
+    if isinstance(value, bool) or not isinstance(value, int | float):
         raise ValueError(f"field_scores[{index}].{key} 必须是数值")
     return float(value)
 

@@ -32,6 +32,12 @@ _MUST_ANSWER_COVERAGE_KINDS: Final[frozenset[str]] = frozenset(
     )
 )
 
+MustNotCoverCoverageKind = Literal[
+    "narrative_guidance",
+]
+
+_MUST_NOT_COVER_COVERAGE_KINDS: Final[frozenset[str]] = frozenset(("narrative_guidance",))
+
 
 @dataclass(frozen=True, slots=True)
 class ContractRequiredItemRule:
@@ -86,14 +92,33 @@ class ContractMustAnswerCoverageRule:
 
 
 @dataclass(frozen=True, slots=True)
+class ContractMustNotCoverCoverageRule:
+    """模板 must_not_cover 的非程序化覆盖路由规则。
+
+    Attributes:
+        chapter_id: 模板章节编号。
+        item_text: manifest 中的 must_not_cover 原文。
+        coverage_kind: 当前禁止项的非程序化覆盖类型。
+        rationale: 非程序化覆盖说明；用于声明为什么不能靠字面 marker 稳定证明。
+    """
+
+    chapter_id: int
+    item_text: str
+    coverage_kind: MustNotCoverCoverageKind
+    rationale: str
+
+
+@dataclass(frozen=True, slots=True)
 class ContractAuditCoverageManifest:
     """CHAPTER_CONTRACT 审计覆盖路由清单。
 
     Attributes:
         must_answer_coverages: 每条 must_answer 的显式覆盖路由。
+        must_not_cover_coverages: 无法用 forbidden marker 稳定审计的 must_not_cover 覆盖路由。
     """
 
     must_answer_coverages: tuple[ContractMustAnswerCoverageRule, ...]
+    must_not_cover_coverages: tuple[ContractMustNotCoverCoverageRule, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -110,8 +135,8 @@ class ProgrammaticContractRules:
 
 
 _REQUIRED_ITEM_RULES: Final[tuple[ContractRequiredItemRule, ...]] = (
-    ContractRequiredItemRule(0, "一句话这是什么基金", ("基金：",)),
-    ContractRequiredItemRule(0, "基金简介", ("基金：",)),
+    ContractRequiredItemRule(0, "一句话这是什么基金", ("这是什么基金：",)),
+    ContractRequiredItemRule(0, "基金简介", ("基金简介：",)),
     ContractRequiredItemRule(0, "当前动作（🟢 值得持有 / 🟡 需要关注 / 🔴 建议替换）", ("最终判断：",)),
     ContractRequiredItemRule(0, "当前业绩与运作状态", ("当前业绩与运作状态：",)),
     ContractRequiredItemRule(0, "支撑当前动作的最主要理由", ("支撑当前动作的最主要理由：",)),
@@ -167,6 +192,153 @@ _FORBIDDEN_CONTENT_RULES: Final[tuple[ContractForbiddenContentRule, ...]] = (
     ContractForbiddenContentRule(5, "不做市场整体走势预测。", ("市场整体走势预测",)),
     ContractForbiddenContentRule(6, "不做风险发生概率的定量预测。", ("风险发生概率",)),
     ContractForbiddenContentRule(7, "不输出具体的买入金额、卖出时机或仓位比例。", ("买入金额", "卖出时机", "仓位比例")),
+)
+
+_MUST_NOT_COVER_COVERAGE_RULES: Final[tuple[ContractMustNotCoverCoverageRule, ...]] = (
+    ContractMustNotCoverCoverageRule(
+        0,
+        "不把本章写成后续章节的摘要、材料摘抄、按顺序复述，或信息罗列式导读。",
+        "narrative_guidance",
+        "这是第 0 章封面叙事约束，不能靠稳定字面 marker 完整判定，只能由后续语义审计或人工复核覆盖。",
+    ),
+    ContractMustNotCoverCoverageRule(
+        0,
+        "不把“基金简介 / 业绩概览 / 风险提示”拆成并列分栏。",
+        "narrative_guidance",
+        "这是第 0 章版式约束；当前 renderer 使用线性封面 bullet，C2 不用单一 forbidden marker 证明全部分栏形态。",
+    ),
+    ContractMustNotCoverCoverageRule(
+        0,
+        "不把本章写成优点/缺点清单、投资亮点清单。",
+        "narrative_guidance",
+        "这是第 0 章表达形态约束，标题和同义表达不稳定，保留为非程序化覆盖。",
+    ),
+    ContractMustNotCoverCoverageRule(
+        0,
+        "不把“最主要的理由”写成多条优点堆砌；默认只保留 1 条。",
+        "narrative_guidance",
+        "这是数量和语义压缩约束，当前 C2 marker 只能定位输出项，不能证明理由是否堆砌。",
+    ),
+    ContractMustNotCoverCoverageRule(
+        0,
+        "不把“最大风险”写成并列风险列表；默认只写一个主要风险。",
+        "narrative_guidance",
+        "这是数量和语义压缩约束，当前 C2 marker 只能定位输出项，不能证明是否并列罗列。",
+    ),
+    ContractMustNotCoverCoverageRule(
+        0,
+        "不把“下一步最小验证问题”写成愿望清单；默认先写 1 个。",
+        "narrative_guidance",
+        "这是验证问题的语义质量约束，不能靠固定 forbidden marker 稳定覆盖。",
+    ),
+    ContractMustNotCoverCoverageRule(
+        0,
+        "不把本章拆成“结论要点 / 详细情况 / 证据与出处”三段结构；第 0 章是封面页。",
+        "narrative_guidance",
+        "这是第 0 章章节结构约束，其中“证据与出处”由程序规则覆盖，其余分段形态由非程序化覆盖。",
+    ),
+    ContractMustNotCoverCoverageRule(
+        1,
+        "不展开基金经理选股能力的分析（属于第 3 章）。",
+        "narrative_guidance",
+        "这是跨章节职责边界，不能靠单一字面 marker 判断是否展开选股能力分析。",
+    ),
+    ContractMustNotCoverCoverageRule(
+        1,
+        "不展开收益率的详细计算（属于第 2 章）。",
+        "narrative_guidance",
+        "这是跨章节职责边界，收益率计算存在多种表达，保留为非程序化覆盖。",
+    ),
+    ContractMustNotCoverCoverageRule(
+        1,
+        "不分析市场竞争或同业比较（属于横向比较模块，不在本报告范围内）。",
+        "narrative_guidance",
+        "这是报告范围约束，同义表达不稳定，保留为非程序化覆盖。",
+    ),
+    ContractMustNotCoverCoverageRule(
+        2,
+        "不展开基金经理选股能力的详细归因（属于第 3 章）。",
+        "narrative_guidance",
+        "这是模板第 2/3 章职责边界，不能靠固定 forbidden marker 完整判定。",
+    ),
+    ContractMustNotCoverCoverageRule(
+        2,
+        "不展开市场走势分析（不属于本报告范围）。",
+        "narrative_guidance",
+        "这是报告范围约束；“市场走势分析”同义表达较多，保留为非程序化覆盖。",
+    ),
+    ContractMustNotCoverCoverageRule(
+        3,
+        "不展开选股能力的量化分析（属于第 2 章超额收益范畴）。",
+        "narrative_guidance",
+        "这是模板第 2/3 章职责边界，不能靠固定 forbidden marker 完整判定。",
+    ),
+    ContractMustNotCoverCoverageRule(
+        5,
+        "不罗列所有变化，只保留最关键的 1-3 个。",
+        "narrative_guidance",
+        "这是数量和重要性排序约束，C2 marker 不能证明是否罗列了所有变化。",
+    ),
+    ContractMustNotCoverCoverageRule(
+        5,
+        "不给最终持有/替换结论。",
+        "narrative_guidance",
+        "这是第 5 章跨章节职责约束，具体最终判断词与上下文相关，保留为非程序化覆盖。",
+    ),
+    ContractMustNotCoverCoverageRule(
+        5,
+        "不展开风险清单；变化事实只有转译为风险或否决项时才进入第 6 章。",
+        "narrative_guidance",
+        "这是第 5/6 章职责边界，不能靠单一 forbidden marker 完整判定风险清单形态。",
+    ),
+    ContractMustNotCoverCoverageRule(
+        5,
+        "不重复基金经理长期画像或成本收益总评。",
+        "narrative_guidance",
+        "这是重复内容约束，依赖上下文比较，保留为非程序化覆盖。",
+    ),
+    ContractMustNotCoverCoverageRule(
+        6,
+        "不把本章写成所有可能风险的罗列。",
+        "narrative_guidance",
+        "这是第 6 章风险筛选语义约束，不能靠固定 marker 判定是否穷举罗列。",
+    ),
+    ContractMustNotCoverCoverageRule(
+        6,
+        "不把“最大风险”写成并列列表；默认只写 1 个最致命的。",
+        "narrative_guidance",
+        "这是数量和语义压缩约束，当前 C2 marker 不能证明是否并列罗列。",
+    ),
+    ContractMustNotCoverCoverageRule(
+        6,
+        "不复述当前阶段事实，除非明确转译为风险、压力测试或否决项。",
+        "narrative_guidance",
+        "这是第 5/6 章职责边界，是否复述依赖上下文比较，保留为非程序化覆盖。",
+    ),
+    ContractMustNotCoverCoverageRule(
+        6,
+        "不给最终持有/替换结论。",
+        "narrative_guidance",
+        "这是第 6/7 章职责边界，具体最终判断词与上下文相关，保留为非程序化覆盖。",
+    ),
+    ContractMustNotCoverCoverageRule(
+        6,
+        "不预测收益或市场走势。",
+        "narrative_guidance",
+        "这是复合禁止项；未来收益由第 2 章程序规则覆盖，市场走势部分保留为非程序化覆盖。",
+    ),
+    ContractMustNotCoverCoverageRule(
+        7,
+        "不把本章写成前 6 章的摘要复述。",
+        "narrative_guidance",
+        "这是第 7 章最终判断叙事约束，依赖跨章内容比较，保留为非程序化覆盖。",
+    ),
+    ContractMustNotCoverCoverageRule(
+        7,
+        "不把“为什么”写成多条理由堆砌；默认只保留 1-2 条核心依据。",
+        "narrative_guidance",
+        "这是数量和语义压缩约束，当前 C2 marker 不能证明是否堆砌理由。",
+    ),
 )
 
 _MUST_ANSWER_COVERAGE_RULES: Final[tuple[ContractMustAnswerCoverageRule, ...]] = (
@@ -308,9 +480,28 @@ def load_contract_audit_coverage_manifest() -> ContractAuditCoverageManifest:
         ValueError: 覆盖规则缺失、重复、引用未知条目或类型字段无效时抛出。
     """
 
-    manifest = ContractAuditCoverageManifest(must_answer_coverages=_MUST_ANSWER_COVERAGE_RULES)
+    manifest = _build_contract_audit_coverage_manifest()
     validate_contract_audit_coverage_manifest(manifest)
     return manifest
+
+
+def _build_contract_audit_coverage_manifest() -> ContractAuditCoverageManifest:
+    """构造 CHAPTER_CONTRACT 审计覆盖路由清单。
+
+    Args:
+        无。
+
+    Returns:
+        未校验的审计覆盖路由清单。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return ContractAuditCoverageManifest(
+        must_answer_coverages=_MUST_ANSWER_COVERAGE_RULES,
+        must_not_cover_coverages=_MUST_NOT_COVER_COVERAGE_RULES,
+    )
 
 
 def load_programmatic_contract_rules() -> ProgrammaticContractRules:
@@ -328,7 +519,6 @@ def load_programmatic_contract_rules() -> ProgrammaticContractRules:
         forbidden_contents=_FORBIDDEN_CONTENT_RULES,
     )
     validate_programmatic_contract_rules(rules)
-    load_contract_audit_coverage_manifest()
     return rules
 
 
@@ -348,15 +538,22 @@ def validate_programmatic_contract_rules(rules: ProgrammaticContractRules) -> No
     manifest = load_template_contract_manifest()
     _validate_required_item_rules(rules.required_items, manifest)
     _validate_forbidden_content_rules(rules.forbidden_contents, manifest)
+    validate_contract_audit_coverage_manifest(
+        _build_contract_audit_coverage_manifest(),
+        forbidden_content_rules=rules.forbidden_contents,
+    )
 
 
 def validate_contract_audit_coverage_manifest(
     coverage_manifest: ContractAuditCoverageManifest,
+    *,
+    forbidden_content_rules: tuple[ContractForbiddenContentRule, ...] = _FORBIDDEN_CONTENT_RULES,
 ) -> None:
     """校验 CHAPTER_CONTRACT 审计覆盖路由清单。
 
     Args:
         coverage_manifest: 待校验的 must_answer 覆盖清单。
+        forbidden_content_rules: 当前程序 forbidden marker 规则集合。
 
     Returns:
         校验通过时返回 `None`。
@@ -384,6 +581,12 @@ def validate_contract_audit_coverage_manifest(
     if missing_questions:
         missing_text = "、".join(f"{chapter_id}:{question}" for chapter_id, question in sorted(missing_questions))
         raise ValueError(f"must_answer 未被覆盖规则覆盖：{missing_text}")
+
+    _validate_must_not_cover_coverage_rules(
+        coverage_manifest,
+        template_manifest,
+        forbidden_content_rules,
+    )
 
 
 def _manifest_must_answer_questions(
@@ -428,6 +631,93 @@ def _manifest_required_output_items(
         for chapter in manifest.chapters
         for item in chapter.required_output_items
     }
+
+
+def _manifest_must_not_cover_items(
+    manifest: TemplateContractManifest,
+) -> set[tuple[int, str]]:
+    """提取模板中的 must_not_cover 禁止项集合。
+
+    Args:
+        manifest: 模板契约清单。
+
+    Returns:
+        `(chapter_id, item_text)` 集合。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return {
+        (chapter.chapter_id, item)
+        for chapter in manifest.chapters
+        for item in chapter.must_not_cover
+    }
+
+
+def _validate_must_not_cover_coverage_rules(
+    coverage_manifest: ContractAuditCoverageManifest,
+    template_manifest: TemplateContractManifest,
+    forbidden_content_rules: tuple[ContractForbiddenContentRule, ...] = _FORBIDDEN_CONTENT_RULES,
+) -> None:
+    """校验 must_not_cover 的反向完整覆盖。
+
+    Args:
+        coverage_manifest: 审计覆盖路由清单。
+        template_manifest: 模板契约清单。
+        forbidden_content_rules: 当前程序 forbidden marker 规则集合。
+
+    Returns:
+        校验通过时返回 `None`。
+
+    Raises:
+        ValueError: 禁止项缺失覆盖、重复覆盖、引用未知条目或覆盖类型非法时抛出。
+    """
+
+    manifest_items = _manifest_must_not_cover_items(template_manifest)
+    programmatic_items = {
+        (rule.chapter_id, rule.item_text)
+        for rule in forbidden_content_rules
+    }
+    seen_items: set[tuple[int, str]] = set()
+    for rule in coverage_manifest.must_not_cover_coverages:
+        key = (rule.chapter_id, rule.item_text)
+        if key in seen_items:
+            raise ValueError(f"must_not_cover 覆盖规则重复：chapter_id={rule.chapter_id}, item={rule.item_text}")
+        seen_items.add(key)
+        if key not in manifest_items:
+            raise ValueError(f"must_not_cover 覆盖规则未匹配 manifest：chapter_id={rule.chapter_id}, item={rule.item_text}")
+        _validate_must_not_cover_coverage_rule(rule)
+
+    overlap_items = programmatic_items & seen_items
+    if overlap_items:
+        overlap_text = "、".join(f"{chapter_id}:{item}" for chapter_id, item in sorted(overlap_items))
+        raise ValueError(f"must_not_cover 同时声明程序规则和非程序覆盖：{overlap_text}")
+
+    covered_items = programmatic_items | seen_items
+    missing_items = manifest_items - covered_items
+    if missing_items:
+        missing_text = "、".join(f"{chapter_id}:{item}" for chapter_id, item in sorted(missing_items))
+        raise ValueError(f"must_not_cover 未被覆盖规则覆盖：{missing_text}")
+
+
+def _validate_must_not_cover_coverage_rule(rule: ContractMustNotCoverCoverageRule) -> None:
+    """校验单条 must_not_cover 非程序化覆盖规则。
+
+    Args:
+        rule: 待校验的 must_not_cover 覆盖规则。
+
+    Returns:
+        校验通过时返回 `None`。
+
+    Raises:
+        ValueError: 覆盖类型非法或缺少 rationale 时抛出。
+    """
+
+    if rule.coverage_kind not in _MUST_NOT_COVER_COVERAGE_KINDS:
+        raise ValueError(f"未知 must_not_cover 覆盖类型：{rule.coverage_kind}")
+    if not rule.rationale:
+        raise ValueError(f"非程序化 must_not_cover 覆盖必须声明 rationale：chapter_id={rule.chapter_id}")
 
 
 def _validate_must_answer_coverage_rule(

@@ -14,6 +14,7 @@ from typing import Final, Literal
 from fund_agent.fund.analysis.checklist import ChecklistItem, ChecklistResult
 from fund_agent.fund.analysis.final_judgment import FinalJudgment, FinalJudgmentSource
 from fund_agent.fund.analysis.r_abc import RabcAttribution
+from fund_agent.fund.analysis.valuation_state import ValuationStateResolution
 from fund_agent.fund.audit.contract_rules import (
     ContractMustAnswerCoverageRule,
     load_contract_audit_coverage_manifest,
@@ -101,6 +102,7 @@ class ProgrammaticAuditInput:
         final_judgment: 最终 selected 判断，用于 R2 与检查清单信号一致性审计。
         derived_final_judgment: Capability 派生判断，用于 R2 source 冲突审计。
         final_judgment_source: selected 判断来源，用于区分系统派生与开发覆盖。
+        valuation_state_resolution: 估值状态结构化真源，用于 R1 第 6 问证据审计。
         required_chapter_titles: 必要章节标题列表。
         chapter_blocks: 已渲染章节块，用于 P3 每章证据和 C2 契约审计。
         item_rule_decisions: renderer 产生的 ITEM_RULE 渲染/删除决策。
@@ -115,6 +117,7 @@ class ProgrammaticAuditInput:
     final_judgment: FinalJudgment | None = None
     derived_final_judgment: FinalJudgment | None = None
     final_judgment_source: FinalJudgmentSource | None = None
+    valuation_state_resolution: ValuationStateResolution | None = None
     required_chapter_titles: tuple[str, ...] = _REQUIRED_CHAPTER_TITLES
     chapter_blocks: tuple[RenderedChapterBlock, ...] = ()
     item_rule_decisions: tuple[TemplateItemRuleDecision, ...] = ()
@@ -151,7 +154,11 @@ def run_programmatic_audit(input_data: ProgrammaticAuditInput) -> ProgrammaticAu
         *_audit_tracking_error_source_guard(chapter_blocks, input_data.tracking_error),
         *_audit_index_profile_source_guard(chapter_blocks, input_data.index_profile),
         *_audit_rabc_closure(input_data.rabc_attributions),
-        *_audit_checklist_rules(input_data.checklist_result),
+        *_audit_checklist_rules(
+            input_data.checklist_result,
+            input_data.valuation_state_resolution,
+            input_data.report_markdown,
+        ),
         *_audit_final_judgment(
             input_data.checklist_result,
             input_data.final_judgment,
@@ -864,11 +871,17 @@ def _audit_rabc_closure(rabc_attributions: tuple[RabcAttribution, ...]) -> tuple
     return tuple(issues)
 
 
-def _audit_checklist_rules(checklist_result: ChecklistResult | None) -> tuple[AuditIssue, ...]:
+def _audit_checklist_rules(
+    checklist_result: ChecklistResult | None,
+    valuation_state_resolution: ValuationStateResolution | None,
+    report_markdown: str | None,
+) -> tuple[AuditIssue, ...]:
     """执行 R1 检查清单规则审计。
 
     Args:
         checklist_result: 检查清单结果。
+        valuation_state_resolution: 估值状态结构化真源。
+        report_markdown: 报告 Markdown，用于免责声明显式展示审计。
 
     Returns:
         R1 审计问题。
@@ -910,7 +923,309 @@ def _audit_checklist_rules(checklist_result: ChecklistResult | None) -> tuple[Au
                     location=item.code,
                 ),
             )
+    issues.extend(
+        _audit_valuation_resolution(
+            checklist_result=checklist_result,
+            valuation_state_resolution=valuation_state_resolution,
+            report_markdown=report_markdown,
+        )
+    )
     return tuple(issues)
+
+
+def _audit_valuation_resolution(
+    *,
+    checklist_result: ChecklistResult,
+    valuation_state_resolution: ValuationStateResolution | None,
+    report_markdown: str | None,
+) -> tuple[AuditIssue, ...]:
+    """审计检查清单第 6 问与估值结构化真源一致性。
+
+    Args:
+        checklist_result: 检查清单结果。
+        valuation_state_resolution: 估值状态结构化真源。
+        report_markdown: 报告 Markdown。
+
+    Returns:
+        R1 估值证据问题。
+
+    Raises:
+        无显式抛出。
+    """
+
+    valuation_item = _valuation_item(checklist_result)
+    if valuation_item is None:
+        return (
+            _issue(
+                code="R1",
+                message="检查清单缺少 valuation 问题。",
+                location="checklist.valuation",
+            ),
+        )
+    if valuation_state_resolution is None:
+        if any(anchor.source_kind == "external_api" for anchor in valuation_item.anchors):
+            return (
+                _issue(
+                    code="R1",
+                    message="估值检查项包含外部温度计锚点但缺少结构化估值真源。",
+                    location="valuation_state_resolution",
+                ),
+            )
+        # 兼容历史手工构造的审计输入；Service/renderer 新路径必须显式传入 resolution。
+        return ()
+    issues: list[AuditIssue] = []
+    expected_signal = _valuation_signal_for_state(valuation_state_resolution.state)
+    if valuation_item.signal != expected_signal:
+        issues.append(
+            _issue(
+                code="R1",
+                message=(
+                    f"valuation 信号应与结构化估值状态一致："
+                    f"{expected_signal}，实际为 {valuation_item.signal}。"
+                ),
+                location="checklist.valuation.signal",
+            )
+        )
+    if not set(valuation_state_resolution.anchors).issubset(set(valuation_item.anchors)):
+        issues.append(
+            _issue(
+                code="R1",
+                message="valuation 检查项锚点必须覆盖估值结构化真源锚点。",
+                location="checklist.valuation.anchors",
+            )
+        )
+    issues.extend(_audit_valuation_resolution_fields(valuation_state_resolution, report_markdown))
+    return tuple(issues)
+
+
+def _valuation_item(checklist_result: ChecklistResult) -> ChecklistItem | None:
+    """读取检查清单估值问题。
+
+    Args:
+        checklist_result: 检查清单结果。
+
+    Returns:
+        valuation 检查项；缺失时返回 `None`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    for item in checklist_result.items:
+        if item.code == "valuation":
+            return item
+    return None
+
+
+def _valuation_signal_for_state(state: str) -> str:
+    """把估值状态映射为检查清单信号。
+
+    Args:
+        state: 估值状态。
+
+    Returns:
+        检查清单信号。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return {"low": "green", "fair": "yellow", "high": "red"}.get(state, "gray")
+
+
+def _audit_valuation_resolution_fields(
+    resolution: ValuationStateResolution,
+    report_markdown: str | None,
+) -> list[AuditIssue]:
+    """审计估值结构化真源字段完整性。
+
+    Args:
+        resolution: 估值状态结构化真源。
+        report_markdown: 报告 Markdown。
+
+    Returns:
+        R1 问题列表。
+
+    Raises:
+        无显式抛出。
+    """
+
+    issues: list[AuditIssue] = []
+    if resolution.source == "self_owned_thermometer" and resolution.state != "unavailable":
+        missing_fields = _missing_available_thermometer_fields(resolution)
+        if missing_fields:
+            issues.append(
+                _issue(
+                    code="R1",
+                    message=f"自动估值缺少必要温度计字段：{'、'.join(missing_fields)}。",
+                    location="valuation_state_resolution",
+                )
+            )
+        if not any(anchor.source_kind == "external_api" for anchor in resolution.anchors):
+            issues.append(
+                _issue(
+                    code="R1",
+                    message="自动估值必须携带 external_api 温度计锚点。",
+                    location="valuation_state_resolution.anchors",
+                )
+            )
+        issues.extend(_audit_thermometer_anchor_identity(resolution))
+    if resolution.source == "explicit_user_input" and not any(
+        anchor.source_kind == "derived" and anchor.section_id == "user_input"
+        for anchor in resolution.anchors
+    ):
+        issues.append(
+            _issue(
+                code="R1",
+                message="显式估值输入必须携带 user_input derived 锚点。",
+                location="valuation_state_resolution.anchors",
+            )
+        )
+    if resolution.source in {"unavailable_mapping", "unavailable_thermometer"}:
+        if resolution.state != "unavailable":
+            issues.append(
+                _issue(
+                    code="R1",
+                    message="不可用估值来源必须映射为 unavailable 灰灯。",
+                    location="valuation_state_resolution.state",
+                )
+            )
+        if not (resolution.reason.strip() or resolution.unavailable_reason):
+            issues.append(
+                _issue(
+                    code="R1",
+                    message="不可用估值来源必须保留原因。",
+                    location="valuation_state_resolution.reason",
+                )
+            )
+        if resolution.source == "unavailable_thermometer":
+            issues.extend(_audit_unavailable_thermometer_anchor(resolution))
+    if resolution.disclaimer_required:
+        if not resolution.disclaimer:
+            issues.append(
+                _issue(
+                    code="R1",
+                    message="温度计估值要求展示免责声明但缺少 disclaimer 字段。",
+                    location="valuation_state_resolution.disclaimer",
+                )
+            )
+        elif report_markdown is not None and resolution.disclaimer not in report_markdown:
+            issues.append(
+                _issue(
+                    code="R1",
+                    message="报告未显式展示自建温度计免责声明。",
+                    location="report_markdown",
+                )
+            )
+    return issues
+
+
+def _audit_unavailable_thermometer_anchor(
+    resolution: ValuationStateResolution,
+) -> list[AuditIssue]:
+    """审计不可用温度计路径是否保留失败 provenance 锚点。
+
+    Args:
+        resolution: 估值状态结构化真源。
+
+    Returns:
+        R1 问题列表。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if any(anchor.source_kind == "external_api" and anchor.section_id == "thermometer" for anchor in resolution.anchors):
+        return []
+    unavailable_reason = resolution.unavailable_reason or resolution.reason
+    for anchor in resolution.anchors:
+        if (
+            anchor.source_kind == "derived"
+            and anchor.section_id == "thermometer"
+            and anchor.row_locator is not None
+            and anchor.row_locator.endswith(":calculation_error")
+            and anchor.note is not None
+            and unavailable_reason in anchor.note
+        ):
+            return []
+    return [
+        _issue(
+            code="R1",
+            message="不可用温度计路径必须携带 external_api 温度计锚点或包含失败原因的 derived thermometer failure 锚点。",
+            location="valuation_state_resolution.anchors",
+        )
+    ]
+
+
+def _missing_available_thermometer_fields(
+    resolution: ValuationStateResolution,
+) -> tuple[str, ...]:
+    """列出自动估值可用读数缺失字段。
+
+    Args:
+        resolution: 估值状态结构化真源。
+
+    Returns:
+        缺失字段名元组。
+
+    Raises:
+        无显式抛出。
+    """
+
+    required = {
+        "index_code": resolution.index_code,
+        "index_name": resolution.index_name,
+        "temperature": resolution.temperature,
+        "pe_percentile": resolution.pe_percentile,
+        "pb_percentile": resolution.pb_percentile,
+        "data_date": resolution.data_date,
+        "lookback_start": resolution.lookback_start,
+        "lookback_end": resolution.lookback_end,
+        "thermometer_source": resolution.thermometer_source,
+        "cached": resolution.cached,
+        "stale": resolution.stale,
+        "disclaimer": resolution.disclaimer,
+    }
+    return tuple(name for name, value in required.items() if value is None or value == "")
+
+
+def _audit_thermometer_anchor_identity(
+    resolution: ValuationStateResolution,
+) -> list[AuditIssue]:
+    """审计温度计锚点是否标识同一指数和数据日期。
+
+    Args:
+        resolution: 估值状态结构化真源。
+
+    Returns:
+        R1 问题列表。
+
+    Raises:
+        无显式抛出。
+    """
+
+    issues: list[AuditIssue] = []
+    external_anchors = tuple(anchor for anchor in resolution.anchors if anchor.source_kind == "external_api")
+    if not external_anchors:
+        return issues
+    expected_row = f"{resolution.index_code}:{resolution.data_date}"
+    if not any(anchor.row_locator == expected_row for anchor in external_anchors):
+        issues.append(
+            _issue(
+                code="R1",
+                message="温度计锚点未标识结构化真源中的指数代码和数据日期。",
+                location="valuation_state_resolution.anchors",
+            )
+        )
+    if not any(anchor.table_id == resolution.thermometer_source for anchor in external_anchors):
+        issues.append(
+            _issue(
+                code="R1",
+                message="温度计锚点未标识结构化真源中的数据来源。",
+                location="valuation_state_resolution.anchors",
+            )
+        )
+    return issues
 
 
 def _audit_final_judgment(

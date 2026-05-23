@@ -68,6 +68,25 @@ def test_parse_ratio_keeps_numeric_inputs_as_already_normalized_decimal_ratio(
     assert parse_ratio(raw_value, field_name="ratio") == expected
 
 
+def test_parse_ratio_rejects_bool_before_numeric_handling() -> None:
+    """验证 bool 不会被 Python 的 int 子类关系误当作数值比例。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 bool 未被拒绝时抛出。
+    """
+
+    with pytest.raises(ValueError, match="不能为布尔值"):
+        parse_ratio(True, field_name="ratio")
+    with pytest.raises(ValueError, match="不能为布尔值"):
+        parse_ratio(False, field_name="ratio")
+
+
 def test_normalize_numeric_ratio_remains_available_for_known_percent_numeric_inputs() -> None:
     """验证保留的数值百分比归一 helper 行为不变。
 

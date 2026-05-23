@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from decimal import Decimal
 
+import pytest
+
 from fund_agent.fund.analysis import (
     ConsistencyCheckResult,
     ConsistencyDimensionResult,
@@ -545,6 +547,29 @@ def test_run_stress_test_reports_missing_tolerance_without_guessing_capacity() -
 
     assert {scenario.capacity_status for scenario in result.scenarios} == {"not_provided"}
     assert "最大可承受亏损比例" in result.next_minimum_verification
+
+
+def test_run_stress_test_rejects_bool_numeric_inputs() -> None:
+    """验证压力测试数值入口拒绝 bool，避免被当作 0/1。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 bool 未被拒绝时抛出。
+    """
+
+    with pytest.raises(ValueError, match="不能为布尔值"):
+        run_stress_test(fund_type="active_fund", investment_amount=True)
+    with pytest.raises(ValueError, match="不能为布尔值"):
+        run_stress_test(
+            fund_type="active_fund",
+            investment_amount=100000,
+            max_tolerable_loss_rate=False,
+        )
 
 
 def test_run_stress_test_rejects_invalid_amount_and_tolerance() -> None:

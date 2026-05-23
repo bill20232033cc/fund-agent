@@ -43,6 +43,7 @@ from fund_agent.services import (
     ThermometerService,
     ValuationState,
 )
+from fund_agent.fund.data.thermometer_types import ThermometerBatchResult, ThermometerReading
 
 app = typer.Typer(help="基金行为教练 Agent — 买入前专业级基金体检报告")
 DEFAULT_GOLDEN_TEMPLATE = DEFAULT_GOLDEN_TEMPLATE_PATH
@@ -90,9 +91,19 @@ def analyze(
         typer.Option("--max-tolerable-loss-rate", help="最大可承受亏损比例，如 40%"),
     ] = None,
     valuation_state: Annotated[
-        str,
-        typer.Option("--valuation-state", help="估值状态：low/fair/high/unavailable"),
-    ] = "unavailable",
+        str | None,
+        typer.Option(
+            "--valuation-state",
+            help=(
+                "估值状态：low/fair/high/unavailable；不传则尝试自建温度计自动估值；"
+                "传 unavailable 则手动灰灯且不调用温度计"
+            ),
+        ),
+    ] = None,
+    thermometer_cache_dir: Annotated[
+        Path | None,
+        typer.Option("--thermometer-cache-dir", help="analyze 自动估值使用的自建温度计缓存目录"),
+    ] = None,
     money_horizon: Annotated[
         str | None,
         typer.Option(
@@ -153,7 +164,8 @@ def analyze(
         tracking_error: 指数基金跟踪误差。
         investment_amount: 压力测试投入金额。
         max_tolerable_loss_rate: 最大可承受亏损比例。
-        valuation_state: 估值状态。
+        valuation_state: 估值状态；缺省时允许自动温度计估值。
+        thermometer_cache_dir: 自动温度计缓存目录。
         money_horizon: 用户资金期限分类。
         user_money_horizon_years: 用户资金不用年限。
         current_stage: 当前阶段与关键变化说明。
@@ -199,6 +211,7 @@ def analyze(
         investment_amount=investment_amount,
         max_tolerable_loss_rate=max_tolerable_loss_rate,
         valuation_state=_valuation_state(valuation_state),
+        thermometer_cache_dir=thermometer_cache_dir,
         user_money_horizon_years=user_money_horizon_years,
         force_refresh=force_refresh,
         mode="developer_override" if dev_override else "product",
@@ -243,6 +256,10 @@ def checklist(
 
 @app.command("thermometer")
 def thermometer(
+    index_code: Annotated[
+        str | None,
+        typer.Option("--index", help="自建温度计指数代码；支持 000300、000905 或逗号分隔批量"),
+    ] = None,
     cache_dir: Annotated[
         Path | None,
         typer.Option("--cache-dir", help="温度计缓存目录；不传则使用默认 cache/thermometer"),
@@ -252,9 +269,10 @@ def thermometer(
     ] = False,
     output_json: Annotated[bool, typer.Option("--json", help="以 JSON 输出温度计快照摘要")] = False,
 ) -> None:
-    """查询有知有行温度计快照。
+    """查询温度计快照或自建指数温度计读数。
 
     Args:
+        index_code: 自建温度计指数代码；为空时保留当前公开页查询；逗号分隔时批量查询。
         cache_dir: 温度计缓存目录。
         force_refresh: 是否强制刷新。
         output_json: 是否输出 JSON。
@@ -267,11 +285,20 @@ def thermometer(
     """
 
     try:
+        parsed_index_code, parsed_index_codes = _parse_index_option(index_code)
         snapshot = asyncio.run(
             ThermometerService().run(
-                ThermometerRequest(cache_dir=cache_dir, force_refresh=force_refresh)
+                ThermometerRequest(
+                    cache_dir=cache_dir,
+                    force_refresh=force_refresh,
+                    index_code=parsed_index_code,
+                    index_codes=parsed_index_codes,
+                )
             )
         )
+    except ValueError as exc:
+        typer.echo(f"温度计请求参数错误：{exc}", err=True)
+        raise typer.Exit(code=2) from exc
     except Exception as exc:
         typer.echo(f"温度计查询失败：{exc}", err=True)
         raise typer.Exit(code=1) from exc
@@ -533,19 +560,21 @@ def quality_gate(
     typer.echo(f"issues: {len(result.issues)}")
 
 
-def _valuation_state(value: str) -> ValuationState:
+def _valuation_state(value: str | None) -> ValuationState | None:
     """校验估值状态选项。
 
     Args:
-        value: CLI 输入的估值状态。
+        value: CLI 输入的估值状态；`None` 表示允许自动温度计估值。
 
     Returns:
-        合法估值状态。
+        合法估值状态或 `None`。
 
     Raises:
         typer.BadParameter: 当取值不在允许集合内时抛出。
     """
 
+    if value is None:
+        return None
     allowed = {"low", "fair", "high", "unavailable"}
     if value not in allowed:
         raise typer.BadParameter(f"valuation_state 必须是 {', '.join(sorted(allowed))}")
@@ -786,6 +815,11 @@ def _thermometer_snapshot_payload(snapshot) -> dict[str, object]:  # type: ignor
         无显式抛出。
     """
 
+    if isinstance(snapshot, ThermometerReading):
+        return _thermometer_reading_payload(snapshot)
+    if isinstance(snapshot, ThermometerBatchResult):
+        return _thermometer_batch_payload(snapshot)
+
     market = snapshot.market
     macro = snapshot.macro
     return {
@@ -812,6 +846,69 @@ def _thermometer_snapshot_payload(snapshot) -> dict[str, object]:  # type: ignor
     }
 
 
+def _thermometer_batch_payload(batch: ThermometerBatchResult) -> dict[str, object]:
+    """把批量自建温度计读数转换为 CLI 输出 payload。
+
+    Args:
+        batch: 批量温度计结果。
+
+    Returns:
+        可 JSON 序列化的批量摘要 payload。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return {
+        "source": batch.source,
+        "requested_index_codes": list(batch.requested_index_codes),
+        "result_count": len(batch.readings),
+        "unavailable": batch.unavailable,
+        "partial_unavailable": batch.partial_unavailable,
+        "unavailable_count": batch.unavailable_count,
+        "generated_at": batch.generated_at,
+        "disclaimer": batch.disclaimer,
+        "readings": [_thermometer_reading_payload(reading) for reading in batch.readings],
+    }
+
+
+def _thermometer_reading_payload(reading: ThermometerReading) -> dict[str, object]:
+    """把自建温度计读数转换为 CLI 输出 payload。
+
+    Args:
+        reading: 自建温度计读数。
+
+    Returns:
+        可 JSON 序列化的摘要 payload。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return {
+        "source": reading.source,
+        "cached": reading.cached,
+        "stale": reading.stale,
+        "unavailable": reading.unavailable,
+        "unavailable_reason": reading.unavailable_reason,
+        "index_code": reading.index_code,
+        "index_name": reading.index_name,
+        "temperature": str(reading.temperature) if reading.temperature is not None else None,
+        "pe_percentile": (
+            str(reading.pe_percentile) if reading.pe_percentile is not None else None
+        ),
+        "pb_percentile": (
+            str(reading.pb_percentile) if reading.pb_percentile is not None else None
+        ),
+        "valuation_state_candidate": reading.valuation_state_candidate,
+        "data_date": reading.data_date,
+        "lookback_start": reading.lookback_start,
+        "lookback_end": reading.lookback_end,
+        "fetched_at": reading.fetched_at,
+        "disclaimer": reading.disclaimer,
+    }
+
+
 def _echo_thermometer_snapshot(payload: dict[str, object]) -> None:
     """输出温度计快照摘要。
 
@@ -825,8 +922,41 @@ def _echo_thermometer_snapshot(payload: dict[str, object]) -> None:
         无显式抛出。
     """
 
+    readings = payload.get("readings")
     for key, value in payload.items():
+        if key == "readings":
+            continue
         typer.echo(f"{key}: {_format_cli_value(value)}")
+    if isinstance(readings, list):
+        for reading in readings:
+            if not isinstance(reading, dict):
+                continue
+            typer.echo("")
+            typer.echo(f"[{_format_cli_value(reading.get('index_code'))}]")
+            for key, value in reading.items():
+                if key in {"source", "index_code", "disclaimer"}:
+                    continue
+                typer.echo(f"{key}: {_format_cli_value(value)}")
+
+
+def _parse_index_option(index_code: str | None) -> tuple[str | None, tuple[str, ...] | None]:
+    """解析 CLI `--index` 选项为显式 Service 请求字段。
+
+    Args:
+        index_code: CLI 原始指数选项。
+
+    Returns:
+        单指数代码或批量指数代码；未传入时两者都为空。
+
+    Raises:
+        无显式抛出；指数形态校验由 Service 统一处理。
+    """
+
+    if index_code is None:
+        return None, None
+    if "," not in index_code:
+        return index_code, None
+    return None, tuple(index_code.split(","))
 
 
 def _format_cli_value(value: object) -> str:
@@ -844,6 +974,8 @@ def _format_cli_value(value: object) -> str:
 
     if isinstance(value, bool):
         return "true" if value else "false"
+    if isinstance(value, list | tuple):
+        return ",".join(str(item) for item in value)
     if value is None:
         return ""
     return str(value)

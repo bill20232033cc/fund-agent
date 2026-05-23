@@ -9,6 +9,13 @@ from fund_agent.fund.data.thermometer import (
     ThermometerSnapshot,
     parse_thermometer_pages,
 )
+from fund_agent.fund.data.thermometer_types import (
+    PePbHistory,
+    PePbPoint,
+    ThermometerBatchResult,
+    ThermometerReading,
+    ThermometerUnavailable,
+)
 
 __all__ = [
     "FundNavDataAdapter",
@@ -17,6 +24,11 @@ __all__ = [
     "MacroTemperature",
     "MarketTemperature",
     "NavDataResult",
+    "PePbHistory",
+    "PePbPoint",
+    "ThermometerBatchResult",
+    "ThermometerReading",
     "ThermometerSnapshot",
+    "ThermometerUnavailable",
     "parse_thermometer_pages",
 ]

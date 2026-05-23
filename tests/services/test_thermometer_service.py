@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import asyncio
+import json
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from pathlib import Path
 
@@ -13,6 +15,9 @@ from fund_agent.fund.data.thermometer import (
     MarketTemperature,
     ThermometerSnapshot,
 )
+from fund_agent.fund.data.thermometer_cache import ThermometerHistoryCache
+from fund_agent.fund.data.thermometer_source import ThermometerSourceError
+from fund_agent.fund.data.thermometer_types import PePbHistory, PePbPoint, ThermometerBatchResult
 from fund_agent.services import ThermometerRequest, ThermometerService
 
 
@@ -50,6 +55,77 @@ class _FakeThermometerAdapter:
 
         self.force_refresh_values.append(force_refresh)
         return self.snapshot
+
+
+class _FakeIndexSource:
+    """自建指数温度计 fake 数据源。"""
+
+    def __init__(
+        self,
+        history: PePbHistory | None = None,
+        histories: dict[str, PePbHistory] | None = None,
+        exc: Exception | None = None,
+        failures: dict[str, Exception] | None = None,
+    ) -> None:
+        """初始化 fake 数据源。
+
+        Args:
+            history: 固定返回的历史序列。
+            histories: 按指数代码返回的历史序列。
+            exc: 固定抛出的异常。
+            failures: 按指数代码抛出的异常。
+
+        Returns:
+            无返回值。
+
+        Raises:
+            无显式抛出。
+        """
+
+        self.history = history or _index_history()
+        self.histories = histories or {}
+        self.exc = exc
+        self.failures = failures or {}
+        self.index_codes: list[str] = []
+
+    async def load_index_history(self, index_code: str) -> PePbHistory:
+        """记录指数代码并返回固定历史。
+
+        Args:
+            index_code: 指数代码。
+
+        Returns:
+            固定历史序列。
+
+        Raises:
+            Exception: 初始化时传入的固定异常。
+        """
+
+        self.index_codes.append(index_code)
+        if index_code in self.failures:
+            raise self.failures[index_code]
+        if self.exc is not None:
+            raise self.exc
+        return self.histories.get(index_code, self.history)
+
+
+class _FailingSaveThermometerHistoryCache(ThermometerHistoryCache):
+    """保存失败的温度计历史缓存。"""
+
+    def save(self, history: PePbHistory) -> PePbHistory:
+        """模拟缓存写入失败。
+
+        Args:
+            history: 待保存历史。
+
+        Returns:
+            不返回。
+
+        Raises:
+            OSError: 始终抛出。
+        """
+
+        raise OSError("read-only cache")
 
 
 def test_thermometer_service_delegates_to_injected_adapter(tmp_path: Path) -> None:
@@ -116,6 +192,385 @@ def test_thermometer_service_rejects_file_cache_dir(tmp_path: Path) -> None:
         asyncio.run(service.run(ThermometerRequest(cache_dir=file_path)))
 
 
+def test_thermometer_service_routes_index_request_to_self_owned_source(tmp_path: Path) -> None:
+    """验证指定指数时 Service 走自建温度计路径。
+
+    Args:
+        tmp_path: pytest 临时目录 fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 Service 路由或读数不符合契约时抛出。
+    """
+
+    source = _FakeIndexSource()
+    service = ThermometerService(
+        adapter_factory=lambda cache_dir: _FakeThermometerAdapter(_available_snapshot()),
+        index_source=source,
+        history_cache_factory=ThermometerHistoryCache,
+    )
+
+    result = asyncio.run(
+        service.run(ThermometerRequest(cache_dir=tmp_path, index_code="000300"))
+    )
+
+    assert source.index_codes == ["000300"]
+    assert result.index_code == "000300"
+    assert result.temperature == Decimal("100.00")
+    assert result.unavailable is False
+    assert result.cached is False
+
+
+def test_thermometer_service_returns_batch_readings_in_order(tmp_path: Path) -> None:
+    """验证批量指数请求由 Service 编排并按请求顺序返回。
+
+    Args:
+        tmp_path: pytest 临时目录 fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当批量读数或顺序不符合契约时抛出。
+    """
+
+    source = _FakeIndexSource(
+        histories={
+            "000300": _index_history(index_code="000300", index_name="沪深300"),
+            "000905": _index_history(index_code="000905", index_name="中证500"),
+        }
+    )
+    service = ThermometerService(
+        index_source=source,
+        history_cache_factory=lambda cache_dir: ThermometerHistoryCache(root_dir=tmp_path),
+    )
+
+    result = asyncio.run(
+        service.run(ThermometerRequest(cache_dir=tmp_path, index_codes=("000300", "000905")))
+    )
+
+    assert isinstance(result, ThermometerBatchResult)
+    assert source.index_codes == ["000300", "000905"]
+    assert result.requested_index_codes == ("000300", "000905")
+    assert [reading.index_code for reading in result.readings] == ["000300", "000905"]
+    assert len(result.readings) == 2
+    assert result.unavailable is False
+    assert result.partial_unavailable is False
+    assert result.unavailable_count == 0
+
+
+def test_thermometer_service_batch_marks_well_formed_unsupported_item_unavailable(
+    tmp_path: Path,
+) -> None:
+    """验证 well-formed 但不支持的指数是 item-level unavailable。
+
+    Args:
+        tmp_path: pytest 临时目录 fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 unsupported code 被当成请求错误时抛出。
+    """
+
+    source = _FakeIndexSource(
+        histories={"000300": _index_history(index_code="000300", index_name="沪深300")},
+        failures={"999999": ThermometerSourceError("暂不支持指数：999999")},
+    )
+    service = ThermometerService(
+        index_source=source,
+        history_cache_factory=lambda cache_dir: ThermometerHistoryCache(root_dir=tmp_path),
+    )
+
+    result = asyncio.run(
+        service.run(ThermometerRequest(cache_dir=tmp_path, index_codes=("000300", "999999")))
+    )
+
+    assert isinstance(result, ThermometerBatchResult)
+    assert result.requested_index_codes == ("000300", "999999")
+    assert result.partial_unavailable is True
+    assert result.unavailable is False
+    assert result.unavailable_count == 1
+    assert result.readings[0].unavailable is False
+    assert result.readings[1].index_code == "999999"
+    assert result.readings[1].unavailable is True
+    assert "暂不支持指数" in str(result.readings[1].unavailable_reason)
+
+
+def test_thermometer_service_rejects_unsupported_batch_item_before_fresh_cache(
+    tmp_path: Path,
+) -> None:
+    """验证 unsupported 指数即使存在 fresh cache 也不会返回 cached available。
+
+    Args:
+        tmp_path: pytest 临时目录 fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 unsupported code 绕过支持性校验读取缓存时抛出。
+    """
+
+    cache = ThermometerHistoryCache(root_dir=tmp_path)
+    cache.save(_index_history(index_code="999999", index_name="伪造指数"))
+    source = _FakeIndexSource(
+        histories={"000300": _index_history(index_code="000300", index_name="沪深300")}
+    )
+    service = ThermometerService(
+        index_source=source,
+        history_cache_factory=lambda cache_dir: ThermometerHistoryCache(root_dir=tmp_path),
+    )
+
+    result = asyncio.run(
+        service.run(ThermometerRequest(cache_dir=tmp_path, index_codes=("000300", "999999")))
+    )
+
+    assert isinstance(result, ThermometerBatchResult)
+    assert source.index_codes == ["000300"]
+    assert result.partial_unavailable is True
+    assert result.unavailable_count == 1
+    assert result.readings[0].index_code == "000300"
+    assert result.readings[0].unavailable is False
+    assert result.readings[1].index_code == "999999"
+    assert result.readings[1].unavailable is True
+    assert result.readings[1].cached is False
+    assert result.readings[1].temperature is None
+    assert "暂不支持指数：999999" in str(result.readings[1].unavailable_reason)
+
+
+def test_thermometer_service_batch_marks_all_failed_items_unavailable(tmp_path: Path) -> None:
+    """验证批量请求所有指数失败时返回整体 unavailable 数据态。
+
+    Args:
+        tmp_path: pytest 临时目录 fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当全失败状态不符合契约时抛出。
+    """
+
+    service = ThermometerService(
+        index_source=_FakeIndexSource(exc=ThermometerSourceError("network down")),
+        history_cache_factory=lambda cache_dir: ThermometerHistoryCache(root_dir=tmp_path),
+    )
+
+    result = asyncio.run(
+        service.run(ThermometerRequest(cache_dir=tmp_path, index_codes=("000300", "000905")))
+    )
+
+    assert isinstance(result, ThermometerBatchResult)
+    assert result.unavailable is True
+    assert result.partial_unavailable is False
+    assert result.unavailable_count == 2
+    assert [reading.unavailable for reading in result.readings] == [True, True]
+
+
+def test_thermometer_service_de_duplicates_batch_codes_preserving_order(tmp_path: Path) -> None:
+    """验证批量指数代码 preserve-order de-duplication。
+
+    Args:
+        tmp_path: pytest 临时目录 fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当去重策略不符合契约时抛出。
+    """
+
+    source = _FakeIndexSource(
+        histories={
+            "000300": _index_history(index_code="000300", index_name="沪深300"),
+            "000905": _index_history(index_code="000905", index_name="中证500"),
+        }
+    )
+    service = ThermometerService(
+        index_source=source,
+        history_cache_factory=lambda cache_dir: ThermometerHistoryCache(root_dir=tmp_path),
+    )
+
+    result = asyncio.run(
+        service.run(
+            ThermometerRequest(cache_dir=tmp_path, index_codes=("000300", "000300", "000905"))
+        )
+    )
+
+    assert isinstance(result, ThermometerBatchResult)
+    assert result.requested_index_codes == ("000300", "000905")
+    assert source.index_codes == ["000300", "000905"]
+    assert len(result.readings) == 2
+
+
+def test_thermometer_service_rejects_mutually_exclusive_index_fields(tmp_path: Path) -> None:
+    """验证 `index_code` 与 `index_codes` 互斥。
+
+    Args:
+        tmp_path: pytest 临时目录 fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当互斥字段未被拒绝时抛出。
+    """
+
+    service = ThermometerService()
+
+    with pytest.raises(ValueError, match="不能同时设置"):
+        asyncio.run(
+            service.run(
+                ThermometerRequest(
+                    cache_dir=tmp_path,
+                    index_code="000300",
+                    index_codes=("000905",),
+                )
+            )
+        )
+
+
+@pytest.mark.parametrize(
+    "index_codes",
+    [
+        (),
+        ("000300", "abc"),
+        ("000300", ""),
+        ("", "000905"),
+        ("   ",),
+    ],
+)
+def test_thermometer_service_rejects_malformed_batch_index_codes(
+    tmp_path: Path, index_codes: tuple[str, ...]
+) -> None:
+    """验证 Service 单一规范化入口拒绝 malformed batch 请求。
+
+    Args:
+        tmp_path: pytest 临时目录 fixture。
+        index_codes: 待验证的原始指数代码序列。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 malformed 请求未被拒绝时抛出。
+    """
+
+    service = ThermometerService()
+
+    with pytest.raises(ValueError):
+        asyncio.run(service.run(ThermometerRequest(cache_dir=tmp_path, index_codes=index_codes)))
+
+
+def test_thermometer_service_uses_stale_index_cache_when_source_fails(tmp_path: Path) -> None:
+    """验证自建数据源失败时可回退到 stale cache。
+
+    Args:
+        tmp_path: pytest 临时目录 fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 stale cache 未被复用时抛出。
+    """
+
+    cache = ThermometerHistoryCache(root_dir=tmp_path)
+    cache.save(_index_history())
+    cache_path = tmp_path / "index" / "000300_history.json"
+    payload = json.loads(cache_path.read_text(encoding="utf-8"))
+    payload["cache_updated_at"] = (datetime.now(timezone.utc) - timedelta(days=2)).isoformat()
+    cache_path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+    service = ThermometerService(
+        index_source=_FakeIndexSource(exc=ThermometerSourceError("network down")),
+        history_cache_factory=lambda cache_dir: ThermometerHistoryCache(root_dir=tmp_path),
+    )
+
+    result = asyncio.run(
+        service.run(ThermometerRequest(cache_dir=tmp_path, index_code="000300", force_refresh=True))
+    )
+
+    assert result.cached is True
+    assert result.stale is True
+    assert result.unavailable is False
+
+
+def test_thermometer_service_returns_unavailable_without_index_cache(tmp_path: Path) -> None:
+    """验证自建数据源失败且无缓存时返回 unavailable 读数。
+
+    Args:
+        tmp_path: pytest 临时目录 fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当失败路径不是 unavailable 数据态时抛出。
+    """
+
+    service = ThermometerService(
+        index_source=_FakeIndexSource(exc=ThermometerSourceError("network down")),
+        history_cache_factory=lambda cache_dir: ThermometerHistoryCache(root_dir=tmp_path),
+    )
+
+    result = asyncio.run(service.run(ThermometerRequest(cache_dir=tmp_path, index_code="000300")))
+
+    assert result.unavailable is True
+    assert result.valuation_state_candidate == "unavailable"
+    assert "network down" in str(result.unavailable_reason)
+
+
+def test_thermometer_service_uses_fresh_history_when_cache_save_fails(tmp_path: Path) -> None:
+    """验证缓存写失败不掩盖已成功取得的新鲜数据。
+
+    Args:
+        tmp_path: pytest 临时目录 fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当缓存写失败导致 unavailable 时抛出。
+    """
+
+    service = ThermometerService(
+        index_source=_FakeIndexSource(),
+        history_cache_factory=lambda cache_dir: _FailingSaveThermometerHistoryCache(root_dir=tmp_path),
+    )
+
+    result = asyncio.run(service.run(ThermometerRequest(cache_dir=tmp_path, index_code="000300")))
+
+    assert result.unavailable is False
+    assert result.cached is False
+    assert result.temperature == Decimal("100.00")
+
+
+def test_thermometer_service_propagates_calculation_contract_error(tmp_path: Path) -> None:
+    """验证计算契约错误不会被 stale cache 掩盖。
+
+    Args:
+        tmp_path: pytest 临时目录 fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当计算错误被包装为 unavailable 时抛出。
+    """
+
+    service = ThermometerService(
+        index_source=_FakeIndexSource(history=_short_index_history()),
+        history_cache_factory=lambda cache_dir: ThermometerHistoryCache(root_dir=tmp_path),
+    )
+
+    with pytest.raises(ValueError, match="样本不足"):
+        asyncio.run(service.run(ThermometerRequest(cache_dir=tmp_path, index_code="000300")))
+
+
 def _available_snapshot() -> ThermometerSnapshot:
     """构造可用温度计快照。
 
@@ -148,4 +603,53 @@ def _available_snapshot() -> ThermometerSnapshot:
         unavailable=False,
         unavailable_reason=None,
         fetched_at="2026-05-20T00:00:00+00:00",
+    )
+
+
+def _index_history(index_code: str = "000300", index_name: str = "沪深300") -> PePbHistory:
+    """构造自建指数温度计历史。
+
+    Args:
+        无。
+
+    Returns:
+        PE/PB 历史。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return PePbHistory(
+        index_code=index_code,
+        index_name=index_name,
+        source="fixture",
+        points=tuple(
+            PePbPoint(
+                date=f"2026-05-{day:02d}",
+                pe=Decimal(day),
+                pb=Decimal(day) / Decimal("10"),
+            )
+            for day in range(1, 31)
+        ),
+    )
+
+
+def _short_index_history() -> PePbHistory:
+    """构造样本不足的自建指数温度计历史。
+
+    Args:
+        无。
+
+    Returns:
+        样本不足的 PE/PB 历史。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return PePbHistory(
+        index_code="000300",
+        index_name="沪深300",
+        source="fixture",
+        points=(PePbPoint(date="2026-05-01", pe=Decimal("1"), pb=Decimal("0.1")),),
     )

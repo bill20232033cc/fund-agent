@@ -19,6 +19,7 @@ from fund_agent.fund.analysis.final_judgment import FinalJudgment, FinalJudgment
 from fund_agent.fund.analysis.investor_return import InvestorExperienceResult
 from fund_agent.fund.analysis.r_abc import RabcAttribution
 from fund_agent.fund.analysis.risk_check import RiskCheckResult, StressTestResult
+from fund_agent.fund.analysis.valuation_state import ValuationStateResolution
 from fund_agent.fund.audit import ProgrammaticAuditInput
 from fund_agent.fund.data_extractor import StructuredFundDataBundle
 from fund_agent.fund.extractors.models import (
@@ -74,6 +75,7 @@ class TemplateRenderInput:
         risk_check_result: 否决项检查结果，用于模板第 6 章。
         stress_test_result: 压力测试结果，用于模板第 6 章。
         checklist_result: 7 问题检查清单结果，用于模板第 7 章和 R1/R2 审计。
+        valuation_state_resolution: 估值状态结构化真源，用于模板第 7 章和 R1 审计。
         final_judgment_decision: 最终判断选择契约，包含 selected/derived/source。
         current_stage: 当前阶段与关键变化说明；缺失时模板第 5 章显式写数据不足。
     """
@@ -87,6 +89,7 @@ class TemplateRenderInput:
     stress_test_result: StressTestResult
     checklist_result: ChecklistResult
     final_judgment_decision: FinalJudgmentDecision
+    valuation_state_resolution: ValuationStateResolution | None = None
     current_stage: str | None = None
 
 
@@ -158,6 +161,7 @@ def render_template_report(input_data: TemplateRenderInput) -> TemplateRenderRes
             final_judgment=input_data.final_judgment_decision.selected_judgment,
             derived_final_judgment=input_data.final_judgment_decision.derived_judgment,
             final_judgment_source=input_data.final_judgment_decision.source,
+            valuation_state_resolution=input_data.valuation_state_resolution,
             chapter_blocks=chapter_blocks,
             item_rule_decisions=item_rule_decisions,
             item_rule_audit_context=item_rule_audit_context,
@@ -324,14 +328,17 @@ def _render_chapter_0(
     fund_name = _value_text(identity, "fund_name")
     fund_code = _value_text(identity, "fund_code", fallback=input_data.structured_data.fund_code)
     fund_type = _value_text(identity, "classified_fund_type")
+    fund_manager = _value_text(identity, "fund_manager")
+    fund_scale = _value_text(identity, "fund_scale")
+    inception_date = _value_text(identity, "inception_date")
     judgment_text = _FINAL_JUDGMENT_TEXT[input_data.final_judgment_decision.selected_judgment]
     primary_rabc = _primary_rabc(input_data.rabc_attributions)
     net_excess = _ratio_text(primary_rabc.net_excess_return) if primary_rabc else _INSUFFICIENT_TEXT
     watch_variable_text = _lens_watch_variable_text(lens_application_plan)
     content = [
         get_template_chapter_heading(0),
-        f"- 基金：{fund_name}（{fund_code}）。",
-        f"- 基金类型：{fund_type}。",
+        f"- 这是什么基金：{fund_name}（{fund_code}），{fund_type}。",
+        f"- 基金简介：基金经理 {fund_manager}；管理规模 {fund_scale}；成立时间 {inception_date}。",
         f"- 最终判断：{judgment_text}；检查清单汇总为 {input_data.checklist_result.overall_signal} / {input_data.checklist_result.overall_status}。",
         f"- 当前业绩与运作状态：R=A+B-C 净超额 {net_excess}；超额性质 {input_data.alpha_judgment.nature}。",
         f"- 支撑当前动作的最主要理由：检查清单汇总为 {input_data.checklist_result.overall_signal} / {input_data.checklist_result.overall_status}。",
@@ -968,6 +975,9 @@ def _render_chapter_7(input_data: TemplateRenderInput) -> str:
     ]
     for item in input_data.checklist_result.items:
         lines.append(f"- {item.question} {item.signal} / {item.status}：{item.reason}")
+    disclaimer = _valuation_disclaimer_text(input_data.valuation_state_resolution)
+    if disclaimer is not None:
+        lines.append(f"- 温度计说明：{disclaimer}")
     lines.append(f"- 下一步最小验证问题：{input_data.checklist_result.next_minimum_verification}")
     lines.append(_evidence_line(_collect_checklist_anchors(input_data.checklist_result)))
     return "\n".join(lines)
@@ -1240,6 +1250,7 @@ def _collect_evidence_anchors(input_data: TemplateRenderInput) -> tuple[Evidence
             *_collect_consistency_anchors(input_data),
             *_collect_risk_anchors(input_data),
             *_collect_checklist_anchors(input_data.checklist_result),
+            *_collect_valuation_resolution_anchors(input_data.valuation_state_resolution),
             *input_data.stress_test_result.anchors,
         ),
     )
@@ -1283,6 +1294,46 @@ def _collect_chapter_evidence_groups(
         _collect_risk_anchors(input_data),
         _collect_checklist_anchors(input_data.checklist_result),
     )
+
+
+def _collect_valuation_resolution_anchors(
+    valuation_state_resolution: ValuationStateResolution | None,
+) -> tuple[EvidenceAnchor, ...]:
+    """汇总估值状态结构化真源锚点。
+
+    Args:
+        valuation_state_resolution: 估值状态结构化真源。
+
+    Returns:
+        去重后的估值锚点。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if valuation_state_resolution is None:
+        return ()
+    return _dedupe_anchors(valuation_state_resolution.anchors)
+
+
+def _valuation_disclaimer_text(
+    valuation_state_resolution: ValuationStateResolution | None,
+) -> str | None:
+    """渲染自建温度计免责声明，见模板第 7 章。
+
+    Args:
+        valuation_state_resolution: 估值状态结构化真源。
+
+    Returns:
+        需要展示时返回免责声明文本，否则返回 `None`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if valuation_state_resolution is None or not valuation_state_resolution.disclaimer_required:
+        return None
+    return valuation_state_resolution.disclaimer
 
 
 def _collect_rabc_anchors(attributions: tuple[RabcAttribution, ...]) -> tuple[EvidenceAnchor, ...]:

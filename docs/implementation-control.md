@@ -6,7 +6,7 @@
 > **MVP 计划书**: `fund-agent-mvp-plan.md`
 > **定性模板**: `docs/fund-analysis-template-draft.md`
 > **P4 质量体系**: `docs/implementation-control-p4.md`
-> **当前状态**: P17-S1 已通过 PR #11 squash merge 到 main；下一 gate 是 post-P17 follow-up planning；P0-P17 已合入主线并在下方台账归档
+> **当前状态**: P19-S4 deferred by source feasibility；next gate is P19-S5 / all-A PE source gate；P0-P17 已合入主线并在下方台账归档
 
 ---
 
@@ -15,9 +15,9 @@
 | Field | State |
 |---|---|
 | Branch | `main` |
-| Current gate | `P17-S1 merged` |
-| Next entry point | `post-P17 follow-up planning` |
-| Current phase | `P17 main-branch closeout accepted` |
+| Current gate | `P19-S5 / all-A PE source gate` |
+| Next entry point | `P19-S5 all-A PE source feasibility plan/review` |
+| Current phase | `P19 thermometer independent development` |
 | Design truth | `docs/design.md` (v2.2) |
 | Control truth | `docs/implementation-control.md` |
 | Latest accepted planning artifact | `docs/reviews/post-p12-planning-20260522.md` |
@@ -73,14 +73,33 @@
 | Latest thermometer design-direction artifact | `docs/reviews/thermometer-self-owned-design-direction-20260522.md` |
 | Latest P17 PR artifacts | `https://github.com/bill20232033cc/fund-agent/pull/11`, `docs/reviews/p17-pr-review-mimo-20260522.md`, `docs/reviews/p17-pr-review-glm-20260522.md`, `docs/reviews/p17-pr-review-controller-judgment-20260522.md` |
 | Latest P17 closeout artifact | `docs/reviews/p17-main-branch-closeout-20260522.md` |
+| Latest P19 input artifacts | `docs/p19-thermometer-technical-proposal.md`, `docs/design-md-v22-changes.md`, `docs/p19-phase-definition.md` |
+| Latest P19 design/control artifacts | `docs/reviews/p19-design-update-20260522.md`, `docs/reviews/p19-control-update-20260522.md` |
+| Latest P19 plan review artifacts | `docs/reviews/p19-plan-review-20260522.md`, `docs/reviews/p19-plan-review-findings-20260522.md` |
+| Latest P19 plan fix artifact | `docs/reviews/p19-plan-fix-data-source-20260522.md` |
+| Latest P19 source decision artifact | `docs/reviews/p19-all-a-pe-source-decision-20260522.md` |
+| Latest P19-S1 plan artifact | `docs/reviews/p19-s1-corrected-index-thermometer-plan-20260522.md` |
+| Latest P19-S1 implementation artifact | `docs/reviews/p19-s1-index-thermometer-implementation-20260523.md` |
+| Latest P19-S1 code review artifacts | `docs/reviews/p19-s1-code-review-mimo-20260523.md`, `docs/reviews/p19-s1-code-review-glm-20260523.md`, `docs/reviews/p19-s1-code-review-controller-judgment-20260523.md` |
+| Latest P19-S1 code re-review artifacts | `docs/reviews/p19-s1-code-rereview-mimo-20260523.md`, `docs/reviews/p19-s1-code-rereview-glm-20260523.md`, `docs/reviews/p19-s1-code-rereview-controller-judgment-20260523.md` |
+| Latest P19-S1 code re-review round 2 artifacts | `docs/reviews/p19-s1-code-rereview-round2-mimo-20260523.md`, `docs/reviews/p19-s1-code-rereview-round2-glm-20260523.md`, `docs/reviews/p19-s1-code-rereview-round2-controller-judgment-20260523.md` |
+| Latest P19-S1 code re-review round 3 artifacts | `docs/reviews/p19-s1-code-rereview-round3-mimo-20260523.md`, `docs/reviews/p19-s1-code-rereview-round3-glm-20260523.md`, `docs/reviews/p19-s1-code-rereview-round3-controller-judgment-20260523.md` |
+| Latest P19-S2 plan artifacts | `docs/reviews/p19-s2-broad-index-thermometer-plan-20260523.md`, `docs/reviews/p19-s2-plan-review-mimo-20260523.md`, `docs/reviews/p19-s2-plan-review-glm-20260523.md`, `docs/reviews/p19-s2-plan-review-controller-judgment-20260523.md` |
+| Latest P19-S2 implementation artifact | `docs/reviews/p19-s2-broad-index-thermometer-implementation-20260523.md` |
+| Latest P19-S2 code review artifacts | `docs/reviews/p19-s2-code-review-mimo-20260523.md`, `docs/reviews/p19-s2-code-review-glm-20260523.md`, `docs/reviews/p19-s2-code-review-controller-judgment-20260523.md` |
+| Latest P19-S2 code re-review artifacts | `docs/reviews/p19-s2-code-rereview-mimo-20260523.md`, `docs/reviews/p19-s2-code-rereview-glm-20260523.md`, `docs/reviews/p19-s2-code-rereview-controller-judgment-20260523.md` |
+| Latest P19-S3 plan artifacts | `docs/reviews/p19-s3-valuation-state-integration-plan-20260523.md`, `docs/reviews/p19-s3-plan-review-mimo-20260523.md`, `docs/reviews/p19-s3-plan-review-glm-20260523.md`, `docs/reviews/p19-s3-plan-review-controller-judgment-20260523.md`, `docs/reviews/p19-s3-plan-rereview-mimo-20260523.md`, `docs/reviews/p19-s3-plan-rereview-glm-20260523.md`, `docs/reviews/p19-s3-plan-rereview-round2-mimo-20260523.md`, `docs/reviews/p19-s3-plan-review-controller-acceptance-20260523.md` |
+| Latest P19-S3 implementation artifact | `docs/reviews/p19-s3-valuation-state-integration-implementation-20260523.md` |
+| Latest P19-S3 code review artifacts | `docs/reviews/p19-s3-code-review-mimo-20260523.md`, `docs/reviews/p19-s3-code-review-glm-20260523.md`, `docs/reviews/p19-s3-code-review-controller-judgment-20260523.md`, `docs/reviews/p19-s3-code-review-fix-20260523.md`, `docs/reviews/p19-s3-code-rereview-mimo-20260523.md`, `docs/reviews/p19-s3-code-rereview-glm-20260523.md`, `docs/reviews/p19-s3-code-rereview-controller-judgment-20260523.md` |
+| Latest P19-S4 artifacts | `docs/reviews/p19-s4-expanded-index-coverage-plan-20260523.md`, `docs/reviews/p19-s4-plan-review-mimo-20260523.md`, `docs/reviews/p19-s4-plan-review-glm-20260523.md`, `docs/reviews/p19-s4-plan-review-controller-judgment-20260523.md`, `docs/reviews/p19-s4-source-feasibility-20260523.md`, `docs/reviews/p19-s4-source-feasibility-controller-judgment-20260523.md` |
 | Scoped 2026-05-22 inputs | local input drafts `docs/design0522.md` and `docs/implementation-control0522.md`, plus scoped audit input `docs/repo-audit-20260522.md`; these are update inputs, not replacement truth documents |
 | Last merged PR | PR 11, merge commit `5c54994b9e7232e6144e730fff6d83d5c8ab80fb` |
 | Product baseline | P10 release-readiness merged; P11 control-doc recovery accepted; P12 closed on main; post-P12 release lane maintenance-ready; P13 direct tracking-error disclosure merged; P14-S1 index quality denominators merged; P16 enhanced-index `index_profile` benchmark-context golden rows merged; P17 tracking_error fail-closed notes and thermometer design direction merged |
 | External repo state | Current open issues: 0; PR 5 remains open and requires explicit external-action authorization to close or comment |
-| Open residuals | RR-13 duplicate `016492`, excluded `docs/repo-audit-20260521.md`, production `tracking_error` golden rows remain blocked for `001548` and P16-S1 enhanced-index candidates, future source-metadata retry with `force_refresh=True` if selected, P17-S1 accepted low-risk note precision/test residuals, future self-owned thermometer design/implementation phase, future thermometer-to-`valuation_state` mapping design if selected, future index methodology/constituents extraction, future calculated tracking-error/index-data candidates, future E1-E3/Evidence Confirm, repo-hygiene candidates D-1/D-8-C5/C-9, scoped 2026-05-22 control/repo-audit follow-ups, design-boundary checklist must appear in future plan reviews |
+| Open residuals | RR-13 duplicate `016492`, excluded `docs/repo-audit-20260521.md`, production `tracking_error` golden rows remain blocked for `001548` and P16-S1 enhanced-index candidates, future source-metadata retry with `force_refresh=True` if selected, P17-S1 accepted low-risk note precision/test residuals, P19 all-A PE source remains unresolved and full all-A market thermometer moves to P19-S5 / all-A PE source gate, P19-S4 exact-index PE+PB sources are unresolved for `399006`/`000688`/`000922`/`000932`/`000933`, P19-S1/S2/S3 live akshare availability remains an external-data residual, future P19 audit hardening may make `ProgrammaticAuditInput.valuation_state_resolution` mandatory outside explicit legacy mode, future test should persist `benchmark_index_code` exact supported index plus cash/bond component acceptance, future index methodology/constituents extraction, future calculated tracking-error/index-data candidates, future E1-E3/Evidence Confirm, repo-hygiene candidates D-1/D-8-C5/C-9, scoped 2026-05-22 control/repo-audit follow-ups, design-boundary checklist must appear in future plan reviews |
 | Non-goal reminder | do not introduce Dayu Host/Engine/tool loop, LLM writing, or external runtime dependency |
 
-Resume checklist: confirm current gate and next entry point; P17-S1 was merged through PR 11 at merge commit `5c54994b9e7232e6144e730fff6d83d5c8ab80fb`; local `main` is aligned to `origin/main` after preserving `backup/p17-pre-squash-main`; P17-S1 plan/review is accepted in `docs/reviews/p17-s1-plan-review-controller-judgment-20260522.md`; P17-S1 implementation/code review is accepted in `docs/reviews/p17-s1-code-review-controller-judgment-20260522.md`; P17-S1 aggregate deepreview is accepted in `docs/reviews/p17-s1-aggregate-deepreview-controller-judgment-20260522.md`; P17-S1 ready-to-open-draft-PR reconciliation is refreshed in `docs/reviews/p17-s1-ready-to-open-draft-pr-reconciliation-20260522.md` after thermometer design-direction correction; thermometer self-owned design direction is accepted in `docs/reviews/thermometer-self-owned-design-direction-20260522.md`; PR #11 is accepted in `docs/reviews/p17-pr-review-controller-judgment-20260522.md` and closed out in `docs/reviews/p17-main-branch-closeout-20260522.md`; current design truth is `docs/design.md` v2.2; next gate is post-P17 follow-up planning; future plan reviews must include design-boundary checks; do not delete the branch, close/comment on unrelated PRs/issues, or modify external GitHub state without explicit user authorization; P17-S1 implementation replaced stale `tracking_error_ambiguous` semantics, handled manager/benchmark note reachability, made target-only continue and multi-match blocker behavior explicit, preserved both early-return fixes, and added focused coverage for table-level multi-match plus `§2` fallback; self-owned thermometer is now accepted as a future design direction, while automatic thermometer-to-`valuation_state` mapping still requires a separate design gate; P16-S1 evidence acquisition remains accepted as `PARTIAL_ACCEPTED_INDEX_PROFILE_ONLY`; P15-S1A evidence acquisition remains accepted with `BLOCKED_NO_DIRECT_DISCLOSURE_EVIDENCE`; production `tracking_error` golden remains blocked for `001548` and all five P16 enhanced-index candidates; `161725` remains fixture-only; do not read or include `docs/repo-audit-20260521.md`; touching RR-13, editing source CSV, or adding unplanned golden rows still requires explicit user authorization; preserve deterministic MVP boundaries and do not introduce LLM audit, Host, Engine, tool loop, Evidence Confirm execution, calculated index series, external index adapters, methodology extraction, constituents extraction, QDII subtype redesign, or unsupported coverage targets.
+Resume checklist: confirm current gate and next entry point; P17-S1 was merged through PR 11 at merge commit `5c54994b9e7232e6144e730fff6d83d5c8ab80fb`; local `main` is aligned to `origin/main` after preserving `backup/p17-pre-squash-main`; P19 input artifacts are `docs/p19-thermometer-technical-proposal.md`, `docs/design-md-v22-changes.md`, and `docs/p19-phase-definition.md`; `docs/design.md` v2.2 has been fused with P19 thermometer design in `docs/reviews/p19-design-update-20260522.md`; P19 plan review is recorded in `docs/reviews/p19-plan-review-20260522.md` with findings in `docs/reviews/p19-plan-review-findings-20260522.md`; P19 data-source plan fix is recorded in `docs/reviews/p19-plan-fix-data-source-20260522.md`; P19 all-A PE source decision is recorded in `docs/reviews/p19-all-a-pe-source-decision-20260522.md`; P19-S1/S2 are accepted; P19-S3 accepted through `docs/reviews/p19-s3-code-rereview-controller-judgment-20260523.md`; P19-S4 is deferred in `docs/reviews/p19-s4-source-feasibility-controller-judgment-20260523.md` because no design-allowed source produced exact target-index PE+PB historical series for `399006`/`000688`/`000922`/`000932`/`000933`; current gate is P19-S5 / all-A PE source gate; P19-S2 accepted commit is `0a0045c`; P19-S3 implementation adds structured `ValuationStateResolution` truth through Service/checklist/renderer/audit, exact benchmark identity matching, explicit valuation input priority including explicit `unavailable`, user-visible disclaimer without forbidden trading-advice terms, thermometer calculation/data-quality exceptions becoming unavailable gray, returned-index identity fail-closed, and unavailable thermometer failure provenance anchors; latest validation recorded targeted `163 passed`, full suite `537 passed`, ruff passed, diff check passed; all-A market thermometer remains deferred to P19-S5 / all-A PE source gate; `ThermometerService` remains the Service entry point to evolve, while current `FundThermometerAdapter` is only a public-page transitional adapter or comparison input; future plan reviews must include design-boundary checks; do not delete branches, close/comment on unrelated PRs/issues, or modify external GitHub state without explicit user authorization; P16-S1 evidence acquisition remains accepted as `PARTIAL_ACCEPTED_INDEX_PROFILE_ONLY`; P15-S1A evidence acquisition remains accepted with `BLOCKED_NO_DIRECT_DISCLOSURE_EVIDENCE`; production `tracking_error` golden remains blocked for `001548` and all five P16 enhanced-index candidates; `161725` remains fixture-only; do not read or include `docs/repo-audit-20260521.md`; touching RR-13, editing source CSV, or adding unplanned golden rows still requires explicit user authorization; preserve deterministic MVP boundaries and do not introduce LLM audit, Host, Engine, tool loop, Evidence Confirm execution, calculated index series, external index adapters beyond P19 thermometer data-source protocols, methodology extraction, constituents extraction, QDII subtype redesign, or unsupported coverage targets.
 
 ## 2026-05-22 Design Alignment Guide Handling
 
@@ -104,6 +123,142 @@ Accepted control impact:
 - Future self-owned thermometer work must define market/index coverage, source datasets, formulas, percentile windows, cache semantics, failure taxonomy, fixtures, and tests.
 - Automatic thermometer-to-`valuation_state` mapping remains a separate design problem; reports still require explicit user-provided valuation state until a dedicated gate changes that behavior.
 - P17-S1 draft PR gate has since passed through PR #11 with this design/control change included.
+
+## 2026-05-22 P19 Thermometer Independent Development
+
+P19 is opened from the latest incoming materials `docs/p19-thermometer-technical-proposal.md`, `docs/design-md-v22-changes.md`, and `docs/p19-phase-definition.md`. Controller artifact `docs/reviews/p19-design-update-20260522.md` accepts the thermometer independent-development direction with corrections:
+
+- Current `docs/design.md` was already v2.2 after P17; P19 is a v2.2 fusion, not a downgrade or replacement of prior design truth.
+- P19-S1/S2 may build self-owned thermometer readings and CLI behavior, but must not silently change `fund-analysis analyze`.
+- P19-S3 is the earliest gate allowed to design automatic thermometer-to-`valuation_state` mapping.
+- Existing `ThermometerService` should be evolved as the Service entry point; existing `FundThermometerAdapter` remains transitional public-page functionality or comparison input, not the P19 production truth source.
+- Original plan review had to verify akshare all-A PE/PB data availability, historical coverage, field stability, first-run backfill cost, cache dependency choice, and acceptable deviation against Youzhiyouxing before implementation.
+- P19 all-A PE source decision has since found no verified all-A PE historical source in akshare 1.18.60 or directly probed matching Legulegu endpoints; P19-S1 is therefore corrected to an index thermometer MVP, and all-A market thermometer moves to P19-S5 / all-A PE source gate.
+- P19-S1 corrected plan is recorded in `docs/reviews/p19-s1-corrected-index-thermometer-plan-20260522.md`. A delegated planning agent timed out, so this is a controller fallback plan, not an independent reviewer artifact.
+
+## Phase P19: 温度计独立开发
+
+### Goal
+
+独立实现温度计功能，基于有知有行公开方法论复现，不依赖有知有行页面抓取作为生产数据真源。P19-S1/S2 先为 `fund-analysis thermometer` 提供项目内自建温度计读数；P19-S3 才允许在独立 gate 中设计并实现为 `fund-analysis analyze` 提供估值状态（low/fair/high/unavailable）自动判断能力。
+
+### Design Truth Update
+
+- `docs/design.md` §1.3 已调整：当前有知有行公开页面抓取不是长期温度计真源，P19 接受项目内自建温度计。
+- `docs/design.md` §6.3 已更新：自建温度计目标数据源为 akshare + 中证指数官方或 akshare 指数估值接口。
+- `docs/design.md` §10 已新增温度计数据来源、计算方法、加权方式和 `valuation_state` 集成 gate 的设计决策。
+- `docs/design.md` §11 已新增完整温度计设计；原 Plan Review 边界检查顺延为 §12。
+- `docs/design.md` 仍为 v2.2；P19 更新是 v2.2 内融合。
+
+### Entry Criteria
+
+- [x] P17 已合入 main；P18 不作为 P19 的前置阻塞项，除非后续规划重新定义 P18。
+- [x] `docs/design.md` 已融合 P19 温度计设计（§1.3、§6.3、§10、§11、§12）。
+- [x] P19 输入材料已进入 `docs/`：`p19-thermometer-technical-proposal.md`、`design-md-v22-changes.md`、`p19-phase-definition.md`。
+- [x] `docs/reviews/p19-plan-review-20260522.md` 完成并通过 controller 裁决，结论为 implementation blocked until data-source plan fix。
+- [x] P19 all-A PE source decision 完成：全 A PB 可用，全 A PE 历史未找到可验证来源；P19-S1 scope 改为沪深300指数温度计 MVP。
+
+### Exit Criteria（可验证）
+
+#### P19 整体
+
+- [x] 沪深300、中证500 温度计算通过单元测试。
+- [x] CLI `fund-analysis thermometer --index 000300` 输出沪深300温度。
+- [x] CLI `fund-analysis thermometer --index 000300,000905` 输出批量指数温度。
+- [x] CLI `fund-analysis thermometer --json` 输出结构化 JSON。
+- [x] P19-S3 后，`fund-analysis analyze` 自动获取温度并映射为 `valuation_state`，且用户显式输入优先。
+- [ ] 3 只样本基金 CLI 端到端测试通过。
+- [x] 程序审计 P1/P2/P3/C2/L1/R1/R2 全部通过。
+- [x] 全量测试套件通过（`pytest -q`）。
+- [x] ruff 检查通过。
+- [ ] 与有知有行页面温度方向对比验证通过；数值偏差只作为合理性信号，不作为精确复刻承诺。
+
+#### P19-S1 沪深300指数温度计 MVP
+
+- [x] `ThermometerDataSource` Protocol 定义完成。
+- [x] 沪深300 PE/PB 历史数据获取实现并通过 fixture 测试。
+- [x] `ThermometerCalculator` PE/PB 分位数和综合温度计算通过测试。
+- [x] 历史分位数计算正确（使用已知 fixture 数据验证）。
+- [x] `ThermometerReading` dataclass 定义完成。
+- [x] 缓存机制工作正常；P19-S1 使用 JSON cache，parquet 依赖未引入。
+- [x] CLI `fund-analysis thermometer --index 000300` 输出沪深300温度。
+- [x] 数据源失败时输出 `unavailable`，不 fallback 到有知有行页面抓取。
+
+#### P19-S2 宽基指数温度计
+
+- [x] 中证500 PE/PB 历史数据获取实现。
+- [x] 指数级温度计算通过单元测试。
+- [x] CLI 支持指定指数查询（`--index 000300`）。
+- [x] CLI 支持批量查询（`--index 000300,000905`）。
+
+#### P19-S3 analyze 自动集成
+
+- [x] `fund-analysis analyze` 自动调用温度计获取对应指数温度。
+- [x] 指数基金和指数增强基金只在 exact benchmark identity 映射到 `000300` / `000905` 时使用指数温度。
+- [x] 主动、债券、QDII、FOF、派生指数、多个权益指数和无法精确归类基准保持 unavailable 灰灯，不调用温度计。
+- [x] 温度不可用时返回 `ValuationState.UNAVAILABLE`。
+- [x] 检查清单第 6 题自动填充估值状态，并保留用户显式输入优先级。
+- [ ] 3 只样本基金端到端测试通过。
+
+#### P19-S4 扩展指数覆盖
+
+- [ ] 创业板指、科创50、中证红利、中证消费、中证医药温度计算通过测试。（deferred: no exact PE+PB historical source verified）
+- [ ] CLI 批量查询覆盖所有支持的指数。（deferred until source gate resolves）
+
+#### P19-S5 全 A 市场温度计
+
+- [ ] 全 A PE 历史来源通过验证，包含字段、历史覆盖、缺失规则和使用许可。
+- [ ] 全 A PB `stock_a_all_pb()` 字段语义已冻结为 fixture。
+- [ ] 全 A PE/PB 历史数据获取实现并通过测试。
+- [ ] CLI `fund-analysis thermometer` 默认输出全 A 市场温度。
+- [ ] 与有知有行页面温度方向对比验证通过。
+
+### Hard Constraints（明确不做）
+
+- 不依赖有知有行页面抓取作为生产温度计真源。
+- 不引入付费数据源，除非显式授权。
+- 不追求与有知有行温度计数值精确一致。
+- 不提供短期择时信号。
+- 不支持非 A 股市场温度计算。
+- 不修改现有 Service/Capability 分层边界。
+- 不引入 Dayu Host/Engine/tool loop。
+- 不修改 R=A+B-C、基金类型判断、年报抽取和现有审计规则。
+- CLI 和报告输出必须包含非官方独立计算免责标注。
+- 禁止把显式参数放进 `extra_payload`。
+
+### Dependencies
+
+| 依赖 | 说明 |
+|------|------|
+| akshare | 全 A PB、分市场 PE/PB、宽基指数 PE/PB 候选数据源；项目已有依赖；全 A PE 历史仍未找到可验证来源 |
+| pandas | 数据处理；项目已有依赖 |
+| pyarrow 或 fastparquet | parquet 缓存候选依赖；是否新增必须由 P19 plan review 接受 |
+
+### Open Residuals
+
+| 风险 | Owner | 处理方式 |
+|------|-------|----------|
+| akshare 全 A 股 PE/PB 接口稳定性 | P19-S5 / Capability | 全 A PB 可用；全 A PE 历史未找到可验证来源；不能实现全 A PE+PB 温度计前置于 source gate |
+| 等权计算与有知有行结果偏差 | P19-S1/S2 验证 | 标注"方法论复现，非官方数据"；方向一致是主目标 |
+| 历史数据首次下载耗时长 | P19-S1/S5 | 指数温度计约 5k 行级别低成本；全 A 若逐股重建必须另行接受耗时、存储量和增量策略 |
+| akshare / 乐咕乐股访问抖动 | P19-S1/S2 | 以 Protocol 封装，明确 retry/cache/unavailable 语义；禁止 fallback 到有知有行页面抓取 |
+| 自动 `valuation_state` 影响报告判断 | P19-S3 | 单独 gate，保留用户显式输入优先级和审计证据 |
+
+### Non-goal Reminder
+
+- 不引入 LLM 写作、Host、Engine、tool loop。
+- 不修改现有审计规则。
+- 不扩展至 QDII 或债券基金温度。
+- 不新增生产 `tracking_error` golden rows。
+
+### Resume Checklist
+
+- 确认当前 gate 是 P19-S1 corrected plan review。
+- P19-S1 scope 已改为沪深300指数温度计 MVP；全 A 市场温度计等待 P19-S5 / all-A PE source gate。
+- 计划审查必须回答 `ThermometerService` / `FundThermometerAdapter` 复用策略、首次历史下载耗时和存储量预估、等权计算与有知有行结果偏差接受标准。
+- P19-S1/S2 不接入 `fund-analysis analyze` 自动估值；P19-S3 才处理自动 `valuation_state`。
+- 不修改外部 GitHub 状态（PR/issue）除非显式授权。
+- 保持确定性 MVP 边界。
 
 ## 2026-05-22 Control Fusion Summary
 
@@ -179,6 +334,24 @@ Rejected or corrected from the input:
 | `thermometer self-owned design direction correction` | accepted | `docs/reviews/thermometer-self-owned-design-direction-20260522.md` | `8d73e3a` | `docs/design.md` updated to v2.2; current public-page thermometer remains transitional; future self-owned thermometer phase accepted; automatic `valuation_state` mapping remains separate gate | draft PR gate | requires explicit user authorization |
 | `P17 draft PR gate / PR review` | accepted | `https://github.com/bill20232033cc/fund-agent/pull/11`, `docs/reviews/p17-pr-review-mimo-20260522.md`, `docs/reviews/p17-pr-review-glm-20260522.md`, `docs/reviews/p17-pr-review-controller-judgment-20260522.md` | local PR review artifacts pending push | Draft PR 11 created; mergeState `CLEAN`; CI `test` success; MiMo/GLM `PASS_WITH_FINDINGS`; controller rejected stale missing-artifact finding after verifying live PR diff includes aggregate/readiness/thermometer artifacts; no blocking findings; excluded local drafts are not in PR diff | draft-PR-pass | merge/mark-ready gate（需用户授权） |
 | `P17 merge gate / main closeout` | merged | `docs/reviews/p17-main-branch-closeout-20260522.md`, `https://github.com/bill20232033cc/fund-agent/pull/11` | PR 11 merge `5c54994b9e7232e6144e730fff6d83d5c8ab80fb` | PR 11 merged by squash; local `main` aligned to `origin/main`; backup branch `backup/p17-pre-squash-main` preserved pre-squash local history; PR CI/reviews had passed | post-P17 follow-up planning | plan/review |
+| `P19 design/control update` | accepted / pending plan review | `docs/reviews/p19-design-update-20260522.md`, `docs/reviews/p19-control-update-20260522.md` | local docs update | `docs/design.md` v2.2 fused with P19 thermometer design; `docs/implementation-control.md` opened P19; controller corrected P19-S3 automatic valuation mapping as separate gate and required akshare feasibility validation before implementation | P19 plan review | data-source feasibility + plan review |
+| `P19 plan review / data-source feasibility` | blocked before implementation | `docs/reviews/p19-plan-review-20260522.md`, `docs/reviews/p19-plan-review-findings-20260522.md` | local review artifacts | akshare `1.18.60` verified in `.venv`; proposed `stock_a_lg_indicator` and `index_value_hist_funddb` are missing; `stock_a_all_pb` works for all-A PB; index PE/PB APIs work for 沪深300; all-A PE history is unproven; `stock_zh_a_spot_em` failed with `ProxyError`; parquet dependency not declared | P19 plan fix | data-source plan correction |
+| `P19 data-source plan fix` | partial accepted / still blocked | `docs/reviews/p19-plan-fix-data-source-20260522.md` | local plan docs update | `docs/p19-thermometer-technical-proposal.md` and `docs/p19-phase-definition.md` corrected to remove missing-interface assumptions; all-A PB and broad-index PE/PB paths documented as verified candidates; all-A PE history remains unresolved | all-A PE source decision | find source or change P19-S1 scope |
+| `P19 all-A PE source decision` | accepted / scope changed | `docs/reviews/p19-all-a-pe-source-decision-20260522.md` | local plan docs update | Direct akshare/Legulegu checks found no verified all-A PE historical source; PB-only all-A output rejected as incomplete; P19-S1 changed to 沪深300指数温度计 MVP, P19-S2 to 中证500, and full all-A market thermometer moved to P19-S5 / all-A PE source gate | P19-S1 corrected plan review | index thermometer MVP plan/review |
+| `P19-S1 corrected index thermometer plan` | drafted / controller fallback | `docs/reviews/p19-s1-corrected-index-thermometer-plan-20260522.md` | local plan docs update | Delegated planning agent timed out and was shut down; controller fallback plan defines P19-S1 implementation slices, data contract, JSON cache, Service/CLI routing, tests, and residuals | P19-S1 implementation handoff | implement index thermometer MVP |
+| `P19-S1 index thermometer implementation` | implemented / pending code review | `docs/reviews/p19-s1-index-thermometer-implementation-20260523.md` | local implementation | Added self-owned 沪深300 thermometer types, calculator, akshare source, JSON cache, Service/CLI `--index 000300`, tests and README sync; no analyze integration and no all-A market thermometer | P19-S1 code review | review/fix loop |
+| `P19-S1 code review / fix` | fixed | `docs/reviews/p19-s1-code-review-mimo-20260523.md`, `docs/reviews/p19-s1-code-review-glm-20260523.md`, `docs/reviews/p19-s1-code-review-controller-judgment-20260523.md` | `9ec6fd4` | MiMo/GLM returned PASS_WITH_FINDINGS; controller accepted Medium findings and fixed history coverage, cache-write failure semantics, date fail-closed behavior, and broad exception domains | P19-S1 code re-review | re-review accepted fixes |
+| `P19-S1 code re-review / strict date fix` | fixed | `docs/reviews/p19-s1-code-rereview-mimo-20260523.md`, `docs/reviews/p19-s1-code-rereview-glm-20260523.md`, `docs/reviews/p19-s1-code-rereview-controller-judgment-20260523.md` | `d7ae07f` | MiMo/GLM both BLOCKED on the same strict date finding; controller accepted it and fixed full-string ISO validation plus timestamp/suffix regression tests; validation `57 passed`, ruff passed, diff check passed | P19-S1 code re-review round 2 | verify strict date fix |
+| `P19-S1 code re-review round 2 / no-trim strict date fix` | fixed | `docs/reviews/p19-s1-code-rereview-round2-mimo-20260523.md`, `docs/reviews/p19-s1-code-rereview-round2-glm-20260523.md`, `docs/reviews/p19-s1-code-rereview-round2-controller-judgment-20260523.md` | `3ea3d80` | MiMo PASS; GLM BLOCKED with direct whitespace reproduction; controller accepted the blocker and removed string trimming before validation; validation `60 passed`, ruff passed, diff check passed | P19-S1 code re-review round 3 | verify no-trim strict date fix |
+| `P19-S1 code re-review round 3 / acceptance` | accepted | `docs/reviews/p19-s1-code-rereview-round3-mimo-20260523.md`, `docs/reviews/p19-s1-code-rereview-round3-glm-20260523.md`, `docs/reviews/p19-s1-code-rereview-round3-controller-judgment-20260523.md` | `9652093` | MiMo/GLM PASS; strict date contract closed, prior accepted findings did not regress, no scope expansion; validation `60 passed`, ruff passed, diff check passed | P19-S2 plan/review | plan 中证500 / batch index behavior |
+| `P19-S2 broad-index thermometer plan/review` | accepted / implementation constraints | `docs/reviews/p19-s2-broad-index-thermometer-plan-20260523.md`, `docs/reviews/p19-s2-plan-review-mimo-20260523.md`, `docs/reviews/p19-s2-plan-review-glm-20260523.md`, `docs/reviews/p19-s2-plan-review-controller-judgment-20260523.md` | `0a4c3d2` | MiMo/GLM PASS_WITH_FINDINGS; controller accepted Service-owned normalization, malformed exit 2, well-formed unsupported item unavailable, and duplicate de-dupe constraints | P19-S2 implementation | implement batch broad-index thermometer |
+| `P19-S2 broad-index thermometer implementation` | implemented / reviewed | `docs/reviews/p19-s2-broad-index-thermometer-implementation-20260523.md` | `8ddad68` | Added `000905`, `ThermometerBatchResult`, Service-owned batch normalization, CLI batch rendering, malformed exit 2, unsupported item unavailable, tests and README sync; validation `79 passed`, ruff passed, diff check passed | P19-S2 code review | review/fix loop |
+| `P19-S2 code review / cache-bypass support fix` | fixed | `docs/reviews/p19-s2-code-review-mimo-20260523.md`, `docs/reviews/p19-s2-code-review-glm-20260523.md`, `docs/reviews/p19-s2-code-review-controller-judgment-20260523.md` | `0a0045c` | MiMo PASS; GLM BLOCKED on unsupported index fresh-cache bypass; controller accepted blocker and fixed support check before cache reuse; validation `81 passed`, ruff passed, diff check passed | P19-S2 code re-review | verify cache-bypass fix |
+| `P19-S2 code re-review / acceptance` | accepted | `docs/reviews/p19-s2-code-rereview-mimo-20260523.md`, `docs/reviews/p19-s2-code-rereview-glm-20260523.md`, `docs/reviews/p19-s2-code-rereview-controller-judgment-20260523.md` | `0a0045c` | MiMo PASS; GLM PASS; prior cache-bypass blocker closed; no analyze/all-A/no-index scope creep; controller accepted P19-S2 | P19-S3 thermometer-to-valuation_state integration plan/review | plan/review |
+| `P19-S3 thermometer-to-valuation_state plan/review` | accepted | `docs/reviews/p19-s3-valuation-state-integration-plan-20260523.md`, `docs/reviews/p19-s3-plan-review-mimo-20260523.md`, `docs/reviews/p19-s3-plan-review-glm-20260523.md`, `docs/reviews/p19-s3-plan-review-controller-judgment-20260523.md`, `docs/reviews/p19-s3-plan-rereview-mimo-20260523.md`, `docs/reviews/p19-s3-plan-rereview-glm-20260523.md`, `docs/reviews/p19-s3-plan-rereview-round2-mimo-20260523.md`, `docs/reviews/p19-s3-plan-review-controller-acceptance-20260523.md` | `fabf666` | Initial reviews failed on provenance, index identity, default semantics, disclaimer, and calculation errors; patched plan passed after round 2 disclaimer forbidden-word fix; implementation constraints recorded | P19-S3 implementation | implementation |
+| `P19-S3 thermometer-to-valuation_state implementation` | implemented / pending code review | `docs/reviews/p19-s3-valuation-state-integration-implementation-20260523.md` | `dc4ea04` | Added automatic valuation resolution for supported index/enhanced funds, structured provenance through renderer/audit, CLI default auto + explicit unavailable opt-out, exact benchmark identity matching, disclaimer output, docs/tests; validation targeted `158 passed`, full suite `532 passed`, ruff passed, diff check passed | P19-S3 code review | review/fix loop |
+| `P19-S3 code review / fix / re-review acceptance` | accepted | `docs/reviews/p19-s3-code-review-mimo-20260523.md`, `docs/reviews/p19-s3-code-review-glm-20260523.md`, `docs/reviews/p19-s3-code-review-controller-judgment-20260523.md`, `docs/reviews/p19-s3-code-review-fix-20260523.md`, `docs/reviews/p19-s3-code-rereview-mimo-20260523.md`, `docs/reviews/p19-s3-code-rereview-glm-20260523.md`, `docs/reviews/p19-s3-code-rereview-controller-judgment-20260523.md` | `b03953f` | MiMo initially BLOCKED on returned-index identity mismatch and unavailable thermometer provenance; GLM PASS with hardening findings; fix added target/result index fail-closed, derived thermometer failure anchor + R1 check, benchmark code/text conflict guard, README sync; MiMo/GLM re-review PASS; validation targeted `163 passed`, full suite `537 passed`, ruff passed, diff check passed | P19-S4 plan/review | expanded index coverage plan/review |
+| `P19-S4 expanded-index source feasibility` | deferred | `docs/reviews/p19-s4-expanded-index-coverage-plan-20260523.md`, `docs/reviews/p19-s4-plan-review-mimo-20260523.md`, `docs/reviews/p19-s4-plan-review-glm-20260523.md`, `docs/reviews/p19-s4-plan-review-controller-judgment-20260523.md`, `docs/reviews/p19-s4-source-feasibility-20260523.md`, `docs/reviews/p19-s4-source-feasibility-controller-judgment-20260523.md` | `4480ff4` | Plan review accepted current Legulegu route as blocked but required broader source feasibility; source feasibility checked akshare and official 中证/国证 candidates and found no exact target-index PE+PB historical source for five P19-S4 targets; no code implementation allowed | P19-S5 / all-A PE source gate | source feasibility plan/review |
 
 ## Phase History Index
 
@@ -210,6 +383,11 @@ Rejected or corrected from the input:
 | Thermometer self-owned design direction | accepted | [Archive: P17](#archive-p17) | `docs/reviews/thermometer-self-owned-design-direction-20260522.md` | `8d73e3a` | `docs/design.md` v2.2 accepts future project-owned thermometer and preserves explicit `valuation_state` gate | draft PR gate pending user authorization |
 | P17 draft PR gate / PR review | accepted | [Archive: P17](#archive-p17) | `https://github.com/bill20232033cc/fund-agent/pull/11`, `docs/reviews/p17-pr-review-mimo-20260522.md`, `docs/reviews/p17-pr-review-glm-20260522.md`, `docs/reviews/p17-pr-review-controller-judgment-20260522.md` | local PR review artifacts pending push | PR #11 is draft/open, mergeState `CLEAN`, CI `test` success; MiMo/GLM `PASS_WITH_FINDINGS`; controller accepted no blockers | merge / mark-ready gate requires explicit authorization |
 | P17 merge / main closeout | merged | [Archive: P17](#archive-p17) | `docs/reviews/p17-main-branch-closeout-20260522.md`, `https://github.com/bill20232033cc/fund-agent/pull/11` | PR 11 merge `5c54994b9e7232e6144e730fff6d83d5c8ab80fb` | PR #11 merged by squash; local `main` aligned to `origin/main` | post-P17 follow-up planning |
+| P19 thermometer independent development | P19-S5 / all-A PE source gate | [Archive: P19](#archive-p19) | `docs/p19-thermometer-technical-proposal.md`, `docs/design-md-v22-changes.md`, `docs/p19-phase-definition.md`, `docs/reviews/p19-design-update-20260522.md`, `docs/reviews/p19-control-update-20260522.md`, `docs/reviews/p19-plan-review-20260522.md`, `docs/reviews/p19-plan-review-findings-20260522.md`, `docs/reviews/p19-plan-fix-data-source-20260522.md`, `docs/reviews/p19-all-a-pe-source-decision-20260522.md`, `docs/reviews/p19-s1-corrected-index-thermometer-plan-20260522.md`, `docs/reviews/p19-s1-index-thermometer-implementation-20260523.md`, `docs/reviews/p19-s1-code-review-controller-judgment-20260523.md`, `docs/reviews/p19-s1-code-rereview-controller-judgment-20260523.md`, `docs/reviews/p19-s1-code-rereview-round2-controller-judgment-20260523.md`, `docs/reviews/p19-s1-code-rereview-round3-controller-judgment-20260523.md`, `docs/reviews/p19-s2-plan-review-controller-judgment-20260523.md`, `docs/reviews/p19-s2-broad-index-thermometer-implementation-20260523.md`, `docs/reviews/p19-s2-code-review-controller-judgment-20260523.md`, `docs/reviews/p19-s2-code-rereview-controller-judgment-20260523.md`, `docs/reviews/p19-s3-plan-review-controller-acceptance-20260523.md`, `docs/reviews/p19-s3-valuation-state-integration-implementation-20260523.md`, `docs/reviews/p19-s3-code-rereview-controller-judgment-20260523.md`, `docs/reviews/p19-s4-source-feasibility-controller-judgment-20260523.md` | `4480ff4` | P19-S3 accepted; P19-S4 deferred because no exact target-index PE+PB historical source was verified; validation `537 passed`, ruff passed, diff check passed | P19-S5 / all-A PE source gate |
+
+## Archive: P19
+
+P19 starts from `docs/p19-thermometer-technical-proposal.md`, `docs/design-md-v22-changes.md`, and `docs/p19-phase-definition.md`. The design update is accepted with corrections in `docs/reviews/p19-design-update-20260522.md`: current `docs/design.md` was already v2.2 after P17, so P19 is a v2.2 fusion; P19-S1/S2 may build self-owned thermometer readings and CLI behavior but must not silently change `fund-analysis analyze`; P19-S3 is the earliest gate allowed to design automatic thermometer-to-`valuation_state` mapping; existing `ThermometerService` remains the Service entry point, while `FundThermometerAdapter` remains a transitional public-page adapter or comparison input. P19 control update is recorded in `docs/reviews/p19-control-update-20260522.md`. P19 plan review is recorded in `docs/reviews/p19-plan-review-20260522.md` with findings in `docs/reviews/p19-plan-review-findings-20260522.md`; implementation was blocked because proposed akshare functions were missing, all-A PE history was unproven, and realtime all-A spot fallback failed locally with `ProxyError`. P19 data-source plan fix is recorded in `docs/reviews/p19-plan-fix-data-source-20260522.md`: missing-interface assumptions were removed from the proposal, all-A PB and broad-index PE/PB verified candidates were documented, but all-A PE history remained unresolved. P19 all-A PE source decision is recorded in `docs/reviews/p19-all-a-pe-source-decision-20260522.md`: no verified all-A PE historical source was found, PB-only all-A output was rejected as an incomplete thermometer, P19-S1 was corrected to 沪深300指数温度计 MVP, and full all-A market thermometer moved to P19-S5 / all-A PE source gate. P19-S1 corrected plan is recorded in `docs/reviews/p19-s1-corrected-index-thermometer-plan-20260522.md`; because the delegated planning agent timed out, it is recorded as controller fallback rather than independent review. P19-S1 implementation is recorded in `docs/reviews/p19-s1-index-thermometer-implementation-20260523.md`: self-owned 沪深300 thermometer was implemented with no analyze integration. P19-S1 code review findings were fixed in `9ec6fd4`; P19-S1 code re-review then blocked on incomplete strict string date validation and was fixed in `d7ae07f`; P19-S1 code re-review round 2 then blocked on whitespace normalization and was fixed in `3ea3d80`; P19-S1 round 3 re-review accepted the result in `docs/reviews/p19-s1-code-rereview-round3-controller-judgment-20260523.md`. P19-S2 plan is accepted with implementation constraints in `docs/reviews/p19-s2-plan-review-controller-judgment-20260523.md`; P19-S2 implementation is recorded in `docs/reviews/p19-s2-broad-index-thermometer-implementation-20260523.md`; P19-S2 code review blocker was fixed in `0a0045c` and accepted in `docs/reviews/p19-s2-code-rereview-controller-judgment-20260523.md`. P19-S3 plan is accepted in `docs/reviews/p19-s3-plan-review-controller-acceptance-20260523.md` after fail/re-review loops closed provenance, index identity, default behavior, disclaimer, and calculation-error semantics. P19-S3 implementation is recorded in `docs/reviews/p19-s3-valuation-state-integration-implementation-20260523.md`; P19-S3 code review initially blocked on returned-index identity mismatch and unavailable thermometer provenance, then fix/re-review passed in `docs/reviews/p19-s3-code-rereview-controller-judgment-20260523.md`. P19-S4 expanded-index coverage is deferred in `docs/reviews/p19-s4-source-feasibility-controller-judgment-20260523.md`: no design-allowed source produced exact target-index PE+PB history for `399006`/`000688`/`000922`/`000932`/`000933`, and no substitute index or PE-only source is allowed. Current gate is P19-S5 / all-A PE source gate.
 
 ## P12 Current Phase Notes
 
@@ -239,6 +417,8 @@ Success signals for the next step: P14-S1 plan defines exact FQ2 priority, compa
 | Future E1-E3 / Evidence Confirm | Future audit architecture phase | Keep separate from deterministic closeout and do not introduce LLM/Dayu runtime without a dedicated design |
 | Future evidence-display / ITEM_RULE cleanup | Future evidence-display or rule-addition slice | Long-anchor truncation/grouping, future ITEM_RULE expansion, and duplicate chapter-mismatch C2 noise remain out of P12 scope |
 | Repo-hygiene candidates D-1, D-8/C-5, C-9 | Future repo-hygiene phase if selected | Keep as open candidates from `docs/repo-audit-20260521.md`; do not mark them fully covered by P10/P11/P12 |
+| P19 thermometer data feasibility | P19-S1 / P19-S5 plan review | For P19-S1/S2 verify supported index PE/PB fields, cache choice, retry/unavailable behavior, and acceptable Youzhiyouxing deviation; for P19-S5 separately verify all-A PE source before any all-market implementation |
+| P19 automatic `valuation_state` integration | P19-S3 | Keep out of P19-S1/S2; preserve user explicit input priority, unavailable gray-light semantics, and audit evidence before changing `fund-analysis analyze` |
 | P13-S1 planning constraints | P13-S1 plan/review | Resolve tracking-error authority, service override migration, external index adapter upper bound, methodology/constituents availability, positive acceptance criteria, and index fixture strategy before implementation |
 | P13 implementation residuals | P13 implementation / future P13 follow-up | Direct disclosure may proceed; calculated tracking error, external index series, methodology extraction, constituents extraction, and golden-answer promotion remain out of first implementation unless explicitly re-scoped |
 
@@ -364,7 +544,7 @@ P16 merge/main closeout is accepted in `docs/reviews/p16-main-branch-closeout-20
 
 Post-P16 follow-up planning is accepted in `docs/reviews/post-p16-follow-up-plan-review-controller-judgment-20260522.md` and selects P17-S1 tracking_error extractor ambiguity boundary and note consistency plan-review. MiMo and GLM both returned `PASS_WITH_FINDINGS` with no blocking issues. Controller accepted P17-S1 because P15/P16 already blocked production `tracking_error` golden rows without direct observed disclosure evidence, so the next best product-quality step is to make existing Fund Capability direct-disclosure extraction fail closed with precise, auditable blocker semantics. P17-S1 plan must carry the accepted reviewer constraints: split or equivalently type distinct `"tracking_error_ambiguous"` note meanings, handle multi-match suppression explicitly or assign it as residual, inspect both top-level and text-extraction early-return locations, phrase missing-path consistency via `note` / `extraction_mode`, and list deterministic tests for each blocker type. P17-S1 must not add production `tracking_error` golden rows, mutate source CSV / RR-13, introduce calculated tracking error, external index adapters, methodology / constituents extraction, QDII subtype redesign, Dayu runtime, Host, Engine, tool loop, LLM writing, Evidence Confirm, or Service/UI/Engine annual-report source access.
 
-Design-control alignment guide reconciliation is accepted in `docs/reviews/design-alignment-review-controller-judgment-20260522.md`. The guide `docs/design-control-alignment-guide.md` is retained as a scoped input, while the controller rejected treating it as a replacement truth document. MiMo and GLM both returned `PASS_WITH_FINDINGS` and found no blockers. That reconciliation updated `docs/design.md` to v2.1 and clarified the then-current thermometer read-only public-page query/cache boundary. The thermometer self-owned direction was later corrected by `docs/reviews/thermometer-self-owned-design-direction-20260522.md`, so current design truth is v2.2: public-page querying is transitional, future self-owned thermometer work is accepted, and automatic `valuation_state` mapping still needs a separate gate. §9 lists current CLI commands; §11 requires future plan reviews to include design-boundary checks. Historical P13-P16 gates are not renamed into P18, and broad `tracking_error coverage >= 90%` targets are rejected for current gates because direct observed disclosure evidence remains unavailable for the blocked candidates.
+Design-control alignment guide reconciliation is accepted in `docs/reviews/design-alignment-review-controller-judgment-20260522.md`. The guide `docs/design-control-alignment-guide.md` is retained as a scoped input, while the controller rejected treating it as a replacement truth document. MiMo and GLM both returned `PASS_WITH_FINDINGS` and found no blockers. That reconciliation updated `docs/design.md` to v2.1 and clarified the then-current thermometer read-only public-page query/cache boundary. The thermometer self-owned direction was later corrected by `docs/reviews/thermometer-self-owned-design-direction-20260522.md`, so current design truth is v2.2: public-page querying is transitional, future self-owned thermometer work is accepted, and automatic `valuation_state` mapping still needs a separate gate. §9 lists current CLI commands; §12 requires future plan reviews to include design-boundary checks. Historical P13-P16 gates are not renamed into P18, and broad `tracking_error coverage >= 90%` targets are rejected for current gates because direct observed disclosure evidence remains unavailable for the blocked candidates.
 
 P17-S1 plan/review is accepted in `docs/reviews/p17-s1-plan-review-controller-judgment-20260522.md`. The accepted implementation scope is limited to `fund_agent/fund/extractors/performance.py`, focused `tests/fund/extractors/test_performance.py`, optional focused fixture snippets, and implementation/review artifacts. MiMo and GLM both returned `PASS_WITH_FINDINGS`; controller accepted all findings as implementation constraints. Implementation must remove stale generic `tracking_error_ambiguous` semantics, avoid brittle manager/benchmark classifiers, make target-only continue and multi-match blocker behavior explicit, fix both early-return locations, preserve direct-disclosure success fields, keep missing-path semantics in `note` / `extraction_mode`, and avoid all production golden, CSV/RR-13, Service/UI/Runtime/Engine/source orchestration, external data, calculated tracking error, Dayu, LLM, and Evidence Confirm changes.
 

@@ -7,6 +7,8 @@ from dataclasses import dataclass
 from decimal import Decimal
 from pathlib import Path
 
+import pytest
+from typer.main import get_command
 from typer.testing import CliRunner
 
 from fund_agent.fund.data.thermometer import (
@@ -14,6 +16,9 @@ from fund_agent.fund.data.thermometer import (
     MarketTemperature,
     ThermometerSnapshot,
 )
+from fund_agent.fund.data.thermometer_cache import ThermometerHistoryCache
+from fund_agent.fund.data.thermometer_types import ThermometerBatchResult, ThermometerReading
+from fund_agent.fund.data.thermometer_types import PePbHistory, PePbPoint
 from fund_agent.fund.quality_gate import QualityGateIssue, QualityGateResult
 from fund_agent.services import QualityGateBlockedError, QualityGateNotRunBlockedError
 from fund_agent.ui import cli
@@ -478,6 +483,148 @@ def _unavailable_thermometer_snapshot() -> ThermometerSnapshot:
     )
 
 
+def _available_thermometer_reading() -> ThermometerReading:
+    """构造可用自建温度计读数。
+
+    Args:
+        无。
+
+    Returns:
+        自建温度计读数。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return ThermometerReading(
+        index_code="000300",
+        index_name="沪深300",
+        temperature=Decimal("42.50"),
+        pe_percentile=Decimal("40.00"),
+        pb_percentile=Decimal("45.00"),
+        valuation_state_candidate="fair",
+        data_date="2026-05-22",
+        lookback_start="2005-04-08",
+        lookback_end="2026-05-22",
+        source="akshare_legulegu_index_pe_pb",
+        cached=False,
+        stale=False,
+        unavailable=False,
+        unavailable_reason=None,
+        fetched_at="2026-05-23T00:00:00+00:00",
+    )
+
+
+def _available_thermometer_batch_result() -> ThermometerBatchResult:
+    """构造批量自建温度计结果。
+
+    Args:
+        无。
+
+    Returns:
+        批量温度计结果。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return ThermometerBatchResult(
+        requested_index_codes=("000300", "000905"),
+        generated_at="2026-05-23T00:00:00+00:00",
+        readings=(
+            _available_thermometer_reading(),
+            ThermometerReading(
+                index_code="000905",
+                index_name="中证500",
+                temperature=Decimal("52.50"),
+                pe_percentile=Decimal("50.00"),
+                pb_percentile=Decimal("55.00"),
+                valuation_state_candidate="fair",
+                data_date="2026-05-22",
+                lookback_start="2007-01-15",
+                lookback_end="2026-05-22",
+                source="akshare_legulegu_index_pe_pb",
+                cached=False,
+                stale=False,
+                unavailable=False,
+                unavailable_reason=None,
+                fetched_at="2026-05-23T00:00:00+00:00",
+            ),
+        ),
+    )
+
+
+def _partial_unavailable_thermometer_batch_result() -> ThermometerBatchResult:
+    """构造部分不可用的批量自建温度计结果。
+
+    Args:
+        无。
+
+    Returns:
+        部分不可用批量温度计结果。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return ThermometerBatchResult(
+        requested_index_codes=("000300", "999999"),
+        generated_at="2026-05-23T00:00:00+00:00",
+        readings=(
+            _available_thermometer_reading(),
+            ThermometerReading(
+                index_code="999999",
+                index_name="999999",
+                temperature=None,
+                pe_percentile=None,
+                pb_percentile=None,
+                valuation_state_candidate="unavailable",
+                data_date=None,
+                lookback_start=None,
+                lookback_end=None,
+                source="self_owned_thermometer",
+                cached=False,
+                stale=False,
+                unavailable=True,
+                unavailable_reason="自建温度计数据不可用：暂不支持指数：999999",
+                fetched_at=None,
+            ),
+        ),
+        unavailable=False,
+        partial_unavailable=True,
+        unavailable_count=1,
+    )
+
+
+def _cli_index_history(index_code: str, index_name: str) -> PePbHistory:
+    """构造 CLI 真实 Service cache 测试使用的 PE/PB 历史。
+
+    Args:
+        index_code: 指数代码。
+        index_name: 指数名称。
+
+    Returns:
+        满足温度计计算最小样本要求的历史序列。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return PePbHistory(
+        index_code=index_code,
+        index_name=index_name,
+        source="fixture",
+        points=tuple(
+            PePbPoint(
+                date=f"2026-05-{day:02d}",
+                pe=Decimal(day),
+                pb=Decimal(day) / Decimal("10"),
+            )
+            for day in range(1, 31)
+        ),
+    )
+
+
 def test_analyze_cli_calls_service_and_prints_report(monkeypatch) -> None:  # type: ignore[no-untyped-def]
     """验证 analyze 命令调用 Service 并输出 Markdown。
 
@@ -519,6 +666,8 @@ def test_analyze_cli_calls_service_and_prints_report(monkeypatch) -> None:  # ty
             "50%",
             "--valuation-state",
             "low",
+            "--thermometer-cache-dir",
+            "cache/thermometer-fixture",
             "--user-money-horizon-years",
             "4",
             "--current-stage",
@@ -548,6 +697,8 @@ def test_analyze_cli_calls_service_and_prints_report(monkeypatch) -> None:  # ty
     assert _FakeService.last_request.developer_overrides is not None
     assert _FakeService.last_request.developer_overrides.equity_position == "80%"
     assert _FakeService.last_request.developer_overrides.final_judgment_override == "worth_holding"
+    assert _FakeService.last_request.valuation_state == "low"
+    assert _FakeService.last_request.thermometer_cache_dir == Path("cache/thermometer-fixture")
     assert _FakeService.last_request.force_refresh is True
     assert _FakeService.last_request.developer_overrides.quality_gate_policy == "warn"
     assert _FakeService.last_request.developer_overrides.quality_gate_source_csv == Path(
@@ -641,6 +792,7 @@ def test_analyze_cli_default_product_request(monkeypatch) -> None:  # type: igno
     assert _FakeService.last_request is not None
     assert _FakeService.last_request.mode == "product"
     assert _FakeService.last_request.developer_overrides is None
+    assert _FakeService.last_request.valuation_state is None
 
 
 def test_analyze_cli_rejects_dev_options_without_dev_override(monkeypatch) -> None:  # type: ignore[no-untyped-def]
@@ -768,6 +920,85 @@ def test_analyze_cli_exits_nonzero_with_clear_message(monkeypatch) -> None:  # t
     assert "分析失败：fixture failure" in result.output
 
 
+def test_analyze_cli_explicit_unavailable_is_forwarded(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    """验证显式 unavailable 作为手动灰灯转发给 Service。
+
+    Args:
+        monkeypatch: pytest monkeypatch fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: unavailable 未显式转发时抛出。
+    """
+
+    _FakeService.last_request = None
+    monkeypatch.setattr(cli, "FundAnalysisService", _FakeService)
+    runner = CliRunner()
+
+    result = runner.invoke(cli.app, ["analyze", "110011", "--valuation-state", "unavailable"])
+
+    assert result.exit_code == 0
+    assert _FakeService.last_request is not None
+    assert _FakeService.last_request.valuation_state == "unavailable"
+
+
+def test_analyze_cli_help_documents_auto_valuation_and_opt_out() -> None:
+    """验证 analyze help 说明缺省自动估值和 unavailable opt-out。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: help 文案缺少 P19-S3 契约时抛出。
+    """
+
+    runner = CliRunner()
+
+    result = runner.invoke(cli.app, ["analyze", "--help"], env={"COLUMNS": "120"})
+
+    assert result.exit_code == 0
+    assert "缺省时允许自动温度计估值" in result.output
+    assert "unavailable" in result.output
+    assert "则手动灰灯且不调用温度计" in result.output
+
+    analyze_command = get_command(cli.app).commands["analyze"]
+    option_names = {
+        option_name
+        for parameter in analyze_command.params
+        for option_name in getattr(parameter, "opts", ())
+    }
+    assert "--thermometer-cache-dir" in option_names
+
+
+def test_analyze_cli_invalid_valuation_exits_2(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    """验证非法估值状态返回参数错误。
+
+    Args:
+        monkeypatch: pytest monkeypatch fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 非法估值状态未被拒绝时抛出。
+    """
+
+    _FakeService.last_request = None
+    monkeypatch.setattr(cli, "FundAnalysisService", _FakeService)
+    runner = CliRunner()
+
+    result = runner.invoke(cli.app, ["analyze", "110011", "--valuation-state", "cold"])
+
+    assert result.exit_code == 2
+    assert "valuation_state 必须是" in result.output
+    assert _FakeService.last_request is None
+
+
 def test_checklist_cli_is_not_misleading_placeholder() -> None:
     """验证 checklist 命令不会输出误导性成功文本。
 
@@ -847,6 +1078,239 @@ def test_thermometer_cli_prints_json_for_unavailable_snapshot(monkeypatch) -> No
     assert payload["unavailable"] is True
     assert payload["unavailable_reason"] == "network down"
     assert payload["market_temperature"] is None
+
+
+def test_thermometer_cli_prints_index_reading_json(monkeypatch, tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """验证 thermometer --index JSON 输出自建温度计读数并转发参数。
+
+    Args:
+        monkeypatch: pytest monkeypatch fixture。
+        tmp_path: pytest 临时目录 fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 JSON 输出或参数转发不符合契约时抛出。
+    """
+
+    _FakeThermometerService.last_request = None
+    _FakeThermometerService.snapshot = _available_thermometer_reading()
+    monkeypatch.setattr(cli, "ThermometerService", _FakeThermometerService)
+    runner = CliRunner()
+
+    result = runner.invoke(
+        cli.app,
+        ["thermometer", "--index", "000300", "--cache-dir", str(tmp_path), "--json"],
+    )
+
+    assert result.exit_code == 0
+    payload = json.loads(result.output)
+    assert payload["index_code"] == "000300"
+    assert payload["index_name"] == "沪深300"
+    assert payload["temperature"] == "42.50"
+    assert payload["valuation_state_candidate"] == "fair"
+    assert "非有知有行官方数据" in payload["disclaimer"]
+    assert _FakeThermometerService.last_request is not None
+    assert _FakeThermometerService.last_request.index_code == "000300"
+    assert _FakeThermometerService.last_request.cache_dir == tmp_path
+
+
+def test_thermometer_cli_prints_index_reading_plain(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    """验证 thermometer --index plain 输出自建温度计读数。
+
+    Args:
+        monkeypatch: pytest monkeypatch fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 plain 输出不符合契约时抛出。
+    """
+
+    _FakeThermometerService.last_request = None
+    _FakeThermometerService.snapshot = _available_thermometer_reading()
+    monkeypatch.setattr(cli, "ThermometerService", _FakeThermometerService)
+    runner = CliRunner()
+
+    result = runner.invoke(cli.app, ["thermometer", "--index", "000300"])
+
+    assert result.exit_code == 0
+    assert "index_code: 000300" in result.output
+    assert "temperature: 42.50" in result.output
+    assert "valuation_state_candidate: fair" in result.output
+
+
+def test_thermometer_cli_prints_batch_reading_json(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    """验证 thermometer --index 批量 JSON 输出和参数转发。
+
+    Args:
+        monkeypatch: pytest monkeypatch fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当批量 JSON 输出不符合契约时抛出。
+    """
+
+    _FakeThermometerService.last_request = None
+    _FakeThermometerService.snapshot = _available_thermometer_batch_result()
+    monkeypatch.setattr(cli, "ThermometerService", _FakeThermometerService)
+    runner = CliRunner()
+
+    result = runner.invoke(cli.app, ["thermometer", "--index", "000300,000905", "--json"])
+
+    assert result.exit_code == 0
+    payload = json.loads(result.output)
+    assert payload["source"] == "self_owned_index_thermometer_batch"
+    assert payload["requested_index_codes"] == ["000300", "000905"]
+    assert payload["result_count"] == 2
+    assert payload["partial_unavailable"] is False
+    assert payload["readings"][0]["index_code"] == "000300"
+    assert payload["readings"][1]["index_code"] == "000905"
+    assert _FakeThermometerService.last_request is not None
+    assert _FakeThermometerService.last_request.index_code is None
+    assert _FakeThermometerService.last_request.index_codes == ("000300", "000905")
+
+
+def test_thermometer_cli_prints_batch_reading_plain(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    """验证 thermometer --index 批量 plain 输出。
+
+    Args:
+        monkeypatch: pytest monkeypatch fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当批量 plain 输出不符合契约时抛出。
+    """
+
+    _FakeThermometerService.last_request = None
+    _FakeThermometerService.snapshot = _available_thermometer_batch_result()
+    monkeypatch.setattr(cli, "ThermometerService", _FakeThermometerService)
+    runner = CliRunner()
+
+    result = runner.invoke(cli.app, ["thermometer", "--index", "000300,000905"])
+
+    assert result.exit_code == 0
+    assert "source: self_owned_index_thermometer_batch" in result.output
+    assert "requested_index_codes: 000300,000905" in result.output
+    assert "[000300]" in result.output
+    assert "[000905]" in result.output
+    assert "index_name: 中证500" in result.output
+
+
+def test_thermometer_cli_partial_unavailable_batch_json_exits_zero(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    """验证 well-formed unsupported code 在 CLI JSON 中是 partial unavailable 且退出 0。
+
+    Args:
+        monkeypatch: pytest monkeypatch fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 unsupported code 被当成进程失败时抛出。
+    """
+
+    _FakeThermometerService.last_request = None
+    _FakeThermometerService.snapshot = _partial_unavailable_thermometer_batch_result()
+    monkeypatch.setattr(cli, "ThermometerService", _FakeThermometerService)
+    runner = CliRunner()
+
+    result = runner.invoke(cli.app, ["thermometer", "--index", "000300,999999", "--json"])
+
+    assert result.exit_code == 0
+    payload = json.loads(result.output)
+    assert payload["requested_index_codes"] == ["000300", "999999"]
+    assert payload["partial_unavailable"] is True
+    assert payload["unavailable_count"] == 1
+    assert payload["readings"][1]["index_code"] == "999999"
+    assert payload["readings"][1]["unavailable"] is True
+    assert _FakeThermometerService.last_request.index_codes == ("000300", "999999")
+
+
+def test_thermometer_cli_unsupported_batch_item_ignores_fresh_cache_json(
+    tmp_path: Path,
+) -> None:
+    """验证 CLI 真实 Service 不会让 unsupported 指数 fresh cache 绕过支持性校验。
+
+    Args:
+        tmp_path: pytest 临时目录 fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 CLI 返回伪造缓存中的 available 读数时抛出。
+    """
+
+    cache = ThermometerHistoryCache(root_dir=tmp_path)
+    cache.save(_cli_index_history(index_code="000300", index_name="沪深300"))
+    cache.save(_cli_index_history(index_code="999999", index_name="伪造指数"))
+    runner = CliRunner()
+
+    result = runner.invoke(
+        cli.app,
+        [
+            "thermometer",
+            "--index",
+            "000300,999999",
+            "--cache-dir",
+            str(tmp_path),
+            "--json",
+        ],
+    )
+
+    assert result.exit_code == 0
+    payload = json.loads(result.output)
+    assert payload["requested_index_codes"] == ["000300", "999999"]
+    assert payload["partial_unavailable"] is True
+    assert payload["unavailable_count"] == 1
+    assert payload["readings"][0]["index_code"] == "000300"
+    assert payload["readings"][0]["unavailable"] is False
+    assert payload["readings"][0]["cached"] is True
+    assert payload["readings"][1]["index_code"] == "999999"
+    assert payload["readings"][1]["unavailable"] is True
+    assert payload["readings"][1]["cached"] is False
+    assert payload["readings"][1]["temperature"] is None
+    assert "暂不支持指数：999999" in str(payload["readings"][1]["unavailable_reason"])
+
+
+@pytest.mark.parametrize(
+    "index_option",
+    [
+        "000300,abc",
+        "000300,",
+        ",000905",
+        "   ",
+        "000300,   ",
+    ],
+)
+def test_thermometer_cli_malformed_index_input_exits_two(
+    index_option: str,
+) -> None:  # type: ignore[no-untyped-def]
+    """验证 malformed `--index` 请求退出 2。
+
+    Args:
+        index_option: 待验证的 CLI `--index` 原始值。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 malformed 输入未退出 2 时抛出。
+    """
+
+    runner = CliRunner()
+
+    result = runner.invoke(cli.app, ["thermometer", "--index", index_option])
+
+    assert result.exit_code == 2
+    assert "温度计请求参数错误" in result.output
 
 
 def test_thermometer_cli_exits_nonzero_on_service_error(monkeypatch) -> None:  # type: ignore[no-untyped-def]
