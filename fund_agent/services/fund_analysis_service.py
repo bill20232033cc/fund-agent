@@ -46,7 +46,7 @@ from fund_agent.fund.audit import ProgrammaticAuditResult, run_programmatic_audi
 from fund_agent.fund.data.thermometer import ThermometerSnapshot
 from fund_agent.fund.data.thermometer_types import ThermometerBatchResult, ThermometerReading
 from fund_agent.fund.data_extractor import FundDataExtractor, StructuredFundDataBundle
-from fund_agent.fund.extraction_snapshot import DEFAULT_SELECTED_FUNDS_CSV
+from fund_agent.config.paths import DEFAULT_SELECTED_FUNDS_CSV
 from fund_agent.fund.fund_type import FundType
 from fund_agent.fund.quality_gate import GATE_STATUS_BLOCK, QualityGateResult
 from fund_agent.fund.quality_gate_integration import check_quality_gate_fund_membership, run_quality_gate_for_bundle

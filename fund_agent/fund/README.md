@@ -323,7 +323,7 @@ C2 当前只做确定性 marker / 元数据检查，不调用 LLM，不判断语
 
 - `models.py`：`DocumentKey`、`ParsedAnnualReport`、`ReportSection`、`ParsedTable`
 - `repository.py`：对外唯一公开读取入口 `FundDocumentRepository`
-- `cache.py`：raw PDF 元信息缓存与 parsed report 物化缓存；parsed report 命中前会检查最小正文长度和关键章节集合，避免历史低质量解析物被当作真实年报复用；损坏的来源元数据只降级为空元数据，不阻断 PDF 路径缓存读取；同一缓存实例内 parsed report 读写串行执行，避免同进程并发读写同一 SQLite/JSON 物化状态
+- `cache.py`：raw PDF 元信息缓存与 parsed report 物化缓存；parsed report 命中前会检查最小正文长度和关键章节集合，避免历史低质量解析物被当作真实年报复用；parsed report JSON 使用同目录临时文件加原子替换写入，替换失败会清理临时 payload 且不写入 SQLite 行；损坏的来源元数据只降级为空元数据，不阻断 PDF 路径缓存读取；同一缓存实例内 parsed report 读写串行执行，避免同进程并发读写同一 SQLite/JSON 物化状态
 - `adapters/annual_report_pdf.py`：把底层 PDF helper 适配为统一仓库返回值
 
 基础画像 extractor 位于 `fund_agent/fund/extractors/`：

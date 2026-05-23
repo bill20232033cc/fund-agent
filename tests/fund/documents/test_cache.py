@@ -619,3 +619,77 @@ async def test_cache_rejects_unusable_parsed_report_payload(tmp_path: Path) -> N
     await cache.save_parsed_report(report, pdf_path=None)
 
     assert await cache.load_parsed_report(document_key) is None
+
+
+@pytest.mark.asyncio
+async def test_save_parsed_report_cleans_temp_payload_when_atomic_replace_fails(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """验证 parsed report 原子替换失败时会清理临时 payload。
+
+    Args:
+        tmp_path: pytest 提供的临时目录。
+        monkeypatch: pytest 提供的运行时打补丁工具。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当失败写入留下临时文件或 SQLite 行时抛出。
+    """
+
+    cache = AnnualReportDocumentCache(tmp_path / "documents-cache")
+    document_key = DocumentKey(fund_code="110011", year=2024)
+    report = _build_stub_report("110011", 2024)
+    original_replace = Path.replace
+
+    def _fail_payload_replace(source_path: Path, target_path: Path) -> Path:
+        """只让目标 parsed payload 的原子替换失败。
+
+        Args:
+            source_path: 临时 payload 路径。
+            target_path: 最终 payload 路径。
+
+        Returns:
+            非目标路径时返回原始 replace 结果。
+
+        Raises:
+            OSError: 目标 payload 替换时模拟文件系统失败。
+        """
+
+        if target_path == cache._parsed_report_payload_path(document_key):
+            raise OSError("simulated atomic replace failure")
+        return original_replace(source_path, target_path)
+
+    monkeypatch.setattr(Path, "replace", _fail_payload_replace)
+
+    with pytest.raises(OSError, match="simulated atomic replace failure"):
+        await cache.save_parsed_report(report, pdf_path=None)
+
+    await cache.initialize()
+    leaked_temp_paths = tuple(cache.parsed_reports_dir.glob("*.json"))
+    with sqlite3.connect(cache.sqlite_path) as connection:
+        row = connection.execute(
+            "SELECT payload_path FROM parsed_reports WHERE document_key = ?",
+            (_document_cache_key_for_test(document_key),),
+        ).fetchone()
+
+    assert leaked_temp_paths == ()
+    assert row is None
+
+
+def _document_cache_key_for_test(key: DocumentKey) -> str:
+    """构造测试断言使用的缓存主键。
+
+    Args:
+        key: 文档主键。
+
+    Returns:
+        与缓存实现一致的 SQLite 主键字符串。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return f"{key.document_kind}:{key.fund_code}:{key.year}"

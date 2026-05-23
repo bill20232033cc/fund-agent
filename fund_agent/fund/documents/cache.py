@@ -12,6 +12,7 @@ import sqlite3
 from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from pathlib import Path
+from tempfile import NamedTemporaryFile
 from typing import Final
 
 from fund_agent.config.paths import DEFAULT_DOCUMENT_CACHE_ROOT
@@ -546,10 +547,23 @@ class AnnualReportDocumentCache:
         normalized_report = _normalize_report_source_metadata(report, effective_source_metadata)
         payload_path = self._parsed_report_payload_path(normalized_report.key)
         payload_path.parent.mkdir(parents=True, exist_ok=True)
-        payload_path.write_text(
-            json.dumps(normalized_report.to_dict(), ensure_ascii=False, indent=2),
-            encoding="utf-8",
-        )
+        temp_path: Path | None = None
+        try:
+            with NamedTemporaryFile(
+                mode="w",
+                suffix=".json",
+                dir=payload_path.parent,
+                delete=False,
+                encoding="utf-8",
+            ) as temp_file:
+                temp_path = Path(temp_file.name)
+                temp_file.write(json.dumps(normalized_report.to_dict(), ensure_ascii=False, indent=2))
+            temp_path.replace(payload_path)
+            temp_path = None
+        except BaseException:
+            if temp_path is not None and temp_path.exists():
+                temp_path.unlink()
+            raise
         with sqlite3.connect(self.sqlite_path) as connection:
             if pdf_path is not None:
                 connection.execute(
