@@ -12,6 +12,16 @@
 
 ## Startup Packet
 
+### Current Truth Guardrails
+
+本节是每个总控 / 子 Agent 恢复任务时必须先读取并复述的当前执行口径：
+
+- 当前真源只包括 `AGENTS.md`、`docs/design.md` 当前设计章节、本文档 Startup Packet 和当前 gate；`docs/reviews/` 与本文档 archive 里的旧六层、Application、Runtime/Engine 表述只作为历史证据，不得作为当前架构依据。
+- 当前架构按 Dayu 四层 `UI -> Service -> Host -> Agent` 设计；当前确定性生产主链路仍是 UI → Service → `fund_agent/fund` Agent 层基金能力的过渡实现。
+- 未开独立 Host/Agent gate 前，不得创建占位 `fund_agent/host` 或 `fund_agent/agent` 包；确需 Host 时必须使用 `dayu.host`，确需 Agent 执行内核 / tool loop / runner / ToolRegistry / ToolTrace 时必须使用 `dayu.engine`。
+- 使用 `$phaseflow design_doc=docs/design.md control_doc=docs/implementation-control.md` 启动时，必须先复述从本文档读到的 current phase、current gate 和 next entry point；若发现 blocking open questions，先提问，不得直接推进实现。
+- 后续 plan/review 必须显式检查四层边界、Dayu Host/Agent 依赖纪律、显式参数 / 禁止 `extra_payload`、`dayu-agent` pyproject 工程基线和当前 gate 非目标。
+
 | Field | State |
 |---|---|
 | Branch | `codex/checklist-host-engine-design` |
