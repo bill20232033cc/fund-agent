@@ -10,7 +10,7 @@ from __future__ import annotations
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from decimal import Decimal
-from typing import Final
+from typing import Final, TypeVar
 
 from fund_agent.fund.analysis.alpha_judge import AlphaJudgment
 from fund_agent.fund.analysis.checklist import ChecklistResult
@@ -18,7 +18,12 @@ from fund_agent.fund.analysis.consistency_check import ConsistencyCheckResult
 from fund_agent.fund.analysis.final_judgment import FinalJudgment, FinalJudgmentDecision
 from fund_agent.fund.analysis.investor_return import InvestorExperienceResult
 from fund_agent.fund.analysis.r_abc import RabcAttribution
-from fund_agent.fund.analysis.risk_check import RiskCheckResult, StressTestResult
+from fund_agent.fund.analysis.risk_check import (
+    RiskCheckItem,
+    RiskCheckResult,
+    StressScenarioResult,
+    StressTestResult,
+)
 from fund_agent.fund.analysis.valuation_state import ValuationStateResolution
 from fund_agent.fund.audit import ProgrammaticAuditInput
 from fund_agent.fund.data_extractor import StructuredFundDataBundle
@@ -60,6 +65,7 @@ _SOURCE_KIND_LABELS: Final[dict[str, str]] = {
     "external_api": "外部数据(external_api)",
     "derived": "计算(derived)",
 }
+_T = TypeVar("_T")
 
 
 @dataclass(frozen=True, slots=True)
@@ -335,6 +341,8 @@ def _render_chapter_0(
     primary_rabc = _primary_rabc(input_data.rabc_attributions)
     net_excess = _ratio_text(primary_rabc.net_excess_return) if primary_rabc else _INSUFFICIENT_TEXT
     watch_variable_text = _lens_watch_variable_text(lens_application_plan)
+    largest_risk_text = _chapter_0_largest_risk_text(input_data)
+    action_threshold_text = _chapter_0_action_threshold_text(input_data)
     content = [
         get_template_chapter_heading(0),
         f"- 这是什么基金：{fund_name}（{fund_code}），{fund_type}。",
@@ -343,13 +351,261 @@ def _render_chapter_0(
         f"- 当前业绩与运作状态：R=A+B-C 净超额 {net_excess}；超额性质 {input_data.alpha_judgment.nature}。",
         f"- 支撑当前动作的最主要理由：检查清单汇总为 {input_data.checklist_result.overall_signal} / {input_data.checklist_result.overall_status}。",
         f"- 当前最值得盯住的变量：{watch_variable_text}",
-        f"- 当前最大的风险：{_INSUFFICIENT_TEXT}，当前未提供独立最大风险排序输入。",
+        f"- 当前最大的风险：{largest_risk_text}",
         f"- R=A+B-C 净超额：{net_excess}；超额性质：{input_data.alpha_judgment.nature}。",
         f"- 下一步最小验证问题：{input_data.checklist_result.next_minimum_verification}",
-        f"- 什么变化会升级、降级或终止当前动作：{_INSUFFICIENT_TEXT}，需要后续跨期证据确认。",
+        f"- 什么变化会升级、降级或终止当前动作：{action_threshold_text}",
         _evidence_line(input_data.structured_data.basic_identity.anchors),
     ]
     return "\n".join(content)
+
+
+def _chapter_0_largest_risk_text(input_data: TemplateRenderInput) -> str:
+    """渲染模板第 0 章“当前最大的风险”。
+
+    Args:
+        input_data: 模板渲染输入，包含风险检查与压力测试结果。
+
+    Returns:
+        第 0 章最大风险 slot 文本，优先使用首个 veto，其次首个 watch，再其次压力测试关注场景。
+
+    Raises:
+        无显式抛出。
+    """
+
+    risk_check_result = input_data.risk_check_result
+    if risk_check_result.veto_items:
+        return _risk_item_summary_text(risk_check_result.veto_items[0], severity_label="已触发否决")
+    if risk_check_result.watch_items:
+        return _risk_item_summary_text(risk_check_result.watch_items[0], severity_label="需要跟踪或补证")
+    stress_scenario = _first_stress_attention_scenario(input_data.stress_test_result)
+    if stress_scenario is not None:
+        return _stress_scenario_summary_text(stress_scenario)
+    return (
+        f"否决项检查为 {risk_check_result.overall_status}，"
+        "当前未发现一票否决或需跟踪风险；继续按下一步验证问题复核。"
+    )
+
+
+def _risk_item_summary_text(item: RiskCheckItem, *, severity_label: str) -> str:
+    """渲染第 0 章单个风险项摘要。
+
+    Args:
+        item: 否决项检查单项结果。
+        severity_label: 面向读者的风险等级标签。
+
+    Returns:
+        风险项摘要文本。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return (
+        f"{item.code} {severity_label}，"
+        f"当前值={_nullable_text(item.current_value)}，阈值={item.threshold}，"
+        f"原因={_sentence_body(item.reason)}。"
+    )
+
+
+def _stress_scenario_summary_text(scenario: StressScenarioResult) -> str:
+    """渲染第 0 章压力测试风险摘要。
+
+    Args:
+        scenario: 压力测试关注场景。
+
+    Returns:
+        压力场景摘要文本。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return (
+        f"压力场景 {scenario.code} 接近或超过承受边界，"
+        f"承受状态={scenario.capacity_status}，阈值={scenario.threshold}，"
+        f"原因={_sentence_body(scenario.reason)}。"
+    )
+
+
+def _chapter_0_action_threshold_text(input_data: TemplateRenderInput) -> str:
+    """渲染模板第 0 章“升级、降级或终止当前动作”。
+
+    Args:
+        input_data: 模板渲染输入，包含风险、检查清单、压力测试和最终判断。
+
+    Returns:
+        第 0 章动作阈值 slot 文本。
+
+    Raises:
+        无显式抛出。
+    """
+
+    upgrade_text = _chapter_0_upgrade_threshold_text(input_data)
+    downgrade_or_stop_text = _chapter_0_downgrade_or_stop_threshold_text(input_data)
+    reason_text = _chapter_0_final_judgment_reason_text(input_data.final_judgment_decision)
+    if reason_text is None:
+        return f"{upgrade_text}；{downgrade_or_stop_text}"
+    return f"{upgrade_text}；{downgrade_or_stop_text}；当前判断触发依据：{reason_text}"
+
+
+def _chapter_0_upgrade_threshold_text(input_data: TemplateRenderInput) -> str:
+    """渲染第 0 章动作升级阈值。
+
+    Args:
+        input_data: 模板渲染输入。
+
+    Returns:
+        动作升级阈值文本；见模板第 0 章“封面→动作→验证”。
+
+    Raises:
+        无显式抛出。
+    """
+
+    judgment = input_data.final_judgment_decision.selected_judgment
+    actionable_signal = _upgrade_signal_text(input_data)
+    if judgment in {"needs_attention", "suggest_replace"}:
+        return (
+            f"升级条件：{actionable_signal}，"
+            "且其他关键项未出现新的黄/灰/红灯或压力越界。"
+        )
+    return (
+        "升级条件：当前已处于值得持有，后续只做维持验证，"
+        "要求检查清单继续 green/pass、否决项继续 pass。"
+    )
+
+
+def _chapter_0_downgrade_or_stop_threshold_text(input_data: TemplateRenderInput) -> str:
+    """渲染第 0 章动作降级或终止阈值。
+
+    Args:
+        input_data: 模板渲染输入。
+
+    Returns:
+        降级或终止阈值文本，优先使用风险、检查清单和压力测试结构化信号。
+
+    Raises:
+        无显式抛出。
+    """
+
+    veto_item = _first_or_none(input_data.risk_check_result.veto_items)
+    red_item = _first_or_none(input_data.checklist_result.red_items)
+    watch_item = _first_or_none(input_data.risk_check_result.watch_items)
+    warning_item = _first_or_none(
+        (*input_data.checklist_result.yellow_items, *input_data.checklist_result.gray_items)
+    )
+    stress_scenario = _first_stress_attention_scenario(input_data.stress_test_result)
+    if veto_item is not None:
+        return f"终止阈值：{veto_item.code} 维持 veto，或同类否决项新增 veto。"
+    if red_item is not None:
+        return f"终止阈值：检查清单“{red_item.question}”维持 red/block，或新增红灯问题。"
+    if watch_item is not None:
+        return f"降级或终止阈值：{watch_item.code} 从 {watch_item.status} 确认为 veto。"
+    if warning_item is not None:
+        return (
+            f"降级或终止阈值：检查清单“{warning_item.question}”"
+            f"从 {warning_item.signal}/{warning_item.status} 转为 red/block。"
+        )
+    if stress_scenario is not None:
+        return (
+            f"降级或终止阈值：压力场景 {stress_scenario.code} "
+            f"从 {stress_scenario.capacity_status} 进一步越过承受边界。"
+        )
+    return (
+        "降级或终止阈值：任一否决项转为 watch/veto、检查清单转黄/灰/红，"
+        "或基础 -20% 压力场景超过承受边界。"
+    )
+
+
+def _upgrade_signal_text(input_data: TemplateRenderInput) -> str:
+    """选择第 0 章动作升级最小验证对象。
+
+    Args:
+        input_data: 模板渲染输入。
+
+    Returns:
+        带目标状态的升级条件文本；全绿时返回维持验证文本。
+
+    Raises:
+        无显式抛出。
+    """
+
+    veto_item = _first_or_none(input_data.risk_check_result.veto_items)
+    if veto_item is not None:
+        return f"{veto_item.code} 从 veto 复核为 pass"
+    red_item = _first_or_none(input_data.checklist_result.red_items)
+    if red_item is not None:
+        return f"检查清单“{red_item.question}”从 red/block 复核为 green/pass"
+    watch_item = _first_or_none(input_data.risk_check_result.watch_items)
+    if watch_item is not None:
+        return f"{watch_item.code} 从 {watch_item.status} 复核为 pass"
+    warning_item = _first_or_none(
+        (*input_data.checklist_result.yellow_items, *input_data.checklist_result.gray_items)
+    )
+    if warning_item is not None:
+        return f"检查清单“{warning_item.question}”从 {warning_item.signal}/{warning_item.status} 复核为 green/pass"
+    stress_scenario = _first_stress_attention_scenario(input_data.stress_test_result)
+    if stress_scenario is not None:
+        return (
+            f"压力场景 {stress_scenario.code} 从 {stress_scenario.capacity_status} "
+            "复核为 within_tolerance"
+        )
+    return "检查清单、否决项和压力测试继续满足 green/pass、pass、within_tolerance"
+
+
+def _chapter_0_final_judgment_reason_text(decision: FinalJudgmentDecision) -> str | None:
+    """渲染第 0 章最终判断触发原因摘要。
+
+    Args:
+        decision: 最终判断选择契约。
+
+    Returns:
+        首个派生原因文本；没有原因时返回 `None`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if not decision.reasons:
+        return None
+    return _sentence_body(decision.reasons[0])
+
+
+def _first_stress_attention_scenario(
+    stress_test_result: StressTestResult,
+) -> StressScenarioResult | None:
+    """选择第 0 章可展示的首个压力测试关注场景。
+
+    Args:
+        stress_test_result: 压力测试结果。
+
+    Returns:
+        首个接近或超过承受边界的压力场景；不存在时返回 `None`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    for scenario in stress_test_result.scenarios:
+        if scenario.capacity_status in {"near_limit", "beyond_tolerance"}:
+            return scenario
+    return None
+
+
+def _first_or_none(items: tuple[_T, ...]) -> _T | None:
+    """读取元组首个项目。
+
+    Args:
+        items: 任意同类型项目元组。
+
+    Returns:
+        首个项目；空元组返回 `None`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return items[0] if items else None
 
 
 def _render_chapter_1(

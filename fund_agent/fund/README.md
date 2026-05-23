@@ -267,6 +267,7 @@ C2 当前只做确定性 marker / 元数据检查，不调用 LLM，不判断语
 - 输出 `chapter_blocks`，每个 `RenderedChapterBlock` 包含 `chapter_id`、`title`、`heading`、`markdown`、`body_markdown` 和对应 `ChapterContract`
 - 输出 `item_rule_decisions` 和 `item_rule_audit_context`；身份缺失时为空决策和 `identity_missing`，身份存在但 `classified_fund_type` 缺失或非法时 fail closed，身份有效时按 `facets=()` 评估当前四条 ITEM_RULE
 - `get_template_chapter_heading(chapter_id)` 按 manifest 返回 `# {chapter_id}. {title}`；`split_rendered_chapter_blocks(report_markdown)` 按当前模板标题切分报告，并在空文本、缺章、重复、乱序、越界、标题不匹配或非模板一级标题时抛出 `ValueError`
+- 第 0 章“当前最大的风险”优先使用首个 `risk_check_result.veto_items`，其次使用首个 `watch_items`，再其次使用压力测试中首个 `near_limit` / `beyond_tolerance` 场景；没有动作项时输出基于 `overall_status` 的通过/无否决说明。“什么变化会升级、降级或终止当前动作”消费风险、检查清单、压力测试和最终判断原因，按风险项 `pass`、检查清单 `green/pass`、压力测试 `within_tolerance` 的目标状态生成升级阈值；全绿通过时仍输出后续监控阈值
 - 年报附录锚点按 `年报{年份}§{章节}表{编号}行{行号}` 输出；缺少表格、行定位或章节时显式写 `未定位`，页码作为附加位置元数据保留；非年报来源显式输出来源类型，不伪装成年报
 - 章节缺少证据锚点时，正文输出数据不足证据行，附录同步输出对应模板章节的缺证条目
 - 缺失字段显式写为“未披露”或“数据不足”，不静默省略
