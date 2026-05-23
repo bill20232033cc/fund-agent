@@ -63,11 +63,11 @@ fund-analysis golden-build \
 fund-analysis quality-gate \
   --score-path reports/extraction-snapshots/p4-s3b-004393-controller-final-score/score.json
 
-# 查询温度计公开页快照
+# 查询默认全 A 市场温度计
 fund-analysis thermometer
 
-# 查询自建宽基指数温度计
-fund-analysis thermometer --index 000300,000905 --json
+# 查询自建全 A / 宽基指数温度计
+fund-analysis thermometer --index wind_all_a,000300,000905 --json
 ```
 
 当前 `fund-analysis checklist FUND_CODE` 是占位命令，尚未接入 Service。请使用 `fund-analysis analyze FUND_CODE` 生成包含检查清单的完整报告。
@@ -116,9 +116,9 @@ fund-analysis thermometer --index 000300,000905 --json
 - `analyze` 自动估值：仅对沪深300/中证500指数基金或指数增强基金使用自建温度计生成第 6 问估值状态
 - 8 章 Markdown 模板渲染
 - 程序审计规则：P1/P2/P3/L1/R1/R2
-- 有知有行温度计 data adapter
-- 有知有行温度计 Service/CLI 查询入口：`fund-analysis thermometer`
-- 自建宽基指数温度计 CLI 查询入口：`fund-analysis thermometer --index 000300`、`fund-analysis thermometer --index 000300,000905`
+- 有知有行温度计 data adapter：保留为过渡/对比能力，不再作为默认 CLI 查询路径
+- 自建全 A 市场温度计 CLI 默认入口：`fund-analysis thermometer`
+- 自建全 A / 宽基指数温度计 CLI 查询入口：`fund-analysis thermometer --index wind_all_a`、`fund-analysis thermometer --index 000300,000905`
 - 精选基金池字段级抽取快照：`snapshot.jsonl`、`summary.md`、`errors.jsonl`
 - 精选基金池字段级评分：`score.json`、`score.md`、`golden_set.json`
 - Correctness golden answer 预填底稿：`fund-analysis golden-prefill`
@@ -134,7 +134,7 @@ fund-analysis thermometer --index 000300,000905 --json
 
 明确非目标：
 
-- 全 A 市场温度计、主动基金持仓估值、债券/QDII/FOF 估值状态自动判断
+- 主动基金持仓估值、债券/QDII/FOF 估值状态自动判断
 
 ## 本地验证
 
@@ -158,7 +158,7 @@ pytest tests/scripts/test_selected_funds_smoke.py -q
 
 ## 温度计查询
 
-`fund-analysis thermometer` 通过 Service 调用 Capability data 层的 `FundThermometerAdapter`，查询有知有行公开温度计数据并复用本地缓存：
+`fund-analysis thermometer` 通过 Service 调用 Capability data 层的自建温度计，默认查询全 A 市场 `wind_all_a`。CLI 不再默认查询有知有行公开页快照；公开页 adapter 仅保留为过渡/对比能力，不作为当前默认 CLI 路径。
 
 ```bash
 fund-analysis thermometer
@@ -166,16 +166,17 @@ fund-analysis thermometer --json
 fund-analysis thermometer --force-refresh --cache-dir cache/thermometer
 ```
 
-指定 `--index` 时，命令查询项目内自建宽基指数温度计，不依赖有知有行页面抓取。当前支持沪深300 `000300` 和中证500 `000905`，可用逗号分隔批量查询：
+指定 `--index` 时，命令查询项目内自建全 A / 宽基指数温度计，不依赖有知有行页面抓取。当前支持全 A 市场 `wind_all_a`、沪深300 `000300` 和中证500 `000905`，可用逗号分隔批量查询：
 
 ```bash
+fund-analysis thermometer --index wind_all_a
 fund-analysis thermometer --index 000300
 fund-analysis thermometer --index 000300 --json
-fund-analysis thermometer --index 000300,000905
-fund-analysis thermometer --index 000300,000905 --json
+fund-analysis thermometer --index wind_all_a,000300,000905
+fund-analysis thermometer --index wind_all_a,000300,000905 --json
 ```
 
-该命令只输出温度计摘要。上游不可用会以 `unavailable: true` 或批量结果里的单项 `unavailable: true` 表示并正常退出；malformed `--index` 参数退出 2，运行异常退出 1。`analyze` 自动估值只使用这里的自建指数温度计单指数路径，不使用有知有行公开页快照作为分析真源。
+该命令只输出温度计摘要。`--force-refresh` 会刷新自有温度计历史数据。上游不可用会以 `unavailable: true` 或批量结果里的单项 `unavailable: true` 表示并正常退出；malformed `--index` 参数退出 2，运行异常退出 1。`analyze` 自动估值仍只使用沪深300/中证500 exact supported-index 单指数路径，不把全 A 自动套用于主动基金或复合基准，也不使用有知有行公开页快照作为分析真源。
 
 ## 精选基金池抽取快照
 
