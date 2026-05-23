@@ -951,6 +951,41 @@ async def test_fund_analysis_service_block_policy_raises_structured_error(tmp_pa
 
 
 @pytest.mark.asyncio
+async def test_fund_analysis_service_checklist_block_policy_raises_structured_error(
+    tmp_path: Path,
+) -> None:
+    """验证 checklist 与 analyze 共享 block 策略阻断语义。
+
+    Args:
+        tmp_path: pytest 临时目录 fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 checklist 绕过 quality gate block 时抛出。
+    """
+
+    extractor = _FakeExtractor(_low_quality_bundle())
+    service = FundAnalysisService(extractor=extractor)
+
+    with pytest.raises(QualityGateBlockedError) as exc_info:
+        await service.checklist(
+            _developer_request(
+                fund_code="004393",
+                quality_gate_policy="block",
+                quality_gate_source_csv=Path("docs/code_20260519.csv"),
+                quality_gate_output_dir=tmp_path / "gate",
+                quality_gate_run_id="fixture-run",
+                quality_gate_golden_answer_path=None,
+            )
+        )
+
+    assert extractor.calls == [("004393", 2024, False)]
+    assert exc_info.value.quality_gate_result.status == "block"
+
+
+@pytest.mark.asyncio
 async def test_fund_analysis_service_block_policy_fails_when_fund_absent_from_quality_csv(
     tmp_path: Path,
 ) -> None:

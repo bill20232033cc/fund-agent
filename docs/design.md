@@ -356,8 +356,17 @@ C（Cost）= 管理费 + 托管费 + 换手率 × 0.3%
 **当前实现核查（2026-05-24）**：
 - `FundAnalysisService._run_analysis_core()` 是 `analyze` 与 `checklist` 的唯一共享确定性分析核心；质量 gate、检查清单、压力测试和最终判断同源，禁止 checklist 另写一套判断规则。
 - Service 先运行 `run_quality_gate_for_bundle()`，再把结果归一化为 `pass / warn / block / not_run` 传入 `derive_final_judgment()`；`quality_gate_policy=block` 时，`block` 或 `not_run` 会先以结构化异常阻断输出。
-- `derive_final_judgment()` 的优先级是 `suggest_replace` 高于 `needs_attention` 高于 `worth_holding`；否决项、检查清单红灯、基础 `minus_20` 压力场景越界会进入 `suggest_replace`；质量 gate `block/not_run`、黄灯/灰灯、watch 项或压力测试接近边界会进入 `needs_attention`；只有检查清单全绿、否决项通过、quality gate `pass/warn` 且压力测试不过界时才进入 `worth_holding`。
+- `derive_final_judgment()` 的优先级是 `suggest_replace` 高于 `needs_attention` 高于 `worth_holding`；否决项、检查清单红灯、基础 `minus_20` 压力场景越界会进入 `suggest_replace`；质量 gate `block/not_run`、黄灯/灰灯、watch 项或压力测试接近边界会进入 `needs_attention`；只有检查清单全绿、否决项通过、quality gate `pass/warn` 且压力测试不过界时才进入 `worth_holding`。`quality_gate_status="warn"` 是可继续的数据质量警告，不会单独把 otherwise-green 产品降为 `needs_attention`。
 - quality gate 数据质量问题不直接升级为 `suggest_replace`；这是第一性原理约束：数据质量不足说明“不应自信判断”，不是产品本身应替换的证据。
+
+**最终判断优先级表**：
+
+| 优先级 | 触发条件 | 派生判断 | 说明 |
+|--------|----------|----------|------|
+| 1 | 否决项存在、检查清单红灯、基础 `minus_20` 压力场景越过用户承受能力 | `suggest_replace` | 产品或用户承受能力出现同源否决证据 |
+| 2 | quality gate `block/not_run`、风险 watch、检查清单黄/灰、压力测试接近边界或非基础极端场景越界 | `needs_attention` | 证据不足或存在需最小验证的问题 |
+| 3 | 检查清单全绿、否决项通过、无风险 watch、quality gate `pass/warn`、压力测试不过界 | `worth_holding` | 当前证据支持持有；`warn` 只提示数据质量警告 |
+| fail-safe | 未命中以上明确条件 | `needs_attention` | 禁止在证据不完备时默认乐观 |
 
 **公开接口**：
 - `derive_final_judgment(checklist_result, risk_check_result, stress_test_result, quality_gate_status, ...) -> FinalJudgmentDecision`
@@ -607,6 +616,17 @@ P4-S1: extraction_snapshot  —— 精选基金池字段级抽取快照
 - `quality_gate_policy=block` 是产品默认：gate `block` 抛出 `QualityGateBlockedError`，gate 未运行抛出 `QualityGateNotRunBlockedError`，CLI 返回退出码 2 并输出结构化 gate 信息。
 - `quality_gate_policy=warn` 允许继续输出，但 `derive_final_judgment()` 仍会消费 gate 状态；`quality_gate_policy=off` 显式标记为 `not_run`，仅允许开发覆盖模式使用。
 - `fund-analysis checklist` 复用同一 gate 和最终判断路径，只省略 8 章模板渲染与程序审计，不省略质量判断。
+
+**Service policy / gate 状态机**：
+
+| policy | gate 执行结果 | Service 行为 | `derive_final_judgment()` 输入 | 用户可见结果 |
+|--------|---------------|--------------|--------------------------------|--------------|
+| `block` | `pass` / `warn` | 继续分析 | `pass` / `warn` | 正常输出报告或清单，附 gate 摘要 |
+| `block` | `block` | 抛出 `QualityGateBlockedError` | 不进入最终判断 | CLI 退出码 2，输出结构化阻断信息 |
+| `block` | 未运行 / 不在精选池 / CSV 不可用 | 抛出 `QualityGateNotRunBlockedError` | 不进入最终判断 | CLI 退出码 2，输出 not-run 原因 |
+| `warn` | `pass` / `warn` / `block` | 继续分析 | gate 原始状态 | 输出报告或清单；`block` 只作为数据质量信号进入最终判断 |
+| `warn` | 未运行 | 继续分析 | `not_run` | 输出报告或清单，但最终判断最多为 `needs_attention` |
+| `off` | 不执行 | 继续分析 | `not_run` | 仅 developer override；最终判断最多为 `needs_attention` |
 
 Golden Answer pipeline 由预填底稿、人工复核、strict JSON 构建和 correctness 比对组成。当前 quality gate 只消费可复核基准与结构化产物；基准覆盖不足时，应扩大 golden coverage 或降级为显式 residual risk，不能把少量 golden answer 误当全域正确性证明。`tracking_error` 生产 golden rows 只有在 reviewed direct observed disclosure evidence 被接受后才能添加。
 
