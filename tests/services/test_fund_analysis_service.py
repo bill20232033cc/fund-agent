@@ -520,7 +520,10 @@ async def test_fund_analysis_service_auto_calls_self_owned_thermometer_for_suppo
     """
 
     thermometer = _FakeThermometerService(_reading(state="low"))
-    service = FundAnalysisService(extractor=_FakeExtractor(_index_bundle()), thermometer_service=thermometer)
+    service = FundAnalysisService(
+        extractor=_FakeExtractor(_index_bundle(benchmark_index_code="000300")),
+        thermometer_service=thermometer,
+    )
 
     request = replace(
         _developer_request(
@@ -568,6 +571,7 @@ async def test_fund_analysis_service_auto_calls_self_owned_thermometer_for_suppo
                 fund_type="enhanced_index",
                 benchmark_text="中证500指数收益率",
                 benchmark_index_name="中证500指数",
+                benchmark_index_code="000905",
             )
         ),
         thermometer_service=thermometer,
