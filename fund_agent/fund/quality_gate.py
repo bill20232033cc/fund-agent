@@ -25,6 +25,11 @@ PRIORITY_P1: Final[str] = "P1"
 STATUS_FAIL: Final[str] = "fail"
 CORRECTNESS_STATUS_AVAILABLE: Final[str] = "available"
 CORRECTNESS_STATUS_UNAVAILABLE: Final[str] = "unavailable"
+CORRECTNESS_COVERAGE_NOT_CONFIGURED: Final[str] = "not_configured"
+CORRECTNESS_COVERAGE_FUND_NOT_COVERED: Final[str] = "fund_not_covered"
+CORRECTNESS_COVERAGE_NO_COMPARABLE_FIELDS: Final[str] = "no_comparable_fields"
+CORRECTNESS_COVERAGE_PARTIALLY_COVERED: Final[str] = "partially_covered"
+CORRECTNESS_COVERAGE_COVERED: Final[str] = "covered"
 CORRECTNESS_MISMATCH: Final[str] = "mismatch"
 APP_CATEGORY_STATUS_CONFLICT: Final[str] = "conflict"
 PREFERRED_LENS_STATUS_MISMATCH: Final[str] = "mismatch"
@@ -57,6 +62,14 @@ class QualityGateIssue:
         threshold: 触发阈值。
         error_type: 抽取失败异常类型；非失败基金 issue 为空。
         error_message: 抽取失败异常信息；非失败基金 issue 为空。
+        reason: 机器可读原因；correctness coverage issue 使用。
+        golden_answer_path: strict golden answer JSON 路径。
+        coverage_scope: correctness 覆盖范围。
+        comparable_records: 可比 correctness 记录数。
+        unavailable_records: 不可比 correctness 记录数。
+        total_records: strict golden answer 有效记录数。
+        missing_fund_codes: 缺少 correctness 覆盖的基金代码。
+        covered_fund_codes: 已有可比 correctness 覆盖的基金代码。
     """
 
     rule_code: str
@@ -76,6 +89,14 @@ class QualityGateIssue:
     threshold: float | None = None
     error_type: str | None = None
     error_message: str | None = None
+    reason: str | None = None
+    golden_answer_path: str | None = None
+    coverage_scope: str | None = None
+    comparable_records: int | None = None
+    unavailable_records: int | None = None
+    total_records: int | None = None
+    missing_fund_codes: tuple[str, ...] = ()
+    covered_fund_codes: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -289,18 +310,37 @@ def _evaluate_correctness(correctness: object) -> list[QualityGateIssue]:
                 field_name=None,
                 priority=None,
                 message="score.json 未包含 correctness；等待 strict golden-answer.json 接入",
+                reason=CORRECTNESS_COVERAGE_NOT_CONFIGURED,
+                coverage_scope=CORRECTNESS_COVERAGE_NOT_CONFIGURED,
             )
         ]
     status = correctness.get("status")
-    if status in {"not_implemented", CORRECTNESS_STATUS_UNAVAILABLE}:
+    if status == "not_implemented":
         return [
-            QualityGateIssue(
-                rule_code="FQ0",
-                severity=SEVERITY_INFO,
+            _correctness_coverage_issue(
                 fund_code=None,
-                field_name=None,
-                priority=None,
+                correctness=correctness,
+                reason=CORRECTNESS_COVERAGE_NOT_CONFIGURED,
+                coverage_scope=CORRECTNESS_COVERAGE_NOT_CONFIGURED,
                 message="correctness 尚未接入；等待人工审核后的 golden-answer.json",
+            )
+        ]
+    if status == CORRECTNESS_STATUS_UNAVAILABLE:
+        reason = _optional_correctness_summary_text(correctness, "coverage_reason")
+        coverage_scope = _optional_correctness_summary_text(correctness, "coverage_scope")
+        _valid_unavailable = {None, CORRECTNESS_COVERAGE_NOT_CONFIGURED}
+        if reason not in _valid_unavailable:
+            raise ValueError(f"score.json correctness.coverage_reason 不受支持：{reason}")
+        if coverage_scope not in _valid_unavailable:
+            raise ValueError(f"score.json correctness.coverage_scope 不受支持：{coverage_scope}")
+        missing_codes = _optional_correctness_text_list(correctness, "missing_fund_codes")
+        return [
+            _correctness_coverage_issue(
+                fund_code=missing_codes[0] if len(missing_codes) == 1 else None,
+                correctness=correctness,
+                reason=reason or CORRECTNESS_COVERAGE_NOT_CONFIGURED,
+                coverage_scope=coverage_scope or CORRECTNESS_COVERAGE_NOT_CONFIGURED,
+                message="strict golden answer 未配置；本次 quality gate 未执行 correctness oracle。",
             )
         ]
     if status != CORRECTNESS_STATUS_AVAILABLE:
@@ -309,12 +349,154 @@ def _evaluate_correctness(correctness: object) -> list[QualityGateIssue]:
     if not isinstance(record_results, list):
         raise ValueError("score.json correctness.record_results 必须是 JSON array")
     issues: list[QualityGateIssue] = []
+    coverage_issue = _correctness_available_coverage_issue(correctness)
+    if coverage_issue is not None:
+        issues.append(coverage_issue)
     for index, raw_row in enumerate(record_results):
         if not isinstance(raw_row, dict):
             raise ValueError(f"correctness.record_results[{index}] 必须是 JSON object")
         if raw_row.get("status") == CORRECTNESS_MISMATCH:
             issues.append(_correctness_mismatch_issue(raw_row, index))
     return issues
+
+
+def _correctness_available_coverage_issue(
+    correctness: Mapping[str, object],
+) -> QualityGateIssue | None:
+    """为 available correctness 汇总生成覆盖缺口 FQ0/info。
+
+    Args:
+        correctness: score.json correctness 汇总。
+
+    Returns:
+        有覆盖缺口时返回 FQ0/info；覆盖充分时返回 `None`。
+
+    Raises:
+        ValueError: coverage 字段类型非法时抛出。
+    """
+
+    coverage_scope = _optional_correctness_summary_text(correctness, "coverage_scope")
+    if coverage_scope in {None, CORRECTNESS_COVERAGE_COVERED}:
+        return None
+    if coverage_scope == CORRECTNESS_COVERAGE_PARTIALLY_COVERED:
+        missing_codes = _optional_correctness_text_list(correctness, "missing_fund_codes")
+        covered_codes = _optional_correctness_text_list(correctness, "covered_fund_codes")
+        if not missing_codes:
+            fund_code = covered_codes[0] if len(covered_codes) == 1 else None
+            return _correctness_coverage_issue(
+                fund_code=fund_code,
+                correctness=correctness,
+                reason="field_not_comparable",
+                coverage_scope=coverage_scope,
+                message=(
+                    "当前基金 strict golden answer 部分字段超出 snapshot 可比合约；"
+                    "本次 correctness oracle 仅比较已暴露的可比字段。"
+                ),
+            )
+        return _correctness_coverage_issue(
+            fund_code=missing_codes[0] if len(missing_codes) == 1 else None,
+            correctness=correctness,
+            reason=CORRECTNESS_COVERAGE_FUND_NOT_COVERED,
+            coverage_scope=coverage_scope,
+            message=_correctness_coverage_message(
+                fund_code=missing_codes[0] if len(missing_codes) == 1 else None,
+                reason=CORRECTNESS_COVERAGE_FUND_NOT_COVERED,
+            ),
+        )
+    if coverage_scope in {
+        CORRECTNESS_COVERAGE_FUND_NOT_COVERED,
+        CORRECTNESS_COVERAGE_NO_COMPARABLE_FIELDS,
+    }:
+        missing_codes = _optional_correctness_text_list(correctness, "missing_fund_codes")
+        return _correctness_coverage_issue(
+            fund_code=missing_codes[0] if len(missing_codes) == 1 else None,
+            correctness=correctness,
+            reason=coverage_scope,
+            coverage_scope=coverage_scope,
+            message=_correctness_coverage_message(
+                fund_code=missing_codes[0] if len(missing_codes) == 1 else None,
+                reason=coverage_scope,
+            ),
+        )
+    if coverage_scope == CORRECTNESS_COVERAGE_NOT_CONFIGURED:
+        return _correctness_coverage_issue(
+            fund_code=None,
+            correctness=correctness,
+            reason=CORRECTNESS_COVERAGE_NOT_CONFIGURED,
+            coverage_scope=coverage_scope,
+            message="strict golden answer 未配置；本次 quality gate 未执行 correctness oracle。",
+        )
+    raise ValueError(f"score.json correctness.coverage_scope 不受支持：{coverage_scope}")
+
+
+def _correctness_coverage_issue(
+    *,
+    fund_code: str | None,
+    correctness: Mapping[str, object],
+    reason: str,
+    coverage_scope: str,
+    message: str,
+) -> QualityGateIssue:
+    """构造 correctness coverage 的 FQ0/info issue。
+
+    Args:
+        fund_code: 当前基金代码；多基金聚合缺口可为空。
+        correctness: score.json correctness 汇总。
+        reason: 机器可读 coverage reason。
+        coverage_scope: coverage scope。
+        message: 人类可读消息。
+
+    Returns:
+        FQ0/info issue。
+
+    Raises:
+        ValueError: count 或列表字段类型非法时抛出。
+    """
+
+    return QualityGateIssue(
+        rule_code="FQ0",
+        severity=SEVERITY_INFO,
+        fund_code=fund_code,
+        field_name=None,
+        priority=None,
+        message=message,
+        reason=reason,
+        golden_answer_path=_optional_correctness_summary_text(correctness, "golden_answer_path"),
+        coverage_scope=coverage_scope,
+        comparable_records=_optional_correctness_int(correctness, "comparable_records"),
+        unavailable_records=_optional_correctness_int(correctness, "unavailable_records"),
+        total_records=_optional_correctness_int(correctness, "total_records"),
+        missing_fund_codes=_optional_correctness_text_list(correctness, "missing_fund_codes"),
+        covered_fund_codes=_optional_correctness_text_list(correctness, "covered_fund_codes"),
+    )
+
+
+def _correctness_coverage_message(*, fund_code: str | None, reason: str) -> str:
+    """生成 correctness coverage FQ0/info 消息。
+
+    Args:
+        fund_code: 当前基金代码。
+        reason: coverage reason。
+
+    Returns:
+        用户可读消息。
+
+    Raises:
+        无显式抛出。
+    """
+
+    target = f"基金 `{fund_code}`" if fund_code is not None else "当前基金"
+    if reason == CORRECTNESS_COVERAGE_FUND_NOT_COVERED:
+        return (
+            f"{target} 在精选池中，但 strict golden answer 尚未覆盖；本次 quality gate 已执行 "
+            "coverage/traceability/fund_quality 检查，未执行该基金 correctness oracle。"
+        )
+    if reason == CORRECTNESS_COVERAGE_NO_COMPARABLE_FIELDS:
+        return (
+            f"{target} 已有 strict golden answer 记录，但当前 snapshot 合约没有可比字段；"
+            "本次 correctness oracle 不进入阻断分母。"
+        )
+    return "strict golden answer 未配置；本次 quality gate 未执行 correctness oracle。"
 
 
 def _correctness_mismatch_issue(row: Mapping[str, object], index: int) -> QualityGateIssue:
@@ -635,7 +817,9 @@ def _fund_quality_rule_result(
         无显式抛出。
     """
 
-    severity = SEVERITY_BLOCK if preferred_lens_status == PREFERRED_LENS_STATUS_MISMATCH else SEVERITY_INFO
+    severity = (
+        SEVERITY_BLOCK if preferred_lens_status == PREFERRED_LENS_STATUS_MISMATCH else SEVERITY_INFO
+    )
     return QualityGateRuleResult(
         rule_code="FQ5",
         severity=severity,
@@ -675,8 +859,7 @@ def _evaluate_failed_fund(row: Mapping[str, object], index: int) -> QualityGateI
         field_name=None,
         priority=None,
         message=(
-            f"基金 `{fund_code}` 抽取流程失败，无法生成可靠报告；"
-            f"error_type=`{error_type or ''}`"
+            f"基金 `{fund_code}` 抽取流程失败，无法生成可靠报告；error_type=`{error_type or ''}`"
         ),
         error_type=error_type,
         error_message=error_message,
@@ -806,7 +989,7 @@ def _required_quality_number(row: Mapping[str, object], key: str, index: int) ->
     """
 
     value = row.get(key)
-    if not isinstance(value, int | float):
+    if isinstance(value, bool) or not isinstance(value, int | float):
         raise ValueError(f"fund_quality[{index}].{key} 必须是数值")
     return float(value)
 
@@ -894,6 +1077,72 @@ def _optional_correctness_text(row: Mapping[str, object], key: str) -> str | Non
     return str(value)
 
 
+def _optional_correctness_summary_text(row: Mapping[str, object], key: str) -> str | None:
+    """读取 correctness 汇总中的可选文本。
+
+    Args:
+        row: correctness 汇总。
+        key: 字段名。
+
+    Returns:
+        文本或 `None`。
+
+    Raises:
+        ValueError: 字段存在但不是文本时抛出。
+    """
+
+    value = row.get(key)
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise ValueError(f"score.json correctness.{key} 必须是字符串")
+    return value
+
+
+def _optional_correctness_int(row: Mapping[str, object], key: str) -> int | None:
+    """读取 correctness 汇总中的可选整数。
+
+    Args:
+        row: correctness 汇总。
+        key: 字段名。
+
+    Returns:
+        整数或 `None`。
+
+    Raises:
+        ValueError: 字段存在但不是整数时抛出。
+    """
+
+    value = row.get(key)
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise ValueError(f"score.json correctness.{key} 必须是整数")
+    return value
+
+
+def _optional_correctness_text_list(row: Mapping[str, object], key: str) -> tuple[str, ...]:
+    """读取 correctness 汇总中的可选文本列表。
+
+    Args:
+        row: correctness 汇总。
+        key: 字段名。
+
+    Returns:
+        文本元组；缺失时返回空元组。
+
+    Raises:
+        ValueError: 字段存在但不是字符串数组时抛出。
+    """
+
+    value = row.get(key)
+    if value is None:
+        return ()
+    if not isinstance(value, list) or any(not isinstance(item, str) for item in value):
+        raise ValueError(f"score.json correctness.{key} 必须是字符串数组")
+    return tuple(value)
+
+
 def _join_fields(fields: tuple[str, ...]) -> str:
     """格式化失败字段列表。
 
@@ -928,7 +1177,7 @@ def _required_number(row: Mapping[str, object], key: str, index: int) -> float:
     """
 
     value = row.get(key)
-    if not isinstance(value, int | float):
+    if isinstance(value, bool) or not isinstance(value, int | float):
         raise ValueError(f"field_scores[{index}].{key} 必须是数值")
     return float(value)
 
@@ -1020,7 +1269,7 @@ def _markdown_payload(result: QualityGateResult) -> str:
             f"{_escape_markdown_cell(issue.expected_value or '')} | "
             f"{_escape_markdown_cell(issue.actual_value or '')} | "
             f"{_escape_markdown_cell(issue.error_type or '')} | "
-            f"{_escape_markdown_cell(issue.message)} |"
+            f"{_escape_markdown_cell(_issue_message_with_reason(issue))} |"
         )
     lines.extend(
         [
@@ -1062,6 +1311,24 @@ def _format_rate(value: float | None) -> str:
     if value is None:
         return ""
     return f"{value:.1%}"
+
+
+def _issue_message_with_reason(issue: QualityGateIssue) -> str:
+    """把 issue 消息与机器原因合并为 Markdown 单元格。
+
+    Args:
+        issue: quality gate issue。
+
+    Returns:
+        Markdown 表格中展示的消息。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if issue.reason is None:
+        return issue.message
+    return f"{issue.message} reason={issue.reason}; coverage_scope={issue.coverage_scope or ''}"
 
 
 def _escape_markdown_cell(value: str) -> str:

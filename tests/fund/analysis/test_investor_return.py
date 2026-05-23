@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from decimal import Decimal
 
+import pytest
+
 from fund_agent.fund.analysis import (
     analyze_investor_experience,
     calculate_behavior_gap,
@@ -284,3 +286,27 @@ def test_judge_fund_flow_reports_missing_for_partial_share_change() -> None:
     assert result.signal == "missing"
     assert result.net_change is None
     assert "net_change" in result.reason
+
+
+def test_judge_fund_flow_rejects_bool_share_values() -> None:
+    """验证份额数值入口拒绝 bool，避免被当作 0/1。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 bool 未被拒绝时抛出。
+    """
+
+    with pytest.raises(ValueError, match="不能为布尔值"):
+        judge_fund_flow(
+            share_change=_field(
+                {"beginning_share": True, "ending_share": "1,200,000.00", "net_change": "200,000.00"},
+                section_id="§10",
+                row_locator="share_change",
+            ),
+            product_return=Decimal("0.1234"),
+        )

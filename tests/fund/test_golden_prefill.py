@@ -2,9 +2,16 @@
 
 from __future__ import annotations
 
+from decimal import Decimal
+
 from fund_agent.fund.data.nav_data import NavDataResult
 from fund_agent.fund.data_extractor import StructuredFundDataBundle
-from fund_agent.fund.extractors import EvidenceAnchor, ExtractedField
+from fund_agent.fund.extractors import (
+    EvidenceAnchor,
+    ExtractedField,
+    IndexProfileValue,
+    TrackingErrorValue,
+)
 from fund_agent.fund.golden_prefill import run_golden_prefill
 
 
@@ -42,6 +49,70 @@ class _FakeGoldenExtractor:
             note="基金名称：测试基金",
         )
         missing_field = ExtractedField(value=None, anchors=(), extraction_mode="missing", note="fixture")
+        index_profile: ExtractedField[IndexProfileValue] = ExtractedField(
+            value=IndexProfileValue(
+                benchmark_text="测试指数收益率",
+                benchmark_identity_status="identified",
+                benchmark_index_name="测试指数",
+                benchmark_index_code="000001",
+                benchmark_component_text=(),
+                methodology_availability="benchmark_only",
+                methodology_summary=None,
+                methodology_source_title=None,
+                constituents_availability="benchmark_only",
+                constituents_summary=None,
+                constituents_as_of_date=None,
+                source_tier="benchmark_context",
+                missing_reasons=(),
+            ),
+            anchors=(
+                EvidenceAnchor(
+                    source_kind="annual_report",
+                    document_year=report_year,
+                    section_id="§2",
+                    page_number=5,
+                    table_id="page-5-table-1",
+                    row_locator="benchmark_index_name",
+                    note="指数名称：测试指数",
+                ),
+            ),
+            extraction_mode="direct",
+        )
+        tracking_error: ExtractedField[TrackingErrorValue] = ExtractedField(
+            value=TrackingErrorValue(
+                value=Decimal("0.0123"),
+                value_text="1.23%",
+                unit="ratio",
+                period_label="报告期",
+                period_start=None,
+                period_end=None,
+                annualized=True,
+                source_type="direct_disclosure",
+                calculation_method="disclosed",
+                benchmark_identity_status="identified",
+                benchmark_index_name="测试指数",
+                benchmark_index_code="000001",
+                fund_series_source=None,
+                index_series_source=None,
+                observation_count=None,
+                frequency="annual_report_period",
+                annualization_factor=None,
+                input_period_complete=True,
+                provenance_note="年报直接披露。",
+            ),
+            anchors=(
+                EvidenceAnchor(
+                    source_kind="annual_report",
+                    document_year=report_year,
+                    section_id="§3",
+                    page_number=6,
+                    table_id=None,
+                    row_locator="value_text",
+                    note="报告期年化跟踪误差：1.23%",
+                ),
+            ),
+            extraction_mode="direct",
+        )
         return StructuredFundDataBundle(
             fund_code=fund_code,
             report_year=report_year,
@@ -88,9 +159,11 @@ class _FakeGoldenExtractor:
                 extraction_mode="direct",
             ),
             fee_schedule=missing_field,
+            index_profile=index_profile,
             turnover_rate=missing_field,
             nav_benchmark_performance=missing_field,
             investor_return=missing_field,
+            tracking_error=tracking_error,
             share_change=missing_field,
             manager_alignment=missing_field,
             manager_strategy_text=missing_field,
@@ -128,6 +201,9 @@ async def test_run_golden_prefill_writes_prefilled_markdown(tmp_path) -> None:
                 "| product_profile | style_positioning | | | |",
                 "| classified_fund_type | fund_type | | | |",
                 "| benchmark | benchmark_name | | | |",
+                "| index_profile | benchmark_index_name | | | |",
+                "| tracking_error | annualized | | | |",
+                "| tracking_error | value_text | | | |",
                 "| fee_schedule | — | — | — | 当前 slice 不处理 |",
             )
         ),
@@ -148,4 +224,7 @@ async def test_run_golden_prefill_writes_prefilled_markdown(tmp_path) -> None:
     assert "| product_profile | style_positioning | 价值成长均衡 | high | 年报2024 §2 page-5 page-5-table-1 style_positioning |" in output
     assert "| classified_fund_type | fund_type | active_fund | high | 年报2024 §2 page-5 page-5-table-0 fund_name |" in output
     assert "| benchmark | benchmark_name | 测试基准 | high | 年报2024 §2 page-5 page-5-table-1 benchmark |" in output
+    assert "| index_profile | benchmark_index_name | 测试指数 | high | 年报2024 §2 page-5 page-5-table-1 benchmark_index_name |" in output
+    assert "| tracking_error | annualized | True | high | 年报2024 §3 page-6 value_text |" in output
+    assert "| tracking_error | value_text | 1.23% | high | 年报2024 §3 page-6 value_text |" in output
     assert "| fee_schedule | — | — | — | 当前 slice 不处理 |" in output

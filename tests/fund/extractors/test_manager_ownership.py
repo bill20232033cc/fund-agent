@@ -427,17 +427,20 @@ def test_extract_manager_ownership_keeps_partial_direct_values_without_judgment(
         "strategy_summary": "本基金报告期内保持低估值行业配置。",
         "market_outlook": None,
     }
+    assert result.manager_strategy_text.note == "部分子字段缺失，仅抽取到部分信息"
     assert result.turnover_rate.extraction_mode == "direct"
     assert result.turnover_rate.value == {
         "turnover_rate": "88.00%",
         "turnover_basis": None,
     }
+    assert result.turnover_rate.note is None
     assert result.manager_alignment.extraction_mode == "missing"
     assert result.holder_structure.extraction_mode == "direct"
     assert result.holder_structure.value == {
         "institutional_holder": "60.00%",
         "individual_holder": None,
     }
+    assert result.holder_structure.note == "部分子字段缺失，仅抽取到部分信息"
     assert result.holder_structure.anchors[0].row_locator == "institutional_holder"
 
 

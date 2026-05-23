@@ -5,16 +5,21 @@
 
 import asyncio
 import logging
+import os
 from pathlib import Path
+from tempfile import NamedTemporaryFile
 
 import akshare as ak
 import httpx
 
+from fund_agent.config.paths import DEFAULT_PDF_CACHE_ROOT
+
 logger = logging.getLogger(__name__)
 
 EASTMONEY_PDF_URL = "https://pdf.dfcfw.com/pdf/H2_{report_id}_1.pdf"
+PDF_MAGIC_BYTES = b"%PDF-"
 
-DEFAULT_CACHE_DIR = Path("cache/pdf")
+DEFAULT_CACHE_DIR = DEFAULT_PDF_CACHE_ROOT
 __all__: list[str] = []
 
 
@@ -77,8 +82,11 @@ async def _download_pdf(
     dest_path = dest_dir / filename
 
     if await asyncio.to_thread(dest_path.exists) and not force_refresh:
-        logger.info("PDF already cached: %s", dest_path)
-        return dest_path
+        if await asyncio.to_thread(_is_valid_pdf_file, dest_path):
+            logger.info("PDF already cached: %s", dest_path)
+            return dest_path
+        logger.warning("Cached PDF is invalid, refreshing: %s", dest_path)
+        await asyncio.to_thread(dest_path.unlink, missing_ok=True)
 
     headers = {
         "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
@@ -89,12 +97,88 @@ async def _download_pdf(
     async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
         resp = await client.get(url, headers=headers)
         resp.raise_for_status()
+        _validate_pdf_bytes(resp.content, context=url)
         # PDF 写盘是阻塞文件 I/O，需要放到线程中执行，避免卡住异步调用链。
-        await asyncio.to_thread(dest_path.write_bytes, resp.content)
+        await asyncio.to_thread(_write_pdf_bytes_atomic, dest_path, resp.content)
 
     file_stat = await asyncio.to_thread(dest_path.stat)
     logger.info("Downloaded: %s (%d bytes)", dest_path, file_stat.st_size)
     return dest_path
+
+
+def _validate_pdf_bytes(content: bytes, *, context: str) -> None:
+    """校验下载内容具有 PDF 文件头。
+
+    Args:
+        content: HTTP 响应正文。
+        context: 用于错误信息的来源描述。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        ValueError: 内容不是 PDF 或为空时抛出。
+    """
+
+    if not content.startswith(PDF_MAGIC_BYTES):
+        raise ValueError(f"PDF 响应缺少 %PDF- 文件头: {context}")
+
+
+def _is_valid_pdf_file(path: Path) -> bool:
+    """检查本地缓存文件是否看起来像有效 PDF。
+
+    Args:
+        path: 待检查的缓存文件路径。
+
+    Returns:
+        文件存在、非空且以 PDF 文件头开头时返回 ``True``。
+
+    Raises:
+        无显式抛出；读取失败会被视为无效缓存。
+    """
+
+    try:
+        if path.stat().st_size < len(PDF_MAGIC_BYTES):
+            return False
+        with path.open("rb") as file_obj:
+            return file_obj.read(len(PDF_MAGIC_BYTES)) == PDF_MAGIC_BYTES
+    except OSError:
+        return False
+
+
+def _write_pdf_bytes_atomic(dest_path: Path, content: bytes) -> None:
+    """以临时文件加原子替换方式写入 PDF 缓存。
+
+    Args:
+        dest_path: 最终 PDF 缓存路径。
+        content: 已通过 PDF 文件头校验的内容。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        OSError: 写入或替换文件失败时抛出。
+    """
+
+    _validate_pdf_bytes(content, context=str(dest_path))
+    temp_path: Path | None = None
+    try:
+        with NamedTemporaryFile(
+            "wb",
+            dir=dest_path.parent,
+            prefix=f".{dest_path.name}.",
+            suffix=".tmp",
+            delete=False,
+        ) as temp_file:
+            temp_path = Path(temp_file.name)
+            temp_file.write(content)
+            temp_file.flush()
+            os.fsync(temp_file.fileno())
+        os.replace(temp_path, dest_path)
+    except Exception:
+        if temp_path is not None:
+            temp_path.unlink(missing_ok=True)
+        raise
 
 
 async def _download_annual_report_pdf(

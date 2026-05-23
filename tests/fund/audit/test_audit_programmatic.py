@@ -8,15 +8,28 @@ from decimal import Decimal
 import pytest
 
 from fund_agent.fund.analysis import ChecklistItem, ChecklistResult, RabcAttribution
+from fund_agent.fund.analysis.valuation_state import (
+    ValuationStateResolution,
+    build_thermometer_failure_anchor,
+)
+from fund_agent.fund.extractors.models import EvidenceAnchor
 from fund_agent.fund.audit.contract_rules import (
+    ContractAuditCoverageManifest,
+    ContractMustAnswerCoverageRule,
+    ContractMustNotCoverCoverageRule,
     ContractRequiredItemRule,
     ProgrammaticContractRules,
+    load_contract_audit_coverage_manifest,
     load_programmatic_contract_rules,
+    validate_contract_audit_coverage_manifest,
     validate_programmatic_contract_rules,
 )
+from fund_agent.fund.template.contracts import load_template_contract_manifest
+from fund_agent.fund.template.item_rules import get_template_item_rule
 from fund_agent.fund.audit import ProgrammaticAuditInput, run_programmatic_audit
 from fund_agent.fund.template import render_template_report, split_rendered_chapter_blocks
-from tests.fund.template.test_renderer import _render_input
+from tests.fund.template.test_renderer import _render_input, _tracking_error_field
+from tests.fund.template.test_renderer import _thermometer_valuation_resolution
 
 
 def _complete_report() -> str:
@@ -123,6 +136,75 @@ def _checklist(signal: str = "green") -> ChecklistResult:
     )
 
 
+def _external_anchor() -> EvidenceAnchor:
+    """构造温度计 external_api 锚点。
+
+    Args:
+        无。
+
+    Returns:
+        温度计锚点。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return EvidenceAnchor(
+        source_kind="external_api",
+        document_year=None,
+        section_id="thermometer",
+        page_number=None,
+        table_id="fixture_source",
+        row_locator="000300:2024-12-31",
+        note="fixture thermometer",
+    )
+
+
+def _checklist_with_valuation(
+    resolution: ValuationStateResolution,
+    *,
+    signal: str = "green",
+    anchors: tuple[EvidenceAnchor, ...] | None = None,
+) -> ChecklistResult:
+    """构造 valuation item 已投影 resolution 的检查清单。
+
+    Args:
+        resolution: 估值状态真源。
+        signal: valuation item 信号。
+        anchors: 覆盖锚点。
+
+    Returns:
+        检查清单结果。
+
+    Raises:
+        无显式抛出。
+    """
+
+    checklist = _checklist("green")
+    valuation_item = next(item for item in checklist.items if item.code == "valuation")
+    projected = replace(
+        valuation_item,
+        signal=signal,  # type: ignore[arg-type]
+        status={"green": "pass", "yellow": "watch", "red": "block", "gray": "insufficient_data"}[
+            signal
+        ],  # type: ignore[arg-type]
+        anchors=resolution.anchors if anchors is None else anchors,
+        reason=resolution.reason,
+    )
+    projected_items = tuple(
+        projected if item.code == "valuation" else item for item in checklist.items
+    )
+    return replace(
+        checklist,
+        items=projected_items,
+        overall_signal=signal,  # type: ignore[arg-type]
+        overall_status={"green": "pass", "yellow": "watch", "red": "block", "gray": "insufficient_data"}[
+            signal
+        ],  # type: ignore[arg-type]
+        red_items=(projected,) if signal == "red" else (),
+        yellow_items=(projected,) if signal == "yellow" else (),
+        gray_items=(projected,) if signal == "gray" else (),
+    )
 def _rendered_audit_input(
     *,
     report_markdown: str | None = None,
@@ -155,7 +237,11 @@ def _rendered_audit_input(
         rabc_attributions=render_result.audit_input.rabc_attributions,
         checklist_result=render_result.audit_input.checklist_result,
         final_judgment=render_result.audit_input.final_judgment,
+        derived_final_judgment=render_result.audit_input.derived_final_judgment,
+        final_judgment_source=render_result.audit_input.final_judgment_source,
         chapter_blocks=chapter_blocks,
+        item_rule_decisions=render_result.audit_input.item_rule_decisions,
+        item_rule_audit_context=render_result.audit_input.item_rule_audit_context,
     )
 
 
@@ -179,7 +265,11 @@ def test_run_programmatic_audit_passes_complete_inputs() -> None:
             rabc_attributions=(_rabc(),),
             checklist_result=_checklist("green"),
             final_judgment="worth_holding",
+            derived_final_judgment="worth_holding",
+            final_judgment_source="derived",
             chapter_blocks=render_result.chapter_blocks,
+            item_rule_decisions=render_result.audit_input.item_rule_decisions,
+            item_rule_audit_context=render_result.audit_input.item_rule_audit_context,
         ),
     )
 
@@ -314,7 +404,11 @@ def test_run_programmatic_audit_detects_malformed_explicit_chapter_blocks() -> N
             rabc_attributions=render_result.audit_input.rabc_attributions,
             checklist_result=render_result.audit_input.checklist_result,
             final_judgment=render_result.audit_input.final_judgment,
+            derived_final_judgment=render_result.audit_input.derived_final_judgment,
+            final_judgment_source=render_result.audit_input.final_judgment_source,
             chapter_blocks=(broken_heading_block, *render_result.chapter_blocks[1:]),
+            item_rule_decisions=render_result.audit_input.item_rule_decisions,
+            item_rule_audit_context=render_result.audit_input.item_rule_audit_context,
         )
     )
 
@@ -327,12 +421,324 @@ def test_run_programmatic_audit_detects_malformed_explicit_chapter_blocks() -> N
             rabc_attributions=render_result.audit_input.rabc_attributions,
             checklist_result=render_result.audit_input.checklist_result,
             final_judgment=render_result.audit_input.final_judgment,
+            derived_final_judgment=render_result.audit_input.derived_final_judgment,
+            final_judgment_source=render_result.audit_input.final_judgment_source,
             chapter_blocks=render_result.chapter_blocks[:-1],
+            item_rule_decisions=render_result.audit_input.item_rule_decisions,
+            item_rule_audit_context=render_result.audit_input.item_rule_audit_context,
         )
     )
 
     assert not incomplete_result.passed
     assert any(issue.code == "C2" and "0..7" in issue.message for issue in incomplete_result.issues)
+
+
+def test_run_programmatic_audit_detects_identity_present_missing_item_rule_decisions() -> None:
+    """验证身份存在但缺少 ITEM_RULE 决策时触发 C2。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当缺少 ITEM_RULE 决策未触发 C2 时抛出。
+    """
+
+    render_result = render_template_report(_render_input())
+    audit_input = replace(
+        render_result.audit_input,
+        item_rule_decisions=(),
+        item_rule_audit_context="identity_present",
+    )
+
+    result = run_programmatic_audit(audit_input)
+
+    assert not result.passed
+    assert any(
+        issue.code == "C2" and "缺少 ITEM_RULE 决策" in issue.message
+        for issue in result.issues
+    )
+
+
+def test_run_programmatic_audit_skips_missing_decision_issue_for_identity_missing_context() -> None:
+    """验证身份缺失路径只跳过 ITEM_RULE 缺决策问题。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当身份缺失路径误报 ITEM_RULE 缺决策时抛出。
+    """
+
+    render_result = render_template_report(_render_input(missing=True, final_judgment="needs_attention"))
+    audit_input = replace(render_result.audit_input, item_rule_decisions=(), item_rule_audit_context="identity_missing")
+
+    result = run_programmatic_audit(audit_input)
+
+    assert result.passed
+    assert not any("缺少 ITEM_RULE 决策" in issue.message for issue in result.issues)
+
+
+def test_run_programmatic_audit_detects_item_rule_render_marker_missing() -> None:
+    """验证触发的 ITEM_RULE 段落缺失时触发 C2。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当触发段落缺失未触发 C2 时抛出。
+    """
+
+    render_result = render_template_report(_render_input(fund_type="active_fund"))
+    broken_blocks = tuple(
+        replace(
+            block,
+            body_markdown=block.body_markdown.replace(
+                "#### 基金经理投资哲学",
+                "#### 被误删的基金经理段落",
+                1,
+            ),
+            markdown=block.markdown.replace("#### 基金经理投资哲学", "#### 被误删的基金经理段落", 1),
+        )
+        if block.chapter_id == 1
+        else block
+        for block in render_result.chapter_blocks
+    )
+
+    result = run_programmatic_audit(replace(render_result.audit_input, chapter_blocks=broken_blocks))
+
+    assert not result.passed
+    assert any(
+        issue.code == "C2" and "要求渲染" in issue.message and "chapter_1_manager_philosophy" in issue.message
+        for issue in result.issues
+    )
+
+
+def test_run_programmatic_audit_detects_item_rule_deleted_marker_present() -> None:
+    """验证未触发的 ITEM_RULE 段落残留时触发 C2。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当应删除段落残留未触发 C2 时抛出。
+    """
+
+    render_result = render_template_report(_render_input(fund_type="active_fund"))
+    broken_blocks = tuple(
+        replace(
+            block,
+            body_markdown=f"{block.body_markdown}\n#### 跟踪误差分析\n- 跟踪误差：数据不足。",
+            markdown=f"{block.markdown}\n#### 跟踪误差分析\n- 跟踪误差：数据不足。",
+        )
+        if block.chapter_id == 2
+        else block
+        for block in render_result.chapter_blocks
+    )
+
+    result = run_programmatic_audit(replace(render_result.audit_input, chapter_blocks=broken_blocks))
+
+    assert not result.passed
+    assert any(
+        issue.code == "C2" and "要求删除" in issue.message and "chapter_2_tracking_error_analysis" in issue.message
+        for issue in result.issues
+    )
+
+
+def test_run_programmatic_audit_detects_tracking_error_without_structured_field() -> None:
+    """验证跟踪误差非数据不足输出必须有 structured tracking_error 支撑。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当基准锚点可冒充跟踪误差证据时抛出。
+    """
+
+    render_result = render_template_report(_render_input(fund_type="index_fund"))
+    broken_blocks = tuple(
+        replace(
+            block,
+            body_markdown=block.body_markdown.replace(
+                "- 跟踪误差：数据不足，当前输入未抽取跟踪误差。",
+                "- 跟踪误差：1.23%（报告期，年化，来源：年报直接披露）。",
+            ),
+            markdown=block.markdown.replace(
+                "- 跟踪误差：数据不足，当前输入未抽取跟踪误差。",
+                "- 跟踪误差：1.23%（报告期，年化，来源：年报直接披露）。",
+            ),
+        )
+        if block.chapter_id == 2
+        else block
+        for block in render_result.chapter_blocks
+    )
+
+    result = run_programmatic_audit(replace(render_result.audit_input, chapter_blocks=broken_blocks))
+
+    assert not result.passed
+    assert any(
+        issue.code == "C2" and "structured_data.tracking_error" in issue.message
+        for issue in result.issues
+    )
+
+
+def test_run_programmatic_audit_accepts_tracking_error_with_structured_field() -> None:
+    """验证结构化跟踪误差可通过 deterministic source guard。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当合法结构化跟踪误差被误拒时抛出。
+    """
+
+    render_result = render_template_report(
+        _render_input(fund_type="index_fund", tracking_error=_tracking_error_field())
+    )
+
+    result = run_programmatic_audit(render_result.audit_input)
+
+    assert result.passed
+
+
+def test_run_programmatic_audit_detects_benchmark_only_methodology_misuse() -> None:
+    """验证 benchmark-only 不得支撑指数编制方法。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当基准证据被误用为编制方法时抛出。
+    """
+
+    render_result = render_template_report(_render_input(fund_type="index_fund"))
+    broken_blocks = tuple(
+        replace(
+            block,
+            body_markdown=block.body_markdown.replace(
+                "- 编制方法：数据不足，当前输入未抽取指数编制方法。",
+                "- 编制方法：采用完全复制法。",
+            ),
+            markdown=block.markdown.replace(
+                "- 编制方法：数据不足，当前输入未抽取指数编制方法。",
+                "- 编制方法：采用完全复制法。",
+            ),
+        )
+        if block.chapter_id == 1
+        else block
+        for block in render_result.chapter_blocks
+    )
+
+    result = run_programmatic_audit(replace(render_result.audit_input, chapter_blocks=broken_blocks))
+
+    assert not result.passed
+    assert any(
+        issue.code == "C2" and "benchmark-only" in issue.message for issue in result.issues
+    )
+
+
+def test_run_programmatic_audit_detects_item_rule_duplicate_unknown_and_mismatched_decisions() -> None:
+    """验证 ITEM_RULE 决策重复、未知和章节错配均 fail closed。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当非法 ITEM_RULE 决策未触发 C2 时抛出。
+    """
+
+    render_result = render_template_report(_render_input())
+    first_decision = render_result.audit_input.item_rule_decisions[0]
+    unknown_decision = replace(first_decision, rule_id="unknown_rule")
+    mismatched_decision = replace(
+        next(
+            decision
+            for decision in render_result.audit_input.item_rule_decisions
+            if decision.rule_id == "chapter_1_manager_philosophy"
+        ),
+        chapter_id=2,
+    )
+    audit_input = replace(
+        render_result.audit_input,
+        item_rule_decisions=(
+            first_decision,
+            first_decision,
+            unknown_decision,
+            mismatched_decision,
+        ),
+    )
+
+    result = run_programmatic_audit(audit_input)
+
+    assert not result.passed
+    messages = tuple(issue.message for issue in result.issues if issue.code == "C2")
+    assert any("决策重复" in message for message in messages)
+    assert any("未知规则" in message for message in messages)
+    assert any("不一致" in message for message in messages)
+
+
+def test_run_programmatic_audit_checks_item_rule_markers_inside_matching_chapter_only() -> None:
+    """验证 ITEM_RULE 审计只检查匹配章节块的正文。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当全局 Markdown 或其他章节 marker 被误判为命中时抛出。
+    """
+
+    render_result = render_template_report(_render_input(fund_type="active_fund"))
+    rule = get_template_item_rule("chapter_1_manager_philosophy")
+    broken_blocks = tuple(
+        replace(
+            block,
+            body_markdown=block.body_markdown.replace("#### 基金经理投资哲学", "#### 错误章节内的主动段落", 1),
+            markdown=block.markdown.replace("#### 基金经理投资哲学", "#### 错误章节内的主动段落", 1),
+        )
+        if block.chapter_id == 1
+        else replace(
+            block,
+            body_markdown=f"{block.body_markdown}\n{rule.segment_markers_any[0]}\n- fixture：错误章节。",
+            markdown=f"{block.markdown}\n{rule.segment_markers_any[0]}\n- fixture：错误章节。",
+        )
+        if block.chapter_id == 2
+        else block
+        for block in render_result.chapter_blocks
+    )
+
+    result = run_programmatic_audit(replace(render_result.audit_input, chapter_blocks=broken_blocks))
+
+    assert not result.passed
+    assert any(
+        issue.code == "C2" and "chapter_1_manager_philosophy" in issue.message and "要求渲染" in issue.message
+        for issue in result.issues
+    )
 
 
 def test_run_programmatic_audit_detects_missing_chapter_evidence_line() -> None:
@@ -386,6 +792,395 @@ def test_programmatic_contract_rules_cover_manifest_and_fail_closed_for_invalid_
     )
     with pytest.raises(ValueError, match="未匹配 manifest"):
         validate_programmatic_contract_rules(broken_rules)
+
+
+def test_programmatic_contract_rules_fail_closed_for_uncovered_must_not_cover() -> None:
+    """验证 must_not_cover manifest 条目未声明程序或非程序覆盖时 fail closed。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当缺失 must_not_cover 覆盖未被拒绝时抛出。
+    """
+
+    rules = load_programmatic_contract_rules()
+    uncovered_rule = next(
+        rule
+        for rule in rules.forbidden_contents
+        if rule.item_text == "不输出“证据与出处”小节。"
+    )
+    broken_rules = ProgrammaticContractRules(
+        required_items=rules.required_items,
+        forbidden_contents=tuple(
+            rule
+            for rule in rules.forbidden_contents
+            if rule is not uncovered_rule
+        ),
+    )
+
+    with pytest.raises(ValueError, match="must_not_cover 未被覆盖规则覆盖"):
+        validate_programmatic_contract_rules(broken_rules)
+
+
+def test_contract_audit_coverage_manifest_covers_every_must_answer() -> None:
+    """验证 must_answer 审计覆盖清单完整覆盖模板问题。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当覆盖清单缺失、重复或分类错误时抛出。
+    """
+
+    coverage_manifest = load_contract_audit_coverage_manifest()
+    template_manifest = load_template_contract_manifest()
+    manifest_questions = {
+        (chapter.chapter_id, question)
+        for chapter in template_manifest.chapters
+        for question in chapter.must_answer
+    }
+    coverage_questions = {
+        (rule.chapter_id, rule.question_text)
+        for rule in coverage_manifest.must_answer_coverages
+    }
+
+    assert coverage_questions == manifest_questions
+    assert len(coverage_manifest.must_answer_coverages) == 47
+    assert sum(
+        1
+        for rule in coverage_manifest.must_answer_coverages
+        if rule.coverage_kind == "narrative_guidance"
+    ) == 2
+    assert any(
+        rule.chapter_id == 6
+        and rule.question_text == "压力测试结论是什么。"
+        and rule.coverage_kind == "structured_data_availability"
+        for rule in coverage_manifest.must_answer_coverages
+    )
+
+
+def test_contract_audit_coverage_manifest_covers_every_must_not_cover() -> None:
+    """验证 must_not_cover 由程序 forbidden marker 或显式非程序路由完整覆盖。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 must_not_cover 覆盖不完整时抛出。
+    """
+
+    coverage_manifest = load_contract_audit_coverage_manifest()
+    rules = load_programmatic_contract_rules()
+    template_manifest = load_template_contract_manifest()
+    manifest_items = {
+        (chapter.chapter_id, item)
+        for chapter in template_manifest.chapters
+        for item in chapter.must_not_cover
+    }
+    programmatic_items = {
+        (rule.chapter_id, rule.item_text)
+        for rule in rules.forbidden_contents
+    }
+    non_programmatic_items = {
+        (rule.chapter_id, rule.item_text)
+        for rule in coverage_manifest.must_not_cover_coverages
+    }
+
+    assert programmatic_items | non_programmatic_items == manifest_items
+    assert programmatic_items.isdisjoint(non_programmatic_items)
+    assert len(coverage_manifest.must_not_cover_coverages) == 24
+
+
+def test_contract_audit_coverage_manifest_fails_closed_for_missing_must_not_cover_route() -> None:
+    """验证删除 must_not_cover 非程序覆盖路由会 fail closed。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当缺失 must_not_cover 覆盖未被拒绝时抛出。
+    """
+
+    coverage_manifest = load_contract_audit_coverage_manifest()
+    broken_manifest = ContractAuditCoverageManifest(
+        must_answer_coverages=coverage_manifest.must_answer_coverages,
+        must_not_cover_coverages=coverage_manifest.must_not_cover_coverages[:-1],
+    )
+
+    with pytest.raises(ValueError, match="must_not_cover 未被覆盖规则覆盖"):
+        validate_contract_audit_coverage_manifest(broken_manifest)
+
+
+def test_contract_audit_coverage_manifest_fails_closed_for_duplicate_must_not_cover_route() -> None:
+    """验证重复声明 must_not_cover 非程序覆盖路由会 fail closed。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当重复 must_not_cover 覆盖未被拒绝时抛出。
+    """
+
+    coverage_manifest = load_contract_audit_coverage_manifest()
+    first_rule = coverage_manifest.must_not_cover_coverages[0]
+    broken_manifest = ContractAuditCoverageManifest(
+        must_answer_coverages=coverage_manifest.must_answer_coverages,
+        must_not_cover_coverages=(
+            first_rule,
+            *coverage_manifest.must_not_cover_coverages,
+        ),
+    )
+
+    with pytest.raises(ValueError, match="must_not_cover 覆盖规则重复"):
+        validate_contract_audit_coverage_manifest(broken_manifest)
+
+
+def test_contract_audit_coverage_manifest_fails_closed_for_unknown_must_not_cover_route() -> None:
+    """验证 must_not_cover 非程序覆盖引用未知条目会 fail closed。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当未知 must_not_cover 覆盖未被拒绝时抛出。
+    """
+
+    coverage_manifest = load_contract_audit_coverage_manifest()
+    broken_manifest = ContractAuditCoverageManifest(
+        must_answer_coverages=coverage_manifest.must_answer_coverages,
+        must_not_cover_coverages=(
+            *coverage_manifest.must_not_cover_coverages,
+            ContractMustNotCoverCoverageRule(
+                0,
+                "不存在的 must_not_cover",
+                "narrative_guidance",
+                "fixture",
+            ),
+        ),
+    )
+
+    with pytest.raises(ValueError, match="must_not_cover 覆盖规则未匹配 manifest"):
+        validate_contract_audit_coverage_manifest(broken_manifest)
+
+
+def test_chapter_0_required_items_use_distinct_markers() -> None:
+    """验证第 0 章“一句话”和“基金简介”使用可独立审计的 marker。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当两个 required item 共用 marker 时抛出。
+    """
+
+    rules = load_programmatic_contract_rules()
+    rules_by_item = {
+        rule.item_text: rule
+        for rule in rules.required_items
+        if rule.chapter_id == 0
+    }
+    what_rule = rules_by_item["一句话这是什么基金"]
+    intro_rule = rules_by_item["基金简介"]
+    render_result = render_template_report(_render_input())
+    chapter_0 = render_result.chapter_blocks[0].body_markdown
+
+    assert set(what_rule.markers_any).isdisjoint(intro_rule.markers_any)
+    assert any(marker in chapter_0 for marker in what_rule.markers_any)
+    assert any(marker in chapter_0 for marker in intro_rule.markers_any)
+
+
+def test_contract_audit_coverage_manifest_fails_closed_for_missing_rule() -> None:
+    """验证缺失 must_answer 覆盖规则会 fail closed。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当缺失覆盖未被拒绝时抛出。
+    """
+
+    coverage_manifest = load_contract_audit_coverage_manifest()
+    broken_manifest = ContractAuditCoverageManifest(
+        must_answer_coverages=coverage_manifest.must_answer_coverages[:-1],
+    )
+
+    with pytest.raises(ValueError, match="must_answer 未被覆盖规则覆盖"):
+        validate_contract_audit_coverage_manifest(broken_manifest)
+
+
+def test_contract_audit_coverage_manifest_fails_closed_for_duplicate_rule() -> None:
+    """验证重复 must_answer 覆盖规则会 fail closed。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当重复覆盖未被拒绝时抛出。
+    """
+
+    coverage_manifest = load_contract_audit_coverage_manifest()
+    first_rule = coverage_manifest.must_answer_coverages[0]
+    broken_manifest = ContractAuditCoverageManifest(
+        must_answer_coverages=(
+            first_rule,
+            *coverage_manifest.must_answer_coverages,
+        ),
+    )
+
+    with pytest.raises(ValueError, match="must_answer 覆盖规则重复"):
+        validate_contract_audit_coverage_manifest(broken_manifest)
+
+
+def test_contract_audit_coverage_manifest_fails_closed_for_unknown_required_item() -> None:
+    """验证 must_answer 覆盖引用未知 required item 会 fail closed。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当未知 required item 未被拒绝时抛出。
+    """
+
+    coverage_manifest = load_contract_audit_coverage_manifest()
+    first_rule = coverage_manifest.must_answer_coverages[0]
+    broken_rule = replace(first_rule, required_item_texts=("不存在的 required item",))
+    broken_manifest = ContractAuditCoverageManifest(
+        must_answer_coverages=(
+            broken_rule,
+            *coverage_manifest.must_answer_coverages[1:],
+        ),
+    )
+
+    with pytest.raises(ValueError, match="引用未知 required item"):
+        validate_contract_audit_coverage_manifest(broken_manifest)
+
+
+def test_contract_audit_coverage_manifest_fails_closed_for_empty_programmatic_marker() -> None:
+    """验证 programmatic_marker 覆盖类型必须声明 marker。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当空 marker 未被拒绝时抛出。
+    """
+
+    coverage_manifest = load_contract_audit_coverage_manifest()
+    first_rule = coverage_manifest.must_answer_coverages[0]
+    broken_rule = replace(
+        first_rule,
+        coverage_kind="programmatic_marker",
+        required_item_texts=(),
+        markers_any=(),
+    )
+    broken_manifest = ContractAuditCoverageManifest(
+        must_answer_coverages=(
+            broken_rule,
+            *coverage_manifest.must_answer_coverages[1:],
+        ),
+    )
+
+    with pytest.raises(ValueError, match="programmatic_marker 必须声明 marker"):
+        validate_contract_audit_coverage_manifest(broken_manifest)
+
+
+def test_contract_audit_coverage_manifest_fails_closed_for_non_programmatic_markers() -> None:
+    """验证非程序化 must_answer 覆盖不能声明 marker。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当非程序化 marker 未被拒绝时抛出。
+    """
+
+    coverage_manifest = load_contract_audit_coverage_manifest()
+    narrative_rule_index, narrative_rule = next(
+        (index, rule)
+        for index, rule in enumerate(coverage_manifest.must_answer_coverages)
+        if rule.coverage_kind == "narrative_guidance"
+    )
+    broken_rule = replace(narrative_rule, markers_any=("为什么偏偏是现在：",))
+    broken_rules = (
+        *coverage_manifest.must_answer_coverages[:narrative_rule_index],
+        broken_rule,
+        *coverage_manifest.must_answer_coverages[narrative_rule_index + 1 :],
+    )
+    broken_manifest = ContractAuditCoverageManifest(must_answer_coverages=broken_rules)
+
+    with pytest.raises(ValueError, match="非程序化 must_answer 覆盖不应声明 marker"):
+        validate_contract_audit_coverage_manifest(broken_manifest)
+
+
+def test_run_programmatic_audit_detects_missing_must_answer_programmatic_marker(monkeypatch: pytest.MonkeyPatch) -> None:
+    """验证 programmatic_marker 覆盖规则缺失 marker 时触发 C2。
+
+    Args:
+        monkeypatch: pytest monkeypatch fixture，用于替换 coverage manifest loader。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当缺失 must_answer marker 未触发 C2 时抛出。
+    """
+
+    marker_rule = ContractMustAnswerCoverageRule(
+        chapter_id=0,
+        question_text="用一句话定义这只基金到底是什么产品。",
+        coverage_kind="programmatic_marker",
+        markers_any=("不存在的独立 must_answer marker：",),
+    )
+    fixture_manifest = ContractAuditCoverageManifest(must_answer_coverages=(marker_rule,))
+    monkeypatch.setattr(
+        "fund_agent.fund.audit.audit_programmatic.load_contract_audit_coverage_manifest",
+        lambda: fixture_manifest,
+    )
+
+    result = run_programmatic_audit(_rendered_audit_input())
+
+    assert not result.passed
+    assert any(
+        issue.code == "C2" and "缺少 must_answer marker" in issue.message
+        for issue in result.issues
+    )
 
 
 def test_run_programmatic_audit_detects_missing_chapter_short_content_and_evidence() -> None:
@@ -453,6 +1248,66 @@ def test_run_programmatic_audit_requires_final_judgment_for_r2() -> None:
 
     assert not result.passed
     assert any(issue.code == "R2" and issue.location == "final_judgment" for issue in result.issues)
+
+
+def test_run_programmatic_audit_requires_derived_final_judgment_for_r2() -> None:
+    """验证缺少系统派生最终判断会触发 R2 输入缺失问题。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当缺少派生判断未触发 R2 时抛出。
+    """
+
+    result = run_programmatic_audit(
+        ProgrammaticAuditInput(
+            report_markdown=_complete_report(),
+            rabc_attributions=(_rabc(),),
+            checklist_result=_checklist("green"),
+            final_judgment="worth_holding",
+            final_judgment_source="derived",
+        ),
+    )
+
+    assert not result.passed
+    assert any(
+        issue.code == "R2" and issue.location == "derived_final_judgment"
+        for issue in result.issues
+    )
+
+
+def test_run_programmatic_audit_requires_final_judgment_source_for_r2() -> None:
+    """验证缺少最终判断来源会触发 R2 输入缺失问题。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当缺少来源未触发 R2 时抛出。
+    """
+
+    result = run_programmatic_audit(
+        ProgrammaticAuditInput(
+            report_markdown=_complete_report(),
+            rabc_attributions=(_rabc(),),
+            checklist_result=_checklist("green"),
+            final_judgment="worth_holding",
+            derived_final_judgment="worth_holding",
+        ),
+    )
+
+    assert not result.passed
+    assert any(
+        issue.code == "R2" and issue.location == "final_judgment_source"
+        for issue in result.issues
+    )
 
 
 def test_run_programmatic_audit_detects_rabc_closure_error() -> None:
@@ -560,8 +1415,306 @@ def test_run_programmatic_audit_detects_final_judgment_conflict() -> None:
         ProgrammaticAuditInput(
             checklist_result=_checklist("red"),
             final_judgment="worth_holding",
+            derived_final_judgment="worth_holding",
+            final_judgment_source="derived",
         ),
     )
 
     assert not result.passed
     assert any(issue.code == "R2" for issue in result.issues)
+
+
+def test_run_programmatic_audit_detects_derived_selected_conflict() -> None:
+    """验证 derived 来源下 selected/derived 不一致触发 R2。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 derived 冲突未触发 R2 时抛出。
+    """
+
+    result = run_programmatic_audit(
+        ProgrammaticAuditInput(
+            checklist_result=_checklist("green"),
+            final_judgment="needs_attention",
+            derived_final_judgment="worth_holding",
+            final_judgment_source="derived",
+        ),
+    )
+
+    assert not result.passed
+    assert any("selected 判断必须等于 derived 判断" in issue.message for issue in result.issues)
+
+
+def test_run_programmatic_audit_detects_developer_override_conflict() -> None:
+    """验证 developer override 来源下 selected/derived 不一致触发 R2。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当开发覆盖冲突未触发 R2 时抛出。
+    """
+
+    result = run_programmatic_audit(
+        ProgrammaticAuditInput(
+            checklist_result=_checklist("green"),
+            final_judgment="needs_attention",
+            derived_final_judgment="worth_holding",
+            final_judgment_source="developer_override",
+        ),
+    )
+
+    assert not result.passed
+    assert any("开发覆盖与系统派生判断冲突" in issue.message for issue in result.issues)
+
+
+def test_run_programmatic_audit_passes_automatic_valuation_resolution() -> None:
+    """验证 R1 使用结构化估值真源审计自动温度计证据。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 完整自动估值证据未通过 R1 时抛出。
+    """
+
+    resolution = _thermometer_valuation_resolution()
+    result = run_programmatic_audit(
+        ProgrammaticAuditInput(
+            report_markdown=f"fixture\n{resolution.disclaimer}",
+            rabc_attributions=(_rabc(),),
+            checklist_result=_checklist_with_valuation(resolution),
+            final_judgment="worth_holding",
+            derived_final_judgment="worth_holding",
+            final_judgment_source="derived",
+            valuation_state_resolution=resolution,
+        ),
+    )
+
+    assert not any(issue.code == "R1" for issue in result.issues)
+
+
+def test_run_programmatic_audit_detects_automatic_valuation_without_external_anchor() -> None:
+    """验证自动估值缺少 external_api 锚点会触发 R1。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 缺少 external_api 锚点未触发 R1 时抛出。
+    """
+
+    resolution = replace(_thermometer_valuation_resolution(), anchors=())
+    result = run_programmatic_audit(
+        ProgrammaticAuditInput(
+            report_markdown=f"fixture\n{resolution.disclaimer}",
+            checklist_result=_checklist_with_valuation(resolution),
+            final_judgment="worth_holding",
+            derived_final_judgment="worth_holding",
+            final_judgment_source="derived",
+            valuation_state_resolution=resolution,
+        ),
+    )
+
+    assert any(issue.code == "R1" and "external_api" in issue.message for issue in result.issues)
+
+
+def test_run_programmatic_audit_detects_automatic_valuation_missing_fields() -> None:
+    """验证自动估值缺少温度、日期或窗口字段会触发 R1。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 缺字段未触发 R1 时抛出。
+    """
+
+    resolution = replace(_thermometer_valuation_resolution(), temperature=None, data_date=None)
+    result = run_programmatic_audit(
+        ProgrammaticAuditInput(
+            report_markdown=f"fixture\n{resolution.disclaimer}",
+            checklist_result=_checklist_with_valuation(resolution),
+            final_judgment="worth_holding",
+            derived_final_judgment="worth_holding",
+            final_judgment_source="derived",
+            valuation_state_resolution=resolution,
+        ),
+    )
+
+    assert any(issue.code == "R1" and "temperature" in issue.message for issue in result.issues)
+    assert any(issue.code == "R1" and "data_date" in issue.message for issue in result.issues)
+
+
+def test_run_programmatic_audit_detects_missing_thermometer_disclaimer() -> None:
+    """验证温度计被调用但报告未展示免责声明时触发 R1。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 缺少免责声明未触发 R1 时抛出。
+    """
+
+    resolution = _thermometer_valuation_resolution()
+    result = run_programmatic_audit(
+        ProgrammaticAuditInput(
+            report_markdown="fixture without disclaimer",
+            checklist_result=_checklist_with_valuation(resolution),
+            final_judgment="worth_holding",
+            derived_final_judgment="worth_holding",
+            final_judgment_source="derived",
+            valuation_state_resolution=resolution,
+        ),
+    )
+
+    assert any(issue.code == "R1" and "免责声明" in issue.message for issue in result.issues)
+
+
+def test_run_programmatic_audit_accepts_unavailable_thermometer_failure_anchor() -> None:
+    """验证不可用温度计计算失败锚点满足 R1 provenance。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: failure anchor 被误判缺失时抛出。
+    """
+
+    reason = "自建温度计计算失败：fixture calculation error"
+    resolution = ValuationStateResolution(
+        state="unavailable",
+        source="unavailable_thermometer",
+        reason=f"自动估值不可用：{reason}",
+        anchors=(
+            build_thermometer_failure_anchor(
+                index_code="000300",
+                index_name="沪深300",
+                unavailable_reason=reason,
+            ),
+        ),
+        disclaimer_required=False,
+        index_code="000300",
+        index_name="沪深300",
+        unavailable_reason=reason,
+    )
+    result = run_programmatic_audit(
+        ProgrammaticAuditInput(
+            checklist_result=_checklist_with_valuation(resolution, signal="gray"),
+            final_judgment="needs_attention",
+            derived_final_judgment="needs_attention",
+            final_judgment_source="derived",
+            valuation_state_resolution=resolution,
+        ),
+    )
+
+    assert not any(issue.code == "R1" for issue in result.issues)
+
+
+def test_run_programmatic_audit_detects_unavailable_thermometer_missing_failure_anchor() -> None:
+    """验证不可用温度计缺少失败 provenance 锚点时触发 R1。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 缺失 failure anchor 未触发 R1 时抛出。
+    """
+
+    reason = "自建温度计计算失败：fixture calculation error"
+    benchmark_anchor = EvidenceAnchor(
+        source_kind="annual_report",
+        document_year=2024,
+        section_id="§2",
+        page_number=None,
+        table_id=None,
+        row_locator="benchmark",
+        note="fixture benchmark",
+    )
+    resolution = ValuationStateResolution(
+        state="unavailable",
+        source="unavailable_thermometer",
+        reason=f"自动估值不可用：{reason}",
+        anchors=(benchmark_anchor,),
+        disclaimer_required=False,
+        index_code="000300",
+        index_name="沪深300",
+        unavailable_reason=reason,
+    )
+    result = run_programmatic_audit(
+        ProgrammaticAuditInput(
+            checklist_result=_checklist_with_valuation(resolution, signal="gray"),
+            final_judgment="needs_attention",
+            derived_final_judgment="needs_attention",
+            final_judgment_source="derived",
+            valuation_state_resolution=resolution,
+        ),
+    )
+
+    assert any(issue.code == "R1" and "thermometer failure" in issue.message for issue in result.issues)
+
+
+def test_run_programmatic_audit_allows_explicit_high_without_thermometer_fields() -> None:
+    """验证显式 high 不要求温度计字段。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 显式输入被误要求温度计字段时抛出。
+    """
+
+    anchor = EvidenceAnchor(
+        source_kind="derived",
+        document_year=None,
+        section_id="user_input",
+        page_number=None,
+        table_id=None,
+        row_locator="valuation_state",
+        note="fixture explicit high",
+    )
+    resolution = ValuationStateResolution(
+        state="high",
+        source="explicit_user_input",
+        reason="用户显式输入当前估值状态为 high。",
+        anchors=(anchor,),
+    )
+    result = run_programmatic_audit(
+        ProgrammaticAuditInput(
+            checklist_result=_checklist_with_valuation(resolution, signal="red"),
+            final_judgment="suggest_replace",
+            derived_final_judgment="suggest_replace",
+            final_judgment_source="derived",
+            valuation_state_resolution=resolution,
+        ),
+    )
+
+    assert not any(issue.code == "R1" for issue in result.issues)

@@ -36,7 +36,7 @@ _INDEX_STRATEGY_KEYWORDS: Final[tuple[str, ...]] = (
     "完全复制",
     "抽样复制",
 )
-_ENHANCED_KEYWORDS: Final[tuple[str, ...]] = ("增强",)
+_ENHANCED_KEYWORDS: Final[tuple[str, ...]] = ("指数增强", "增强指数", "增强型指数")
 _QDII_KEYWORDS: Final[tuple[str, ...]] = ("QDII", "境外")
 _FOF_KEYWORDS: Final[tuple[str, ...]] = ("FOF", "基金中基金")
 _BOND_KEYWORDS: Final[tuple[str, ...]] = ("债券", "中债")
@@ -258,6 +258,45 @@ def _has_index_identity_evidence(fund_name: str, fund_category: str, strategy_te
     )
 
 
+def _build_concurrent_index_basis(
+    fund_name: str,
+    fund_category: str,
+    index_strategy_text: str,
+    index_evidence_text: str,
+) -> tuple[str, ...]:
+    """构造 QDII/FOF 顶层分类下的并发指数身份依据。
+
+    本函数服务于模板第 1 章“产品本质”的前置分类：QDII/FOF 是当前稳定
+    `FundType` 的顶层产品类型，但真实产品可能同时具备指数或增强指数身份。
+    在不引入复合类型的前提下，将并发证据保留到 `classification_basis`。
+
+    Args:
+        fund_name: 基金名称或简称。
+        fund_category: 年报披露的基金类别。
+        index_strategy_text: 投资目标、投资范围与投资策略拼接文本。
+        index_evidence_text: 基金身份与策略拼接后的完整指数证据文本。
+
+    Returns:
+        存在指数身份证据时返回依据元组，否则返回空元组。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if not _has_index_identity_evidence(fund_name, fund_category, index_strategy_text):
+        return ()
+
+    basis: tuple[str, ...] = (
+        f"同时命中指数基金身份或策略证据：{index_evidence_text}",
+    )
+    if _contains_any(index_evidence_text, _ENHANCED_KEYWORDS):
+        basis = (
+            *basis,
+            f"同时命中增强关键词：{index_evidence_text}",
+        )
+    return basis
+
+
 def classify_fund_type(report: ParsedAnnualReport) -> FundTypeClassification:
     """基于 `§1/§2` 披露信息识别基金类型。
 
@@ -280,21 +319,33 @@ def classify_fund_type(report: ParsedAnnualReport) -> FundTypeClassification:
     identity_text = f"{fund_name} {fund_category}"
     index_strategy_text = f"{investment_objective} {investment_scope} {investment_strategy}"
     index_evidence_text = f"{identity_text} {index_strategy_text}"
-    classification_text = f"{fund_name} {fund_category} {benchmark} {investment_scope}"
+    qdii_fof_text = f"{fund_name} {fund_category} {investment_objective} {investment_scope} {investment_strategy}"
 
-    if _contains_any(classification_text, _QDII_KEYWORDS):
+    if _contains_any(qdii_fof_text, _QDII_KEYWORDS):
         return FundTypeClassification(
             classified_fund_type="qdii_fund",
             classification_basis=(
                 f"基金类别/名称命中 QDII 关键词：{fund_category or fund_name}",
+                *_build_concurrent_index_basis(
+                    fund_name,
+                    fund_category,
+                    index_strategy_text,
+                    index_evidence_text,
+                ),
             ),
         )
 
-    if _contains_any(classification_text, _FOF_KEYWORDS):
+    if _contains_any(qdii_fof_text, _FOF_KEYWORDS):
         return FundTypeClassification(
             classified_fund_type="fof_fund",
             classification_basis=(
                 f"基金类别/名称命中 FOF 关键词：{fund_category or fund_name}",
+                *_build_concurrent_index_basis(
+                    fund_name,
+                    fund_category,
+                    index_strategy_text,
+                    index_evidence_text,
+                ),
             ),
         )
 
@@ -332,11 +383,11 @@ def classify_fund_type(report: ParsedAnnualReport) -> FundTypeClassification:
             ),
         )
 
-    if _contains_any(investment_scope, _BOND_KEYWORDS):
+    if _contains_any(investment_scope, _BOND_KEYWORDS) and "股票" not in investment_scope:
         return FundTypeClassification(
             classified_fund_type="bond_fund",
             classification_basis=(
-                f"基金类别或投资范围命中债券特征：{fund_category or investment_scope}",
+                f"基金类别或投资范围命中债券特征且不含股票：{fund_category or investment_scope}",
             ),
         )
 

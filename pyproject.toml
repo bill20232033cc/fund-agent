@@ -2,9 +2,9 @@
 name = "fund-agent"
 version = "0.1.0"
 description = "基金行为教练 Agent — 买入前专业级基金体检报告"
+license = "MIT"
 requires-python = ">=3.11"
 dependencies = [
-    "dayu-agent @ https://github.com/noho/dayu-agent/releases/download/v0.1.4/dayu_agent-0.1.4-py3-none-any.whl",
     "pdfplumber>=0.11",
     "httpx>=0.28",
     "akshare>=1.15",

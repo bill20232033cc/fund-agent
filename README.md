@@ -18,20 +18,7 @@ fund-analysis --help
 5 分钟跑通一只基金：
 
 ```bash
-fund-analysis analyze 004393 \
-  --report-year 2024 \
-  --equity-position 80% \
-  --actual-style 均衡 \
-  --actual-equity-position 70% \
-  --manager-tenure-months 24 \
-  --peer-fee-median 1.00% \
-  --investment-amount 10000 \
-  --max-tolerable-loss-rate 50% \
-  --valuation-state low \
-  --user-money-horizon-years 4 \
-  --current-stage 估值较低但需继续跟踪境外市场波动。 \
-  --final-judgment worth_holding \
-  --quality-gate-policy warn
+fund-analysis analyze 004393 --report-year 2024
 ```
 
 命令成功后会把完整 Markdown 报告写到 stdout，quality gate 摘要写到 stderr。需要保存报告时可使用 shell 重定向：
@@ -69,12 +56,18 @@ fund-analysis golden-prefill \
 
 # 将人工审核后的 golden answer Markdown 转为 strict JSON
 fund-analysis golden-build \
-  --input-path reports/golden-answers/golden-answer-prefill.md \
+  --input-path reports/golden-answers/golden-answer-prefill-reviewed.md \
   --output-path reports/golden-answers/golden-answer.json
 
 # 基于 score.json 生成报告质量 gate
 fund-analysis quality-gate \
   --score-path reports/extraction-snapshots/p4-s3b-004393-controller-final-score/score.json
+
+# 查询默认全 A 市场温度计
+fund-analysis thermometer
+
+# 查询自建全 A / 宽基指数温度计
+fund-analysis thermometer --index wind_all_a,000300,000905 --json
 ```
 
 当前 `fund-analysis checklist FUND_CODE` 是占位命令，尚未接入 Service。请使用 `fund-analysis analyze FUND_CODE` 生成包含检查清单的完整报告。
@@ -84,25 +77,16 @@ fund-analysis quality-gate \
 | 参数 | 用途 |
 |------|------|
 | `--report-year` | 年报年份，默认 `2024` |
-| `--equity-position` | R=A+B-C 使用的显式股票仓位，如 `80%` |
-| `--actual-style` | 言行一致性检查使用的实际持仓风格 |
-| `--actual-equity-position` | 言行一致性检查使用的实际股票仓位 |
-| `--manager-tenure-months` | 基金经理管理本基金月数 |
-| `--peer-fee-median` | 同类总费率中位数，如 `1.00%` |
-| `--tracking-error` | 指数基金跟踪误差，如 `1.50%` |
 | `--investment-amount` | 压力测试投入金额，默认 `10000` |
 | `--max-tolerable-loss-rate` | 最大可承受亏损比例，如 `50%` |
-| `--valuation-state` | 估值状态：`low` / `fair` / `high` / `unavailable` |
-| `--money-horizon` | 资金期限分类：`long_enough` / `uncertain` / `too_short` |
+| `--valuation-state` | 手动估值状态：`low` / `fair` / `high` / `unavailable`；不传时尝试自建温度计自动估值 |
+| `--thermometer-cache-dir` | `analyze` 自动估值使用的自建温度计缓存目录 |
 | `--user-money-horizon-years` | 用户资金不用年限 |
-| `--current-stage` | 当前阶段与关键变化说明 |
-| `--final-judgment` | `worth_holding` / `needs_attention` / `suggest_replace` |
 | `--force-refresh` | 强制刷新底层数据 |
-| `--quality-gate-policy` | 报告质量 gate 策略：`block` / `warn` / `off`，默认 `block` |
-| `--quality-gate-source-csv` | 精选基金池 CSV，默认 `docs/code_20260519.csv` |
-| `--quality-gate-output-dir` | quality gate 输出目录；为空时自动生成不覆盖的运行目录 |
-| `--quality-gate-run-id` | quality gate 运行 ID；为空时自动生成 |
-| `--quality-gate-golden-answer-path` | strict golden answer JSON 路径，默认 `reports/golden-answers/golden-answer.json` |
+
+`analyze` 默认是 product mode：最终判断由 Fund Capability 根据检查清单、否决项、压力测试和 quality gate 派生；R=A+B-C 股票仓位、言行一致性实际风格、经理任期、同类费率、跟踪误差、当前阶段、最终判断覆盖和 quality gate `warn/off` 等夹具参数仅供开发验证使用，必须显式传 `--dev-override`。
+
+`fund-analysis analyze FUND_CODE` 不传 `--valuation-state` 时，会先识别基金类型，再仅对 `index_fund` / `enhanced_index` 且业绩基准可精确映射到沪深300 `000300` 或中证500 `000905` 的基金调用项目内自建温度计。主动、债券、QDII、FOF、缺少基准、复合基准不确定、派生/策略/行业指数或未支持指数都会保持 `unavailable` 灰灯且不调用温度计。显式传 `--valuation-state unavailable` 会恢复旧的手动灰灯路径，并且不调用温度计；显式传 `low/fair/high` 也同样优先于自动估值。
 
 ## 输出内容
 
@@ -129,10 +113,12 @@ fund-analysis quality-gate \
 - 统一年报仓库入口：`FundDocumentRepository.load_annual_report(...)`
 - P1 结构化抽取：基金类型、产品画像、表现、经理/持有人、持仓和份额变化
 - P2 分析：R=A+B-C、超额性质、言行一致性、投资者获得感、风险检查、压力测试、7 问题检查清单
+- `analyze` 自动估值：仅对沪深300/中证500指数基金或指数增强基金使用自建温度计生成第 6 问估值状态
 - 8 章 Markdown 模板渲染
 - 程序审计规则：P1/P2/P3/L1/R1/R2
-- 有知有行温度计 data adapter
-- 有知有行温度计 Service/CLI 查询入口：`fund-analysis thermometer`
+- 有知有行温度计 data adapter：保留为过渡/对比能力，不再作为默认 CLI 查询路径
+- 自建全 A 市场温度计 CLI 默认入口：`fund-analysis thermometer`
+- 自建全 A / 宽基指数温度计 CLI 查询入口：`fund-analysis thermometer --index wind_all_a`、`fund-analysis thermometer --index 000300,000905`
 - 精选基金池字段级抽取快照：`snapshot.jsonl`、`summary.md`、`errors.jsonl`
 - 精选基金池字段级评分：`score.json`、`score.md`、`golden_set.json`
 - Correctness golden answer 预填底稿：`fund-analysis golden-prefill`
@@ -143,11 +129,24 @@ fund-analysis quality-gate \
 
 尚未接入：
 
-- 温度计数据自动映射为 `analyze --valuation-state`
 - 独立 `fund-analysis checklist` Service 命令
 - 真实 PDF/network 路径的普通 pytest gate；当前保留为显式 `--run` smoke
 
+明确非目标：
+
+- 主动基金持仓估值、债券/QDII/FOF 估值状态自动判断
+
 ## 本地验证
+
+CI 使用 Python 3.11，并执行以下发布就绪检查：
+
+```bash
+uv sync --extra dev --frozen
+uv run ruff check .
+uv run pytest -q
+```
+
+本地也可以按关注范围运行较小的测试集：
 
 ```bash
 pytest tests/fund/data/test_thermometer.py tests/services/test_thermometer_service.py tests/ui/test_cli.py tests/scripts/test_selected_funds_smoke.py -q
@@ -159,7 +158,7 @@ pytest tests/scripts/test_selected_funds_smoke.py -q
 
 ## 温度计查询
 
-`fund-analysis thermometer` 通过 Service 调用 Capability data 层的 `FundThermometerAdapter`，查询有知有行公开温度计数据并复用本地缓存：
+`fund-analysis thermometer` 通过 Service 调用 Capability data 层的自建温度计，默认查询全 A 市场 `wind_all_a`。CLI 不再默认查询有知有行公开页快照；公开页 adapter 仅保留为过渡/对比能力，不作为当前默认 CLI 路径。
 
 ```bash
 fund-analysis thermometer
@@ -167,7 +166,17 @@ fund-analysis thermometer --json
 fund-analysis thermometer --force-refresh --cache-dir cache/thermometer
 ```
 
-该命令只输出温度计快照摘要。上游不可用会以 `unavailable: true` 表示并正常退出；只有参数校验或运行异常才非零退出。当前不会把温度计数值自动映射为 `low/fair/high`，分析报告仍需要显式传入 `--valuation-state`。
+指定 `--index` 时，命令查询项目内自建全 A / 宽基指数温度计，不依赖有知有行页面抓取。当前支持全 A 市场 `wind_all_a`、沪深300 `000300` 和中证500 `000905`，可用逗号分隔批量查询：
+
+```bash
+fund-analysis thermometer --index wind_all_a
+fund-analysis thermometer --index 000300
+fund-analysis thermometer --index 000300 --json
+fund-analysis thermometer --index wind_all_a,000300,000905
+fund-analysis thermometer --index wind_all_a,000300,000905 --json
+```
+
+该命令只输出温度计摘要。`--force-refresh` 会刷新自有温度计历史数据。上游不可用会以 `unavailable: true` 或批量结果里的单项 `unavailable: true` 表示并正常退出；malformed `--index` 参数退出 2，运行异常退出 1。`analyze` 自动估值仍只使用沪深300/中证500 exact supported-index 单指数路径，不把全 A 自动套用于主动基金或复合基准，也不使用有知有行公开页快照作为分析真源。
 
 ## 精选基金池抽取快照
 
@@ -191,7 +200,7 @@ fund-analysis extraction-score \
   --golden-answer-path reports/golden-answers/golden-answer.json
 ```
 
-默认输出到 snapshot 所在目录，包含 `score.json`、`score.md` 和 `golden_set.json`。`score.json` 同时包含字段级 `field_scores`、单基金 `fund_scores`、`fund_quality`、`failed_funds` 和 `correctness`。Correctness 只对 snapshot `comparable_values` 显式暴露的可比 golden 子字段做保守 normalize 后比较，skipped 和不可比记录不进入分母；提供 `--errors-path` 时，`errors.jsonl` 中的完全失败基金会进入 `failed_funds` 并由 quality gate 阻断；未提供 `--golden-answer-path` 时只输出 `FQ0/info` 所需 skeleton。最小 golden set 固定包含 `004393`，并暂时排除货币基金类。
+默认输出到 snapshot 所在目录，包含 `score.json`、`score.md` 和 `golden_set.json`。`score.json` 同时包含字段级 `field_scores`、单基金 `fund_scores`、`fund_quality`、`failed_funds` 和 `correctness`。Correctness 只对 snapshot `comparable_values` 显式暴露的可比 golden 子字段做保守 normalize 后比较，skipped 和不可比记录不进入分母；`correctness.status` 只表达 `available / unavailable`，`coverage_scope` 进一步区分 `not_configured / fund_not_covered / no_comparable_fields / partially_covered / covered`。提供 `--errors-path` 时，`errors.jsonl` 中的完全失败基金会进入 `failed_funds` 并由 quality gate 阻断；未提供 `--golden-answer-path` 时只输出 `FQ0/info` 所需 metadata。最小 golden set 固定包含 `004393`，并暂时排除货币基金类。
 
 生成 correctness golden answer 自动预填底稿：
 
@@ -208,7 +217,7 @@ fund-analysis golden-prefill \
 
 ```bash
 fund-analysis golden-build \
-  --input-path reports/golden-answers/golden-answer-prefill.md \
+  --input-path reports/golden-answers/golden-answer-prefill-reviewed.md \
   --output-path reports/golden-answers/golden-answer.json
 ```
 
@@ -221,9 +230,9 @@ fund-analysis quality-gate \
   --score-path reports/extraction-snapshots/p4-s3b-004393-controller-final-score/score.json
 ```
 
-默认输出到 `score.json` 所在目录，包含 `quality_gate.json` 和 `quality_gate.md`。当前 gate 消费 coverage / traceability / `fund_quality` / `failed_funds` / correctness：字段级或单基金 P0 fail 会阻断，单基金 issue 会保留 `fund_code`；P1 fail 会警告；App 类别与基金类型明确冲突或 strict golden answer mismatch 会触发 `FQ1/block`；字段缺失率达到阈值会触发 FQ4；基金类型无法解析 preferred_lens 会触发 FQ5；完全失败基金会触发 FQ6；correctness 未接入时只记录 `FQ0/info`。
+默认输出到 `score.json` 所在目录，包含 `quality_gate.json` 和 `quality_gate.md`。当前 gate 消费 coverage / traceability / `fund_quality` / `failed_funds` / correctness：字段级或单基金 P0 fail 会阻断，单基金 issue 会保留 `fund_code`；P1 fail 会警告；App 类别与基金类型明确冲突或 strict golden answer mismatch 会触发 `FQ1/block`；字段缺失率达到阈值会触发 FQ4；基金类型无法解析 preferred_lens 会触发 FQ5；完全失败基金会触发 FQ6；strict golden answer 未配置、当前基金未覆盖或当前基金无可比字段时记录带 `reason` / `coverage_scope` / `fund_code` 的 `FQ0/info`，不等同于 gate 未运行。
 
-`fund-analysis analyze` 默认也会运行 quality gate。若 gate 状态为 `block`，默认策略会非零退出并在 stderr 输出 `quality_gate.json` / `quality_gate.md` 路径，不输出完整报告；使用 `--quality-gate-policy warn` 可保留报告输出并只在 stderr 提示；使用 `--quality-gate-policy off` 会明确跳过 gate。
+`fund-analysis analyze` 默认也会运行 quality gate，product mode 使用 `docs/code_20260519.csv` 作为精选池 membership source，并使用默认 strict golden answer 路径。若 gate 状态为 `block` 或 gate 未运行，默认策略会非零退出并在 stderr 输出结构化原因，不输出完整报告；精选池成员缺 strict golden 覆盖时仍会输出报告，并在 stderr 增加 `quality_gate_info: ...`。`--quality-gate-policy warn/off` 仅可在 `--dev-override` 模式下用于开发验证。
 
 ## 真实精选基金池 Smoke
 
@@ -252,11 +261,17 @@ fund-analysis quality-gate \
   --output-dir reports/smoke/selected-1x
 ```
 
-真实运行的 smoke 命令会显式传入 `--quality-gate-policy warn`，用于观察真实 PDF/network/report-rendering 路径，同时仍在 stderr 记录质量 gate 状态；生产 `fund-analysis analyze` 默认 `block` 策略不受影响。`results.jsonl` 和 `summary.md` 会分别记录进程退出状态与 `quality_gate_status`，避免把“链路跑完”误读为“质量 gate 通过”。
+真实运行的 smoke 命令会显式传入 `--dev-override --quality-gate-policy warn`，用于观察真实 PDF/network/report-rendering 路径，同时仍在 stderr 记录质量 gate 状态；生产 `fund-analysis analyze` 默认 `block` 策略不受影响。`results.jsonl` 和 `summary.md` 会分别记录进程退出状态与 `quality_gate_status`，避免把“链路跑完”误读为“质量 gate 通过”。
 
 输出目录会包含每只基金的 Markdown 报告、stderr、`results.jsonl` 和 `summary.md`。当前 CSV 有 56 条记录、55 个唯一基金代码，`016492` 重复，需要人工确认后再启用 `--strict`。
 
 完整开发验证入口见 [tests/README.md](tests/README.md)。
+
+## 仓库产物策略
+
+仓库采用 MIT License。发布基础验证由 GitHub Actions 执行 Python 3.11 下的 `uv sync --extra dev --frozen`、`uv run ruff check .` 和 `uv run pytest -q`。
+
+当前会跟踪人工维护或可复核的输入产物，例如 `docs/code_20260519.csv`、`docs/golden-answer-template.md` 和 `reports/golden-answers/` 下的 curated golden answer 文件。运行时生成物保持本地：`cache/`、`reports/extraction-snapshots/`、`reports/quality-gate-runs/`、`report-*.md` 和 `docs/*.docx` 不纳入默认版本控制。
 
 ## 文档导航
 
@@ -269,5 +284,7 @@ fund-analysis quality-gate \
 | [docs/fund-analysis-template-draft.md](docs/fund-analysis-template-draft.md) | 8 章分析模板 |
 | [docs/sample-funds.md](docs/sample-funds.md) | 样本基金基线 |
 | [docs/code_20260519.csv](docs/code_20260519.csv) | 有知有行 App 精选基金池手动清单 |
+| [fund_agent/README.md](fund_agent/README.md) | 开发手册总览，说明当前 UI / Service / Fund Capability 边界 |
 | [fund_agent/fund/README.md](fund_agent/fund/README.md) | Fund capability 说明 |
+| [fund_agent/config/README.md](fund_agent/config/README.md) | 配置命名空间当前状态 |
 | [tests/README.md](tests/README.md) | 测试说明 |

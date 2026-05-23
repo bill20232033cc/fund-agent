@@ -184,6 +184,7 @@ _SAMPLE_CASES: tuple[_SampleFundCase, ...] = (
         cli_args=(
             "--report-year",
             "2024",
+            "--dev-override",
             "--equity-position",
             "80%",
             "--actual-style",
@@ -204,8 +205,6 @@ _SAMPLE_CASES: tuple[_SampleFundCase, ...] = (
             "4",
             "--current-stage",
             "估值较低但需继续跟踪境外市场波动。",
-            "--final-judgment",
-            "worth_holding",
             "--quality-gate-policy",
             "off",
             "--force-refresh",
@@ -226,6 +225,7 @@ _SAMPLE_CASES: tuple[_SampleFundCase, ...] = (
         cli_args=(
             "--report-year",
             "2024",
+            "--dev-override",
             "--equity-position",
             "100%",
             "--actual-style",
@@ -248,8 +248,6 @@ _SAMPLE_CASES: tuple[_SampleFundCase, ...] = (
             "4",
             "--current-stage",
             "宽基指数处于可持续跟踪阶段。",
-            "--final-judgment",
-            "needs_attention",
             "--quality-gate-policy",
             "off",
             "--force-refresh",
@@ -270,6 +268,7 @@ _SAMPLE_CASES: tuple[_SampleFundCase, ...] = (
         cli_args=(
             "--report-year",
             "2024",
+            "--dev-override",
             "--equity-position",
             "20%",
             "--actual-style",
@@ -290,8 +289,6 @@ _SAMPLE_CASES: tuple[_SampleFundCase, ...] = (
             "3",
             "--current-stage",
             "债券底仓稳定，权益增强贡献需持续验证。",
-            "--final-judgment",
-            "needs_attention",
             "--quality-gate-policy",
             "off",
             "--force-refresh",
@@ -562,8 +559,8 @@ def test_p3_cli_outputs_complete_reports_for_three_sample_funds(monkeypatch) -> 
         for chapter_index in range(8):
             assert f"# {chapter_index}." in result.output
         assert "## 证据与出处" in result.output
-        assert f"基金：{case.fund_name}（{case.fund_code}）" in result.output
-        assert f"基金类型：{case.expected_type}" in result.output
+        assert f"这是什么基金：{case.fund_name}（{case.fund_code}），{case.expected_type}" in result.output
+        assert "基金简介：" in result.output
         assert "产品本质：未披露" not in result.output
         assert "业绩基准 未披露" not in result.output
         assert "表page-5-table-0" in result.output

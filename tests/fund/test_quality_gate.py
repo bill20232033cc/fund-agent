@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from fund_agent.fund.quality_gate import (
     GATE_STATUS_BLOCK,
     GATE_STATUS_PASS,
@@ -70,7 +72,7 @@ def test_run_quality_gate_warns_failed_p1_without_blocking(tmp_path: Path) -> No
             {
                 "field_scores": [
                     _field_score("basic_identity", "P0", "pass", 1.0, 1.0),
-                    _field_score("holdings_snapshot", "P1", "fail", 0.0, 0.0),
+                    _field_score("tracking_error", "P1", "fail", 0.0, 0.0),
                 ],
                 "correctness": {"status": "not_implemented"},
             },
@@ -83,7 +85,7 @@ def test_run_quality_gate_warns_failed_p1_without_blocking(tmp_path: Path) -> No
 
     assert result.status == GATE_STATUS_WARN
     assert any(
-        issue.severity == "warn" and issue.field_name == "holdings_snapshot"
+        issue.severity == "warn" and issue.field_name == "tracking_error"
         for issue in result.issues
     )
     assert any(issue.severity == "info" and issue.rule_code == "FQ0" for issue in result.issues)
@@ -181,6 +183,180 @@ def test_run_quality_gate_blocks_correctness_mismatch_as_fq1(tmp_path: Path) -> 
     assert result.status == GATE_STATUS_BLOCK
     assert any(issue.rule_code == "FQ1" and issue.fund_code == "004393" for issue in result.issues)
     assert payload["issues"][0]["expected_value"] == "active_fund"
+
+
+def test_run_quality_gate_blocks_composite_index_profile_scalar_mismatch(
+    tmp_path: Path,
+) -> None:
+    """验证复合指数画像 scalar mismatch 通过 FQ1 阻断。
+
+    Args:
+        tmp_path: pytest 临时目录 fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 index_profile correctness mismatch 未阻断时抛出。
+    """
+
+    score_path = tmp_path / "score.json"
+    score_path.write_text(
+        json.dumps(
+            {
+                "field_scores": [_field_score("index_profile", "P1", "pass", 1.0, 1.0)],
+                "fund_scores": [_fund_score("004194", "pass", "pass")],
+                "correctness": {
+                    "status": "available",
+                    "record_results": [
+                        {
+                            "fund_code": "004194",
+                            "field_name": "index_profile",
+                            "sub_field": "source_tier",
+                            "status": "mismatch",
+                            "expected_value": "benchmark_context",
+                            "actual_value": "missing",
+                            "normalized_expected": "benchmark_context",
+                            "normalized_actual": "missing",
+                            "reason": "保守 normalize 后不一致。",
+                            "confidence": "high",
+                            "source": "年报2024 §2 page-5 page-5-table-1 benchmark",
+                        }
+                    ],
+                },
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    result = run_quality_gate(score_path=score_path)
+    issue = next(issue for issue in result.issues if issue.rule_code == "FQ1")
+
+    assert result.status == GATE_STATUS_BLOCK
+    assert issue.fund_code == "004194"
+    assert issue.field_name == "index_profile"
+    assert "index_profile.source_tier" in issue.message
+    assert issue.expected_value == "benchmark_context"
+    assert issue.actual_value == "missing"
+
+
+def test_run_quality_gate_reports_correctness_fund_not_covered_as_fq0_info(
+    tmp_path: Path,
+) -> None:
+    """验证精选池成员缺 golden 覆盖时是 FQ0/info 而非 block。
+
+    Args:
+        tmp_path: pytest 临时目录 fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 FQ0 metadata 不符合 P9-S2 契约时抛出。
+    """
+
+    score_path = tmp_path / "score.json"
+    score_path.write_text(
+        json.dumps(
+            {
+                "field_scores": [_field_score("classified_fund_type", "P0", "pass", 1.0, 1.0)],
+                "fund_scores": [_fund_score("000216", "pass", "pass")],
+                "correctness": {
+                    "status": "available",
+                    "golden_answer_path": "reports/golden-answers/golden-answer.json",
+                    "coverage_scope": "fund_not_covered",
+                    "coverage_reason": "fund_not_covered",
+                    "coverage_required": False,
+                    "covered_fund_codes": [],
+                    "missing_fund_codes": ["000216"],
+                    "total_records": 6,
+                    "comparable_records": 0,
+                    "unavailable_records": 0,
+                    "record_results": [],
+                },
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    result = run_quality_gate(score_path=score_path)
+    payload = json.loads(result.gate_json_path.read_text(encoding="utf-8"))
+    issue = next(issue for issue in result.issues if issue.rule_code == "FQ0")
+
+    assert result.status == GATE_STATUS_PASS
+    assert issue.severity == "info"
+    assert issue.fund_code == "000216"
+    assert issue.reason == "fund_not_covered"
+    assert issue.coverage_scope == "fund_not_covered"
+    assert issue.golden_answer_path == "reports/golden-answers/golden-answer.json"
+    assert issue.comparable_records == 0
+    assert issue.total_records == 6
+    assert payload["issues"][0]["reason"] == "fund_not_covered"
+
+
+def test_run_quality_gate_reports_no_comparable_fields_as_fq0_info(tmp_path: Path) -> None:
+    """验证当前基金有 golden 记录但无可比字段时输出 no_comparable_fields。
+
+    Args:
+        tmp_path: pytest 临时目录 fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 no_comparable_fields 未被输出为 FQ0/info 时抛出。
+    """
+
+    score_path = tmp_path / "score.json"
+    score_path.write_text(
+        json.dumps(
+            {
+                "field_scores": [_field_score("fee_schedule", "P0", "pass", 1.0, 1.0)],
+                "fund_scores": [_fund_score("004393", "pass", "pass")],
+                "correctness": {
+                    "status": "available",
+                    "golden_answer_path": "reports/golden-answers/golden-answer.json",
+                    "coverage_scope": "no_comparable_fields",
+                    "coverage_reason": "no_comparable_fields",
+                    "coverage_required": False,
+                    "covered_fund_codes": [],
+                    "missing_fund_codes": ["004393"],
+                    "total_records": 1,
+                    "comparable_records": 0,
+                    "unavailable_records": 1,
+                    "record_results": [
+                        {
+                            "fund_code": "004393",
+                            "field_name": "fee_schedule",
+                            "sub_field": "management_fee",
+                            "status": "unavailable",
+                            "expected_value": "1.20%",
+                            "actual_value": None,
+                            "normalized_expected": "1.20%",
+                            "normalized_actual": None,
+                            "reason": "snapshot 未显式暴露该 golden 子字段；不进入 correctness 分母。",
+                            "confidence": "high",
+                            "source": "年报2024 §2 page-5",
+                        }
+                    ],
+                },
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    result = run_quality_gate(score_path=score_path)
+    issue = next(issue for issue in result.issues if issue.rule_code == "FQ0")
+
+    assert result.status == GATE_STATUS_PASS
+    assert issue.fund_code == "004393"
+    assert issue.reason == "no_comparable_fields"
+    assert issue.coverage_scope == "no_comparable_fields"
+    assert issue.comparable_records == 0
+    assert issue.unavailable_records == 1
 
 
 def test_run_quality_gate_blocks_app_category_conflict_and_lens_mismatch(tmp_path: Path) -> None:
@@ -451,9 +627,7 @@ def test_run_quality_gate_warns_and_blocks_fq4_missing_rate_thresholds(tmp_path:
     )
 
     result = run_quality_gate(score_path=score_path)
-    fq4_by_fund = {
-        issue.fund_code: issue for issue in result.issues if issue.rule_code == "FQ4"
-    }
+    fq4_by_fund = {issue.fund_code: issue for issue in result.issues if issue.rule_code == "FQ4"}
 
     assert result.status == GATE_STATUS_BLOCK
     assert fq4_by_fund["000001"].severity == "warn"
@@ -462,6 +636,80 @@ def test_run_quality_gate_warns_and_blocks_fq4_missing_rate_thresholds(tmp_path:
     assert fq4_by_fund["000002"].severity == "block"
     assert fq4_by_fund["000002"].observed_rate == 0.35
     assert fq4_by_fund["000002"].threshold == 0.35
+
+
+def test_run_quality_gate_rejects_unknown_unavailable_coverage_scope(tmp_path: Path) -> None:
+    """验证 unavailable correctness 携带未知 coverage_scope 时 fail closed。
+
+    Args:
+        tmp_path: pytest 临时目录 fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 未知 coverage_scope 未抛出 ValueError 时抛出。
+    """
+
+    score_path = tmp_path / "score.json"
+    score_path.write_text(
+        json.dumps(
+            {
+                "field_scores": [_field_score("classified_fund_type", "P0", "pass", 1.0, 1.0)],
+                "correctness": {
+                    "status": "unavailable",
+                    "coverage_scope": "bogus_scope",
+                    "coverage_reason": "not_configured",
+                },
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    try:
+        run_quality_gate(score_path=score_path)
+    except ValueError as exc:
+        assert "coverage_scope" in str(exc)
+    else:
+        raise AssertionError("expected ValueError for unknown unavailable coverage_scope")
+
+
+def test_run_quality_gate_rejects_unknown_unavailable_coverage_reason(tmp_path: Path) -> None:
+    """验证 unavailable correctness 携带未知 coverage_reason 时 fail closed。
+
+    Args:
+        tmp_path: pytest 临时目录 fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 未知 coverage_reason 未抛出 ValueError 时抛出。
+    """
+
+    score_path = tmp_path / "score.json"
+    score_path.write_text(
+        json.dumps(
+            {
+                "field_scores": [_field_score("classified_fund_type", "P0", "pass", 1.0, 1.0)],
+                "correctness": {
+                    "status": "unavailable",
+                    "coverage_scope": "not_configured",
+                    "coverage_reason": "bogus_reason",
+                },
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    try:
+        run_quality_gate(score_path=score_path)
+    except ValueError as exc:
+        assert "coverage_reason" in str(exc)
+    else:
+        raise AssertionError("expected ValueError for unknown unavailable coverage_reason")
 
 
 def test_run_quality_gate_keeps_old_score_without_fund_quality_compatible(tmp_path: Path) -> None:
@@ -482,7 +730,15 @@ def test_run_quality_gate_keeps_old_score_without_fund_quality_compatible(tmp_pa
         json.dumps(
             {
                 "field_scores": [_field_score("classified_fund_type", "P0", "pass", 1.0, 1.0)],
-                "correctness": {"status": "unavailable"},
+                "correctness": {
+                    "status": "unavailable",
+                    "coverage_scope": "not_configured",
+                    "coverage_reason": "not_configured",
+                    "missing_fund_codes": ["004393"],
+                    "total_records": 0,
+                    "comparable_records": 0,
+                    "unavailable_records": 0,
+                },
             },
             ensure_ascii=False,
         ),
@@ -493,6 +749,69 @@ def test_run_quality_gate_keeps_old_score_without_fund_quality_compatible(tmp_pa
 
     assert result.status == GATE_STATUS_PASS
     assert any("fund_quality" in issue.message for issue in result.issues)
+
+
+def test_run_quality_gate_rejects_bool_field_score_numeric_rates(tmp_path: Path) -> None:
+    """验证 field_scores 数值字段拒绝 bool。
+
+    Args:
+        tmp_path: pytest 临时目录 fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 bool 数值字段未被拒绝时抛出。
+    """
+
+    score_path = tmp_path / "score.json"
+    score_path.write_text(
+        json.dumps(
+            {
+                "field_scores": [
+                    _field_score("classified_fund_type", "P0", "pass", True, 1.0),
+                ],
+                "correctness": {"status": "unavailable"},
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="field_scores\\[0\\]\\.coverage_rate 必须是数值"):
+        run_quality_gate(score_path=score_path)
+
+
+def test_run_quality_gate_rejects_bool_fund_quality_numeric_rates(tmp_path: Path) -> None:
+    """验证 fund_quality 数值字段拒绝 bool。
+
+    Args:
+        tmp_path: pytest 临时目录 fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 bool 数值字段未被拒绝时抛出。
+    """
+
+    score_path = tmp_path / "score.json"
+    score_path.write_text(
+        json.dumps(
+            {
+                "field_scores": [_field_score("classified_fund_type", "P0", "pass", 1.0, 1.0)],
+                "fund_quality": [
+                    _fund_quality(missing_field_rate=True),
+                ],
+                "correctness": {"status": "unavailable"},
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="fund_quality\\[0\\]\\.missing_field_rate 必须是数值"):
+        run_quality_gate(score_path=score_path)
 
 
 def test_run_quality_gate_blocks_failed_funds_as_fq6(tmp_path: Path) -> None:
@@ -568,7 +887,53 @@ def test_run_quality_gate_keeps_fq0_info_without_golden_answer(tmp_path: Path) -
     result = run_quality_gate(score_path=score_path)
 
     assert result.status == GATE_STATUS_PASS
-    assert any(issue.rule_code == "FQ0" and issue.severity == "info" for issue in result.issues)
+    issue = next(issue for issue in result.issues if issue.rule_code == "FQ0")
+    assert issue.severity == "info"
+    assert issue.reason == "not_configured"
+    assert issue.coverage_scope == "not_configured"
+
+
+def test_run_quality_gate_reports_not_configured_with_fund_metadata(tmp_path: Path) -> None:
+    """验证新 score 的 not_configured FQ0/info 带 fund-scoped metadata。
+
+    Args:
+        tmp_path: pytest 临时目录 fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 metadata 未进入 FQ0 issue 时抛出。
+    """
+
+    score_path = tmp_path / "score.json"
+    score_path.write_text(
+        json.dumps(
+            {
+                "field_scores": [_field_score("classified_fund_type", "P0", "pass", 1.0, 1.0)],
+                "correctness": {
+                    "status": "unavailable",
+                    "coverage_scope": "not_configured",
+                    "coverage_reason": "not_configured",
+                    "missing_fund_codes": ["004393"],
+                    "total_records": 0,
+                    "comparable_records": 0,
+                    "unavailable_records": 0,
+                },
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    result = run_quality_gate(score_path=score_path)
+    issue = next(issue for issue in result.issues if issue.rule_code == "FQ0")
+
+    assert result.status == GATE_STATUS_PASS
+    assert issue.fund_code == "004393"
+    assert issue.reason == "not_configured"
+    assert issue.coverage_scope == "not_configured"
+    assert issue.comparable_records == 0
 
 
 def _field_score(

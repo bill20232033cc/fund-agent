@@ -13,6 +13,7 @@ from fund_agent.fund.documents.models import DocumentKey, ParsedAnnualReport, Pa
 _SAMPLE_FUNDS: tuple[tuple[str, str], ...] = (
     ("110011", "主动权益"),
     ("510300", "宽基指数"),
+    ("161725", "指数增强"),
     ("000171", "偏债混合"),
 )
 
@@ -20,10 +21,12 @@ _MATRIX_FIELD_NAMES: tuple[str, ...] = (
     "basic_identity",
     "product_profile",
     "benchmark",
+    "index_profile",
     "fee_schedule",
     "turnover_rate",
     "nav_benchmark_performance",
     "investor_return",
+    "tracking_error",
     "share_change",
     "manager_alignment",
     "manager_strategy_text",
@@ -131,10 +134,15 @@ def _build_report(fund_code: str, fund_category: str) -> ParsedAnnualReport:
         ValueError: 章节标题缺失时抛出。
     """
 
+    fund_name = f"样本基金{fund_code}"
+    benchmark_text = "沪深300指数收益率×80%＋中债综合指数收益率×20%"
+    if fund_code == "161725":
+        fund_name = "样本沪深300指数增强基金161725"
+        benchmark_text = "沪深300指数收益率×95%＋银行活期存款利率（税后）×5%"
     raw_text = "\n".join(
         (
             "§1 基金简介",
-            f"基金名称：样本基金{fund_code}",
+            f"基金名称：{fund_name}",
             f"基金代码：{fund_code}",
             f"基金类别：{fund_category}",
             "基金规模：10.00亿元",
@@ -143,13 +151,14 @@ def _build_report(fund_code: str, fund_category: str) -> ParsedAnnualReport:
             "投资目标：追求长期稳健回报。",
             "投资范围：依法投资于基金合同允许的资产。",
             "投资策略：坚持分散配置。",
-            "业绩比较基准：沪深300指数收益率×80%＋中债综合指数收益率×20%",
+            f"业绩比较基准：{benchmark_text}",
             "管理费率：1.20%/年",
             "托管费率：0.20%/年",
             "§3 主要财务指标、基金净值表现及利润分配情况",
             "基金份额净值增长率：12.34%",
             "业绩比较基准收益率：10.01%",
             "加权平均投资者收益率：8.88%",
+            "报告期年化跟踪误差：1.23%",
             "§4 管理人报告",
             "投资策略：本基金报告期内保持均衡配置。",
             "风格定位：均衡偏价值。",
@@ -234,8 +243,8 @@ def _assert_bundle_shape(bundle: StructuredFundDataBundle) -> None:
 
 
 @pytest.mark.asyncio
-async def test_p1_sample_matrix_outputs_at_least_33_of_36_fields() -> None:
-    """验证 3 只样本基金的 12 项矩阵至少 33/36 通过。
+async def test_p1_sample_matrix_outputs_applicable_fields_without_source_leakage() -> None:
+    """验证 3 只样本基金的结构化矩阵保持可用且不越过注入边界。
 
     Args:
         无。
@@ -268,15 +277,24 @@ async def test_p1_sample_matrix_outputs_at_least_33_of_36_fields() -> None:
             if extracted_field.extraction_mode in {"direct", "estimated", "derived"}:
                 passed_cells += 1
 
-    assert passed_cells >= 33
-    assert passed_cells == 36
+    assert passed_cells == 52
+    bundles_by_code = {bundle.fund_code: bundle for bundle in bundles}
+    assert bundles_by_code["510300"].tracking_error.extraction_mode == "direct"
+    assert bundles_by_code["161725"].basic_identity.value is not None
+    assert bundles_by_code["161725"].basic_identity.value["classified_fund_type"] == "enhanced_index"
+    assert bundles_by_code["161725"].index_profile.extraction_mode == "direct"
+    assert bundles_by_code["161725"].tracking_error.extraction_mode == "direct"
+    assert bundles_by_code["110011"].tracking_error.extraction_mode == "missing"
+    assert bundles_by_code["000171"].tracking_error.extraction_mode == "missing"
     assert repository.calls == [
         ("110011", 2024, True),
         ("510300", 2024, True),
+        ("161725", 2024, True),
         ("000171", 2024, True),
     ]
     assert nav_provider.calls == [
         ("110011", True),
         ("510300", True),
+        ("161725", True),
         ("000171", True),
     ]

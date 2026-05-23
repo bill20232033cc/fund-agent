@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from decimal import Decimal
 from pathlib import Path
 
 from fund_agent.fund.documents.models import DocumentKey, ParsedAnnualReport, ParsedTable, ReportSection
@@ -92,6 +93,93 @@ def _build_report_with_tables(tables: tuple[ParsedTable, ...], fund_code: str) -
     )
 
 
+def _build_report_with_text_and_tables(
+    section_text: str,
+    tables: tuple[ParsedTable, ...],
+    fund_code: str,
+    section_two_text: str | None = None,
+) -> ParsedAnnualReport:
+    """构造同时包含 `§3` 正文和表格的年报对象。
+
+    Args:
+        section_text: `§3` 正文。
+        tables: 表格元组。
+        fund_code: 基金代码。
+        section_two_text: 可选 `§2` 正文。
+
+    Returns:
+        构造后的年报对象。
+
+    Raises:
+        无显式抛出。
+    """
+
+    section_three_title = "§3 主要财务指标、基金净值表现及利润分配情况"
+    if section_two_text is None:
+        raw_text = f"{section_three_title}\n{section_text}"
+        sections = {
+            "§3": ReportSection(
+                section_id="§3",
+                title=section_three_title,
+                start_offset=0,
+                end_offset=len(raw_text),
+                matched_rule="fixture",
+                confidence=1.0,
+            ),
+        }
+    else:
+        section_two_title = "§2 基金简介"
+        section_two = f"{section_two_title}\n{section_two_text}\n"
+        section_three = f"{section_three_title}\n{section_text}"
+        raw_text = f"{section_two}{section_three}"
+        sections = {
+            "§2": ReportSection(
+                section_id="§2",
+                title=section_two_title,
+                start_offset=0,
+                end_offset=len(section_two),
+                matched_rule="fixture",
+                confidence=1.0,
+            ),
+            "§3": ReportSection(
+                section_id="§3",
+                title=section_three_title,
+                start_offset=len(section_two),
+                end_offset=len(raw_text),
+                matched_rule="fixture",
+                confidence=1.0,
+            ),
+        }
+    return ParsedAnnualReport(
+        key=DocumentKey(fund_code=fund_code, year=2024),
+        raw_text=raw_text,
+        sections=sections,
+        tables=tables,
+    )
+
+
+def _assert_missing_tracking_error_note(report: ParsedAnnualReport, expected_note: str) -> None:
+    """断言跟踪误差字段按指定 note 缺失。
+
+    Args:
+        report: 待抽取的年报对象。
+        expected_note: 预期缺失原因。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当字段状态或 note 不符合预期时抛出。
+    """
+
+    result = extract_performance(report)
+
+    assert result.tracking_error.extraction_mode == "missing"
+    assert result.tracking_error.value is None
+    assert result.tracking_error.anchors == ()
+    assert result.tracking_error.note == expected_note
+
+
 def test_extract_performance_outputs_nav_and_benchmark_with_anchors() -> None:
     """验证 `§3` 能直接提取净值增长率与基准收益率，并带 anchor。
 
@@ -120,6 +208,389 @@ def test_extract_performance_outputs_nav_and_benchmark_with_anchors() -> None:
     assert all(anchor.note is not None for anchor in result.nav_benchmark_performance.anchors)
     anchor_labels = {anchor.row_locator for anchor in result.nav_benchmark_performance.anchors}
     assert {"nav_growth_rate", "benchmark_return_rate"} <= anchor_labels
+
+
+def test_extract_performance_outputs_direct_tracking_error_when_disclosed() -> None:
+    """验证年报直接披露实际跟踪误差时返回结构化字段。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当跟踪误差未被结构化抽取时抛出。
+    """
+
+    report = _build_report_from_fixture("performance_with_tracking_error.txt", "510300")
+
+    result = extract_performance(report)
+
+    assert result.tracking_error.extraction_mode == "direct"
+    assert result.tracking_error.value is not None
+    assert result.tracking_error.value.value == Decimal("0.0123")
+    assert result.tracking_error.value.value_text == "1.23%"
+    assert result.tracking_error.value.period_label == "报告期"
+    assert result.tracking_error.value.annualized is True
+    assert result.tracking_error.value.source_type == "direct_disclosure"
+    assert result.tracking_error.anchors[0].source_kind == "annual_report"
+    assert result.tracking_error.anchors[0].section_id == "§3"
+    assert result.tracking_error.anchors[0].row_locator == "tracking_error"
+
+
+def test_extract_performance_does_not_treat_tracking_error_target_as_observed() -> None:
+    """验证跟踪误差目标或限制文本不会被当作实际值。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当目标值被误抽取为实际跟踪误差时抛出。
+    """
+
+    report = _build_report_from_fixture("performance_with_tracking_error_target_only.txt", "510300")
+
+    _assert_missing_tracking_error_note(report, "tracking_error_target_or_limit")
+
+
+def test_extract_performance_fails_closed_on_mixed_actual_target_tracking_error_text() -> None:
+    """验证实际值和目标值混杂时返回具体缺失原因。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当模糊文本未 fail closed 时抛出。
+    """
+
+    report = _build_report_with_text_and_tables(
+        "本报告期实际年化跟踪误差为 1.20%，仍力争将跟踪误差控制在 4.00% 以内。",
+        (),
+        "510300",
+    )
+
+    _assert_missing_tracking_error_note(report, "tracking_error_mixed_actual_and_target")
+
+
+def test_extract_performance_does_not_use_standard_deviation_as_tracking_error() -> None:
+    """验证净值或基准标准差不会被误认为跟踪误差。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当标准差被误抽取为跟踪误差时抛出。
+    """
+
+    report = _build_report_from_fixture("performance_with_standard_deviation_only.txt", "510300")
+
+    _assert_missing_tracking_error_note(report, "tracking_error_standard_deviation_only")
+
+
+def test_extract_performance_marks_manager_tracking_error_narrative_with_specific_note() -> None:
+    """验证基金经理叙事不会被当作实际跟踪误差。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当管理叙事被误抽取或 note 不正确时抛出。
+    """
+
+    report = _build_report_with_text_and_tables(
+        "基金经理在报告期内加强组合管理，努力降低跟踪误差。",
+        (),
+        "510300",
+    )
+
+    _assert_missing_tracking_error_note(report, "tracking_error_manager_narrative")
+
+
+def test_extract_performance_marks_benchmark_only_tracking_error_with_specific_note() -> None:
+    """验证仅围绕业绩基准的跟踪误差文本不会被采信。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当基准上下文 note 不正确时抛出。
+    """
+
+    report = _build_report_with_text_and_tables(
+        "业绩比较基准指数采用低跟踪误差编制方法。",
+        (),
+        "510300",
+    )
+
+    _assert_missing_tracking_error_note(report, "tracking_error_benchmark_only")
+
+
+def test_extract_performance_marks_unparseable_direct_tracking_error_with_specific_note() -> None:
+    """验证直接披露形态但数值不可解析时返回具体缺失原因。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当不可解析文本 note 不正确时抛出。
+    """
+
+    report = _build_report_with_text_and_tables(
+        "报告期年化跟踪误差为 --%。",
+        (),
+        "510300",
+    )
+
+    _assert_missing_tracking_error_note(report, "tracking_error_unparseable")
+
+
+def test_extract_performance_outputs_tracking_error_from_annual_table() -> None:
+    """验证年报表现表中直接披露跟踪误差时可抽取。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当表格跟踪误差抽取失败时抛出。
+    """
+
+    table = ParsedTable(
+        page_number=9,
+        table_index=1,
+        headers=("阶段", "份额净值增长率①", "业绩比较基准收益率③", "年化跟踪误差"),
+        rows=(("过去一年", "17.32%", "14.45%", "1.11%"),),
+    )
+    report = _build_report_with_tables((table,), "510300")
+
+    result = extract_performance(report)
+
+    assert result.tracking_error.extraction_mode == "direct"
+    assert result.tracking_error.value is not None
+    assert result.tracking_error.value.value == Decimal("0.0111")
+    assert result.tracking_error.value.period_label == "过去一年"
+    assert result.tracking_error.anchors[0].table_id == "page-9-table-1"
+
+
+def test_extract_performance_marks_table_level_multiple_tracking_error_matches() -> None:
+    """验证表格内多个跟踪误差直接值命中时显式 fail closed。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当表格多候选未返回具体 note 时抛出。
+    """
+
+    table = ParsedTable(
+        page_number=9,
+        table_index=1,
+        headers=("阶段", "年化跟踪误差"),
+        rows=(("过去一年", "0.53%"), ("过去三年", "0.71%")),
+    )
+    report = _build_report_with_tables((table,), "510300")
+
+    _assert_missing_tracking_error_note(report, "tracking_error_multi_match")
+
+
+def test_extract_performance_keeps_table_match_when_text_discloses_same_tracking_error() -> None:
+    """验证正文和表格披露同一跟踪误差时保留表格锚点。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当一致双披露被误判为 ambiguous 时抛出。
+    """
+
+    table = ParsedTable(
+        page_number=9,
+        table_index=1,
+        headers=("阶段", "年化跟踪误差"),
+        rows=(("过去一年", "0.53%"),),
+    )
+    report = _build_report_with_text_and_tables(
+        "报告期年化跟踪误差为 0.53%。",
+        (table,),
+        "510300",
+    )
+
+    result = extract_performance(report)
+
+    assert result.tracking_error.extraction_mode == "direct"
+    assert result.tracking_error.value is not None
+    assert result.tracking_error.value.value == Decimal("0.0053")
+    assert result.tracking_error.anchors[0].table_id == "page-9-table-1"
+
+
+def test_extract_performance_marks_table_text_conflicting_tracking_error_as_inconsistent() -> None:
+    """验证正文和表格跟踪误差不一致时返回具体缺失原因。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当冲突披露未 fail closed 时抛出。
+    """
+
+    table = ParsedTable(
+        page_number=9,
+        table_index=1,
+        headers=("阶段", "年化跟踪误差"),
+        rows=(("过去一年", "0.53%"),),
+    )
+    report = _build_report_with_text_and_tables(
+        "报告期年化跟踪误差为 0.71%。",
+        (table,),
+        "510300",
+    )
+
+    _assert_missing_tracking_error_note(report, "tracking_error_table_text_inconsistent")
+
+
+def test_extract_performance_marks_multiple_tracking_error_matches_with_specific_note() -> None:
+    """验证多个直接披露候选无法选择时显式 fail closed。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当多候选未返回具体 note 时抛出。
+    """
+
+    report = _build_report_with_text_and_tables(
+        "报告期年化跟踪误差为 0.53%。\n过去一年年化跟踪误差为 0.71%。",
+        (),
+        "510300",
+    )
+
+    _assert_missing_tracking_error_note(report, "tracking_error_multi_match")
+
+
+def test_extract_performance_accepts_direct_tracking_error_after_earlier_mixed_target_line() -> None:
+    """验证早期实际/目标混杂文本不压制后续有效直接披露。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当后续有效披露未被采信时抛出。
+    """
+
+    report = _build_report_with_text_and_tables(
+        "本报告期实际年化跟踪误差为 1.20%，仍力争将跟踪误差控制在 4.00% 以内。\n"
+        "报告期年化跟踪误差为 1.23%。",
+        (),
+        "510300",
+    )
+
+    result = extract_performance(report)
+
+    assert result.tracking_error.extraction_mode == "direct"
+    assert result.tracking_error.value is not None
+    assert result.tracking_error.value.value == Decimal("0.0123")
+    assert result.tracking_error.value.value_text == "1.23%"
+    assert result.tracking_error.value.source_type == "direct_disclosure"
+    assert result.tracking_error.value.calculation_method == "disclosed"
+    assert result.tracking_error.anchors[0].row_locator == "tracking_error"
+
+
+def test_extract_performance_falls_back_to_section_two_tracking_error_when_section_three_missing() -> None:
+    """验证 `§3` 未披露跟踪误差时可用 `§2` 直接披露兜底。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 `§2` 直接披露兜底契约不正确时抛出。
+    """
+
+    report = _build_report_with_text_and_tables(
+        "本报告期基金净值增长率为 12.34%，业绩比较基准收益率为 10.01%。",
+        (),
+        "510300",
+        section_two_text="本基金报告期年化跟踪误差为 1.23%。",
+    )
+
+    result = extract_performance(report)
+
+    assert result.tracking_error.extraction_mode == "direct"
+    assert result.tracking_error.value is not None
+    assert result.tracking_error.value.value == Decimal("0.0123")
+    assert result.tracking_error.value.value_text == "1.23%"
+    assert result.tracking_error.value.frequency == "annual_report_period"
+    assert result.tracking_error.value.source_type == "direct_disclosure"
+    assert result.tracking_error.value.calculation_method == "disclosed"
+    assert result.tracking_error.anchors[0].section_id == "§2"
+    assert result.tracking_error.anchors[0].row_locator == "tracking_error"
+
+
+def test_extract_performance_accepts_direct_tracking_error_after_earlier_target_only_line() -> None:
+    """验证早期目标限制文本记录 blocker 后仍继续扫描后续直接披露。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 target-only 语义压制后续披露时抛出。
+    """
+
+    report = _build_report_with_text_and_tables(
+        "本基金力争将年化跟踪误差控制在 4.00% 以内。\n报告期年化跟踪误差为 1.23%。",
+        (),
+        "510300",
+    )
+
+    result = extract_performance(report)
+
+    assert result.tracking_error.extraction_mode == "direct"
+    assert result.tracking_error.value is not None
+    assert result.tracking_error.value.value == Decimal("0.0123")
+    assert result.tracking_error.value.period_label == "报告期"
+    assert result.tracking_error.value.frequency == "annual_report_period"
+    assert result.tracking_error.anchors[0].section_id == "§3"
 
 
 def test_extract_performance_outputs_nav_and_benchmark_from_annual_table() -> None:

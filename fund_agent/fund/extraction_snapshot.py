@@ -15,21 +15,28 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Final, Protocol, Sequence
 
+from fund_agent.config.paths import (
+    DEFAULT_EXTRACTION_SNAPSHOT_ROOT,
+    DEFAULT_SELECTED_FUNDS_CSV as _DEFAULT_SELECTED_FUNDS_CSV,
+)
+from fund_agent.fund._value_utils import value_mapping
 from fund_agent.fund.data.nav_data import NavDataResult
 from fund_agent.fund.data_extractor import FundDataExtractor, StructuredFundDataBundle
 from fund_agent.fund.extractors import EvidenceAnchor, ExtractedField
 
-DEFAULT_SELECTED_FUNDS_CSV: Final[Path] = Path("docs/code_20260519.csv")
-DEFAULT_SNAPSHOT_OUTPUT_ROOT: Final[Path] = Path("reports/extraction-snapshots")
+DEFAULT_SELECTED_FUNDS_CSV: Final[Path] = _DEFAULT_SELECTED_FUNDS_CSV
+DEFAULT_SNAPSHOT_OUTPUT_ROOT: Final[Path] = DEFAULT_EXTRACTION_SNAPSHOT_ROOT
 REQUIRED_SELECTED_FUND_COLUMNS: Final[tuple[str, ...]] = ("基金名称", "基金代码", "类别")
 SNAPSHOT_FIELD_ORDER: Final[tuple[tuple[str, str], ...]] = (
     ("profile", "basic_identity"),
     ("profile", "product_profile"),
     ("profile", "benchmark"),
+    ("profile", "index_profile"),
     ("profile", "fee_schedule"),
     ("profile", "classified_fund_type"),
     ("performance", "nav_benchmark_performance"),
     ("performance", "investor_return"),
+    ("performance", "tracking_error"),
     ("manager", "manager_strategy_text"),
     ("manager", "turnover_rate"),
     ("manager", "manager_alignment"),
@@ -49,7 +56,28 @@ COMPARABLE_SUB_FIELDS_BY_FIELD: Final[dict[str, tuple[str, ...]]] = {
         "classified_fund_type",
     ),
     "benchmark": ("benchmark_name", "benchmark_text"),
+    "index_profile": (
+        "benchmark_text",
+        "benchmark_identity_status",
+        "benchmark_index_name",
+        "benchmark_index_code",
+        "methodology_availability",
+        "constituents_availability",
+        "source_tier",
+    ),
     "nav_benchmark_performance": ("nav_growth_rate", "benchmark_return_rate"),
+    "tracking_error": (
+        "value_text",
+        "period_label",
+        "annualized",
+        "source_type",
+        "calculation_method",
+        "benchmark_identity_status",
+        "benchmark_index_name",
+        "benchmark_index_code",
+        "frequency",
+        "input_period_complete",
+    ),
     "classified_fund_type": ("fund_type",),
 }
 _EXTRACTION_MODE_DIRECT: Final[str] = "direct"
@@ -482,7 +510,7 @@ def build_snapshot_records(
         source_csv: 输出记录中的 CSV 路径文本。
 
     Returns:
-        14 个 P4-S1 字段级 snapshot 记录。
+        字段级 snapshot 记录；P13 新增指数画像和跟踪误差观测字段，但不进入可比值分母。
 
     Raises:
         无显式抛出。
@@ -773,7 +801,7 @@ def _extract_classification_basis(bundle: StructuredFundDataBundle) -> tuple[str
 
 def _build_extracted_field_record(
     *,
-    extracted_field: ExtractedField[dict[str, object]],
+    extracted_field: ExtractedField[object],
     bundle: StructuredFundDataBundle,
     selected_fund: SelectedFundRecord,
     run_id: str,
@@ -1003,7 +1031,7 @@ def _snapshot_record(
 
 def _comparable_values_for_field(
     field_name: str,
-    value: dict[str, object] | None,
+    value: object,
 ) -> dict[str, str]:
     """从抽取字段值中提取 correctness 可比子字段。
 
@@ -1019,15 +1047,16 @@ def _comparable_values_for_field(
     """
 
     allowed_sub_fields = COMPARABLE_SUB_FIELDS_BY_FIELD.get(field_name)
-    if allowed_sub_fields is None or value is None:
+    mapped_value = value_mapping(value)
+    if allowed_sub_fields is None or mapped_value is None:
         return {}
     comparable_values: dict[str, str] = {}
     for sub_field in allowed_sub_fields:
-        comparable_value = _comparable_scalar(value.get(sub_field))
+        comparable_value = _comparable_scalar(mapped_value.get(sub_field))
         if comparable_value is not None:
             comparable_values[sub_field] = comparable_value
     if field_name == "benchmark" and "benchmark_name" not in comparable_values:
-        benchmark_text = _comparable_scalar(value.get("benchmark_text"))
+        benchmark_text = _comparable_scalar(mapped_value.get("benchmark_text"))
         if benchmark_text is not None:
             comparable_values["benchmark_name"] = benchmark_text
     return comparable_values

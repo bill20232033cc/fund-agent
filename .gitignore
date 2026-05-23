@@ -2,6 +2,31 @@
 .venv/
 __pycache__/
 *.pyc
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+dist/
+build/
+*.egg-info/
 
 cache/
 .claude/
+
+# Generated analysis outputs.
+report-*.md
+reports/extraction-snapshots/
+reports/quality-gate-runs/
+# reports/golden-answers/ contains curated fixtures and is intentionally tracked.
+
+# Binary source audit inputs stay local unless converted to Markdown review artifacts.
+docs/*.docx
+
+# Local tmux / launchd automation helpers.
+launchd/
+scripts/aliases.zsh
+scripts/multi_tail.py
+scripts/remind-agentcontroller.sh
+scripts/setup-ai-session.sh
+scripts/start-tmux-agents.sh
+scripts/start-tmux-ai.sh

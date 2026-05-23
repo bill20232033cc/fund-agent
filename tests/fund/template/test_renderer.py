@@ -15,6 +15,7 @@ from fund_agent.fund.analysis import (
     ChecklistResult,
     ConsistencyCheckResult,
     ConsistencyDimensionResult,
+    FinalJudgmentDecision,
     FundFlowResult,
     InvestorExperienceResult,
     RabcAttribution,
@@ -22,11 +23,18 @@ from fund_agent.fund.analysis import (
     RiskCheckResult,
     StressScenarioResult,
     StressTestResult,
+    ValuationStateResolution,
 )
 from fund_agent.fund.audit import run_programmatic_audit
 from fund_agent.fund.data.nav_data import NavDataResult
 from fund_agent.fund.data_extractor import StructuredFundDataBundle
-from fund_agent.fund.extractors.models import EvidenceAnchor, ExtractedField
+from fund_agent.fund.extractors.models import (
+    EvidenceAnchor,
+    ExtractedField,
+    IndexProfileValue,
+    TrackingErrorValue,
+)
+from fund_agent.fund.fund_type import FundType
 from fund_agent.fund.template import (
     TemplateRenderInput,
     build_programmatic_audit_input,
@@ -35,8 +43,19 @@ from fund_agent.fund.template import (
     render_template_report,
     split_rendered_chapter_blocks,
 )
+from fund_agent.fund.template.renderer import (
+    _body_anchor_reference,
+    _item_rule_evidence_bullet,
+)
 
 _REPO_ROOT = Path(__file__).resolve().parents[3]
+_ITEM_RULE_MARKERS = (
+    "#### 指数编制规则与成分股",
+    "#### 基金经理投资哲学",
+    "#### 超额收益分年度拆解",
+    "#### 跟踪误差分析",
+)
+_ITEM_RULE_EMPTY_EVIDENCE_BOUNDARY = "- 证据边界：数据不足，当前段落未携带独立证据锚点。"
 
 
 def _anchor(
@@ -103,12 +122,62 @@ def _field(
     )
 
 
-def _bundle(*, missing: bool = False, anchor_without_row: bool = False) -> StructuredFundDataBundle:
+def _tracking_error_field(value_text: str = "1.23%") -> ExtractedField[TrackingErrorValue]:
+    """构造直接披露跟踪误差字段。
+
+    Args:
+        value_text: 跟踪误差百分比文本。
+
+    Returns:
+        跟踪误差抽取字段。
+
+    Raises:
+        无显式抛出。
+    """
+
+    value = Decimal(value_text.replace("%", "")) / Decimal("100")
+    return ExtractedField(
+        value=TrackingErrorValue(
+            value=value,
+            value_text=value_text,
+            unit="ratio",
+            period_label="报告期",
+            period_start=None,
+            period_end=None,
+            annualized=True,
+            source_type="direct_disclosure",
+            calculation_method="disclosed",
+            benchmark_identity_status="identified",
+            benchmark_index_name="沪深300指数",
+            benchmark_index_code=None,
+            fund_series_source=None,
+            index_series_source=None,
+            observation_count=None,
+            frequency="annual_report_period",
+            annualization_factor=None,
+            input_period_complete=True,
+            provenance_note="fixture direct disclosure",
+        ),
+        anchors=(_anchor("§3", "tracking_error"),),
+        extraction_mode="direct",
+        note=None,
+    )
+
+
+def _bundle(
+    *,
+    missing: bool = False,
+    anchor_without_row: bool = False,
+    fund_type: str = "active_fund",
+    tracking_error: ExtractedField[TrackingErrorValue] | None = None,
+) -> StructuredFundDataBundle:
     """构造 P1 结构化数据包。
 
     Args:
         missing: 是否构造关键字段缺失路径。
         anchor_without_row: 是否让部分证据缺少行定位。
+        fund_type: classified_fund_type fixture 值。
+        tracking_error: 显式跟踪误差字段。
 
     Returns:
         P1 结构化数据包。
@@ -127,7 +196,8 @@ def _bundle(*, missing: bool = False, anchor_without_row: bool = False) -> Struc
             "fund_category": "混合型",
             "fund_scale": "10.00亿元",
             "fund_manager": "张三",
-            "classified_fund_type": "active_fund",
+            "inception_date": "2020-01-15",
+            "classified_fund_type": fund_type,
             "classification_basis": ("基金类别：混合型",),
         },
         "§1",
@@ -145,7 +215,36 @@ def _bundle(*, missing: bool = False, anchor_without_row: bool = False) -> Struc
         "§2",
         "product_profile",
     )
-    benchmark = _field({"benchmark": "沪深300指数收益率*80%+中债指数收益率*20%"}, "§2", "benchmark")
+    benchmark = _field({"benchmark_text": "沪深300指数收益率*80%+中债指数收益率*20%"}, "§2", "benchmark")
+    index_profile: ExtractedField[IndexProfileValue]
+    if fund_type in {"index_fund", "enhanced_index"}:
+        index_profile = ExtractedField(
+            value=IndexProfileValue(
+                benchmark_text="沪深300指数收益率*80%+中债指数收益率*20%",
+                benchmark_identity_status="composite",
+                benchmark_index_name=None,
+                benchmark_index_code=None,
+                benchmark_component_text=("沪深300指数收益率*80%", "中债指数收益率*20%"),
+                methodology_availability="benchmark_only",
+                methodology_summary=None,
+                methodology_source_title=None,
+                constituents_availability="benchmark_only",
+                constituents_summary=None,
+                constituents_as_of_date=None,
+                source_tier="benchmark_context",
+                missing_reasons=("fixture",),
+            ),
+            anchors=benchmark.anchors,
+            extraction_mode="direct",
+            note="fixture",
+        )
+    else:
+        index_profile = ExtractedField(
+            value=None,
+            anchors=(),
+            extraction_mode="missing",
+            note="非指数基金不适用指数画像",
+        )
     fee_schedule = _field({"management_fee": "1.20%", "custody_fee": "0.20%"}, "§2", "fee_schedule")
     turnover_rate = _field({"turnover_rate": "100.00%"}, "§8", "turnover_rate")
     nav_performance = _field(
@@ -175,16 +274,24 @@ def _bundle(*, missing: bool = False, anchor_without_row: bool = False) -> Struc
         "holdings_snapshot",
     )
     holder_structure = _field({"institutional_holder_ratio": "30%", "individual_holder_ratio": "70%"}, "§9", "holder_structure")
+    tracking_error_field = tracking_error or ExtractedField(
+        value=None,
+        anchors=(),
+        extraction_mode="missing",
+        note="fixture tracking error missing",
+    )
     return StructuredFundDataBundle(
         fund_code="110011",
         report_year=2024,
         basic_identity=basic_identity,
         product_profile=product_profile,
         benchmark=benchmark,
+        index_profile=index_profile,
         fee_schedule=fee_schedule,
         turnover_rate=turnover_rate,
         nav_benchmark_performance=nav_performance,
         investor_return=investor_return,
+        tracking_error=tracking_error_field,
         share_change=share_change,
         manager_alignment=manager_alignment,
         manager_strategy_text=manager_strategy,
@@ -368,11 +475,11 @@ def _risk_check() -> RiskCheckResult:
     )
 
 
-def _stress_test() -> StressTestResult:
+def _stress_test(*, fund_type: str = "active_fund") -> StressTestResult:
     """构造压力测试结果。
 
     Args:
-        无。
+        fund_type: 压力测试使用的标准基金类型。
 
     Returns:
         压力测试结果。
@@ -417,7 +524,7 @@ def _stress_test() -> StressTestResult:
         ),
     )
     return StressTestResult(
-        fund_type="active_fund",
+        fund_type=fund_type,  # type: ignore[arg-type]
         investment_amount=Decimal("10000"),
         max_tolerable_loss_rate=Decimal("0.50"),
         scenarios=scenarios,
@@ -476,12 +583,67 @@ def _checklist(signal: str = "green") -> ChecklistResult:
     )
 
 
-def _render_input(*, missing: bool = False, final_judgment: str = "worth_holding") -> TemplateRenderInput:
+def _thermometer_valuation_resolution() -> ValuationStateResolution:
+    """构造温度计估值状态真源。
+
+    Args:
+        无。
+
+    Returns:
+        温度计来源估值状态。
+
+    Raises:
+        无显式抛出。
+    """
+
+    anchor = EvidenceAnchor(
+        source_kind="external_api",
+        document_year=None,
+        section_id="thermometer",
+        page_number=None,
+        table_id="fixture_source",
+        row_locator="000300:2024-12-31",
+        note="fixture thermometer",
+    )
+    return ValuationStateResolution(
+        state="low",
+        source="self_owned_thermometer",
+        reason="自建温度计 fixture 低估。",
+        anchors=(anchor,),
+        disclaimer_required=True,
+        index_code="000300",
+        index_name="沪深300",
+        temperature=Decimal("20.00"),
+        pe_percentile=Decimal("10.00"),
+        pb_percentile=Decimal("30.00"),
+        data_date="2024-12-31",
+        lookback_start="2014-12-31",
+        lookback_end="2024-12-31",
+        thermometer_source="fixture_source",
+        cached=False,
+        stale=False,
+        disclaimer=(
+            "本温度计基于有知有行公开方法论独立计算，非有知有行官方数据。"
+            "计算方法：等权 PE/PB 中位数历史分位数综合。"
+            "与有知有行官方温度计可能存在合理偏差，仅供投资前风险检查参考。"
+        ),
+    )
+def _render_input(
+    *,
+    missing: bool = False,
+    final_judgment: str = "worth_holding",
+    fund_type: str = "active_fund",
+    tracking_error: ExtractedField[TrackingErrorValue] | None = None,
+    valuation_state_resolution: ValuationStateResolution | None = None,
+) -> TemplateRenderInput:
     """构造模板渲染输入。
 
     Args:
         missing: 是否构造缺失数据路径。
-        final_judgment: 最终判断。
+        final_judgment: 最终 selected 判断。
+        fund_type: classified_fund_type fixture 值。
+        tracking_error: 显式跟踪误差字段。
+        valuation_state_resolution: 估值状态结构化真源。
 
     Returns:
         模板渲染输入。
@@ -491,17 +653,77 @@ def _render_input(*, missing: bool = False, final_judgment: str = "worth_holding
     """
 
     return TemplateRenderInput(
-        structured_data=_bundle(missing=missing, anchor_without_row=True),
+        structured_data=_bundle(
+            missing=missing,
+            anchor_without_row=True,
+            fund_type=fund_type,
+            tracking_error=tracking_error,
+        ),
         rabc_attributions=(_rabc(missing=missing),),
         alpha_judgment=_alpha_judgment(),
         consistency_result=_consistency(),
         investor_experience=_investor_experience(missing=missing),
         risk_check_result=_risk_check(),
-        stress_test_result=_stress_test(),
+        stress_test_result=_stress_test(fund_type=fund_type),
         checklist_result=_checklist("gray" if missing else "green"),
-        final_judgment=final_judgment,  # type: ignore[arg-type]
+        final_judgment_decision=FinalJudgmentDecision(
+            selected_judgment=final_judgment,  # type: ignore[arg-type]
+            derived_judgment=final_judgment,  # type: ignore[arg-type]
+            source="derived",
+            override_judgment=None,
+            reasons=("fixture",),
+            conflict_reasons=(),
+        ),
+        valuation_state_resolution=valuation_state_resolution,
         current_stage=None if missing else "规模稳定，收益归因仍需跨期观察",
     )
+
+
+def _segment_lines(markdown: str, heading: str) -> tuple[str, ...]:
+    """提取指定 ITEM_RULE 小节的正文行。
+
+    Args:
+        markdown: 章节 Markdown 正文。
+        heading: ITEM_RULE 小节标题。
+
+    Returns:
+        小节行，包含标题行和标题后的 bullet 行。
+
+    Raises:
+        AssertionError: 当目标小节不存在时抛出。
+    """
+
+    lines = markdown.splitlines()
+    try:
+        start = lines.index(heading)
+    except ValueError as exc:
+        raise AssertionError(f"未找到 ITEM_RULE 小节：{heading}") from exc
+    end = len(lines)
+    for index in range(start + 1, len(lines)):
+        if lines[index].startswith("#### ") or lines[index].startswith("> 📎 证据"):
+            end = index
+            break
+    return tuple(lines[start:end])
+
+
+def _evidence_boundary_line(markdown: str, heading: str) -> str:
+    """提取指定 ITEM_RULE 小节的证据边界行。
+
+    Args:
+        markdown: 章节 Markdown 正文。
+        heading: ITEM_RULE 小节标题。
+
+    Returns:
+        `- 证据边界：` bullet 行。
+
+    Raises:
+        AssertionError: 当小节内没有证据边界行时抛出。
+    """
+
+    for line in _segment_lines(markdown, heading):
+        if line.startswith("- 证据边界："):
+            return line
+    raise AssertionError(f"ITEM_RULE 小节缺少证据边界行：{heading}")
 
 
 def test_render_template_report_contains_exact_eight_design_chapters() -> None:
@@ -532,6 +754,24 @@ def test_render_template_report_contains_exact_eight_design_chapters() -> None:
     assert all(title in result.report_markdown for title in chapter_titles)
     assert result.report_markdown.count("\n# ") == 7
     assert result.report_markdown.startswith("# 0. 投资要点概览")
+
+
+def test_render_template_report_renders_chapter_0_profile_with_inception_date() -> None:
+    """验证第 0 章基金简介渲染已披露成立时间。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当基金简介未渲染成立时间时抛出。
+    """
+
+    result = render_template_report(_render_input())
+
+    assert "- 基金简介：基金经理 张三；管理规模 10.00亿元；成立时间 2020-01-15。" in result.report_markdown
 
 
 def test_render_template_report_exposes_contract_aligned_chapter_blocks() -> None:
@@ -870,6 +1110,255 @@ def test_render_template_report_builds_audit_input_that_passes_p1_p2_p3_c2_l1_r1
     assert audit_result.checked_rules == ("P1", "P2", "P3", "C2", "L1", "R1", "R2")
 
 
+def test_render_template_report_applies_active_fund_lens_to_target_slots() -> None:
+    """验证主动基金报告在第 0/1 章应用确定性 lens 关注点。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当主动基金 lens 未写入目标 slot 时抛出。
+    """
+
+    result = render_template_report(_render_input(fund_type="active_fund"))
+
+    assert result.lens_application_plan is not None
+    assert result.lens_application_plan.fund_type == "active_fund"
+    assert "- 当前最值得盯住的变量：基金经理言行一致性与超额收益稳定性。当前公开输入仍需后续证据验证。" in result.chapter_blocks[0].body_markdown
+    assert "- 看这类基金最先看什么：先看基金经理、超额收益稳定性、言行一致性。" in result.chapter_blocks[1].body_markdown
+    assert "preferred_lens" not in result.report_markdown
+
+
+def test_render_template_report_applies_index_fund_lens_to_target_slots() -> None:
+    """验证指数基金报告在第 0/1 章应用确定性 lens 关注点。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当指数基金 lens 未写入目标 slot 时抛出。
+    """
+
+    active_result = render_template_report(_render_input(fund_type="active_fund"))
+    index_result = render_template_report(_render_input(fund_type="index_fund"))
+    index_audit_result = run_programmatic_audit(index_result.audit_input)
+
+    assert index_result.lens_application_plan is not None
+    assert index_result.lens_application_plan.fund_type == "index_fund"
+    assert "- 当前最值得盯住的变量：跟踪误差、费率和规模流动性。当前公开输入仍需后续证据验证。" in index_result.chapter_blocks[0].body_markdown
+    assert "- 看这类基金最先看什么：先看跟踪误差、费率、规模/流动性。" in index_result.chapter_blocks[1].body_markdown
+    assert "基金经理言行一致性与超额收益稳定性" not in index_result.chapter_blocks[0].body_markdown
+    assert active_result.chapter_blocks[0].body_markdown != index_result.chapter_blocks[0].body_markdown
+    assert active_result.chapter_blocks[1].body_markdown != index_result.chapter_blocks[1].body_markdown
+    assert index_audit_result.passed
+
+
+@pytest.mark.parametrize(
+    ("fund_type", "expected_markers"),
+    (
+        ("index_fund", ("#### 指数编制规则与成分股", "#### 跟踪误差分析")),
+        ("active_fund", ("#### 基金经理投资哲学", "#### 超额收益分年度拆解")),
+        (
+            "enhanced_index",
+            ("#### 指数编制规则与成分股", "#### 超额收益分年度拆解", "#### 跟踪误差分析"),
+        ),
+        ("bond_fund", ()),
+        ("qdii_fund", ()),
+        ("fof_fund", ()),
+    ),
+)
+def test_render_template_report_applies_item_rule_segments_by_fund_type(
+    fund_type: FundType,
+    expected_markers: tuple[str, ...],
+) -> None:
+    """验证六类基金按 ITEM_RULE 决策渲染或删除条件段落。
+
+    Args:
+        fund_type: 标准基金类型。
+        expected_markers: 当前基金类型应渲染的 ITEM_RULE 小节标题。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 ITEM_RULE 段落集合或审计上下文不符合预期时抛出。
+    """
+
+    result = render_template_report(_render_input(fund_type=fund_type))
+    audit_result = run_programmatic_audit(result.audit_input)
+
+    assert result.item_rule_audit_context == "identity_present"
+    assert result.audit_input.item_rule_audit_context == "identity_present"
+    assert result.item_rule_decisions == result.audit_input.item_rule_decisions
+    assert audit_result.passed
+    for marker in _ITEM_RULE_MARKERS:
+        assert (marker in result.report_markdown) is (marker in expected_markers)
+
+
+def test_render_template_report_replaces_tracking_error_only_from_structured_data() -> None:
+    """验证跟踪误差段落只通过 structured_data.tracking_error 替换占位。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当跟踪误差未按结构化字段渲染时抛出。
+    """
+
+    result = render_template_report(
+        _render_input(fund_type="index_fund", tracking_error=_tracking_error_field("1.23%"))
+    )
+    chapter_2 = result.chapter_blocks[2].body_markdown
+
+    assert "- 跟踪误差：1.23%（报告期，年化，来源：年报直接披露）。" in chapter_2
+    assert "fixture direct disclosure" in chapter_2
+    assert "年报2024§3 tracking_error" in chapter_2
+
+
+def test_render_template_report_defensively_handles_missing_tracking_error_value() -> None:
+    """验证渲染器不用 assert 作为运行时完整性保护。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当值缺失路径抛异常或误渲染时抛出。
+    """
+
+    tracking_error: ExtractedField[TrackingErrorValue] = ExtractedField(
+        value=None,
+        anchors=(_anchor("§3", "tracking_error"),),
+        extraction_mode="direct",
+        note="fixture inconsistent field",
+    )
+
+    result = render_template_report(
+        _render_input(fund_type="index_fund", tracking_error=tracking_error)
+    )
+    chapter_2 = result.chapter_blocks[2].body_markdown
+
+    assert "- 跟踪误差：数据不足，当前输入未抽取跟踪误差。" in chapter_2
+
+
+def test_render_template_report_keeps_methodology_and_constituents_insufficient_for_benchmark_only() -> None:
+    """验证 benchmark-only 指数画像不替代编制方法或成分股。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当基准证据被误用为编制方法或成分股时抛出。
+    """
+
+    result = render_template_report(_render_input(fund_type="index_fund"))
+    chapter_1 = result.chapter_blocks[1].body_markdown
+
+    assert "- 业绩基准引用：沪深300指数收益率*80%+中债指数收益率*20%。" in chapter_1
+    assert "- 编制方法：数据不足，当前输入未抽取指数编制方法。" in chapter_1
+    assert "- 成分股：数据不足，当前输入未抽取指数成分股。" in chapter_1
+
+
+def test_render_template_report_renders_item_rule_segments_with_fixed_bullets_and_evidence_boundaries() -> None:
+    """验证 ITEM_RULE 段落使用固定 bullet 且不伪造证据边界。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当固定段落或数据不足边界被破坏时抛出。
+    """
+
+    result = render_template_report(_render_input(fund_type="enhanced_index"))
+    chapter_1 = result.chapter_blocks[1].body_markdown
+    chapter_2 = result.chapter_blocks[2].body_markdown
+    input_data = _render_input(fund_type="enhanced_index")
+    benchmark_reference = _body_anchor_reference(input_data.structured_data.benchmark.anchors[0])
+    tracking_evidence_line = _evidence_boundary_line(chapter_2, "#### 跟踪误差分析")
+    index_evidence_line = _evidence_boundary_line(chapter_1, "#### 指数编制规则与成分股")
+    index_segment = _segment_lines(chapter_1, "#### 指数编制规则与成分股")
+
+    assert "#### 指数编制规则与成分股\n- 业绩基准引用：" in chapter_1
+    assert "- 编制方法：数据不足，当前输入未抽取指数编制方法。" in chapter_1
+    assert "- 成分股：数据不足，当前输入未抽取指数成分股。" in chapter_1
+    assert "#### 超额收益分年度拆解\n- 可用周期：2024。" in chapter_2
+    assert "- 分年度结论：数据不足，当前输入未形成多年度完整序列时不得推断稳定性。" in chapter_2
+    assert "#### 跟踪误差分析\n- 跟踪误差：数据不足，当前输入未抽取跟踪误差。" in chapter_2
+    assert "- 后续最小验证：补充跟踪误差披露或净值/指数日频序列后再计算。" in chapter_2
+    assert tracking_evidence_line == _ITEM_RULE_EMPTY_EVIDENCE_BOUNDARY
+    assert index_evidence_line.count(benchmark_reference) == 1
+    assert "；" not in index_evidence_line
+    assert not any(line.startswith("> 📎 证据") for line in index_segment)
+
+
+def test_render_template_report_renders_item_rule_empty_anchor_boundary_for_present_identity() -> None:
+    """验证身份存在但 ITEM_RULE 相关锚点为空时输出精确缺证边界。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当空锚点路径未输出精确缺证文本时抛出。
+    """
+
+    input_data = _render_input(fund_type="index_fund")
+    structured_data = replace(
+        input_data.structured_data,
+        benchmark=replace(input_data.structured_data.benchmark, anchors=()),
+    )
+    attribution = replace(input_data.rabc_attributions[0], anchors=())
+    result = render_template_report(
+        replace(input_data, structured_data=structured_data, rabc_attributions=(attribution,))
+    )
+
+    evidence_line = _evidence_boundary_line(result.chapter_blocks[2].body_markdown, "#### 跟踪误差分析")
+
+    assert result.item_rule_audit_context == "identity_present"
+    assert evidence_line == _ITEM_RULE_EMPTY_EVIDENCE_BOUNDARY
+
+
+def test_item_rule_evidence_bullet_deduplicates_duplicate_anchors() -> None:
+    """验证 ITEM_RULE 私有证据边界 helper 对重复锚点稳定去重。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当重复锚点被重复渲染时抛出。
+    """
+
+    anchor = _anchor("§2", "benchmark")
+    reference = _body_anchor_reference(anchor)
+
+    evidence_line = _item_rule_evidence_bullet((anchor, anchor))
+
+    assert evidence_line == f"- 证据边界：{reference}。"
+    assert evidence_line.count(reference) == 1
+
+
 def test_render_template_report_missing_data_path_is_explicit_and_audit_compatible() -> None:
     """验证缺失数据路径显式输出未披露或数据不足且仍兼容审计输入。
 
@@ -888,8 +1377,56 @@ def test_render_template_report_missing_data_path_is_explicit_and_audit_compatib
 
     assert "未披露" in result.report_markdown
     assert "数据不足" in result.report_markdown
+    assert result.lens_application_plan is None
+    assert result.item_rule_decisions == ()
+    assert result.item_rule_audit_context == "identity_missing"
+    assert result.audit_input.item_rule_audit_context == "identity_missing"
     assert result.audit_input.final_judgment == "needs_attention"
+    assert result.audit_input.derived_final_judgment == "needs_attention"
+    assert result.audit_input.final_judgment_source == "derived"
     assert audit_result.passed
+
+
+def test_render_template_report_rejects_present_identity_without_classified_fund_type() -> None:
+    """验证存在身份数据但缺少基金类型时 renderer fail closed。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当缺少基金类型未抛出 `ValueError` 时抛出。
+    """
+
+    input_data = _render_input()
+    identity = dict(input_data.structured_data.basic_identity.value or {})
+    identity.pop("classified_fund_type")
+    structured_data = replace(
+        input_data.structured_data,
+        basic_identity=replace(input_data.structured_data.basic_identity, value=identity),
+    )
+
+    with pytest.raises(ValueError, match="classified_fund_type"):
+        render_template_report(replace(input_data, structured_data=structured_data))
+
+
+def test_render_template_report_rejects_unsupported_classified_fund_type() -> None:
+    """验证不受支持的基金类型在 renderer 入口 fail closed。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当非法基金类型未抛出 `ValueError` 时抛出。
+    """
+
+    with pytest.raises(ValueError, match="不支持的基金类型"):
+        render_template_report(_render_input(fund_type="money_market_fund"))
 
 
 def test_render_template_report_rejects_unsafe_final_judgment_wording() -> None:
@@ -950,4 +1487,47 @@ def test_render_template_report_keeps_l1_r1_r2_structured_inputs_unmodified() ->
 
     assert result.audit_input.rabc_attributions == input_data.rabc_attributions
     assert result.audit_input.checklist_result == modified_checklist
-    assert result.audit_input.final_judgment == input_data.final_judgment
+    assert result.audit_input.final_judgment == input_data.final_judgment_decision.selected_judgment
+    assert (
+        result.audit_input.derived_final_judgment
+        == input_data.final_judgment_decision.derived_judgment
+    )
+    assert result.audit_input.final_judgment_source == input_data.final_judgment_decision.source
+
+
+def test_render_template_report_outputs_thermometer_disclaimer_and_anchor() -> None:
+    """验证调用自建温度计时报告正文和附录展示免责声明与锚点。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 免责声明或 external_api 锚点缺失时抛出。
+    """
+
+    resolution = _thermometer_valuation_resolution()
+    checklist = _checklist("green")
+    valuation_item = next(item for item in checklist.items if item.code == "valuation")
+    projected_item = replace(
+        valuation_item,
+        anchors=resolution.anchors,
+        reason=resolution.reason,
+    )
+    checklist = replace(
+        checklist,
+        items=tuple(projected_item if item.code == "valuation" else item for item in checklist.items),
+    )
+    input_data = replace(
+        _render_input(valuation_state_resolution=resolution),
+        checklist_result=checklist,
+    )
+
+    result = render_template_report(input_data)
+
+    assert resolution.disclaimer in result.report_markdown
+    assert "外部数据(external_api)§thermometer表fixture_source行000300:2024-12-31" in result.report_markdown
+    assert result.audit_input.valuation_state_resolution == resolution
+    assert all(term not in resolution.disclaimer for term in ("买入", "卖出", "仓位比例", "收益预测"))

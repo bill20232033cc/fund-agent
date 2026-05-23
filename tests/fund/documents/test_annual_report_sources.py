@@ -1,5 +1,6 @@
 """年报来源编排测试。"""
 
+import asyncio
 import json
 from pathlib import Path
 from urllib.parse import parse_qs
@@ -12,6 +13,8 @@ from fund_agent.fund.documents.models import AnnualReportSourceMetadata
 from fund_agent.fund.documents.sources import (
     AnnualReportSourceAggregateError,
     AnnualReportSourceConfig,
+    AnnualReportSourceFallbackBlockedError,
+    AnnualReportSourceIntegrityError,
     EastmoneyAnnualReportSource,
     EidAnnualReportSource,
     AnnualReportSourceMismatchError,
@@ -20,6 +23,7 @@ from fund_agent.fund.documents.sources import (
     AnnualReportSourceResult,
     AnnualReportSourceSchemaError,
     AnnualReportSourceUnavailableError,
+    _write_pdf_bytes_atomic,
 )
 
 _EID_BASE_URL = "http://eid.test/fund"
@@ -360,6 +364,35 @@ def _source_result(tmp_path: Path, source: str = "eastmoney") -> AnnualReportSou
     )
 
 
+def _assert_blocked_failure(
+    error: AnnualReportSourceFallbackBlockedError,
+    *,
+    category: str,
+    source: str = "eid",
+    message: str,
+) -> None:
+    """断言 fallback 阻断错误携带指定阻断类别与可读来源信息。
+
+    Args:
+        error: 实际捕获的阻断错误。
+        category: 预期阻断失败类别。
+        source: 预期阻断来源。
+        message: 预期原始错误文本片段。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当阻断 provenance 不符合预期时抛出。
+    """
+
+    assert error.blocking_failure.source == source
+    assert error.blocking_failure.category == category
+    assert message in error.blocking_failure.message
+    assert error.failures[-1] == error.blocking_failure
+    assert f"{source}:{category}:{message}" in str(error)
+
+
 def test_orchestrator_rejects_empty_sources_but_none_uses_default() -> None:
     """验证空来源列表会被拒绝，`None` 使用 EID 主源和 Eastmoney fallback。
 
@@ -624,7 +657,7 @@ async def test_eid_source_pdf_content_type_must_be_pdf(tmp_path: Path) -> None:
         client_factory=server.client_factory,
     )
 
-    with pytest.raises(AnnualReportSourceSchemaError, match="Content-Type"):
+    with pytest.raises(AnnualReportSourceIntegrityError, match="Content-Type"):
         await source.fetch_annual_report_pdf("004393", 2024)
 
 
@@ -649,8 +682,29 @@ async def test_eid_source_pdf_magic_bytes_must_be_pdf(tmp_path: Path) -> None:
         client_factory=server.client_factory,
     )
 
-    with pytest.raises(AnnualReportSourceSchemaError, match="%PDF-"):
+    with pytest.raises(AnnualReportSourceIntegrityError, match="%PDF-"):
         await source.fetch_annual_report_pdf("004393", 2024)
+
+
+def test_write_pdf_bytes_atomic_rejects_invalid_pdf_bytes(tmp_path: Path) -> None:
+    """验证原子写入会拒绝缺少 PDF 文件头的内容。
+
+    Args:
+        tmp_path: pytest 临时目录。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当非法 PDF 内容被写入时抛出。
+    """
+
+    pdf_path = tmp_path / "invalid.pdf"
+
+    with pytest.raises(AnnualReportSourceIntegrityError, match="%PDF-"):
+        _write_pdf_bytes_atomic(pdf_path, b"<html></html>")
+
+    assert not pdf_path.exists()
 
 
 @pytest.mark.asyncio
@@ -721,9 +775,15 @@ async def test_orchestrator_does_not_fallback_after_eid_mismatch(tmp_path: Path)
     eastmoney = _FakeAnnualReportSource("eastmoney", result=_source_result(tmp_path))
     orchestrator = AnnualReportSourceOrchestrator((eid, eastmoney))
 
-    with pytest.raises(AnnualReportSourceMismatchError, match="wrong year"):
+    with pytest.raises(AnnualReportSourceFallbackBlockedError) as exc_info:
         await orchestrator.fetch_annual_report_pdf("004393", 2024)
 
+    assert isinstance(exc_info.value.__cause__, AnnualReportSourceMismatchError)
+    _assert_blocked_failure(
+        exc_info.value,
+        category="identity_mismatch",
+        message="wrong year",
+    )
     assert eastmoney.calls == []
 
 
@@ -791,6 +851,43 @@ async def test_eid_source_without_force_refresh_reuses_existing_pdf_after_metada
         "/fund/disclose/validate_fund.do",
         "/fund/disclose/advanced_search_report.do",
     ]
+
+
+@pytest.mark.asyncio
+async def test_eid_source_serializes_same_document_downloads(tmp_path: Path) -> None:
+    """验证同一基金年份的 EID 并发请求只下载一次 PDF。
+
+    Args:
+        tmp_path: pytest 临时目录。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当同 key 并发请求重复下载 PDF 时抛出。
+    """
+
+    server = _EidMockServer(pdf_bytes=b"%PDF-concurrent")
+    source = EidAnnualReportSource(
+        base_url=_EID_BASE_URL,
+        cache_dir=tmp_path,
+        client_factory=server.client_factory,
+    )
+
+    results = await asyncio.gather(
+        source.fetch_annual_report_pdf("004393", 2024),
+        source.fetch_annual_report_pdf("004393", 2024),
+    )
+
+    assert {result.pdf_path for result in results} == {
+        tmp_path / "004393_2024_annual_report_eid.pdf"
+    }
+    assert results[0].pdf_path.read_bytes() == b"%PDF-concurrent"
+    assert [
+        request.url.path
+        for request in server.requests
+        if request.url.path == "/fund/disclose/instance_show_pdf_id.do"
+    ] == ["/fund/disclose/instance_show_pdf_id.do"]
 
 
 @pytest.mark.asyncio
@@ -926,9 +1023,15 @@ async def test_orchestrator_stops_on_mismatch_error(tmp_path: Path) -> None:
     fallback = _FakeAnnualReportSource("eastmoney", result=_source_result(tmp_path))
     orchestrator = AnnualReportSourceOrchestrator((primary, fallback))
 
-    with pytest.raises(AnnualReportSourceMismatchError, match="wrong year"):
+    with pytest.raises(AnnualReportSourceFallbackBlockedError) as exc_info:
         await orchestrator.fetch_annual_report_pdf("004393", 2024)
 
+    assert isinstance(exc_info.value.__cause__, AnnualReportSourceMismatchError)
+    _assert_blocked_failure(
+        exc_info.value,
+        category="identity_mismatch",
+        message="wrong year",
+    )
     assert fallback.calls == []
 
 
@@ -950,10 +1053,93 @@ async def test_orchestrator_stops_on_schema_error(tmp_path: Path) -> None:
     fallback = _FakeAnnualReportSource("eastmoney", result=_source_result(tmp_path))
     orchestrator = AnnualReportSourceOrchestrator((primary, fallback))
 
-    with pytest.raises(AnnualReportSourceSchemaError, match="missing field"):
+    with pytest.raises(AnnualReportSourceFallbackBlockedError) as exc_info:
         await orchestrator.fetch_annual_report_pdf("004393", 2024)
 
+    assert isinstance(exc_info.value.__cause__, AnnualReportSourceSchemaError)
+    _assert_blocked_failure(
+        exc_info.value,
+        category="schema_drift",
+        message="missing field",
+    )
     assert fallback.calls == []
+
+
+@pytest.mark.asyncio
+async def test_orchestrator_stops_on_integrity_error(tmp_path: Path) -> None:
+    """验证 PDF 完整性错误会 fail closed，不进入 fallback。
+
+    Args:
+        tmp_path: pytest 临时目录。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 fallback 被调用或异常类别错误时抛出。
+    """
+
+    primary = _FakeAnnualReportSource(
+        "eid",
+        error=AnnualReportSourceIntegrityError("bad pdf"),
+    )
+    fallback = _FakeAnnualReportSource("eastmoney", result=_source_result(tmp_path))
+    orchestrator = AnnualReportSourceOrchestrator((primary, fallback))
+
+    with pytest.raises(AnnualReportSourceFallbackBlockedError) as exc_info:
+        await orchestrator.fetch_annual_report_pdf("004393", 2024)
+
+    assert isinstance(exc_info.value.__cause__, AnnualReportSourceIntegrityError)
+    _assert_blocked_failure(
+        exc_info.value,
+        category="integrity_error",
+        message="bad pdf",
+    )
+    assert fallback.calls == []
+
+
+@pytest.mark.asyncio
+async def test_orchestrator_blocked_failure_preserves_prior_eligible_failures(
+    tmp_path: Path,
+) -> None:
+    """验证阻断错误包含阻断前所有 eligible 失败记录。
+
+    Args:
+        tmp_path: pytest 临时目录。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 prior failures 或 blocking failure 丢失时抛出。
+    """
+
+    primary = _FakeAnnualReportSource(
+        "eid",
+        error=AnnualReportSourceNotFoundError("eid none"),
+    )
+    secondary = _FakeAnnualReportSource(
+        "eastmoney",
+        error=AnnualReportSourceIntegrityError("bad pdf"),
+    )
+    unused = _FakeAnnualReportSource("archive", result=_source_result(tmp_path, "archive"))
+    orchestrator = AnnualReportSourceOrchestrator((primary, secondary, unused))
+
+    with pytest.raises(AnnualReportSourceFallbackBlockedError) as exc_info:
+        await orchestrator.fetch_annual_report_pdf("004393", 2024)
+
+    assert isinstance(exc_info.value.__cause__, AnnualReportSourceIntegrityError)
+    assert [(failure.source, failure.category) for failure in exc_info.value.failures] == [
+        ("eid", "not_found"),
+        ("eastmoney", "integrity_error"),
+    ]
+    _assert_blocked_failure(
+        exc_info.value,
+        source="eastmoney",
+        category="integrity_error",
+        message="bad pdf",
+    )
+    assert unused.calls == []
 
 
 @pytest.mark.asyncio
@@ -1127,6 +1313,48 @@ async def test_eastmoney_source_maps_http_error_to_unavailable() -> None:
         """
 
         raise httpx.TimeoutException(f"{fund_code}-{year}-{force_refresh}")
+
+    source = EastmoneyAnnualReportSource(downloader=failing_downloader)
+
+    with pytest.raises(AnnualReportSourceUnavailableError, match="004393-2024-True"):
+        await source.fetch_annual_report_pdf("004393", 2024, force_refresh=True)
+
+
+@pytest.mark.asyncio
+async def test_eastmoney_source_maps_os_error_to_unavailable() -> None:
+    """验证 Eastmoney 包装器会把缓存写入错误归类为来源不可用。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 OSError 未被归类为 unavailable 时抛出。
+    """
+
+    async def failing_downloader(
+        fund_code: str,
+        year: int,
+        *,
+        force_refresh: bool = False,
+    ) -> Path:
+        """抛出文件系统错误的假下载器。
+
+        Args:
+            fund_code: 基金代码。
+            year: 年报年份。
+            force_refresh: 是否强制刷新。
+
+        Returns:
+            不返回。
+
+        Raises:
+            OSError: 固定抛出。
+        """
+
+        raise OSError(f"{fund_code}-{year}-{force_refresh}")
 
     source = EastmoneyAnnualReportSource(downloader=failing_downloader)
 

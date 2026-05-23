@@ -2,6 +2,12 @@
 
 - 用中文回答
 
+## 规则真源
+
+- 本文件是本仓库所有 Agent 执行规则的唯一权威入口。
+- Claude Code、AgentMiMo、AgentDS、AgentOpus 等 Claude 类 Agent 如果默认读取 `CLAUDE.md`，必须继续读取并遵守本文件；若两者冲突，以本文件为准。
+- `CLAUDE.md` 只作为 Claude 类 Agent 的入口适配层，不单独维护架构、模块边界、开发流程或基金分析规则。
+
 ## 背景
 
 - **基金分析 Agent 项目**，基于有知有行投资方法论（R = A + B - C），提供基金分析工具供 LLM 从基金年报、招募说明书、定期报告中提取信息。
@@ -10,7 +16,7 @@
   - R = A + B - C（投资者收益 = Alpha + Beta - Cost）
   - 产品本质 → 收益归因 → 基金经理画像 → 投资者获得感 → 当前阶段 → 核心风险 → 最终判断
 
-- **基金分析模板**：见 `/workspace/fund-analysis-template-draft.md`，包含 8 章结构化分析框架和 CHAPTER_CONTRACT 机制。
+- **基金分析模板**：见 `docs/fund-analysis-template-draft.md`，包含 8 章结构化分析框架和 CHAPTER_CONTRACT 机制。
 
 - **审计机制**：三层审计架构（Programmatic → LLM → Evidence Confirm），规则码 P1/P2/E1/E2/E3/C1/L1/L2/R1/R2
 
@@ -20,10 +26,10 @@
 
 ## 必读文件（按优先级）
 
-1. **本文档**（`fund-agent-prompt-template.md`）——所有约束和原则
+1. **本文档**（`AGENTS.md`）——所有 Agent 执行约束和原则
 2. `docs/design.md`——设计真源文档，所有设计决策的唯一权威来源
 3. `docs/implementation-control.md`——实施总控文档，Phase 列表、依赖、验证要求
-4. `fund-analysis-template-draft.md`——基金分析模板（CHAPTER_CONTRACT / preferred_lens / ITEM_RULE）
+4. `docs/fund-analysis-template-draft.md`——基金分析模板（CHAPTER_CONTRACT / preferred_lens / ITEM_RULE）
 
 ## 建议
 
@@ -42,6 +48,12 @@
 - **CHAPTER_CONTRACT 的设计目标**，不是"把信息给全"，而是"让一个会犯错、会走捷径、上下文有限、偏好模式匹配的推理器，在最低认知负担下稳定做对下一步动作"。
 
 - **对基金文档的存取**，都应该只通过统一的文档仓库接口，禁止直接操作文件系统。
+
+- **生产年报 PDF 访问必须经过 `FundDocumentRepository`**。年报来源编排属于 Fund Capability documents 层内部实现，Service、UI、Engine、renderer、quality gate 不得直接调用具体来源、PDF cache 或下载 helper。
+
+- **年报来源 fallback 必须显式按失败分类决策**：`not_found`、`unavailable` 才允许 fallback；`schema_drift`、`identity_mismatch`、`integrity_error` 必须 fail-closed，禁止被 Eastmoney fallback 静默掩盖。
+
+- **Dayu 只作为方法论和历史研究参考**。当前生产主链路不得依赖外部 `dayu-agent` 运行时、Host、Engine、tool loop 或外部 Dayu API；后续如需要相关能力，必须在本项目内按现有边界内化实现。
 
 - **禁止把显式参数放在 extra_payload 里传递**，所有参数必须显式声明。
 
@@ -194,6 +206,20 @@
 3. **按模板 8 章结构执行分析**，每章遵循 CHAPTER_CONTRACT
 4. **执行审计检查**（P1/P2/E1/E2/E3/C1/L1/L2/R1/R2）
 5. **生成证据锚点**，确保所有判断可溯源
+
+### 年报来源 fallback 策略
+
+| 失败类别 | 含义 | 是否允许 fallback |
+|---------|------|------------------|
+| `not_found` | 来源正常响应但没有目标基金/年份年报 | 是 |
+| `unavailable` | 网络、超时、服务端或本地依赖临时不可用 | 是 |
+| `schema_drift` | 官方来源响应结构、字段或附件形态偏离契约 | 否 |
+| `identity_mismatch` | 返回候选与基金代码、基金 ID、年份或报告类型矛盾 | 否 |
+| `integrity_error` | PDF Content-Type、文件头或写入内容完整性失败 | 否 |
+
+- fallback 成功时必须保留 `metadata.fallback_used=True`。
+- fallback 被阻断时必须保留来源、失败类别、错误信息和原始异常 cause。
+- eligible 失败全部耗尽时保持当前最终异常语义，不把 unavailable 误报为 not-found。
 
 ### 禁止事项
 

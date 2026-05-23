@@ -19,6 +19,7 @@ from fund_agent.fund.template.item_rules import (
     TemplateItemRule,
     TemplateItemRuleDecision,
     TemplateItemRuleDecisionStatus,
+    TemplateItemRuleAuditContext,
     TemplateItemRuleManifest,
     TemplateItemRuleMissingBehavior,
     TemplateItemRuleMode,
@@ -29,9 +30,13 @@ from fund_agent.fund.template.item_rules import (
     rendered_segment_present,
     validate_template_item_rule_manifest,
 )
+from fund_agent.fund.template.lens_application import (
+    LensApplicationPlan,
+    LensChapterApplication,
+    build_lens_application_plan,
+)
 
 _RENDERER_EXPORTS = {
-    "TemplateFinalJudgment",
     "TemplateRenderInput",
     "TemplateRenderResult",
     "build_programmatic_audit_input",
@@ -63,11 +68,13 @@ __all__ = [
     "ChapterContract",
     "EVIDENCE_APPENDIX_HEADING",
     "RenderedChapterBlock",
+    "LensApplicationPlan",
+    "LensChapterApplication",
     "TemplateContractManifest",
-    "TemplateFinalJudgment",
     "TemplateItemRule",
     "TemplateItemRuleDecision",
     "TemplateItemRuleDecisionStatus",
+    "TemplateItemRuleAuditContext",
     "TemplateItemRuleManifest",
     "TemplateItemRuleMissingBehavior",
     "TemplateItemRuleMode",
@@ -75,6 +82,7 @@ __all__ = [
     "TemplateRenderInput",
     "TemplateRenderResult",
     "build_programmatic_audit_input",
+    "build_lens_application_plan",
     "evaluate_template_item_rule",
     "evaluate_template_item_rules",
     "get_chapter_contract",

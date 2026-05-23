@@ -10,7 +10,11 @@ _PERCENT_PATTERN: Final[re.Pattern[str]] = re.compile(r"[-+]?\d+(?:,\d{3})*(?:\.
 
 
 def parse_ratio(value: object, *, field_name: str) -> Decimal:
-    """解析百分比或小数字符串为小数比例。
+    """解析比例字段为小数比例。
+
+    字符串输入按年报披露文本解析，带 `%` 或绝对值大于 1 的数字文本按百分比换算。
+    数值型输入视为调用方已经标准化的小数比例，不再按绝对值二次归一，避免
+    123.45% 换手率已表达为 `Decimal("1.2345")` 时被错误缩小为 `0.012345`。
 
     Args:
         value: 原始比例值。
@@ -25,10 +29,12 @@ def parse_ratio(value: object, *, field_name: str) -> Decimal:
 
     if value is None:
         raise ValueError(f"{field_name} 不能为空")
+    if isinstance(value, bool):
+        raise ValueError(f"{field_name} 不能为布尔值")
     if isinstance(value, Decimal):
-        return normalize_numeric_ratio(value)
+        return value
     if isinstance(value, int | float):
-        return normalize_numeric_ratio(Decimal(str(value)))
+        return Decimal(str(value))
     text = str(value).strip()
     if not text:
         raise ValueError(f"{field_name} 不能为空")
@@ -48,7 +54,10 @@ def parse_ratio(value: object, *, field_name: str) -> Decimal:
 
 
 def normalize_numeric_ratio(value: Decimal) -> Decimal:
-    """把数值型比例统一为小数比例。
+    """把明确标注为百分数口径的数值统一为小数比例。
+
+    新代码优先直接调用 `parse_ratio()` 并传入标准小数比例；本函数仅保留给
+    已知输入仍使用百分数数值口径的调用方。
 
     Args:
         value: 数值型比例。

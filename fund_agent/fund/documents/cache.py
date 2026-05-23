@@ -14,9 +14,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Final
 
+from fund_agent.config.paths import DEFAULT_DOCUMENT_CACHE_ROOT
 from fund_agent.fund.documents.models import AnnualReportSourceMetadata, DocumentKey, ParsedAnnualReport
 
-DOCUMENT_CACHE_ROOT: Final[Path] = Path("cache/documents")
+DOCUMENT_CACHE_ROOT: Final[Path] = DEFAULT_DOCUMENT_CACHE_ROOT
 PARSED_REPORT_CACHE_DIRNAME: Final[str] = "parsed_reports"
 SQLITE_CACHE_FILENAME: Final[str] = "documents.sqlite3"
 PARSED_REPORT_SCHEMA_VERSION: Final[int] = 1
@@ -184,6 +185,9 @@ class AnnualReportDocumentCache:
         self.root_dir = root_dir or DOCUMENT_CACHE_ROOT
         self.parsed_reports_dir = self.root_dir / PARSED_REPORT_CACHE_DIRNAME
         self.sqlite_path = self.root_dir / SQLITE_CACHE_FILENAME
+        self._initialize_lock = asyncio.Lock()
+        self._initialized = False
+        self._lock = asyncio.Lock()
 
     async def initialize(self) -> None:
         """初始化缓存目录与 SQLite schema。
@@ -199,7 +203,11 @@ class AnnualReportDocumentCache:
             sqlite3.Error: 初始化 SQLite 失败时抛出。
         """
 
-        await asyncio.to_thread(self._initialize_sync)
+        async with self._initialize_lock:
+            if self._initialized:
+                return
+            await asyncio.to_thread(self._initialize_sync)
+            self._initialized = True
 
     def _initialize_sync(self) -> None:
         """同步初始化缓存目录与 SQLite schema。
@@ -437,7 +445,8 @@ class AnnualReportDocumentCache:
         """
 
         await self.initialize()
-        return await asyncio.to_thread(self._load_parsed_report_sync, key)
+        async with self._lock:
+            return await asyncio.to_thread(self._load_parsed_report_sync, key)
 
     def _load_parsed_report_sync(self, key: DocumentKey) -> ParsedAnnualReport | None:
         """同步读取已解析年报缓存。
@@ -470,8 +479,13 @@ class AnnualReportDocumentCache:
             return None
         if not payload_path.exists():
             return None
-        payload = json.loads(payload_path.read_text(encoding="utf-8"))
-        report = ParsedAnnualReport.from_dict(payload)
+        try:
+            payload = json.loads(payload_path.read_text(encoding="utf-8"))
+            if not isinstance(payload, dict):
+                return None
+            report = ParsedAnnualReport.from_dict(payload)
+        except (json.JSONDecodeError, KeyError, TypeError, ValueError):
+            return None
         if not is_parsed_annual_report_cache_usable(report):
             return None
         return report
@@ -499,12 +513,13 @@ class AnnualReportDocumentCache:
         """
 
         await self.initialize()
-        await asyncio.to_thread(
-            self._save_parsed_report_sync,
-            report,
-            pdf_path,
-            source_metadata,
-        )
+        async with self._lock:
+            await asyncio.to_thread(
+                self._save_parsed_report_sync,
+                report,
+                pdf_path,
+                source_metadata,
+            )
 
     def _save_parsed_report_sync(
         self,

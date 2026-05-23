@@ -175,6 +175,13 @@ def test_extract_profile_classifies_before_general_field_builders(
         call_order.append("benchmark")
         return _dummy_field()
 
+    def _fake_build_index_profile(
+        _classification: FundTypeClassification,
+        _benchmark: ExtractedField[dict[str, object]],
+    ) -> ExtractedField[object]:
+        call_order.append("index_profile")
+        return ExtractedField(value=None, anchors=(), extraction_mode="missing", note="fixture")
+
     def _fake_build_fee_schedule(_report: ParsedAnnualReport) -> ExtractedField[dict[str, object]]:
         call_order.append("fee")
         return _dummy_field()
@@ -183,12 +190,13 @@ def test_extract_profile_classifies_before_general_field_builders(
     monkeypatch.setattr(profile_module, "_build_basic_identity", _fake_build_basic_identity)
     monkeypatch.setattr(profile_module, "_build_product_profile", _fake_build_product_profile)
     monkeypatch.setattr(profile_module, "_build_benchmark", _fake_build_benchmark)
+    monkeypatch.setattr(profile_module, "_build_index_profile", _fake_build_index_profile)
     monkeypatch.setattr(profile_module, "_build_fee_schedule", _fake_build_fee_schedule)
 
     result = extract_profile(report)
 
     assert isinstance(result, ProfileExtractionResult)
-    assert call_order == ["classify", "basic", "product", "benchmark", "fee"]
+    assert call_order == ["classify", "benchmark", "basic", "product", "index_profile", "fee"]
 
 
 def test_extract_profile_outputs_classification_basis_and_anchors_for_active_fund() -> None:
@@ -254,6 +262,221 @@ def test_extract_profile_classifies_multiple_fund_types_without_code_special_cas
     assert result.basic_identity.value is not None
     assert result.basic_identity.value["classified_fund_type"] == expected_type
     assert result.basic_identity.value["classification_basis"]
+
+
+def test_extract_profile_builds_pure_index_profile_from_benchmark_context() -> None:
+    """验证纯指数基金生成 Tier 1 指数画像但不声称编制方法或成分股。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当指数画像层级或证据边界不符合预期时抛出。
+    """
+
+    report = _build_report_from_fixture("index_fund_profile.txt", "510300")
+
+    result = extract_profile(report)
+
+    assert result.basic_identity.value is not None
+    assert result.basic_identity.value["classified_fund_type"] == "index_fund"
+    assert result.index_profile.extraction_mode == "direct"
+    assert result.index_profile.value is not None
+    assert result.index_profile.value.benchmark_text == "沪深300指数收益率"
+    assert result.index_profile.value.benchmark_identity_status == "identified"
+    assert result.index_profile.value.benchmark_index_name == "沪深300指数"
+    assert result.index_profile.value.methodology_availability == "benchmark_only"
+    assert result.index_profile.value.constituents_availability == "benchmark_only"
+    assert result.index_profile.anchors == result.benchmark.anchors
+
+
+def test_extract_profile_builds_composite_index_profile_for_enhanced_index() -> None:
+    """验证指数增强复合基准保留 composite 状态。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当复合基准被静默压成单一指数时抛出。
+    """
+
+    report = _build_report_from_fixture("index_enhanced_profile.txt", "161725")
+
+    result = extract_profile(report)
+
+    assert result.basic_identity.value is not None
+    assert result.basic_identity.value["classified_fund_type"] == "enhanced_index"
+    assert result.index_profile.value is not None
+    assert result.index_profile.value.benchmark_identity_status == "composite"
+    assert result.index_profile.value.benchmark_index_name is None
+    assert result.index_profile.value.benchmark_component_text
+
+
+@pytest.mark.parametrize(
+    ("fund_code", "raw_benchmark_text", "expected_benchmark_text"),
+    (
+        (
+            "017644",
+            "中证1000指数收益率×95%+同期银行活期存款利\n率(税后)×5%",
+            "中证1000指数收益率×95%+同期银行活期存款利率(税后)×5%",
+        ),
+        (
+            "019918",
+            "中证2000指数收益率*95%+中国人民银行人民币活期存款利率（税后）\n*5%",
+            "中证2000指数收益率*95%+中国人民银行人民币活期存款利率（税后）*5%",
+        ),
+        (
+            "004194",
+            "中证1000指数收益率×95%+同期银行活期存款利率（税后）×5%",
+            "中证1000指数收益率×95%+同期银行活期存款利率（税后）×5%",
+        ),
+        (
+            "005313",
+            "中证1000指数收益率*95%＋一年期人民币定期存款利率（税后）*5%",
+            "中证1000指数收益率*95%＋一年期人民币定期存款利率（税后）*5%",
+        ),
+        (
+            "019923",
+            "中证2000指数收益率×95%＋人民币活期存款税后利率×5%",
+            "中证2000指数收益率×95%＋人民币活期存款税后利率×5%",
+        ),
+    ),
+)
+def test_extract_profile_normalizes_benchmark_text_newlines_only_for_benchmark_path(
+    fund_code: str,
+    raw_benchmark_text: str,
+    expected_benchmark_text: str,
+) -> None:
+    """验证基准文本路径会清理 PDF 表格视觉换行并保留指数画像语义。
+
+    Args:
+        fund_code: 基金代码。
+        raw_benchmark_text: 表格中原始业绩比较基准。
+        expected_benchmark_text: 期望输出的业绩比较基准。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当基准文本、锚点或复合基准语义漂移时抛出。
+    """
+
+    report = _build_table_profile_report(
+        fund_code,
+        ParsedTable(
+            page_number=5,
+            table_index=0,
+            headers=("基金名称", "示例中证指数增强型证券投资基金"),
+            rows=(("基金简称", "示例中证指数增强A"), ("基金主代码", fund_code)),
+        ),
+        ParsedTable(
+            page_number=5,
+            table_index=1,
+            headers=("投资目标", "在控制跟踪误差的基础上追求超越标的指数的增强收益。"),
+            rows=(
+                ("投资范围", "本基金主要投资于标的指数成份股及备选成份股。"),
+                ("投资策略", "采用指数增强策略，力争获得超越标的指数的收益。"),
+                ("业绩比较基准", raw_benchmark_text),
+            ),
+        ),
+    )
+
+    result = extract_profile(report)
+
+    assert result.benchmark.value == {"benchmark_text": expected_benchmark_text}
+    benchmark_anchor = result.benchmark.anchors[0]
+    assert benchmark_anchor.note == f"业绩比较基准：{expected_benchmark_text}"
+    assert benchmark_anchor.section_id == "§2"
+    assert benchmark_anchor.page_number == 5
+    assert benchmark_anchor.table_id == "page-5-table-1"
+    assert benchmark_anchor.row_locator == "benchmark"
+    assert result.index_profile.value is not None
+    assert result.index_profile.value.benchmark_text == expected_benchmark_text
+    assert result.index_profile.value.benchmark_identity_status == "composite"
+    assert result.index_profile.value.benchmark_index_name is None
+    assert result.index_profile.value.benchmark_component_text == profile_module._benchmark_components(
+        expected_benchmark_text
+    )
+    assert result.index_profile.value.methodology_availability == "benchmark_only"
+    assert result.index_profile.value.constituents_availability == "benchmark_only"
+    assert result.index_profile.value.source_tier == "benchmark_context"
+
+
+def test_extract_profile_splits_composite_benchmark_with_chinese_and_multiply_separators() -> None:
+    """验证复合基准拆分覆盖 `和` 与 `×` 分隔符。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当复合基准被误判为单一指数时抛出。
+    """
+
+    report = _build_table_profile_report(
+        "510311",
+        ParsedTable(
+            page_number=5,
+            table_index=0,
+            headers=("基金名称", "示例沪深300指数证券投资基金"),
+            rows=(("基金简称", "示例沪深300指数A"), ("基金主代码", "510311")),
+        ),
+        ParsedTable(
+            page_number=5,
+            table_index=1,
+            headers=("投资目标", "紧密跟踪标的指数表现。"),
+            rows=(
+                ("投资范围", "投资于沪深300指数及中证500指数成份股。"),
+                ("投资策略", "采用完全复制法跟踪标的指数。"),
+                ("业绩比较基准", "沪深300指数收益率×80%和中证500指数收益率×20%"),
+            ),
+        ),
+    )
+
+    result = extract_profile(report)
+
+    assert result.basic_identity.value is not None
+    assert result.basic_identity.value["classified_fund_type"] == "index_fund"
+    assert result.index_profile.value is not None
+    assert result.index_profile.value.benchmark_identity_status == "composite"
+    assert result.index_profile.value.benchmark_index_name is None
+    assert result.index_profile.value.benchmark_component_text == (
+        "沪深300指数收益率",
+        "80%",
+        "中证500指数收益率",
+        "20%",
+    )
+
+
+def test_extract_profile_marks_non_index_profile_missing() -> None:
+    """验证非指数基金显式返回不适用的指数画像字段。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当非指数基金仍生成指数画像时抛出。
+    """
+
+    report = _build_report_from_fixture("active_fund_profile.txt", "110011")
+
+    result = extract_profile(report)
+
+    assert result.index_profile.extraction_mode == "missing"
+    assert result.index_profile.value is None
+    assert result.index_profile.anchors == ()
+    assert result.index_profile.note == "非指数基金不适用指数画像"
 
 
 def test_extract_profile_reads_real_section_two_key_value_tables() -> None:
@@ -439,6 +662,86 @@ def test_extract_profile_does_not_treat_tracking_market_dynamics_as_index() -> N
     assert result.basic_identity.value["classified_fund_type"] != "index_fund"
 
 
+def test_extract_profile_does_not_treat_generic_enhance_word_as_enhanced_index() -> None:
+    """验证泛化“增强收益”表述不会把普通指数基金误判为指数增强。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当普通指数基金因泛化增强词被误判时抛出。
+    """
+
+    report = _build_table_profile_report(
+        "510310",
+        ParsedTable(
+            page_number=5,
+            table_index=0,
+            headers=("基金名称", "示例沪深300指数证券投资基金"),
+            rows=(("基金简称", "示例沪深300指数A"), ("基金主代码", "510310")),
+        ),
+        ParsedTable(
+            page_number=5,
+            table_index=1,
+            headers=("投资目标", "紧密跟踪标的指数表现，并力争增强投资者长期持有体验。"),
+            rows=(
+                ("投资范围", "投资于沪深300指数成份股。"),
+                ("投资策略", "采用完全复制法跟踪标的指数。"),
+                ("业绩比较基准", "沪深300指数收益率"),
+            ),
+        ),
+    )
+
+    result = extract_profile(report)
+
+    assert result.basic_identity.value is not None
+    assert result.basic_identity.value["classified_fund_type"] == "index_fund"
+    assert result.basic_identity.value["classified_fund_type"] != "enhanced_index"
+
+
+def test_extract_profile_does_not_use_benchmark_for_qdii_or_fof_classification() -> None:
+    """验证 QDII/FOF 顶层分类不由业绩比较基准单独触发。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当基准文本中的境外或 FOF 词触发顶层分类时抛出。
+    """
+
+    report = _build_table_profile_report(
+        "019998",
+        ParsedTable(
+            page_number=5,
+            table_index=0,
+            headers=("基金名称", "示例灵活配置混合型证券投资基金"),
+            rows=(("基金简称", "示例灵活配置混合A"), ("基金主代码", "019998")),
+        ),
+        ParsedTable(
+            page_number=5,
+            table_index=1,
+            headers=("投资目标", "在严格控制风险的前提下追求长期稳健增值。"),
+            rows=(
+                ("投资范围", "本基金主要投资于境内股票、存托凭证和现金管理工具。"),
+                ("投资策略", "采用主动管理策略。"),
+                ("业绩比较基准", "境外权益指数收益率×20%+FOF基金指数收益率×10%+沪深300指数收益率×70%"),
+            ),
+        ),
+    )
+
+    result = extract_profile(report)
+
+    assert result.basic_identity.value is not None
+    assert result.basic_identity.value["classified_fund_type"] == "active_fund"
+    assert result.basic_identity.value["classified_fund_type"] not in {"qdii_fund", "fof_fund"}
+
+
 def test_extract_profile_uses_table_short_name_for_qdii_classification() -> None:
     """验证基金简称中的 QDII 标识可参与基金类型判断。
 
@@ -473,3 +776,86 @@ def test_extract_profile_uses_table_short_name_for_qdii_classification() -> None
     assert result.basic_identity.value is not None
     assert result.basic_identity.value["fund_name"] == "易方达优质精选混合型证券投资基金"
     assert result.basic_identity.value["classified_fund_type"] == "qdii_fund"
+
+
+def test_extract_profile_preserves_qdii_enhanced_index_evidence() -> None:
+    """验证 QDII 顶层分类会保留增强指数并发证据。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 QDII 增强指数证据被分类早返回吞掉时抛出。
+    """
+
+    report = _build_table_profile_report(
+        "161128",
+        ParsedTable(
+            page_number=5,
+            table_index=0,
+            headers=("基金名称", "易方达标普500指数增强型证券投资基金（QDII）"),
+            rows=(("基金简称", "易方达标普500增强QDII"), ("基金主代码", "161128")),
+        ),
+        ParsedTable(
+            page_number=5,
+            table_index=1,
+            headers=("投资目标", "在控制跟踪误差的基础上追求超越标的指数的增强收益。"),
+            rows=(
+                ("投资范围", "本基金主要投资于标普500指数成份股及备选成份股。"),
+                ("投资策略", "采用指数增强策略，力争获得超越标的指数的收益。"),
+                ("业绩比较基准", "标普500指数收益率"),
+            ),
+        ),
+    )
+
+    result = extract_profile(report)
+
+    assert result.basic_identity.value is not None
+    assert result.basic_identity.value["classified_fund_type"] == "qdii_fund"
+    basis_text = "\n".join(result.basic_identity.value["classification_basis"])
+    assert "同时命中指数基金身份或策略证据" in basis_text
+    assert "同时命中增强关键词" in basis_text
+
+
+def test_extract_profile_preserves_fof_index_evidence() -> None:
+    """验证 FOF 顶层分类会保留指数并发证据。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 FOF 指数证据被分类早返回吞掉时抛出。
+    """
+
+    report = _build_table_profile_report(
+        "020001",
+        ParsedTable(
+            page_number=5,
+            table_index=0,
+            headers=("基金名称", "示例目标日期指数基金中基金（FOF）"),
+            rows=(("基金简称", "示例目标日期指数FOF"), ("基金主代码", "020001")),
+        ),
+        ParsedTable(
+            page_number=5,
+            table_index=1,
+            headers=("投资目标", "紧密跟踪目标日期基金指数表现。"),
+            rows=(
+                ("投资范围", "本基金主要投资于公开募集证券投资基金。"),
+                ("投资策略", "采用抽样复制方法跟踪目标日期基金指数。"),
+                ("业绩比较基准", "目标日期基金指数收益率"),
+            ),
+        ),
+    )
+
+    result = extract_profile(report)
+
+    assert result.basic_identity.value is not None
+    assert result.basic_identity.value["classified_fund_type"] == "fof_fund"
+    basis_text = "\n".join(result.basic_identity.value["classification_basis"])
+    assert "同时命中指数基金身份或策略证据" in basis_text

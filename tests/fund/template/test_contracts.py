@@ -225,6 +225,56 @@ def test_get_chapter_contract_zero_returns_cover_contract() -> None:
     assert "下一步最小验证问题" in chapter.required_output_items
 
 
+def test_current_stage_contract_separates_change_facts_from_risk_and_final_judgment() -> None:
+    """验证第 5 章只承载当前阶段与变化事实边界。
+
+    Args:
+        无。
+
+    Returns:
+        无。
+
+    Raises:
+        AssertionError: 第 5 章契约缺少阶段/变化边界或禁止项。
+    """
+
+    chapter = get_chapter_contract(5)
+
+    assert chapter.title == "当前阶段与关键变化"
+    assert "当前阶段是什么（建仓期/稳定期/膨胀期/萎缩期/转型期）。" in chapter.must_answer
+    assert any("过去一年最关键的 1-3 个变化" in item for item in chapter.must_answer)
+    assert "这些变化是否影响原始投资假设或第 1-4 章判断。" in chapter.must_answer
+    assert "下一步最小验证问题是什么。" in chapter.must_answer
+    assert "不给最终持有/替换结论。" in chapter.must_not_cover
+    assert "不展开风险清单；变化事实只有转译为风险或否决项时才进入第 6 章。" in chapter.must_not_cover
+    assert "不重复基金经理长期画像或成本收益总评。" in chapter.must_not_cover
+
+
+def test_core_risk_contract_translates_changes_into_risk_veto_and_stress_test() -> None:
+    """验证第 6 章承载风险、否决项和压力测试边界。
+
+    Args:
+        无。
+
+    Returns:
+        无。
+
+    Raises:
+        AssertionError: 第 6 章契约缺少风险转译或禁止项。
+    """
+
+    chapter = get_chapter_contract(6)
+
+    assert chapter.title == "核心风险与否决项"
+    assert "核心风险是什么，其中哪些是结构性风险、哪些是阶段性风险。" in chapter.must_answer
+    assert "是否触发一票否决，还是仍可跟踪。" in chapter.must_answer
+    assert "压力测试结论是什么。" in chapter.must_answer
+    assert "哪个信息缺口最可能改变最终判断，下一轮先验证什么。" in chapter.must_answer
+    assert "不复述当前阶段事实，除非明确转译为风险、压力测试或否决项。" in chapter.must_not_cover
+    assert "不给最终持有/替换结论。" in chapter.must_not_cover
+    assert "不预测收益或市场走势。" in chapter.must_not_cover
+
+
 def test_resolve_preferred_lens_fails_without_exact_or_default_fallback() -> None:
     """验证缺少 exact/default lens fallback 时抛出异常。
 

@@ -16,6 +16,7 @@ from fund_agent.fund.template.contracts import load_template_contract_manifest
 TemplateItemRuleMode = Literal["optional", "conditional"]
 TemplateItemRuleMissingBehavior = Literal["render_unavailable", "delete_segment"]
 TemplateItemRuleDecisionStatus = Literal["render", "delete"]
+TemplateItemRuleAuditContext = Literal["identity_missing", "identity_present"]
 
 _TEMPLATE_ID: Final[str] = "fund-analysis-template-v1"
 _SOURCE_PATH: Final[str] = "docs/fund-analysis-template-draft.md"
@@ -42,6 +43,17 @@ _FACET_FUND_TYPE_MAP: Final[dict[str, FundType]] = {
     "主动权益基金（价值风格）": "active_fund",
     "主动权益基金（均衡风格）": "active_fund",
     "主动权益基金（成长风格）": "active_fund",
+    "债券基金": "bond_fund",
+    "纯债基金": "bond_fund",
+    "混合债基金": "bond_fund",
+    "二级债基/混合债基": "bond_fund",
+    "偏债混合基金": "bond_fund",
+    "QDII基金": "qdii_fund",
+    "QDII 基金": "qdii_fund",
+    "境外权益基金": "qdii_fund",
+    "FOF基金": "fof_fund",
+    "FOF 基金": "fof_fund",
+    "基金中基金": "fof_fund",
 }
 
 
