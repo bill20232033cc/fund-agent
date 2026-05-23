@@ -15,6 +15,7 @@ from typing import Literal, Protocol
 
 from fund_agent.config.paths import DEFAULT_GOLDEN_ANSWER_JSON
 from fund_agent.fund.analysis import (
+    AlphaJudgment,
     ChecklistResult,
     ConsistencyCheckResult,
     FinalJudgment,
@@ -270,6 +271,72 @@ class FundAnalysisResult:
         return self.render_result.report_markdown
 
 
+@dataclass(frozen=True, slots=True)
+class FundChecklistResult:
+    """基金检查清单 Service 结果。
+
+    Attributes:
+        structured_data: P1 结构化基金数据包。
+        rabc_attribution: R=A+B-C 单期归因结果。
+        consistency_result: 言行一致性检查结果。
+        investor_experience: 投资者获得感分析结果。
+        risk_check_result: 否决项检查结果。
+        stress_test_result: 压力测试结果。
+        checklist_result: 7 问题检查清单结果。
+        valuation_state_resolution: 估值状态结构化真源。
+        final_judgment_decision: 最终判断选择契约。
+        quality_gate_result: quality gate 结果；未运行时为空。
+        quality_gate_not_run_reason: quality gate 未运行原因。
+    """
+
+    structured_data: StructuredFundDataBundle
+    rabc_attribution: RabcAttribution
+    consistency_result: ConsistencyCheckResult
+    investor_experience: InvestorExperienceResult
+    risk_check_result: RiskCheckResult
+    stress_test_result: StressTestResult
+    checklist_result: ChecklistResult
+    valuation_state_resolution: ValuationStateResolution
+    final_judgment_decision: FinalJudgmentDecision
+    quality_gate_result: QualityGateResult | None = None
+    quality_gate_not_run_reason: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class _AnalysisCoreResult:
+    """Service 内部复用的分析核心结果。
+
+    Attributes:
+        structured_data: P1 结构化基金数据包。
+        rabc_attribution: R=A+B-C 单期归因结果。
+        alpha_judgment: 超额收益性质判断。
+        consistency_result: 言行一致性检查结果。
+        investor_experience: 投资者获得感分析结果。
+        risk_check_result: 否决项检查结果。
+        stress_test_result: 压力测试结果。
+        checklist_result: 7 问题检查清单结果。
+        valuation_state_resolution: 估值状态结构化真源。
+        final_judgment_decision: 最终判断选择契约。
+        current_stage: 当前阶段说明。
+        quality_gate_result: quality gate 结果；未运行时为空。
+        quality_gate_not_run_reason: quality gate 未运行原因。
+    """
+
+    structured_data: StructuredFundDataBundle
+    rabc_attribution: RabcAttribution
+    alpha_judgment: AlphaJudgment
+    consistency_result: ConsistencyCheckResult
+    investor_experience: InvestorExperienceResult
+    risk_check_result: RiskCheckResult
+    stress_test_result: StressTestResult
+    checklist_result: ChecklistResult
+    valuation_state_resolution: ValuationStateResolution
+    final_judgment_decision: FinalJudgmentDecision
+    current_stage: str | None
+    quality_gate_result: QualityGateResult | None
+    quality_gate_not_run_reason: str | None
+
+
 class QualityGateBlockedError(ValueError):
     """quality gate 阻断报告输出的结构化异常。
 
@@ -369,108 +436,20 @@ class FundAnalysisService:
             Exception: 允许底层抽取器或 Capability 模块传播异常。
         """
 
-        resolved_contract = _resolve_analyze_contract(request)
-        _validate_request(request, resolved_contract)
-        _check_pool_membership_before_extraction(request, resolved_contract)
-        structured_data = await self._extractor.extract(
-            request.fund_code,
-            request.report_year,
-            force_refresh=request.force_refresh,
-        )
-        quality_gate_result, quality_gate_not_run_reason = _run_quality_gate_if_enabled(
-            structured_data=structured_data,
-            resolved_contract=resolved_contract,
-        )
-        if resolved_contract.quality_gate_policy == "block":
-            if quality_gate_result is None:
-                raise QualityGateNotRunBlockedError(quality_gate_not_run_reason or "unknown")
-            if quality_gate_result.status == GATE_STATUS_BLOCK:
-                raise QualityGateBlockedError(quality_gate_result)
-        quality_gate_status = _resolve_final_judgment_quality_gate_status(
-            quality_gate_result=quality_gate_result,
-            quality_gate_not_run_reason=quality_gate_not_run_reason,
-        )
-        fund_type = _extract_fund_type(structured_data)
-        rabc_attribution = calculate_r_abc_from_bundle(
-            structured_data,
-            period=str(structured_data.report_year),
-            equity_position=resolved_contract.equity_position,
-        )
-        # MVP 限制：judge_alpha_nature 需要 observations_from_attributions，
-        # 但该函数要求 market_environments 和 source_confidences，
-        # 当前 Service 层无法提供这些外部输入，故传空元组，
-        # alpha judgment 将返回 insufficient_data。
-        alpha_judgment = judge_alpha_nature((), fund_type=fund_type)
-        consistency_result = check_consistency(
-            product_profile=structured_data.product_profile,
-            manager_strategy_text=structured_data.manager_strategy_text,
-            holdings_snapshot=structured_data.holdings_snapshot,
-            turnover_rate=structured_data.turnover_rate,
-            actual_style=resolved_contract.actual_style,
-            actual_equity_position=resolved_contract.actual_equity_position,
-        )
-        investor_experience = analyze_investor_experience(
-            nav_benchmark_performance=structured_data.nav_benchmark_performance,
-            investor_return=structured_data.investor_return,
-            share_change=structured_data.share_change,
-        )
-        risk_check_result = run_risk_checks(
-            basic_identity=structured_data.basic_identity,
-            fee_schedule=structured_data.fee_schedule,
-            consistency_result=consistency_result,
-            fund_type=fund_type,
-            manager_tenure_months=resolved_contract.manager_tenure_months,
-            peer_fee_median=resolved_contract.peer_fee_median,
-            tracking_error=resolve_tracking_error_for_risk(
-                tracking_error_field=structured_data.tracking_error,
-                developer_override=resolved_contract.tracking_error,
-                developer_override_enabled=resolved_contract.mode == "developer_override",
-                fund_type=fund_type,
-            ),
-        )
-        stress_test_result = run_stress_test(
-            fund_type=fund_type,
-            investment_amount=request.investment_amount,
-            max_tolerable_loss_rate=request.max_tolerable_loss_rate,
-            anchors=structured_data.basic_identity.anchors,
-        )
-        valuation_state_resolution = await self._resolve_valuation_state(
-            request=request,
-            structured_data=structured_data,
-            fund_type=fund_type,
-        )
-        checklist_result = run_checklist(
-            rabc_attribution=rabc_attribution,
-            manager_alignment=structured_data.manager_alignment,
-            investor_experience=investor_experience,
-            consistency_result=consistency_result,
-            risk_check_result=risk_check_result,
-            valuation_state=valuation_state_resolution.state,
-            valuation_resolution=valuation_state_resolution,
-            money_horizon=resolved_contract.money_horizon,
-            user_money_horizon_years=request.user_money_horizon_years,
-        )
-        final_judgment_decision = derive_final_judgment(
-            checklist_result=checklist_result,
-            risk_check_result=risk_check_result,
-            stress_test_result=stress_test_result,
-            quality_gate_status=quality_gate_status,
-            quality_gate_not_run_reason=quality_gate_not_run_reason,
-            override_judgment=resolved_contract.final_judgment_override,
-        )
+        core_result = await self._run_analysis_core(request)
         render_result = render_template_report(
             TemplateRenderInput(
-                structured_data=structured_data,
-                rabc_attributions=(rabc_attribution,),
-                alpha_judgment=alpha_judgment,
-                consistency_result=consistency_result,
-                investor_experience=investor_experience,
-                risk_check_result=risk_check_result,
-                stress_test_result=stress_test_result,
-                checklist_result=checklist_result,
-                valuation_state_resolution=valuation_state_resolution,
-                final_judgment_decision=final_judgment_decision,
-                current_stage=resolved_contract.current_stage,
+                structured_data=core_result.structured_data,
+                rabc_attributions=(core_result.rabc_attribution,),
+                alpha_judgment=core_result.alpha_judgment,
+                consistency_result=core_result.consistency_result,
+                investor_experience=core_result.investor_experience,
+                risk_check_result=core_result.risk_check_result,
+                stress_test_result=core_result.stress_test_result,
+                checklist_result=core_result.checklist_result,
+                valuation_state_resolution=core_result.valuation_state_resolution,
+                final_judgment_decision=core_result.final_judgment_decision,
+                current_stage=core_result.current_stage,
             )
         )
         audit_result = run_programmatic_audit(render_result.audit_input)
@@ -478,19 +457,50 @@ class FundAnalysisService:
             issue_text = "；".join(issue.message for issue in audit_result.issues)
             raise ValueError(f"程序审计未通过：{issue_text}")
         return FundAnalysisResult(
-            structured_data=structured_data,
-            rabc_attribution=rabc_attribution,
-            consistency_result=consistency_result,
-            investor_experience=investor_experience,
-            risk_check_result=risk_check_result,
-            stress_test_result=stress_test_result,
-            checklist_result=checklist_result,
-            valuation_state_resolution=valuation_state_resolution,
-            final_judgment_decision=final_judgment_decision,
+            structured_data=core_result.structured_data,
+            rabc_attribution=core_result.rabc_attribution,
+            consistency_result=core_result.consistency_result,
+            investor_experience=core_result.investor_experience,
+            risk_check_result=core_result.risk_check_result,
+            stress_test_result=core_result.stress_test_result,
+            checklist_result=core_result.checklist_result,
+            valuation_state_resolution=core_result.valuation_state_resolution,
+            final_judgment_decision=core_result.final_judgment_decision,
             render_result=render_result,
             audit_result=audit_result,
-            quality_gate_result=quality_gate_result,
-            quality_gate_not_run_reason=quality_gate_not_run_reason,
+            quality_gate_result=core_result.quality_gate_result,
+            quality_gate_not_run_reason=core_result.quality_gate_not_run_reason,
+        )
+
+    async def checklist(self, request: FundAnalysisRequest) -> FundChecklistResult:
+        """执行单只基金买入前检查清单用例。
+
+        Args:
+            request: 显式分析参数，不使用 `extra_payload`。
+
+        Returns:
+            检查清单结果、估值状态和最终判断，不渲染完整 8 章报告。
+
+        Raises:
+            ValueError: 当基金代码、年份、基金类型或请求契约非法时抛出。
+            QualityGateBlockedError: 当 quality gate 在 block 策略下阻断报告时抛出。
+            QualityGateNotRunBlockedError: 当 quality gate 在 block 策略下未运行时抛出。
+            Exception: 允许底层抽取器或 Capability 模块传播异常。
+        """
+
+        core_result = await self._run_analysis_core(request)
+        return FundChecklistResult(
+            structured_data=core_result.structured_data,
+            rabc_attribution=core_result.rabc_attribution,
+            consistency_result=core_result.consistency_result,
+            investor_experience=core_result.investor_experience,
+            risk_check_result=core_result.risk_check_result,
+            stress_test_result=core_result.stress_test_result,
+            checklist_result=core_result.checklist_result,
+            valuation_state_resolution=core_result.valuation_state_resolution,
+            final_judgment_decision=core_result.final_judgment_decision,
+            quality_gate_result=core_result.quality_gate_result,
+            quality_gate_not_run_reason=core_result.quality_gate_not_run_reason,
         )
 
     async def _resolve_valuation_state(
@@ -561,6 +571,126 @@ class FundAnalysisService:
                 f"result={result.index_code}"
             )
         return build_thermometer_valuation_resolution(result)
+
+    async def _run_analysis_core(self, request: FundAnalysisRequest) -> _AnalysisCoreResult:
+        """执行 `analyze` 和 `checklist` 共享的确定性分析核心。
+
+        Args:
+            request: 基金分析请求。
+
+        Returns:
+            共享分析核心结果。
+
+        Raises:
+            ValueError: 当请求契约或结构化数据非法时抛出。
+            QualityGateBlockedError: 当 quality gate 在 block 策略下阻断输出时抛出。
+            QualityGateNotRunBlockedError: 当 quality gate 在 block 策略下未运行时抛出。
+            Exception: 允许底层抽取器或 Capability 模块传播异常。
+        """
+
+        resolved_contract = _resolve_analyze_contract(request)
+        _validate_request(request, resolved_contract)
+        _check_pool_membership_before_extraction(request, resolved_contract)
+        structured_data = await self._extractor.extract(
+            request.fund_code,
+            request.report_year,
+            force_refresh=request.force_refresh,
+        )
+        quality_gate_result, quality_gate_not_run_reason = _run_quality_gate_if_enabled(
+            structured_data=structured_data,
+            resolved_contract=resolved_contract,
+        )
+        if resolved_contract.quality_gate_policy == "block":
+            if quality_gate_result is None:
+                raise QualityGateNotRunBlockedError(quality_gate_not_run_reason or "unknown")
+            if quality_gate_result.status == GATE_STATUS_BLOCK:
+                raise QualityGateBlockedError(quality_gate_result)
+        quality_gate_status = _resolve_final_judgment_quality_gate_status(
+            quality_gate_result=quality_gate_result,
+            quality_gate_not_run_reason=quality_gate_not_run_reason,
+        )
+        fund_type = _extract_fund_type(structured_data)
+        rabc_attribution = calculate_r_abc_from_bundle(
+            structured_data,
+            period=str(structured_data.report_year),
+            equity_position=resolved_contract.equity_position,
+        )
+        # MVP 限制：judge_alpha_nature 需要 observations_from_attributions，
+        # 但该函数要求 market_environments 和 source_confidences，
+        # 当前 Service 层无法提供这些外部输入，故传空元组。
+        alpha_judgment = judge_alpha_nature((), fund_type=fund_type)
+        consistency_result = check_consistency(
+            product_profile=structured_data.product_profile,
+            manager_strategy_text=structured_data.manager_strategy_text,
+            holdings_snapshot=structured_data.holdings_snapshot,
+            turnover_rate=structured_data.turnover_rate,
+            actual_style=resolved_contract.actual_style,
+            actual_equity_position=resolved_contract.actual_equity_position,
+        )
+        investor_experience = analyze_investor_experience(
+            nav_benchmark_performance=structured_data.nav_benchmark_performance,
+            investor_return=structured_data.investor_return,
+            share_change=structured_data.share_change,
+        )
+        risk_check_result = run_risk_checks(
+            basic_identity=structured_data.basic_identity,
+            fee_schedule=structured_data.fee_schedule,
+            consistency_result=consistency_result,
+            fund_type=fund_type,
+            manager_tenure_months=resolved_contract.manager_tenure_months,
+            peer_fee_median=resolved_contract.peer_fee_median,
+            tracking_error=resolve_tracking_error_for_risk(
+                tracking_error_field=structured_data.tracking_error,
+                developer_override=resolved_contract.tracking_error,
+                developer_override_enabled=resolved_contract.mode == "developer_override",
+                fund_type=fund_type,
+            ),
+        )
+        stress_test_result = run_stress_test(
+            fund_type=fund_type,
+            investment_amount=request.investment_amount,
+            max_tolerable_loss_rate=request.max_tolerable_loss_rate,
+            anchors=structured_data.basic_identity.anchors,
+        )
+        valuation_state_resolution = await self._resolve_valuation_state(
+            request=request,
+            structured_data=structured_data,
+            fund_type=fund_type,
+        )
+        checklist_result = run_checklist(
+            rabc_attribution=rabc_attribution,
+            manager_alignment=structured_data.manager_alignment,
+            investor_experience=investor_experience,
+            consistency_result=consistency_result,
+            risk_check_result=risk_check_result,
+            valuation_state=valuation_state_resolution.state,
+            valuation_resolution=valuation_state_resolution,
+            money_horizon=resolved_contract.money_horizon,
+            user_money_horizon_years=request.user_money_horizon_years,
+        )
+        final_judgment_decision = derive_final_judgment(
+            checklist_result=checklist_result,
+            risk_check_result=risk_check_result,
+            stress_test_result=stress_test_result,
+            quality_gate_status=quality_gate_status,
+            quality_gate_not_run_reason=quality_gate_not_run_reason,
+            override_judgment=resolved_contract.final_judgment_override,
+        )
+        return _AnalysisCoreResult(
+            structured_data=structured_data,
+            rabc_attribution=rabc_attribution,
+            alpha_judgment=alpha_judgment,
+            consistency_result=consistency_result,
+            investor_experience=investor_experience,
+            risk_check_result=risk_check_result,
+            stress_test_result=stress_test_result,
+            checklist_result=checklist_result,
+            valuation_state_resolution=valuation_state_resolution,
+            final_judgment_decision=final_judgment_decision,
+            current_stage=resolved_contract.current_stage,
+            quality_gate_result=quality_gate_result,
+            quality_gate_not_run_reason=quality_gate_not_run_reason,
+        )
 
 
 def _resolve_analyze_contract(request: FundAnalysisRequest) -> ResolvedAnalyzeContract:

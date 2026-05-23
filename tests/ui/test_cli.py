@@ -54,6 +54,116 @@ class _FakeService:
         return _FakeResult(report_markdown="# 0. 投资要点概览\n\n# 7. 是否值得持有——最终判断\n")
 
 
+@dataclass(frozen=True, slots=True)
+class _FakeChecklistItem:
+    """CLI checklist 测试用单项结果。"""
+
+    code: str
+    signal: str
+    status: str
+    question: str
+    reason: str
+    anchors: tuple[object, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class _FakeChecklistResult:
+    """CLI checklist 测试用检查清单结果。"""
+
+    items: tuple[_FakeChecklistItem, ...]
+    overall_signal: str
+    overall_status: str
+    next_minimum_verification: str
+
+
+@dataclass(frozen=True, slots=True)
+class _FakeValuationResolution:
+    """CLI checklist 测试用估值解析结果。"""
+
+    state: str
+    source: str
+    index_code: str | None = None
+    temperature: Decimal | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class _FakeFinalJudgmentDecision:
+    """CLI checklist 测试用最终判断结果。"""
+
+    selected_judgment: str
+    derived_judgment: str
+    source: str
+
+
+@dataclass(frozen=True, slots=True)
+class _FakeStructuredData:
+    """CLI checklist 测试用结构化数据摘要。"""
+
+    fund_code: str
+    report_year: int
+
+
+@dataclass(frozen=True, slots=True)
+class _FakeChecklistServiceResult:
+    """CLI checklist 测试用 Service 结果。"""
+
+    structured_data: _FakeStructuredData
+    checklist_result: _FakeChecklistResult
+    valuation_state_resolution: _FakeValuationResolution
+    final_judgment_decision: _FakeFinalJudgmentDecision
+    quality_gate_result: object | None = None
+    quality_gate_not_run_reason: str | None = None
+
+
+class _FakeChecklistService:
+    """CLI 测试用独立 checklist Service。"""
+
+    last_request = None
+
+    async def checklist(self, request):  # type: ignore[no-untyped-def]
+        """记录请求并返回固定检查清单。
+
+        Args:
+            request: CLI 构造的 Service 请求。
+
+        Returns:
+            fake checklist Service 返回值。
+
+        Raises:
+            无显式抛出。
+        """
+
+        type(self).last_request = request
+        item = _FakeChecklistItem(
+            code="valuation",
+            signal="green",
+            status="pass",
+            question="当前估值处于什么位置？",
+            reason="当前估值偏低。",
+            anchors=(object(),),
+        )
+        return _FakeChecklistServiceResult(
+            structured_data=_FakeStructuredData(fund_code=request.fund_code, report_year=request.report_year),
+            checklist_result=_FakeChecklistResult(
+                items=(item,),
+                overall_signal="green",
+                overall_status="pass",
+                next_minimum_verification="进入程序审计。",
+            ),
+            valuation_state_resolution=_FakeValuationResolution(
+                state="low",
+                source="explicit_user_input",
+                index_code="000300",
+                temperature=Decimal("12.3"),
+            ),
+            final_judgment_decision=_FakeFinalJudgmentDecision(
+                selected_judgment="worth_holding",
+                derived_judgment="worth_holding",
+                source="derived",
+            ),
+        )
+
+
 class _FakeWarnService:
     """CLI 测试用带 quality gate warning 的 Service。"""
 
@@ -662,7 +772,7 @@ def test_analyze_cli_calls_service_and_prints_report(monkeypatch) -> None:  # ty
     """
 
     _FakeService.last_request = None
-    monkeypatch.setattr(cli, "FundAnalysisService", _FakeService)
+    monkeypatch.setattr(cli, "FundAnalysisUseCase", _FakeService)
     runner = CliRunner()
 
     result = runner.invoke(
@@ -736,6 +846,24 @@ def test_analyze_cli_calls_service_and_prints_report(monkeypatch) -> None:  # ty
     )
 
 
+def test_cli_module_does_not_import_services_directly() -> None:
+    """验证 UI 模块不再直接导入 Service 层。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 CLI 源码直接导入 `fund_agent.services` 时抛出。
+    """
+
+    cli_source = Path(cli.__file__).read_text(encoding="utf-8")
+
+    assert "fund_agent.services" not in cli_source
+
+
 def test_analyze_cli_prints_quality_gate_summary_to_stderr(monkeypatch) -> None:  # type: ignore[no-untyped-def]
     """验证 analyze 成功时 quality gate 摘要写入 stderr。
 
@@ -749,7 +877,7 @@ def test_analyze_cli_prints_quality_gate_summary_to_stderr(monkeypatch) -> None:
         AssertionError: 当 stdout 被 gate 摘要污染或 stderr 缺少摘要时抛出。
     """
 
-    monkeypatch.setattr(cli, "FundAnalysisService", _FakeWarnService)
+    monkeypatch.setattr(cli, "FundAnalysisUseCase", _FakeWarnService)
     runner = CliRunner()
 
     result = runner.invoke(
@@ -778,7 +906,7 @@ def test_analyze_cli_prints_quality_gate_info_for_missing_golden_coverage(
         AssertionError: 当 info 行缺失或 exit code 被改变时抛出。
     """
 
-    monkeypatch.setattr(cli, "FundAnalysisService", _FakeInfoService)
+    monkeypatch.setattr(cli, "FundAnalysisUseCase", _FakeInfoService)
     runner = CliRunner()
 
     result = runner.invoke(cli.app, ["analyze", "000216"])
@@ -806,7 +934,7 @@ def test_analyze_cli_default_product_request(monkeypatch) -> None:  # type: igno
     """
 
     _FakeService.last_request = None
-    monkeypatch.setattr(cli, "FundAnalysisService", _FakeService)
+    monkeypatch.setattr(cli, "FundAnalysisUseCase", _FakeService)
     runner = CliRunner()
 
     result = runner.invoke(cli.app, ["analyze", "110011"])
@@ -832,7 +960,7 @@ def test_analyze_cli_rejects_dev_options_without_dev_override(monkeypatch) -> No
     """
 
     _FakeService.last_request = None
-    monkeypatch.setattr(cli, "FundAnalysisService", _FakeService)
+    monkeypatch.setattr(cli, "FundAnalysisUseCase", _FakeService)
     runner = CliRunner()
 
     result = runner.invoke(cli.app, ["analyze", "110011", "--equity-position", "80%"])
@@ -857,7 +985,7 @@ def test_analyze_cli_rejects_quality_gate_policy_without_dev_override(monkeypatc
     """
 
     _FakeService.last_request = None
-    monkeypatch.setattr(cli, "FundAnalysisService", _FakeService)
+    monkeypatch.setattr(cli, "FundAnalysisUseCase", _FakeService)
     runner = CliRunner()
 
     result = runner.invoke(cli.app, ["analyze", "110011", "--quality-gate-policy", "off"])
@@ -881,7 +1009,7 @@ def test_analyze_cli_structured_quality_gate_block(monkeypatch) -> None:  # type
         AssertionError: 当阻断输出不符合契约时抛出。
     """
 
-    monkeypatch.setattr(cli, "FundAnalysisService", _FakeBlockedAnalysisService)
+    monkeypatch.setattr(cli, "FundAnalysisUseCase", _FakeBlockedAnalysisService)
     runner = CliRunner()
 
     result = runner.invoke(cli.app, ["analyze", "110011"])
@@ -909,7 +1037,7 @@ def test_analyze_cli_structured_quality_gate_not_run_block(
         AssertionError: 当 not-run 阻断输出不符合契约时抛出。
     """
 
-    monkeypatch.setattr(cli, "FundAnalysisService", _FakeNotRunBlockedAnalysisService)
+    monkeypatch.setattr(cli, "FundAnalysisUseCase", _FakeNotRunBlockedAnalysisService)
     runner = CliRunner()
 
     result = runner.invoke(cli.app, ["analyze", "110011"])
@@ -934,7 +1062,7 @@ def test_analyze_cli_exits_nonzero_with_clear_message(monkeypatch) -> None:  # t
         AssertionError: 当 CLI 失败路径不符合契约时抛出。
     """
 
-    monkeypatch.setattr(cli, "FundAnalysisService", _FailingService)
+    monkeypatch.setattr(cli, "FundAnalysisUseCase", _FailingService)
     runner = CliRunner()
 
     result = runner.invoke(cli.app, ["analyze", "110011"])
@@ -957,7 +1085,7 @@ def test_analyze_cli_explicit_unavailable_is_forwarded(monkeypatch) -> None:  # 
     """
 
     _FakeService.last_request = None
-    monkeypatch.setattr(cli, "FundAnalysisService", _FakeService)
+    monkeypatch.setattr(cli, "FundAnalysisUseCase", _FakeService)
     runner = CliRunner()
 
     result = runner.invoke(cli.app, ["analyze", "110011", "--valuation-state", "unavailable"])
@@ -1036,7 +1164,7 @@ def test_analyze_cli_invalid_valuation_exits_2(monkeypatch) -> None:  # type: ig
     """
 
     _FakeService.last_request = None
-    monkeypatch.setattr(cli, "FundAnalysisService", _FakeService)
+    monkeypatch.setattr(cli, "FundAnalysisUseCase", _FakeService)
     runner = CliRunner()
 
     result = runner.invoke(cli.app, ["analyze", "110011", "--valuation-state", "cold"])
@@ -1046,25 +1174,44 @@ def test_analyze_cli_invalid_valuation_exits_2(monkeypatch) -> None:  # type: ig
     assert _FakeService.last_request is None
 
 
-def test_checklist_cli_is_not_misleading_placeholder() -> None:
-    """验证 checklist 命令不会输出误导性成功文本。
+def test_checklist_cli_calls_service_and_prints_summary(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    """验证 checklist 命令接入 Service 并输出真实摘要。
 
     Args:
-        无。
+        monkeypatch: pytest monkeypatch fixture。
 
     Returns:
         无返回值。
 
     Raises:
-        AssertionError: 当 placeholder 命令伪装成功时抛出。
+        AssertionError: CLI 未调用 Service 或摘要缺少核心字段时抛出。
     """
 
+    _FakeChecklistService.last_request = None
+    monkeypatch.setattr(cli, "FundAnalysisUseCase", _FakeChecklistService)
     runner = CliRunner()
 
-    result = runner.invoke(cli.app, ["checklist", "110011"])
+    result = runner.invoke(
+        cli.app,
+        [
+            "checklist",
+            "110011",
+            "--valuation-state",
+            "low",
+            "--user-money-horizon-years",
+            "4",
+        ],
+    )
 
-    assert result.exit_code == 2
-    assert "尚未接入 Service" in result.output
+    assert result.exit_code == 0
+    assert _FakeChecklistService.last_request is not None
+    assert _FakeChecklistService.last_request.fund_code == "110011"
+    assert _FakeChecklistService.last_request.valuation_state == "low"
+    assert _FakeChecklistService.last_request.user_money_horizon_years == "4"
+    assert "overall_signal: green" in result.output
+    assert "valuation_state: low" in result.output
+    assert "final_judgment: worth_holding" in result.output
+    assert "- valuation: green/pass" in result.output
 
 
 def test_thermometer_cli_prints_plain_summary(monkeypatch, tmp_path) -> None:  # type: ignore[no-untyped-def]
@@ -1083,7 +1230,7 @@ def test_thermometer_cli_prints_plain_summary(monkeypatch, tmp_path) -> None:  #
 
     _FakeThermometerService.last_request = None
     _FakeThermometerService.snapshot = _available_all_a_thermometer_reading()
-    monkeypatch.setattr(cli, "ThermometerService", _FakeThermometerService)
+    monkeypatch.setattr(cli, "ThermometerUseCase", _FakeThermometerService)
     runner = CliRunner()
 
     result = runner.invoke(
@@ -1123,7 +1270,7 @@ def test_thermometer_cli_no_arg_json_delegates_default_to_service(monkeypatch) -
 
     _FakeThermometerService.last_request = None
     _FakeThermometerService.snapshot = _available_all_a_thermometer_reading()
-    monkeypatch.setattr(cli, "ThermometerService", _FakeThermometerService)
+    monkeypatch.setattr(cli, "ThermometerUseCase", _FakeThermometerService)
     runner = CliRunner()
 
     result = runner.invoke(cli.app, ["thermometer", "--json"])
@@ -1157,7 +1304,7 @@ def test_thermometer_cli_prints_json_for_unavailable_all_a_reading(monkeypatch) 
 
     _FakeThermometerService.last_request = None
     _FakeThermometerService.snapshot = _unavailable_all_a_thermometer_reading()
-    monkeypatch.setattr(cli, "ThermometerService", _FakeThermometerService)
+    monkeypatch.setattr(cli, "ThermometerUseCase", _FakeThermometerService)
     runner = CliRunner()
 
     result = runner.invoke(cli.app, ["thermometer", "--json"])
@@ -1187,7 +1334,7 @@ def test_thermometer_cli_prints_all_a_reading_json(monkeypatch) -> None:  # type
 
     _FakeThermometerService.last_request = None
     _FakeThermometerService.snapshot = _available_all_a_thermometer_reading()
-    monkeypatch.setattr(cli, "ThermometerService", _FakeThermometerService)
+    monkeypatch.setattr(cli, "ThermometerUseCase", _FakeThermometerService)
     runner = CliRunner()
 
     result = runner.invoke(cli.app, ["thermometer", "--index", "wind_all_a", "--json"])
@@ -1218,7 +1365,7 @@ def test_thermometer_cli_prints_index_reading_json(monkeypatch, tmp_path) -> Non
 
     _FakeThermometerService.last_request = None
     _FakeThermometerService.snapshot = _available_thermometer_reading()
-    monkeypatch.setattr(cli, "ThermometerService", _FakeThermometerService)
+    monkeypatch.setattr(cli, "ThermometerUseCase", _FakeThermometerService)
     runner = CliRunner()
 
     result = runner.invoke(
@@ -1253,7 +1400,7 @@ def test_thermometer_cli_prints_index_reading_plain(monkeypatch) -> None:  # typ
 
     _FakeThermometerService.last_request = None
     _FakeThermometerService.snapshot = _available_thermometer_reading()
-    monkeypatch.setattr(cli, "ThermometerService", _FakeThermometerService)
+    monkeypatch.setattr(cli, "ThermometerUseCase", _FakeThermometerService)
     runner = CliRunner()
 
     result = runner.invoke(cli.app, ["thermometer", "--index", "000300"])
@@ -1279,7 +1426,7 @@ def test_thermometer_cli_prints_batch_reading_json(monkeypatch) -> None:  # type
 
     _FakeThermometerService.last_request = None
     _FakeThermometerService.snapshot = _available_thermometer_batch_result()
-    monkeypatch.setattr(cli, "ThermometerService", _FakeThermometerService)
+    monkeypatch.setattr(cli, "ThermometerUseCase", _FakeThermometerService)
     runner = CliRunner()
 
     result = runner.invoke(cli.app, ["thermometer", "--index", "000300,000905", "--json"])
@@ -1312,7 +1459,7 @@ def test_thermometer_cli_prints_all_a_mixed_batch_reading_json(monkeypatch) -> N
 
     _FakeThermometerService.last_request = None
     _FakeThermometerService.snapshot = _available_all_a_mixed_batch_result()
-    monkeypatch.setattr(cli, "ThermometerService", _FakeThermometerService)
+    monkeypatch.setattr(cli, "ThermometerUseCase", _FakeThermometerService)
     runner = CliRunner()
 
     result = runner.invoke(cli.app, ["thermometer", "--index", "wind_all_a,000300", "--json"])
@@ -1344,7 +1491,7 @@ def test_thermometer_cli_prints_batch_reading_plain(monkeypatch) -> None:  # typ
 
     _FakeThermometerService.last_request = None
     _FakeThermometerService.snapshot = _available_thermometer_batch_result()
-    monkeypatch.setattr(cli, "ThermometerService", _FakeThermometerService)
+    monkeypatch.setattr(cli, "ThermometerUseCase", _FakeThermometerService)
     runner = CliRunner()
 
     result = runner.invoke(cli.app, ["thermometer", "--index", "000300,000905"])
@@ -1372,7 +1519,7 @@ def test_thermometer_cli_partial_unavailable_batch_json_exits_zero(monkeypatch) 
 
     _FakeThermometerService.last_request = None
     _FakeThermometerService.snapshot = _partial_unavailable_thermometer_batch_result()
-    monkeypatch.setattr(cli, "ThermometerService", _FakeThermometerService)
+    monkeypatch.setattr(cli, "ThermometerUseCase", _FakeThermometerService)
     runner = CliRunner()
 
     result = runner.invoke(cli.app, ["thermometer", "--index", "000300,999999", "--json"])
@@ -1480,7 +1627,7 @@ def test_thermometer_cli_exits_nonzero_on_service_error(monkeypatch) -> None:  #
         AssertionError: 当失败路径不符合契约时抛出。
     """
 
-    monkeypatch.setattr(cli, "ThermometerService", _FailingThermometerService)
+    monkeypatch.setattr(cli, "ThermometerUseCase", _FailingThermometerService)
     runner = CliRunner()
 
     result = runner.invoke(cli.app, ["thermometer"])
@@ -1504,7 +1651,7 @@ def test_extraction_snapshot_cli_is_thin_capability_entry(monkeypatch, tmp_path)
     """
 
     _FakeExtractionSnapshotService.last_request = None
-    monkeypatch.setattr(cli, "ExtractionSnapshotService", _FakeExtractionSnapshotService)
+    monkeypatch.setattr(cli, "ExtractionSnapshotUseCase", _FakeExtractionSnapshotService)
     runner = CliRunner()
 
     result = runner.invoke(
@@ -1557,7 +1704,7 @@ def test_extraction_score_cli_is_thin_service_entry(monkeypatch, tmp_path) -> No
     """
 
     _FakeExtractionScoreService.last_request = None
-    monkeypatch.setattr(cli, "ExtractionScoreService", _FakeExtractionScoreService)
+    monkeypatch.setattr(cli, "ExtractionScoreUseCase", _FakeExtractionScoreService)
     runner = CliRunner()
 
     result = runner.invoke(
@@ -1608,7 +1755,7 @@ def test_golden_prefill_cli_is_thin_service_entry(monkeypatch, tmp_path) -> None
     """
 
     _FakeGoldenPrefillService.last_request = None
-    monkeypatch.setattr(cli, "GoldenPrefillService", _FakeGoldenPrefillService)
+    monkeypatch.setattr(cli, "GoldenPrefillUseCase", _FakeGoldenPrefillService)
     runner = CliRunner()
     output_path = tmp_path / "prefill.md"
 
@@ -1652,7 +1799,7 @@ def test_golden_build_cli_is_thin_service_entry(monkeypatch, tmp_path) -> None: 
     """
 
     _FakeGoldenAnswerService.last_request = None
-    monkeypatch.setattr(cli, "GoldenAnswerService", _FakeGoldenAnswerService)
+    monkeypatch.setattr(cli, "GoldenAnswerUseCase", _FakeGoldenAnswerService)
     runner = CliRunner()
     input_path = tmp_path / "reviewed.md"
     output_path = tmp_path / "golden-answer.json"
@@ -1690,7 +1837,7 @@ def test_golden_build_cli_defaults_to_reviewed_markdown(monkeypatch) -> None:  #
     """
 
     _FakeGoldenAnswerService.last_request = None
-    monkeypatch.setattr(cli, "GoldenAnswerService", _FakeGoldenAnswerService)
+    monkeypatch.setattr(cli, "GoldenAnswerUseCase", _FakeGoldenAnswerService)
     runner = CliRunner()
 
     result = runner.invoke(cli.app, ["golden-build"])
@@ -1720,7 +1867,7 @@ def test_quality_gate_cli_is_thin_service_entry(monkeypatch, tmp_path) -> None: 
     """
 
     _FakeQualityGateService.last_request = None
-    monkeypatch.setattr(cli, "QualityGateService", _FakeQualityGateService)
+    monkeypatch.setattr(cli, "QualityGateUseCase", _FakeQualityGateService)
     runner = CliRunner()
     score_path = tmp_path / "score.json"
     output_dir = tmp_path / "gate"

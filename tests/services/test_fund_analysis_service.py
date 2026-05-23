@@ -455,6 +455,37 @@ async def test_fund_analysis_service_builds_render_and_audit_path_with_fake_extr
 
 
 @pytest.mark.asyncio
+async def test_fund_analysis_service_checklist_returns_shared_core_without_rendering() -> None:
+    """验证独立 checklist 用例复用分析核心并返回最终判断。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: checklist 未复用抽取或未返回 7 问结果时抛出。
+    """
+
+    extractor = _FakeExtractor(_bundle())
+    service = FundAnalysisService(extractor=extractor)
+
+    result = await service.checklist(_developer_request(force_refresh=True))
+
+    assert extractor.calls == [("110011", 2024, True)]
+    assert len(result.checklist_result.items) == 7
+    assert result.valuation_state_resolution.state == "low"
+    assert result.final_judgment_decision.derived_judgment in {
+        "worth_holding",
+        "needs_attention",
+        "suggest_replace",
+    }
+    assert result.quality_gate_result is None
+    assert result.quality_gate_not_run_reason == "policy=off"
+
+
+@pytest.mark.asyncio
 async def test_fund_analysis_service_explicit_valuation_suppresses_thermometer() -> None:
     """验证显式估值输入不会调用温度计。
 

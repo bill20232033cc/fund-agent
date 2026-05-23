@@ -29,6 +29,7 @@ from fund_agent.services.thermometer_service import (
 )
 from fund_agent.services.fund_analysis_service import (
     AnalyzeMode,
+    FundChecklistResult,
     FundAnalysisDeveloperOverrides,
     FundAnalysisRequest,
     FundAnalysisResult,
@@ -57,6 +58,7 @@ __all__ = [
     "ThermometerService",
     "AnalyzeMode",
     "FinalJudgment",
+    "FundChecklistResult",
     "FundAnalysisDeveloperOverrides",
     "FundAnalysisRequest",
     "FundAnalysisResult",

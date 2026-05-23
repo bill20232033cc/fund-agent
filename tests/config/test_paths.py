@@ -73,6 +73,34 @@ def test_paths_module_import_is_isolated_from_ui_and_service() -> None:
     assert "fund_agent.services.fund_analysis_service" not in sys.modules
 
 
+def test_ui_cli_imports_application_not_services() -> None:
+    """验证 UI CLI 只依赖 Application 层入口。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 UI 直接导入 Service 或 Capability 时抛出。
+    """
+
+    source_path = REPO_ROOT / "fund_agent/ui/cli.py"
+    module = ast.parse(source_path.read_text(encoding="utf-8"))
+    forbidden_imports: list[str] = []
+    for node in ast.walk(module):
+        if isinstance(node, ast.ImportFrom) and node.module is not None:
+            if node.module.startswith(("fund_agent.services", "fund_agent.fund")):
+                forbidden_imports.append(f"{node.module}:{node.lineno}")
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                if alias.name.startswith(("fund_agent.services", "fund_agent.fund")):
+                    forbidden_imports.append(f"{alias.name}:{node.lineno}")
+
+    assert forbidden_imports == []
+
+
 def test_existing_path_aliases_point_to_config_defaults() -> None:
     """验证迁移前公开默认路径别名仍指向同一默认值。
 

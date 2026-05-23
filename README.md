@@ -68,9 +68,12 @@ fund-analysis thermometer
 
 # 查询自建全 A / 宽基指数温度计
 fund-analysis thermometer --index wind_all_a,000300,000905 --json
+
+# 生成独立买入前检查清单
+fund-analysis checklist 004393 --report-year 2024
 ```
 
-当前 `fund-analysis checklist FUND_CODE` 是占位命令，尚未接入 Service。请使用 `fund-analysis analyze FUND_CODE` 生成包含检查清单的完整报告。
+`fund-analysis checklist FUND_CODE` 已接入当前分析主链路，会输出 7 问题检查清单摘要、估值状态和最终判断，不渲染完整 8 章报告。
 
 ## 常用参数
 
@@ -110,6 +113,7 @@ fund-analysis thermometer --index wind_all_a,000300,000905 --json
 已实现：
 
 - `fund-analysis analyze FUND_CODE` CLI 分析入口
+- `fund-analysis checklist FUND_CODE` 独立买入前检查清单入口
 - 统一年报仓库入口：`FundDocumentRepository.load_annual_report(...)`
 - P1 结构化抽取：基金类型、产品画像、表现、经理/持有人、持仓和份额变化
 - P2 分析：R=A+B-C、超额性质、言行一致性、投资者获得感、风险检查、压力测试、7 问题检查清单
@@ -129,7 +133,6 @@ fund-analysis thermometer --index wind_all_a,000300,000905 --json
 
 尚未接入：
 
-- 独立 `fund-analysis checklist` Service 命令
 - 真实 PDF/network 路径的普通 pytest gate；当前保留为显式 `--run` smoke
 
 明确非目标：
@@ -284,7 +287,7 @@ fund-analysis quality-gate \
 | [docs/fund-analysis-template-draft.md](docs/fund-analysis-template-draft.md) | 8 章分析模板 |
 | [docs/sample-funds.md](docs/sample-funds.md) | 样本基金基线 |
 | [docs/code_20260519.csv](docs/code_20260519.csv) | 有知有行 App 精选基金池手动清单 |
-| [fund_agent/README.md](fund_agent/README.md) | 开发手册总览，说明当前 UI / Service / Fund Capability 边界 |
+| [fund_agent/README.md](fund_agent/README.md) | 开发手册总览，说明当前 UI / Application / Service / Fund Capability 边界 |
 | [fund_agent/fund/README.md](fund_agent/fund/README.md) | Fund capability 说明 |
 | [fund_agent/config/README.md](fund_agent/config/README.md) | 配置命名空间当前状态 |
 | [tests/README.md](tests/README.md) | 测试说明 |
