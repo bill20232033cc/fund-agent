@@ -1,7 +1,7 @@
 """golden answer JSON 构建 Service 编排层。
 
-本模块属于 Service/Application 边界，负责把 UI 输入收敛为显式请求对象，
-并委托 Capability 层 `fund_agent.fund.golden_answer` 完成 Markdown 转 JSON。
+本模块属于 Service 层，负责把 UI 输入收敛为显式请求对象，
+并委托 Agent 层基金能力 `fund_agent.fund.golden_answer` 完成 Markdown 转 JSON。
 """
 
 from __future__ import annotations
@@ -35,11 +35,11 @@ class GoldenAnswerService:
             request: 显式构建参数，不使用 `extra_payload`。
 
         Returns:
-            Capability 返回的构建结果。
+            Agent 层基金能力返回的构建结果。
 
         Raises:
             ValueError: 请求参数非法时抛出。
-            GoldenAnswerValidationError: Markdown 校验失败时由 Capability 抛出。
+            GoldenAnswerValidationError: Markdown 校验失败时由 Agent 层基金能力抛出。
             OSError: 输入读取或输出写入失败时抛出。
         """
 

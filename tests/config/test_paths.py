@@ -73,8 +73,8 @@ def test_paths_module_import_is_isolated_from_ui_and_service() -> None:
     assert "fund_agent.services.fund_analysis_service" not in sys.modules
 
 
-def test_ui_cli_imports_application_not_services() -> None:
-    """验证 UI CLI 只依赖 Application 层入口。
+def test_ui_cli_imports_service_but_not_agent_internals() -> None:
+    """验证 UI CLI 只依赖 Service 层入口。
 
     Args:
         无。
@@ -83,21 +83,27 @@ def test_ui_cli_imports_application_not_services() -> None:
         无返回值。
 
     Raises:
-        AssertionError: 当 UI 直接导入 Service 或 Capability 时抛出。
+        AssertionError: 当 UI 跳过 Service 直接导入 Agent 层基金能力时抛出。
     """
 
     source_path = REPO_ROOT / "fund_agent/ui/cli.py"
     module = ast.parse(source_path.read_text(encoding="utf-8"))
+    service_imports: list[str] = []
     forbidden_imports: list[str] = []
     for node in ast.walk(module):
         if isinstance(node, ast.ImportFrom) and node.module is not None:
-            if node.module.startswith(("fund_agent.services", "fund_agent.fund")):
+            if node.module.startswith("fund_agent.services"):
+                service_imports.append(f"{node.module}:{node.lineno}")
+            if node.module.startswith("fund_agent.fund"):
                 forbidden_imports.append(f"{node.module}:{node.lineno}")
         if isinstance(node, ast.Import):
             for alias in node.names:
-                if alias.name.startswith(("fund_agent.services", "fund_agent.fund")):
+                if alias.name.startswith("fund_agent.services"):
+                    service_imports.append(f"{alias.name}:{node.lineno}")
+                if alias.name.startswith("fund_agent.fund"):
                     forbidden_imports.append(f"{alias.name}:{node.lineno}")
 
+    assert service_imports
     assert forbidden_imports == []
 
 
@@ -111,7 +117,7 @@ def test_existing_path_aliases_point_to_config_defaults() -> None:
         无返回值。
 
     Raises:
-        AssertionError: 当 UI、Service 或 Capability 默认路径别名漂移时抛出。
+        AssertionError: 当 UI、Service 或 Agent 层基金能力默认路径别名漂移时抛出。
     """
 
     from fund_agent.fund import extraction_snapshot, golden_answer, golden_prefill

@@ -1,8 +1,8 @@
 """基金分析 Service 编排层。
 
-本模块属于 Service 层，负责把 P1 结构化抽取、P2 Capability 分析、
+本模块属于 Service 层，负责把 P1 结构化抽取、P2 Agent 层基金分析、
 模板渲染和程序审计串成一个用例。它不直接读取年报文件、PDF 或缓存，
-所有基金文档访问都通过 `FundDataExtractor` 进入 Capability 边界。
+所有基金文档访问都通过 `FundDataExtractor` 进入 Agent 层基金能力边界。
 """
 
 from __future__ import annotations
@@ -395,7 +395,7 @@ class QualityGateNotRunBlockedError(ValueError):
 class FundAnalysisService:
     """基金分析用例编排 Service。
 
-    Service 只负责按当前 MVP 流程协调 Capability 模块，不承载基金领域规则。
+    Service 只负责按当前 MVP 流程协调 Agent 层基金能力，不承载基金领域规则。
     领域判断、审计和模板规则均保留在 `fund_agent.fund`。
     """
 
@@ -433,7 +433,7 @@ class FundAnalysisService:
             ValueError: 当基金代码、年份、基金类型或审计结果非法时抛出。
             QualityGateBlockedError: 当 quality gate 在 block 策略下阻断报告时抛出。
             QualityGateNotRunBlockedError: 当 quality gate 在 block 策略下未运行时抛出。
-            Exception: 允许底层抽取器或 Capability 模块传播异常。
+            Exception: 允许底层抽取器或 Agent 层基金能力传播异常。
         """
 
         core_result = await self._run_analysis_core(request)
@@ -485,7 +485,7 @@ class FundAnalysisService:
             ValueError: 当基金代码、年份、基金类型或请求契约非法时抛出。
             QualityGateBlockedError: 当 quality gate 在 block 策略下阻断报告时抛出。
             QualityGateNotRunBlockedError: 当 quality gate 在 block 策略下未运行时抛出。
-            Exception: 允许底层抽取器或 Capability 模块传播异常。
+            Exception: 允许底层抽取器或 Agent 层基金能力传播异常。
         """
 
         core_result = await self._run_analysis_core(request)
@@ -585,7 +585,7 @@ class FundAnalysisService:
             ValueError: 当请求契约或结构化数据非法时抛出。
             QualityGateBlockedError: 当 quality gate 在 block 策略下阻断输出时抛出。
             QualityGateNotRunBlockedError: 当 quality gate 在 block 策略下未运行时抛出。
-            Exception: 允许底层抽取器或 Capability 模块传播异常。
+            Exception: 允许底层抽取器或 Agent 层基金能力传播异常。
         """
 
         resolved_contract = _resolve_analyze_contract(request)
@@ -842,7 +842,7 @@ def _run_quality_gate_if_enabled(
         `(quality_gate_result, not_run_reason)`。
 
     Raises:
-        Exception: 允许 Capability quality gate 传播 JSON 或写文件异常。
+        Exception: 允许 Agent 层 quality gate 传播 JSON 或写文件异常。
     """
 
     if resolved_contract.quality_gate_policy == "off":

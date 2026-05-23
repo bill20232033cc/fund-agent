@@ -21,28 +21,28 @@ from fund_agent.config.paths import (
     DEFAULT_GOLDEN_TEMPLATE_PATH,
     DEFAULT_SELECTED_FUNDS_CSV,
 )
-from fund_agent.application import (
+from fund_agent.services import (
     ExtractionScoreRequest,
-    ExtractionScoreUseCase,
+    ExtractionScoreService,
     ExtractionSnapshotRequest,
-    ExtractionSnapshotUseCase,
+    ExtractionSnapshotService,
     FinalJudgment,
     FundAnalysisDeveloperOverrides,
     FundAnalysisRequest,
-    FundAnalysisUseCase,
+    FundAnalysisService,
     GoldenAnswerBuildRequest,
-    GoldenAnswerUseCase,
+    GoldenAnswerService,
     GoldenPrefillRequest,
-    GoldenPrefillUseCase,
+    GoldenPrefillService,
     MoneyHorizon,
     QualityGateBlockedError,
     QualityGateNotRunBlockedError,
     QualityGateRequest,
-    QualityGateUseCase,
+    QualityGateService,
     ThermometerBatchResult,
     ThermometerReading,
     ThermometerRequest,
-    ThermometerUseCase,
+    ThermometerService,
     ValuationState,
 )
 
@@ -219,7 +219,7 @@ def analyze(
         developer_overrides=developer_overrides,
     )
     try:
-        result = asyncio.run(FundAnalysisUseCase().analyze(request))
+        result = asyncio.run(FundAnalysisService().analyze(request))
     except QualityGateNotRunBlockedError as exc:
         _echo_quality_gate_not_run_blocked(exc)
         raise typer.Exit(code=2) from exc
@@ -296,7 +296,7 @@ def checklist(
         force_refresh=force_refresh,
     )
     try:
-        result = asyncio.run(FundAnalysisUseCase().checklist(request))
+        result = asyncio.run(FundAnalysisService().checklist(request))
     except QualityGateNotRunBlockedError as exc:
         _echo_quality_gate_not_run_blocked(exc)
         raise typer.Exit(code=2) from exc
@@ -346,7 +346,7 @@ def thermometer(
     try:
         parsed_index_code, parsed_index_codes = _parse_index_option(index_code)
         snapshot = asyncio.run(
-            ThermometerUseCase().run(
+            ThermometerService().run(
                 ThermometerRequest(
                     cache_dir=cache_dir,
                     force_refresh=force_refresh,
@@ -411,7 +411,7 @@ def extraction_snapshot(
 
     try:
         result = asyncio.run(
-            ExtractionSnapshotUseCase().run(
+            ExtractionSnapshotService().run(
                 ExtractionSnapshotRequest(
                     fund_code=fund_code,
                     report_year=report_year,
@@ -474,7 +474,7 @@ def extraction_score(
     """
 
     try:
-        result = ExtractionScoreUseCase().run(
+        result = ExtractionScoreService().run(
             ExtractionScoreRequest(
                 snapshot_path=snapshot_path,
                 source_csv=source_csv,
@@ -523,7 +523,7 @@ def golden_prefill(
 
     try:
         result = asyncio.run(
-            GoldenPrefillUseCase().run(
+            GoldenPrefillService().run(
                 GoldenPrefillRequest(
                     template_path=template_path,
                     output_path=output_path,
@@ -566,7 +566,7 @@ def golden_build(
     """
 
     try:
-        result = GoldenAnswerUseCase().build(
+        result = GoldenAnswerService().build(
             GoldenAnswerBuildRequest(
                 input_path=input_path,
                 output_path=output_path,
@@ -604,7 +604,7 @@ def quality_gate(
     """
 
     try:
-        result = QualityGateUseCase().run(
+        result = QualityGateService().run(
             QualityGateRequest(
                 score_path=score_path,
                 output_dir=output_dir,

@@ -87,7 +87,7 @@ fund-analysis checklist 004393 --report-year 2024
 | `--user-money-horizon-years` | 用户资金不用年限 |
 | `--force-refresh` | 强制刷新底层数据 |
 
-`analyze` 默认是 product mode：最终判断由 Fund Capability 根据检查清单、否决项、压力测试和 quality gate 派生；R=A+B-C 股票仓位、言行一致性实际风格、经理任期、同类费率、跟踪误差、当前阶段、最终判断覆盖和 quality gate `warn/off` 等夹具参数仅供开发验证使用，必须显式传 `--dev-override`。
+`analyze` 默认是 product mode：最终判断由 Agent 层基金能力根据检查清单、否决项、压力测试和 quality gate 派生；R=A+B-C 股票仓位、言行一致性实际风格、经理任期、同类费率、跟踪误差、当前阶段、最终判断覆盖和 quality gate `warn/off` 等夹具参数仅供开发验证使用，必须显式传 `--dev-override`。
 
 `fund-analysis analyze FUND_CODE` 不传 `--valuation-state` 时，会先识别基金类型，再仅对 `index_fund` / `enhanced_index` 且业绩基准可精确映射到沪深300 `000300` 或中证500 `000905` 的基金调用项目内自建温度计。主动、债券、QDII、FOF、缺少基准、复合基准不确定、派生/策略/行业指数或未支持指数都会保持 `unavailable` 灰灯且不调用温度计。显式传 `--valuation-state unavailable` 会恢复旧的手动灰灯路径，并且不调用温度计；显式传 `low/fair/high` 也同样优先于自动估值。
 
@@ -161,7 +161,7 @@ pytest tests/scripts/test_selected_funds_smoke.py -q
 
 ## 温度计查询
 
-`fund-analysis thermometer` 通过 Service 调用 Capability data 层的自建温度计，默认查询全 A 市场 `wind_all_a`。CLI 不再默认查询有知有行公开页快照；公开页 adapter 仅保留为过渡/对比能力，不作为当前默认 CLI 路径。
+`fund-analysis thermometer` 通过 Service 调用 Agent 层基金 data 能力中的自建温度计，默认查询全 A 市场 `wind_all_a`。CLI 不再默认查询有知有行公开页快照；公开页 adapter 仅保留为过渡/对比能力，不作为当前默认 CLI 路径。
 
 ```bash
 fund-analysis thermometer
@@ -282,12 +282,10 @@ fund-analysis quality-gate \
 |------|------|
 | [docs/design.md](docs/design.md) | 设计真源 |
 | [docs/implementation-control.md](docs/implementation-control.md) | Phase 与 gate 总控 |
-| [docs/implementation-control-p4.md](docs/implementation-control-p4.md) | P4 精选基金池质量闭环执行控制 |
-| [docs/post-mvp-p4-first-principles-plan.md](docs/post-mvp-p4-first-principles-plan.md) | P4 第一性原理行动计划 |
 | [docs/fund-analysis-template-draft.md](docs/fund-analysis-template-draft.md) | 8 章分析模板 |
 | [docs/sample-funds.md](docs/sample-funds.md) | 样本基金基线 |
 | [docs/code_20260519.csv](docs/code_20260519.csv) | 有知有行 App 精选基金池手动清单 |
-| [fund_agent/README.md](fund_agent/README.md) | 开发手册总览，说明当前 UI / Application / Service / Fund Capability 边界 |
-| [fund_agent/fund/README.md](fund_agent/fund/README.md) | Fund capability 说明 |
+| [fund_agent/README.md](fund_agent/README.md) | 开发手册总览，说明当前 UI / Service / Host / Agent 边界 |
+| [fund_agent/fund/README.md](fund_agent/fund/README.md) | Fund 作为 Agent 层基金能力包的说明 |
 | [fund_agent/config/README.md](fund_agent/config/README.md) | 配置命名空间当前状态 |
 | [tests/README.md](tests/README.md) | 测试说明 |

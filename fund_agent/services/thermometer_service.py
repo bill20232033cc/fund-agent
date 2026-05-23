@@ -1,7 +1,7 @@
 """温度计查询 Service 编排层。
 
 本模块属于 Service 层，只负责把 UI 输入收敛为显式请求对象并调用
-Capability data 层的温度计适配器。它不解析温度计页面，不决定估值状态，
+Agent 层基金 data 能力的温度计适配器。它不解析温度计页面，不决定估值状态，
 也不把温度计结果写入基金分析报告。
 """
 
@@ -56,7 +56,7 @@ class _ThermometerAdapterFactory(Protocol):
         """按缓存目录创建温度计适配器。
 
         Args:
-            cache_dir: 温度计缓存目录；为空时使用 Capability 默认目录。
+            cache_dir: 温度计缓存目录；为空时使用 Agent 层基金能力默认目录。
 
         Returns:
             温度计适配器。
@@ -146,7 +146,7 @@ class ThermometerRequest:
     """温度计查询请求。
 
     Attributes:
-        cache_dir: 温度计缓存目录；为空时使用 Capability 默认目录。
+        cache_dir: 温度计缓存目录；为空时使用 Agent 层基金能力默认目录。
         force_refresh: 是否绕过 fresh cache 强制抓取。
         index_code: 指定单个自建温度计代码；为空时默认查询全 A 市场。
         index_codes: 指定多个自建温度计代码；与 `index_code` 互斥。
@@ -299,7 +299,7 @@ def _default_adapter_factory(cache_dir: Path | None) -> FundThermometerAdapter:
     """创建默认温度计适配器。
 
     Args:
-        cache_dir: 温度计缓存目录；为空时使用 Capability 默认目录。
+        cache_dir: 温度计缓存目录；为空时使用 Agent 层基金能力默认目录。
 
     Returns:
         默认温度计适配器。

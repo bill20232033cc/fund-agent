@@ -86,3 +86,4 @@ line-length = 100
 minversion = "8.0"
 asyncio_mode = "auto"
 testpaths = ["tests"]
+pythonpath = ["."]
