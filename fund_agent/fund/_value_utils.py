@@ -1,7 +1,7 @@
 """Agent 层基金能力内部结构化值工具。
 
 本模块只服务 `fund_agent.fund` 内部，把 dict/dataclass 结构化抽取值规范化为
-可读取子字段的映射；不依赖 Service、Engine、Runtime 或 UI 层。
+可读取子字段的映射；不依赖 Service、Host 或 UI 层。
 """
 
 from __future__ import annotations
