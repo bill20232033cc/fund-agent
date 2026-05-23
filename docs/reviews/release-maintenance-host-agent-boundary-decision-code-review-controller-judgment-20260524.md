@@ -36,4 +36,3 @@ None.
 ## Next Gate
 
 Dispatch a fix worker for HABC-C1 only, then dispatch targeted re-review. If re-review passes and no new blocker appears, proceed to accepted slice commit.
-

@@ -91,4 +91,3 @@ None. All reviewer findings are accepted as low-risk plan fixes before acceptanc
 ## Next Gate
 
 Dispatch a plan-fix worker to update only `docs/reviews/release-maintenance-next-candidate-plan-20260524.md` and create a fix artifact. Then dispatch MiMo and GLM re-review against the accepted findings only.
-
