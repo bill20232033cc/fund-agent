@@ -1,6 +1,6 @@
 """基金分析模板 CHAPTER_CONTRACT 机器契约。
 
-本模块在 Capability 层维护可机器消费的模板章节契约，覆盖模板第 0-7 章。
+本模块在 Agent 层基金能力维护可机器消费的模板章节契约，覆盖模板第 0-7 章。
 契约内容来自 `docs/fund-analysis-template-draft.md` 的 CHAPTER_CONTRACT，
 章节标题与 `docs/design.md` 第 3.1 节保持一致。本模块不在运行时解析
 Markdown 注释，也不依赖模板渲染器的私有常量。

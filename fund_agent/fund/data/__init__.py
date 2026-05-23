@@ -1,6 +1,6 @@
 """基金数据适配器公共入口。
 
-本模块是 Fund Capability data 层对外暴露的稳定入口。上层 Service 可以
+本模块是 Agent 层基金能力 data 层对外暴露的稳定入口。上层 Service 可以
 通过这里获取数据适配器、结构化类型和默认工厂，不直接穿透具体实现模块。
 """
 
@@ -38,7 +38,7 @@ def create_default_thermometer_history_cache(
     """创建默认自建温度计历史缓存。
 
     Args:
-        cache_dir: 温度计缓存目录；为空时使用 Capability 默认目录。
+        cache_dir: 温度计缓存目录；为空时使用基金领域能力默认目录。
 
     Returns:
         默认温度计历史缓存。

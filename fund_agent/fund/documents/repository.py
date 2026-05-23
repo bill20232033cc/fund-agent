@@ -1,6 +1,6 @@
 """基金文档仓库实现。
 
-`FundDocumentRepository` 是 Capability 层对外唯一公开的文档读取入口。
+`FundDocumentRepository` 是 Agent 层基金能力对外唯一公开的文档读取入口。
 当前仅支持年报，并复用 PDF 适配器完成下载与解析。
 """
 
@@ -268,7 +268,7 @@ class FundDocumentRepository:
     """基金文档仓库。
 
     当前仓库只开放 `load_annual_report()`，用于把 PDF 下载与解析细节收口到
-    Capability 层内部，为后续模板第 2 章和第 4 章的数据提取提供统一输入。
+    Agent 层基金能力内部，为后续模板第 2 章和第 4 章的数据提取提供统一输入。
     """
 
     def __init__(self, annual_report_loader: _AnnualReportLoader | None = None) -> None:

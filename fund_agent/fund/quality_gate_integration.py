@@ -1,6 +1,6 @@
 """单基金报告质量 gate 集成适配器。
 
-本模块属于 Capability 层，负责把 `FundAnalysisService` 已经取得的
+本模块属于 Agent 层基金能力，负责把 `FundAnalysisService` 已经取得的
 `StructuredFundDataBundle` 转换为 P4 snapshot/score/quality gate 产物。
 它不重新抽取基金文档，也不把质量规则上移到 Service 或 UI。
 """

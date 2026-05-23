@@ -1,6 +1,6 @@
 """报告质量 gate 能力。
 
-本模块属于 Capability 层，只消费 `extraction-score` 产出的 `score.json`，
+本模块属于 Agent 层基金能力，只消费 `extraction-score` 产出的 `score.json`，
 根据 coverage / traceability / correctness 质量信号生成报告质量 gate 结果。
 它不读取 PDF、cache 或基金文档，也不执行 LLM 审计。
 """

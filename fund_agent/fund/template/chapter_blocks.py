@@ -1,6 +1,6 @@
 """基金模板渲染章节块切分工具。
 
-本模块属于基金 Capability 层，服务 `docs/design.md` 第 3.1 节 8 章模板。
+本模块属于 Agent 层基金能力，服务 `docs/design.md` 第 3.1 节 8 章模板。
 它只依赖 CHAPTER_CONTRACT manifest，不依赖模板渲染器或程序审计实现。
 """
 

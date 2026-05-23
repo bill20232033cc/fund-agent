@@ -27,6 +27,7 @@ from fund_agent.services import (
     ExtractionSnapshotRequest,
     ExtractionSnapshotService,
     FinalJudgment,
+    FundChecklistResult,
     FundAnalysisDeveloperOverrides,
     FundAnalysisRequest,
     FundAnalysisService,
@@ -1040,7 +1041,7 @@ def _format_cli_value(value: object) -> str:
     return str(value)
 
 
-def _echo_checklist_result(result) -> None:  # type: ignore[no-untyped-def]
+def _echo_checklist_result(result: FundChecklistResult) -> None:
     """输出独立检查清单摘要。
 
     Args:

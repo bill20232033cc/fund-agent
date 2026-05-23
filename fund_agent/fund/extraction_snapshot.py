@@ -1,6 +1,6 @@
 """精选基金池字段级抽取快照能力。
 
-本模块位于 Capability 层，负责 P4-S1 精选基金池年报抽取质量快照：
+本模块位于 Agent 层基金能力，负责 P4-S1 精选基金池年报抽取质量快照：
 读取基金池 CSV、调用 `FundDataExtractor.extract(...)`、将结构化数据包拆成
 字段级 `SnapshotRecord`，并输出 JSONL、错误明细和人工可读 summary。
 """

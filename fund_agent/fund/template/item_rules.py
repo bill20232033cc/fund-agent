@@ -1,6 +1,6 @@
 """基金分析模板 ITEM_RULE 机器契约。
 
-本模块在 Capability 层维护模板第 1/2 章中当前已声明的 ITEM_RULE。
+本模块在 Agent 层基金能力维护模板第 1/2 章中当前已声明的 ITEM_RULE。
 规则只表达确定性的 optional / conditional 渲染策略，不调用 LLM、不解析
 基金文档，也不接入程序审计或质量门禁。
 """

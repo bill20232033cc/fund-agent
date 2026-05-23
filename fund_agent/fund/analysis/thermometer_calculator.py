@@ -1,6 +1,6 @@
 """自建温度计纯计算器。
 
-本模块属于 Fund Capability analysis 层，负责 P19 自建温度计的 PE/PB
+本模块属于 Agent 层基金能力 analysis 层，负责 P19 自建温度计的 PE/PB
 历史分位数和综合温度计算。它不读取 akshare、不访问缓存，也不决定 CLI 输出。
 """
 

@@ -1,6 +1,6 @@
 """CHAPTER_CONTRACT 审计规则与覆盖路由。
 
-本模块属于基金 Capability 层，服务 `docs/design.md` 第 5.2 节的确定性 C2 审计。
+本模块属于 Agent 层基金能力，服务 `docs/design.md` 第 5.2 节的确定性 C2 审计。
 它维护 manifest 到确定性程序审计 marker 的显式映射，也维护 must_answer 到后续审计层的覆盖路由。
 本模块只做规则声明和 fail-closed 校验，不执行 LLM 判断、语义推断或证据复核。
 """

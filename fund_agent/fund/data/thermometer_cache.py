@@ -1,6 +1,6 @@
 """自建温度计历史数据 JSON 缓存。
 
-本模块属于 Fund Capability data 层，只负责 P19 自建温度计历史序列的
+本模块属于 Agent 层基金能力 data 层，只负责 P19 自建温度计历史序列的
 版本化 JSON 缓存。它不访问 akshare，不计算温度。
 """
 

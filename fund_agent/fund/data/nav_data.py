@@ -116,7 +116,7 @@ class NavDataResult:
 class FundNavDataAdapter:
     """基金净值数据适配器。
 
-    该适配器位于 Capability 的 data 层，负责净值数据获取与自身缓存。
+    该适配器位于 Agent 层基金能力的 data 层，负责净值数据获取与自身缓存。
     """
 
     def __init__(self, root_dir: Path | None = None, fetcher: NavFetcher | None = None) -> None:
