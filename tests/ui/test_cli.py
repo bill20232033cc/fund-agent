@@ -8,6 +8,7 @@ from decimal import Decimal
 from pathlib import Path
 
 import pytest
+from typer.main import get_command
 from typer.testing import CliRunner
 
 from fund_agent.fund.data.thermometer import (
@@ -958,13 +959,20 @@ def test_analyze_cli_help_documents_auto_valuation_and_opt_out() -> None:
 
     runner = CliRunner()
 
-    result = runner.invoke(cli.app, ["analyze", "--help"])
+    result = runner.invoke(cli.app, ["analyze", "--help"], env={"COLUMNS": "120"})
 
     assert result.exit_code == 0
     assert "缺省时允许自动温度计估值" in result.output
     assert "unavailable" in result.output
     assert "则手动灰灯且不调用温度计" in result.output
-    assert "--thermometer-cache-dir" in result.output
+
+    analyze_command = get_command(cli.app).commands["analyze"]
+    option_names = {
+        option_name
+        for parameter in analyze_command.params
+        for option_name in getattr(parameter, "opts", ())
+    }
+    assert "--thermometer-cache-dir" in option_names
 
 
 def test_analyze_cli_invalid_valuation_exits_2(monkeypatch) -> None:  # type: ignore[no-untyped-def]
