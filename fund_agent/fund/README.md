@@ -318,6 +318,7 @@ C2 当前只做确定性 marker / 元数据检查，不调用 LLM，不判断语
 - `fund-analysis analyze` 缺省估值输入时，只对 `index_fund` / `enhanced_index` 且业绩基准 exact identity 映射到沪深300 `000300` 或中证500 `000905` 的基金调用自建温度计；主动、债券、QDII、FOF、缺失/歧义/派生/未支持指数均返回 `unavailable` 灰灯且不调用温度计
 - 显式 `valuation_state=low/fair/high/unavailable` 优先于自动估值；其中显式 `unavailable` 是手动灰灯 opt-out
 - `fund_agent/fund/analysis/valuation_state.py` 定义 `ValuationStateResolution`、指数映射规则和 resolution 构造函数，是检查清单、renderer、审计共享的估值结构化真源
+- `fund_agent/fund/data/__init__.py` 是自建温度计对 Service 暴露的公共入口，导出读数类型、代码分类 helper 和默认数据源/缓存工厂；Service 不直接 import `thermometer_source.py` 或 `thermometer_cache.py` 的具体实现模块
 
 仓库层位于 `fund_agent/fund/documents/`：
 

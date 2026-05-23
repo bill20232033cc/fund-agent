@@ -22,6 +22,8 @@ from fund_agent.services.quality_gate_service import (
     QualityGateService,
 )
 from fund_agent.services.thermometer_service import (
+    ThermometerBatchResult,
+    ThermometerReading,
     ThermometerRequest,
     ThermometerService,
 )
@@ -49,6 +51,8 @@ __all__ = [
     "GoldenPrefillService",
     "QualityGateRequest",
     "QualityGateService",
+    "ThermometerBatchResult",
+    "ThermometerReading",
     "ThermometerRequest",
     "ThermometerService",
     "AnalyzeMode",

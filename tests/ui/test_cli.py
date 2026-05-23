@@ -12,10 +12,14 @@ from typer.main import get_command
 from typer.testing import CliRunner
 
 from fund_agent.fund.data.thermometer_cache import ThermometerHistoryCache
-from fund_agent.fund.data.thermometer_types import ThermometerBatchResult, ThermometerReading
 from fund_agent.fund.data.thermometer_types import PePbHistory, PePbPoint
 from fund_agent.fund.quality_gate import QualityGateIssue, QualityGateResult
-from fund_agent.services import QualityGateBlockedError, QualityGateNotRunBlockedError
+from fund_agent.services import (
+    QualityGateBlockedError,
+    QualityGateNotRunBlockedError,
+    ThermometerBatchResult,
+    ThermometerReading,
+)
 from fund_agent.ui import cli
 
 

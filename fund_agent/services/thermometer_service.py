@@ -14,19 +14,17 @@ from typing import Protocol
 
 from fund_agent.fund.analysis.thermometer_calculator import calculate_thermometer_reading
 from fund_agent.fund.data import (
+    ALL_A_MARKET_CODE,
     FundThermometerAdapter,
     PePbHistory,
     ThermometerBatchResult,
     ThermometerReading,
     ThermometerSnapshot,
-    ThermometerUnavailable,
-)
-from fund_agent.fund.data.thermometer_cache import ThermometerHistoryCache
-from fund_agent.fund.data.thermometer_source import (
-    ALL_A_MARKET_CODE,
-    AkshareThermometerSource,
     ThermometerSourceError,
+    ThermometerUnavailable,
     classify_thermometer_code,
+    create_default_thermometer_history_cache,
+    create_default_thermometer_source,
     thermometer_display_name,
 )
 
@@ -88,7 +86,7 @@ class _IndexThermometerSource(Protocol):
 class _ThermometerHistoryCacheFactory(Protocol):
     """温度计历史缓存工厂协议。"""
 
-    def __call__(self, cache_dir: Path | None) -> ThermometerHistoryCache:
+    def __call__(self, cache_dir: Path | None) -> _ThermometerHistoryCache:
         """按缓存目录创建温度计历史缓存。
 
         Args:
@@ -99,6 +97,47 @@ class _ThermometerHistoryCacheFactory(Protocol):
 
         Raises:
             Exception: 允许具体工厂传播初始化异常。
+        """
+
+
+class _CachedPePbHistory(Protocol):
+    """缓存 PE/PB 历史读取结果协议。"""
+
+    history: PePbHistory
+    stale: bool
+
+
+class _ThermometerHistoryCache(Protocol):
+    """温度计历史缓存协议。"""
+
+    def load(
+        self, index_code: str, *, allow_stale: bool = False
+    ) -> _CachedPePbHistory | None:
+        """读取缓存历史。
+
+        Args:
+            index_code: 指数或市场代码。
+            allow_stale: 是否允许读取 stale cache。
+
+        Returns:
+            缓存读取结果；缺失、损坏或过期时返回 None。
+
+        Raises:
+            Exception: 允许具体缓存传播非数据态异常。
+        """
+
+    def save(self, history: PePbHistory) -> PePbHistory:
+        """保存历史序列。
+
+        Args:
+            history: 待保存的 PE/PB 历史序列。
+
+        Returns:
+            写入缓存元数据后的 PE/PB 历史序列。
+
+        Raises:
+            OSError: 缓存目录创建或写入失败时抛出。
+            Exception: 允许具体缓存传播非数据态异常。
         """
 
 
@@ -143,8 +182,10 @@ class ThermometerService:
         """
 
         self._adapter_factory = adapter_factory or _default_adapter_factory
-        self._index_source = index_source or AkshareThermometerSource()
-        self._history_cache_factory = history_cache_factory or ThermometerHistoryCache
+        self._index_source = index_source or create_default_thermometer_source()
+        self._history_cache_factory = (
+            history_cache_factory or create_default_thermometer_history_cache
+        )
 
     async def run(
         self, request: ThermometerRequest

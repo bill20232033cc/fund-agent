@@ -39,11 +39,12 @@ from fund_agent.services import (
     QualityGateNotRunBlockedError,
     QualityGateRequest,
     QualityGateService,
+    ThermometerBatchResult,
+    ThermometerReading,
     ThermometerRequest,
     ThermometerService,
     ValuationState,
 )
-from fund_agent.fund.data.thermometer_types import ThermometerBatchResult, ThermometerReading
 
 app = typer.Typer(help="基金行为教练 Agent — 买入前专业级基金体检报告")
 DEFAULT_GOLDEN_TEMPLATE = DEFAULT_GOLDEN_TEMPLATE_PATH
