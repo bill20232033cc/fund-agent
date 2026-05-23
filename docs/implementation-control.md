@@ -1,12 +1,12 @@
 # 基金行为教练 Agent —— 实施总控文档
 
 > **版本**: v1.1
-> **日期**: 2026-05-22
+> **日期**: 2026-05-23
 > **设计真源**: `docs/design.md` (v2.2)
 > **MVP 计划书**: `fund-agent-mvp-plan.md`
 > **定性模板**: `docs/fund-analysis-template-draft.md`
 > **P4 质量体系**: `docs/implementation-control-p4.md`
-> **当前状态**: P19 closed；P0-P19-S6 已合入主线并在下方台账归档；当前处于 release maintenance
+> **当前状态**: P19 closed；当前处于 release maintenance；本次总控修订按 `AGENTS.md` 统一六层边界，并吸收 `dayu-agent` `pyproject.toml` 中适用于本项目的工程基线
 
 ---
 
@@ -15,8 +15,8 @@
 | Field | State |
 |---|---|
 | Branch | `main` |
-| Current gate | `release maintenance A-D + P1 Ch0/source taxonomy accepted locally` |
-| Next entry point | `release maintenance P1/P2 backlog selection or push authorization` |
+| Current gate | `release maintenance documentation / engineering-baseline alignment accepted locally` |
+| Next entry point | `release maintenance boundary-debt selection or push authorization` |
 | Current phase | `release maintenance` |
 | Design truth | `docs/design.md` (v2.2) |
 | Control truth | `docs/implementation-control.md` |
@@ -39,6 +39,7 @@
 | Latest release-maintenance repo-deepreview artifacts | `docs/reviews/agentds-repo-deepreview-20260523.md`, `docs/reviews/agentglm-repo-deepreview-20260523.md`, `docs/reviews/controller-judgment-repo-deepreview-20260523.md` |
 | Latest release-maintenance A-D artifacts | `docs/reviews/release-maintenance-slice-a-precheck-20260523.md`, `docs/reviews/release-maintenance-slice-b-numeric-type-guards-handoff-20260523.md`, `docs/reviews/release-maintenance-slice-b-numeric-type-guards-controller-judgment-20260523.md`, `docs/reviews/release-maintenance-slice-c-layer-boundary-handoff-20260523.md`, `docs/reviews/release-maintenance-slice-c-layer-boundary-controller-judgment-20260523.md`, `docs/reviews/release-maintenance-slice-d-ci-coverage-gate-handoff-20260523.md`, `docs/reviews/release-maintenance-slice-d-ci-coverage-gate-controller-judgment-20260523.md` |
 | Latest release-maintenance P1 artifacts | `docs/reviews/release-maintenance-p1-ch0-risk-threshold-handoff-20260523.md`, `docs/reviews/release-maintenance-p1-ch0-risk-threshold-controller-judgment-20260523.md`, `docs/reviews/release-maintenance-p1-annual-report-source-taxonomy-confirmation-20260523.md` |
+| Latest engineering-baseline artifacts | `docs/reviews/release-maintenance-engineering-baseline-build-fix-handoff-20260523.md`, `docs/reviews/release-maintenance-engineering-baseline-alignment-controller-judgment-20260523.md` |
 | Latest next-phase selection artifacts | `docs/reviews/next-phase-selection-20260522.md`, `docs/reviews/next-phase-selection-plan-review-mimo-20260522.md`, `docs/reviews/next-phase-selection-plan-review-glm-20260522.md`, `docs/reviews/next-phase-selection-controller-judgment-20260522.md` |
 | Latest P13-S1 plan artifacts | `docs/reviews/p13-s1-tracking-error-index-data-plan-20260522.md`, `docs/reviews/p13-s1-plan-review-mimo-20260522.md`, `docs/reviews/p13-s1-plan-review-glm-20260522.md`, `docs/reviews/p13-s1-plan-rereview-mimo-20260522.md`, `docs/reviews/p13-s1-plan-rereview-glm-20260522.md`, `docs/reviews/p13-s1-plan-review-controller-judgment-20260522.md` |
 | Latest P13 implementation artifacts | `docs/reviews/p13-tracking-error-direct-disclosure-implementation-20260522.md`, `docs/reviews/p13-tracking-error-code-review-mimo-20260522.md`, `docs/reviews/p13-tracking-error-code-review-glm-20260522.md`, `docs/reviews/p13-tracking-error-code-rereview-mimo-20260522.md`, `docs/reviews/p13-tracking-error-code-rereview-glm-20260522.md`, `docs/reviews/p13-tracking-error-code-review-controller-judgment-20260522.md` |
@@ -110,12 +111,12 @@
 | Latest P19-S6 aggregate/closeout artifacts | `docs/reviews/p19-s6-aggregate-deepreview-ds-20260523.md`, `docs/reviews/p19-s6-post-merge-aggregate-deepreview-glm-20260523.md`, `docs/reviews/p19-s6-post-merge-controller-judgment-20260523.md` |
 | Scoped 2026-05-22 inputs | local input drafts `docs/design0522.md` and `docs/implementation-control0522.md`, plus scoped audit input `docs/repo-audit-20260522.md`; these are update inputs, not replacement truth documents |
 | Last merged PR | PR 14, merge commit `45bea3e88802de191016c18ea6baee65eb6737fb` |
-| Product baseline | P10 release-readiness merged; P11 control-doc recovery accepted; P12 closed on main; post-P12 release lane maintenance-ready; P13 direct tracking-error disclosure merged; P14-S1 index quality denominators merged; P16 enhanced-index `index_profile` benchmark-context golden rows merged; P17 tracking_error fail-closed notes and thermometer design direction merged; repo-deepreview audit type guards merged through PR 12; P19 self-owned thermometer through P19-S6 production validation merged through PR 14; release-maintenance A-D + P1 Ch0/source taxonomy accepted locally through current HEAD and not yet pushed |
+| Product baseline | P10 release-readiness merged; P11 control-doc recovery accepted; P12 closed on main; post-P12 release lane maintenance-ready; P13 direct tracking-error disclosure merged; P14-S1 index quality denominators merged; P16 enhanced-index `index_profile` benchmark-context golden rows merged; P17 tracking_error fail-closed notes and thermometer design direction merged; repo-deepreview audit type guards merged through PR 12; P19 self-owned thermometer through P19-S6 production validation merged through PR 14; release-maintenance A-D + P1 Ch0/source taxonomy accepted locally through current HEAD and not yet pushed; docs/pyproject engineering-baseline alignment accepted locally and not yet pushed |
 | External repo state | Current open issues: 0; PR 5 remains open and requires explicit external-action authorization to close or comment |
-| Open residuals | RR-13 duplicate `016492`, excluded `docs/repo-audit-20260521.md`, production `tracking_error` golden rows remain blocked for `001548` and P16-S1 enhanced-index candidates, future source-metadata retry with `force_refresh=True` if selected, P17-S1 accepted low-risk note precision/test residuals, P19-S5 draft-PR-pass residuals are non-blocking and owned by future cleanup / production hardening: retry-budget harmonization, legacy public-page adapter cleanup, source error-message wording cleanup, async cancellation wrapping if future runtime requires it, future review of any newly introduced concurrent akshare calls, and live akshare availability monitoring; P19-S6 accepted low-risk residuals are owned by future production hardening / test maintenance: preserve S6-2/S6-3/S6-4 existing test mapping and optionally add CLI negative e2e if CLI behavior grows; P19-S4 exact-index PE+PB sources remain unresolved for `399006`/`000688`/`000922`/`000932`/`000933`, future P19 audit hardening may make `ProgrammaticAuditInput.valuation_state_resolution` mandatory outside explicit legacy mode, future test should persist `benchmark_index_code` exact supported index plus cash/bond component acceptance, future index methodology/constituents extraction, future calculated tracking-error/index-data candidates, future E1-E3/Evidence Confirm, release-maintenance repo-deepreview remaining backlog: quality-gate watch/FQ3 semantics, developer override blocker severity, thermometer batch parallelism, Chinese amount unit parsing, style/equity bucket ambiguity, external I/O timeout/concurrency/table-parse hardening, fund-type ordering decision, Alpha attribution feature; scoped 2026-05-22 control/repo-audit follow-ups, design-boundary checklist must appear in future plan reviews |
+| Open residuals | RR-13 duplicate `016492`, excluded `docs/repo-audit-20260521.md`, production `tracking_error` golden rows remain blocked for `001548` and P16-S1 enhanced-index candidates, future source-metadata retry with `force_refresh=True` if selected, P17-S1 accepted low-risk note precision/test residuals, P19-S5 draft-PR-pass residuals are non-blocking and owned by future cleanup / production hardening: retry-budget harmonization, legacy public-page adapter cleanup, source error-message wording cleanup, async cancellation wrapping if future runtime requires it, future review of any newly introduced concurrent akshare calls, and live akshare availability monitoring; P19-S6 accepted low-risk residuals are owned by future production hardening / test maintenance: preserve S6-2/S6-3/S6-4 existing test mapping and optionally add CLI negative e2e if CLI behavior grows; P19-S4 exact-index PE+PB sources remain unresolved for `399006`/`000688`/`000922`/`000932`/`000933`, future P19 audit hardening may make `ProgrammaticAuditInput.valuation_state_resolution` mandatory outside explicit legacy mode, future test should persist `benchmark_index_code` exact supported index plus cash/bond component acceptance, future index methodology/constituents extraction, future calculated tracking-error/index-data candidates, future E1-E3/Evidence Confirm, release-maintenance repo-deepreview remaining backlog: quality-gate watch/FQ3 semantics, developer override blocker severity, thermometer batch parallelism, Chinese amount unit parsing, style/equity bucket ambiguity, external I/O timeout/concurrency/table-parse hardening, fund-type ordering decision, Alpha attribution feature; current boundary debt: UI still directly calls Service on deterministic CLI path and Application/Runtime/Engine packages are not yet implemented; design-boundary checklist and pyproject engineering-baseline checklist must appear in future plan reviews |
 | Non-goal reminder | do not introduce Dayu Host/Engine/tool loop, LLM writing, or external runtime dependency |
 
-Resume checklist: confirm current gate and next entry point from the Startup Packet first. Current truth is `release maintenance A-D + P1 Ch0/source taxonomy accepted locally`, `Current phase=release maintenance`, branch `main`, and local `main` is ahead of `origin/main` through current HEAD; these local release-maintenance commits are not pushed and any push/PR/external action still requires explicit user authorization. P19-S6 was merged through PR 14 at merge commit `45bea3e88802de191016c18ea6baee65eb6737fb`, followed by closeout commit `3769def`; P19-S6 aggregate/post-merge review artifacts are `docs/reviews/p19-s6-aggregate-deepreview-ds-20260523.md`, `docs/reviews/p19-s6-post-merge-aggregate-deepreview-glm-20260523.md`, and `docs/reviews/p19-s6-post-merge-controller-judgment-20260523.md`. Release-maintenance repo-level deepreview is recorded in `docs/reviews/controller-judgment-repo-deepreview-20260523.md`; A/B were closed by current-state evidence, C tightened thermometer UI/Service/Capability data boundaries, D enforces the CI coverage gate, P1 Ch0 closes the renderer risk/upgrade-downgrade structural output finding, and P1 source-taxonomy confirmation closes the annual-report fallback classification/provenance finding by current-state evidence. Remaining backlog starts from P1/P2 selections listed in Open residuals; branch deletion, reviewer requests, approvals, external comments, issue mutations, or unrelated PR actions require explicit user authorization; `ThermometerService` remains the Service entry point to evolve, while current `FundThermometerAdapter` is only a public-page transitional adapter or comparison input; future plan reviews must include design-boundary checks; P16-S1 evidence acquisition remains accepted as `PARTIAL_ACCEPTED_INDEX_PROFILE_ONLY`; P15-S1A evidence acquisition remains accepted with `BLOCKED_NO_DIRECT_DISCLOSURE_EVIDENCE`; production `tracking_error` golden remains blocked for `001548` and all five P16 enhanced-index candidates; `161725` remains fixture-only; do not read or include `docs/repo-audit-20260521.md`; touching RR-13, editing source CSV, or adding unplanned golden rows still requires explicit user authorization; preserve deterministic MVP boundaries and do not introduce LLM audit, Host, Engine, tool loop, Evidence Confirm execution, calculated index series, external index adapters beyond P19 thermometer data-source protocols, methodology extraction, constituents extraction, QDII subtype redesign, or unsupported coverage targets.
+Resume checklist: confirm current gate and next entry point from the Startup Packet first. Current truth is `release maintenance documentation / engineering-baseline alignment accepted locally`, `Current phase=release maintenance`, branch `main`, and local `main` is ahead of `origin/main` through current HEAD plus accepted local docs/pyproject work; these local release-maintenance commits are not pushed and any push/PR/external action still requires explicit user authorization. P19-S6 was merged through PR 14 at merge commit `45bea3e88802de191016c18ea6baee65eb6737fb`, followed by closeout commit `3769def`; P19-S6 aggregate/post-merge review artifacts are `docs/reviews/p19-s6-aggregate-deepreview-ds-20260523.md`, `docs/reviews/p19-s6-post-merge-aggregate-deepreview-glm-20260523.md`, and `docs/reviews/p19-s6-post-merge-controller-judgment-20260523.md`. Release-maintenance repo-level deepreview is recorded in `docs/reviews/controller-judgment-repo-deepreview-20260523.md`; A/B were closed by current-state evidence, C tightened thermometer UI/Service/Capability data boundaries, D enforces the CI coverage gate, P1 Ch0 closes the renderer risk/upgrade-downgrade structural output finding, P1 source-taxonomy confirmation closes the annual-report fallback classification/provenance finding by current-state evidence, and engineering-baseline alignment closes the setuptools/PEP 639 build blocker while preserving no-Dayu-runtime scope. Current documentation alignment adds two gate constraints: all future plans must check the `AGENTS.md` six-layer boundary (UI/Application/Runtime/Service/Engine/Capability), and all package/dependency changes must check the absorbed `dayu-agent` pyproject baseline without reintroducing Dayu runtime. Branch deletion, reviewer requests, approvals, external comments, issue mutations, or unrelated PR actions require explicit user authorization; `ThermometerService` remains the Service entry point to evolve, while current `FundThermometerAdapter` is only a public-page transitional adapter or comparison input; P16-S1 evidence acquisition remains accepted as `PARTIAL_ACCEPTED_INDEX_PROFILE_ONLY`; P15-S1A evidence acquisition remains accepted with `BLOCKED_NO_DIRECT_DISCLOSURE_EVIDENCE`; production `tracking_error` golden remains blocked for `001548` and all five P16 enhanced-index candidates; `161725` remains fixture-only; do not read or include `docs/repo-audit-20260521.md`; touching RR-13, editing source CSV, or adding unplanned golden rows still requires explicit user authorization; preserve deterministic MVP boundaries and do not introduce external Dayu runtime, LLM audit, Host, external Engine/tool loop, Evidence Confirm execution, calculated index series, external index adapters beyond P19 thermometer data-source protocols, methodology extraction, constituents extraction, QDII subtype redesign, or unsupported coverage targets.
 
 ## 2026-05-22 Design Alignment Guide Handling
 
@@ -126,7 +127,7 @@ Resume checklist: confirm current gate and next entry point from the Startup Pac
 - Rejected: do not freeze all work, do not roll back read-only thermometer Service/CLI, and do not rewrite historical P13-P16 gate identities into P18.
 - Rejected for current gates: do not use `tracking_error coverage >= 90%` as a broad exit criterion unless the denominator is restricted to direct observed disclosure evidence; P15/P16 show that unsupported coverage targets would incentivize false acceptance.
 
-This v2.1 alignment was later superseded for thermometer direction by `docs/reviews/thermometer-self-owned-design-direction-20260522.md`. `docs/design.md` is now v2.2 and remains the design truth: current thermometer public-page querying is transitional, future project-owned thermometer calculation is accepted as a design direction, and automatic mapping to `valuation_state` still requires a separate design gate.
+This v2.1 alignment was later superseded for thermometer direction by `docs/reviews/thermometer-self-owned-design-direction-20260522.md`, and then by P19-S3/P19-S6 implementation. `docs/design.md` is now v2.2 and remains the design truth: public-page querying is transitional, project-owned thermometer calculation is the current production direction, and automatic mapping to `valuation_state` is allowed only within the P19-S3 accepted exact benchmark identity scope.
 
 ## 2026-05-22 Thermometer Self-Owned Direction
 
@@ -137,8 +138,31 @@ Accepted control impact:
 - `docs/design.md` is updated to v2.2.
 - Current code remains a read-only `ThermometerService` / `fund-analysis thermometer` query with cache over the public page.
 - Future self-owned thermometer work must define market/index coverage, source datasets, formulas, percentile windows, cache semantics, failure taxonomy, fixtures, and tests.
-- Automatic thermometer-to-`valuation_state` mapping remains a separate design problem; reports still require explicit user-provided valuation state until a dedicated gate changes that behavior.
+- Historical note: at this gate, automatic thermometer-to-`valuation_state` mapping remained a separate design problem. P19-S3 later changed that behavior only for exact benchmark identity matches to supported indexes.
 - P17-S1 draft PR gate has since passed through PR #11 with this design/control change included.
+
+## 2026-05-23 AGENTS / Dayu Pyproject Alignment
+
+本次修订从第一性原理确认两件事：
+
+- `AGENTS.md` 是 Agent 执行规则的唯一权威入口；`docs/design.md` 是设计真源，但不能覆盖 `AGENTS.md` 的硬约束。
+- 用户指定的 `https://github.com/noho/dayu-agent/blob/main/pyproject.toml` 应吸收的是工程基线，不是外部 Dayu 运行时。当前项目继续禁止依赖外部 `dayu-agent`、Host、Engine、tool loop 或外部 Dayu API。
+
+Accepted control impact:
+
+- `docs/design.md` 已统一为 UI / Application / Runtime / Service / Engine / Capability 六层边界。
+- 当前 deterministic CLI 仍存在 UI 直接调用 Service 的历史实现事实；这被记录为 release-maintenance 边界债，不再作为目标架构口径。
+- `pyproject.toml` 吸收 Dayu 工程约束：Python `>=3.11`、setuptools 构建后端、PEP 621 元数据、显式 `pandas>=2.1.4,<4.0.0` 生产依赖、`test` 与 `dev` 可选依赖分组、pytest/ruff/black 配置入口、包发现排除测试/文档/产物目录；`uv.lock` 已同步到该依赖图；setuptools/PEP 639 license classifier blocker 已通过移除旧式 MIT classifier 并保留 `license = "MIT"` 关闭。
+- 未吸收 Dayu 的运行时依赖和入口：`dayu-agent`、FastAPI/Web、browser、wechat、Host/Engine/tool loop 均不进入当前项目依赖或脚本入口。
+- 后续 plan review 必须新增工程基线检查：新增依赖是否为当前代码真实需要、是否显式声明上下界、是否破坏 setuptools 打包范围、是否把测试/开发工具混入生产依赖、是否重新引入外部 Dayu runtime。
+
+Next release-maintenance candidates:
+
+| Candidate | Reason | Scope guard |
+|---|---|---|
+| UI/Application boundary closure | 当前 CLI 直接调用 Service，与 `AGENTS.md` UI 只依赖 Application 的边界不一致 | 只做薄 Application use-case façade，不改变 Fund Capability 行为 |
+| Runtime/Engine placeholder decision | `AGENTS.md` 已定义边界，但当前包未落地 | 未选中具体 runner/tool-loop 需求前不得空造复杂框架 |
+| pyproject verification follow-up | `uv lock --check`、`uv run python -c "import fund_agent; import pandas; print('ok')"`、ruff 与 diff check 已通过；repo hygiene 测试仍受当前工作区 `LICENSE` 已删除影响 | 不恢复未授权删除；恢复或确认 LICENSE 后重跑 repo hygiene |
 
 ## 2026-05-22 P19 Thermometer Independent Development
 
@@ -269,10 +293,10 @@ P19 is opened from the latest incoming materials `docs/p19-thermometer-technical
 
 ### Resume Checklist
 
-- 确认当前 gate 是 P19-S1 corrected plan review。
-- P19-S1 scope 已改为沪深300指数温度计 MVP；全 A 市场温度计等待 P19-S5 / all-A PE source gate。
-- 计划审查必须回答 `ThermometerService` / `FundThermometerAdapter` 复用策略、首次历史下载耗时和存储量预估、等权计算与有知有行结果偏差接受标准。
-- P19-S1/S2 不接入 `fund-analysis analyze` 自动估值；P19-S3 才处理自动 `valuation_state`。
+- Historical P19 note: this checklist applied when current gate was P19-S1 corrected plan review. Current Startup Packet supersedes it.
+- P19-S1 scope had been corrected to 沪深300指数温度计 MVP；P19-S5 later accepted all-A source feasibility and implementation.
+- Historical plan review requirements were `ThermometerService` / `FundThermometerAdapter` 复用策略、首次历史下载耗时和存储量预估、等权计算与有知有行结果偏差接受标准。
+- Historical P19-S1/S2 did not integrate `fund-analysis analyze`; P19-S3 later accepted constrained automatic `valuation_state` mapping for exact supported-index benchmark identity.
 - 不修改外部 GitHub 状态（PR/issue）除非显式授权。
 - 保持确定性 MVP 边界。
 
@@ -384,6 +408,7 @@ Rejected or corrected from the input:
 | `release maintenance Slice D CI coverage gate` | accepted locally | `docs/reviews/release-maintenance-slice-d-ci-coverage-gate-handoff-20260523.md`, `docs/reviews/release-maintenance-slice-d-ci-coverage-gate-controller-judgment-20260523.md` | `70ed9ad`, implementation `dceb5cc` | CI pytest command now enforces `--cov=fund_agent --cov-report=term-missing --cov-fail-under=50`; repo hygiene test guards workflow coverage command; README/tests README synced; validation repo hygiene `3 passed`, ruff passed, diff check passed | P1/P2 backlog selection or push authorization | release maintenance |
 | `release maintenance P1 Ch0 risk/threshold slots` | accepted locally | `docs/reviews/release-maintenance-p1-ch0-risk-threshold-handoff-20260523.md`, `docs/reviews/release-maintenance-p1-ch0-risk-threshold-controller-judgment-20260523.md` | `ba9bd1e`, implementation `e20367f` | 第 0 章最大风险和动作阈值改为消费 risk_check/checklist/stress/final judgment 结构化信号；review findings on stress target/fallback/regression coverage closed; validation renderer `50 passed`, audit `49 passed`, CLI e2e `2 passed`, ruff passed, diff check passed | P1/P2 backlog selection or push authorization | release maintenance |
 | `release maintenance P1 annual-report source taxonomy confirmation` | accepted locally / current-state satisfied | `docs/reviews/release-maintenance-p1-annual-report-source-taxonomy-confirmation-20260523.md` | current HEAD | Current `fund_agent/fund/documents/sources.py` already enforces fallback only for `not_found`/`unavailable`, fail-closed for `schema_drift`/`identity_mismatch`/`integrity_error`, preserves blocked failure cause/list, marks `fallback_used=True`, and persists source metadata via repository/cache; validation source `35 passed`, repository `17 passed`, cache `14 passed`, ruff passed | P1/P2 backlog selection or push authorization | release maintenance |
+| `release maintenance engineering-baseline alignment` | accepted locally | `docs/reviews/release-maintenance-engineering-baseline-build-fix-handoff-20260523.md`, `docs/reviews/release-maintenance-engineering-baseline-alignment-controller-judgment-20260523.md` | current HEAD | `docs/design.md` / `docs/implementation-control.md` now align `AGENTS.md` six-layer boundary and Dayu engineering-baseline absorption scope; `pyproject.toml` uses setuptools + PEP 621 metadata, removes the PEP 639-conflicting MIT license classifier while preserving `license = "MIT"`, and keeps external Dayu runtime out; validation `uv lock --check`, import `ok`, ruff, diff check passed; repo hygiene still fails because current worktree has `LICENSE` deleted | boundary-debt selection or push authorization | release maintenance |
 
 ## Phase History Index
 
@@ -412,7 +437,7 @@ Rejected or corrected from the input:
 | P17-S1 implementation/code review | accepted | [Archive: P17](#archive-p17) | `docs/reviews/p17-s1-tracking-error-extractor-ambiguity-boundary-implementation-20260522.md`, `docs/reviews/p17-s1-code-review-mimo-20260522.md`, `docs/reviews/p17-s1-code-review-glm-20260522.md`, `docs/reviews/p17-s1-code-review-controller-judgment-20260522.md` | `d069862` | MiMo/GLM `PASS_WITH_FINDINGS`; no blockers; table-level multi-match and `§2` fallback tests added; validation `22/62/55 passed`, ruff passed, diff check passed | P17-S1 aggregate deepreview |
 | P17-S1 aggregate deepreview | accepted | [Archive: P17](#archive-p17) | `docs/reviews/p17-s1-aggregate-deepreview-mimo-20260522.md`, `docs/reviews/p17-s1-aggregate-deepreview-glm-20260522.md`, `docs/reviews/p17-s1-aggregate-deepreview-controller-judgment-20260522.md` | `2327309` | MiMo `PASS`; GLM `PASS_WITH_FINDINGS`; no blockers; residual owners recorded | ready-to-open-draft-PR reconciliation |
 | P17-S1 ready-to-open-draft-PR reconciliation | accepted / refreshed | [Archive: P17](#archive-p17) | `docs/reviews/p17-s1-ready-to-open-draft-pr-reconciliation-20260522.md` | `db63f19` | inclusion/exclusion set refreshed after thermometer design direction changed before push/PR creation | draft PR gate pending user authorization |
-| Thermometer self-owned design direction | accepted | [Archive: P17](#archive-p17) | `docs/reviews/thermometer-self-owned-design-direction-20260522.md` | `8d73e3a` | `docs/design.md` v2.2 accepts future project-owned thermometer and preserves explicit `valuation_state` gate | draft PR gate pending user authorization |
+| Thermometer self-owned design direction | accepted | [Archive: P17](#archive-p17) | `docs/reviews/thermometer-self-owned-design-direction-20260522.md` | `8d73e3a` | `docs/design.md` v2.2 accepts future project-owned thermometer and preserved explicit `valuation_state` gate until P19-S3 | draft PR gate pending user authorization |
 | P17 draft PR gate / PR review | accepted | [Archive: P17](#archive-p17) | `https://github.com/bill20232033cc/fund-agent/pull/11`, `docs/reviews/p17-pr-review-mimo-20260522.md`, `docs/reviews/p17-pr-review-glm-20260522.md`, `docs/reviews/p17-pr-review-controller-judgment-20260522.md` | local PR review artifacts pending push | PR #11 is draft/open, mergeState `CLEAN`, CI `test` success; MiMo/GLM `PASS_WITH_FINDINGS`; controller accepted no blockers | merge / mark-ready gate requires explicit authorization |
 | P17 merge / main closeout | merged | [Archive: P17](#archive-p17) | `docs/reviews/p17-main-branch-closeout-20260522.md`, `https://github.com/bill20232033cc/fund-agent/pull/11` | PR 11 merge `5c54994b9e7232e6144e730fff6d83d5c8ab80fb` | PR #11 merged by squash; local `main` aligned to `origin/main` | post-P17 follow-up planning |
 | P19 thermometer independent development | done | [Archive: P19](#archive-p19) | `docs/p19-thermometer-technical-proposal.md`, `docs/design-md-v22-changes.md`, `docs/p19-phase-definition.md`, `docs/reviews/p19-design-update-20260522.md`, `docs/reviews/p19-control-update-20260522.md`, `docs/reviews/p19-plan-review-20260522.md`, `docs/reviews/p19-plan-review-findings-20260522.md`, `docs/reviews/p19-plan-fix-data-source-20260522.md`, `docs/reviews/p19-all-a-pe-source-decision-20260522.md`, `docs/reviews/p19-s1-corrected-index-thermometer-plan-20260522.md`, `docs/reviews/p19-s1-index-thermometer-implementation-20260523.md`, `docs/reviews/p19-s1-code-review-controller-judgment-20260523.md`, `docs/reviews/p19-s1-code-rereview-controller-judgment-20260523.md`, `docs/reviews/p19-s1-code-rereview-round2-controller-judgment-20260523.md`, `docs/reviews/p19-s1-code-rereview-round3-controller-judgment-20260523.md`, `docs/reviews/p19-s2-plan-review-controller-judgment-20260523.md`, `docs/reviews/p19-s2-broad-index-thermometer-implementation-20260523.md`, `docs/reviews/p19-s2-code-review-controller-judgment-20260523.md`, `docs/reviews/p19-s2-code-rereview-controller-judgment-20260523.md`, `docs/reviews/p19-s3-plan-review-controller-acceptance-20260523.md`, `docs/reviews/p19-s3-valuation-state-integration-implementation-20260523.md`, `docs/reviews/p19-s3-code-rereview-controller-judgment-20260523.md`, `docs/reviews/p19-s4-source-feasibility-controller-judgment-20260523.md`, `docs/reviews/p19-s5-plan-review-controller-acceptance-20260523.md`, `docs/reviews/p19-s5-source-feasibility-controller-judgment-20260523.md`, `docs/reviews/p19-s5-implementation-plan-review-controller-acceptance-20260523.md`, `docs/reviews/p19-s5-s5-1-code-review-controller-judgment-20260523.md`, `docs/reviews/p19-s5-s5-2-code-review-controller-judgment-20260523.md`, `docs/reviews/p19-s5-s5-3-code-review-controller-judgment-20260523.md`, `docs/reviews/p19-s5-aggregate-deepreview-controller-judgment-20260523.md`, `docs/reviews/p19-s5-ready-to-open-draft-pr-reconciliation-20260523.md`, `docs/reviews/p19-s5-pr-review-controller-judgment-20260523.md`, `docs/reviews/p19-s5-draft-pr-pass-closeout-20260523.md`, `docs/reviews/p19-s5-pr-feedback-fix-implementation-20260523.md`, `docs/reviews/p19-s5-pr-feedback-fix-code-review-ds-20260523.md`, `docs/reviews/p19-s5-pr-feedback-fix-code-review-glm-20260523.md`, `docs/reviews/p19-s5-pr-feedback-fix-controller-judgment-20260523.md`, `docs/reviews/post-p19-next-phase-selection-20260523.md`, `docs/reviews/p19-s5-main-branch-closeout-20260523.md`, `docs/reviews/p19-s6-production-validation-plan-20260523.md`, `docs/reviews/p19-s6-production-validation-implementation-20260523.md`, `docs/reviews/code-review-20260523-183037.md`, `docs/reviews/p19-s6-aggregate-deepreview-ds-20260523.md`, `docs/reviews/p19-s6-post-merge-aggregate-deepreview-glm-20260523.md`, `docs/reviews/p19-s6-post-merge-controller-judgment-20260523.md` | PR 14 squash merge `45bea3e88802de191016c18ea6baee65eb6737fb`; closeout `3769def` | P19-S6 merged through PR 14; PR CI `test` SUCCESS; DS/GLM aggregate findings accepted as low-risk or closed; local `main` aligned to `origin/main` | P19 closed; release maintenance |
@@ -576,7 +601,7 @@ P16 merge/main closeout is accepted in `docs/reviews/p16-main-branch-closeout-20
 
 Post-P16 follow-up planning is accepted in `docs/reviews/post-p16-follow-up-plan-review-controller-judgment-20260522.md` and selects P17-S1 tracking_error extractor ambiguity boundary and note consistency plan-review. MiMo and GLM both returned `PASS_WITH_FINDINGS` with no blocking issues. Controller accepted P17-S1 because P15/P16 already blocked production `tracking_error` golden rows without direct observed disclosure evidence, so the next best product-quality step is to make existing Fund Capability direct-disclosure extraction fail closed with precise, auditable blocker semantics. P17-S1 plan must carry the accepted reviewer constraints: split or equivalently type distinct `"tracking_error_ambiguous"` note meanings, handle multi-match suppression explicitly or assign it as residual, inspect both top-level and text-extraction early-return locations, phrase missing-path consistency via `note` / `extraction_mode`, and list deterministic tests for each blocker type. P17-S1 must not add production `tracking_error` golden rows, mutate source CSV / RR-13, introduce calculated tracking error, external index adapters, methodology / constituents extraction, QDII subtype redesign, Dayu runtime, Host, Engine, tool loop, LLM writing, Evidence Confirm, or Service/UI/Engine annual-report source access.
 
-Design-control alignment guide reconciliation is accepted in `docs/reviews/design-alignment-review-controller-judgment-20260522.md`. The guide `docs/design-control-alignment-guide.md` is retained as a scoped input, while the controller rejected treating it as a replacement truth document. MiMo and GLM both returned `PASS_WITH_FINDINGS` and found no blockers. That reconciliation updated `docs/design.md` to v2.1 and clarified the then-current thermometer read-only public-page query/cache boundary. The thermometer self-owned direction was later corrected by `docs/reviews/thermometer-self-owned-design-direction-20260522.md`, so current design truth is v2.2: public-page querying is transitional, future self-owned thermometer work is accepted, and automatic `valuation_state` mapping still needs a separate gate. §9 lists current CLI commands; §12 requires future plan reviews to include design-boundary checks. Historical P13-P16 gates are not renamed into P18, and broad `tracking_error coverage >= 90%` targets are rejected for current gates because direct observed disclosure evidence remains unavailable for the blocked candidates.
+Design-control alignment guide reconciliation is accepted in `docs/reviews/design-alignment-review-controller-judgment-20260522.md`. The guide `docs/design-control-alignment-guide.md` is retained as a scoped input, while the controller rejected treating it as a replacement truth document. MiMo and GLM both returned `PASS_WITH_FINDINGS` and found no blockers. That reconciliation updated `docs/design.md` to v2.1 and clarified the then-current thermometer read-only public-page query/cache boundary. The thermometer self-owned direction was later corrected by `docs/reviews/thermometer-self-owned-design-direction-20260522.md`, and P19-S3 later accepted constrained automatic `valuation_state` mapping. Current design truth is v2.2: public-page querying is transitional, project-owned thermometer work is the production direction, and automatic mapping is limited to exact supported-index benchmark identity. §9 lists current CLI commands; §12 requires future plan reviews to include design-boundary checks. Historical P13-P16 gates are not renamed into P18, and broad `tracking_error coverage >= 90%` targets are rejected for current gates because direct observed disclosure evidence remains unavailable for the blocked candidates.
 
 P17-S1 plan/review is accepted in `docs/reviews/p17-s1-plan-review-controller-judgment-20260522.md`. The accepted implementation scope is limited to `fund_agent/fund/extractors/performance.py`, focused `tests/fund/extractors/test_performance.py`, optional focused fixture snippets, and implementation/review artifacts. MiMo and GLM both returned `PASS_WITH_FINDINGS`; controller accepted all findings as implementation constraints. Implementation must remove stale generic `tracking_error_ambiguous` semantics, avoid brittle manager/benchmark classifiers, make target-only continue and multi-match blocker behavior explicit, fix both early-return locations, preserve direct-disclosure success fields, keep missing-path semantics in `note` / `extraction_mode`, and avoid all production golden, CSV/RR-13, Service/UI/Runtime/Engine/source orchestration, external data, calculated tracking error, Dayu, LLM, and Evidence Confirm changes.
 
@@ -618,12 +643,16 @@ This snapshot records the pre-P11-S1 implementation state only. It is not curren
 | P9 | Analyze 产品契约加固（用户最小输入 + dev override 分离） | Post-P8 | ✅ done | P8 |
 | P10 | Repo hygiene / release readiness | Post-P9 | ✅ merged | P9 |
 | P11 | Control doc hygiene / recovery ergonomics | Post-P10 | 🟡 in progress | P10 |
+| RM-B1 | AGENTS / Dayu pyproject alignment | Release maintenance | 🟡 local | P19 |
+| RM-B2 | UI/Application boundary closure | Release maintenance | ⬜ candidate | RM-B1 |
 
 ### 1.1.1 能力域摘要
 
 | 能力域 | 当前状态 | 稳定入口 / 归属 |
 |--------|----------|----------------|
-| CLI / UI | 已实现用户入口和开发辅助命令 | `fund_agent/ui/cli.py` |
+| CLI / UI | 已实现用户入口和开发辅助命令；当前仍有 UI 直接调用 Service 的边界债 | `fund_agent/ui/cli.py` |
+| Application | 目标边界已由 `AGENTS.md` / `docs/design.md` 确认，当前尚未独立成包 | 后续 RM-B2 |
+| Runtime / Engine | 目标边界已确认；当前未接入 Agent runtime 或通用 tool engine | 后续按真实需求设计 |
 | Service 编排 | 已实现主分析、快照、评分、quality gate、golden answer、温度计等 use case | `fund_agent/services/` |
 | 文档仓库 | 统一仓库入口、PDF/parsed cache、source metadata、EID 主源 + Eastmoney fallback | `fund_agent/fund/documents/` |
 | 结构化抽取 | P1 数据 façade 与 profile/performance/manager/holdings extractors | `fund_agent/fund/data_extractor.py`、`fund_agent/fund/extractors/` |
@@ -720,7 +749,7 @@ This snapshot records the pre-P11-S1 implementation state only. It is not curren
   - P5-S5 share_change hardening plan 已 drafted 并通过 controller review/rereview，plan artifact=`docs/reviews/p5-s5-share-change-hardening-plan-20260520.md`，review artifact=`docs/reviews/p5-s5-plan-review-controller-20260520.md`，re-review artifact=`docs/reviews/p5-s5-plan-rereview-controller-20260520.md`。计划裁决为：拒绝 fund_code 尾号推断 A/C 类，只允许单值列、表头精确基金代码、严格 A 类 fallback；歧义多列表必须 fail closed；下一 gate 为 `P5-S5 implementation`。
   - P5-S5 implementation 已完成，artifact=`docs/reviews/p5-s5-implementation-20260520.md`。实现新增显式份额列选择、稳定 `share_class_selection_reason` metadata、总份额列处理和歧义多列表 missing；controller code review 发现并修复 A 类 fallback 忽略其他代码表头的问题，review artifact=`docs/reviews/code-review-p5-s5-20260520.md`；当前验证 targeted `31 passed`、full suite `195 passed`、ruff passed、diff check passed；下一 gate 为 `P5-S6 user/App source reconciliation`。
   - P5-S6 user/App source reconciliation 已形成 artifact=`docs/reviews/p5-s6-user-app-source-reconciliation-20260520.md`。当前事实为 `docs/code_20260519.csv` 第 26 行和第 35 行均使用 `016492`，但对应不同基金名称；该问题需要用户/App 源确认，controller 不自动改 CSV；RR-13 保持 human-owned，不阻断 P5-S7 plan。
-  - P5-S7 post-MVP infra validation plan 已 drafted 并通过 controller review/rereview，plan artifact=`docs/reviews/p5-s7-post-mvp-infra-validation-plan-20260520.md`，review artifact=`docs/reviews/p5-s7-plan-review-controller-20260520.md`，re-review artifact=`docs/reviews/p5-s7-plan-rereview-controller-20260520.md`。计划裁决为：温度计只做 read-only Service/CLI 查询能力，不自动映射 `valuation_state`；真实 PDF/network smoke 保持显式 `--run`，并用 `--quality-gate-policy warn` 避免质量 gate 掩盖基础设施信号；下一 gate 为 `P5-S7 implementation`。
+  - P5-S7 post-MVP infra validation plan 已 drafted 并通过 controller review/rereview，plan artifact=`docs/reviews/p5-s7-post-mvp-infra-validation-plan-20260520.md`，review artifact=`docs/reviews/p5-s7-plan-review-controller-20260520.md`，re-review artifact=`docs/reviews/p5-s7-plan-rereview-controller-20260520.md`。历史计划裁决为：当时温度计只做 read-only Service/CLI 查询能力，不自动映射 `valuation_state`；该限制已被 P19-S3 在 exact supported-index benchmark identity 范围内 supersede。真实 PDF/network smoke 保持显式 `--run`，并用 `--quality-gate-policy warn` 避免质量 gate 掩盖基础设施信号；下一 gate 为 `P5-S7 implementation`。
   - P5-S7 implementation 已完成并通过 controller code review，implementation artifact=`docs/reviews/p5-s7-implementation-20260520.md`，review artifact=`docs/reviews/code-review-p5-s7-20260520.md`。实现新增 `ThermometerService`、`fund-analysis thermometer` plain/JSON 输出、unavailable exit 0、smoke 显式 `--quality-gate-policy warn` 和 README/tests 同步；当前验证 targeted `32 passed`、full suite `200 passed`、ruff passed、diff check passed；下一 gate 为 `P5 aggregate readiness reconciliation`。
   - P5 aggregate readiness reconciliation 已接受，artifact=`docs/reviews/p5-aggregate-readiness-reconciliation-20260520.md`。P5-S1/S2/S3/S4/S5/S7 均已 accepted，P5-S6 duplicate `016492` 保持 human-owned 且不阻断 aggregate deepreview；当前验证 full suite `200 passed`、ruff passed、diff check passed；下一 gate 为 `P5 aggregate deepreview`。
   - P5 aggregate deepreview 已完成并修复所有 accepted findings，controller judgment artifact=`docs/reviews/p5-aggregate-deepreview-controller-judgment-20260520.md`。接受并修复 5 个问题：block 策略 gate not-run 成功出报告、显式 golden 路径 typo 静默降级、present parent 下白名单子字段缺失变 unavailable、share_change A 类 fallback 误伤非 A 份额、smoke PASS 隐藏 gate block；当前验证 full suite `206 passed`、ruff passed、diff check passed；下一 gate 为 `P5 aggregate re-review / acceptance`。
@@ -1023,7 +1052,7 @@ This snapshot records the pre-P11-S1 implementation state only. It is not curren
 
 **目标**
 
-完成开发环境搭建，建立四层架构骨架，验证数据提取可行性。
+完成开发环境搭建，建立当前确定性架构骨架，验证数据提取可行性。2026-05-23 后，目标边界以 `AGENTS.md` 的 UI / Application / Runtime / Service / Engine / Capability 六层为准；历史 P0 的“四层架构”表述只描述当时实现事实。
 
 **进入条件**
 
@@ -1034,7 +1063,7 @@ This snapshot records the pre-P11-S1 implementation state only. It is not curren
 **退出条件**
 
 - [x] 历史 P0 曾验证 `dayu-agent` 包可安装；2026-05-21 裁决为移除外部 Dayu 生产依赖，能力按需内化
-- [x] 四层架构目录结构就位（ui/services/fund/config）
+- [x] 历史四层目录结构就位（ui/services/fund/config）；六层目标边界已在 2026-05-23 设计修订中确认，Application/Runtime/Engine 独立落地转入 release-maintenance 候选
 - [x] `pyproject.toml` 配置完成且 `pip install -e .` 无报错
 - [x] 选定 3-5 只样本基金并记录分析基准
 - [x] 能从巨潮资讯网下载至少 1 只样本基金的年报 PDF
@@ -1047,7 +1076,7 @@ This snapshot records the pre-P11-S1 implementation state only. It is not curren
 |-------|------|---------|
 | P0-S1 | 历史验证 dayu-agent 依赖可用；后续裁决为不保留生产依赖 | 2026-05-21 dependency reconciliation 移除外部 Dayu 依赖 |
 | P0-S2 | 创建项目骨架目录结构（ui/services/fund/config） | `ls fund_agent/` 输出符合 design.md |
-| P0-S3 | 编写 `pyproject.toml`（pdfplumber/httpx/akshare/typer/rich 等生产依赖） | `pip install -e .` 无报错 |
+| P0-S3 | 编写 `pyproject.toml`（pdfplumber/httpx/akshare/pandas/typer/rich 等生产依赖；setuptools 构建；test/dev 可选依赖） | `pip install -e .` 无报错；后续需验证 `uv lock --check` |
 | P0-S4 | 选定样本基金（从有知有行严选基金池） | 记录基金代码和手动分析结果 |
 | P0-S5 | 实现 `fund/pdf/downloader.py` 基础版 | 能下载巨潮网年报 PDF |
 | P0-S6 | 实现 `fund/pdf/parser.py` 基础版 | 能读取 PDF 文本和表格 |
@@ -1071,6 +1100,7 @@ This snapshot records the pre-P11-S1 implementation state only. It is not curren
 - 已验证样本基金基线存在：`docs/sample-funds.md` 已记录主动权益、指数、债券三类样本。
 - 已验证样本年报下载与解析链路：`110011` 的 2024 年年报可下载，且可提取约 70K 字全文与 99 个表格。
 - 2026-05-21 已移除外部 `dayu-agent` 生产依赖，`pip install -e .` 不再需要下载该 wheel。
+- 2026-05-23 已吸收 `dayu-agent` `pyproject.toml` 的工程基线：setuptools 构建、PEP 621 元数据、显式 pandas 生产依赖、`test` / `dev` 可选依赖、pytest/ruff/black 配置入口；未吸收外部 Dayu runtime、Host、Engine、tool loop 或 Web/browser/wechat 入口。
 
 ---
 
@@ -1845,11 +1875,27 @@ P0（环境搭建）
   └── P1（数据层）
         └── P2（分析引擎）
               └── P3（整合测试）
+                    └── P4-P19（质量、模板、来源、温度计、release hardening）
+                          └── release maintenance（边界债与工程基线）
 ```
 
-- 所有 Phase 串行执行，无并行 Phase
+- 所有产品语义 Phase 默认串行执行，无并行 Phase
 - P1 内部的 Slice 可部分并行（P1-S4~P1-S7 在 P1-S3 被接受后可并行）
 - P2 内部的 Slice 可部分并行（P2-S1~S7 与 P2-S8~S10 可并行）
+- release-maintenance 只能并行处理互不重叠的文档、工程基线或边界债 slice；凡涉及 UI/Application/Runtime/Service/Engine/Capability 装配关系变化，必须先做 plan review，并显式对照 `AGENTS.md` 边界。
+
+### 3.1 工程基线依赖
+
+`pyproject.toml` 是包元数据、构建后端、依赖分组和工具配置入口：
+
+| 领域 | 当前基线 | 变更要求 |
+|------|----------|----------|
+| Python | `>=3.11` | 不得降低；如声明支持新版本需测试验证 |
+| Build backend | setuptools | 不得无计划切回 hatchling 或混用多个构建真源 |
+| 生产依赖 | 仅放运行时真实需要的库；当前包含 `pandas>=2.1.4,<4.0.0` | 新增依赖必须说明使用位置、上下界和替代方案 |
+| Optional deps | `test` 与 `dev` 分组 | 测试、lint、format、类型检查工具不得混入生产依赖 |
+| Tool config | pytest / ruff / black | 配置入口在 `pyproject.toml`，README 只写运行方式 |
+| Dayu | 只吸收工程基线 | 禁止重新引入 `dayu-agent`、Host、Engine、tool loop 或外部 Dayu API |
 
 ---
 
@@ -1872,7 +1918,7 @@ P0（环境搭建）
 | RR-1 | PDF 格式不统一导致解析失败 | P1 | 已设计兜底策略 | 否 |
 | RR-2 | 超额收益性质判断主观性强 | P2 | MVP 用规则引擎 | 否 |
 | RR-3 | 审计规则过严导致频繁阻断 | P2 | MVP 仅启用程序审计 | 否 |
-| RR-4 | 温度计爬虫被封锁 | P3/v2 | P5-S7 已提供 read-only Service/CLI、24h 缓存、7 天 stale fallback 与 `unavailable=True`；自动映射为 `valuation_state` 仍 deferred，除非先有同源估值规则 | 是（如被封锁且无可用缓存需人工确认） |
+| RR-4 | 温度计公开页适配器被封锁 | P3/P19 | P5-S7 的 read-only public-page Service/CLI 已降级为过渡/对比输入；P19 自建温度计是当前生产方向，`valuation_state` 自动映射仅限 exact supported-index benchmark identity | 否 |
 | RR-5 | `dayu-agent` wheel 下载受 GitHub 可达性影响 | P0/P1 | 已关闭：2026-05-21 裁决移除外部 Dayu 生产依赖；后续 Host/Engine/tool-loop 能力必须项目内化 | 否 |
 | RR-6 | 模板禁用交易措辞使用 substring 匹配，未来合法短语可能误报 | P3/v2 | P2 当前输出已测试通过；P3 若调整模板措辞需同步审查 | 否 |
 | RR-7 | 缺证附录当前为章节级，不是 item 级证据确认 | v2 | MVP 先保证章节级可追溯，Evidence Confirm 层后续细化 | 否 |
@@ -1888,6 +1934,8 @@ P0（环境搭建）
 | RR-17 | P4 draft PR 前工作树范围不清 | P4 | 已关闭；PR inclusion set 已在 `docs/reviews/p4-pr-scope-hygiene-reconciliation-20260520.md` 明确，draft PR 必须按 include / exclude 清单准备 | 否 |
 | RR-18 | 年报下载主源不是监管披露主源 | P7 | 当前实现通过 akshare + Eastmoney PDF 下载年报；已接受 EID/证监会资本市场电子化信息披露平台作为后续主源方向，天天基金/Eastmoney 作为 fallback，需独立 P7 plan/review/implementation，不阻塞 P6-S1 | 否 |
 | RR-19 | 模板源文档第 7 章 `危级/降级阈值` 疑似 typo | P6 | P6-S1 保持 manifest 与 `docs/fund-analysis-template-draft.md` 源文档忠实一致，未单边改成 `升级/降级阈值`；后续模板源文档清理时应同步修正 source template 与 manifest | 否 |
+| RR-20 | UI 直接调用 Service，与 `AGENTS.md` UI 只依赖 Application 的边界不一致 | release maintenance | 已记录为 RM-B2 候选；下一步应新增薄 Application use-case façade 并保持当前 CLI 行为不变 | 否 |
+| RR-21 | `pyproject.toml` 工程基线已切换到 setuptools 并新增依赖分组 | release maintenance | `uv.lock` 已更新；setuptools/PEP 639 blocker 已通过移除旧式 MIT license classifier 关闭；`uv lock --check`、import smoke、ruff 与 diff check 已通过；`tests/test_repo_hygiene.py` 仍因当前工作区 `LICENSE` 已删除而失败，需恢复或确认该删除后重跑 | 是（仅当要处理 LICENSE 删除时） |
 
 ---
 
@@ -1898,17 +1946,17 @@ P0（环境搭建）
 | 功能 | 说明 |
 |------|------|
 | 严选基金池内横向比较 | 同类型基金择优 |
-| LLM 审计 | 证据充分性（E1/E2/E3）+ 内容合规性（C1/C2） |
+| LLM 审计 | 证据充分性（E1/E2/E3）+ 内容合规性（C1/C2）；必须先设计本项目内 Runtime/Engine 边界，不依赖外部 Dayu runtime |
 | 证据复核 | 对 E1/E2 类违规执行二次确认（supported/confirmed_missing） |
 | 修复闭环 | patch（局部修补）+ regenerate（整章重建）+ 锚点重写 |
-| LLM 写作 | 从模板填充升级为 LLM 生成差异化分析 |
+| LLM 写作 | 从模板填充升级为 LLM 生成差异化分析；不得跳过 CHAPTER_CONTRACT / ITEM_RULE / preferred_lens / 证据锚点审计 |
 
 ### v3（Week 10-13）
 
 | 功能 | 说明 |
 |------|------|
 | 组合管理 | 再平衡引擎 + 目标市值策略 |
-| 温度计自建 | AKShare + 自行计算 PE/PB 百分位 |
+| 温度计自建 | P19 已落地沪深300/中证500指数温度计；全 A 与其他指数等待 source gate |
 | Web UI | FastAPI + 前端 |
 | 微信入口 | 微信消息适配 |
 
@@ -2065,3 +2113,4 @@ P0（环境搭建）
 | 2026-05-22 | post-P11 follow-up planning | ✅ accepted | artifact=`docs/reviews/post-p11-second-follow-up-planning-20260522.md`；P11 control-doc recovery 已关闭，RR-13 duplicate `016492` 与 `docs/repo-audit-20260521.md` 均为非阻断 residual；controller 裁决下一阶段进入 P12 ITEM_RULE deterministic compliance，首个 gate 为 `P12-S1 ITEM_RULE renderer/audit compliance plan/review`；P12 非目标包括 LLM audit、Evidence Confirm、RepairContract、Host/Engine/tool loop、RR-13 自动修复和 repo-audit 发布 |
 | 2026-05-22 | P12-S1 ITEM_RULE renderer/audit compliance plan/review | ✅ accepted | plan artifact=`docs/reviews/p12-s1-item-rule-renderer-audit-compliance-plan-20260522.md`；controller judgment=`docs/reviews/p12-s1-plan-review-controller-judgment-20260522.md`；MiMo/GLM initial reviews 均为 `PASS_WITH_FINDINGS`，targeted re-review 均 `PASS`；计划接受 renderer 产生 `item_rule_decisions` 与 `item_rule_audit_context`、audit 消费同一 tuple/context、FQ5 语义不扩张、固定 Markdown 段落和 evidence 边界；当前 gate 为 `P12-S1 ITEM_RULE renderer/audit compliance plan accepted`，下一 gate 为 `P12-S1 implementation` |
 | 2026-05-23 | P19-S6 production validation | ✅ merged | PR 14 squash merge `45bea3e`；新增确定性 Service/CLI 温度计估值验证（exact benchmark identity、unsupported code no-call、ambiguous composite no-call）；full suite `599 passed`、ruff passed | P19 closed |
+| 2026-05-23 | AGENTS / Dayu pyproject alignment | ✅ accepted locally | `docs/design.md` / `docs/implementation-control.md` / `pyproject.toml` 已统一 `AGENTS.md` 六层边界和 Dayu 工程基线吸收范围；`uv.lock` 已同步；未引入外部 Dayu runtime；setuptools/PEP 639 license classifier blocker 已修复；`uv lock --check`、import smoke、ruff、diff check 通过；repo hygiene 测试仍因当前工作区 `LICENSE` 已删除而失败 |
