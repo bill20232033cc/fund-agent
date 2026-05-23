@@ -1,12 +1,14 @@
 # fund_agent 开发手册
 
-`fund_agent` 是基金分析 Agent 的 Python 包。当前主链路是确定性四层架构：
+`fund_agent` 是基金分析 Agent 的 Python 包。当前生产路径是确定性 CLI 管线：
 
 ```text
 UI -> Application -> Service -> Fund Capability
 ```
 
-当前代码不接入外部 Dayu Host、Engine、tool loop、scene registry 或 LLM prompt runtime。后续如需要这些能力，应在本项目内按当前边界实现，不通过外部 Dayu API 包装主链路。
+目标架构边界仍是 UI / Application / Runtime / Service / Engine / Capability 六层。当前没有 `Runtime` 或 `Engine` 通用包是有意 defer，不是遗漏：在真实 session/run/cancel/resume/outbox、scene registry、tool loop、runner、ToolRegistry、ToolTrace 或 context budget 需求出现前，不创建占位包。
+
+当前代码不接入外部 Dayu Host、Engine、tool loop、scene registry 或 LLM prompt runtime。Dayu 只作为工程纪律和设计参考；后续如需要 Runtime / Engine 能力，必须先通过具体需求 gate，在本项目边界内声明契约、生命周期、失败语义、事件/trace schema、测试和文档，再修改包结构。
 
 ## 当前包边界
 
@@ -16,7 +18,7 @@ UI -> Application -> Service -> Fund Capability
 | `fund_agent/application` | 薄 use-case facade；只把 typed request 委托给 Service，不承载基金领域规则 |
 | `fund_agent/services` | 用例编排、请求校验、调用 Fund Capability、组合返回结果 |
 | `fund_agent/fund` | 基金领域能力：文档仓库、抽取、分析、模板、审计、quality gate、数据 adapter |
-| `fund_agent/config` | 静态仓库默认路径；当前不提供 Host/Engine runtime 配置 |
+| `fund_agent/config` | 静态仓库默认路径；当前不提供 Runtime/Engine 配置 |
 
 ## 稳定边界
 
@@ -27,6 +29,7 @@ UI -> Application -> Service -> Fund Capability
 - `FundAnalysisRequest.valuation_state=None` 表示允许自动估值；显式 `low/fair/high/unavailable` 都由 Service 短路为用户输入，不调用温度计。自动估值的结构化真源是 `ValuationStateResolution`，同一个对象进入 `FundAnalysisResult`、`TemplateRenderInput` 和 `ProgrammaticAuditInput`。
 - 文档读取只通过 `FundDocumentRepository.load_annual_report(...)` 进入生产路径。
 - Dayu 相关 Host/Engine/Prompting 只作为方法论参考，不是安装依赖或当前主链路事实。
+- Runtime / Engine 是目标边界；当前不创建 `runtime` / `engine` 占位目录，后续必须由具体需求 gate 驱动。
 - `fund_agent/config/paths.py` 只集中维护仓库默认路径常量，不代表 workspace override、prompt manifest、scene registry 或工具运行时已经接入。
 
 ## 阅读顺序

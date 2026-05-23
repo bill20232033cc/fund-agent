@@ -2,11 +2,11 @@
 
 > **版本**: v2.2
 > **日期**: 2026-05-23
-> **状态**: 已按 `AGENTS.md` 统一规则真源、六层模块边界、P19 全 A/指数温度计集成事实、工程基线和 Dayu 参考材料吸收范围
-> **变更摘要**: v2.2 当前修订确认 `AGENTS.md` 是 Agent 规则唯一权威入口；设计文档是代码设计真源但不得覆盖 `AGENTS.md`；模块边界统一为 UI / Application / Runtime / Service / Engine / Capability；P19-S3 后 `analyze` 只在 exact benchmark identity 命中 `000300` / `000905` 时自动映射 `valuation_state`；P19-S5 后 `fund-analysis thermometer` 默认使用项目内自建全 A `wind_all_a` PE/PB 温度计；`fund-analysis checklist` 作为独立 Application 用例复用 Service 确定性分析核心；吸收 `dayu-agent` `pyproject.toml` 的 Python 3.11、setuptools、元数据、可选依赖、pytest/ruff/black 与包资源声明纪律，并吸收 Dayu README / Host / Engine / Fins / Config / CONTRIBUTING 手册中的可迁移工程纪律；当前确定性主链路不依赖外部 Dayu runtime、Host、Engine、tool loop 或外部 Dayu API，后续如需要相关能力必须在本项目边界内化实现。
+> **状态**: 已按用户提供的六层边界、P19 全 A/指数温度计集成事实、工程基线和 Dayu 参考材料吸收范围完成设计对齐；Runtime / Engine 仍为目标边界，当前不创建占位包
+> **变更摘要**: v2.2 当前修订确认设计文档是代码设计真源但不得覆盖仓库执行规则；模块边界统一为 UI / Application / Runtime / Service / Engine / Capability；P19-S3 后 `analyze` 只在 exact benchmark identity 命中 `000300` / `000905` 时自动映射 `valuation_state`；P19-S5 后 `fund-analysis thermometer` 默认使用项目内自建全 A `wind_all_a` PE/PB 温度计；`fund-analysis checklist` 作为独立 Application 用例复用 Service 确定性分析核心；吸收 `dayu-agent` `pyproject.toml` 的 Python 3.11、setuptools、元数据、可选依赖、pytest/ruff/black 与包资源声明纪律，并吸收 Dayu README / Host / Engine / Fins / Config / CONTRIBUTING 手册中的可迁移工程纪律；当前确定性主链路不依赖外部 Dayu runtime、Host、Engine、tool loop 或外部 Dayu API；Runtime / Engine 只作为目标边界保留，只有真实 session/run/tool-loop/ToolTrace/scene registry 等需求出现并通过独立 plan review 后才落地。
 > **关联文档**: `docs/implementation-control.md`（实施总控）、`fund-agent-mvp-plan.md`（MVP 计划书）、`docs/fund-analysis-template-draft.md`（定性模板 v2）、`docs/audit-alignment.md`（审计机制对照研究）
 
-⚠️ **重要声明**：`AGENTS.md` 是本仓库所有 Agent 执行规则的唯一权威入口；本文档是其下位的设计真源。若本文档、实施总控、README 或代码与 `AGENTS.md` 冲突，必须先按 `AGENTS.md` 修正方案和实现，再回写本文档；不得长期保留“设计未来”口径冒充已实现状态。
+⚠️ **重要声明**：本文档记录当前代码设计真源；若本文档、实施总控、README 或代码与用户提供的仓库执行规则冲突，必须先修正方案和实现，再回写本文档；不得长期保留“设计未来”口径冒充已实现状态。
 
 ---
 
@@ -66,7 +66,7 @@ UI → Application → Service / Runtime → Engine / Capability
 
 > **显式参数裁决**：Dayu 手册中的 `extra_payloads` 只能作为未来 provider 扩展参数参考；本项目任何业务参数、基金代码、年份、估值状态、缓存策略、来源选择、scene、tool 或审计开关都必须在 typed request / contract / config 中显式声明，禁止塞进 `extra_payload` 或自由 dict。
 
-> **目录事实裁决**：`fund_agent/config` 的存在不代表 prompt manifest、scene registry 或 Dayu config runtime 已接入；当前尚未创建 `fund_agent/runtime` 或 `fund_agent/engine` 通用执行包。空目录、本地未跟踪草案或审计输入不能单独作为设计事实。
+> **目录事实裁决**：`fund_agent/config` 的存在不代表 prompt manifest、scene registry 或 Dayu config runtime 已接入；当前尚未创建 Runtime 或 Engine 通用执行包。空目录、本地未跟踪草案或审计输入不能单独作为设计事实。
 
 ### 2.2 当前确定性执行链路
 
@@ -695,8 +695,6 @@ fund-agent/
 │   ├── application/                     # Application 层薄 use-case facade
 │   │   ├── __init__.py
 │   │   └── use_cases.py
-│   ├── runtime/                         # Runtime 层（目标包；当前未接入 Agent runtime）
-│   ├── engine/                          # Engine 层（目标包；当前未接入通用工具执行框架）
 │   ├── services/                        # Service 层（7 个服务）
 │   │   ├── __init__.py                  # 公共导出（Request/Result/Service 类型）
 │   │   ├── fund_analysis_service.py     # 主分析用例编排
@@ -809,6 +807,8 @@ fund-agent/
 ├── CLAUDE.md
 └── README.md
 ```
+
+Runtime / Engine 是目标边界，不是当前磁盘目录事实。当前生产路径故意保持为 UI → Application → Service → Fund Capability；在没有真实 session/run/cancel/resume/outbox、scene registry、tool loop、runner、ToolRegistry、ToolTrace 或 context budget 需求前，不创建 Runtime 或 Engine 占位包。后续若要落地这些能力，必须进入独立 gate，先完成 plan review、契约、生命周期、失败语义、事件/trace schema、测试和文档边界裁决，再修改包结构。
 
 ### 9.1 工程基线与 Dayu 吸收范围
 
