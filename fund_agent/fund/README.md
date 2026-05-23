@@ -311,6 +311,7 @@ C2 当前只做确定性 marker / 元数据检查，不调用 LLM，不判断语
 
 - 当前覆盖宽基指数和全 A 市场：`fund-analysis thermometer` 默认查询全 A 市场 `wind_all_a`，`fund-analysis thermometer --index wind_all_a` 可显式查询全 A，`fund-analysis thermometer --index wind_all_a,000300,000905` 可批量查询全 A、沪深300和中证500
 - 数据源通过 akshare 乐咕乐股指数 PE/PB 接口获取沪深300/中证500 `滚动市盈率中位数` 和 `市净率中位数`，并通过全 A PE/PB 历史接口获取 `wind_all_a` 共同日期数据
+- 指数和全 A 的 PE/PB 抓取按 PE 后 PB 顺序执行，避免并发进入 akshare/Legulegu native 依赖；全 A 同源响应内同日期多条正数记录按输入顺序保留最后一条，不跨来源插补或推断
 - 计算器使用 PE/PB 历史分位数各 50% 生成温度和 `low/fair/high` 候选状态
 - 缓存使用版本化 JSON，按市场/指数隔离命名空间：全 A 使用 `cache/thermometer/market/wind_all_a_history.json`，宽基指数使用 `cache/thermometer/index/<index_code>_history.json`
 - 数据源失败时返回 `unavailable` 数据态或复用可用缓存，不 fallback 到有知有行公开页面

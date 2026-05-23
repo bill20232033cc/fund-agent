@@ -5,6 +5,8 @@ from __future__ import annotations
 import asyncio
 from datetime import date
 from decimal import Decimal
+import threading
+import time
 
 import pytest
 
@@ -170,6 +172,311 @@ class _FlakyNoArgFetcher:
         return _FakeFrame(self.records)
 
 
+class _ConcurrentEntryGuard:
+    """检测测试 fetcher 是否发生并发进入。"""
+
+    def __init__(self) -> None:
+        """初始化并发进入检测器。
+
+        Args:
+            无。
+
+        Returns:
+            无返回值。
+
+        Raises:
+            无显式抛出。
+        """
+
+        self._lock = threading.Lock()
+        self._active_label: str | None = None
+        self.events: list[str] = []
+
+    def run(self, label: str, records: list[dict[str, object]]) -> _FakeFrame:
+        """记录 fetcher 执行区间，并在并发进入时失败。
+
+        Args:
+            label: 当前 fetcher 标签。
+            records: 待返回的 records 数据。
+
+        Returns:
+            fake frame。
+
+        Raises:
+            AssertionError: 当另一个 fetcher 尚未退出时再次进入。
+        """
+
+        with self._lock:
+            if self._active_label is not None:
+                raise AssertionError(f"fetcher 并发进入：{self._active_label} / {label}")
+            self._active_label = label
+            self.events.append(f"{label}:start")
+        try:
+            time.sleep(0.02)
+            return _FakeFrame(records)
+        finally:
+            with self._lock:
+                self.events.append(f"{label}:end")
+                self._active_label = None
+
+
+class _GuardedSymbolFetcher:
+    """带并发检测的指数 fake fetcher。"""
+
+    def __init__(
+        self,
+        guard: _ConcurrentEntryGuard,
+        label: str,
+        records: list[dict[str, object]],
+    ) -> None:
+        """初始化带并发检测的指数 fake fetcher。
+
+        Args:
+            guard: 共享并发检测器。
+            label: 当前 fetcher 标签。
+            records: 待返回的 records 数据。
+
+        Returns:
+            无返回值。
+
+        Raises:
+            无显式抛出。
+        """
+
+        self.guard = guard
+        self.label = label
+        self.records = records
+        self.symbols: list[str] = []
+
+    def __call__(self, symbol: str) -> _FakeFrame:
+        """记录 symbol 并执行带并发检测的抓取。
+
+        Args:
+            symbol: akshare 指数名称。
+
+        Returns:
+            fake frame。
+
+        Raises:
+            AssertionError: 当 PE/PB fetcher 并发进入时抛出。
+        """
+
+        self.symbols.append(symbol)
+        return self.guard.run(self.label, self.records)
+
+
+class _GuardedNoArgFetcher:
+    """带并发检测的无参 fake fetcher。"""
+
+    def __init__(
+        self,
+        guard: _ConcurrentEntryGuard,
+        label: str,
+        records: list[dict[str, object]],
+    ) -> None:
+        """初始化带并发检测的无参 fake fetcher。
+
+        Args:
+            guard: 共享并发检测器。
+            label: 当前 fetcher 标签。
+            records: 待返回的 records 数据。
+
+        Returns:
+            无返回值。
+
+        Raises:
+            无显式抛出。
+        """
+
+        self.guard = guard
+        self.label = label
+        self.records = records
+        self.calls = 0
+
+    def __call__(self) -> _FakeFrame:
+        """记录调用并执行带并发检测的抓取。
+
+        Args:
+            无。
+
+        Returns:
+            fake frame。
+
+        Raises:
+            AssertionError: 当 PE/PB fetcher 并发进入时抛出。
+        """
+
+        self.calls += 1
+        return self.guard.run(self.label, self.records)
+
+
+class _ImmediateToThreadAwaitable:
+    """同步可观察的 `asyncio.to_thread` awaitable 测试替身。"""
+
+    def __init__(
+        self,
+        events: list[str],
+        label: str,
+        function: object,
+        args: tuple[object, ...],
+        kwargs: dict[str, object],
+    ) -> None:
+        """初始化同步 awaitable。
+
+        Args:
+            events: 事件记录列表。
+            label: 被调函数标签。
+            function: 原始同步函数。
+            args: 位置参数。
+            kwargs: 关键字参数。
+
+        Returns:
+            无返回值。
+
+        Raises:
+            无显式抛出。
+        """
+
+        self.events = events
+        self.label = label
+        self.function = function
+        self.args = args
+        self.kwargs = kwargs
+
+    def __await__(self) -> object:
+        """同步执行原始函数并返回 await 迭代器。
+
+        Args:
+            无。
+
+        Returns:
+            await 迭代器。
+
+        Raises:
+            Exception: 原始函数异常原样传播，供 source 层统一包裹。
+        """
+
+        self.events.append(f"await:{self.label}")
+        if False:
+            yield None
+        return self.function(*self.args, **self.kwargs)  # type: ignore[operator]
+
+
+class _DeterministicToThreadScheduler:
+    """记录 `asyncio.to_thread` 调度顺序的测试替身。"""
+
+    def __init__(self) -> None:
+        """初始化调度记录器。
+
+        Args:
+            无。
+
+        Returns:
+            无返回值。
+
+        Raises:
+            无显式抛出。
+        """
+
+        self.events: list[str] = []
+
+    def __call__(
+        self,
+        function: object,
+        /,
+        *args: object,
+        **kwargs: object,
+    ) -> _ImmediateToThreadAwaitable:
+        """记录待调度函数并返回同步 awaitable。
+
+        Args:
+            function: `asyncio.to_thread` 接收的同步函数。
+            args: 位置参数。
+            kwargs: 关键字参数。
+
+        Returns:
+            同步 awaitable 测试替身。
+
+        Raises:
+            无显式抛出。
+        """
+
+        label = getattr(function, "__name__", repr(function))
+        self.events.append(f"schedule:{label}")
+        return _ImmediateToThreadAwaitable(self.events, label, function, args, kwargs)
+
+
+class _FailingPeFetcher:
+    """主动失败的 PE fetcher，用于证明 PB 不会被提前调度。"""
+
+    def __init__(self, events: list[str]) -> None:
+        """初始化主动失败 fetcher。
+
+        Args:
+            events: 事件记录列表。
+
+        Returns:
+            无返回值。
+
+        Raises:
+            无显式抛出。
+        """
+
+        self.events = events
+
+    def __call__(self, symbol: str) -> _FakeFrame:
+        """记录 PE 调用并主动失败。
+
+        Args:
+            symbol: akshare 指数名称。
+
+        Returns:
+            不返回。
+
+        Raises:
+            RuntimeError: 始终抛出，用于阻断后续 PB 调度。
+        """
+
+        self.events.append(f"pe_fetcher:{symbol}:start")
+        self.events.append("pe_fetcher:fail")
+        raise RuntimeError("PE sentinel failure")
+
+
+class _ForbiddenPbFetcher:
+    """禁止被调用的 PB fetcher。"""
+
+    def __init__(self, events: list[str]) -> None:
+        """初始化禁止调用 fetcher。
+
+        Args:
+            events: 事件记录列表。
+
+        Returns:
+            无返回值。
+
+        Raises:
+            无显式抛出。
+        """
+
+        self.events = events
+
+    def __call__(self, symbol: str) -> _FakeFrame:
+        """若被调用则立即失败。
+
+        Args:
+            symbol: akshare 指数名称。
+
+        Returns:
+            不返回。
+
+        Raises:
+            AssertionError: PB 被错误调用时抛出。
+        """
+
+        self.events.append(f"pb_fetcher:{symbol}:called")
+        raise AssertionError("PB fetcher 不应在 PE 失败后被调用")
+
+
 def test_thermometer_code_classifier_distinguishes_index_market_and_unsupported() -> None:
     """验证 Capability 共享分类器区分指数、全 A 市场和不支持代码。
 
@@ -275,6 +582,70 @@ def test_akshare_index_source_fails_closed_on_schema_drift() -> None:
 
     with pytest.raises(ThermometerSourceError, match="缺少字段"):
         asyncio.run(source.load_index_history("000300"))
+
+
+def test_akshare_index_source_fetches_pe_before_pb_without_concurrency() -> None:
+    """验证指数 PE/PB 抓取顺序执行，避免并发进入 akshare native 依赖。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 PE/PB fetcher 并发执行或顺序不符合预期时抛出。
+    """
+
+    guard = _ConcurrentEntryGuard()
+    pe_fetcher = _GuardedSymbolFetcher(
+        guard,
+        "pe",
+        [{"日期": "2026-05-22", "滚动市盈率中位数": "20"}],
+    )
+    pb_fetcher = _GuardedSymbolFetcher(
+        guard,
+        "pb",
+        [{"日期": "2026-05-22", "市净率中位数": "2"}],
+    )
+    source = AkshareIndexThermometerSource(pe_fetcher=pe_fetcher, pb_fetcher=pb_fetcher)
+
+    history = asyncio.run(source.load_index_history("000300"))
+
+    assert guard.events == ["pe:start", "pe:end", "pb:start", "pb:end"]
+    assert pe_fetcher.symbols == ["沪深300"]
+    assert pb_fetcher.symbols == ["沪深300"]
+    assert history.points[0].pe == Decimal("20")
+
+
+def test_akshare_index_source_does_not_schedule_pb_before_pe_finishes(monkeypatch) -> None:
+    """验证指数 PE 完成前不会调度 PB，不依赖真实线程重叠窗口。
+
+    Args:
+        monkeypatch: pytest monkeypatch fixture，用于替换 `asyncio.to_thread`。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 PB 在 PE 失败前已被调度或调用时抛出。
+    """
+
+    scheduler = _DeterministicToThreadScheduler()
+    pe_fetcher = _FailingPeFetcher(scheduler.events)
+    pb_fetcher = _ForbiddenPbFetcher(scheduler.events)
+    monkeypatch.setattr(asyncio, "to_thread", scheduler)
+    source = AkshareIndexThermometerSource(pe_fetcher=pe_fetcher, pb_fetcher=pb_fetcher)
+
+    with pytest.raises(ThermometerSourceError, match="PE sentinel failure"):
+        asyncio.run(source.load_index_history("000300"))
+
+    assert scheduler.events == [
+        "schedule:_load_pe_frame",
+        "await:_load_pe_frame",
+        "pe_fetcher:沪深300:start",
+        "pe_fetcher:fail",
+    ]
 
 
 def test_akshare_index_source_rejects_bool_valuation_values() -> None:
@@ -485,7 +856,7 @@ def test_akshare_all_a_source_uses_only_middle_columns() -> None:
 
 
 def test_akshare_all_a_source_fails_on_conflicting_duplicate_date() -> None:
-    """验证全 A 同日期不同正数值会 fail-closed。
+    """验证全 A 同日期不同正数值按输入顺序确定性保留最后一条。
 
     Args:
         无。
@@ -494,7 +865,7 @@ def test_akshare_all_a_source_fails_on_conflicting_duplicate_date() -> None:
         无返回值。
 
     Raises:
-        AssertionError: 当重复日期冲突未被拒绝时抛出。
+        AssertionError: 当重复日期未确定性折叠时抛出。
     """
 
     source = AkshareAllAMarketThermometerSource(
@@ -507,8 +878,12 @@ def test_akshare_all_a_source_fails_on_conflicting_duplicate_date() -> None:
         pb_fetcher=lambda: _FakeFrame([{"date": "2026-05-22", "middlePB": "1.9"}]),
     )
 
-    with pytest.raises(ThermometerSourceError, match="重复日期冲突"):
-        asyncio.run(source.load_index_history(ALL_A_MARKET_CODE))
+    history = asyncio.run(source.load_index_history(ALL_A_MARKET_CODE))
+
+    assert len(history.points) == 1
+    assert history.points[0].date == "2026-05-22"
+    assert history.points[0].pe == Decimal("18.6")
+    assert history.points[0].pb == Decimal("1.9")
 
 
 def test_akshare_all_a_source_collapses_identical_duplicate_date() -> None:
@@ -544,6 +919,40 @@ def test_akshare_all_a_source_collapses_identical_duplicate_date() -> None:
     assert len(history.points) == 1
     assert history.points[0].pe == Decimal("18.50")
     assert history.points[0].pb == Decimal("1.90")
+
+
+def test_akshare_all_a_source_fetches_pe_before_pb_without_concurrency() -> None:
+    """验证全 A PE/PB 抓取顺序执行，避免并发进入 akshare native 依赖。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 PE/PB fetcher 并发执行或顺序不符合预期时抛出。
+    """
+
+    guard = _ConcurrentEntryGuard()
+    pe_fetcher = _GuardedNoArgFetcher(
+        guard,
+        "pe",
+        [{"date": "2026-05-22", "middlePETTM": "18.5"}],
+    )
+    pb_fetcher = _GuardedNoArgFetcher(
+        guard,
+        "pb",
+        [{"date": "2026-05-22", "middlePB": "1.9"}],
+    )
+    source = AkshareAllAMarketThermometerSource(pe_fetcher=pe_fetcher, pb_fetcher=pb_fetcher)
+
+    history = asyncio.run(source.load_index_history(ALL_A_MARKET_CODE))
+
+    assert guard.events == ["pe:start", "pe:end", "pb:start", "pb:end"]
+    assert pe_fetcher.calls == 1
+    assert pb_fetcher.calls == 1
+    assert history.points[0].pe == Decimal("18.5")
 
 
 @pytest.mark.parametrize(

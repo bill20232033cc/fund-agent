@@ -198,10 +198,8 @@ class AkshareIndexThermometerSource:
             raise ThermometerSourceError(f"暂不支持指数：{index_code}")
 
         try:
-            pe_frame, pb_frame = await asyncio.gather(
-                asyncio.to_thread(self._load_pe_frame, symbol),
-                asyncio.to_thread(self._load_pb_frame, symbol),
-            )
+            pe_frame = await asyncio.to_thread(self._load_pe_frame, symbol)
+            pb_frame = await asyncio.to_thread(self._load_pb_frame, symbol)
         except Exception as exc:
             raise ThermometerSourceError(f"指数估值数据获取失败：{exc}") from exc
 
@@ -288,10 +286,8 @@ class AkshareAllAMarketThermometerSource:
         if classify_thermometer_code(index_code) != "market":
             raise ThermometerSourceError(f"暂不支持全 A 市场代码：{index_code}")
 
-        pe_frame, pb_frame = await asyncio.gather(
-            asyncio.to_thread(self._load_pe_frame),
-            asyncio.to_thread(self._load_pb_frame),
-        )
+        pe_frame = await asyncio.to_thread(self._load_pe_frame)
+        pb_frame = await asyncio.to_thread(self._load_pb_frame)
         points = _merge_all_a_pe_pb_rows(pe_frame, pb_frame)
         if not points:
             raise ThermometerSourceError("全 A PE/PB 历史合并后为空")
@@ -408,7 +404,7 @@ def _merge_all_a_pe_pb_rows(pe_frame: object, pb_frame: object) -> tuple[PePbPoi
         按日期升序排列的 PE/PB 点。
 
     Raises:
-        ThermometerSourceError: 表结构缺列、重复日期冲突或有效共同日期为空时抛出。
+        ThermometerSourceError: 表结构缺列或有效共同日期为空时抛出。
     """
 
     pe_rows = _strict_positive_records_by_date(
@@ -493,6 +489,10 @@ def _strict_positive_records_by_date(
 ) -> dict[str, Decimal]:
     """把全 A DataFrame-like 表转换为严格日期到正估值值的映射。
 
+    同一来源响应内如果同一日期出现多条正数记录，按输入顺序保留最后
+    一条。该规则只在同源表内部做确定性折叠，用于处理来源返回的重复
+    修正行；不跨来源推断、不做插补，也不放宽 schema 和数值校验。
+
     Args:
         frame: akshare DataFrame 或具备 `to_dict(orient=\"records\")` 的对象。
         date_column: 日期列名，必须是全 A source contract 的 `date`。
@@ -502,7 +502,7 @@ def _strict_positive_records_by_date(
         日期到正估值值的映射。
 
     Raises:
-        ThermometerSourceError: schema 缺失、值不可解析或重复日期冲突时抛出。
+        ThermometerSourceError: schema 缺失或值不可解析时抛出。
     """
 
     if not hasattr(frame, "to_dict"):
@@ -526,12 +526,8 @@ def _strict_positive_records_by_date(
         value = _to_optional_positive_decimal(record[value_column], field_name=value_column)
         if value is None:
             continue
-        existing_value = values.get(date_text)
-        if existing_value is None:
-            values[date_text] = value
-            continue
-        if existing_value != value:
-            raise ThermometerSourceError(f"全 A 估值数据重复日期冲突：{date_text} / {value_column}")
+        # 同源响应内重复日期视为来源重复修正行，按响应输入顺序保留最后一条正数值。
+        values[date_text] = value
 
     if not saw_structured_row or not values:
         raise ThermometerSourceError(f"全 A 估值数据没有有效正数记录：{value_column}")

@@ -23,7 +23,7 @@ CI 当前固定 Python 3.11，使用 `uv sync --extra dev --frozen` 安装锁定
 - `tests/fund/test_quality_gate_integration.py`：P5-S1/P9-S2 单基金 quality gate adapter 测试，覆盖从已抽取 `StructuredFundDataBundle` 生成 snapshot/score/gate 产物、精选池成员缺 golden coverage 仍运行 gate，以及基金不在精选池时返回 not-run reason；不触发真实网络或 PDF
 - `tests/fund/data/test_nav_data.py`：净值数据适配器测试，覆盖 `nav_cache` 命中和强制刷新
 - `tests/fund/data/test_thermometer.py`：有知有行温度计适配器测试，覆盖全市场/指数/宏观解析、24h 缓存复用、强制刷新、抓取失败 stale fallback、无缓存 unavailable 和 malformed HTML
-- `tests/fund/data/test_thermometer_source.py`：自建温度计 akshare 数据源测试，覆盖沪深300/中证500 PE/PB 表合并、全 A `wind_all_a` PE/PB 共同日期合并、不支持代码和 schema drift fail-closed
+- `tests/fund/data/test_thermometer_source.py`：自建温度计 akshare 数据源测试，覆盖沪深300/中证500 PE/PB 表合并、指数与全 A PE/PB 顺序抓取、全 A `wind_all_a` PE/PB 共同日期合并、同日期重复修正行确定性折叠、不支持代码和 schema drift fail-closed
 - `tests/fund/data/test_thermometer_cache.py`：自建温度计 JSON 缓存测试，覆盖 index/market 命名空间隔离、fresh cache、stale policy 和损坏缓存降级
 - `tests/fund/analysis/test_ratios.py`：分析模块公共比例解析测试，覆盖披露文本百分比解析、数值型输入已标准化契约、保留的显式数值百分比归一 helper 和非法输入 fail-closed
 - `tests/fund/analysis/test_r_abc.py`：R=A+B-C 收益归因测试，覆盖公式闭合、P1 字段解析、证据锚点传递和缺失输入路径
