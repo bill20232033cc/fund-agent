@@ -149,6 +149,8 @@ uv run ruff check .
 uv run pytest --cov=fund_agent --cov-report=term-missing --cov-fail-under=50 -q
 ```
 
+当前自动 CI gate 是 `fund_agent` 全局覆盖率不低于 50%。仓库开发规则同时要求新增或大幅修改模块以单文件覆盖率 ≥80% 为评审目标；低于目标时应在 review 或 residual risk 中解释，不应在未评估缺口前直接提高 CI 阈值。
+
 本地也可以按关注范围运行较小的测试集：
 
 ```bash
@@ -273,6 +275,8 @@ fund-analysis quality-gate \
 ## 仓库产物策略
 
 仓库采用 MIT License。发布基础验证由 GitHub Actions 执行 Python 3.11 下的 `uv sync --extra dev --frozen`、`uv run ruff check .` 和 `uv run pytest --cov=fund_agent --cov-report=term-missing --cov-fail-under=50 -q`。
+
+覆盖率策略分两层：CI 自动阻断使用全局 `--cov-fail-under=50`；单文件 ≥80% 是代码评审目标，适用于新增或大幅修改模块，需要通过定向测试、review 说明或 residual risk 追踪落实。
 
 当前会跟踪人工维护或可复核的输入产物，例如 `docs/code_20260519.csv`、`docs/golden-answer-template.md` 和 `reports/golden-answers/` 下的 curated golden answer 文件。运行时生成物保持本地：`cache/`、`reports/extraction-snapshots/`、`reports/quality-gate-runs/`、`report-*.md` 和 `docs/*.docx` 不纳入默认版本控制。
 

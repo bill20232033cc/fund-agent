@@ -119,7 +119,9 @@ fund-analysis thermometer --index wind_all_a,000300,000905 --force-refresh --jso
 uv run pytest --cov=fund_agent --cov-report=term-missing --cov-fail-under=50 -q
 ```
 
-该命令要求安装 dev 依赖中的 `pytest-cov`。当前 P3-S7 gate 要求总覆盖率不低于 50%。
+该命令要求安装 dev 依赖中的 `pytest-cov`。当前 CI / P3-S7 gate 要求 `fund_agent` 总覆盖率不低于 50%，这是自动阻断阈值，不是单文件质量目标。
+
+单文件覆盖率 ≥80% 是新增或大幅修改模块的评审目标。实现或重构时应优先补足对应测试；暂时无法达到时，必须在 code review、controller judgment 或 residual risk 中说明原因、风险范围和后续补测路径。不要把全局 50% gate 当作单文件覆盖率目标已满足的证明，也不要在未完成缺口评估前直接提高 CI 阈值。
 
 发布就绪完整验证：
 
