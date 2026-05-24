@@ -119,7 +119,7 @@ fund-analysis checklist 004393 --report-year 2024
 - P2 分析：R=A+B-C、超额性质、言行一致性、投资者获得感、风险检查、压力测试、7 问题检查清单
 - `analyze` 自动估值：仅对沪深300/中证500指数基金或指数增强基金使用自建温度计生成第 6 问估值状态
 - 8 章 Markdown 模板渲染
-- 程序审计规则：P1/P2/P3/L1/R1/R2
+- 程序审计规则：P1/P2/P3/C2/L1/R1/R2
 - 有知有行温度计 data adapter：保留为过渡/对比能力，不再作为默认 CLI 查询路径
 - 自建全 A 市场温度计 CLI 默认入口：`fund-analysis thermometer`
 - 自建全 A / 宽基指数温度计 CLI 查询入口：`fund-analysis thermometer --index wind_all_a`、`fund-analysis thermometer --index 000300,000905`

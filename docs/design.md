@@ -389,6 +389,8 @@ C（Cost）= 管理费 + 托管费 + 换手率 × 0.3%
 - `fund_agent/fund/audit/audit_programmatic.py`—— 程序审计执行器
 - `fund_agent/fund/audit/contract_rules.py`—— CHAPTER_CONTRACT C2 审计规则
 
+**规则码口径**：P/C/L/R/E 审计规则码描述报告级三层审计目标，不等同于 quality gate 的 FQ0-FQ6 字段质量规则。当前 MVP 只执行确定性的程序审计规则 `P1/P2/P3/C2/L1/R1/R2`；`E1/E2/E3/C1/L2` 是后续 LLM 审计、Evidence Confirm 或语义复核目标，不进入当前 `ProgrammaticAuditResult.checked_rules`，也不得在文档或测试中把未运行规则描述为已通过。
+
 | 规则码 | 含义 | 阻断级别 | MVP 阶段 | 代码位置 |
 |--------|------|----------|---------|---------|
 | P1 | 章节结构不匹配 | 阻断 | ✅ 实现 | `audit_programmatic.py` |
