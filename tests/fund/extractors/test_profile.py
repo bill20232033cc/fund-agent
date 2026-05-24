@@ -122,6 +122,77 @@ def _build_table_profile_report(fund_code: str, profile_table: ParsedTable, prod
     )
 
 
+def _build_report_with_extra_section(
+    fund_code: str,
+    profile_table: ParsedTable,
+    product_table: ParsedTable,
+    extra_section_id: str,
+    extra_section_title: str,
+    extra_section_text: str,
+    extra_tables: tuple[ParsedTable, ...] = (),
+) -> ParsedAnnualReport:
+    """构造带 parser 可见额外章节的基础画像测试对象。
+
+    Args:
+        fund_code: 基金代码。
+        profile_table: 基金身份键值表。
+        product_table: 产品本质键值表。
+        extra_section_id: 额外章节编号。
+        extra_section_title: 额外章节标题。
+        extra_section_text: 额外章节正文。
+        extra_tables: 额外 parser 表格。
+
+    Returns:
+        带 `§2` 与额外章节的年报对象。
+
+    Raises:
+        ValueError: 章节标题缺失时抛出。
+    """
+
+    raw_text = "\n".join(
+        (
+            "§1 基金简介",
+            "§2 基金简介",
+            "本章字段主要位于表格。",
+            extra_section_title,
+            extra_section_text,
+        )
+    )
+    section_two_start = raw_text.index("§2")
+    extra_section_start = raw_text.index(extra_section_title)
+    return ParsedAnnualReport(
+        key=DocumentKey(fund_code=fund_code, year=2024),
+        raw_text=raw_text,
+        sections={
+            "§1": ReportSection(
+                section_id="§1",
+                title="§1 基金简介",
+                start_offset=0,
+                end_offset=section_two_start,
+                matched_rule="fixture",
+                confidence=1.0,
+            ),
+            "§2": ReportSection(
+                section_id="§2",
+                title="§2 基金简介",
+                start_offset=section_two_start,
+                end_offset=extra_section_start,
+                matched_rule="fixture",
+                confidence=1.0,
+            ),
+            extra_section_id: ReportSection(
+                section_id=extra_section_id,
+                title=extra_section_title,
+                start_offset=extra_section_start,
+                end_offset=len(raw_text),
+                matched_rule="fixture",
+                confidence=1.0,
+            ),
+        },
+        tables=(profile_table, product_table, *extra_tables),
+    )
+
+
 def _dummy_field() -> ExtractedField[dict[str, object]]:
     """构造顺序测试使用的占位字段。
 
@@ -525,6 +596,9 @@ def test_extract_profile_reads_real_section_two_key_value_tables() -> None:
     assert result.basic_identity.value is not None
     assert result.basic_identity.value["fund_name"] == "华泰柏瑞沪深300交易型开放式指数证券投资基金"
     assert result.basic_identity.value["fund_code"] == "510300"
+    assert result.basic_identity.value["management_company"] == "华泰柏瑞基金管理有限公司"
+    assert result.basic_identity.value["custodian"] is None
+    assert result.basic_identity.value["inception_date"] is None
     assert result.basic_identity.value["classified_fund_type"] == "index_fund"
     assert result.product_profile.value == {
         "investment_objective": "紧密跟踪标的指数表现。",
@@ -540,6 +614,494 @@ def test_extract_profile_reads_real_section_two_key_value_tables() -> None:
     anchor_table_ids = {anchor.table_id for anchor in result.basic_identity.anchors}
     assert "page-5-table-0" in anchor_table_ids
     assert result.product_profile.anchors[0].table_id == "page-5-table-1"
+
+
+def test_extract_profile_outputs_basic_identity_company_custodian_inception_with_anchors() -> None:
+    """验证基础身份从 `§2` 表格输出管理人、托管人和合同生效日及锚点。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当新增基础身份字段或证据锚点缺失时抛出。
+    """
+
+    report = _build_table_profile_report(
+        "004393",
+        ParsedTable(
+            page_number=5,
+            table_index=0,
+            headers=("基金名称", "安信企业价值优选混合型证券投资基金"),
+            rows=(
+                ("基金简称", "安信企业价值优选混合A"),
+                ("基金主代码", "004393"),
+                ("基金管理人", "安信基金管理有限责任公司"),
+                ("基金托管人", "中国银行股份有限公司"),
+                ("基金合同生效日", "2022 年 8 月 8 日"),
+            ),
+        ),
+        ParsedTable(
+            page_number=5,
+            table_index=1,
+            headers=("投资目标", "在严格控制风险的前提下，追求基金资产的长期稳健增值。"),
+            rows=(
+                ("投资范围", "投资于股票、债券等。"),
+                ("业绩比较基准", "沪深300指数收益率×60%+中债综合指数收益率×40%"),
+            ),
+        ),
+    )
+
+    result = extract_profile(report)
+
+    assert result.basic_identity.value is not None
+    assert result.basic_identity.value["management_company"] == "安信基金管理有限责任公司"
+    assert result.basic_identity.value["custodian"] == "中国银行股份有限公司"
+    assert result.basic_identity.value["inception_date"] == "2022 年 8 月 8 日"
+    anchors = {anchor.row_locator: anchor for anchor in result.basic_identity.anchors}
+    assert anchors["management_company"].section_id == "§2"
+    assert anchors["management_company"].table_id == "page-5-table-0"
+    assert anchors["management_company"].note == "基金管理人：安信基金管理有限责任公司"
+    assert anchors["custodian"].table_id == "page-5-table-0"
+    assert anchors["inception_date"].table_id == "page-5-table-0"
+
+
+def test_extract_profile_fee_schedule_fallback_reads_74102_text_when_section_seven_absent() -> None:
+    """验证 `§2` 缺费率时按 parser 可见 `7.4.10.2` 文本 fallback。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 fallback 依赖 `§7` 或未输出标量费率时抛出。
+    """
+
+    report = _build_report_with_extra_section(
+        "004393",
+        ParsedTable(
+            page_number=5,
+            table_index=0,
+            headers=("基金名称", "安信企业价值优选混合型证券投资基金"),
+            rows=(("基金简称", "安信企业价值优选混合A"), ("基金主代码", "004393")),
+        ),
+        ParsedTable(
+            page_number=5,
+            table_index=1,
+            headers=("投资目标", "追求基金资产长期稳健增值。"),
+            rows=(("业绩比较基准", "沪深300指数收益率×60%+中债综合指数收益率×40%"),),
+        ),
+        "§5",
+        "§5 财务报表附注",
+        "\n".join(
+            (
+                "7.4.10.2 基金费用计提方法、计提标准和支付方式",
+                "7.4.10.2.1 基金管理费",
+                "本基金的管理费按前一日基金资产净值的 1.20% 年费率计提。",
+                "7.4.10.2.2 基金托管费",
+                "本基金的托管费按前一日基金资产净值的 0.20% 年费率计提。",
+                "7.4.10.3 其他费用",
+            )
+        ),
+    )
+
+    result = extract_profile(report)
+
+    assert result.fee_schedule.value == {
+        "management_fee": "1.20%",
+        "custody_fee": "0.20%",
+    }
+    anchors = {anchor.row_locator: anchor for anchor in result.fee_schedule.anchors}
+    assert anchors["management_fee"].section_id == "§5"
+    assert anchors["management_fee"].table_id is None
+    assert anchors["management_fee"].note == "7.4.10.2.1 基金管理费：1.20%"
+    assert anchors["custody_fee"].section_id == "§5"
+    assert anchors["custody_fee"].note == "7.4.10.2.2 基金托管费：0.20%"
+
+
+def test_extract_profile_fee_schedule_fallback_reads_74102_table_semantics() -> None:
+    """验证 fallback 可从表格语义读取 `7.4.10.2` 管理费和托管费。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当表格语义 fallback 未提取费率时抛出。
+    """
+
+    fee_table = ParsedTable(
+        page_number=42,
+        table_index=3,
+        headers=("项目", "计提标准"),
+        rows=(
+            ("7.4.10.2.1 基金管理费", "按前一日基金资产净值的 1.20% 年费率计提"),
+            ("7.4.10.2.2 基金托管费", "按前一日基金资产净值的 0.20% 年费率计提"),
+        ),
+    )
+    report = _build_report_with_extra_section(
+        "004393",
+        ParsedTable(
+            page_number=5,
+            table_index=0,
+            headers=("基金名称", "安信企业价值优选混合型证券投资基金"),
+            rows=(("基金简称", "安信企业价值优选混合A"), ("基金主代码", "004393")),
+        ),
+        ParsedTable(
+            page_number=5,
+            table_index=1,
+            headers=("投资目标", "追求基金资产长期稳健增值。"),
+            rows=(("业绩比较基准", "沪深300指数收益率×60%+中债综合指数收益率×40%"),),
+        ),
+        "§5",
+        "§5 财务报表附注",
+        "7.4.10.2 基金费用计提方法、计提标准和支付方式",
+        (fee_table,),
+    )
+
+    result = extract_profile(report)
+
+    assert result.fee_schedule.value == {
+        "management_fee": "1.20%",
+        "custody_fee": "0.20%",
+    }
+    anchors = {anchor.row_locator: anchor for anchor in result.fee_schedule.anchors}
+    assert anchors["management_fee"].table_id == "page-42-table-3"
+    assert anchors["management_fee"].page_number == 42
+    assert anchors["management_fee"].section_id == "§7.4.10.2.1"
+    assert anchors["custody_fee"].table_id == "page-42-table-3"
+    assert anchors["custody_fee"].section_id == "§7.4.10.2.2"
+
+
+def test_extract_profile_fee_schedule_table_fallback_ignores_unbounded_fee_labels() -> None:
+    """验证表格 fallback 不会被无目标子章节上下文的宽泛费率标签抢先命中。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当无关费率表覆盖目标 `7.4.10.2.x` 费率时抛出。
+    """
+
+    unrelated_fee_table = ParsedTable(
+        page_number=20,
+        table_index=0,
+        headers=("项目", "说明"),
+        rows=(
+            ("其他基金管理费率说明", "同类产品管理费可能达到 3.00%"),
+            ("其他产品托管费水平", "同类产品托管费可能达到 4.00%"),
+        ),
+    )
+    target_fee_table = ParsedTable(
+        page_number=42,
+        table_index=3,
+        headers=("项目", "计提标准"),
+        rows=(
+            ("7.4.10.2.1 基金管理费", "按前一日基金资产净值的 1.20% 年费率计提"),
+            ("7.4.10.2.2 基金托管费", "按前一日基金资产净值的 0.20% 年费率计提"),
+        ),
+    )
+    report = _build_report_with_extra_section(
+        "004393",
+        ParsedTable(
+            page_number=5,
+            table_index=0,
+            headers=("基金名称", "安信企业价值优选混合型证券投资基金"),
+            rows=(("基金简称", "安信企业价值优选混合A"), ("基金主代码", "004393")),
+        ),
+        ParsedTable(
+            page_number=5,
+            table_index=1,
+            headers=("投资目标", "追求基金资产长期稳健增值。"),
+            rows=(("业绩比较基准", "沪深300指数收益率×60%+中债综合指数收益率×40%"),),
+        ),
+        "§5",
+        "§5 财务报表附注",
+        "7.4.10.2 基金费用计提方法、计提标准和支付方式",
+        (unrelated_fee_table, target_fee_table),
+    )
+
+    result = extract_profile(report)
+
+    assert result.fee_schedule.value == {
+        "management_fee": "1.20%",
+        "custody_fee": "0.20%",
+    }
+    anchors = {anchor.row_locator: anchor for anchor in result.fee_schedule.anchors}
+    assert anchors["management_fee"].table_id == "page-42-table-3"
+    assert anchors["custody_fee"].table_id == "page-42-table-3"
+    assert anchors["management_fee"].section_id == "§7.4.10.2.1"
+    assert anchors["custody_fee"].section_id == "§7.4.10.2.2"
+
+
+def test_extract_profile_fee_schedule_table_fallback_stays_inside_target_subsection() -> None:
+    """验证表格 fallback 不会跨子章节把相同标签碰撞成错误费率。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当托管费从管理费子章节误抽取时抛出。
+    """
+
+    fee_table = ParsedTable(
+        page_number=42,
+        table_index=3,
+        headers=("项目", "计提标准"),
+        rows=(
+            ("7.4.10.2.1 基金管理费", "管理费 1.20%，托管费另见下节。"),
+            ("提示", "本行仍在管理费子章节，托管费历史水平 9.99% 不应命中。"),
+            ("7.4.10.2.2 基金托管费", "托管费按前一日基金资产净值的 0.20% 年费率计提"),
+        ),
+    )
+    report = _build_report_with_extra_section(
+        "004393",
+        ParsedTable(
+            page_number=5,
+            table_index=0,
+            headers=("基金名称", "安信企业价值优选混合型证券投资基金"),
+            rows=(("基金简称", "安信企业价值优选混合A"), ("基金主代码", "004393")),
+        ),
+        ParsedTable(
+            page_number=5,
+            table_index=1,
+            headers=("投资目标", "追求基金资产长期稳健增值。"),
+            rows=(("业绩比较基准", "沪深300指数收益率×60%+中债综合指数收益率×40%"),),
+        ),
+        "§5",
+        "§5 财务报表附注",
+        "7.4.10.2 基金费用计提方法、计提标准和支付方式",
+        (fee_table,),
+    )
+
+    result = extract_profile(report)
+
+    assert result.fee_schedule.value == {
+        "management_fee": "1.20%",
+        "custody_fee": "0.20%",
+    }
+    custody_anchor = {
+        anchor.row_locator: anchor for anchor in result.fee_schedule.anchors
+    }["custody_fee"]
+    assert custody_anchor.note == (
+        "7.4.10.2.2 基金托管费："
+        "7.4.10.2.2 基金托管费 托管费按前一日基金资产净值的 0.20% 年费率计提"
+    )
+
+
+def test_extract_profile_fee_schedule_table_fallback_uses_target_subsection_anchor() -> None:
+    """验证表格 fallback 使用目标子章节语义锚点而不是猜测 parser section。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当表格锚点使用无关章节猜测而非目标子章节时抛出。
+    """
+
+    fee_table = ParsedTable(
+        page_number=42,
+        table_index=3,
+        headers=("项目", "计提标准"),
+        rows=(
+            ("7.4.10.2.1 基金管理费", "按前一日基金资产净值的 1.20% 年费率计提"),
+            ("7.4.10.2.2 基金托管费", "按前一日基金资产净值的 0.20% 年费率计提"),
+        ),
+    )
+    report = _build_report_with_extra_section(
+        "004393",
+        ParsedTable(
+            page_number=5,
+            table_index=0,
+            headers=("基金名称", "安信企业价值优选混合型证券投资基金"),
+            rows=(("基金简称", "安信企业价值优选混合A"), ("基金主代码", "004393")),
+        ),
+        ParsedTable(
+            page_number=5,
+            table_index=1,
+            headers=("投资目标", "追求基金资产长期稳健增值。"),
+            rows=(("业绩比较基准", "沪深300指数收益率×60%+中债综合指数收益率×40%"),),
+        ),
+        "§5",
+        "§5 财务报表附注",
+        "\n".join(
+            (
+                "7.4.10.2 基金费用计提方法、计提标准和支付方式",
+                "7.4.10.2.1 基金管理费",
+                "详见下表。",
+                "7.4.10.2.2 基金托管费",
+                "详见下表。",
+            )
+        ),
+        (fee_table,),
+    )
+
+    result = extract_profile(report)
+
+    anchors = {anchor.row_locator: anchor for anchor in result.fee_schedule.anchors}
+    assert anchors["management_fee"].section_id == "§7.4.10.2.1"
+    assert anchors["management_fee"].table_id == "page-42-table-3"
+    assert anchors["custody_fee"].section_id == "§7.4.10.2.2"
+
+
+def test_extract_profile_fee_schedule_keeps_section_two_values_without_fallback_drift() -> None:
+    """验证 `§2` 已披露费率时不被 fallback 文本覆盖。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 direct 费率被 fallback 破坏时抛出。
+    """
+
+    report = _build_report_with_extra_section(
+        "510300",
+        ParsedTable(
+            page_number=5,
+            table_index=0,
+            headers=("基金名称", "华泰柏瑞沪深300交易型开放式指数证券投资基金"),
+            rows=(("基金简称", "华泰柏瑞沪深300ETF"), ("基金主代码", "510300")),
+        ),
+        ParsedTable(
+            page_number=5,
+            table_index=1,
+            headers=("投资目标", "紧密跟踪标的指数表现。"),
+            rows=(
+                ("业绩比较基准", "沪深300指数"),
+                ("管理费率", "0.50%"),
+                ("托管费率", "0.10%"),
+            ),
+        ),
+        "§5",
+        "§5 财务报表附注",
+        "\n".join(
+            (
+                "7.4.10.2.1 基金管理费",
+                "错误候选 1.20%",
+                "7.4.10.2.2 基金托管费",
+                "错误候选 0.20%",
+            )
+        ),
+    )
+
+    result = extract_profile(report)
+
+    assert result.fee_schedule.value == {
+        "management_fee": "0.50%",
+        "custody_fee": "0.10%",
+    }
+    assert {anchor.section_id for anchor in result.fee_schedule.anchors} == {"§2"}
+
+
+def test_extract_profile_fee_schedule_combines_direct_and_fallback_when_partial() -> None:
+    """验证 direct 与 fallback 可按缺失侧合并。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当局部 direct 或 fallback 锚点丢失时抛出。
+    """
+
+    report = _build_report_with_extra_section(
+        "004393",
+        ParsedTable(
+            page_number=5,
+            table_index=0,
+            headers=("基金名称", "安信企业价值优选混合型证券投资基金"),
+            rows=(("基金简称", "安信企业价值优选混合A"), ("基金主代码", "004393")),
+        ),
+        ParsedTable(
+            page_number=5,
+            table_index=1,
+            headers=("投资目标", "追求基金资产长期稳健增值。"),
+            rows=(
+                ("业绩比较基准", "沪深300指数收益率×60%+中债综合指数收益率×40%"),
+                ("管理费率", "1.00%"),
+            ),
+        ),
+        "§5",
+        "§5 财务报表附注",
+        "\n".join(
+            (
+                "7.4.10.2.2 基金托管费",
+                "本基金的托管费按前一日基金资产净值的 0.20% 年费率计提。",
+            )
+        ),
+    )
+
+    result = extract_profile(report)
+
+    assert result.fee_schedule.value == {
+        "management_fee": "1.00%",
+        "custody_fee": "0.20%",
+    }
+    anchors = {anchor.row_locator: anchor for anchor in result.fee_schedule.anchors}
+    assert anchors["management_fee"].section_id == "§2"
+    assert anchors["management_fee"].table_id == "page-5-table-1"
+    assert anchors["custody_fee"].section_id == "§5"
+    assert anchors["custody_fee"].table_id is None
+
+
+def test_extract_profile_fee_schedule_remains_missing_without_section_two_or_fallback_fee() -> None:
+    """验证没有 direct 与 fallback 费率时 `fee_schedule` 仍为 missing。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当无费率披露被误抽取时抛出。
+    """
+
+    report = _build_report_with_extra_section(
+        "004393",
+        ParsedTable(
+            page_number=5,
+            table_index=0,
+            headers=("基金名称", "安信企业价值优选混合型证券投资基金"),
+            rows=(("基金简称", "安信企业价值优选混合A"), ("基金主代码", "004393")),
+        ),
+        ParsedTable(
+            page_number=5,
+            table_index=1,
+            headers=("投资目标", "追求基金资产长期稳健增值。"),
+            rows=(("业绩比较基准", "沪深300指数收益率×60%+中债综合指数收益率×40%"),),
+        ),
+        "§5",
+        "§5 财务报表附注",
+        "7.4.10.2 基金费用计提方法、计提标准和支付方式\n本节未列示管理费或托管费率。",
+    )
+
+    result = extract_profile(report)
+
+    assert result.fee_schedule.value is None
+    assert result.fee_schedule.anchors == ()
+    assert result.fee_schedule.extraction_mode == "missing"
+    assert result.fee_schedule.note == "§2 与 7.4.10.2 均未披露管理费/托管费"
 
 
 def test_extract_profile_prefers_bond_name_before_mixed_index_benchmark() -> None:

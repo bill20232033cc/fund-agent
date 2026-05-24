@@ -173,6 +173,9 @@ def test_build_snapshot_records_contains_required_schema_and_all_fields() -> Non
         "fund_name": "安信企业价值优选混合A",
         "fund_code": "110011",
         "fund_category": "混合型",
+        "management_company": "安信基金管理有限责任公司",
+        "custodian": "中国银行股份有限公司",
+        "inception_date": "2022 年 8 月 8 日",
         "classified_fund_type": "active_fund",
     }
     assert records_by_name["benchmark"].comparable_values == {
@@ -530,6 +533,9 @@ def _build_bundle(
                 "fund_name": "安信企业价值优选混合A",
                 "fund_code": fund_code,
                 "fund_category": "混合型",
+                "management_company": "安信基金管理有限责任公司",
+                "custodian": "中国银行股份有限公司",
+                "inception_date": "2022 年 8 月 8 日",
                 "classified_fund_type": classified_fund_type,
                 "classification_basis": ("fixture basis",),
             },
