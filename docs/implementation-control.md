@@ -24,7 +24,7 @@
 
 | Field | State |
 |---|---|
-| Branch | `codex/checklist-host-engine-design` |
+| Branch | `codex/004393-quality-gate` |
 | Current gate | `ready-to-open-draft-PR` |
 | Next entry point | `draft PR gate for release-maintenance 004393 quality gate work (awaiting user authorization)` |
 | Current phase | `release maintenance` |
