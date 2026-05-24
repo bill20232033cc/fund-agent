@@ -286,6 +286,8 @@ fund-analysis quality-gate \
 |------|------|
 | [docs/design.md](docs/design.md) | 设计真源 |
 | [docs/implementation-control.md](docs/implementation-control.md) | Phase 与 gate 总控 |
+| [docs/source-document-standards.md](docs/source-document-standards.md) | 真源文档规范说明 |
+| [docs/archive/implementation-control-history-20260525.md](docs/archive/implementation-control-history-20260525.md) | 实施总控历史快照 |
 | [docs/fund-analysis-template-draft.md](docs/fund-analysis-template-draft.md) | 8 章分析模板 |
 | [docs/sample-funds.md](docs/sample-funds.md) | 样本基金基线 |
 | [docs/code_20260519.csv](docs/code_20260519.csv) | 有知有行 App 精选基金池手动清单 |
