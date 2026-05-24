@@ -35,4 +35,3 @@
 
 - The 004393 smoke still fails after quality gate due to a downstream report audit banned-word issue. That is outside this worker scope.
 - The date normalization intentionally does not parse alternate date formats or partial dates; it only handles complete Chinese年月日 visual spacing differences needed by S5.
-
