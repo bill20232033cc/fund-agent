@@ -278,7 +278,7 @@ fund-analysis quality-gate \
 
 覆盖率策略分两层：CI 自动阻断使用全局 `--cov-fail-under=50`；单文件 ≥80% 是代码评审目标，适用于新增或大幅修改模块，需要通过定向测试、review 说明或 residual risk 追踪落实。
 
-当前会跟踪人工维护或可复核的输入产物，例如 `docs/code_20260519.csv`、`docs/golden-answer-template.md` 和 `reports/golden-answers/` 下的 curated golden answer 文件。运行时生成物保持本地：`cache/`、`reports/extraction-snapshots/`、`reports/quality-gate-runs/`、`report-*.md` 和 `docs/*.docx` 不纳入默认版本控制。
+当前会跟踪人工维护或可复核的输入产物，例如 `docs/code_20260519.csv`、`docs/golden-answer-template.md` 和 `reports/golden-answers/` 下的 curated golden answer 文件。运行时生成物保持本地：`cache/`、`reports/extraction-snapshots/`、`reports/quality-gate-runs/`、`reports/smoke/`、`reports/scoring-runs/`、`reports/writing-runs/`、`reports/data-source-runs/`、`report.md`、`report-*.md` 和 `docs/*.docx` 不纳入默认版本控制。后续用于评分、数据源迭代、写作脚本迭代和报告质量调参的大量输出，应优先落在上述本地 run 目录；只有经人工复核后要作为长期基准的输入，才进入 `docs/` 或 curated fixture。
 
 ## 文档导航
 

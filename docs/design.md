@@ -426,7 +426,50 @@ C（Cost）= 管理费 + 托管费 + 换手率 × 0.3%
 
 > 详细对照分析见 `docs/audit-alignment.md`。
 
-### 5.4 证据锚点格式
+### 5.4 章节级写作审计闭环（设计候选）
+
+当前 `fund-analysis analyze` 仍是 v0 确定性 8 章模板渲染：一次性消费结构化抽取、P2 分析、检查清单、最终判断和 quality gate 状态，输出 Markdown 后执行程序审计。该路径保持为当前可用主链路，不声明已经具备 LLM 分章写作、章节级修复或 Dayu Host/Agent 调度。
+
+后续报告质量升级应借鉴 Dayu 的写作方法论，但不得直接依赖外部 `dayu-agent` runtime。目标是把报告生成从“一次性模板填充”升级为“章节级写作 → 审计 → 修复/重写 → 总装”的闭环：
+
+```text
+Evidence Store / Fact Store
+  → Chapter 1-9 写作
+    → 章节规则审计
+    → 章节 LLM 审计
+    → patch / regenerate / accept
+  → Chapter 10 最终判断（只消费 Chapter 1-9 accepted 结论）
+  → Chapter 0 总结（只消费 Chapter 1-10 accepted 结论）
+  → 全文一致性审计
+  → 报告输出
+```
+
+**设计原则**：
+
+- 第 1-9 章先独立写作，每章必须声明输入 facts、必须回答项、禁止覆盖项、证据锚点和章节结论。
+- 每条关键判断必须绑定 `EvidenceAnchor` 或 derived 计算来源；没有同源证据时只能写“未披露 / 数据不足 / 下一步最小验证问题”。
+- 每章都必须经过规则审计和 LLM 审计；规则审计负责结构、锚点、CHAPTER_CONTRACT / ITEM_RULE、数值闭合与边界条件，LLM 审计负责证据是否支撑断言、语义越界、投资建议措辞和读者可理解性。
+- 审计失败必须产生 `RepairDecision`：可局部修复的问题走 patch；证据缺失、章节结构错误、关键逻辑不成立或 LLM 审计判定不可修补时整章 regenerate；修复后必须重新审计。
+- 第 10 章最终判断必须后置，只能消费第 1-9 章 accepted 结构化结论和 quality gate 状态，不得由 prompt 自由发挥。
+- 第 0 章执行摘要必须最后生成，只能总结第 1-10 章 accepted 结论，不得引入新事实、新证据或新判断。
+- LLM 写作、审计和修复不得直接读取 PDF、cache 或来源 helper；所有事实输入必须来自 `FundDocumentRepository` 派生的结构化 evidence/fact store。
+- 若未来需要 session/run/cancel/resume/outbox、章节任务并发或写作 agent 调度，必须先开独立 Host/Agent gate：Host 使用 `dayu.host`，Agent 执行内核使用 `dayu.engine`，并声明事件流、ToolTrace、失败语义、重试策略和测试。
+- 当前 8 章模板与未来 0-10 章体系的映射尚未裁决；不得在未完成 design gate 前把当前 renderer 改写为 0-10 章，或把该设计候选描述为已实现。
+
+建议的最小状态机：
+
+| 状态 | 输入 | 输出 | 失败处理 |
+|------|------|------|----------|
+| `ChapterPlan` | CHAPTER_CONTRACT / facts / evidence | 章节写作约束 | 缺少关键 fact 时先返回数据缺口 |
+| `ChapterDraft` | ChapterPlan + 写作器 | 草稿 Markdown + 结构化结论 | 进入规则审计 |
+| `RuleAudit` | ChapterDraft | 规则问题列表 | patch 或 regenerate |
+| `LLMAudit` | ChapterDraft + evidence bundle | 语义/证据/措辞问题列表 | patch 或 regenerate |
+| `AcceptedChapter` | 审计通过草稿 | 可供后续章节消费的结论 | 锁定输入和证据 |
+| `ReportAssemblyAudit` | accepted chapters | 全文一致性结果 | 回退到具体章节修复 |
+
+后续评分、数据源迭代、写作脚本迭代和报告质量调参会产生大量本地 run 产物，应落在 `reports/scoring-runs/`、`reports/data-source-runs/`、`reports/writing-runs/` 或临时目录；只有人工复核后要作为长期基准的输入才进入 curated fixture。
+
+### 5.5 证据锚点格式
 
 **代码实现**：`fund_agent/fund/extractors/models.py` —— `EvidenceAnchor` dataclass
 
