@@ -173,6 +173,9 @@ def test_build_snapshot_records_contains_required_schema_and_all_fields() -> Non
         "fund_name": "安信企业价值优选混合A",
         "fund_code": "110011",
         "fund_category": "混合型",
+        "management_company": "安信基金管理有限责任公司",
+        "custodian": "中国银行股份有限公司",
+        "inception_date": "2022 年 8 月 8 日",
         "classified_fund_type": "active_fund",
     }
     assert records_by_name["benchmark"].comparable_values == {
@@ -190,6 +193,10 @@ def test_build_snapshot_records_contains_required_schema_and_all_fields() -> Non
     assert records_by_name["tracking_error"].comparable_values == {}
     assert records_by_name["product_profile"].comparable_values == {}
     assert records_by_name["fee_schedule"].comparable_values == {}
+    assert records_by_name["holdings_snapshot"].comparable_values == {
+        "top_holdings_status": "direct_top_ten",
+        "top_holdings_source": "top_ten",
+    }
 
 
 def test_build_snapshot_records_serializes_index_quality_dataclass_comparable_values() -> None:
@@ -530,6 +537,9 @@ def _build_bundle(
                 "fund_name": "安信企业价值优选混合A",
                 "fund_code": fund_code,
                 "fund_category": "混合型",
+                "management_company": "安信基金管理有限责任公司",
+                "custodian": "中国银行股份有限公司",
+                "inception_date": "2022 年 8 月 8 日",
                 "classified_fund_type": classified_fund_type,
                 "classification_basis": ("fixture basis",),
             },
@@ -551,7 +561,15 @@ def _build_bundle(
         share_change=_field({"beginning_share": "1", "ending_share": "2", "net_change": "1"}, "share_change"),
         manager_alignment=_field(None, "manager_alignment", extraction_mode="missing", note="fixture missing"),
         manager_strategy_text=_field({"strategy_summary": "精选个股"}, "manager_strategy_text"),
-        holdings_snapshot=_field({"top_holdings": [{"name": "A"}]}, "holdings_snapshot"),
+        holdings_snapshot=_field(
+            {
+                "top_holdings": [{"name": "A"}],
+                "top_holdings_status": "direct_top_ten",
+                "top_holdings_source": "top_ten",
+                "industry_distribution_status": "missing",
+            },
+            "holdings_snapshot",
+        ),
         holder_structure=_field({"institutional_holder": "10%", "individual_holder": "90%"}, "holder_structure"),
         nav_data=NavDataResult(
             fund_code=fund_code,

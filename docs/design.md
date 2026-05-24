@@ -667,7 +667,7 @@ Golden Answer pipeline 由预填底稿、人工复核、strict JSON 构建和 co
 2. 收集证据锚点
 3. 按章节 0-7 依次渲染（`_render_chapter_0` ~ `_render_chapter_7`）
 4. 渲染证据附录（`## 证据与出处`）
-5. 校验禁用词（"买入"/"卖出"/"仓位比例"/"收益预测"）
+5. 校验直接交易建议与明确配置指令，允许年报披露语境中的非指令性交易动词
 6. 切分章节块（`split_rendered_chapter_blocks`）
 7. 构建程序审计输入
 

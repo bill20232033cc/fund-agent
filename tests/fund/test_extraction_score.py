@@ -258,6 +258,156 @@ def test_index_quality_fields_are_p1_only_for_applicable_fund_types() -> None:
     assert quality_rows["000000"].missing_p1_fields == ("index_profile",)
 
 
+def test_holdings_snapshot_requires_stock_holdings_status_for_coverage() -> None:
+    """验证只有行业分布不会满足股票持仓覆盖。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 industry-only 被误计为 holdings coverage 时抛出。
+    """
+
+    records = [
+        _snapshot_record(
+            "holdings",
+            "holdings_snapshot",
+            fund_code="004393",
+            value_present=True,
+            anchor_present=True,
+            comparable_values={
+                "top_holdings_status": "missing",
+                "top_holdings_source": "none",
+            },
+        ),
+        _snapshot_record(
+            "holdings",
+            "holdings_snapshot",
+            fund_code="110011",
+            value_present=True,
+            anchor_present=True,
+            comparable_values={
+                "top_holdings_status": "direct_all_stock_details",
+                "top_holdings_source": "all_stock_investment_details",
+            },
+        ),
+    ]
+
+    field_row = score_snapshot_records(records)[0]
+    fund_scores = {row.fund_code: row for row in score_fund_records(records)}
+    quality_rows = {row.fund_code: row for row in derive_fund_quality_records(records)}
+
+    assert field_row.field_name == "holdings_snapshot"
+    assert field_row.records == 2
+    assert field_row.covered_records == 1
+    assert field_row.coverage_rate == 0.5
+    assert fund_scores["004393"].p1_failed_fields == ("holdings_snapshot",)
+    assert fund_scores["110011"].p1_failed_fields == ()
+    assert quality_rows["004393"].missing_p1_fields == ("holdings_snapshot",)
+    assert quality_rows["004393"].missing_field_rate == 1.0
+    assert quality_rows["110011"].missing_field_rate == 0.0
+
+
+def test_holdings_snapshot_coverage_requires_explicit_status_source_allowlist() -> None:
+    """验证持仓覆盖必须由显式 status/source allowlist 决定。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当缺失、空白、未知或不一致 status/source 被计为覆盖时抛出。
+    """
+
+    records = [
+        _snapshot_record(
+            "holdings",
+            "holdings_snapshot",
+            fund_code="004390",
+            value_present=True,
+            anchor_present=True,
+        ),
+        _snapshot_record(
+            "holdings",
+            "holdings_snapshot",
+            fund_code="004391",
+            value_present=True,
+            anchor_present=True,
+            comparable_values={
+                "top_holdings_status": "",
+                "top_holdings_source": "",
+            },
+        ),
+        _snapshot_record(
+            "holdings",
+            "holdings_snapshot",
+            fund_code="004392",
+            value_present=True,
+            anchor_present=True,
+            comparable_values={
+                "top_holdings_status": "direct_unknown",
+                "top_holdings_source": "unknown",
+            },
+        ),
+        _snapshot_record(
+            "holdings",
+            "holdings_snapshot",
+            fund_code="004393",
+            value_present=True,
+            anchor_present=True,
+            comparable_values={
+                "top_holdings_status": "direct_all_stock_details",
+                "top_holdings_source": "top_ten",
+            },
+        ),
+        _snapshot_record(
+            "holdings",
+            "holdings_snapshot",
+            fund_code="004394",
+            value_present=True,
+            anchor_present=True,
+            comparable_values={
+                "top_holdings_status": "direct_top_ten",
+                "top_holdings_source": "top_ten",
+            },
+        ),
+        _snapshot_record(
+            "holdings",
+            "holdings_snapshot",
+            fund_code="004395",
+            value_present=True,
+            anchor_present=True,
+            comparable_values={
+                "top_holdings_status": "direct_all_stock_details",
+                "top_holdings_source": "all_stock_investment_details",
+            },
+        ),
+    ]
+
+    field_row = score_snapshot_records(records)[0]
+    fund_scores = {row.fund_code: row for row in score_fund_records(records)}
+    quality_rows = {row.fund_code: row for row in derive_fund_quality_records(records)}
+
+    assert field_row.field_name == "holdings_snapshot"
+    assert field_row.records == 6
+    assert field_row.covered_records == 2
+    assert fund_scores["004390"].p1_failed_fields == ("holdings_snapshot",)
+    assert fund_scores["004391"].p1_failed_fields == ("holdings_snapshot",)
+    assert fund_scores["004392"].p1_failed_fields == ("holdings_snapshot",)
+    assert fund_scores["004393"].p1_failed_fields == ("holdings_snapshot",)
+    assert fund_scores["004394"].p1_failed_fields == ()
+    assert fund_scores["004395"].p1_failed_fields == ()
+    assert quality_rows["004390"].missing_p1_fields == ("holdings_snapshot",)
+    assert quality_rows["004393"].missing_p1_fields == ("holdings_snapshot",)
+    assert quality_rows["004394"].missing_p1_fields == ()
+    assert quality_rows["004395"].missing_p1_fields == ()
+
+
 def test_derive_fund_quality_records_resolves_all_standard_fund_types() -> None:
     """验证所有标准基金类型都能解析当前模板契约。
 
@@ -1126,6 +1276,237 @@ def test_compare_snapshot_correctness_handles_index_quality_comparable_fields(
     assert statuses[("index_profile", "benchmark_index_name")] == CORRECTNESS_MATCH
     assert statuses[("tracking_error", "annualized")] == CORRECTNESS_MISMATCH
     assert statuses[("tracking_error", "value_text")] == CORRECTNESS_MATCH
+
+
+def test_compare_snapshot_correctness_normalizes_benchmark_chinese_visual_whitespace(
+    tmp_path: Path,
+) -> None:
+    """验证 benchmark 字段级中文视觉空白可归一化。
+
+    Args:
+        tmp_path: pytest 临时目录 fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 benchmark 视觉空白未匹配时抛出。
+    """
+
+    golden_path = _golden_answer_json_from_records(
+        tmp_path,
+        records=[
+            {
+                "fund_code": "004393",
+                "field_name": "benchmark",
+                "sub_field": "benchmark_text",
+                "expected_value": "中债综合（全价）指数收益率",
+                "confidence": "high",
+                "source": "年报2024 §2 page-5",
+            }
+        ],
+    )
+    records = [
+        _snapshot_record(
+            "profile",
+            "benchmark",
+            value_present=True,
+            anchor_present=True,
+            comparable_values={"benchmark_text": "中债综 合（全价）指数收益率"},
+        )
+    ]
+
+    summary = compare_snapshot_correctness(records=records, golden_answer_path=golden_path)
+
+    assert summary.comparable_records == 1
+    assert summary.matched_records == 1
+    assert summary.record_results[0].status == CORRECTNESS_MATCH
+    assert summary.record_results[0].normalized_actual == "中债综合（全价）指数收益率"
+
+
+def test_compare_snapshot_correctness_keeps_visual_whitespace_for_non_benchmark_fields(
+    tmp_path: Path,
+) -> None:
+    """验证非 benchmark 字段不获得中文视觉空白归一化。
+
+    Args:
+        tmp_path: pytest 临时目录 fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当非 benchmark 字段被过度归一化时抛出。
+    """
+
+    golden_path = _golden_answer_json_from_records(
+        tmp_path,
+        records=[
+            {
+                "fund_code": "004393",
+                "field_name": "basic_identity",
+                "sub_field": "fund_name",
+                "expected_value": "中债综合",
+                "confidence": "high",
+                "source": "年报2024 §2 page-5",
+            }
+        ],
+    )
+    records = [
+        _snapshot_record(
+            "profile",
+            "basic_identity",
+            value_present=True,
+            anchor_present=True,
+            comparable_values={"fund_name": "中债综 合"},
+        )
+    ]
+
+    summary = compare_snapshot_correctness(records=records, golden_answer_path=golden_path)
+
+    assert summary.comparable_records == 1
+    assert summary.mismatched_records == 1
+    assert summary.record_results[0].status == CORRECTNESS_MISMATCH
+    assert summary.record_results[0].normalized_actual == "中债综 合"
+
+
+def test_compare_snapshot_correctness_normalizes_basic_identity_chinese_date_spacing(
+    tmp_path: Path,
+) -> None:
+    """验证 basic_identity.inception_date 中文日期视觉空白可归一化。
+
+    Args:
+        tmp_path: pytest 临时目录 fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当中文年月日日期空白差异未匹配时抛出。
+    """
+
+    golden_path = _golden_answer_json_from_records(
+        tmp_path,
+        records=[
+            {
+                "fund_code": "004393",
+                "field_name": "basic_identity",
+                "sub_field": "inception_date",
+                "expected_value": "2022 年 8 月 8 日",
+                "confidence": "high",
+                "source": "年报2024 §2 page-5 page-5-table-0 inception_date",
+            }
+        ],
+    )
+    records = [
+        _snapshot_record(
+            "profile",
+            "basic_identity",
+            value_present=True,
+            anchor_present=True,
+            comparable_values={"inception_date": "2022年8月8日"},
+        )
+    ]
+
+    summary = compare_snapshot_correctness(records=records, golden_answer_path=golden_path)
+
+    assert summary.comparable_records == 1
+    assert summary.matched_records == 1
+    assert summary.record_results[0].status == CORRECTNESS_MATCH
+    assert summary.record_results[0].normalized_expected == "2022年8月8日"
+    assert summary.record_results[0].normalized_actual == "2022年8月8日"
+
+
+def test_compare_snapshot_correctness_keeps_non_date_basic_identity_spacing(
+    tmp_path: Path,
+) -> None:
+    """验证 basic_identity 非日期字符串不会被中文日期规则过度归一化。
+
+    Args:
+        tmp_path: pytest 临时目录 fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当非日期字符串被错误移除空格时抛出。
+    """
+
+    golden_path = _golden_answer_json_from_records(
+        tmp_path,
+        records=[
+            {
+                "fund_code": "004393",
+                "field_name": "basic_identity",
+                "sub_field": "inception_date",
+                "expected_value": "成立 日期 待确认",
+                "confidence": "high",
+                "source": "年报2024 §2 page-5 page-5-table-0 inception_date",
+            }
+        ],
+    )
+    records = [
+        _snapshot_record(
+            "profile",
+            "basic_identity",
+            value_present=True,
+            anchor_present=True,
+            comparable_values={"inception_date": "成立日期待确认"},
+        )
+    ]
+
+    summary = compare_snapshot_correctness(records=records, golden_answer_path=golden_path)
+
+    assert summary.comparable_records == 1
+    assert summary.mismatched_records == 1
+    assert summary.record_results[0].status == CORRECTNESS_MISMATCH
+    assert summary.record_results[0].normalized_expected == "成立 日期 待确认"
+    assert summary.record_results[0].normalized_actual == "成立日期待确认"
+
+
+def test_compare_snapshot_correctness_preserves_ascii_word_spacing_for_benchmark(
+    tmp_path: Path,
+) -> None:
+    """验证 benchmark 归一化不移除 ASCII 单词间空格。
+
+    Args:
+        tmp_path: pytest 临时目录 fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 ASCII word spacing 被错误移除时抛出。
+    """
+
+    golden_path = _golden_answer_json_from_records(
+        tmp_path,
+        records=[
+            {
+                "fund_code": "004393",
+                "field_name": "benchmark",
+                "sub_field": "benchmark_name",
+                "expected_value": "MSCI China Index",
+                "confidence": "high",
+                "source": "年报2024 §2 page-5",
+            }
+        ],
+    )
+    records = [
+        _snapshot_record(
+            "profile",
+            "benchmark",
+            value_present=True,
+            anchor_present=True,
+            comparable_values={"benchmark_name": "MSCIChinaIndex"},
+        )
+    ]
+
+    summary = compare_snapshot_correctness(records=records, golden_answer_path=golden_path)
+
+    assert summary.record_results[0].status == CORRECTNESS_MISMATCH
+    assert summary.record_results[0].normalized_expected == "msci china index"
+    assert summary.record_results[0].normalized_actual == "mscichinaindex"
 
 
 def test_compare_snapshot_correctness_matches_composite_index_profile_scalars(

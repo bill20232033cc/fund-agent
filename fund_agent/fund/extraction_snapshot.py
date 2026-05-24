@@ -79,6 +79,7 @@ COMPARABLE_SUB_FIELDS_BY_FIELD: Final[dict[str, tuple[str, ...]]] = {
         "input_period_complete",
     ),
     "classified_fund_type": ("fund_type",),
+    "holdings_snapshot": ("top_holdings_status", "top_holdings_source"),
 }
 _EXTRACTION_MODE_DIRECT: Final[str] = "direct"
 _EXTRACTION_MODE_MISSING: Final[str] = "missing"

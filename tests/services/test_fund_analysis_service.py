@@ -232,6 +232,8 @@ def _bundle() -> StructuredFundDataBundle:
         holdings_snapshot=ExtractedField(
             value={
                 "top_holdings": [{"股票名称": "测试股份"}],
+                "top_holdings_status": "direct_top_ten",
+                "top_holdings_source": "top_ten",
                 "industry_distribution": [{"行业": "消费", "占比": "40%"}],
             },
             anchors=(_anchor("§8", "industry_distribution", table_id="T1"),),

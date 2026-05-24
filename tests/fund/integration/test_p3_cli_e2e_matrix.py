@@ -360,7 +360,7 @@ _EXPECTED_APPENDIX_EVIDENCE_FRAGMENTS: tuple[str, ...] = (
     "年报2024§3表未定位行nav_growth_rate",
     "年报2024§3表未定位行investor_return_rate",
     "年报2024§4表未定位行strategy_summary",
-    "年报2024§8表page-42-table-0行top_holdings",
+    "年报2024§8表page-42-table-0行top_ten",
     "年报2024§8表page-43-table-1行industry_distribution",
     "年报2024§9表未定位行manager_holding",
     "年报2024§10表page-58-table-0行share_change",
