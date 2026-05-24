@@ -44,6 +44,7 @@ from fund_agent.fund.template import (
     split_rendered_chapter_blocks,
 )
 from fund_agent.fund.template.renderer import (
+    _validate_report_wording,
     _body_anchor_reference,
     _item_rule_evidence_bullet,
 )
@@ -1845,7 +1846,7 @@ def test_render_template_report_rejects_unsafe_final_judgment_wording() -> None:
 
 
 def test_render_template_report_does_not_emit_buy_sell_wording() -> None:
-    """验证报告不输出买卖建议、收益预测或仓位比例措辞。
+    """验证报告不输出明确买卖建议、收益预测或仓位比例措辞。
 
     Args:
         无。
@@ -1858,10 +1859,67 @@ def test_render_template_report_does_not_emit_buy_sell_wording() -> None:
     """
 
     result = render_template_report(_render_input(final_judgment="suggest_replace"))
-    forbidden_terms = ("买入", "卖出", "收益预测", "仓位比例")
+    forbidden_terms = ("建议买入", "建议卖出", "收益预测", "仓位比例")
 
     assert "建议替换" in result.report_markdown
     assert all(term not in result.report_markdown for term in forbidden_terms)
+
+
+@pytest.mark.parametrize("forbidden_text", ("买入金额", "建议买入", "建议卖出", "买入信号"))
+def test_validate_report_wording_rejects_direct_trading_advice(
+    forbidden_text: str,
+) -> None:
+    """验证 wording validator 仍拒绝明确交易建议措辞。
+
+    Args:
+        forbidden_text: 人工构造的禁用交易建议文本。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当明确交易建议未被拒绝时抛出。
+    """
+
+    with pytest.raises(ValueError, match="报告包含禁用投资建议措辞"):
+        _validate_report_wording(f"# 7. 是否值得持有——最终判断\n- 后续动作：{forbidden_text}。")
+
+
+@pytest.mark.parametrize(
+    "strategy_summary",
+    ("好价格可以买入并持有好公司", "市场波动时不宜卖出优质公司"),
+)
+def test_render_template_report_allows_disclosed_strategy_context(
+    strategy_summary: str,
+) -> None:
+    """验证年报披露语境中的交易动词不会被误判为直接交易建议。
+
+    Args:
+        strategy_summary: §4 管理人策略披露原文。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当披露原文被阻断或报告输出直接买卖建议时抛出。
+    """
+
+    input_data = _render_input()
+    strategy_field = _field(
+        {"strategy_summary": strategy_summary},
+        "§4",
+        "manager_strategy_text",
+    )
+    structured_data = replace(
+        input_data.structured_data,
+        manager_strategy_text=strategy_field,
+    )
+
+    result = render_template_report(replace(input_data, structured_data=structured_data))
+
+    assert f"披露策略：{strategy_summary}。" in result.report_markdown
+    assert "建议买入" not in result.report_markdown
+    assert "建议卖出" not in result.report_markdown
 
 
 def test_render_template_report_keeps_l1_r1_r2_structured_inputs_unmodified() -> None:

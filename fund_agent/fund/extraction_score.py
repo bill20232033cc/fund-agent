@@ -114,6 +114,11 @@ BENCHMARK_NORMALIZED_SUB_FIELDS: Final[tuple[str, ...]] = ("benchmark_name", "be
 INTRA_CHINESE_VISUAL_WHITESPACE_PATTERN: Final[re.Pattern[str]] = re.compile(
     r"(?<=[\u4e00-\u9fff])\s+(?=[\u4e00-\u9fff])"
 )
+BASIC_IDENTITY_FIELD_NAME: Final[str] = "basic_identity"
+INCEPTION_DATE_SUB_FIELD: Final[str] = "inception_date"
+CHINESE_DATE_VISUAL_WHITESPACE_PATTERN: Final[re.Pattern[str]] = re.compile(
+    r"\d{4}\s*年\s*\d{1,2}\s*月\s*\d{1,2}\s*日"
+)
 INDEX_QUALITY_APPLICABLE_FUND_TYPES: Final[tuple[str, ...]] = (
     "index_fund",
     "enhanced_index",
@@ -2055,7 +2060,8 @@ def _normalize_comparable_value(
     """对可比字段执行保守 normalize。
 
     默认只做大小写、全角空白和连续空白归一化；仅对 benchmark 字段的
-    benchmark_name / benchmark_text 额外移除中文字符之间的视觉空白。
+    benchmark_name / benchmark_text 额外移除中文字符之间的视觉空白；仅对
+    basic_identity.inception_date 的完整中文年月日日期移除日期单位周围视觉空白。
     不做同义词映射、不补值，避免用间接证据或经验推断修正 correctness。
 
     Args:
@@ -2073,6 +2079,8 @@ def _normalize_comparable_value(
     text = str(value).strip().replace("\u3000", " ")
     if _is_benchmark_visual_whitespace_field(field_name, sub_field):
         text = INTRA_CHINESE_VISUAL_WHITESPACE_PATTERN.sub("", text)
+    if _is_chinese_date_visual_whitespace_field(field_name, sub_field):
+        text = _normalize_chinese_date_visual_whitespace(text)
     return " ".join(text.split()).casefold()
 
 
@@ -2094,6 +2102,47 @@ def _is_benchmark_visual_whitespace_field(
     """
 
     return field_name == BENCHMARK_FIELD_NAME and sub_field in BENCHMARK_NORMALIZED_SUB_FIELDS
+
+
+def _is_chinese_date_visual_whitespace_field(
+    field_name: str | None,
+    sub_field: str | None,
+) -> bool:
+    """判断 correctness 字段是否允许中文年月日视觉空白归一化。
+
+    Args:
+        field_name: correctness 字段名。
+        sub_field: correctness 子字段名。
+
+    Returns:
+        仅 `basic_identity.inception_date` 返回 `True`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return field_name == BASIC_IDENTITY_FIELD_NAME and sub_field == INCEPTION_DATE_SUB_FIELD
+
+
+def _normalize_chinese_date_visual_whitespace(text: str) -> str:
+    """归一化完整中文年月日日期中的视觉空白。
+
+    只处理整体符合 `YYYY 年 M 月 D 日` 形态的日期文本，避免把非日期说明、
+    基金名称或其他中文字符串中的空格误删。
+
+    Args:
+        text: 已完成首尾裁剪和全角空白替换的原始文本。
+
+    Returns:
+        若文本是完整中文日期，返回移除内部空白后的日期；否则原样返回。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if CHINESE_DATE_VISUAL_WHITESPACE_PATTERN.fullmatch(text):
+        return "".join(text.split())
+    return text
 
 
 def _score_status(

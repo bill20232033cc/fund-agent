@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+import re
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from decimal import Decimal
@@ -56,7 +57,19 @@ _FINAL_JUDGMENT_TEXT: Final[dict[FinalJudgment, str]] = {
     "needs_attention": "需要关注",
     "suggest_replace": "建议替换",
 }
-_FORBIDDEN_TERMS: Final[tuple[str, ...]] = ("买入", "卖出", "仓位比例", "收益预测")
+_FORBIDDEN_REPORT_PHRASES: Final[tuple[str, ...]] = (
+    "买入金额",
+    "卖出时机",
+    "买入信号",
+    "卖出信号",
+    "仓位比例",
+    "收益预测",
+)
+_DIRECT_TRADING_ADVICE_PATTERN: Final[re.Pattern[str]] = re.compile(
+    r"(建议|推荐|应当|应该|直接|立即|马上)"
+    r"[\s，,。；;：:、]{0,4}"
+    r"(买入|卖出|加仓|减仓)"
+)
 _MISSING_TEXT: Final[str] = "未披露"
 _INSUFFICIENT_TEXT: Final[str] = "数据不足"
 _UNLOCATED_TEXT: Final[str] = "未定位"
@@ -1892,6 +1905,11 @@ def _validate_report_wording(report_markdown: str) -> None:
         ValueError: 当报告包含禁用措辞时抛出。
     """
 
-    forbidden_hits = tuple(term for term in _FORBIDDEN_TERMS if term in report_markdown)
+    forbidden_hits = tuple(
+        phrase for phrase in _FORBIDDEN_REPORT_PHRASES if phrase in report_markdown
+    )
+    forbidden_hits += tuple(
+        match.group(0).strip() for match in _DIRECT_TRADING_ADVICE_PATTERN.finditer(report_markdown)
+    )
     if forbidden_hits:
         raise ValueError(f"报告包含禁用投资建议措辞：{'、'.join(forbidden_hits)}")

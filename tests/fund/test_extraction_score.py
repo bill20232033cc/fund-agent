@@ -1370,6 +1370,100 @@ def test_compare_snapshot_correctness_keeps_visual_whitespace_for_non_benchmark_
     assert summary.record_results[0].normalized_actual == "中债综 合"
 
 
+def test_compare_snapshot_correctness_normalizes_basic_identity_chinese_date_spacing(
+    tmp_path: Path,
+) -> None:
+    """验证 basic_identity.inception_date 中文日期视觉空白可归一化。
+
+    Args:
+        tmp_path: pytest 临时目录 fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当中文年月日日期空白差异未匹配时抛出。
+    """
+
+    golden_path = _golden_answer_json_from_records(
+        tmp_path,
+        records=[
+            {
+                "fund_code": "004393",
+                "field_name": "basic_identity",
+                "sub_field": "inception_date",
+                "expected_value": "2022 年 8 月 8 日",
+                "confidence": "high",
+                "source": "年报2024 §2 page-5 page-5-table-0 inception_date",
+            }
+        ],
+    )
+    records = [
+        _snapshot_record(
+            "profile",
+            "basic_identity",
+            value_present=True,
+            anchor_present=True,
+            comparable_values={"inception_date": "2022年8月8日"},
+        )
+    ]
+
+    summary = compare_snapshot_correctness(records=records, golden_answer_path=golden_path)
+
+    assert summary.comparable_records == 1
+    assert summary.matched_records == 1
+    assert summary.record_results[0].status == CORRECTNESS_MATCH
+    assert summary.record_results[0].normalized_expected == "2022年8月8日"
+    assert summary.record_results[0].normalized_actual == "2022年8月8日"
+
+
+def test_compare_snapshot_correctness_keeps_non_date_basic_identity_spacing(
+    tmp_path: Path,
+) -> None:
+    """验证 basic_identity 非日期字符串不会被中文日期规则过度归一化。
+
+    Args:
+        tmp_path: pytest 临时目录 fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当非日期字符串被错误移除空格时抛出。
+    """
+
+    golden_path = _golden_answer_json_from_records(
+        tmp_path,
+        records=[
+            {
+                "fund_code": "004393",
+                "field_name": "basic_identity",
+                "sub_field": "inception_date",
+                "expected_value": "成立 日期 待确认",
+                "confidence": "high",
+                "source": "年报2024 §2 page-5 page-5-table-0 inception_date",
+            }
+        ],
+    )
+    records = [
+        _snapshot_record(
+            "profile",
+            "basic_identity",
+            value_present=True,
+            anchor_present=True,
+            comparable_values={"inception_date": "成立日期待确认"},
+        )
+    ]
+
+    summary = compare_snapshot_correctness(records=records, golden_answer_path=golden_path)
+
+    assert summary.comparable_records == 1
+    assert summary.mismatched_records == 1
+    assert summary.record_results[0].status == CORRECTNESS_MISMATCH
+    assert summary.record_results[0].normalized_expected == "成立 日期 待确认"
+    assert summary.record_results[0].normalized_actual == "成立日期待确认"
+
+
 def test_compare_snapshot_correctness_preserves_ascii_word_spacing_for_benchmark(
     tmp_path: Path,
 ) -> None:
