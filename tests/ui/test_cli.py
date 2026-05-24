@@ -12,10 +12,14 @@ from typer.main import get_command
 from typer.testing import CliRunner
 
 from fund_agent.fund.data.thermometer_cache import ThermometerHistoryCache
-from fund_agent.fund.data.thermometer_types import ThermometerBatchResult, ThermometerReading
 from fund_agent.fund.data.thermometer_types import PePbHistory, PePbPoint
 from fund_agent.fund.quality_gate import QualityGateIssue, QualityGateResult
-from fund_agent.services import QualityGateBlockedError, QualityGateNotRunBlockedError
+from fund_agent.services import (
+    QualityGateBlockedError,
+    QualityGateNotRunBlockedError,
+    ThermometerBatchResult,
+    ThermometerReading,
+)
 from fund_agent.ui import cli
 
 
@@ -48,6 +52,116 @@ class _FakeService:
 
         type(self).last_request = request
         return _FakeResult(report_markdown="# 0. 投资要点概览\n\n# 7. 是否值得持有——最终判断\n")
+
+
+@dataclass(frozen=True, slots=True)
+class _FakeChecklistItem:
+    """CLI checklist 测试用单项结果。"""
+
+    code: str
+    signal: str
+    status: str
+    question: str
+    reason: str
+    anchors: tuple[object, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class _FakeChecklistResult:
+    """CLI checklist 测试用检查清单结果。"""
+
+    items: tuple[_FakeChecklistItem, ...]
+    overall_signal: str
+    overall_status: str
+    next_minimum_verification: str
+
+
+@dataclass(frozen=True, slots=True)
+class _FakeValuationResolution:
+    """CLI checklist 测试用估值解析结果。"""
+
+    state: str
+    source: str
+    index_code: str | None = None
+    temperature: Decimal | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class _FakeFinalJudgmentDecision:
+    """CLI checklist 测试用最终判断结果。"""
+
+    selected_judgment: str
+    derived_judgment: str
+    source: str
+
+
+@dataclass(frozen=True, slots=True)
+class _FakeStructuredData:
+    """CLI checklist 测试用结构化数据摘要。"""
+
+    fund_code: str
+    report_year: int
+
+
+@dataclass(frozen=True, slots=True)
+class _FakeChecklistServiceResult:
+    """CLI checklist 测试用 Service 结果。"""
+
+    structured_data: _FakeStructuredData
+    checklist_result: _FakeChecklistResult
+    valuation_state_resolution: _FakeValuationResolution
+    final_judgment_decision: _FakeFinalJudgmentDecision
+    quality_gate_result: object | None = None
+    quality_gate_not_run_reason: str | None = None
+
+
+class _FakeChecklistService:
+    """CLI 测试用独立 checklist Service。"""
+
+    last_request = None
+
+    async def checklist(self, request):  # type: ignore[no-untyped-def]
+        """记录请求并返回固定检查清单。
+
+        Args:
+            request: CLI 构造的 Service 请求。
+
+        Returns:
+            fake checklist Service 返回值。
+
+        Raises:
+            无显式抛出。
+        """
+
+        type(self).last_request = request
+        item = _FakeChecklistItem(
+            code="valuation",
+            signal="green",
+            status="pass",
+            question="当前估值处于什么位置？",
+            reason="当前估值偏低。",
+            anchors=(object(),),
+        )
+        return _FakeChecklistServiceResult(
+            structured_data=_FakeStructuredData(fund_code=request.fund_code, report_year=request.report_year),
+            checklist_result=_FakeChecklistResult(
+                items=(item,),
+                overall_signal="green",
+                overall_status="pass",
+                next_minimum_verification="进入程序审计。",
+            ),
+            valuation_state_resolution=_FakeValuationResolution(
+                state="low",
+                source="explicit_user_input",
+                index_code="000300",
+                temperature=Decimal("12.3"),
+            ),
+            final_judgment_decision=_FakeFinalJudgmentDecision(
+                selected_judgment="worth_holding",
+                derived_judgment="worth_holding",
+                source="derived",
+            ),
+        )
 
 
 class _FakeWarnService:
@@ -732,6 +846,28 @@ def test_analyze_cli_calls_service_and_prints_report(monkeypatch) -> None:  # ty
     )
 
 
+def test_cli_module_imports_service_but_not_agent_internals() -> None:
+    """验证 UI 只依赖 Service，不直接导入 Agent 内部模块。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 CLI 直接导入 Agent 内部模块时抛出。
+    """
+
+    cli_source = Path(cli.__file__).read_text(encoding="utf-8")
+    forbidden_agent_import = "fund_agent." + "fund."
+    forbidden_application_import = "fund_agent." + "application"
+
+    assert "fund_agent.services" in cli_source
+    assert forbidden_agent_import not in cli_source
+    assert forbidden_application_import not in cli_source
+
+
 def test_analyze_cli_prints_quality_gate_summary_to_stderr(monkeypatch) -> None:  # type: ignore[no-untyped-def]
     """验证 analyze 成功时 quality gate 摘要写入 stderr。
 
@@ -1042,25 +1178,44 @@ def test_analyze_cli_invalid_valuation_exits_2(monkeypatch) -> None:  # type: ig
     assert _FakeService.last_request is None
 
 
-def test_checklist_cli_is_not_misleading_placeholder() -> None:
-    """验证 checklist 命令不会输出误导性成功文本。
+def test_checklist_cli_calls_service_and_prints_summary(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    """验证 checklist 命令接入 Service 并输出真实摘要。
 
     Args:
-        无。
+        monkeypatch: pytest monkeypatch fixture。
 
     Returns:
         无返回值。
 
     Raises:
-        AssertionError: 当 placeholder 命令伪装成功时抛出。
+        AssertionError: CLI 未调用 Service 或摘要缺少核心字段时抛出。
     """
 
+    _FakeChecklistService.last_request = None
+    monkeypatch.setattr(cli, "FundAnalysisService", _FakeChecklistService)
     runner = CliRunner()
 
-    result = runner.invoke(cli.app, ["checklist", "110011"])
+    result = runner.invoke(
+        cli.app,
+        [
+            "checklist",
+            "110011",
+            "--valuation-state",
+            "low",
+            "--user-money-horizon-years",
+            "4",
+        ],
+    )
 
-    assert result.exit_code == 2
-    assert "尚未接入 Service" in result.output
+    assert result.exit_code == 0
+    assert _FakeChecklistService.last_request is not None
+    assert _FakeChecklistService.last_request.fund_code == "110011"
+    assert _FakeChecklistService.last_request.valuation_state == "low"
+    assert _FakeChecklistService.last_request.user_money_horizon_years == "4"
+    assert "overall_signal: green" in result.output
+    assert "valuation_state: low" in result.output
+    assert "final_judgment: worth_holding" in result.output
+    assert "- valuation: green/pass" in result.output
 
 
 def test_thermometer_cli_prints_plain_summary(monkeypatch, tmp_path) -> None:  # type: ignore[no-untyped-def]

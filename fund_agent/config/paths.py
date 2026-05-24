@@ -1,6 +1,6 @@
 """仓库默认路径常量。
 
-本模块只提供静态默认路径，方便 UI、Service 和 Fund Capability 复用同一份
+本模块只提供静态默认路径，方便 UI、Service 和 Agent 层基金能力复用同一份
 路径真源；它不读取环境变量、workspace 配置、prompt manifest 或运行时配置。
 """
 

@@ -68,9 +68,12 @@ fund-analysis thermometer
 
 # 查询自建全 A / 宽基指数温度计
 fund-analysis thermometer --index wind_all_a,000300,000905 --json
+
+# 生成独立买入前检查清单
+fund-analysis checklist 004393 --report-year 2024
 ```
 
-当前 `fund-analysis checklist FUND_CODE` 是占位命令，尚未接入 Service。请使用 `fund-analysis analyze FUND_CODE` 生成包含检查清单的完整报告。
+`fund-analysis checklist FUND_CODE` 已接入当前分析主链路，会输出 7 问题检查清单摘要、估值状态和最终判断，不渲染完整 8 章报告。
 
 ## 常用参数
 
@@ -84,7 +87,7 @@ fund-analysis thermometer --index wind_all_a,000300,000905 --json
 | `--user-money-horizon-years` | 用户资金不用年限 |
 | `--force-refresh` | 强制刷新底层数据 |
 
-`analyze` 默认是 product mode：最终判断由 Fund Capability 根据检查清单、否决项、压力测试和 quality gate 派生；R=A+B-C 股票仓位、言行一致性实际风格、经理任期、同类费率、跟踪误差、当前阶段、最终判断覆盖和 quality gate `warn/off` 等夹具参数仅供开发验证使用，必须显式传 `--dev-override`。
+`analyze` 默认是 product mode：最终判断由 Agent 层基金能力根据检查清单、否决项、压力测试和 quality gate 派生；R=A+B-C 股票仓位、言行一致性实际风格、经理任期、同类费率、跟踪误差、当前阶段、最终判断覆盖和 quality gate `warn/off` 等夹具参数仅供开发验证使用，必须显式传 `--dev-override`。
 
 `fund-analysis analyze FUND_CODE` 不传 `--valuation-state` 时，会先识别基金类型，再仅对 `index_fund` / `enhanced_index` 且业绩基准可精确映射到沪深300 `000300` 或中证500 `000905` 的基金调用项目内自建温度计。主动、债券、QDII、FOF、缺少基准、复合基准不确定、派生/策略/行业指数或未支持指数都会保持 `unavailable` 灰灯且不调用温度计。显式传 `--valuation-state unavailable` 会恢复旧的手动灰灯路径，并且不调用温度计；显式传 `low/fair/high` 也同样优先于自动估值。
 
@@ -110,6 +113,7 @@ fund-analysis thermometer --index wind_all_a,000300,000905 --json
 已实现：
 
 - `fund-analysis analyze FUND_CODE` CLI 分析入口
+- `fund-analysis checklist FUND_CODE` 独立买入前检查清单入口
 - 统一年报仓库入口：`FundDocumentRepository.load_annual_report(...)`
 - P1 结构化抽取：基金类型、产品画像、表现、经理/持有人、持仓和份额变化
 - P2 分析：R=A+B-C、超额性质、言行一致性、投资者获得感、风险检查、压力测试、7 问题检查清单
@@ -129,7 +133,6 @@ fund-analysis thermometer --index wind_all_a,000300,000905 --json
 
 尚未接入：
 
-- 独立 `fund-analysis checklist` Service 命令
 - 真实 PDF/network 路径的普通 pytest gate；当前保留为显式 `--run` smoke
 
 明确非目标：
@@ -143,7 +146,7 @@ CI 使用 Python 3.11，并执行以下发布就绪检查：
 ```bash
 uv sync --extra dev --frozen
 uv run ruff check .
-uv run pytest -q
+uv run pytest --cov=fund_agent --cov-report=term-missing --cov-fail-under=50 -q
 ```
 
 本地也可以按关注范围运行较小的测试集：
@@ -158,7 +161,7 @@ pytest tests/scripts/test_selected_funds_smoke.py -q
 
 ## 温度计查询
 
-`fund-analysis thermometer` 通过 Service 调用 Capability data 层的自建温度计，默认查询全 A 市场 `wind_all_a`。CLI 不再默认查询有知有行公开页快照；公开页 adapter 仅保留为过渡/对比能力，不作为当前默认 CLI 路径。
+`fund-analysis thermometer` 通过 Service 调用 Agent 层基金 data 能力中的自建温度计，默认查询全 A 市场 `wind_all_a`。CLI 不再默认查询有知有行公开页快照；公开页 adapter 仅保留为过渡/对比能力，不作为当前默认 CLI 路径。
 
 ```bash
 fund-analysis thermometer
@@ -269,7 +272,7 @@ fund-analysis quality-gate \
 
 ## 仓库产物策略
 
-仓库采用 MIT License。发布基础验证由 GitHub Actions 执行 Python 3.11 下的 `uv sync --extra dev --frozen`、`uv run ruff check .` 和 `uv run pytest -q`。
+仓库采用 MIT License。发布基础验证由 GitHub Actions 执行 Python 3.11 下的 `uv sync --extra dev --frozen`、`uv run ruff check .` 和 `uv run pytest --cov=fund_agent --cov-report=term-missing --cov-fail-under=50 -q`。
 
 当前会跟踪人工维护或可复核的输入产物，例如 `docs/code_20260519.csv`、`docs/golden-answer-template.md` 和 `reports/golden-answers/` 下的 curated golden answer 文件。运行时生成物保持本地：`cache/`、`reports/extraction-snapshots/`、`reports/quality-gate-runs/`、`report-*.md` 和 `docs/*.docx` 不纳入默认版本控制。
 
@@ -279,12 +282,10 @@ fund-analysis quality-gate \
 |------|------|
 | [docs/design.md](docs/design.md) | 设计真源 |
 | [docs/implementation-control.md](docs/implementation-control.md) | Phase 与 gate 总控 |
-| [docs/implementation-control-p4.md](docs/implementation-control-p4.md) | P4 精选基金池质量闭环执行控制 |
-| [docs/post-mvp-p4-first-principles-plan.md](docs/post-mvp-p4-first-principles-plan.md) | P4 第一性原理行动计划 |
 | [docs/fund-analysis-template-draft.md](docs/fund-analysis-template-draft.md) | 8 章分析模板 |
 | [docs/sample-funds.md](docs/sample-funds.md) | 样本基金基线 |
 | [docs/code_20260519.csv](docs/code_20260519.csv) | 有知有行 App 精选基金池手动清单 |
-| [fund_agent/README.md](fund_agent/README.md) | 开发手册总览，说明当前 UI / Service / Fund Capability 边界 |
-| [fund_agent/fund/README.md](fund_agent/fund/README.md) | Fund capability 说明 |
+| [fund_agent/README.md](fund_agent/README.md) | 开发手册总览，说明当前 UI / Service / Host / Agent 边界 |
+| [fund_agent/fund/README.md](fund_agent/fund/README.md) | Fund 作为 Agent 层基金能力包的说明 |
 | [fund_agent/config/README.md](fund_agent/config/README.md) | 配置命名空间当前状态 |
 | [tests/README.md](tests/README.md) | 测试说明 |

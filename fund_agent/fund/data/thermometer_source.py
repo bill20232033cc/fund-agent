@@ -1,6 +1,6 @@
 """自建温度计 akshare 数据源。
 
-本模块属于 Fund Capability data 层，负责把外部指数估值数据规整为
+本模块属于 Agent 层基金能力 data 层，负责把外部指数估值数据规整为
 `PePbHistory`。它不计算温度，不处理 CLI 输出，也不依赖 Service。
 """
 
@@ -57,7 +57,7 @@ def classify_thermometer_code(code: str) -> ThermometerCodeKind:
 
     Returns:
         `index` 表示已支持的六位指数，`market` 表示全 A 市场，
-        `unsupported` 表示当前 Capability 未支持。
+        `unsupported` 表示当前基金领域能力未支持。
 
     Raises:
         无显式抛出。
@@ -71,7 +71,7 @@ def classify_thermometer_code(code: str) -> ThermometerCodeKind:
 
 
 def is_supported_thermometer_code(code: str) -> bool:
-    """判断温度计代码是否受当前 Capability 支持。
+    """判断温度计代码是否受当前基金领域能力支持。
 
     Args:
         code: 温度计代码。

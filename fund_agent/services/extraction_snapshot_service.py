@@ -1,8 +1,8 @@
 """精选基金池抽取快照 Service 编排层。
 
-本模块属于 Service/Application 边界，负责把 UI 输入收敛为显式请求对象，
-并委托 Capability 层 `fund_agent.fund.extraction_snapshot` 生成字段级快照。
-UI 只能依赖本模块，不直接依赖 Capability。
+本模块属于 Service 层，负责把 UI 输入收敛为显式请求对象，
+并委托 Agent 层基金能力 `fund_agent.fund.extraction_snapshot` 生成字段级快照。
+UI 只能依赖本模块，不直接依赖 Agent 内部实现。
 """
 
 from __future__ import annotations
@@ -22,7 +22,7 @@ class ExtractionSnapshotRequest:
         report_year: 年报年份。
         source_csv: 精选基金池 CSV 路径。
         run_id: 本次运行 ID。
-        output_dir: 显式输出目录；为空时使用 Capability 默认输出根目录。
+        output_dir: 显式输出目录；为空时使用 Agent 层基金能力默认输出根目录。
         force_refresh: 是否强制刷新统一仓库和净值缓存。
         sample_per_category: 未指定基金代码时每个类别抽样数量。
         limit: 最大抽取数量。
@@ -42,7 +42,7 @@ class ExtractionSnapshotService:
     """精选基金池抽取快照用例编排 Service。
 
     Service 只负责请求编排与边界隔离；字段级抽取、CSV 校验和文件输出
-    仍由 Capability 层实现。
+    仍由 Agent 层基金能力实现。
     """
 
     async def run(self, request: ExtractionSnapshotRequest) -> SnapshotRunResult:
@@ -52,11 +52,11 @@ class ExtractionSnapshotService:
             request: 显式快照参数，不使用 `extra_payload`。
 
         Returns:
-            Capability 返回的快照运行结果。
+            Agent 层基金能力返回的快照运行结果。
 
         Raises:
             ValueError: 当请求或 CSV 输入非法时抛出。
-            Exception: 允许 Capability 层传播抽取或写文件异常。
+            Exception: 允许 Agent 层基金能力传播抽取或写文件异常。
         """
 
         _validate_request(request)

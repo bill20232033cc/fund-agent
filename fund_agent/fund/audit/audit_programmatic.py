@@ -1,6 +1,6 @@
 """程序化审计规则。
 
-本模块属于基金 Capability 层，服务 `docs/design.md` 第 5.2 节的 MVP 程序审计。
+本模块属于 Agent 层基金能力，服务 `docs/design.md` 第 5.2 节的 MVP 程序审计。
 它只消费报告文本和 P2 结构化结果，不直接读取年报、PDF、缓存或文档仓库。
 """
 
@@ -100,7 +100,7 @@ class ProgrammaticAuditInput:
         rabc_attributions: R=A+B-C 归因结果，用于 L1 计算闭合审计。
         checklist_result: 检查清单结果，用于 R1/R2 规则审计。
         final_judgment: 最终 selected 判断，用于 R2 与检查清单信号一致性审计。
-        derived_final_judgment: Capability 派生判断，用于 R2 source 冲突审计。
+        derived_final_judgment: Agent 层基金能力派生判断，用于 R2 source 冲突审计。
         final_judgment_source: selected 判断来源，用于区分系统派生与开发覆盖。
         valuation_state_resolution: 估值状态结构化真源，用于 R1 第 6 问证据审计。
         required_chapter_titles: 必要章节标题列表。

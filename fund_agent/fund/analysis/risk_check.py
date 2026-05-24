@@ -1,6 +1,6 @@
 """否决项检查模块。
 
-本模块属于基金 Capability 层，服务模板第 6 章“核心风险与否决项”。
+本模块属于 Agent 层基金能力，服务模板第 6 章“核心风险与否决项”。
 它只消费结构化字段和调用方显式输入的外部指标，不直接读取年报文件。
 """
 
@@ -130,11 +130,11 @@ class ResolvedTrackingErrorForRisk:
         value_text: 人类可读数值文本。
         source_type: 跟踪误差来源类型。
         authority: 当前风险检查采用的数据权威。
-        field_extraction_mode: Capability 字段抽取模式。
-        anchors: Capability 证据锚点；开发覆盖为空。
+        field_extraction_mode: 基金领域能力字段抽取模式。
+        anchors: 基金领域能力证据锚点；开发覆盖为空。
         provenance_note: 来源说明。
         missing_reason: 缺失原因。
-        conflict_note: 开发覆盖和 Capability 数据冲突说明。
+        conflict_note: 开发覆盖和基金领域能力数据冲突说明。
         is_product_evidence: 是否可作为产品证据。
     """
 
@@ -277,7 +277,7 @@ def resolve_tracking_error_for_risk(
     """解析风险检查的唯一跟踪误差输入，见模板第 6 章否决项。
 
     Args:
-        tracking_error_field: Fund Capability 结构化跟踪误差字段。
+        tracking_error_field: Agent 层基金能力结构化跟踪误差字段。
         developer_override: 开发模式显式覆盖值。
         developer_override_enabled: 是否允许开发覆盖参与风险检查。
         fund_type: 标准化基金类型。

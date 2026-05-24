@@ -1,6 +1,6 @@
 """Correctness golden answer Markdown 转 JSON、strict JSON 读取与校验能力。
 
-本模块属于 Capability 层，只处理人工审核后的 golden answer Markdown
+本模块属于 Agent 层基金能力，只处理人工审核后的 golden answer Markdown
 结构化、strict JSON 读取与校验，不读取 PDF、cache 或底层解析文件，也不执行
 correctness 评分。Correctness 比对见 `extraction_score.py`，对应模板字段质量
 闭环。

@@ -1,7 +1,7 @@
 """报告质量 gate Service 编排层。
 
-本模块属于 Service/Application 边界，负责把 UI 输入收敛为显式请求对象，
-并委托 Capability 层 `fund_agent.fund.quality_gate` 消费 `score.json`。
+本模块属于 Service 层，负责把 UI 输入收敛为显式请求对象，
+并委托 Agent 层基金能力 `fund_agent.fund.quality_gate` 消费 `score.json`。
 """
 
 from __future__ import annotations
@@ -35,11 +35,11 @@ class QualityGateService:
             request: 显式 gate 参数，不使用 `extra_payload`。
 
         Returns:
-            Capability 返回的质量 gate 结果。
+            Agent 层基金能力返回的质量 gate 结果。
 
         Raises:
             ValueError: 请求路径非法时抛出。
-            Exception: 允许 Capability 层传播 JSON 解析或文件写入异常。
+            Exception: 允许 Agent 层基金能力传播 JSON 解析或文件写入异常。
         """
 
         _validate_request(request)

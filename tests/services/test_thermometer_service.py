@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ast
 import asyncio
 import json
 from datetime import datetime, timedelta, timezone
@@ -19,6 +20,14 @@ from fund_agent.fund.data.thermometer_cache import ThermometerHistoryCache
 from fund_agent.fund.data.thermometer_source import ThermometerSourceError
 from fund_agent.fund.data.thermometer_types import PePbHistory, PePbPoint, ThermometerBatchResult
 from fund_agent.services import ThermometerRequest, ThermometerService
+
+FORBIDDEN_BOUNDARY_IMPORTS: dict[str, tuple[str, ...]] = {
+    "fund_agent/ui/cli.py": ("fund_agent.fund.data.thermometer_types",),
+    "fund_agent/services/thermometer_service.py": (
+        "fund_agent.fund.data.thermometer_cache",
+        "fund_agent.fund.data.thermometer_source",
+    ),
+}
 
 
 class _FakeThermometerAdapter:
@@ -55,6 +64,55 @@ class _FakeThermometerAdapter:
 
         self.force_refresh_values.append(force_refresh)
         return self.snapshot
+
+
+def _imported_modules(source_path: Path) -> set[str]:
+    """提取 Python 文件中的直接 import 模块名。
+
+    Args:
+        source_path: 待检查的 Python 源文件路径。
+
+    Returns:
+        文件中所有 `import x` 与 `from x import y` 的模块名集合。
+
+    Raises:
+        SyntaxError: 源文件无法被 Python AST 解析时抛出。
+        OSError: 源文件读取失败时抛出。
+    """
+
+    tree = ast.parse(source_path.read_text(encoding="utf-8"), filename=str(source_path))
+    imported_modules: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            imported_modules.update(alias.name for alias in node.names)
+        if isinstance(node, ast.ImportFrom) and node.module is not None:
+            imported_modules.add(node.module)
+    return imported_modules
+
+
+def test_thermometer_layer_boundary_imports_do_not_cross_internal_modules() -> None:
+    """验证 UI/Service 温度计路径不直接 import 下层内部实现模块。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当生产文件重新引入禁止的跨层 import 时抛出。
+    """
+
+    repo_root = Path(__file__).resolve().parents[2]
+    violations: dict[str, set[str]] = {}
+    for relative_path, forbidden_modules in FORBIDDEN_BOUNDARY_IMPORTS.items():
+        imported = _imported_modules(repo_root / relative_path)
+        forbidden = set(forbidden_modules)
+        direct_hits = imported & forbidden
+        if direct_hits:
+            violations[relative_path] = direct_hits
+
+    assert violations == {}
 
 
 class _FakeIndexSource:

@@ -1,6 +1,6 @@
 """最终判断派生策略。
 
-本模块属于 Fund Capability 层，服务模板第 7 章“是否值得持有--最终判断”
+本模块属于 Agent 层基金能力，服务模板第 7 章“是否值得持有--最终判断”
 和检查清单第 7 问。它只消费已形成的结构化分析结果，不读取年报、PDF、
 缓存、UI 或 Service 运行状态。
 """
@@ -40,7 +40,7 @@ class FinalJudgmentDecision:
 
     Attributes:
         selected_judgment: 报告实际采用的最终判断，见模板第 7 章。
-        derived_judgment: Capability 根据检查清单、否决项、压力测试与质量 gate 派生的判断。
+        derived_judgment: Agent 层基金能力根据检查清单、否决项、压力测试与质量 gate 派生的判断。
         source: 实际采用判断的来源。
         override_judgment: 开发覆盖判断；未覆盖时为 `None`。
         reasons: 派生判断触发原因，按规则优先级去重。

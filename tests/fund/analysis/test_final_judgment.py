@@ -242,6 +242,35 @@ def test_derive_final_judgment_worth_holding_on_all_green_pass() -> None:
     assert decision.derived_judgment == "worth_holding"
 
 
+def test_derive_final_judgment_worth_holding_on_all_green_gate_warn() -> None:
+    """验证 quality gate warn 不单独降低全绿产品判断。"""
+
+    decision = derive_final_judgment(
+        checklist_result=_checklist(),
+        risk_check_result=_risk(),
+        stress_test_result=_stress(),
+        quality_gate_status="warn",
+        quality_gate_not_run_reason=None,
+    )
+
+    assert decision.derived_judgment == "worth_holding"
+
+
+def test_derive_final_judgment_not_run_prevents_worth_holding() -> None:
+    """验证 quality gate not_run 会把 otherwise-green 判断压到需要关注。"""
+
+    decision = derive_final_judgment(
+        checklist_result=_checklist(),
+        risk_check_result=_risk(),
+        stress_test_result=_stress(),
+        quality_gate_status="not_run",
+        quality_gate_not_run_reason="policy=off",
+    )
+
+    assert decision.derived_judgment == "needs_attention"
+    assert any("policy=off" in reason for reason in decision.reasons)
+
+
 def test_derive_final_judgment_accumulates_reasons_and_keeps_highest_priority() -> None:
     """验证多规则同时触发时原因累积且最高优先级为建议替换。"""
 

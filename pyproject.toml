@@ -1,40 +1,89 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "fund-agent"
 version = "0.1.0"
 description = "基金行为教练 Agent — 买入前专业级基金体检报告"
-license = "MIT"
+readme = "README.md"
 requires-python = ">=3.11"
+license = "MIT"
+authors = [{ name = "bill20232033cc" }]
+keywords = [
+    "agent",
+    "financial-analysis",
+    "fund",
+    "mutual-fund",
+    "investment",
+    "behavioral-finance",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Financial and Insurance Industry",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Office/Business :: Financial :: Investment",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Natural Language :: Chinese (Simplified)",
+]
 dependencies = [
     "pdfplumber>=0.11",
-    "httpx>=0.28",
+    "httpx>=0.28.0",
     "akshare>=1.15",
+    "pandas>=2.1.4,<4.0.0",
     "sqlite-utils>=3.37",
     "typer>=0.12",
     "rich>=13",
 ]
 
 [project.optional-dependencies]
+test = [
+    "pytest>=8",
+    "pytest-asyncio>=0.24",
+    "pytest-cov>=7.1",
+    "pytest-mock>=3.11.0",
+    "pytest-timeout>=2.1.0",
+    "requests-mock>=1.11.0",
+]
 dev = [
     "pytest>=8",
     "pytest-asyncio>=0.24",
     "pytest-cov>=7.1",
+    "pytest-mock>=3.11.0",
+    "pytest-timeout>=2.1.0",
+    "requests-mock>=1.11.0",
     "ruff>=0.5",
+    "black>=23.7.0",
+    "mypy>=1.5.0",
+    "pyright>=1.1.0",
 ]
+
+[project.urls]
+Homepage = "https://github.com/bill20232033cc/fund-agent"
+Repository = "https://github.com/bill20232033cc/fund-agent"
+Issues = "https://github.com/bill20232033cc/fund-agent/issues"
 
 [project.scripts]
 fund-analysis = "fund_agent.ui.cli:app"
 
-[build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
-
-[tool.hatch.metadata]
-allow-direct-references = true
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["fund_agent*"]
+exclude = ["tests*", "docs*", "reports*", "scripts*", "workspace*", "cache*"]
 
 [tool.ruff]
 target-version = "py311"
 line-length = 100
 
+[tool.black]
+target-version = ["py311"]
+line-length = 100
+
 [tool.pytest.ini_options]
+minversion = "8.0"
 asyncio_mode = "auto"
 testpaths = ["tests"]
+pythonpath = ["."]

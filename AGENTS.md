@@ -49,11 +49,11 @@
 
 - **对基金文档的存取**，都应该只通过统一的文档仓库接口，禁止直接操作文件系统。
 
-- **生产年报 PDF 访问必须经过 `FundDocumentRepository`**。年报来源编排属于 Fund Capability documents 层内部实现，Service、UI、Engine、renderer、quality gate 不得直接调用具体来源、PDF cache 或下载 helper。
+- **生产年报 PDF 访问必须经过 `FundDocumentRepository`**。年报来源编排属于 Agent 层 `fund_agent/fund` documents 内部实现，Service、UI、Host、renderer、quality gate 不得直接调用具体来源、PDF cache 或下载 helper。
 
 - **年报来源 fallback 必须显式按失败分类决策**：`not_found`、`unavailable` 才允许 fallback；`schema_drift`、`identity_mismatch`、`integrity_error` 必须 fail-closed，禁止被 Eastmoney fallback 静默掩盖。
 
-- **Dayu 只作为方法论和历史研究参考**。当前生产主链路不得依赖外部 `dayu-agent` 运行时、Host、Engine、tool loop 或外部 Dayu API；后续如需要相关能力，必须在本项目内按现有边界内化实现。
+- **Dayu 是四层架构参考与 Host/Agent 执行底座来源**。本项目目标架构统一为 `UI -> Service -> Host -> Agent`。当前确定性 CLI 主链路尚未接入 Host/Agent 调度，但后续一旦引入 Host 层，必须使用 `dayu.host`；一旦引入 Agent 执行内核 / tool loop / runner / ToolRegistry / ToolTrace，必须使用 `dayu.engine`。禁止通过零散外部 Dayu API 绕过本项目四层边界。
 
 - **禁止把显式参数放在 extra_payload 里传递**，所有参数必须显式声明。
 
@@ -63,41 +63,35 @@
 
 ## 模块边界（必须遵守）
 
+目标架构固定为四层：
+
+```text
+UI -> Service -> Host -> Agent
+```
+
 ### UI 层
 
 - **负责**：用户交互界面、报告渲染、可视化展示
 - **不负责**：基金分析逻辑、数据提取、审计判断
-- **依赖约束**：只依赖 Application 层提供的接口，不直接调用 Engine 或 Capability
-
-### Application 层
-
-- **负责**：用例编排、场景定义、prompt 组装、用户会话管理
-- **不负责**：具体工具实现、基金领域知识、审计机制
-- **依赖约束**：可调用 Service 和 Runtime，不直接调用 Capability
-
-### Runtime 层
-
-- **负责**：Agent 生命周期管理、system_prompt 渲染、scene 注册、工具绑定
-- **不负责**：工具具体实现、基金分析逻辑
-- **依赖约束**：管理 tool loop / runner / trace / facts / ToolRegistry
+- **依赖约束**：只依赖 Service 层提供的接口，不直接调用 Host 或 Agent 内部模块
 
 ### Service 层
 
-- **负责**：跨领域协调、工作流编排、报告生成
-- **不负责**：底层工具实现、领域知识
-- **依赖约束**：协调 Engine 和 Capability 完成复杂任务
+- **负责**：业务用例编排、场景定义、prompt/ExecutionContract 组装、用户会话语义、报告生成、质量策略选择
+- **不负责**：Host 生命周期治理、Agent tool loop、底层工具实现、基金领域规则细节
+- **依赖约束**：调用 Host 层执行 Agent；当前确定性过渡路径可调用 `fund_agent/fund` 公开能力，但不得新增 UI 直接调用 Agent 内部模块
 
-### Engine 层
+### Host 层
 
-- **负责**：Tool 执行框架、ToolTrace 记录、状态机、事件流
-- **不负责**：基金领域知识、具体财报解析
-- **依赖约束**：提供稳定的工具调用契约
+- **负责**：Agent session/run 生命周期、并发、超时、取消、恢复、memory、reply outbox、事件投递、ExecutionDeliveryContext
+- **不负责**：基金领域知识、工具具体实现、prompt 业务语义、报告判断
+- **依赖约束**：Host 层实现必须使用 `dayu.host`；Host 调用 Agent 层执行，不直接实现工具或基金分析
 
-### Capability 层（fund_agent/fund）
+### Agent 层
 
-- **负责**：基金领域知识、年报解析规则、有知有行方法论实现、审计规则
-- **不负责**：通用工具框架、UI 渲染
-- **依赖约束**：理解基金类型、财报章节、投资规则、E大策略
+- **负责**：Agent 执行、tool loop、runner、ToolRegistry、ToolTrace、context budget、工具调用、基金领域能力、年报解析规则、有知有行方法论实现、审计规则
+- **不负责**：UI 渲染、Service 业务用例选择、Host 生命周期治理
+- **依赖约束**：Agent 执行内核必须使用 `dayu.engine`；`fund_agent/fund` 是当前 Agent 层基金领域能力包，理解基金类型、财报章节、投资规则、E大策略、CHAPTER_CONTRACT、preferred_lens、ITEM_RULE 和证据审计
 
 ### 边界执行规则
 
@@ -110,13 +104,14 @@
 - 以代码为准，不让文档先于代码"设计未来"。
 
 - **归属判定规则**：
-  - 任何"读取 prompt manifests / scene 定义"的代码，默认放在 `Application` 或 `Runtime`，不能放在 `Service` 或 `Engine`
-  - 任何"渲染最终 `system_prompt`"的代码，默认放在 `Runtime`
-  - 任何"决定某个 scene 注册哪些工具"的代码，默认放在 `Runtime`
-  - 任何"管理 tool loop / runner / trace / facts / ToolRegistry"的代码，默认放在 `Engine`
-  - 任何"理解基金类型、财报章节、投资规则、有知有行方法论"的代码，默认放在 `Capability` 或 `fund_agent/fund`
-  - 任何"CHAPTER_CONTRACT 解析 / preferred_lens 应用"的代码，默认放在 `Capability`
-  - 任何"审计规则执行 / 证据锚点验证"的代码，默认放在 `Capability`
+  - 任何"读取 prompt manifests / scene 定义"的代码，默认放在 `Service`
+  - 任何"渲染最终 `system_prompt` / ExecutionContract / AgentInput"的代码，默认放在 `Service`
+  - 任何"决定某个 scene 需要哪些工具语义"的代码，默认放在 `Service`
+  - 任何"管理 session / run / 并发 / timeout / cancel / resume / memory / reply outbox / ExecutionDeliveryContext"的代码，默认放在 `Host`，并使用 `dayu.host`
+  - 任何"管理 tool loop / runner / trace / facts / ToolRegistry / context budget / tool execution"的代码，默认放在 `Agent`，并使用 `dayu.engine`
+  - 任何"理解基金类型、财报章节、投资规则、有知有行方法论"的代码，默认放在 `Agent` 层的 `fund_agent/fund`
+  - 任何"CHAPTER_CONTRACT 解析 / preferred_lens 应用"的代码，默认放在 `Agent` 层的 `fund_agent/fund`
+  - 任何"审计规则执行 / 证据锚点验证"的代码，默认放在 `Agent` 层的 `fund_agent/fund`
 
 ## 📌 设计和代码编写原则（必须遵守）
 
@@ -170,20 +165,22 @@
   3. 文档职责是否越界（总览文档不抢包文档职责，包文档不重复用户手册）。
 
 - **各 README 的固定定位**：
-  - 项目根目录 `README.md`：**用户手册**。目标是"用户一看就会用"。只写用户成功路径：安装、配置、5 分钟跑通、常用工作流、CLI 常用命令、报告渲染入口、文档导航；不展开 Engine/Fund 内部机制。
-  - `fund_agent/README.md`：**开发手册 - 总览**。目标是"开发者一看就能理解整体架构并开始扩展"。只写总架构、设计意图、稳定边界、机制示意图、扩展入口、代码阅读顺序；不下沉到 Engine/Fund 包内部实现细节。
-  - `fund_agent/engine/README.md`：**开发手册 - Engine 包**。只写 Engine 的架构、公共契约、Runner/Agent 事件流、状态机、ToolTrace schema、扩展点和模块导读；这里必须把事件流和状态机写清楚。
-  - `fund_agent/fund/README.md`：**开发手册 - Fund 包**。只写 Fund 作为 capability 的定位、分析框架（8章模板）、CHAPTER_CONTRACT 机制、审计规则、对外接口、内部分层与机制；不要把 Fund 写成系统基础设施。
+  - 项目根目录 `README.md`：**用户手册**。目标是"用户一看就会用"。只写用户成功路径：安装、配置、5 分钟跑通、常用工作流、CLI 常用命令、报告渲染入口、文档导航；不展开 Host/Agent/Fund 内部机制。
+  - `fund_agent/README.md`：**开发手册 - 总览**。目标是"开发者一看就能理解整体架构并开始扩展"。只写总架构、设计意图、稳定边界、机制示意图、扩展入口、代码阅读顺序；不下沉到 Host/Agent/Fund 包内部实现细节。
+  - `fund_agent/host/README.md`：**开发手册 - Host 包**。只写 Host 的架构、`dayu.host` 接入、公共同步/异步契约、session/run 生命周期、并发、取消、恢复、memory、reply outbox、事件流和扩展点。
+  - `fund_agent/agent/README.md`：**开发手册 - Agent 包**。只写 Agent 的架构、`dayu.engine` 接入、Runner/Agent 事件流、状态机、ToolTrace schema、ToolRegistry、context budget、工具执行契约和模块导读。
+  - `fund_agent/fund/README.md`：**开发手册 - Fund 包**。只写 Fund 作为 Agent 层基金领域能力包的定位、分析框架（8章模板）、CHAPTER_CONTRACT 机制、审计规则、对外接口、内部分层与机制；不要把 Fund 写成系统基础设施。
   - `fund_agent/config/README.md`：**配置说明手册**。只写默认配置、`workspace/config` 覆盖关系、常改项、最小示例、prompts 目录职责；不重复运行时内部实现。
   - `tests/README.md`：**测试手册**。只写测试分层、运行方式、约定和新增测试时的维护规则。
 
 - **触发更新规则**：
-  - `fund_agent/engine/` 修改 → 更新 `fund_agent/engine/README.md`
+  - `fund_agent/host/` 修改 → 更新 `fund_agent/host/README.md`
+  - `fund_agent/agent/` 修改 → 更新 `fund_agent/agent/README.md`
   - `fund_agent/fund/` 修改 → 更新 `fund_agent/fund/README.md`
   - `fund_agent/config/` 修改 → 更新 `fund_agent/config/README.md`
   - `tests/` 修改 → 更新 `tests/README.md`
   - `fund_agent/cli/`、`render/`、项目级使用方式或配置入口发生变化 → 更新项目根目录 `README.md`
-  - 涉及分层关系、装配方式、Service/Capability/Engine 边界变化 → 同步更新 `fund_agent/README.md`
+  - 涉及分层关系、装配方式、Service/Host/Agent/Fund 边界变化 → 同步更新 `fund_agent/README.md`
   - **模板章节结构变化** → 同步更新 `fund_agent/fund/README.md` 和 `docs/design.md`
 
 - **文档写作约束**：

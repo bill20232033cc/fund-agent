@@ -8,6 +8,10 @@ import tomllib
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+CI_COVERAGE_COMMAND = (
+    "uv run pytest --cov=fund_agent --cov-report=term-missing "
+    "--cov-fail-under=50 -q"
+)
 
 
 def test_license_and_package_metadata_are_declared() -> None:
@@ -49,7 +53,10 @@ def test_ci_workflow_runs_release_readiness_checks() -> None:
     assert 'python-version: "3.11"' in workflow
     assert "uv sync --extra dev --frozen" in workflow
     assert "uv run ruff check ." in workflow
-    assert "uv run pytest -q" in workflow
+    assert CI_COVERAGE_COMMAND in workflow
+    assert "--cov=fund_agent" in workflow
+    assert "--cov-report=term-missing" in workflow
+    assert "--cov-fail-under=50" in workflow
 
 
 def test_gitignore_keeps_generated_outputs_local_without_hiding_fixtures() -> None:

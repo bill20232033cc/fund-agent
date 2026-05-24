@@ -1,6 +1,6 @@
 """preferred_lens 确定性应用计划。
 
-本模块属于基金 Capability 的模板层，负责把 CHAPTER_CONTRACT 中的
+本模块属于 Agent 层基金能力的模板层，负责把 CHAPTER_CONTRACT 中的
 preferred_lens 解析为渲染器可消费的确定性关注点。它不渲染报告、不读取
 基金文档，也不执行 LLM 写作。
 """

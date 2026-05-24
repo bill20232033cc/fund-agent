@@ -475,6 +475,67 @@ def _risk_check() -> RiskCheckResult:
     )
 
 
+def _risk_item(
+    code: str,
+    status: str,
+    *,
+    current_value: str | None,
+    threshold: str,
+    reason: str,
+) -> RiskCheckItem:
+    """构造单个风险检查项。
+
+    Args:
+        code: 风险检查编码。
+        status: 风险检查状态。
+        current_value: 当前风险值。
+        threshold: 风险阈值。
+        reason: 判断原因。
+
+    Returns:
+        风险检查项。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return RiskCheckItem(
+        code=code,  # type: ignore[arg-type]
+        status=status,  # type: ignore[arg-type]
+        current_value=current_value,
+        threshold=threshold,
+        anchors=(_anchor("§6", code),),
+        reason=reason,
+    )
+
+
+def _risk_check_with_item(
+    item: RiskCheckItem,
+    *,
+    overall_status: str,
+) -> RiskCheckResult:
+    """构造带单个动作项的风险检查汇总。
+
+    Args:
+        item: 风险检查项。
+        overall_status: 汇总状态。
+
+    Returns:
+        风险检查汇总结果。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return RiskCheckResult(
+        overall_status=overall_status,  # type: ignore[arg-type]
+        items=(item,),
+        veto_items=(item,) if item.status == "veto" else (),
+        watch_items=(item,) if item.status in {"watch", "insufficient_data"} else (),
+        next_minimum_verification="复核风险动作项。",
+    )
+
+
 def _stress_test(*, fund_type: str = "active_fund") -> StressTestResult:
     """构造压力测试结果。
 
@@ -527,6 +588,65 @@ def _stress_test(*, fund_type: str = "active_fund") -> StressTestResult:
         fund_type=fund_type,  # type: ignore[arg-type]
         investment_amount=Decimal("10000"),
         max_tolerable_loss_rate=Decimal("0.50"),
+        scenarios=scenarios,
+        worst_scenario=scenarios[-1],
+        anchors=(_anchor("§1", "fund_type"),),
+        next_minimum_verification="复核最大可承受亏损。",
+    )
+
+
+def _stress_test_all_within_tolerance(*, fund_type: str = "active_fund") -> StressTestResult:
+    """构造全场景均未越过承受边界的压力测试结果。
+
+    Args:
+        fund_type: 压力测试使用的标准基金类型。
+
+    Returns:
+        压力测试结果。
+
+    Raises:
+        无显式抛出。
+    """
+
+    scenarios = (
+        StressScenarioResult(
+            code="minus_20",
+            decline_rate=Decimal("-0.20"),
+            investment_amount=Decimal("10000"),
+            account_balance=Decimal("8000"),
+            floating_loss_amount=Decimal("2000"),
+            severity="normal",
+            capacity_status="within_tolerance",
+            threshold="fixture",
+            reason="fixture",
+        ),
+        StressScenarioResult(
+            code="minus_40",
+            decline_rate=Decimal("-0.40"),
+            investment_amount=Decimal("10000"),
+            account_balance=Decimal("6000"),
+            floating_loss_amount=Decimal("4000"),
+            severity="extreme",
+            capacity_status="within_tolerance",
+            threshold="fixture",
+            reason="fixture",
+        ),
+        StressScenarioResult(
+            code="minus_60",
+            decline_rate=Decimal("-0.60"),
+            investment_amount=Decimal("10000"),
+            account_balance=Decimal("4000"),
+            floating_loss_amount=Decimal("6000"),
+            severity="historical_worst",
+            capacity_status="within_tolerance",
+            threshold="fixture",
+            reason="fixture",
+        ),
+    )
+    return StressTestResult(
+        fund_type=fund_type,  # type: ignore[arg-type]
+        investment_amount=Decimal("10000"),
+        max_tolerable_loss_rate=Decimal("0.80"),
         scenarios=scenarios,
         worst_scenario=scenarios[-1],
         anchors=(_anchor("§1", "fund_type"),),
@@ -679,6 +799,89 @@ def _render_input(
     )
 
 
+def _chapter_0_placeholder_case_input(case_name: str) -> TemplateRenderInput:
+    """构造第 0 章旧占位文本回归测试输入。
+
+    Args:
+        case_name: 用例名称，支持 veto/watch/checklist_warning/stress_only/all_green。
+
+    Returns:
+        模板渲染输入。
+
+    Raises:
+        ValueError: 当用例名称不受支持时抛出。
+    """
+
+    input_data = _render_input()
+    if case_name == "veto":
+        veto_item = _risk_item(
+            "liquidation_risk",
+            "veto",
+            current_value="30000000",
+            threshold=">50000000 元",
+            reason="基金规模低于清盘风险阈值。",
+        )
+        decision = replace(
+            input_data.final_judgment_decision,
+            selected_judgment="suggest_replace",
+            derived_judgment="suggest_replace",
+            reasons=("模板第 6 章存在否决项，最终判断应建议替换。",),
+        )
+        return replace(
+            input_data,
+            risk_check_result=_risk_check_with_item(veto_item, overall_status="veto"),
+            final_judgment_decision=decision,
+        )
+    if case_name == "watch":
+        watch_item = _risk_item(
+            "style_drift",
+            "watch",
+            current_value="行业偏离声明风格",
+            threshold="言行一致性需保持 aligned",
+            reason="言行一致性出现黄灯。",
+        )
+        return replace(
+            input_data,
+            risk_check_result=_risk_check_with_item(watch_item, overall_status="watch"),
+            final_judgment_decision=replace(
+                input_data.final_judgment_decision,
+                selected_judgment="needs_attention",
+                derived_judgment="needs_attention",
+            ),
+        )
+    if case_name == "checklist_warning":
+        return replace(
+            input_data,
+            checklist_result=_checklist("yellow"),
+            final_judgment_decision=replace(
+                input_data.final_judgment_decision,
+                selected_judgment="needs_attention",
+                derived_judgment="needs_attention",
+                reasons=("检查清单存在黄灯或灰灯问题，需要最小验证。",),
+            ),
+        )
+    if case_name == "stress_only":
+        return replace(
+            input_data,
+            final_judgment_decision=replace(
+                input_data.final_judgment_decision,
+                selected_judgment="needs_attention",
+                derived_judgment="needs_attention",
+                reasons=("压力测试接近或超过承受边界，需要最小验证。",),
+            ),
+        )
+    if case_name == "all_green":
+        return replace(
+            input_data,
+            stress_test_result=_stress_test_all_within_tolerance(),
+            final_judgment_decision=replace(
+                input_data.final_judgment_decision,
+                reasons=("检查清单全绿、否决项通过、质量 gate 通过，当前证据下值得持有。",),
+            ),
+        )
+    raise ValueError(f"未知第 0 章占位回归用例：{case_name}")
+
+
 def _segment_lines(markdown: str, heading: str) -> tuple[str, ...]:
     """提取指定 ITEM_RULE 小节的正文行。
 
@@ -772,6 +975,201 @@ def test_render_template_report_renders_chapter_0_profile_with_inception_date() 
     result = render_template_report(_render_input())
 
     assert "- 基金简介：基金经理 张三；管理规模 10.00亿元；成立时间 2020-01-15。" in result.report_markdown
+
+
+def test_render_template_report_uses_veto_item_as_chapter_0_largest_risk() -> None:
+    """验证第 0 章最大风险优先使用首个 veto 风险项。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当第 0 章未消费 veto 结构化结果时抛出。
+    """
+
+    input_data = _render_input(final_judgment="suggest_replace")
+    veto_item = _risk_item(
+        "liquidation_risk",
+        "veto",
+        current_value="30000000",
+        threshold=">50000000 元",
+        reason="基金规模低于清盘风险阈值。",
+    )
+    decision = replace(
+        input_data.final_judgment_decision,
+        selected_judgment="suggest_replace",
+        derived_judgment="suggest_replace",
+        reasons=("模板第 6 章存在否决项，最终判断应建议替换。",),
+    )
+    result = render_template_report(
+        replace(
+            input_data,
+            risk_check_result=_risk_check_with_item(veto_item, overall_status="veto"),
+            final_judgment_decision=decision,
+        )
+    )
+
+    assert (
+        "- 当前最大的风险：liquidation_risk 已触发否决，当前值=30000000，"
+        "阈值=>50000000 元，原因=基金规模低于清盘风险阈值。"
+    ) in result.chapter_blocks[0].body_markdown
+    assert "终止阈值：liquidation_risk 维持 veto" in result.chapter_blocks[0].body_markdown
+    assert "liquidation_risk 从 veto 复核为 pass" in result.chapter_blocks[0].body_markdown
+    assert "当前未提供独立最大风险排序输入" not in result.chapter_blocks[0].body_markdown
+
+
+def test_render_template_report_uses_watch_item_as_chapter_0_largest_risk() -> None:
+    """验证第 0 章最大风险在无 veto 时使用首个 watch 风险项。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当第 0 章未消费 watch 结构化结果时抛出。
+    """
+
+    watch_item = _risk_item(
+        "style_drift",
+        "watch",
+        current_value="行业偏离声明风格",
+        threshold="言行一致性需保持 aligned",
+        reason="言行一致性出现黄灯。",
+    )
+    input_data = replace(
+        _render_input(final_judgment="needs_attention"),
+        risk_check_result=_risk_check_with_item(watch_item, overall_status="watch"),
+    )
+
+    result = render_template_report(input_data)
+
+    assert (
+        "- 当前最大的风险：style_drift 需要跟踪或补证，当前值=行业偏离声明风格，"
+        "阈值=言行一致性需保持 aligned，原因=言行一致性出现黄灯。"
+    ) in result.chapter_blocks[0].body_markdown
+    assert "降级或终止阈值：style_drift 从 watch 确认为 veto" in result.chapter_blocks[0].body_markdown
+    assert "style_drift 从 watch 复核为 pass" in result.chapter_blocks[0].body_markdown
+
+
+def test_render_template_report_uses_checklist_warning_for_chapter_0_thresholds() -> None:
+    """验证第 0 章阈值可由检查清单黄灯驱动。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当第 0 章阈值未消费 checklist warning 时抛出。
+    """
+
+    input_data = _render_input(final_judgment="needs_attention")
+    yellow_checklist = _checklist("yellow")
+    decision = replace(
+        input_data.final_judgment_decision,
+        selected_judgment="needs_attention",
+        derived_judgment="needs_attention",
+        reasons=("检查清单存在黄灯或灰灯问题，需要最小验证。",),
+    )
+    result = render_template_report(
+        replace(input_data, checklist_result=yellow_checklist, final_judgment_decision=decision)
+    )
+
+    assert "检查清单“超额收益能覆盖成本吗？”从 yellow/watch 复核为 green/pass" in result.chapter_blocks[0].body_markdown
+    assert (
+        "降级或终止阈值：检查清单“超额收益能覆盖成本吗？”从 yellow/watch 转为 red/block"
+        in result.chapter_blocks[0].body_markdown
+    )
+    assert "需要后续跨期证据确认" not in result.chapter_blocks[0].body_markdown
+
+
+def test_render_template_report_uses_stress_scenario_as_chapter_0_risk_fallback() -> None:
+    """验证风险检查无动作项时第 0 章可使用压力测试场景作为最大风险。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当压力测试关注场景被错误渲染为无风险时抛出。
+    """
+
+    input_data = _chapter_0_placeholder_case_input("stress_only")
+    result = render_template_report(input_data)
+    chapter_0 = result.chapter_blocks[0].body_markdown
+
+    assert "当前最大的风险：压力场景 minus_40 接近或超过承受边界" in chapter_0
+    assert "压力场景 minus_40 从 near_limit 复核为 within_tolerance" in chapter_0
+    assert "当前未发现一票否决或需跟踪风险" not in chapter_0
+
+
+def test_render_template_report_chapter_0_all_green_pass_uses_monitoring_threshold() -> None:
+    """验证第 0 章全绿通过时输出具体监控阈值。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当第 0 章仍输出旧 blanket placeholder 时抛出。
+    """
+
+    input_data = _render_input()
+    decision = replace(
+        input_data.final_judgment_decision,
+        reasons=("检查清单全绿、否决项通过、质量 gate 通过，当前证据下值得持有。",),
+    )
+    result = render_template_report(
+        replace(
+            input_data,
+            stress_test_result=_stress_test_all_within_tolerance(),
+            final_judgment_decision=decision,
+        )
+    )
+    chapter_0 = result.chapter_blocks[0].body_markdown
+
+    assert "否决项检查为 pass，当前未发现一票否决或需跟踪风险" in chapter_0
+    assert "任一否决项转为 watch/veto、检查清单转黄/灰/红" in chapter_0
+    assert "当前未提供独立最大风险排序输入" not in chapter_0
+    assert "需要后续跨期证据确认" not in chapter_0
+
+
+@pytest.mark.parametrize(
+    "case_name",
+    ("veto", "watch", "checklist_warning", "stress_only", "all_green"),
+)
+def test_render_template_report_chapter_0_never_emits_old_blanket_placeholders(
+    case_name: str,
+) -> None:
+    """验证第 0 章各结构化信号路径均不输出旧 blanket placeholder。
+
+    Args:
+        case_name: 第 0 章结构化信号路径。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当旧占位文本回归时抛出。
+    """
+
+    result = render_template_report(_chapter_0_placeholder_case_input(case_name))
+    chapter_0 = result.chapter_blocks[0].body_markdown
+
+    assert "当前最大的风险" in chapter_0
+    assert "什么变化会升级、降级或终止当前动作" in chapter_0
+    assert "当前未提供独立最大风险排序输入" not in chapter_0
+    assert "需要后续跨期证据确认" not in chapter_0
 
 
 def test_render_template_report_exposes_contract_aligned_chapter_blocks() -> None:

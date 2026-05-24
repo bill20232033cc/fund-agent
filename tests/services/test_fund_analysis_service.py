@@ -455,6 +455,66 @@ async def test_fund_analysis_service_builds_render_and_audit_path_with_fake_extr
 
 
 @pytest.mark.asyncio
+async def test_fund_analysis_service_checklist_returns_shared_core_without_rendering() -> None:
+    """验证独立 checklist 用例复用分析核心并返回最终判断。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: checklist 未复用抽取或未返回 7 问结果时抛出。
+    """
+
+    extractor = _FakeExtractor(_bundle())
+    service = FundAnalysisService(extractor=extractor)
+
+    result = await service.checklist(_developer_request(force_refresh=True))
+
+    assert extractor.calls == [("110011", 2024, True)]
+    assert len(result.checklist_result.items) == 7
+    assert result.valuation_state_resolution.state == "low"
+    assert result.final_judgment_decision.derived_judgment in {
+        "worth_holding",
+        "needs_attention",
+        "suggest_replace",
+    }
+    assert result.quality_gate_result is None
+    assert result.quality_gate_not_run_reason == "policy=off"
+
+
+@pytest.mark.asyncio
+async def test_fund_analysis_service_normalizes_fund_code_before_extraction() -> None:
+    """验证 Service 校验后的基金代码会规范化后再传入抽取器。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当抽取器收到未规范化基金代码时抛出。
+    """
+
+    extractor = _FakeExtractor(_bundle())
+    service = FundAnalysisService(extractor=extractor)
+
+    result = await service.checklist(
+        _developer_request(
+            fund_code=" 110011 ",
+            force_refresh=True,
+            quality_gate_policy="off",
+        )
+    )
+
+    assert extractor.calls == [("110011", 2024, True)]
+    assert result.structured_data.fund_code == "110011"
+
+
+@pytest.mark.asyncio
 async def test_fund_analysis_service_explicit_valuation_suppresses_thermometer() -> None:
     """验证显式估值输入不会调用温度计。
 
@@ -917,6 +977,76 @@ async def test_fund_analysis_service_block_policy_raises_structured_error(tmp_pa
     assert extractor.calls == [("004393", 2024, False)]
     assert exc_info.value.quality_gate_result.status == "block"
     assert exc_info.value.quality_gate_result.gate_json_path.exists()
+
+
+@pytest.mark.asyncio
+async def test_fund_analysis_service_block_policy_uses_normalized_fund_code_for_membership(
+    tmp_path: Path,
+) -> None:
+    """验证 block 策略下精选池 membership 使用规范化基金代码。
+
+    Args:
+        tmp_path: pytest 临时目录 fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当带空白基金代码被误判为 quality gate not-run 时抛出。
+    """
+
+    extractor = _FakeExtractor(_low_quality_bundle())
+    service = FundAnalysisService(extractor=extractor)
+
+    with pytest.raises(QualityGateBlockedError) as exc_info:
+        await service.analyze(
+            _developer_request(
+                fund_code=" 004393 ",
+                quality_gate_policy="block",
+                quality_gate_source_csv=Path("docs/code_20260519.csv"),
+                quality_gate_output_dir=tmp_path / "gate",
+                quality_gate_run_id="fixture-run",
+                quality_gate_golden_answer_path=None,
+            )
+        )
+
+    assert extractor.calls == [("004393", 2024, False)]
+    assert exc_info.value.quality_gate_result.status == "block"
+
+
+@pytest.mark.asyncio
+async def test_fund_analysis_service_checklist_block_policy_raises_structured_error(
+    tmp_path: Path,
+) -> None:
+    """验证 checklist 与 analyze 共享 block 策略阻断语义。
+
+    Args:
+        tmp_path: pytest 临时目录 fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 checklist 绕过 quality gate block 时抛出。
+    """
+
+    extractor = _FakeExtractor(_low_quality_bundle())
+    service = FundAnalysisService(extractor=extractor)
+
+    with pytest.raises(QualityGateBlockedError) as exc_info:
+        await service.checklist(
+            _developer_request(
+                fund_code="004393",
+                quality_gate_policy="block",
+                quality_gate_source_csv=Path("docs/code_20260519.csv"),
+                quality_gate_output_dir=tmp_path / "gate",
+                quality_gate_run_id="fixture-run",
+                quality_gate_golden_answer_path=None,
+            )
+        )
+
+    assert extractor.calls == [("004393", 2024, False)]
+    assert exc_info.value.quality_gate_result.status == "block"
 
 
 @pytest.mark.asyncio

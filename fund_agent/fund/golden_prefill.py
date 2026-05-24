@@ -1,6 +1,6 @@
 """Correctness golden answer 预填底稿生成能力。
 
-本模块位于 Capability 层，只负责把模板中的基金与字段行转换为可人工复核的
+本模块位于 Agent 层基金能力，只负责把模板中的基金与字段行转换为可人工复核的
 silver label 底稿。预填值来自 `FundDataExtractor`，不能直接作为最终
 correctness golden answer 使用。
 """

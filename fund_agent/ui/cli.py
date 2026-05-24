@@ -27,6 +27,7 @@ from fund_agent.services import (
     ExtractionSnapshotRequest,
     ExtractionSnapshotService,
     FinalJudgment,
+    FundChecklistResult,
     FundAnalysisDeveloperOverrides,
     FundAnalysisRequest,
     FundAnalysisService,
@@ -39,11 +40,12 @@ from fund_agent.services import (
     QualityGateNotRunBlockedError,
     QualityGateRequest,
     QualityGateService,
+    ThermometerBatchResult,
+    ThermometerReading,
     ThermometerRequest,
     ThermometerService,
     ValuationState,
 )
-from fund_agent.fund.data.thermometer_types import ThermometerBatchResult, ThermometerReading
 
 app = typer.Typer(help="基金行为教练 Agent — 买入前专业级基金体检报告")
 DEFAULT_GOLDEN_TEMPLATE = DEFAULT_GOLDEN_TEMPLATE_PATH
@@ -235,23 +237,78 @@ def analyze(
 @app.command()
 def checklist(
     fund_code: Annotated[str, typer.Argument(help="基金代码")],
+    report_year: Annotated[int, typer.Option("--report-year", help="年报年份")] = 2024,
+    investment_amount: Annotated[
+        str,
+        typer.Option("--investment-amount", help="压力测试投入金额，CLI 显式默认 10000 元"),
+    ] = "10000",
+    max_tolerable_loss_rate: Annotated[
+        str | None,
+        typer.Option("--max-tolerable-loss-rate", help="最大可承受亏损比例，如 40%"),
+    ] = None,
+    valuation_state: Annotated[
+        str | None,
+        typer.Option(
+            "--valuation-state",
+            help=(
+                "估值状态：low/fair/high/unavailable；不传则尝试自建温度计自动估值；"
+                "传 unavailable 则手动灰灯且不调用温度计"
+            ),
+        ),
+    ] = None,
+    thermometer_cache_dir: Annotated[
+        Path | None,
+        typer.Option("--thermometer-cache-dir", help="自动估值使用的自建温度计缓存目录"),
+    ] = None,
+    user_money_horizon_years: Annotated[
+        str | None, typer.Option("--user-money-horizon-years", help="用户资金不用年限")
+    ] = None,
+    force_refresh: Annotated[
+        bool, typer.Option("--force-refresh", help="强制刷新底层数据")
+    ] = False,
 ) -> None:
-    """提示检查清单独立命令尚未接入，避免输出误导性成功信息。
+    """对指定基金执行独立买入前检查清单。
 
     Args:
         fund_code: 基金代码。
+        report_year: 年报年份。
+        investment_amount: 压力测试投入金额。
+        max_tolerable_loss_rate: 最大可承受亏损比例。
+        valuation_state: 估值状态；缺省时允许自动温度计估值。
+        thermometer_cache_dir: 自动温度计缓存目录。
+        user_money_horizon_years: 用户资金不用年限。
+        force_refresh: 是否强制刷新底层数据。
 
     Returns:
-        无返回值。
+        无返回值，检查清单摘要写入 stdout。
 
     Raises:
-        typer.Exit: 始终以非零状态退出，提示用户使用 `analyze`。
+        typer.Exit: 检查清单生成失败时以非零状态退出。
     """
 
-    typer.echo(
-        f"检查清单独立命令尚未接入 Service：{fund_code}。请先使用 analyze 生成完整报告。", err=True
+    request = FundAnalysisRequest(
+        fund_code=fund_code,
+        report_year=report_year,
+        investment_amount=investment_amount,
+        max_tolerable_loss_rate=max_tolerable_loss_rate,
+        valuation_state=_valuation_state(valuation_state),
+        thermometer_cache_dir=thermometer_cache_dir,
+        user_money_horizon_years=user_money_horizon_years,
+        force_refresh=force_refresh,
     )
-    raise typer.Exit(code=2)
+    try:
+        result = asyncio.run(FundAnalysisService().checklist(request))
+    except QualityGateNotRunBlockedError as exc:
+        _echo_quality_gate_not_run_blocked(exc)
+        raise typer.Exit(code=2) from exc
+    except QualityGateBlockedError as exc:
+        _echo_quality_gate_blocked(exc)
+        raise typer.Exit(code=2) from exc
+    except Exception as exc:
+        typer.echo(f"检查清单生成失败：{exc}", err=True)
+        raise typer.Exit(code=1) from exc
+    _echo_quality_gate_summary(result)
+    _echo_checklist_result(result)
 
 
 @app.command("thermometer")
@@ -982,6 +1039,44 @@ def _format_cli_value(value: object) -> str:
     if value is None:
         return ""
     return str(value)
+
+
+def _echo_checklist_result(result: FundChecklistResult) -> None:
+    """输出独立检查清单摘要。
+
+    Args:
+        result: `FundChecklistResult`。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        无显式抛出。
+    """
+
+    checklist_result = result.checklist_result
+    decision = result.final_judgment_decision
+    valuation_resolution = result.valuation_state_resolution
+    typer.echo(f"fund_code: {result.structured_data.fund_code}")
+    typer.echo(f"report_year: {result.structured_data.report_year}")
+    typer.echo(f"overall_signal: {checklist_result.overall_signal}")
+    typer.echo(f"overall_status: {checklist_result.overall_status}")
+    typer.echo(f"valuation_state: {valuation_resolution.state}")
+    typer.echo(f"valuation_source: {valuation_resolution.source}")
+    if valuation_resolution.index_code:
+        typer.echo(f"valuation_index_code: {valuation_resolution.index_code}")
+    if valuation_resolution.temperature is not None:
+        typer.echo(f"valuation_temperature: {valuation_resolution.temperature}")
+    typer.echo(f"final_judgment: {decision.selected_judgment}")
+    typer.echo(f"derived_final_judgment: {decision.derived_judgment}")
+    typer.echo(f"final_judgment_source: {decision.source}")
+    typer.echo(f"next_minimum_verification: {checklist_result.next_minimum_verification}")
+    typer.echo("")
+    for item in checklist_result.items:
+        typer.echo(f"- {item.code}: {item.signal}/{item.status} | {item.question}")
+        typer.echo(f"  reason: {item.reason}")
+        if item.anchors:
+            typer.echo(f"  evidence_count: {len(item.anchors)}")
 
 
 def _echo_quality_gate_blocked(error: QualityGateBlockedError) -> None:

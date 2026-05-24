@@ -1,6 +1,6 @@
 """精选基金池字段级抽取评分与 correctness 比对能力。
 
-本模块位于 Capability 层，负责 P4-S2 前半段质量基线：
+本模块位于 Agent 层基金能力，负责 P4-S2 前半段质量基线：
 只消费 P4-S1 `snapshot.jsonl` 字段级记录，计算 coverage / traceability，
 并从精选基金池 CSV 中选择最小 golden set。P4-R10 起额外消费 strict
 golden answer JSON，对 snapshot 明确暴露的可比字段执行 correctness 比对。

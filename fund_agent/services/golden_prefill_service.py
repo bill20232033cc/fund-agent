@@ -1,7 +1,7 @@
 """golden answer 预填底稿 Service 编排层。
 
-本模块属于 Service/Application 边界，负责把 UI 输入收敛为显式请求对象，
-并委托 Capability 层 `fund_agent.fund.golden_prefill` 生成预填底稿。
+本模块属于 Service 层，负责把 UI 输入收敛为显式请求对象，
+并委托 Agent 层基金能力 `fund_agent.fund.golden_prefill` 生成预填底稿。
 """
 
 from __future__ import annotations
@@ -39,11 +39,11 @@ class GoldenPrefillService:
             request: 显式预填参数，不使用 `extra_payload`。
 
         Returns:
-            Capability 返回的预填运行结果。
+            Agent 层基金能力返回的预填运行结果。
 
         Raises:
             ValueError: 当请求参数非法时抛出。
-            Exception: 允许 Capability 层传播抽取或写文件异常。
+            Exception: 允许 Agent 层基金能力传播抽取或写文件异常。
         """
 
         _validate_request(request)
