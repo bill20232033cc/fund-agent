@@ -12,6 +12,7 @@ import json
 from collections import Counter
 from dataclasses import asdict, dataclass
 from pathlib import Path
+import re
 from typing import Final, Mapping, Sequence, cast, get_args
 
 from fund_agent.fund.fund_type import FundType
@@ -98,6 +99,21 @@ PREFERRED_LENS_STATUS_NOT_APPLICABLE: Final[str] = "not_applicable"
 PREFERRED_LENS_STATUS_MISMATCH: Final[str] = "mismatch"
 SUPPORTED_CONTRACT_FUND_TYPES: Final[tuple[str, ...]] = tuple(get_args(FundType))
 INDEX_QUALITY_FIELD_NAMES: Final[tuple[str, ...]] = ("index_profile", "tracking_error")
+HOLDINGS_SNAPSHOT_FIELD_NAME: Final[str] = "holdings_snapshot"
+TOP_HOLDINGS_STATUS_SUB_FIELD: Final[str] = "top_holdings_status"
+TOP_HOLDINGS_SOURCE_SUB_FIELD: Final[str] = "top_holdings_source"
+TOP_HOLDINGS_COVERED_STATUS_SOURCE_PAIRS: Final[frozenset[tuple[str, str]]] = frozenset(
+    {
+        ("direct_top_ten", "top_ten"),
+        ("direct_all_stock_details", "all_stock_investment_details"),
+    }
+)
+TOP_HOLDINGS_STATUS_MISSING: Final[str] = "missing"
+BENCHMARK_FIELD_NAME: Final[str] = "benchmark"
+BENCHMARK_NORMALIZED_SUB_FIELDS: Final[tuple[str, ...]] = ("benchmark_name", "benchmark_text")
+INTRA_CHINESE_VISUAL_WHITESPACE_PATTERN: Final[re.Pattern[str]] = re.compile(
+    r"(?<=[\u4e00-\u9fff])\s+(?=[\u4e00-\u9fff])"
+)
 INDEX_QUALITY_APPLICABLE_FUND_TYPES: Final[tuple[str, ...]] = (
     "index_fund",
     "enhanced_index",
@@ -551,7 +567,7 @@ def score_snapshot_records(
             _FieldScoreCounter(field_group=field_group, field_name=field_name),
         )
         counter.records += 1
-        if _truthy_bool(record.get("value_present")):
+        if _record_is_covered(record):
             counter.covered_records += 1
         if _truthy_bool(record.get("anchor_present")):
             counter.traceable_records += 1
@@ -1187,7 +1203,7 @@ def _score_records_for_single_fund(
             _FieldScoreCounter(field_group=field_group, field_name=field_name),
         )
         counter.records += 1
-        if _truthy_bool(record.get("value_present")):
+        if _record_is_covered(record):
             counter.covered_records += 1
         if _truthy_bool(record.get("anchor_present")):
             counter.traceable_records += 1
@@ -1258,9 +1274,7 @@ def _build_fund_quality_row(
         fund_type_reason=fund_type_reason,
     )
     total_field_count = len(scorable_records)
-    missing_field_count = sum(
-        1 for record in scorable_records if not _truthy_bool(record.get("value_present"))
-    )
+    missing_field_count = sum(1 for record in scorable_records if not _record_is_covered(record))
     reasons = [
         fund_name_reason,
         app_category_reason,
@@ -1350,12 +1364,38 @@ def _missing_fields_by_priority(
         use_record_fund_type=use_record_fund_type,
     ):
         field_name = _required_text(record, "field_name")
-        if _truthy_bool(record.get("value_present")):
+        if _record_is_covered(record):
             continue
         priority = FIELD_PRIORITY_BY_NAME.get(field_name, UNKNOWN_FIELD_PRIORITY)
         if priority in missing_by_priority:
             missing_by_priority[priority].add(field_name)
     return {priority: tuple(sorted(fields)) for priority, fields in missing_by_priority.items()}
+
+
+def _record_is_covered(record: Mapping[str, object]) -> bool:
+    """判断 snapshot 记录是否满足字段 coverage。
+
+    `holdings_snapshot` 的 coverage 以股票持仓明细为准，避免只有行业分布时把
+    模板第 3 章“实际投资行为”的股票持仓缺口误计为已覆盖。
+
+    Args:
+        record: snapshot 字段记录。
+
+    Returns:
+        记录满足字段 coverage 时返回 `True`。
+
+    Raises:
+        ValueError: `holdings_snapshot.comparable_values` 结构非法时抛出。
+    """
+
+    if not _truthy_bool(record.get("value_present")):
+        return False
+    if _required_text(record, "field_name") != HOLDINGS_SNAPSHOT_FIELD_NAME:
+        return True
+    comparable_values = _record_comparable_values(record)
+    top_holdings_status = _optional_scalar_text(comparable_values.get(TOP_HOLDINGS_STATUS_SUB_FIELD))
+    top_holdings_source = _optional_scalar_text(comparable_values.get(TOP_HOLDINGS_SOURCE_SUB_FIELD))
+    return (top_holdings_status, top_holdings_source) in TOP_HOLDINGS_COVERED_STATUS_SOURCE_PAIRS
 
 
 def _scorable_records(
@@ -1865,7 +1905,11 @@ def _compare_golden_record(
     expected_value = record.expected_value
     confidence = record.confidence
     source = record.source
-    normalized_expected = _normalize_comparable_value(expected_value)
+    normalized_expected = _normalize_comparable_value(
+        expected_value,
+        field_name=field_name,
+        sub_field=sub_field,
+    )
     key = (fund_code, field_name, sub_field)
     if key not in actual_index:
         return CorrectnessRecordResult(
@@ -1896,7 +1940,11 @@ def _compare_golden_record(
             confidence=confidence,
             source=source,
         )
-    normalized_actual = _normalize_comparable_value(actual_value)
+    normalized_actual = _normalize_comparable_value(
+        actual_value,
+        field_name=field_name,
+        sub_field=sub_field,
+    )
     status = CORRECTNESS_MATCH if normalized_actual == normalized_expected else CORRECTNESS_MISMATCH
     reason = (
         "保守 normalize 后完全一致。"
@@ -1998,14 +2046,22 @@ def _optional_scalar_text(value: object) -> str | None:
     return text or None
 
 
-def _normalize_comparable_value(value: object) -> str:
+def _normalize_comparable_value(
+    value: object,
+    *,
+    field_name: str | None = None,
+    sub_field: str | None = None,
+) -> str:
     """对可比字段执行保守 normalize。
 
-    该函数只做大小写、全角空白和连续空白归一化，不做同义词映射、不补值，
-    避免用间接证据或经验推断修正 correctness。
+    默认只做大小写、全角空白和连续空白归一化；仅对 benchmark 字段的
+    benchmark_name / benchmark_text 额外移除中文字符之间的视觉空白。
+    不做同义词映射、不补值，避免用间接证据或经验推断修正 correctness。
 
     Args:
         value: 原始值。
+        field_name: correctness 字段名。
+        sub_field: correctness 子字段名。
 
     Returns:
         归一化后的文本。
@@ -2015,7 +2071,29 @@ def _normalize_comparable_value(value: object) -> str:
     """
 
     text = str(value).strip().replace("\u3000", " ")
+    if _is_benchmark_visual_whitespace_field(field_name, sub_field):
+        text = INTRA_CHINESE_VISUAL_WHITESPACE_PATTERN.sub("", text)
     return " ".join(text.split()).casefold()
+
+
+def _is_benchmark_visual_whitespace_field(
+    field_name: str | None,
+    sub_field: str | None,
+) -> bool:
+    """判断 correctness 字段是否允许 benchmark 视觉空白归一化。
+
+    Args:
+        field_name: correctness 字段名。
+        sub_field: correctness 子字段名。
+
+    Returns:
+        仅 `benchmark.benchmark_name` / `benchmark.benchmark_text` 返回 `True`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return field_name == BENCHMARK_FIELD_NAME and sub_field in BENCHMARK_NORMALIZED_SUB_FIELDS
 
 
 def _score_status(

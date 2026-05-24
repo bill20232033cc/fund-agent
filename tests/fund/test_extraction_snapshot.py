@@ -193,6 +193,10 @@ def test_build_snapshot_records_contains_required_schema_and_all_fields() -> Non
     assert records_by_name["tracking_error"].comparable_values == {}
     assert records_by_name["product_profile"].comparable_values == {}
     assert records_by_name["fee_schedule"].comparable_values == {}
+    assert records_by_name["holdings_snapshot"].comparable_values == {
+        "top_holdings_status": "direct_top_ten",
+        "top_holdings_source": "top_ten",
+    }
 
 
 def test_build_snapshot_records_serializes_index_quality_dataclass_comparable_values() -> None:
@@ -557,7 +561,15 @@ def _build_bundle(
         share_change=_field({"beginning_share": "1", "ending_share": "2", "net_change": "1"}, "share_change"),
         manager_alignment=_field(None, "manager_alignment", extraction_mode="missing", note="fixture missing"),
         manager_strategy_text=_field({"strategy_summary": "精选个股"}, "manager_strategy_text"),
-        holdings_snapshot=_field({"top_holdings": [{"name": "A"}]}, "holdings_snapshot"),
+        holdings_snapshot=_field(
+            {
+                "top_holdings": [{"name": "A"}],
+                "top_holdings_status": "direct_top_ten",
+                "top_holdings_source": "top_ten",
+                "industry_distribution_status": "missing",
+            },
+            "holdings_snapshot",
+        ),
         holder_structure=_field({"institutional_holder": "10%", "individual_holder": "90%"}, "holder_structure"),
         nav_data=NavDataResult(
             fund_code=fund_code,
