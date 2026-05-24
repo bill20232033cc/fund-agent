@@ -36,6 +36,9 @@ _FIELD_PATTERNS: Final[dict[str, tuple[tuple[str, tuple[str, ...]], ...]]] = {
         ("§1", (r"基金经理\s*[：:]\s*(.+)",)),
         ("§2", (r"基金经理\s*[：:]\s*(.+)",)),
     ),
+    "management_company": (("§2", (r"基金管理人\s*[：:]\s*(.+)",)),),
+    "custodian": (("§2", (r"基金托管人\s*[：:]\s*(.+)",)),),
+    "inception_date": (("§2", (r"基金合同生效日\s*[：:]\s*(.+)",)),),
     "investment_objective": (("§2", (r"投资目标\s*[：:]\s*(.+)",)),),
     "investment_scope": (("§2", (r"投资范围\s*[：:]\s*(.+)",)),),
     "investment_strategy": (("§2", (r"投资策略\s*[：:]\s*(.+)",)),),
@@ -59,6 +62,9 @@ _TABLE_FIELD_LABELS: Final[dict[str, tuple[str, ...]]] = {
     "fund_category": ("基金类型", "基金类别"),
     "fund_scale": ("报告期末基金份额总额", "基金份额总额", "基金规模"),
     "fund_manager": ("基金管理人", "基金经理"),
+    "management_company": ("基金管理人",),
+    "custodian": ("基金托管人",),
+    "inception_date": ("基金合同生效日",),
     "investment_objective": ("投资目标",),
     "investment_scope": ("投资范围",),
     "investment_strategy": ("投资策略",),
@@ -79,6 +85,44 @@ _ASCII_WORD_CHAR_PATTERN: Final[re.Pattern[str]] = re.compile(r"[A-Za-z0-9]")
 _INDEX_NAME_PATTERN: Final[re.Pattern[str]] = re.compile(
     r"(?P<name>[\u4e00-\u9fa5A-Za-z0-9]+(?:指数|Index|ETF))"
 )
+_FEE_RATE_PATTERN: Final[re.Pattern[str]] = re.compile(r"(?P<rate>\d+(?:\.\d+)?\s*%)")
+_FEE_SUBSECTION_BOUNDARY_PATTERN: Final[re.Pattern[str]] = re.compile(
+    r"\n\s*7\s*\.\s*4\s*\.\s*10\s*\.\s*(?:2\s*\.\s*\d+|[3-9])"
+)
+_FEE_FALLBACK_WINDOW_CHARS: Final[int] = 2000
+
+
+@dataclass(frozen=True, slots=True)
+class _FeeFallbackRule:
+    """费率 fallback 抽取规则，见模板第 2 章 R=A+B-C 的 Cost 项。
+
+    Attributes:
+        field_name: 输出字段名。
+        subsection_number: parser 可见的年报子章节编号。
+        subsection_title: 子章节标题。
+        semantic_labels: 表格或文本中可确认费率类别的语义标签。
+    """
+
+    field_name: str
+    subsection_number: str
+    subsection_title: str
+    semantic_labels: tuple[str, ...]
+
+
+_FEE_FALLBACK_RULES: Final[dict[str, _FeeFallbackRule]] = {
+    "management_fee": _FeeFallbackRule(
+        field_name="management_fee",
+        subsection_number="7.4.10.2.1",
+        subsection_title="基金管理费",
+        semantic_labels=("基金管理费", "管理费"),
+    ),
+    "custody_fee": _FeeFallbackRule(
+        field_name="custody_fee",
+        subsection_number="7.4.10.2.2",
+        subsection_title="基金托管费",
+        semantic_labels=("基金托管费", "托管费"),
+    ),
+}
 
 
 @dataclass(frozen=True, slots=True)
@@ -167,6 +211,286 @@ def _extract_field_from_section_two_tables(
                 table_id=_table_id(table),
             )
     return None
+
+
+def _extract_fee_from_fallback_subsection(
+    report: ParsedAnnualReport, field_name: str
+) -> _MatchedField | None:
+    """从 parser 可见的 `7.4.10.2` 子章节语义中提取费率，见模板第 2 章 Cost。
+
+    S0 证据表明 004393 的 parser cache 中没有可直接读取的 `§7`，且 `7.4.10.2`
+    出现在 parser 可见的其它章节文本中。因此这里扫描 `raw_text` 和表格语义，
+    而不是依赖 `get_section_text("§7")`。
+
+    Args:
+        report: 已解析年报对象。
+        field_name: `management_fee` 或 `custody_fee`。
+
+    Returns:
+        命中时返回字段命中结果，否则返回 `None`。
+
+    Raises:
+        KeyError: 请求未知 fee fallback 字段时抛出。
+    """
+
+    rule = _FEE_FALLBACK_RULES[field_name]
+    text_match = _extract_fee_from_fallback_text(report, rule)
+    if text_match is not None:
+        return text_match
+    return _extract_fee_from_fallback_tables(report, rule)
+
+
+def _extract_fee_from_fallback_text(
+    report: ParsedAnnualReport, rule: _FeeFallbackRule
+) -> _MatchedField | None:
+    """从 `7.4.10.2` 子章节文本窗口提取费率，见模板第 2 章 Cost。
+
+    Args:
+        report: 已解析年报对象。
+        rule: 目标费率 fallback 规则。
+
+    Returns:
+        命中时返回字段命中结果，否则返回 `None`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    subsection_text = _fallback_subsection_text(report.raw_text, rule)
+    if subsection_text is None:
+        return None
+    rate = _extract_scalar_fee_rate(subsection_text)
+    if rate is None:
+        return None
+    section_id = _section_id_for_text_offset(report, report.raw_text.find(subsection_text))
+    return _MatchedField(
+        field_name=rule.field_name,
+        value=rate,
+        section_id=section_id,
+        matched_line=f"{rule.subsection_number} {rule.subsection_title}：{rate}",
+    )
+
+
+def _extract_fee_from_fallback_tables(
+    report: ParsedAnnualReport, rule: _FeeFallbackRule
+) -> _MatchedField | None:
+    """从 parser 表格语义提取 `7.4.10.2` 费率，见模板第 2 章 Cost。
+
+    Args:
+        report: 已解析年报对象。
+        rule: 目标费率 fallback 规则。
+
+    Returns:
+        命中时返回字段命中结果，否则返回 `None`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    for table in report.tables:
+        in_target_context = False
+        for row in _iter_key_value_rows(table):
+            row_text = " ".join(cell.strip() for cell in row if cell.strip())
+            row_context = _fee_row_context(row_text, rule)
+            if row_context == "target":
+                in_target_context = True
+            elif row_context == "other_fee_subsection":
+                in_target_context = False
+
+            if not _row_matches_fee_semantics(row_text, in_target_context):
+                continue
+            rate = _extract_scalar_fee_rate(row_text)
+            if rate is None:
+                continue
+            return _MatchedField(
+                field_name=rule.field_name,
+                value=rate,
+                section_id=_section_id_for_fee_table(rule),
+                matched_line=f"{rule.subsection_number} {rule.subsection_title}：{row_text}",
+                page_number=table.page_number,
+                table_id=_table_id(table),
+            )
+    return None
+
+
+def _fallback_subsection_text(raw_text: str, rule: _FeeFallbackRule) -> str | None:
+    """定位 `7.4.10.2.x` 子章节文本窗口，见模板第 2 章 Cost。
+
+    Args:
+        raw_text: parser 可见全文。
+        rule: 目标费率 fallback 规则。
+
+    Returns:
+        子章节文本；未定位时返回 `None`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    match = _fallback_subsection_heading_match(raw_text, rule)
+    if match is None:
+        return None
+    window = raw_text[match.start() : match.start() + _FEE_FALLBACK_WINDOW_CHARS]
+    boundary = _FEE_SUBSECTION_BOUNDARY_PATTERN.search(window, pos=max(match.end() - match.start(), 1))
+    if boundary is not None:
+        window = window[: boundary.start()]
+    return window
+
+
+def _fallback_subsection_heading_match(
+    raw_text: str, rule: _FeeFallbackRule
+) -> re.Match[str] | None:
+    """定位目标 `7.4.10.2.x` 子章节标题，见模板第 2 章 Cost。
+
+    Args:
+        raw_text: parser 可见全文。
+        rule: 目标费率 fallback 规则。
+
+    Returns:
+        命中的子章节标题；未命中时返回 `None`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return re.search(
+        rf"{re.escape(rule.subsection_number)}\s*{re.escape(rule.subsection_title)}",
+        raw_text,
+    )
+
+
+def _fee_row_context(
+    row_text: str,
+    rule: _FeeFallbackRule,
+) -> Literal["target", "other_fee_subsection", "unchanged"]:
+    """判断表格行是否切换到目标费率子章节上下文，见模板第 2 章 Cost。
+
+    Args:
+        row_text: 表格行合并文本。
+        rule: 目标费率 fallback 规则。
+
+    Returns:
+        `target` 表示目标 `7.4.10.2.x` 上下文，`other_fee_subsection`
+        表示其它费率子章节，`unchanged` 表示沿用前一行上下文。
+
+    Raises:
+        无显式抛出。
+    """
+
+    normalized_row = _normalize_fee_context_text(row_text)
+    if _row_contains_fee_subsection(normalized_row, rule.subsection_number):
+        return "target"
+    if re.search(r"7\.4\.10\.2\.\d+", normalized_row):
+        return "other_fee_subsection"
+    return "unchanged"
+
+
+def _row_contains_fee_subsection(normalized_row: str, subsection_number: str) -> bool:
+    """判断行文本是否包含完整目标费率子章节编号，见模板第 2 章 Cost。
+
+    Args:
+        normalized_row: 已去除空白的表格行文本。
+        subsection_number: 目标子章节编号。
+
+    Returns:
+        包含完整目标编号且不是更长编号前缀时返回 `True`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    normalized_subsection = _normalize_fee_context_text(subsection_number)
+    return re.search(rf"{re.escape(normalized_subsection)}(?!\d)", normalized_row) is not None
+
+
+def _normalize_fee_context_text(value: str) -> str:
+    """规范化费率子章节上下文文本，见模板第 2 章 Cost。
+
+    Args:
+        value: 原始表格行或章节编号。
+
+    Returns:
+        去除空白后的文本。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return re.sub(r"\s+", "", value)
+
+
+def _row_matches_fee_semantics(row_text: str, in_target_context: bool) -> bool:
+    """判断表格行是否具备目标费率语义，见模板第 2 章 Cost。
+
+    Args:
+        row_text: 表格行合并文本。
+        in_target_context: 当前行是否处于目标 `7.4.10.2.x` 子章节上下文。
+
+    Returns:
+        处于目标子章节上下文且存在非空文本时返回 `True`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return in_target_context and bool(row_text.strip())
+
+
+def _extract_scalar_fee_rate(value: str) -> str | None:
+    """从文本中提取用户可比较的标量费率，见模板第 2 章 Cost。
+
+    Args:
+        value: 含费率披露的文本。
+
+    Returns:
+        形如 `1.20%` 的费率；未命中时返回 `None`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    match = _FEE_RATE_PATTERN.search(value)
+    if match is None:
+        return None
+    return re.sub(r"\s+", "", match.group("rate"))
+
+
+def _section_id_for_text_offset(report: ParsedAnnualReport, offset: int) -> str:
+    """根据全文偏移反查 parser 章节编号。
+
+    Args:
+        report: 已解析年报对象。
+        offset: raw_text 中的字符偏移。
+
+    Returns:
+        命中的章节编号；无法定位时返回 `§7.4.10.2` 语义锚点。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if offset < 0:
+        return "§7.4.10.2"
+    for section in report.sections.values():
+        if section.start_offset <= offset < section.end_offset:
+            return section.section_id
+    return "§7.4.10.2"
+
+
+def _section_id_for_fee_table(rule: _FeeFallbackRule) -> str:
+    """为费率表格 fallback 生成目标子章节锚点，见模板第 2 章 Cost。
+
+    Args:
+        rule: 目标费率 fallback 规则。
+
+    Returns:
+        目标子章节语义锚点。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return f"§{rule.subsection_number}"
 
 
 def _iter_key_value_rows(table: ParsedTable) -> tuple[tuple[str, ...], ...]:
@@ -465,6 +789,9 @@ def _build_basic_identity(
         _extract_field(report, "fund_category"),
         _extract_field(report, "fund_scale"),
         _extract_field(report, "fund_manager"),
+        _extract_field(report, "management_company"),
+        _extract_field(report, "custodian"),
+        _extract_field(report, "inception_date"),
     ]
     value = {
         "fund_name": matched_fields[0].value if matched_fields[0] else None,
@@ -472,6 +799,9 @@ def _build_basic_identity(
         "fund_category": matched_fields[2].value if matched_fields[2] else None,
         "fund_scale": matched_fields[3].value if matched_fields[3] else None,
         "fund_manager": matched_fields[4].value if matched_fields[4] else None,
+        "management_company": matched_fields[5].value if matched_fields[5] else None,
+        "custodian": matched_fields[6].value if matched_fields[6] else None,
+        "inception_date": matched_fields[7].value if matched_fields[7] else None,
         "classified_fund_type": classification.classified_fund_type,
         "classification_basis": classification.classification_basis,
     }
@@ -598,13 +928,17 @@ def _build_fee_schedule(report: ParsedAnnualReport) -> ExtractedField[dict[str, 
 
     management_fee = _extract_field(report, "management_fee")
     custody_fee = _extract_field(report, "custody_fee")
+    if management_fee is None:
+        management_fee = _extract_fee_from_fallback_subsection(report, "management_fee")
+    if custody_fee is None:
+        custody_fee = _extract_fee_from_fallback_subsection(report, "custody_fee")
     anchors = tuple(
         _build_anchor(report, matched_field)
         for matched_field in (management_fee, custody_fee)
         if matched_field is not None
     )
     if not anchors:
-        return _missing_field("§2 未披露管理费/托管费")
+        return _missing_field("§2 与 7.4.10.2 均未披露管理费/托管费")
     return ExtractedField(
         value={
             "management_fee": management_fee.value if management_fee else None,
