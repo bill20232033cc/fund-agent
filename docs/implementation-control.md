@@ -5,7 +5,7 @@
 > **设计真源**: `docs/design.md` (v2.2)
 > **规则真源**: `AGENTS.md`
 > **历史快照**: `docs/archive/implementation-control-history-20260525.md`
-> **当前状态**: release maintenance；draft PR 18 CI 已通过；下一入口为 user authorization to mark PR ready for review
+> **当前状态**: release maintenance；PR 18 已合并到 main；下一入口为 post-merge local branch and residual disposition planning
 
 ---
 
@@ -25,13 +25,13 @@
 |---|---|
 | Branch | `codex/v0-release-readiness-plan` |
 | Current phase | `release maintenance` |
-| Current gate | `draft PR 18 CI passed` |
-| Next entry point | `user authorization to mark PR 18 ready for review` |
-| Latest accepted commit | `211596a docs: accept release PR readiness packaging` |
+| Current gate | `PR 18 merged to main` |
+| Next entry point | `post-merge local branch and residual disposition planning` |
+| Latest accepted commit | `c74223a Release readiness: deterministic MVP and report-quality evidence contract` |
 | Design truth | `docs/design.md` (v2.2) |
 | Control truth | `docs/implementation-control.md` |
 | Historical control snapshot | `docs/archive/implementation-control-history-20260525.md` |
-| External repo state | PR 18 draft at `https://github.com/bill20232033cc/fund-agent/pull/18`; branch tracks `origin/codex/v0-release-readiness-plan`; latest PR poll reports `MERGEABLE` and CI `test` `SUCCESS` |
+| External repo state | PR 18 merged at `2026-05-25T14:44:05Z`; merge commit `c74223aefa1fe2c0ff66dd55bd8f17e5145c12c1`; `origin/main` points to `c74223a` |
 
 ## Current Gate
 
@@ -103,6 +103,7 @@
 | Report-quality validator dry-run evidence controller judgment | `docs/reviews/release-maintenance-report-quality-validator-dry-run-evidence-controller-judgment-20260525.md` |
 | Release-readiness reconciliation | `docs/reviews/release-readiness-reconciliation-20260525.md` |
 | Release acceptance packaging / PR readiness | `docs/reviews/release-acceptance-packaging-pr-readiness-20260525.md` |
+| Overnight release-readiness closeout | `docs/reviews/overnight-release-readiness-closeout-20260525.md` |
 
 ### Current Decisions
 
@@ -139,6 +140,7 @@
 - Release acceptance packaging / PR readiness accepted the current branch as locally ready to push for a release-readiness PR, subject to user authorization. Evidence: branch `codex/v0-release-readiness-plan` has no upstream, no open PR, PR 15 is closed, PR 17 is merged; `origin/main..HEAD` contains release evidence and Fund-only new capabilities; product commands, full pytest, ruff, `git diff --check`, boundary checks, and tracked scratch checks pass.
 - After explicit user authorization, branch `codex/v0-release-readiness-plan` was pushed to origin and draft PR 18 was opened against `main`. First post-create poll: state `OPEN`, draft `true`, mergeable `MERGEABLE`, CI `test` `IN_PROGRESS`.
 - PR 18 CI follow-up: `test` check completed with `SUCCESS`; PR remains `OPEN`, draft `true`, and `MERGEABLE`.
+- After explicit user authorization in prior turns, PR 18 was marked ready for review and squash-merged into `main`. Read-only closeout evidence confirms PR 18 state `MERGED`, merge commit `c74223aefa1fe2c0ff66dd55bd8f17e5145c12c1`, and `origin/main` at `c74223a`.
 
 ### Current Non-Goals
 
@@ -151,17 +153,17 @@
 
 ## Next Entry Point
 
-`user authorization to mark PR 18 ready for review`
+`post-merge local branch and residual disposition planning`
 
-The next gate requires explicit user authorization before changing PR 18 from draft to ready for review.
+The next gate is local-only unless the user explicitly authorizes more GitHub operations.
 
 The gate must answer:
 
-- whether to mark PR 18 ready for review;
-- after marking ready, whether review / mergeability state introduces blockers;
-- whether explicit user authorization has been given before merging.
+- whether the local checkout should remain on `codex/v0-release-readiness-plan` or move to an updated local `main`;
+- whether untracked local research/review documents should remain untracked, be archived under a reviewed gate, or be removed by explicit user request;
+- whether the next safe planning gate should be report-quality validator integration decision, or whether release work should stop.
 
-Do not mark PR 18 ready for review, merge, close PRs, edit unrelated PRs, or perform additional GitHub mutations without explicit user authorization. Do not modify Service, CLI, renderer, `quality_gate.py`, `extraction_score.py`, tracked reports, fixtures, repository/PDF/cache/source helpers, `FundDocumentRepository`, Host/Agent/dayu, `nav_data`, derived calculations, durable baseline, report-quality validator integration, or product-flow behavior unless a later explicit gate authorizes that scope.
+Do not push, create PR, mark ready, merge, close PRs, edit unrelated PRs, delete branches, or perform additional GitHub mutations without explicit user authorization. Do not modify Service, CLI, renderer, `quality_gate.py`, `extraction_score.py`, tracked reports, fixtures, repository/PDF/cache/source helpers, `FundDocumentRepository`, Host/Agent/dayu, `nav_data`, derived calculations, durable baseline, report-quality validator integration, or product-flow behavior unless a later explicit gate authorizes that scope.
 
 ## Open Residuals
 
