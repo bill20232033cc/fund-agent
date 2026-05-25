@@ -5,7 +5,7 @@
 > **设计真源**: `docs/design.md` (v2.2)
 > **规则真源**: `AGENTS.md`
 > **历史快照**: `docs/archive/implementation-control-history-20260525.md`
-> **当前状态**: release maintenance；report-quality baseline / Fact-Evidence contract plan 已本地接受；下一入口为 S0 corpus-selection evidence
+> **当前状态**: release maintenance；report-quality baseline S0 corpus-selection evidence 已本地接受；下一入口为 S1 score-schema fixture draft
 
 ---
 
@@ -25,9 +25,9 @@
 |---|---|
 | Branch | `codex/v0-release-readiness-plan` |
 | Current phase | `release maintenance` |
-| Current gate | `release-maintenance report-quality baseline / Fact-Evidence contract plan accepted locally` |
-| Next entry point | `report-quality-baseline S0 corpus-selection evidence` |
-| Latest accepted commit | `4b3a56e docs: accept report-quality baseline plan` |
+| Current gate | `release-maintenance report-quality baseline S0 corpus-selection evidence accepted locally` |
+| Next entry point | `report-quality-baseline S1 score-schema fixture draft` |
+| Latest accepted commit | `c73e594 docs: accept report-quality s0 corpus evidence` |
 | Design truth | `docs/design.md` (v2.2) |
 | Control truth | `docs/implementation-control.md` |
 | Historical control snapshot | `docs/archive/implementation-control-history-20260525.md` |
@@ -45,13 +45,21 @@
 | Report-quality baseline / Fact-Evidence contract plan | `docs/reviews/release-maintenance-report-quality-baseline-fact-evidence-contract-plan-20260525.md` |
 | Plan review: MiMo | `docs/reviews/release-maintenance-report-quality-baseline-fact-evidence-contract-plan-review-mimo-20260525.md` |
 | Plan review: DS | `docs/reviews/release-maintenance-report-quality-baseline-fact-evidence-contract-plan-review-ds-20260525.md` |
-| Controller judgment | `docs/reviews/release-maintenance-report-quality-baseline-fact-evidence-contract-plan-review-controller-judgment-20260525.md` |
+| Plan controller judgment | `docs/reviews/release-maintenance-report-quality-baseline-fact-evidence-contract-plan-review-controller-judgment-20260525.md` |
+| S0 corpus-selection evidence | `docs/reviews/release-maintenance-report-quality-baseline-s0-corpus-selection-evidence-20260525.md` |
+| S0 review: MiMo | `docs/reviews/release-maintenance-report-quality-baseline-s0-corpus-selection-evidence-review-mimo-20260525.md` |
+| S0 review: DS | `docs/reviews/release-maintenance-report-quality-baseline-s0-corpus-selection-evidence-review-ds-20260525.md` |
+| S0 re-review: MiMo | `docs/reviews/release-maintenance-report-quality-baseline-s0-corpus-selection-evidence-rereview-mimo-20260525.md` |
+| S0 re-review: DS | `docs/reviews/release-maintenance-report-quality-baseline-s0-corpus-selection-evidence-rereview-ds-20260525.md` |
+| S0 controller judgment | `docs/reviews/release-maintenance-report-quality-baseline-s0-corpus-selection-evidence-controller-judgment-20260525.md` |
 
 ### Current Decisions
 
 - Report quality must first become observable through a small representative baseline corpus, report-quality scoring schema, and Fact/Evidence input contract.
 - Data-source / extraction iteration vs template / writing iteration must be selected from scoring failure categories, not from subjective report taste.
 - S0 should attempt FOF, but must not block if no repository-verified FOF annual report is available; missing FOF must be recorded as a `data_gap`.
+- S0 accepted active, index, enhanced index, bond, and QDII candidates as repository evidence; FOF remains a `data_gap` because current QDII-FOF candidates classify as `qdii_fund`.
+- S1 must recover the upstream failure category for fallback candidates (`110020`, `017641`, `017970`) before durable baseline selection, or exclude those candidates.
 - First scoring implementation remains issue-based; `N/A` dimensions are excluded from denominators, and all-`N/A` chapters are `skipped`, not `passing`.
 - `fact_prefill_reviewed` uses a Markdown evidence table under `docs/reviews/` until a later curated-fixture gate accepts JSON fixtures.
 
@@ -66,31 +74,32 @@
 
 ## Next Entry Point
 
-`report-quality-baseline S0 corpus-selection evidence`
+`report-quality-baseline S1 score-schema fixture draft`
 
-S0 must produce a reviewed candidate table with:
+S1 must draft an observational score schema and reviewed dry-run fixture plan from S0 evidence with:
 
-- fund type slot;
-- fund code;
-- report year;
-- repository verification status;
-- review state;
-- source failure category;
-- ignored run path.
+- separate fields for document identity verification and fund-type slot membership;
+- `source_boundary` value domain;
+- issue-based output with score issue localization;
+- `N/A` denominator semantics and all-`N/A` chapter skip behavior;
+- explicit handling of fallback candidates with `unknown_upstream_failure_category`;
+- ignored scoring run path under `reports/scoring-runs/`;
+- no tracked fixture promotion without a later curated-fixture gate.
 
-S0 must also define transition trigger, actor, and minimum evidence for each review state before any code implementation.
-
-Stop after S0 if corpus identity verification fails for multiple fund types; choose source reliability / repository boundary work before scoring schema implementation.
+Stop before durable baseline selection if fallback upstream failure categories cannot be recovered or excluded.
 
 ## Open Residuals
 
 | Residual | Owner / next gate | Required handling |
 |---|---|---|
-| S0 corpus transition triggers | S0 corpus-selection evidence | Define trigger, actor, and minimum evidence for `candidate -> repository_verified -> fact_prefill_generated -> fact_prefill_reviewed -> scoring_ready -> accepted_baseline` |
-| FOF corpus coverage | S0 / S1 | Attempt in S0; if repository verification fails, record `data_gap`; require by second pass |
+| S0 corpus transition triggers | Completed in S0 | S0 defined trigger, actor, and minimum evidence for `candidate -> repository_verified -> fact_prefill_generated -> fact_prefill_reviewed -> scoring_ready -> accepted_baseline` |
+| FOF corpus coverage | S1 / fund-type taxonomy gate | S0 recorded QDII-FOF as `data_gap`; second pass must find pure `fof_fund` or open QDII-FOF taxonomy / precedence design |
+| Fallback upstream failure category | S1 entry gate / source reliability evidence | Recover original upstream failure category for `110020`, `017641`, and `017970`, or exclude the fallback candidate before durable baseline selection |
 | S1 score schema details | S1 score-schema fixture draft | Define `source_boundary`, issue-based output, `N/A` denominator semantics, and score issue localization |
 | Fact/Evidence contract shape | S2 bundle candidate | Decide `ReportEvidenceBundle` relation to current `StructuredFundDataBundle`; avoid parallel extraction paths unless explicitly justified |
 | Anchor naming and review status derivation | S1 / S2 | Normalize anchor id naming; define bundle-level status derivation from contained facts, anchors, calculations, and gaps |
+| Document identity vs fund-type slot membership | S1 score-schema fixture draft | Split document verification from type-slot membership so `verified_as_annual_report_but_type_gap` cannot become scoring-ready FOF evidence |
+| Review-state terminal states | S1 / S2 | Decide whether rejected / deferred / expired states are needed beyond S0 forward transitions |
 | `fq_gate_status` citation | S1 / S2 | Cite existing quality gate final judgment contract semantics for `pass`, `warn`, `block`, `not_run` |
 | PR 15 stale disposition | User authorization only | Do not close/comment/mutate GitHub state without explicit authorization |
 | Host/Agent boundary debt | Future explicit Host/Agent gate | Host must use `dayu.host`; Agent execution must use `dayu.engine`; no placeholder packages |
@@ -102,6 +111,7 @@ Stop after S0 if corpus identity verification fails for multiple fund types; cho
 | `release-maintenance chapter-audit report pipeline design implementation` | accepted locally | `docs/reviews/release-maintenance-chapter-audit-report-pipeline-design-implementation-20260524.md` | Design promotes measurable report-quality baseline before data-script or template iteration; no source/test/runtime changes | concrete corpus/schema/mapping decisions | report-quality baseline / Fact-Evidence plan |
 | `release-maintenance methodology coverage matrix design` | accepted locally | `docs/reviews/release-maintenance-methodology-coverage-matrix-plan-20260525.md`, `docs/reviews/release-maintenance-methodology-coverage-matrix-implementation-20260525.md` | `docs/design.md` §5.4.3 adds Morningstar x 有知有行 x fund type x CHAPTER_CONTRACT matrix; validation `rg` and `git diff --check` passed | concrete scoring schema and baseline corpus | report-quality baseline / Fact-Evidence plan |
 | `release-maintenance report-quality baseline / Fact-Evidence contract plan/review` | accepted locally | `docs/reviews/release-maintenance-report-quality-baseline-fact-evidence-contract-plan-20260525.md`, `docs/reviews/release-maintenance-report-quality-baseline-fact-evidence-contract-plan-review-controller-judgment-20260525.md` | AgentCodex plan; AgentMiMo and AgentDS `PASS_WITH_FINDINGS`; controller accepted S0/S1/S2 sequence and resolved open questions | S0/S1/S2 details above | `report-quality-baseline S0 corpus-selection evidence` |
+| `report-quality-baseline S0 corpus-selection evidence` | accepted locally | `docs/reviews/release-maintenance-report-quality-baseline-s0-corpus-selection-evidence-20260525.md`, `docs/reviews/release-maintenance-report-quality-baseline-s0-corpus-selection-evidence-controller-judgment-20260525.md` | AgentCodex evidence; AgentMiMo and AgentDS `PASS_WITH_FINDINGS`; review fix completed; both re-reviews `PASS`; commit `c73e594` | S1 fallback category, FOF data_gap, score schema details | `report-quality-baseline S1 score-schema fixture draft` |
 
 ## Historical Evidence Index
 
