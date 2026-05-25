@@ -27,7 +27,7 @@
 | Current phase | `release maintenance` |
 | Current gate | `release-readiness reconciliation accepted locally` |
 | Next entry point | `release acceptance packaging / PR readiness` |
-| Latest accepted commit | `5f31465 docs: accept release readiness reconciliation` |
+| Latest accepted commit | `9727d04 docs: accept release readiness reconciliation` |
 | Design truth | `docs/design.md` (v2.2) |
 | Control truth | `docs/implementation-control.md` |
 | Historical control snapshot | `docs/archive/implementation-control-history-20260525.md` |
