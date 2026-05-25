@@ -31,6 +31,24 @@
 3. `docs/implementation-control.md`——实施总控文档，Phase 列表、依赖、验证要求
 4. `docs/fund-analysis-template-draft.md`——基金分析模板（CHAPTER_CONTRACT / preferred_lens / ITEM_RULE）
 
+## 真源文档规范
+
+### `docs/design.md`
+
+- 定位：代码设计真源，回答“当前系统是什么、稳定边界是什么、已接受但未实现的未来设计是什么”。
+- 必须区分三类状态：`当前已实现`、`已接受的未来设计`、`候选/研究输入`。
+- 未实现内容可以进入 `docs/design.md`，但必须明确标注为未来设计或候选，不得写成当前代码事实。
+- 禁止把实验构想、研究材料、外部项目机制或旧架构表述直接写成当前设计事实；只有经过当前 gate 裁决并回写的内容才可作为设计真源。
+- 当前代码事实与未来设计并存时，必须写清当前生产路径、非目标、触发未来 gate 的条件和禁止事项。
+
+### `docs/implementation-control.md`
+
+- 定位：实施总控入口，回答“当前 phase/gate 在哪、下一步做什么、依据哪些 accepted artifacts、还有哪些 residual owner”。
+- 文件前部只保留控制面信息：Startup Packet、Current Truth Guardrails、current gate、next entry point、当前 accepted artifacts、open residuals、non-goal reminder、最近 Active Gate Ledger。
+- 历史审计账本、长版本记录、旧 phase 全量日志、PR/commit 细节和 superseded 架构叙述应迁入 `docs/reviews/` 或 `docs/archive/`，在 control doc 中只保留索引和必要摘要。
+- `docs/implementation-control.md` 中的 archive / historical section 只能作为证据链，不得覆盖 Startup Packet、当前 gate 或 `docs/design.md` 当前设计章节。
+- 后续更新 control doc 时，应优先压缩而不是追加长日志；新增日志如果不是恢复当前 gate 所必需，必须写入独立 artifact 并在 control doc 中引用路径。
+
 ## 建议
 
 - 共享终端经常会被前一次的 heredoc 污染，执行脚本时每次都启用新的后台 terminal 运行命令，避免受旧会话影响。
@@ -151,7 +169,7 @@ UI -> Service -> Host -> Agent
 
 - 每完成一处代码修改，应同步编写/更新测试并优先验证通过。
 - 测试跟着实现边界迁移，而不是用生产代码去兼容旧测试。
-- 单文件测试覆盖率目标为 ≥80%。
+- 单文件测试覆盖率目标为 ≥80%；这是新增或大幅修改模块的评审目标。当前 CI 自动阻断 gate 仍以项目全局覆盖率命令为准，若单文件暂未达到目标，必须在 review / residual risk 中说明原因、补测计划或接受依据。
 - **基金分析测试必须覆盖：模板章节完整性、证据锚点格式、审计规则触发**。
 
 ### 6. 文档同步

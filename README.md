@@ -119,7 +119,7 @@ fund-analysis checklist 004393 --report-year 2024
 - P2 分析：R=A+B-C、超额性质、言行一致性、投资者获得感、风险检查、压力测试、7 问题检查清单
 - `analyze` 自动估值：仅对沪深300/中证500指数基金或指数增强基金使用自建温度计生成第 6 问估值状态
 - 8 章 Markdown 模板渲染
-- 程序审计规则：P1/P2/P3/L1/R1/R2
+- 程序审计规则：P1/P2/P3/C2/L1/R1/R2
 - 有知有行温度计 data adapter：保留为过渡/对比能力，不再作为默认 CLI 查询路径
 - 自建全 A 市场温度计 CLI 默认入口：`fund-analysis thermometer`
 - 自建全 A / 宽基指数温度计 CLI 查询入口：`fund-analysis thermometer --index wind_all_a`、`fund-analysis thermometer --index 000300,000905`
@@ -148,6 +148,8 @@ uv sync --extra dev --frozen
 uv run ruff check .
 uv run pytest --cov=fund_agent --cov-report=term-missing --cov-fail-under=50 -q
 ```
+
+当前自动 CI gate 是 `fund_agent` 全局覆盖率不低于 50%。仓库开发规则同时要求新增或大幅修改模块以单文件覆盖率 ≥80% 为评审目标；低于目标时应在 review 或 residual risk 中解释，不应在未评估缺口前直接提高 CI 阈值。
 
 本地也可以按关注范围运行较小的测试集：
 
@@ -274,7 +276,9 @@ fund-analysis quality-gate \
 
 仓库采用 MIT License。发布基础验证由 GitHub Actions 执行 Python 3.11 下的 `uv sync --extra dev --frozen`、`uv run ruff check .` 和 `uv run pytest --cov=fund_agent --cov-report=term-missing --cov-fail-under=50 -q`。
 
-当前会跟踪人工维护或可复核的输入产物，例如 `docs/code_20260519.csv`、`docs/golden-answer-template.md` 和 `reports/golden-answers/` 下的 curated golden answer 文件。运行时生成物保持本地：`cache/`、`reports/extraction-snapshots/`、`reports/quality-gate-runs/`、`report-*.md` 和 `docs/*.docx` 不纳入默认版本控制。
+覆盖率策略分两层：CI 自动阻断使用全局 `--cov-fail-under=50`；单文件 ≥80% 是代码评审目标，适用于新增或大幅修改模块，需要通过定向测试、review 说明或 residual risk 追踪落实。
+
+当前会跟踪人工维护或可复核的输入产物，例如 `docs/code_20260519.csv`、`docs/golden-answer-template.md` 和 `reports/golden-answers/` 下的 curated golden answer 文件。运行时生成物保持本地：`cache/`、`reports/extraction-snapshots/`、`reports/quality-gate-runs/`、`reports/smoke/`、`reports/scoring-runs/`、`reports/writing-runs/`、`reports/data-source-runs/`、`report.md`、`report-*.md` 和 `docs/*.docx` 不纳入默认版本控制。后续用于评分、数据源迭代、写作脚本迭代和报告质量调参的大量输出，应优先落在上述本地 run 目录；只有经人工复核后要作为长期基准的输入，才进入 `docs/` 或 curated fixture。
 
 ## 文档导航
 
@@ -282,6 +286,8 @@ fund-analysis quality-gate \
 |------|------|
 | [docs/design.md](docs/design.md) | 设计真源 |
 | [docs/implementation-control.md](docs/implementation-control.md) | Phase 与 gate 总控 |
+| [docs/source-document-standards.md](docs/source-document-standards.md) | 真源文档规范说明 |
+| [docs/archive/implementation-control-history-20260525.md](docs/archive/implementation-control-history-20260525.md) | 实施总控历史快照 |
 | [docs/fund-analysis-template-draft.md](docs/fund-analysis-template-draft.md) | 8 章分析模板 |
 | [docs/sample-funds.md](docs/sample-funds.md) | 样本基金基线 |
 | [docs/code_20260519.csv](docs/code_20260519.csv) | 有知有行 App 精选基金池手动清单 |
