@@ -5,7 +5,7 @@
 > **设计真源**: `docs/design.md` (v2.2)
 > **规则真源**: `AGENTS.md`
 > **历史快照**: `docs/archive/implementation-control-history-20260525.md`
-> **当前状态**: release maintenance；report-quality validator quasi-real bundle evidence run accepted locally；下一入口为 active-fund chapter 3 turnover/style-consistency contract wording plan
+> **当前状态**: release maintenance；active-fund chapter 3 turnover/style-consistency data-gap wording contract implementation accepted locally；下一入口为 small baseline real evaluation run + first concrete quality fix + dev-only reporting tool
 
 ---
 
@@ -27,7 +27,7 @@
 | Current phase | `release maintenance` |
 | Current gate | `active-fund chapter 3 turnover/style-consistency data-gap wording contract implementation accepted locally` |
 | Next entry point | `small baseline real evaluation run + first concrete quality fix + dev-only reporting tool` |
-| Latest accepted commit | `22bf696 docs: accept first report quality improvement slice plan` |
+| Latest accepted commit | `d4304e3 feat: harden active fund chapter 3 gap contract` |
 | Design truth | `docs/design.md` (v2.2) |
 | Control truth | `docs/implementation-control.md` |
 | Historical control snapshot | `docs/archive/implementation-control-history-20260525.md` |
