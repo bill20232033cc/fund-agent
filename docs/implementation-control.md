@@ -5,7 +5,7 @@
 > **设计真源**: `docs/design.md` (v2.2)
 > **规则真源**: `AGENTS.md`
 > **历史快照**: `docs/archive/implementation-control-history-20260525.md`
-> **当前状态**: release maintenance；report-quality baseline S1 dry-run evidence 已本地接受；下一入口为 fact-evidence-contract S2 bundle candidate planning
+> **当前状态**: release maintenance；fact-evidence-contract S2 bundle candidate plan 已本地接受；下一入口为 typed ReportEvidenceBundle model/projection implementation plan review
 
 ---
 
@@ -25,9 +25,9 @@
 |---|---|
 | Branch | `codex/v0-release-readiness-plan` |
 | Current phase | `release maintenance` |
-| Current gate | `release-maintenance report-quality baseline S1 dry-run evidence accepted locally` |
-| Next entry point | `fact-evidence-contract S2 bundle candidate planning` |
-| Latest accepted commit | `1b1a30d docs: accept report-quality s1 dry run evidence` |
+| Current gate | `release-maintenance fact-evidence-contract S2 bundle candidate plan accepted locally` |
+| Next entry point | `typed ReportEvidenceBundle model/projection implementation plan review` |
+| Latest accepted commit | `bac54ba docs: accept fact-evidence s2 bundle plan` |
 | Design truth | `docs/design.md` (v2.2) |
 | Control truth | `docs/implementation-control.md` |
 | Historical control snapshot | `docs/archive/implementation-control-history-20260525.md` |
@@ -62,6 +62,12 @@
 | S1 dry-run review: MiMo | `docs/reviews/release-maintenance-report-quality-baseline-s1-dry-run-evidence-review-mimo-20260525.md` |
 | S1 dry-run review: DS | `docs/reviews/release-maintenance-report-quality-baseline-s1-dry-run-evidence-review-ds-20260525.md` |
 | S1 dry-run controller judgment | `docs/reviews/release-maintenance-report-quality-baseline-s1-dry-run-evidence-controller-judgment-20260525.md` |
+| S2 bundle candidate plan | `docs/reviews/release-maintenance-fact-evidence-contract-s2-bundle-candidate-plan-20260525.md` |
+| S2 plan review: MiMo | `docs/reviews/release-maintenance-fact-evidence-contract-s2-bundle-candidate-plan-review-mimo-20260525.md` |
+| S2 plan review: DS | `docs/reviews/release-maintenance-fact-evidence-contract-s2-bundle-candidate-plan-review-ds-20260525.md` |
+| S2 plan re-review: MiMo | `docs/reviews/release-maintenance-fact-evidence-contract-s2-bundle-candidate-plan-rereview-mimo-20260525.md` |
+| S2 plan re-review: DS | `docs/reviews/release-maintenance-fact-evidence-contract-s2-bundle-candidate-plan-rereview-ds-20260525.md` |
+| S2 plan controller judgment | `docs/reviews/release-maintenance-fact-evidence-contract-s2-bundle-candidate-plan-controller-judgment-20260525.md` |
 
 ### Current Decisions
 
@@ -75,7 +81,11 @@
 - S1 dry-run accepted one narrow pass and one material localized issue from `004393` / 2024 / `chapter_3`; it proves minimal issue localization only, not durable baseline readiness.
 - S1 dry-run outputs under `reports/scoring-runs/s1-dry-run-20260525/` are ignored scratch evidence; no JSON fixture or durable baseline was promoted.
 - The turnover-rate gap's immediate next action is `chapter_contract` first: require explicit gap wording and prohibit unsupported stability inference; choose `data_extraction` later only if an accepted chapter contract requires turnover / style-change evidence for the claim.
-- Next S2 planning may design a `ReportEvidenceBundle` candidate, but must not start code implementation until a later controller gate explicitly accepts typed contract implementation.
+- S2 accepted `ReportEvidenceBundle` as a projection wrapper over `StructuredFundDataBundle`; it must not replace the extraction bundle or create a parallel extraction path.
+- S2 accepted directly implementable contract decisions for `classified_fund_type`, `preferred_lens`, `corpus_id`, source boundaries, review-status progression / priority, anchor ids, `data_gap_refs`, score issue ids, and negative validation cases.
+- S2 excludes `nav_data` from the initial facts projection because `NavDataResult` is not an `ExtractedField`; a later `nav_data` source-contract slice must define a safe mapping before projecting it as report facts.
+- S2 accepted the active-fund Chapter 3 turnover stability wording constraint: stability / style-consistency claims require reviewed turnover or style-change evidence, otherwise the report must state insufficiency and next minimum validation question.
+- Next gate is implementation plan review for typed model/projection only; it must choose concrete files/tests and still stop before code until controller accepts that plan.
 - `fact_prefill_reviewed` uses a Markdown evidence table under `docs/reviews/` until a later curated-fixture gate accepts JSON fixtures.
 
 ### Current Non-Goals
@@ -89,18 +99,18 @@
 
 ## Next Entry Point
 
-`fact-evidence-contract S2 bundle candidate planning`
+`typed ReportEvidenceBundle model/projection implementation plan review`
 
-S2 bundle candidate planning must turn the accepted S0/S1 evidence into a code-generation-ready contract plan without implementing code. The plan must define:
+The next gate must produce an implementation plan, not code. It should translate the accepted S2 bundle candidate plan into a minimal typed model/projection slice. The plan must define:
 
-- whether `ReportEvidenceBundle` wraps, evolves from, or coexists with current `StructuredFundDataBundle`;
-- source boundaries for facts, derived calculations, evidence anchors, data gaps, quality context, and review status derivation;
-- anchor id and `data_gap_refs` naming conventions, using the S1 dry-run as evidence but not freezing its ad hoc names without review;
-- how chapter-contract gaps, especially the turnover-rate stability claim, become explicit report wording constraints before triggering extraction work;
-- executable validation needs if the schema becomes code, including field presence, enum domains, invalid state combinations, and content-level JSONL checks;
-- strict non-goals: no S2 code implementation, no renderer/FQ0-FQ6 behavior change, no fixture promotion, no durable baseline selection, no Host/Agent package, and no Dayu runtime introduction.
+- concrete Agent-layer Fund files for typed models and projection helpers;
+- whether bundle records are frozen dataclasses or an equivalent immutable model;
+- explicit enum / Literal domains, including `type_slot_membership_status`;
+- projection from `StructuredFundDataBundle.basic_identity.value["classified_fund_type"]`, current `ExtractedField` groups, multi-anchor fields, missing extraction modes, and excluded `nav_data`;
+- deterministic anchor id hashing, `data_gap_refs`, score issue linkage, and review-status derivation tests;
+- validation commands and exact test targets for the minimal slice.
 
-The plan must preserve the `FundDocumentRepository` access boundary, explicit parameters / no `extra_payload`, and current deterministic production path. If it proposes Host or Agent runtime work, stop and split that into a separate explicit gate using `dayu.host` / `dayu.engine`.
+The implementation plan must preserve the `FundDocumentRepository` access boundary, explicit parameters / no `extra_payload`, and current deterministic production path. It must stop before renderer/FQ0-FQ6 behavior changes, fixture promotion, durable baseline selection, direct PDF/cache/source access, parallel extraction, Host/Agent package work, or any `dayu.host` / `dayu.engine` runtime introduction.
 
 ## Open Residuals
 
@@ -111,10 +121,14 @@ The plan must preserve the `FundDocumentRepository` access boundary, explicit pa
 | Fallback upstream failure category | S1 entry gate / source reliability evidence | Recover original upstream failure category for `110020`, `017641`, and `017970`, or exclude the fallback candidate before durable baseline selection |
 | S1 score schema details | Completed in S1 schema draft | `source_boundary`, issue-based output, `N/A` denominator semantics, `chapter_summary`, terminal states, and score issue localization are accepted as draft schema |
 | S1 dry-run evidence | Completed in S1 dry-run | Accepted ignored scoring-run output plus tracked Markdown review evidence; no fixture or durable baseline was promoted |
-| Fact/Evidence contract shape | S2 bundle candidate planning | Decide `ReportEvidenceBundle` relation to current `StructuredFundDataBundle`; avoid parallel extraction paths unless explicitly justified |
-| Anchor naming and review status derivation | S2 bundle candidate planning | Normalize anchor id and `data_gap_refs` naming; define bundle-level status derivation from contained facts, anchors, calculations, and gaps |
-| Turnover-rate stability gap | S2 bundle candidate planning / chapter contract | Prefer explicit chapter-contract gap wording and prohibit unsupported stability inference before choosing data extraction |
-| JSONL content validation | S2 / later implementation | Add field-presence, enum-domain, invalid-combination, and content-level checks if the schema becomes code |
+| Fact/Evidence contract shape | Completed in S2 bundle plan | Accepted `ReportEvidenceBundle` wraps/projects from `StructuredFundDataBundle`; no parallel extraction path |
+| Anchor naming and review status derivation | Completed in S2 bundle plan / future implementation validation | S2 accepted namespaced ids, `sha256` locator hash, `data_gap_refs`, S0-aligned progression, and restrictive priority order |
+| Turnover-rate stability gap | Completed in S2 bundle plan / future chapter-contract implementation | S2 accepted narrow active-fund Chapter 3 wording constraint before extraction work |
+| JSONL content validation | future implementation / scoring validation slice | Add field-presence, enum-domain, invalid-combination, id-reference, `N/A`, `chapter_summary`, and content-level checks if schema becomes code |
+| Typed model file placement | typed model/projection implementation plan review | Choose concrete Agent-layer Fund files; avoid Service/renderer placement |
+| Bundle immutability | typed model/projection implementation plan review | Decide frozen dataclass or equivalent immutable model behavior |
+| `type_slot_membership_status` value domain | typed model/projection implementation plan review | Define executable enum/domain and derivation, including `matches_slot` and type-gap outcomes |
+| `nav_data` mapping | future `nav_data` source-contract slice | Keep excluded from initial facts projection until a safe mapping contract exists |
 | Document identity vs fund-type slot membership | Completed in S1 schema draft | S1 split document verification from type-slot membership so `verified_as_annual_report_but_type_gap` cannot become scoring-ready FOF evidence |
 | Review-state terminal states | Completed in S1 schema draft / future implementation validation | S1 defined rejected / deferred / expired semantics; S2 or later implementation must add executable value-domain validation if schema becomes code |
 | `fq_gate_status` citation | S1 / S2 | Cite existing quality gate final judgment contract semantics for `pass`, `warn`, `block`, `not_run` |
@@ -131,6 +145,7 @@ The plan must preserve the `FundDocumentRepository` access boundary, explicit pa
 | `report-quality-baseline S0 corpus-selection evidence` | accepted locally | `docs/reviews/release-maintenance-report-quality-baseline-s0-corpus-selection-evidence-20260525.md`, `docs/reviews/release-maintenance-report-quality-baseline-s0-corpus-selection-evidence-controller-judgment-20260525.md` | AgentCodex evidence; AgentMiMo and AgentDS `PASS_WITH_FINDINGS`; review fix completed; both re-reviews `PASS`; commit `c73e594` | S1 fallback category, FOF data_gap, score schema details | `report-quality-baseline S1 score-schema fixture draft` |
 | `report-quality-baseline S1 score-schema fixture draft` | accepted locally | `docs/reviews/release-maintenance-report-quality-baseline-s1-score-schema-fixture-draft-20260525.md`, `docs/reviews/release-maintenance-report-quality-baseline-s1-score-schema-fixture-draft-controller-judgment-20260525.md` | AgentCodex draft; AgentMiMo and AgentDS `PASS_WITH_FINDINGS`; review fix completed; both re-reviews `PASS`; commit `f22f47e` | S1 dry-run evidence, fallback source category, FOF data_gap, future value-domain validation | `report-quality-baseline S1 dry-run evidence collection` |
 | `report-quality-baseline S1 dry-run evidence` | accepted locally | `docs/reviews/release-maintenance-report-quality-baseline-s1-dry-run-evidence-20260525.md`, `docs/reviews/release-maintenance-report-quality-baseline-s1-dry-run-evidence-controller-judgment-20260525.md` | AgentCodex evidence; AgentMiMo and AgentDS `PASS_WITH_FINDINGS`; controller accepted minimal pass / issue localization; commit `1b1a30d` | S2 bundle shape, anchor/gap naming, JSONL content validation, turnover chapter-contract handling, fallback category, FOF data_gap | `fact-evidence-contract S2 bundle candidate planning` |
+| `fact-evidence-contract S2 bundle candidate planning` | accepted locally | `docs/reviews/release-maintenance-fact-evidence-contract-s2-bundle-candidate-plan-20260525.md`, `docs/reviews/release-maintenance-fact-evidence-contract-s2-bundle-candidate-plan-controller-judgment-20260525.md` | AgentCodex plan; AgentMiMo and AgentDS `PASS_WITH_FINDINGS`; plan patched; both re-reviews `PASS`; commit `bac54ba` | typed model file placement, immutability, `type_slot_membership_status`, `nav_data` mapping, fallback category, FOF data_gap, fixture gate | `typed ReportEvidenceBundle model/projection implementation plan review` |
 
 ## Historical Evidence Index
 
