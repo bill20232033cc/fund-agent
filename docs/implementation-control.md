@@ -25,9 +25,9 @@
 |---|---|
 | Branch | `codex/local-reconciliation` |
 | Current phase | `release maintenance` |
-| Current gate | `small baseline corpus candidate selection accepted locally` |
-| Next entry point | `baseline evaluation plan / verifier design` |
-| Latest accepted commit | `e2eabff docs: add report quality retrospective verification` |
+| Current gate | `baseline evaluation plan / verifier design accepted locally` |
+| Next entry point | `first improvement slice selection plan/review` |
+| Latest accepted commit | `90c6d91 docs: accept small baseline corpus candidates` |
 | Design truth | `docs/design.md` (v2.2) |
 | Control truth | `docs/implementation-control.md` |
 | Historical control snapshot | `docs/archive/implementation-control-history-20260525.md` |
@@ -112,6 +112,7 @@
 | Report-quality validator quasi-real bundle controller judgment | `docs/reviews/release-maintenance-report-quality-validator-quasi-real-bundle-controller-judgment-20260526.md` |
 | Report-quality validator quasi-real retrospective controller judgment | `docs/reviews/release-maintenance-report-quality-quasi-real-retrospective-controller-judgment-20260526.md` |
 | Small baseline corpus candidate selection | `docs/reviews/release-maintenance-small-baseline-corpus-candidate-selection-20260526.md` |
+| Small baseline evaluation plan / verifier design | `docs/reviews/release-maintenance-small-baseline-evaluation-plan-verifier-design-20260526.md` |
 
 ### Current Decisions
 
@@ -155,6 +156,7 @@
 - Report-quality validator quasi-real bundle evidence run is accepted locally. `validate_report_quality_bundle()` consumed 1 quasi-real bundle and `validate_report_quality_jsonl()` consumed a 3-line JSONL with 1 bundle record and 2 score-issue records; both returned no validator issues and no fail-closed state. The evidence remains quasi-real, not repository-verified, not scoring-ready, and not baseline. Failure-category decision: validator schema is not the blocker; next gate should be active-fund chapter 3 turnover/style-consistency contract wording before any data extraction, renderer, Service/CLI, FQ0-FQ6, durable baseline, Host/Agent, or Dayu work.
 - Retrospective verification accepted the prior quasi-real closeout process: AgentMiMo returned `PASS` for Gate 0 control-state sanity, AgentGLM returned `PASS_WITH_FINDINGS` for Gate 1 / Gate 2 evidence and failure-category review, and all findings were informational. Future corpus / chapter-contract gates should preserve the provenance chain for S0-derived `identity_status="verified_annual_report"` so it is not misread as a new repository verification claim.
 - Small baseline corpus candidate selection accepted 7 planning rows from existing accepted evidence only: clean near-term evaluation candidates `004393` / active, `004194` / enhanced index, and `006597` / bond; fallback-blocked planning candidates `110020` / index and `017641` / QDII pending upstream failure-category recovery or replacement; FOF remains a `data_gap` with `007721` and `017970` recorded as QDII-FOF/type-gap evidence, not fulfilled pure FOF coverage. No sample is `scoring_ready` or `accepted_baseline`.
+- Small baseline evaluation plan / verifier design is accepted as planning-only. The future offline loop must use explicit manifests, reviewed inputs, `ReportEvidenceBundle` / JSONL serialization, `validate_report_quality_bundle()` / `validate_report_quality_jsonl()`, scratch output under `/tmp/fund-agent-small-baseline-eval-20260526/` or ignored `reports/scoring-runs/small-baseline-eval-20260526/`, and a tracked summary artifact. It must keep fallback-blocked index/QDII rows out of the clean denominator, keep FOF as `data_gap`, and must not call default `analyze` / `checklist` or change renderer, FQ0-FQ6, Service/CLI, Host/Agent/dayu, fixtures, or product flow.
 
 ### Current Non-Goals
 
@@ -201,6 +203,7 @@ Do not push, create PR, mark ready, merge, close PRs, edit unrelated PRs, delete
 | Report-quality validator integration decision | Completed in planning | `11cde1d` accepted the manually assembled `quasi_real_review_evidence` next run path without product-flow integration |
 | Report-quality validator quasi-real evidence | Completed in evidence run | `05d037b` accepted one quasi-real bundle plus single-bundle JSONL validation; next decision is chapter-contract wording before extraction or integration |
 | Small baseline corpus candidate selection | Completed in candidate selection | Accepted clean evaluation-plan candidates `004393`, `004194`, `006597`; fallback-blocked `110020`, `017641`; FOF data-gap attempts `007721`, `017970`; no durable baseline promotion |
+| Small baseline evaluation plan / verifier design | Completed in planning | Offline explicit-manifest evaluator design accepted; durable baseline remains blocked until reviewed facts, source recovery or replacement, clean validator results, and a separate curated-fixture gate |
 | `nav_data` mapping | future `nav_data` source-contract slice | Keep excluded from initial facts projection until a safe mapping contract exists |
 | Document identity vs fund-type slot membership | Completed in S1 schema draft | S1 split document verification from type-slot membership so `verified_as_annual_report_but_type_gap` cannot become scoring-ready FOF evidence |
 | Review-state terminal states | Completed in S1 schema draft / future implementation validation | S1 defined rejected / deferred / expired semantics; S2 or later implementation must add executable value-domain validation if schema becomes code |
@@ -229,6 +232,7 @@ Do not push, create PR, mark ready, merge, close PRs, edit unrelated PRs, delete
 | `report-quality validator quasi-real bundle evidence run` | accepted locally | `docs/reviews/release-maintenance-report-quality-validator-quasi-real-bundle-evidence-20260525.md`, `docs/reviews/release-maintenance-report-quality-validator-quasi-real-bundle-controller-judgment-20260526.md` | `validate_report_quality_bundle()` consumed 1 quasi-real bundle; `validate_report_quality_jsonl()` consumed 3 JSONL records; focused tests / ruff / diff check passed; commit `05d037b` | active-fund chapter 3 turnover/style-consistency wording, multi-bundle JSONL, durable baseline, source reliability, FOF taxonomy | `active-fund chapter 3 turnover/style-consistency contract wording plan` |
 | `report-quality validator quasi-real retrospective verification` | accepted locally | `docs/reviews/release-maintenance-report-quality-quasi-real-retrospective-controller-judgment-20260526.md` | AgentMiMo `PASS`; AgentGLM `PASS_WITH_FINDINGS`; no blocking or material findings; informational provenance observation accepted | provenance wording in future corpus/chapter-contract gates, untracked unrelated review artifact disposition | `small baseline corpus candidate selection + first report-quality improvement slice` |
 | `small baseline corpus candidate selection` | accepted locally | `docs/reviews/release-maintenance-small-baseline-corpus-candidate-selection-20260526.md` | AgentCodex selected 7 candidate/data-gap rows from accepted evidence only; `git diff --check` passed; no source/test/product-flow changes | fallback recovery or replacement for index/QDII, pure FOF coverage, fact-review/scoring-ready freeze, chapter 3 turnover contract | `baseline evaluation plan / verifier design` |
+| `baseline evaluation plan / verifier design` | accepted locally | `docs/reviews/release-maintenance-small-baseline-evaluation-plan-verifier-design-20260526.md` | AgentCodex designed an offline explicit-input evaluator loop with scratch-only outputs and failure-category mapping; `git diff --check` passed; no source/test/product-flow changes | reviewed fact availability for `004194` / `006597`, source recovery or replacement, pure FOF coverage, durable fixture gate | `first improvement slice selection plan/review` |
 
 ## Historical Evidence Index
 
