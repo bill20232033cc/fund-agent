@@ -5,7 +5,7 @@
 > **设计真源**: `docs/design.md` (v2.2)
 > **规则真源**: `AGENTS.md`
 > **历史快照**: `docs/archive/implementation-control-history-20260525.md`
-> **当前状态**: release maintenance；report-quality validator dry-run evidence 已本地接受；下一入口为 report-quality validator integration decision planning
+> **当前状态**: release maintenance；release-readiness reconciliation 已本地接受；下一入口为 release acceptance packaging / PR readiness
 
 ---
 
@@ -25,9 +25,9 @@
 |---|---|
 | Branch | `codex/v0-release-readiness-plan` |
 | Current phase | `release maintenance` |
-| Current gate | `release-maintenance report-quality validator dry-run evidence accepted locally` |
-| Next entry point | `report-quality validator integration decision planning` |
-| Latest accepted commit | `1087c57 docs: add report quality validator dry-run evidence` |
+| Current gate | `release-readiness reconciliation accepted locally` |
+| Next entry point | `release acceptance packaging / PR readiness` |
+| Latest accepted commit | `5f31465 docs: accept release readiness reconciliation` |
 | Design truth | `docs/design.md` (v2.2) |
 | Control truth | `docs/implementation-control.md` |
 | Historical control snapshot | `docs/archive/implementation-control-history-20260525.md` |
@@ -101,6 +101,7 @@
 | Report-quality validator dry-run evidence review: GLM | `docs/reviews/release-maintenance-report-quality-validator-dry-run-evidence-review-glm-20260525.md` |
 | Report-quality validator dry-run evidence re-review: MiMo | `docs/reviews/release-maintenance-report-quality-validator-dry-run-evidence-rereview-mimo-20260525.md` |
 | Report-quality validator dry-run evidence controller judgment | `docs/reviews/release-maintenance-report-quality-validator-dry-run-evidence-controller-judgment-20260525.md` |
+| Release-readiness reconciliation | `docs/reviews/release-readiness-reconciliation-20260525.md` |
 
 ### Current Decisions
 
@@ -133,6 +134,7 @@
 - The dry-run plan requires explicit `bundle_record_count == 1`, representative issues for fallback conflict, fail-closed source, `chapter_summary`, `N/A`, forward ref, backlink completeness, and `scoring_ready` precondition, plus boundary checks proving no product-flow integration.
 - Report-quality validator dry-run evidence accepted commit `1087c57` proves the validator can be consumed over a synthetic valid bundle and single-bundle JSONL, returns stable summary counts, pointers, run id, schema version, and representative issues, and still excludes product-flow integration.
 - Dry-run evidence residuals remain non-blocking: multi-bundle JSONL, exact unknown-upstream message assertions, non-scoring-ready `chapter_summary/report_level` policy, `nav_data`, derived calculations, durable baseline, fallback recovery, FOF taxonomy, real corpus evidence, and Host/Agent/Dayu runtime.
+- Release-readiness reconciliation accepted the current deterministic MVP path as locally release-ready: `fund-analysis analyze 004393 --report-year 2024 --quality-gate-policy block` exits 0 with `quality_gate_status: warn`; `fund-analysis checklist 004393 --report-year 2024` exits 0; `fund-analysis thermometer --json` exits 0; full pytest, ruff, and `git diff --check` pass; no tracked scratch report / scoring-run / quality-gate-run / JSONL / cache output was introduced; renderer, FQ0-FQ6 quality gate, Service, CLI, Host/Agent packages, and Dayu runtime dependencies remain unchanged.
 
 ### Current Non-Goals
 
@@ -145,19 +147,19 @@
 
 ## Next Entry Point
 
-`report-quality validator integration decision planning`
+`release acceptance packaging / PR readiness`
 
-The next gate should decide whether and where the accepted validator should be integrated next. This is a planning gate, not an implementation gate.
+The next gate should package the accepted deterministic MVP release evidence for final local acceptance and PR readiness. It must stay focused on release acceptance, not new feature implementation.
 
-The plan must answer:
+The gate must answer:
 
-- whether the next useful move is Service/CLI integration, a `docs/reviews/` scoring-run evidence loop, curated fixture planning, or more validator hardening;
-- what concrete consumer would call `validate_report_quality_bundle()` / `validate_report_quality_jsonl()`, with explicit inputs and outputs;
-- how integration would preserve the current rule that FQ0-FQ6 quality gate behavior is unchanged unless a later explicit gate changes it;
-- whether integration can remain inside Fund/report-quality tooling or must cross into Service/CLI boundaries;
-- what success evidence would prove product usefulness without promoting synthetic scratch files to durable baseline.
+- whether the current local branch has a clean tracked diff suitable for PR;
+- what release evidence should be cited in the PR / acceptance note;
+- whether any untracked local documents should remain untracked, be archived separately, or be explicitly excluded from the release branch;
+- whether PR 15 stale disposition still needs separate user authorization;
+- whether the report-quality validator integration decision should remain deferred to a post-release planning gate.
 
-The planning gate must stop before source code changes. It must not modify Service, CLI, renderer, `quality_gate.py`, `extraction_score.py`, tracked reports, fixtures, repository/PDF/cache/source helpers, `FundDocumentRepository`, Host/Agent/dayu, `nav_data`, derived calculations, durable baseline, or product-flow behavior unless a later accepted implementation gate explicitly authorizes that scope.
+The release acceptance gate must stop before source code changes. It must not modify Service, CLI, renderer, `quality_gate.py`, `extraction_score.py`, tracked reports, fixtures, repository/PDF/cache/source helpers, `FundDocumentRepository`, Host/Agent/dayu, `nav_data`, derived calculations, durable baseline, report-quality validator integration, or product-flow behavior unless a later explicit gate authorizes that scope.
 
 ## Open Residuals
 
