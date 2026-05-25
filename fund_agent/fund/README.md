@@ -96,6 +96,14 @@ chapter_lens = resolve_preferred_lens(chapter_id=2, fund_type="active_fund")
 - `accepted_baseline` 只作为未来生命周期域存在，当前 slice 不会派生，也会拒绝调用方强制设置
 - `DerivedCalculation` 当前只定义记录形状，`derived_calculations` 默认为空；R=A+B-C、压力测试等计算来源仍由后续 calculation-source gate 处理
 
+`validate_report_quality_bundle()` 和 `validate_report_quality_jsonl()` 位于 `fund_agent/fund/report_quality_validation.py`，当前用于校验报告质量评分输入内容：
+
+- 只消费 `ReportEvidenceBundle`、JSON-like Mapping 或 JSONL record，不读取文档仓库、PDF/cache/source helper、renderer、Service 或 FQ0-FQ6 输出
+- 复用 `report_evidence.py` 的 Literal domain、schema version 和 typed dataclass 字段名，不创建平行评分输入 schema
+- 输出冻结 slotted dataclass 结果，包括字段缺失、enum domain、invalid combinations、id refs、`N/A`、`chapter_summary`、fallback consistency、`scoring_ready` 前置条件和链接完整性 issue
+- JSONL 当前支持 `record_type="bundle"` 与 `record_type="score_issue"`，并保留稳定行号 / 字段 pointer，供后续 scoring-run artifact 复盘
+- validator 只做内容可消费性判断，不替代 `run_quality_gate()` 的 FQ0-FQ6，也不生成 durable baseline 或 curated fixture
+
 `run_extraction_snapshot()` 返回 `SnapshotRunResult`，当前覆盖 P4-S1 精选基金池字段级抽取快照：
 
 - 输入显式接收 `fund_code`、`report_year`、`source_csv`、`run_id`、输出目录和 `force_refresh`
