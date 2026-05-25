@@ -41,7 +41,22 @@ Current PR state from read-only `gh pr list --state all --limit 50`:
 - PR 16: `MERGED`
 - PR 15: `CLOSED`, not open; the older control-doc statement that PR 15 remained open is superseded by current GitHub state
 
-No push, PR creation, PR close, or GitHub mutation was performed in this gate.
+Initial packaging gate performed no push, PR creation, PR close, or GitHub mutation. After explicit user authorization, the branch was pushed and draft PR 18 was opened.
+
+Authorized remote actions:
+
+- pushed `codex/v0-release-readiness-plan` to `origin`
+- created draft PR 18: `https://github.com/bill20232033cc/fund-agent/pull/18`
+- set upstream to `origin/codex/v0-release-readiness-plan`
+
+Draft PR state after creation:
+
+- state: `OPEN`
+- draft: `true`
+- base: `main`
+- head: `codex/v0-release-readiness-plan`
+- mergeable: `MERGEABLE`
+- CI: `test` check `IN_PROGRESS` at first post-create poll
 
 ## Branch Diff for PR
 
@@ -240,9 +255,10 @@ Recommended PR body:
 
 ## Next Gate
 
-Next gate requires user authorization:
+Next gate after draft PR creation:
 
-- push `codex/v0-release-readiness-plan`
-- open a draft PR against `main`
+- wait for PR 18 CI completion
+- review PR status and any review/check findings
+- if checks pass and no review blockers remain, request explicit user authorization before marking PR ready for review or merging
 
-Until that authorization is given, do not push, create PRs, close PRs, or mutate GitHub state.
+Do not mark PR ready for review, merge, close PRs, or perform additional GitHub mutations without explicit user authorization.
