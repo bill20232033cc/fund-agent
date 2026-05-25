@@ -5,7 +5,7 @@
 > **设计真源**: `docs/design.md` (v2.2)
 > **规则真源**: `AGENTS.md`
 > **历史快照**: `docs/archive/implementation-control-history-20260525.md`
-> **当前状态**: release maintenance；release-readiness reconciliation 已本地接受；下一入口为 release acceptance packaging / PR readiness
+> **当前状态**: release maintenance；release acceptance packaging / PR readiness 已本地接受；下一入口为 user authorization for push / draft PR
 
 ---
 
@@ -25,13 +25,13 @@
 |---|---|
 | Branch | `codex/v0-release-readiness-plan` |
 | Current phase | `release maintenance` |
-| Current gate | `release-readiness reconciliation accepted locally` |
-| Next entry point | `release acceptance packaging / PR readiness` |
-| Latest accepted commit | `9727d04 docs: accept release readiness reconciliation` |
+| Current gate | `release acceptance packaging / PR readiness accepted locally` |
+| Next entry point | `user authorization for push / draft PR` |
+| Latest accepted commit | `96b5406 docs: sync release readiness control pointer` |
 | Design truth | `docs/design.md` (v2.2) |
 | Control truth | `docs/implementation-control.md` |
 | Historical control snapshot | `docs/archive/implementation-control-history-20260525.md` |
-| External repo state | PR 17 squash-merged at `99df84c`; PR 15 remains open non-draft/DIRTY and needs explicit stale disposition authorization |
+| External repo state | PR 17 merged; PR 15 is closed; current branch has no upstream and no open PR as of read-only `gh pr list --state all --limit 50` |
 
 ## Current Gate
 
@@ -102,6 +102,7 @@
 | Report-quality validator dry-run evidence re-review: MiMo | `docs/reviews/release-maintenance-report-quality-validator-dry-run-evidence-rereview-mimo-20260525.md` |
 | Report-quality validator dry-run evidence controller judgment | `docs/reviews/release-maintenance-report-quality-validator-dry-run-evidence-controller-judgment-20260525.md` |
 | Release-readiness reconciliation | `docs/reviews/release-readiness-reconciliation-20260525.md` |
+| Release acceptance packaging / PR readiness | `docs/reviews/release-acceptance-packaging-pr-readiness-20260525.md` |
 
 ### Current Decisions
 
@@ -135,6 +136,7 @@
 - Report-quality validator dry-run evidence accepted commit `1087c57` proves the validator can be consumed over a synthetic valid bundle and single-bundle JSONL, returns stable summary counts, pointers, run id, schema version, and representative issues, and still excludes product-flow integration.
 - Dry-run evidence residuals remain non-blocking: multi-bundle JSONL, exact unknown-upstream message assertions, non-scoring-ready `chapter_summary/report_level` policy, `nav_data`, derived calculations, durable baseline, fallback recovery, FOF taxonomy, real corpus evidence, and Host/Agent/Dayu runtime.
 - Release-readiness reconciliation accepted the current deterministic MVP path as locally release-ready: `fund-analysis analyze 004393 --report-year 2024 --quality-gate-policy block` exits 0 with `quality_gate_status: warn`; `fund-analysis checklist 004393 --report-year 2024` exits 0; `fund-analysis thermometer --json` exits 0; full pytest, ruff, and `git diff --check` pass; no tracked scratch report / scoring-run / quality-gate-run / JSONL / cache output was introduced; renderer, FQ0-FQ6 quality gate, Service, CLI, Host/Agent packages, and Dayu runtime dependencies remain unchanged.
+- Release acceptance packaging / PR readiness accepted the current branch as locally ready to push for a release-readiness PR, subject to user authorization. Evidence: branch `codex/v0-release-readiness-plan` has no upstream, no open PR, PR 15 is closed, PR 17 is merged; `origin/main..HEAD` contains release evidence and Fund-only new capabilities; product commands, full pytest, ruff, `git diff --check`, boundary checks, and tracked scratch checks pass.
 
 ### Current Non-Goals
 
@@ -147,19 +149,18 @@
 
 ## Next Entry Point
 
-`release acceptance packaging / PR readiness`
+`user authorization for push / draft PR`
 
-The next gate should package the accepted deterministic MVP release evidence for final local acceptance and PR readiness. It must stay focused on release acceptance, not new feature implementation.
+The next gate requires explicit user authorization before mutating GitHub state.
 
 The gate must answer:
 
-- whether the current local branch has a clean tracked diff suitable for PR;
-- what release evidence should be cited in the PR / acceptance note;
-- whether any untracked local documents should remain untracked, be archived separately, or be explicitly excluded from the release branch;
-- whether PR 15 stale disposition still needs separate user authorization;
-- whether the report-quality validator integration decision should remain deferred to a post-release planning gate.
+- whether to push `codex/v0-release-readiness-plan` to `origin`;
+- whether to open a draft PR against `main` using the release acceptance PR body;
+- whether to leave the current untracked local documents untracked for this PR;
+- whether any GitHub-side operation beyond push + draft PR is explicitly authorized.
 
-The release acceptance gate must stop before source code changes. It must not modify Service, CLI, renderer, `quality_gate.py`, `extraction_score.py`, tracked reports, fixtures, repository/PDF/cache/source helpers, `FundDocumentRepository`, Host/Agent/dayu, `nav_data`, derived calculations, durable baseline, report-quality validator integration, or product-flow behavior unless a later explicit gate authorizes that scope.
+Do not push, open PRs, close PRs, edit PRs, or mutate GitHub state without explicit user authorization. Do not modify Service, CLI, renderer, `quality_gate.py`, `extraction_score.py`, tracked reports, fixtures, repository/PDF/cache/source helpers, `FundDocumentRepository`, Host/Agent/dayu, `nav_data`, derived calculations, durable baseline, report-quality validator integration, or product-flow behavior unless a later explicit gate authorizes that scope.
 
 ## Open Residuals
 
@@ -185,7 +186,7 @@ The release acceptance gate must stop before source code changes. It must not mo
 | Document identity vs fund-type slot membership | Completed in S1 schema draft | S1 split document verification from type-slot membership so `verified_as_annual_report_but_type_gap` cannot become scoring-ready FOF evidence |
 | Review-state terminal states | Completed in S1 schema draft / future implementation validation | S1 defined rejected / deferred / expired semantics; S2 or later implementation must add executable value-domain validation if schema becomes code |
 | `fq_gate_status` citation | S1 / S2 | Cite existing quality gate final judgment contract semantics for `pass`, `warn`, `block`, `not_run` |
-| PR 15 stale disposition | User authorization only | Do not close/comment/mutate GitHub state without explicit authorization |
+| PR 15 stale disposition | Completed by external state | Current GitHub state reports PR 15 as closed; no local action required |
 | Host/Agent boundary debt | Future explicit Host/Agent gate | Host must use `dayu.host`; Agent execution must use `dayu.engine`; no placeholder packages |
 
 ## Active Gate Ledger
