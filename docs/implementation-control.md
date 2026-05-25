@@ -5,7 +5,7 @@
 > **设计真源**: `docs/design.md` (v2.2)
 > **规则真源**: `AGENTS.md`
 > **历史快照**: `docs/archive/implementation-control-history-20260525.md`
-> **当前状态**: release maintenance；fact-evidence-contract S2 bundle candidate plan 已本地接受；下一入口为 typed ReportEvidenceBundle model/projection implementation plan review
+> **当前状态**: release maintenance；typed ReportEvidenceBundle model/projection implementation plan 已本地接受；下一入口为 ReportEvidenceBundle typed model/projection implementation
 
 ---
 
@@ -25,9 +25,9 @@
 |---|---|
 | Branch | `codex/v0-release-readiness-plan` |
 | Current phase | `release maintenance` |
-| Current gate | `release-maintenance fact-evidence-contract S2 bundle candidate plan accepted locally` |
-| Next entry point | `typed ReportEvidenceBundle model/projection implementation plan review` |
-| Latest accepted commit | `bac54ba docs: accept fact-evidence s2 bundle plan` |
+| Current gate | `release-maintenance typed ReportEvidenceBundle model/projection implementation plan accepted locally` |
+| Next entry point | `ReportEvidenceBundle typed model/projection implementation` |
+| Latest accepted commit | `81191c3 docs: accept report evidence bundle implementation plan` |
 | Design truth | `docs/design.md` (v2.2) |
 | Control truth | `docs/implementation-control.md` |
 | Historical control snapshot | `docs/archive/implementation-control-history-20260525.md` |
@@ -68,6 +68,12 @@
 | S2 plan re-review: MiMo | `docs/reviews/release-maintenance-fact-evidence-contract-s2-bundle-candidate-plan-rereview-mimo-20260525.md` |
 | S2 plan re-review: DS | `docs/reviews/release-maintenance-fact-evidence-contract-s2-bundle-candidate-plan-rereview-ds-20260525.md` |
 | S2 plan controller judgment | `docs/reviews/release-maintenance-fact-evidence-contract-s2-bundle-candidate-plan-controller-judgment-20260525.md` |
+| ReportEvidenceBundle implementation plan | `docs/reviews/release-maintenance-report-evidence-bundle-typed-model-projection-implementation-plan-20260525.md` |
+| Implementation plan review: MiMo | `docs/reviews/release-maintenance-report-evidence-bundle-typed-model-projection-implementation-plan-review-mimo-20260525.md` |
+| Implementation plan review: DS | `docs/reviews/release-maintenance-report-evidence-bundle-typed-model-projection-implementation-plan-review-ds-20260525.md` |
+| Implementation plan re-review: MiMo | `docs/reviews/release-maintenance-report-evidence-bundle-typed-model-projection-implementation-plan-rereview-mimo-20260525.md` |
+| Implementation plan re-review: DS | `docs/reviews/release-maintenance-report-evidence-bundle-typed-model-projection-implementation-plan-rereview-ds-20260525.md` |
+| Implementation plan controller judgment | `docs/reviews/release-maintenance-report-evidence-bundle-typed-model-projection-implementation-plan-controller-judgment-20260525.md` |
 
 ### Current Decisions
 
@@ -85,7 +91,9 @@
 - S2 accepted directly implementable contract decisions for `classified_fund_type`, `preferred_lens`, `corpus_id`, source boundaries, review-status progression / priority, anchor ids, `data_gap_refs`, score issue ids, and negative validation cases.
 - S2 excludes `nav_data` from the initial facts projection because `NavDataResult` is not an `ExtractedField`; a later `nav_data` source-contract slice must define a safe mapping before projecting it as report facts.
 - S2 accepted the active-fund Chapter 3 turnover stability wording constraint: stability / style-consistency claims require reviewed turnover or style-change evidence, otherwise the report must state insufficiency and next minimum validation question.
-- Next gate is implementation plan review for typed model/projection only; it must choose concrete files/tests and still stop before code until controller accepts that plan.
+- Implementation plan accepted the first code slice as `fund_agent/fund/report_evidence.py`, `tests/fund/test_report_evidence.py`, and minimal `fund_agent/fund/README.md` sync if source changes require it.
+- First code slice must use frozen slotted dataclasses, explicit Literal domains, explicit `ReportEvidenceProjectionContext`, deterministic ids, projection from `StructuredFundDataBundle`, preferred-lens projection, validation helpers, and derived review status.
+- First code slice must exclude `nav_data` facts, broad derived calculation population, renderer/FQ0-FQ6 changes, fixture promotion, durable baseline selection, Host/Agent runtime, and Dayu runtime.
 - `fact_prefill_reviewed` uses a Markdown evidence table under `docs/reviews/` until a later curated-fixture gate accepts JSON fixtures.
 
 ### Current Non-Goals
@@ -99,18 +107,15 @@
 
 ## Next Entry Point
 
-`typed ReportEvidenceBundle model/projection implementation plan review`
+`ReportEvidenceBundle typed model/projection implementation`
 
-The next gate must produce an implementation plan, not code. It should translate the accepted S2 bundle candidate plan into a minimal typed model/projection slice. The plan must define:
+The next gate may implement only the accepted narrow slice:
 
-- concrete Agent-layer Fund files for typed models and projection helpers;
-- whether bundle records are frozen dataclasses or an equivalent immutable model;
-- explicit enum / Literal domains, including `type_slot_membership_status`;
-- projection from `StructuredFundDataBundle.basic_identity.value["classified_fund_type"]`, current `ExtractedField` groups, multi-anchor fields, missing extraction modes, and excluded `nav_data`;
-- deterministic anchor id hashing, `data_gap_refs`, score issue linkage, and review-status derivation tests;
-- validation commands and exact test targets for the minimal slice.
+- add `fund_agent/fund/report_evidence.py` with typed domains, frozen slotted dataclasses, explicit projection context, deterministic id helpers, projection from current `StructuredFundDataBundle`, preferred-lens projection, validation helpers, and derived review status;
+- add `tests/fund/test_report_evidence.py` with fake-bundle unit tests covering field projection, preferred lens, fund-type gaps, type-slot status, multi-anchor preservation, anchor hashing/collision suffixing, data-gap refs, review-status priority, `accepted_baseline` blocking, score issue validation, `nav_data` exclusion, and source-boundary checks;
+- update `fund_agent/fund/README.md` minimally if required by the source change, keeping it current-state oriented.
 
-The implementation plan must preserve the `FundDocumentRepository` access boundary, explicit parameters / no `extra_payload`, and current deterministic production path. It must stop before renderer/FQ0-FQ6 behavior changes, fixture promotion, durable baseline selection, direct PDF/cache/source access, parallel extraction, Host/Agent package work, or any `dayu.host` / `dayu.engine` runtime introduction.
+The implementation must run the validation commands accepted in the controller judgment, including focused tests, coverage for `fund_agent.fund.report_evidence`, adjacent regression tests, ruff, boundary `rg`, and `git diff --check`. It must stop before any direct PDF/cache/source helper access, repository calls inside projection, parallel extraction, `extra_payload`, renderer/FQ0-FQ6 behavior changes, fixture promotion, durable baseline selection, `nav_data` facts, Host/Agent packages, or `dayu.host` / `dayu.engine`.
 
 ## Open Residuals
 
@@ -125,9 +130,9 @@ The implementation plan must preserve the `FundDocumentRepository` access bounda
 | Anchor naming and review status derivation | Completed in S2 bundle plan / future implementation validation | S2 accepted namespaced ids, `sha256` locator hash, `data_gap_refs`, S0-aligned progression, and restrictive priority order |
 | Turnover-rate stability gap | Completed in S2 bundle plan / future chapter-contract implementation | S2 accepted narrow active-fund Chapter 3 wording constraint before extraction work |
 | JSONL content validation | future implementation / scoring validation slice | Add field-presence, enum-domain, invalid-combination, id-reference, `N/A`, `chapter_summary`, and content-level checks if schema becomes code |
-| Typed model file placement | typed model/projection implementation plan review | Choose concrete Agent-layer Fund files; avoid Service/renderer placement |
-| Bundle immutability | typed model/projection implementation plan review | Decide frozen dataclass or equivalent immutable model behavior |
-| `type_slot_membership_status` value domain | typed model/projection implementation plan review | Define executable enum/domain and derivation, including `matches_slot` and type-gap outcomes |
+| Typed model file placement | Completed in implementation plan | Use `fund_agent/fund/report_evidence.py` and `tests/fund/test_report_evidence.py`; minimal `fund_agent/fund/README.md` sync if source changes require it |
+| Bundle immutability | Completed in implementation plan | Use frozen slotted dataclasses and tuple fields |
+| `type_slot_membership_status` value domain | Completed in implementation plan / future code validation | Implement executable enum/domain and derivation, including `matches_slot`, `type_gap`, `taxonomy_pending`, `unknown`, and `not_applicable` |
 | `nav_data` mapping | future `nav_data` source-contract slice | Keep excluded from initial facts projection until a safe mapping contract exists |
 | Document identity vs fund-type slot membership | Completed in S1 schema draft | S1 split document verification from type-slot membership so `verified_as_annual_report_but_type_gap` cannot become scoring-ready FOF evidence |
 | Review-state terminal states | Completed in S1 schema draft / future implementation validation | S1 defined rejected / deferred / expired semantics; S2 or later implementation must add executable value-domain validation if schema becomes code |
@@ -146,6 +151,7 @@ The implementation plan must preserve the `FundDocumentRepository` access bounda
 | `report-quality-baseline S1 score-schema fixture draft` | accepted locally | `docs/reviews/release-maintenance-report-quality-baseline-s1-score-schema-fixture-draft-20260525.md`, `docs/reviews/release-maintenance-report-quality-baseline-s1-score-schema-fixture-draft-controller-judgment-20260525.md` | AgentCodex draft; AgentMiMo and AgentDS `PASS_WITH_FINDINGS`; review fix completed; both re-reviews `PASS`; commit `f22f47e` | S1 dry-run evidence, fallback source category, FOF data_gap, future value-domain validation | `report-quality-baseline S1 dry-run evidence collection` |
 | `report-quality-baseline S1 dry-run evidence` | accepted locally | `docs/reviews/release-maintenance-report-quality-baseline-s1-dry-run-evidence-20260525.md`, `docs/reviews/release-maintenance-report-quality-baseline-s1-dry-run-evidence-controller-judgment-20260525.md` | AgentCodex evidence; AgentMiMo and AgentDS `PASS_WITH_FINDINGS`; controller accepted minimal pass / issue localization; commit `1b1a30d` | S2 bundle shape, anchor/gap naming, JSONL content validation, turnover chapter-contract handling, fallback category, FOF data_gap | `fact-evidence-contract S2 bundle candidate planning` |
 | `fact-evidence-contract S2 bundle candidate planning` | accepted locally | `docs/reviews/release-maintenance-fact-evidence-contract-s2-bundle-candidate-plan-20260525.md`, `docs/reviews/release-maintenance-fact-evidence-contract-s2-bundle-candidate-plan-controller-judgment-20260525.md` | AgentCodex plan; AgentMiMo and AgentDS `PASS_WITH_FINDINGS`; plan patched; both re-reviews `PASS`; commit `bac54ba` | typed model file placement, immutability, `type_slot_membership_status`, `nav_data` mapping, fallback category, FOF data_gap, fixture gate | `typed ReportEvidenceBundle model/projection implementation plan review` |
+| `typed ReportEvidenceBundle model/projection implementation plan review` | accepted locally | `docs/reviews/release-maintenance-report-evidence-bundle-typed-model-projection-implementation-plan-20260525.md`, `docs/reviews/release-maintenance-report-evidence-bundle-typed-model-projection-implementation-plan-controller-judgment-20260525.md` | AgentCodex plan; AgentMiMo and AgentDS `PASS_WITH_FINDINGS`; plan patched; both re-reviews `PASS`; commit `81191c3` | code implementation, coverage, README sync, `nav_data` mapping, fallback category, FOF data_gap, fixture gate | `ReportEvidenceBundle typed model/projection implementation` |
 
 ## Historical Evidence Index
 
