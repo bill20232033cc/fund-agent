@@ -5,7 +5,7 @@
 > **设计真源**: `docs/design.md` (v2.2)
 > **规则真源**: `AGENTS.md`
 > **历史快照**: `docs/archive/implementation-control-history-20260525.md`
-> **当前状态**: release maintenance；report-quality validator real-bundle evidence loop plan accepted locally；下一入口为 evidence run implementation
+> **当前状态**: release maintenance；report-quality validator quasi-real bundle evidence run accepted locally；下一入口为 active-fund chapter 3 turnover/style-consistency contract wording plan
 
 ---
 
@@ -25,9 +25,9 @@
 |---|---|
 | Branch | `codex/local-reconciliation` |
 | Current phase | `release maintenance` |
-| Current gate | `report-quality validator real-bundle evidence loop planning accepted locally` |
-| Next entry point | `report-quality validator quasi-real bundle evidence run` |
-| Latest accepted commit | `7cf644e docs: accept local post-merge reconciliation` |
+| Current gate | `report-quality validator quasi-real bundle evidence run accepted locally` |
+| Next entry point | `active-fund chapter 3 turnover/style-consistency contract wording plan` |
+| Latest accepted commit | `11cde1d docs: accept report quality evidence plan` |
 | Design truth | `docs/design.md` (v2.2) |
 | Control truth | `docs/implementation-control.md` |
 | Historical control snapshot | `docs/archive/implementation-control-history-20260525.md` |
@@ -108,6 +108,8 @@
 | Report-quality validator integration decision plan | `docs/reviews/release-maintenance-report-quality-validator-integration-decision-plan-20260525.md` |
 | Report-quality validator integration plan review | `docs/reviews/plan-review-20260525-235520.md` |
 | Report-quality validator integration plan re-review | `docs/reviews/plan-rereview-20260525-235615.md` |
+| Report-quality validator quasi-real bundle evidence | `docs/reviews/release-maintenance-report-quality-validator-quasi-real-bundle-evidence-20260525.md` |
+| Report-quality validator quasi-real bundle controller judgment | `docs/reviews/release-maintenance-report-quality-validator-quasi-real-bundle-controller-judgment-20260526.md` |
 
 ### Current Decisions
 
@@ -148,6 +150,7 @@
 - After explicit user authorization, PR 19 was marked ready for review and squash-merged into `main`. Read-only closeout evidence confirms PR 19 state `MERGED`, merge commit `44ea95554f7b3f8fa48b62902dfb1a3469b3e471`, and `origin/main` at `44ea955`.
 - Local reconciliation accepted `codex/local-reconciliation` as the safe working baseline from `origin/main`; local `main` remains divergent and must not be reset, rebased, or used as the work baseline without explicit user decision. Ignored `reports/data-source-runs/` and `reports/scoring-runs/` outputs remain scratch evidence. The untracked report-quality validator integration decision plan remains a candidate artifact, not accepted truth.
 - Report-quality validator integration decision plan is accepted after plan review and targeted re-review. The next evidence run must use a manually assembled quasi-real bundle labeled `quasi_real_review_evidence`, derived from accepted S0/S1/S2 review evidence and current validator serialization shape. It must not fetch or parse annual reports, call production extractors, call `FundDocumentRepository`, PDF/cache/source helpers, downloaders, or source adapters, and must not claim `repository_verified`, `scoring_ready`, or `accepted_baseline`.
+- Report-quality validator quasi-real bundle evidence run is accepted locally. `validate_report_quality_bundle()` consumed 1 quasi-real bundle and `validate_report_quality_jsonl()` consumed a 3-line JSONL with 1 bundle record and 2 score-issue records; both returned no validator issues and no fail-closed state. The evidence remains quasi-real, not repository-verified, not scoring-ready, and not baseline. Failure-category decision: validator schema is not the blocker; next gate should be active-fund chapter 3 turnover/style-consistency contract wording before any data extraction, renderer, Service/CLI, FQ0-FQ6, durable baseline, Host/Agent, or Dayu work.
 
 ### Current Non-Goals
 
@@ -160,15 +163,15 @@
 
 ## Next Entry Point
 
-`report-quality validator quasi-real bundle evidence run`
+`active-fund chapter 3 turnover/style-consistency contract wording plan`
 
 The next gate is local-only unless the user explicitly authorizes more GitHub operations.
 
 The gate must answer:
 
-- whether a manually assembled `quasi_real_review_evidence` `ReportEvidenceBundle` can pass through `validate_report_quality_bundle()` and `validate_report_quality_jsonl()` with stable summary and issue localization;
-- where scratch JSONL/result output lives so no durable fixture or tracked report output is promoted accidentally;
-- which failure categories should decide the next implementation gate: data/source extraction, evidence traceability, chapter contract, validator schema, or report writing quality.
+- what CHAPTER_CONTRACT / ITEM_RULE / scoring wording behavior should apply to active-fund chapter 3 when turnover-rate or style-change evidence is unavailable or not reviewed;
+- how the report should state insufficiency and the next minimum validation question without making unsupported stability or style-consistency claims;
+- whether accepted contract wording creates a real need for later data extraction, evidence traceability, validator schema, or report writing changes.
 
 Do not push, create PR, mark ready, merge, close PRs, edit unrelated PRs, delete branches, or perform additional GitHub mutations without explicit user authorization. Do not modify Service, CLI, renderer, `quality_gate.py`, `extraction_score.py`, tracked reports, fixtures, repository/PDF/cache/source helpers, `FundDocumentRepository`, Host/Agent/dayu, `nav_data`, derived calculations, durable baseline, report-quality validator integration, or product-flow behavior unless a later explicit gate authorizes that scope.
 
