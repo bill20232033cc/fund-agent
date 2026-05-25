@@ -898,7 +898,52 @@ def test_contract_audit_coverage_manifest_covers_every_must_not_cover() -> None:
 
     assert programmatic_items | non_programmatic_items == manifest_items
     assert programmatic_items.isdisjoint(non_programmatic_items)
-    assert len(coverage_manifest.must_not_cover_coverages) == 24
+    assert len(coverage_manifest.must_not_cover_coverages) == 25
+    assert any(
+        rule.chapter_id == 3
+        and rule.item_text == "不在换手率或风格变化证据缺失、不可用、未复核时，推断主动基金风格稳定、风格一致或言行一致。"
+        and rule.coverage_kind == "narrative_guidance"
+        for rule in coverage_manifest.must_not_cover_coverages
+    )
+
+
+def test_active_fund_chapter_3_gap_contract_does_not_add_unconditional_required_item() -> None:
+    """验证换手率缺口契约不会在未改 renderer 前变成无条件 C2 marker 要求。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当安全选项被破坏并新增运行时 required item 时抛出。
+    """
+
+    rules = load_programmatic_contract_rules()
+    coverage_manifest = load_contract_audit_coverage_manifest()
+
+    assert not any(
+        rule.chapter_id == 3
+        and rule.item_text == "换手率/风格变化证据缺口说明与下一步最小验证问题"
+        for rule in rules.required_items
+    )
+    assert any(
+        rule.chapter_id == 3
+        and rule.question_text
+        == "言行一致性判断：说的和做的一样吗？主动基金如缺少已复核的换手率或风格变化证据，不得据此判断言行一致。"
+        and rule.coverage_kind == "covered_by_required_item"
+        and rule.required_item_texts == ("言行一致性判断",)
+        for rule in coverage_manifest.must_answer_coverages
+    )
+    assert any(
+        rule.chapter_id == 3
+        and rule.question_text
+        == "风格稳定性判断：跨期风格是否漂移？主动基金必须基于已复核的换手率或风格变化证据。"
+        and rule.coverage_kind == "covered_by_required_item"
+        and rule.required_item_texts == ("风格稳定性判断",)
+        for rule in coverage_manifest.must_answer_coverages
+    )
 
 
 def test_contract_audit_coverage_manifest_fails_closed_for_missing_must_not_cover_route() -> None:

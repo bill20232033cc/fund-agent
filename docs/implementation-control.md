@@ -25,9 +25,9 @@
 |---|---|
 | Branch | `codex/local-reconciliation` |
 | Current phase | `release maintenance` |
-| Current gate | `first improvement slice selection plan/review accepted locally` |
-| Next entry point | `active-fund chapter 3 turnover/style-consistency data-gap wording contract implementation` |
-| Latest accepted commit | `75dd9a3 docs: accept small baseline evaluation plan` |
+| Current gate | `active-fund chapter 3 turnover/style-consistency data-gap wording contract implementation accepted locally` |
+| Next entry point | `small baseline real evaluation run + first concrete quality fix + dev-only reporting tool` |
+| Latest accepted commit | `22bf696 docs: accept first report quality improvement slice plan` |
 | Design truth | `docs/design.md` (v2.2) |
 | Control truth | `docs/implementation-control.md` |
 | Historical control snapshot | `docs/archive/implementation-control-history-20260525.md` |
@@ -119,6 +119,9 @@
 | First improvement slice plan re-review: MiMo | `docs/reviews/release-maintenance-first-report-quality-improvement-slice-plan-rereview-mimo-20260526.md` |
 | First improvement slice plan re-review: GLM | `docs/reviews/release-maintenance-first-report-quality-improvement-slice-plan-rereview-glm-20260526.md` |
 | First improvement slice plan controller judgment | `docs/reviews/release-maintenance-first-report-quality-improvement-slice-plan-controller-judgment-20260526.md` |
+| First improvement slice implementation review: MiMo | `docs/reviews/release-maintenance-first-report-quality-improvement-slice-implementation-review-mimo-20260526.md` |
+| First improvement slice implementation review: GLM | `docs/reviews/release-maintenance-first-report-quality-improvement-slice-implementation-review-glm-20260526.md` |
+| First improvement slice implementation controller judgment | `docs/reviews/release-maintenance-first-report-quality-improvement-slice-implementation-controller-judgment-20260526.md` |
 
 ### Current Decisions
 
@@ -164,6 +167,7 @@
 - Small baseline corpus candidate selection accepted 7 planning rows from existing accepted evidence only: clean near-term evaluation candidates `004393` / active, `004194` / enhanced index, and `006597` / bond; fallback-blocked planning candidates `110020` / index and `017641` / QDII pending upstream failure-category recovery or replacement; FOF remains a `data_gap` with `007721` and `017970` recorded as QDII-FOF/type-gap evidence, not fulfilled pure FOF coverage. No sample is `scoring_ready` or `accepted_baseline`.
 - Small baseline evaluation plan / verifier design is accepted as planning-only. The future offline loop must use explicit manifests, reviewed inputs, `ReportEvidenceBundle` / JSONL serialization, `validate_report_quality_bundle()` / `validate_report_quality_jsonl()`, scratch output under `/tmp/fund-agent-small-baseline-eval-20260526/` or ignored `reports/scoring-runs/small-baseline-eval-20260526/`, and a tracked summary artifact. It must keep fallback-blocked index/QDII rows out of the clean denominator, keep FOF as `data_gap`, and must not call default `analyze` / `checklist` or change renderer, FQ0-FQ6, Service/CLI, Host/Agent/dayu, fixtures, or product flow.
 - First improvement slice plan/review accepted `active_fund` Chapter 3 turnover/style-consistency data-gap wording contract as the minimal first implementation slice. The patched plan closed MiMo material findings by specifying exact Chinese contract wording, fixed audit route decisions, explicit modify/add decisions, and template-draft-first update order. Gate D must first verify whether adding a new `ContractRequiredItemRule` would affect default runtime audit behavior; if it would require renderer/product-flow changes, implementation must stop or defer that rule to a later renderer/report-writing gate.
+- First improvement slice implementation accepted the safe option: Chapter 3 active-fund contract wording and `narrative_guidance` `must_not_cover` coverage were hardened, `ReportDataGapOverride.required_report_wording` now preserves insufficiency and next-minimum-validation wording, and no new runtime `ContractRequiredItemRule` was added because current renderer output cannot satisfy that marker without a later renderer/report-writing gate. Focused tests, adjacent tests, ruff, `git diff --check`, boundary checks, and two independent code reviews passed.
 
 ### Current Non-Goals
 
@@ -212,6 +216,7 @@ Do not push, create PR, mark ready, merge, close PRs, edit unrelated PRs, delete
 | Small baseline corpus candidate selection | Completed in candidate selection | Accepted clean evaluation-plan candidates `004393`, `004194`, `006597`; fallback-blocked `110020`, `017641`; FOF data-gap attempts `007721`, `017970`; no durable baseline promotion |
 | Small baseline evaluation plan / verifier design | Completed in planning | Offline explicit-manifest evaluator design accepted; durable baseline remains blocked until reviewed facts, source recovery or replacement, clean validator results, and a separate curated-fixture gate |
 | First improvement slice plan/review | Completed in planning | Accepted active-fund Chapter 3 turnover/style-consistency data-gap wording contract; Gate D must preflight runtime audit behavior before adding any required item rule |
+| First improvement slice implementation | Completed in implementation | Accepted safe-option contract hardening; no renderer/FQ0-FQ6/Service/CLI/default behavior change; runtime required item deferred |
 | `nav_data` mapping | future `nav_data` source-contract slice | Keep excluded from initial facts projection until a safe mapping contract exists |
 | Document identity vs fund-type slot membership | Completed in S1 schema draft | S1 split document verification from type-slot membership so `verified_as_annual_report_but_type_gap` cannot become scoring-ready FOF evidence |
 | Review-state terminal states | Completed in S1 schema draft / future implementation validation | S1 defined rejected / deferred / expired semantics; S2 or later implementation must add executable value-domain validation if schema becomes code |
@@ -242,6 +247,7 @@ Do not push, create PR, mark ready, merge, close PRs, edit unrelated PRs, delete
 | `small baseline corpus candidate selection` | accepted locally | `docs/reviews/release-maintenance-small-baseline-corpus-candidate-selection-20260526.md` | AgentCodex selected 7 candidate/data-gap rows from accepted evidence only; `git diff --check` passed; no source/test/product-flow changes | fallback recovery or replacement for index/QDII, pure FOF coverage, fact-review/scoring-ready freeze, chapter 3 turnover contract | `baseline evaluation plan / verifier design` |
 | `baseline evaluation plan / verifier design` | accepted locally | `docs/reviews/release-maintenance-small-baseline-evaluation-plan-verifier-design-20260526.md` | AgentCodex designed an offline explicit-input evaluator loop with scratch-only outputs and failure-category mapping; `git diff --check` passed; no source/test/product-flow changes | reviewed fact availability for `004194` / `006597`, source recovery or replacement, pure FOF coverage, durable fixture gate | `first improvement slice selection plan/review` |
 | `first improvement slice selection plan/review` | accepted locally | `docs/reviews/release-maintenance-first-report-quality-improvement-slice-plan-20260526.md`, `docs/reviews/release-maintenance-first-report-quality-improvement-slice-plan-controller-judgment-20260526.md` | AgentCodex plan; AgentMiMo and AgentGLM `PASS_WITH_FINDINGS`; plan patched; MiMo re-review `PASS`; GLM re-review `PASS_WITH_FINDINGS`; mandatory Gate D preflight accepted | runtime audit rule behavior, renderer/product-flow boundary, README/design sync, durable baseline, source recovery, FOF taxonomy | `active-fund chapter 3 turnover/style-consistency data-gap wording contract implementation` |
+| `active-fund chapter 3 turnover/style-consistency data-gap wording contract implementation` | accepted locally | `docs/reviews/release-maintenance-first-report-quality-improvement-slice-implementation-controller-judgment-20260526.md` | AgentCodex implementation; focused tests `83 passed`; adjacent tests `190 passed`; ruff / diff check / boundary checks passed; AgentMiMo and AgentGLM `PASS_WITH_FINDINGS`; safe option accepted | renderer/report-writing marker emission, runtime required item, extraction evidence, fallback recovery, FOF taxonomy, durable baseline | `small baseline real evaluation run + first concrete quality fix + dev-only reporting tool` |
 
 ## Historical Evidence Index
 

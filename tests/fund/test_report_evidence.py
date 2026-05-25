@@ -274,7 +274,11 @@ def test_extraction_mode_missing_produces_data_gap_ref() -> None:
         failure_category="not_reviewed_in_current_slice",
         reason_code="not_reviewed_in_current_slice",
         chapter_ids=("chapter_3",),
-        required_report_wording="当前 slice 未复核换手率，不能据此判断风格稳定",
+        required_report_wording=(
+            "当前 slice 未复核换手率，不能据此判断风格稳定、风格一致或言行一致；"
+            "下一步最小验证问题：复核年报§8换手率及跨期行业配置/持仓集中度变化后，"
+            "风格稳定性和言行一致性判断是否仍成立？"
+        ),
     )
 
     result = project_report_evidence_bundle(
@@ -283,7 +287,10 @@ def test_extraction_mode_missing_produces_data_gap_ref() -> None:
     )
 
     expected_gap_id = "gap:004393:2024:not_reviewed:manager.turnover_rate:not_reviewed_in_current_slice"
-    assert expected_gap_id in {gap.gap_id for gap in result.data_gaps}
+    gap = next(gap for gap in result.data_gaps if gap.gap_id == expected_gap_id)
+    assert gap.required_report_wording == override.required_report_wording
+    assert "不能据此判断风格稳定、风格一致或言行一致" in gap.required_report_wording
+    assert "下一步最小验证问题：" in gap.required_report_wording
     assert expected_gap_id in _fact(result, "turnover_rate").data_gap_refs
 
 
