@@ -88,6 +88,14 @@ chapter_lens = resolve_preferred_lens(chapter_id=2, fund_type="active_fund")
 
 `FundDataExtractor.extract()` 返回 `StructuredFundDataBundle`，当前聚合 P1 已接受的 14 项结构化数据，并附带净值数据读取结果。新增 `index_profile` 只承载指数画像上下文，新增 `tracking_error` 只承载年报直接披露或后续已接受计算路径形成的跟踪误差；开发覆盖不写入结构化数据包。它只做 orchestration，不直接读文件、不直接写缓存。
 
+`project_report_evidence_bundle()` 位于 `fund_agent/fund/report_evidence.py`，当前把已经创建的 `StructuredFundDataBundle` 投影为 typed `ReportEvidenceBundle`：
+
+- 只消费内存中的结构化数据包和显式 `ReportEvidenceProjectionContext`，不调用文档仓库、PDF/cache/source helper、renderer 或 FQ0-FQ6
+- 输出冻结 slotted dataclass 记录，包括来源文档边界、报告事实、证据锚点、数据缺口、preferred_lens 可序列化投影、评分 issue 链接和派生 `review_status`
+- `classified_fund_type` 只读取 `basic_identity.value["classified_fund_type"]`，不从名称、基准或类别推断；`nav_data` 当前不投影为报告事实
+- `accepted_baseline` 只作为未来生命周期域存在，当前 slice 不会派生，也会拒绝调用方强制设置
+- `DerivedCalculation` 当前只定义记录形状，`derived_calculations` 默认为空；R=A+B-C、压力测试等计算来源仍由后续 calculation-source gate 处理
+
 `run_extraction_snapshot()` 返回 `SnapshotRunResult`，当前覆盖 P4-S1 精选基金池字段级抽取快照：
 
 - 输入显式接收 `fund_code`、`report_year`、`source_csv`、`run_id`、输出目录和 `force_refresh`
@@ -366,6 +374,7 @@ C2 当前只做确定性 marker / 元数据检查，不调用 LLM，不判断语
 - `data/`：外部数据适配器。当前包含 `FundNavDataAdapter` 与自身 `nav_cache`。
 - `extractors/`：章节级结构化提取能力。当前已落地基础画像、`§3` 表现、管理人/持有人、持仓/份额 extractor。
 - `data_extractor.py`：P1 façade，聚合文档仓库、净值适配器和章节 extractor。
+- `report_evidence.py`：报告证据包 typed model / projection，只消费 `StructuredFundDataBundle` 与显式投影上下文，产出事实、锚点、缺口、preferred_lens 和派生 review status。
 - `_value_utils.py`：Fund 内部结构化值 helper，把 dict/dataclass 抽取值规范化为子字段映射。
 - `extraction_snapshot.py`：P4-S1 字段级抽取快照能力，消费 `FundDataExtractor` 并写出 JSONL/summary/errors。
 - `extraction_score.py`：P4-S2 字段级评分与最小 golden set 选择能力，只消费 snapshot JSONL 和精选基金池 CSV。
@@ -389,6 +398,7 @@ C2 当前只做确定性 marker / 元数据检查，不调用 LLM，不判断语
 - 当前管理人/持有人 extractor 只覆盖 `manager_strategy_text`、`turnover_rate`、`manager_alignment`、`holder_structure` 四类输出。
 - 当前持仓/份额 extractor 只覆盖 `holdings_snapshot` 与 `share_change` 两类输出；`share_change` 对多份额列表只显式选择单值列或表头精确基金代码列，无法可靠选择时返回 `missing`，不再按列顺序或 A 类 fallback 默认取值。
 - `data_extractor.py` façade 已接入当前 12 项结构化数据；`structured_data` 当前以 `StructuredFundDataBundle` dataclass 表达，不额外物化 SQLite 表。
+- `report_evidence.py` 当前只投影已有 `StructuredFundDataBundle`，不新增抽取路径、不调用文档仓库、不把 `nav_data` 作为事实，也不改变 renderer / FQ0-FQ6 行为。
 - `extraction_snapshot.py` 当前记录字段级抽取状态，并通过 `comparable_values` 暴露 correctness 可比子字段白名单；不为特定基金覆盖字段值。
 - `extraction_score.py` 当前计算字段级与单基金 coverage / traceability，对 strict golden answer 中 snapshot 可比字段执行 correctness 比对，并可显式消费 `errors.jsonl` 输出 `failed_funds`；旧 snapshot 仅保留 `classified_fund_type.fund_type` 兼容路径。
 - `golden_answer.py` 当前构建、读取和校验人工 golden answer strict JSON，不执行 correctness 比对。
