@@ -27,7 +27,7 @@
 | Current phase | `release maintenance` |
 | Current gate | `release acceptance packaging / PR readiness accepted locally` |
 | Next entry point | `user authorization for push / draft PR` |
-| Latest accepted commit | `96b5406 docs: sync release readiness control pointer` |
+| Latest accepted commit | `211596a docs: accept release PR readiness packaging` |
 | Design truth | `docs/design.md` (v2.2) |
 | Control truth | `docs/implementation-control.md` |
 | Historical control snapshot | `docs/archive/implementation-control-history-20260525.md` |
