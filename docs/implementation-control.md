@@ -5,7 +5,7 @@
 > **设计真源**: `docs/design.md` (v2.2)
 > **规则真源**: `AGENTS.md`
 > **历史快照**: `docs/archive/implementation-control-history-20260525.md`
-> **当前状态**: release maintenance；PR 18 已合并到 main；下一入口为 post-merge local branch and residual disposition planning
+> **当前状态**: release maintenance；PR 19 已合并到 main；本地已从 `origin/main` 建立干净 reconciliation 分支；下一入口为 report-quality validator real-bundle evidence loop planning
 
 ---
 
@@ -23,15 +23,15 @@
 
 | Field | State |
 |---|---|
-| Branch | `codex/v0-release-readiness-plan` |
+| Branch | `codex/local-reconciliation` |
 | Current phase | `release maintenance` |
-| Current gate | `PR 18 merged to main` |
-| Next entry point | `post-merge local branch and residual disposition planning` |
-| Latest accepted commit | `c74223a Release readiness: deterministic MVP and report-quality evidence contract` |
+| Current gate | `post-merge local branch and residual disposition planning accepted locally` |
+| Next entry point | `report-quality validator real-bundle evidence loop planning` |
+| Latest accepted commit | `44ea955 docs: record post-merge release closeout (#19)` |
 | Design truth | `docs/design.md` (v2.2) |
 | Control truth | `docs/implementation-control.md` |
 | Historical control snapshot | `docs/archive/implementation-control-history-20260525.md` |
-| External repo state | PR 18 merged at `2026-05-25T14:44:05Z`; merge commit `c74223aefa1fe2c0ff66dd55bd8f17e5145c12c1`; `origin/main` points to `c74223a` |
+| External repo state | PR 18 merged at `2026-05-25T14:44:05Z`; PR 19 merged at `2026-05-25T15:43:35Z`; `origin/main` points to `44ea955` |
 
 ## Current Gate
 
@@ -104,6 +104,7 @@
 | Release-readiness reconciliation | `docs/reviews/release-readiness-reconciliation-20260525.md` |
 | Release acceptance packaging / PR readiness | `docs/reviews/release-acceptance-packaging-pr-readiness-20260525.md` |
 | Overnight release-readiness closeout | `docs/reviews/overnight-release-readiness-closeout-20260525.md` |
+| Post-merge local reconciliation / artifact disposition | `docs/reviews/post-merge-local-reconciliation-artifact-disposition-20260525.md` |
 
 ### Current Decisions
 
@@ -141,6 +142,8 @@
 - After explicit user authorization, branch `codex/v0-release-readiness-plan` was pushed to origin and draft PR 18 was opened against `main`. First post-create poll: state `OPEN`, draft `true`, mergeable `MERGEABLE`, CI `test` `IN_PROGRESS`.
 - PR 18 CI follow-up: `test` check completed with `SUCCESS`; PR remains `OPEN`, draft `true`, and `MERGEABLE`.
 - After explicit user authorization in prior turns, PR 18 was marked ready for review and squash-merged into `main`. Read-only closeout evidence confirms PR 18 state `MERGED`, merge commit `c74223aefa1fe2c0ff66dd55bd8f17e5145c12c1`, and `origin/main` at `c74223a`.
+- After explicit user authorization, PR 19 was marked ready for review and squash-merged into `main`. Read-only closeout evidence confirms PR 19 state `MERGED`, merge commit `44ea95554f7b3f8fa48b62902dfb1a3469b3e471`, and `origin/main` at `44ea955`.
+- Local reconciliation accepted `codex/local-reconciliation` as the safe working baseline from `origin/main`; local `main` remains divergent and must not be reset, rebased, or used as the work baseline without explicit user decision. Ignored `reports/data-source-runs/` and `reports/scoring-runs/` outputs remain scratch evidence. The untracked report-quality validator integration decision plan remains a candidate artifact, not accepted truth.
 
 ### Current Non-Goals
 
@@ -153,15 +156,16 @@
 
 ## Next Entry Point
 
-`post-merge local branch and residual disposition planning`
+`report-quality validator real-bundle evidence loop planning`
 
 The next gate is local-only unless the user explicitly authorizes more GitHub operations.
 
 The gate must answer:
 
-- whether the local checkout should remain on `codex/v0-release-readiness-plan` or move to an updated local `main`;
-- whether untracked local research/review documents should remain untracked, be archived under a reviewed gate, or be removed by explicit user request;
-- whether the next safe planning gate should be report-quality validator integration decision, or whether release work should stop.
+- whether `docs/reviews/release-maintenance-report-quality-validator-integration-decision-plan-20260525.md` is still current under the post-PR19 true sources and should be accepted, revised, or left untracked;
+- whether the next evidence loop should run a real or quasi-real `ReportEvidenceBundle` through the existing report-quality validator without Service/CLI/FQ0-FQ6/renderer integration;
+- where scratch JSONL/result output should live so no durable fixture or tracked report output is promoted accidentally;
+- which failure categories should decide the next implementation gate: data/source extraction, evidence traceability, chapter contract, validator schema, or report writing quality.
 
 Do not push, create PR, mark ready, merge, close PRs, edit unrelated PRs, delete branches, or perform additional GitHub mutations without explicit user authorization. Do not modify Service, CLI, renderer, `quality_gate.py`, `extraction_score.py`, tracked reports, fixtures, repository/PDF/cache/source helpers, `FundDocumentRepository`, Host/Agent/dayu, `nav_data`, derived calculations, durable baseline, report-quality validator integration, or product-flow behavior unless a later explicit gate authorizes that scope.
 
