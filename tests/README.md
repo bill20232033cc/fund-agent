@@ -45,6 +45,7 @@ CI 当前固定 Python 3.11，使用 `uv sync --extra dev --frozen` 安装锁定
 - `tests/services/test_thermometer_service.py`：温度计 Service 测试，覆盖注入 fake adapter、默认全 A `wind_all_a` 路由、显式 cache_dir/force_refresh 转发、非法缓存路径拒绝、自建 `--index 000300` / `--index wind_all_a` 路由、批量代码规范化、preserve-order 去重、partial unavailable、stale cache fallback 和 unavailable；不触发真实网络
 - `tests/ui/test_cli.py`：Typer CLI 测试，覆盖 `analyze` product mode 最小请求、缺省 `valuation_state=None` 自动估值契约、显式 `--valuation-state unavailable` 手动灰灯 opt-out、developer override 参数门禁、nested override 构造、gate summary/blocked/info 信息输出、失败非零退出、`checklist` 通过 Service 输出摘要、`thermometer` 默认全 A plain/JSON 输出、help 文案、自建 `--index wind_all_a` 和 `--index 000300` plain/JSON 输出、批量 `--index wind_all_a,000300` / `--index 000300,000905` 输出、malformed index exit 2
 - `tests/scripts/test_selected_funds_smoke.py`：有知有行精选基金池 smoke 脚本测试，覆盖 CSV 数据质量、分层抽样、指定代码、CLI 命令构造和 `quality_gate_status` 记录；命令显式使用 `--dev-override --quality-gate-policy warn`，测试不触发真实网络
+- `tests/scripts/test_report_quality_eval.py`：report-quality maintainer-only/dev-only 汇总脚本测试，使用 `tmp_path` fake JSONL / bundle 输入覆盖显式输入、summary 输出和 validator issue 汇总；不读取年报、不触发网络、PDF、extractor、Service、renderer 或产品 CLI
 - `tests/config/test_paths.py`：仓库默认路径迁移守卫测试，覆盖 `fund_agent.config.paths` 默认值、导入隔离、UI 只依赖 Service 且不越过 Service 直连 Agent 层基金能力、旧常量别名、CLI 历史 score fixture 排除和散落 `Path("docs|reports|cache/...")` 默认值扫描
 - `tests/test_repo_hygiene.py`：仓库发布卫生测试，覆盖 MIT License、`pyproject.toml` license、GitHub Actions CI 命令和 `.gitignore` artifact policy
 - `tests/fund/integration/test_p1_sample_matrix.py`：P1 样本矩阵测试，验证 3 只样本基金 12 项结构化数据达到 `36/36`
@@ -85,6 +86,7 @@ pytest tests/fund/template/test_renderer.py -q
 pytest tests/services -q
 pytest tests/ui -q
 pytest tests/scripts/test_selected_funds_smoke.py -q
+pytest tests/scripts/test_report_quality_eval.py -q
 pytest tests/fund/integration/test_p1_sample_matrix.py -q
 pytest tests/fund/integration/test_p3_cli_e2e_matrix.py -q
 ```
@@ -158,6 +160,18 @@ fund-analysis extraction-score --snapshot-path reports/extraction-snapshots/p4-s
 ```
 
 pytest 中的 snapshot 和 score 测试必须继续使用 fake extractor 或临时 JSONL，禁止依赖真实 PDF、缓存或网络。
+
+report-quality dev-only 汇总工具只消费调用方显式准备好的 JSONL 或 bundle JSON，不属于产品 CLI。当前真实用法：
+
+```bash
+.venv/bin/python scripts/report_quality_eval.py \
+  --jsonl /tmp/fund-agent-small-baseline-eval-20260526/bundles.jsonl \
+  --bundle /tmp/fund-agent-small-baseline-eval-20260526/bundle.json \
+  --output /tmp/fund-agent-small-baseline-eval-20260526/validator-summary.json \
+  --run-id small-baseline-eval:20260526
+```
+
+测试必须继续使用 `tmp_path` fake JSONL / bundle 输入，不得读取年报、PDF、cache 或网络。
 
 ## 维护约定
 

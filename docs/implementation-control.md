@@ -5,7 +5,7 @@
 > **设计真源**: `docs/design.md` (v2.2)
 > **规则真源**: `AGENTS.md`
 > **历史快照**: `docs/archive/implementation-control-history-20260525.md`
-> **当前状态**: release maintenance；active-fund chapter 3 turnover/style-consistency data-gap wording contract implementation accepted locally；下一入口为 small baseline real evaluation run + first concrete quality fix + dev-only reporting tool
+> **当前状态**: release maintenance；small baseline real evaluation + multi-bundle validator fix + dev-only report-quality eval tool accepted locally；下一入口为 escalation readiness check, then chapter contract implementation + report writing quality upgrade design gate only if all readiness evidence remains complete
 
 ---
 
@@ -25,9 +25,9 @@
 |---|---|
 | Branch | `codex/local-reconciliation` |
 | Current phase | `release maintenance` |
-| Current gate | `active-fund chapter 3 turnover/style-consistency data-gap wording contract implementation accepted locally` |
-| Next entry point | `small baseline real evaluation run + first concrete quality fix + dev-only reporting tool` |
-| Latest accepted commit | `d4304e3 feat: harden active fund chapter 3 gap contract` |
+| Current gate | `small baseline real evaluation + multi-bundle validator fix + dev-only report-quality eval tool accepted locally` |
+| Next entry point | `escalation readiness check; if complete, chapter contract implementation + report writing quality upgrade design gate` |
+| Latest accepted commit | `pending local accepted commit for small baseline real evaluation gate` |
 | Design truth | `docs/design.md` (v2.2) |
 | Control truth | `docs/implementation-control.md` |
 | Historical control snapshot | `docs/archive/implementation-control-history-20260525.md` |
@@ -122,6 +122,17 @@
 | First improvement slice implementation review: MiMo | `docs/reviews/release-maintenance-first-report-quality-improvement-slice-implementation-review-mimo-20260526.md` |
 | First improvement slice implementation review: GLM | `docs/reviews/release-maintenance-first-report-quality-improvement-slice-implementation-review-glm-20260526.md` |
 | First improvement slice implementation controller judgment | `docs/reviews/release-maintenance-first-report-quality-improvement-slice-implementation-controller-judgment-20260526.md` |
+| Small baseline real evaluation run | `docs/reviews/release-maintenance-small-baseline-real-evaluation-run-20260526.md` |
+| Small baseline validator fix evidence | `docs/reviews/release-maintenance-small-baseline-real-evaluation-validator-fix-20260526.md` |
+| Validator fix review: MiMo | `docs/reviews/release-maintenance-small-baseline-real-evaluation-validator-fix-review-mimo-20260526.md` |
+| Validator fix review: GLM | `docs/reviews/release-maintenance-small-baseline-real-evaluation-validator-fix-review-glm-20260526.md` |
+| Validator fix re-review: MiMo | `docs/reviews/release-maintenance-small-baseline-real-evaluation-validator-fix-rereview-mimo-20260526.md` |
+| Validator fix re-review: GLM | `docs/reviews/release-maintenance-small-baseline-real-evaluation-validator-fix-rereview-glm-20260526.md` |
+| Dev-only report-quality eval tool | `docs/reviews/release-maintenance-small-baseline-real-evaluation-dev-tool-20260526.md` |
+| Small baseline real evaluation controller judgment / readiness | `docs/reviews/release-maintenance-small-baseline-real-evaluation-controller-judgment-20260526.md` |
+| Small baseline final aggregate review: MiMo | `docs/reviews/release-maintenance-small-baseline-real-evaluation-final-review-mimo-20260526.md` |
+| Small baseline final aggregate review: GLM | `docs/reviews/release-maintenance-small-baseline-real-evaluation-final-review-glm-20260526.md` |
+| Deepreview controller judgment evidence-chain artifact | `docs/reviews/release-maintenance-deepreview-controller-judgment-20260526.md` |
 
 ### Current Decisions
 
@@ -168,6 +179,9 @@
 - Small baseline evaluation plan / verifier design is accepted as planning-only. The future offline loop must use explicit manifests, reviewed inputs, `ReportEvidenceBundle` / JSONL serialization, `validate_report_quality_bundle()` / `validate_report_quality_jsonl()`, scratch output under `/tmp/fund-agent-small-baseline-eval-20260526/` or ignored `reports/scoring-runs/small-baseline-eval-20260526/`, and a tracked summary artifact. It must keep fallback-blocked index/QDII rows out of the clean denominator, keep FOF as `data_gap`, and must not call default `analyze` / `checklist` or change renderer, FQ0-FQ6, Service/CLI, Host/Agent/dayu, fixtures, or product flow.
 - First improvement slice plan/review accepted `active_fund` Chapter 3 turnover/style-consistency data-gap wording contract as the minimal first implementation slice. The patched plan closed MiMo material findings by specifying exact Chinese contract wording, fixed audit route decisions, explicit modify/add decisions, and template-draft-first update order. Gate D must first verify whether adding a new `ContractRequiredItemRule` would affect default runtime audit behavior; if it would require renderer/product-flow changes, implementation must stop or defer that rule to a later renderer/report-writing gate.
 - First improvement slice implementation accepted the safe option: Chapter 3 active-fund contract wording and `narrative_guidance` `must_not_cover` coverage were hardened, `ReportDataGapOverride.required_report_wording` now preserves insufficiency and next-minimum-validation wording, and no new runtime `ContractRequiredItemRule` was added because current renderer output cannot satisfy that marker without a later renderer/report-writing gate. Focused tests, adjacent tests, ruff, `git diff --check`, boundary checks, and two independent code reviews passed.
+- Small baseline real evaluation accepted three clean fund-type slots: `004393` / active, `004194` / enhanced index, and `006597` / bond. Each sample produced scratch `ReportEvidenceBundle`, per-sample JSONL, validator summary, and failure-category localization under `/tmp/fund-agent-small-baseline-real-eval-20260526/`; `110020` / index and `017641` / QDII remain fallback-blocked, and FOF remains a data-gap/type-taxonomy residual. No sample is `scoring_ready`, `accepted_baseline`, or durable fixture.
+- The first concrete quality fix accepted for this gate is the multi-bundle JSONL validator consumer fix. `validate_report_quality_jsonl()` now assigns standalone `record_type="score_issue"` rows to the nearest preceding bundle, keeps bundle-before-score ownership fail-closed via `RQV_SCORE_ISSUE_ORPHANED`, and still rejects cross-bundle anchor/gap references. The Gate A combined JSONL now validates with `total_records=9`, `blocking_count=0`, and `failed_closed=false`.
+- Gate C accepted `scripts/report_quality_eval.py` as a maintainer-only/dev-only wrapper over explicit JSONL and bundle JSON inputs. It is not registered as a product CLI entry point and does not change `fund-analysis analyze`, `fund-analysis checklist`, Service defaults, renderer, FQ0-FQ6, Host/Agent/dayu, document repository, source helpers, `nav_data`, or durable fixtures.
 
 ### Current Non-Goals
 
@@ -180,15 +194,17 @@
 
 ## Next Entry Point
 
-`active-fund chapter 3 turnover/style-consistency contract wording plan`
+`escalation readiness check; if complete, chapter contract implementation + report writing quality upgrade design gate`
 
 The next gate is local-only unless the user explicitly authorizes more GitHub operations.
 
-The gate must answer:
+The readiness check must answer:
 
-- what CHAPTER_CONTRACT / ITEM_RULE / scoring wording behavior should apply to active-fund chapter 3 when turnover-rate or style-change evidence is unavailable or not reviewed;
-- how the report should state insufficiency and the next minimum validation question without making unsupported stability or style-consistency claims;
-- whether accepted contract wording creates a real need for later data extraction, evidence traceability, validator schema, or report writing changes.
+- whether small baseline real evaluation covered at least three fund-type slots with bundle / JSONL / validator summary / failure categories;
+- whether the concrete validator fix directly corresponds to Gate A failure categories and has tests, ruff, `git diff --check`, and two independent reviews / re-reviews;
+- whether `docs/implementation-control.md` is reconciled, the worktree is clean after accepted commits, and no scratch/report output is staged.
+
+If readiness passes, the next design gate should plan chapter contract implementation plus report-writing quality upgrade for the active-fund Chapter 3 turnover/style-consistency wording path. It must not enter renderer/FQ0-FQ6/Service/CLI default changes without reviewed proof that such scope is the minimum necessary change.
 
 Do not push, create PR, mark ready, merge, close PRs, edit unrelated PRs, delete branches, or perform additional GitHub mutations without explicit user authorization. Do not modify Service, CLI, renderer, `quality_gate.py`, `extraction_score.py`, tracked reports, fixtures, repository/PDF/cache/source helpers, `FundDocumentRepository`, Host/Agent/dayu, `nav_data`, derived calculations, durable baseline, report-quality validator integration, or product-flow behavior unless a later explicit gate authorizes that scope.
 
@@ -217,6 +233,10 @@ Do not push, create PR, mark ready, merge, close PRs, edit unrelated PRs, delete
 | Small baseline evaluation plan / verifier design | Completed in planning | Offline explicit-manifest evaluator design accepted; durable baseline remains blocked until reviewed facts, source recovery or replacement, clean validator results, and a separate curated-fixture gate |
 | First improvement slice plan/review | Completed in planning | Accepted active-fund Chapter 3 turnover/style-consistency data-gap wording contract; Gate D must preflight runtime audit behavior before adding any required item rule |
 | First improvement slice implementation | Completed in implementation | Accepted safe-option contract hardening; no renderer/FQ0-FQ6/Service/CLI/default behavior change; runtime required item deferred |
+| Small baseline real evaluation | Completed in evidence run | Accepted three clean slots and scratch-only bundle / JSONL / validator evidence; no `scoring_ready`, durable baseline, or product-flow integration |
+| Multi-bundle JSONL validator consumer | Completed in implementation | Accepted nearest-preceding-bundle score_issue ownership fix; duplicate-index issue duplication remains low residual |
+| Dev-only report-quality eval tool | Completed in implementation | `scripts/report_quality_eval.py` is maintainer-only and explicit-input only; no product CLI integration |
+| Renderer/report-writing contract emission | next chapter contract / report-writing design gate | Decide whether active-fund Chapter 3 accepted gap wording requires renderer/report-writing changes; stop if FQ0-FQ6 or default Service/CLI changes would be required without explicit reviewed scope |
 | `nav_data` mapping | future `nav_data` source-contract slice | Keep excluded from initial facts projection until a safe mapping contract exists |
 | Document identity vs fund-type slot membership | Completed in S1 schema draft | S1 split document verification from type-slot membership so `verified_as_annual_report_but_type_gap` cannot become scoring-ready FOF evidence |
 | Review-state terminal states | Completed in S1 schema draft / future implementation validation | S1 defined rejected / deferred / expired semantics; S2 or later implementation must add executable value-domain validation if schema becomes code |
@@ -248,6 +268,7 @@ Do not push, create PR, mark ready, merge, close PRs, edit unrelated PRs, delete
 | `baseline evaluation plan / verifier design` | accepted locally | `docs/reviews/release-maintenance-small-baseline-evaluation-plan-verifier-design-20260526.md` | AgentCodex designed an offline explicit-input evaluator loop with scratch-only outputs and failure-category mapping; `git diff --check` passed; no source/test/product-flow changes | reviewed fact availability for `004194` / `006597`, source recovery or replacement, pure FOF coverage, durable fixture gate | `first improvement slice selection plan/review` |
 | `first improvement slice selection plan/review` | accepted locally | `docs/reviews/release-maintenance-first-report-quality-improvement-slice-plan-20260526.md`, `docs/reviews/release-maintenance-first-report-quality-improvement-slice-plan-controller-judgment-20260526.md` | AgentCodex plan; AgentMiMo and AgentGLM `PASS_WITH_FINDINGS`; plan patched; MiMo re-review `PASS`; GLM re-review `PASS_WITH_FINDINGS`; mandatory Gate D preflight accepted | runtime audit rule behavior, renderer/product-flow boundary, README/design sync, durable baseline, source recovery, FOF taxonomy | `active-fund chapter 3 turnover/style-consistency data-gap wording contract implementation` |
 | `active-fund chapter 3 turnover/style-consistency data-gap wording contract implementation` | accepted locally | `docs/reviews/release-maintenance-first-report-quality-improvement-slice-implementation-controller-judgment-20260526.md` | AgentCodex implementation; focused tests `83 passed`; adjacent tests `190 passed`; ruff / diff check / boundary checks passed; AgentMiMo and AgentGLM `PASS_WITH_FINDINGS`; safe option accepted | renderer/report-writing marker emission, runtime required item, extraction evidence, fallback recovery, FOF taxonomy, durable baseline | `small baseline real evaluation run + first concrete quality fix + dev-only reporting tool` |
+| `small baseline real evaluation run + first concrete quality fix + dev-only reporting tool` | accepted locally | `docs/reviews/release-maintenance-small-baseline-real-evaluation-controller-judgment-20260526.md`, `docs/reviews/release-maintenance-small-baseline-real-evaluation-final-review-mimo-20260526.md`, `docs/reviews/release-maintenance-small-baseline-real-evaluation-final-review-glm-20260526.md` | AgentCodex evidence / implementation; Gate A validated three clean fund-type slots; Gate B fixed combined JSONL validator ownership; Gate C added maintainer-only script; MiMo final review `PASS`, GLM final review `PASS_WITH_FINDINGS`; focused / adjacent tests, ruff, diff check passed | duplicate-index residual, index/QDII fallback recovery, FOF data-gap, durable baseline blocked, active Chapter 3 renderer/report-writing emission | `escalation readiness check; if complete, chapter contract implementation + report writing quality upgrade design gate` |
 
 ## Historical Evidence Index
 
