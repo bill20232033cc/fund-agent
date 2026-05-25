@@ -5,7 +5,7 @@
 > **设计真源**: `docs/design.md` (v2.2)
 > **规则真源**: `AGENTS.md`
 > **历史快照**: `docs/archive/implementation-control-history-20260525.md`
-> **当前状态**: release maintenance；report-quality validator dry-run evidence plan 已本地接受；下一入口为 report-quality validator dry-run evidence implementation
+> **当前状态**: release maintenance；report-quality validator dry-run evidence 已本地接受；下一入口为 report-quality validator integration decision planning
 
 ---
 
@@ -25,9 +25,9 @@
 |---|---|
 | Branch | `codex/v0-release-readiness-plan` |
 | Current phase | `release maintenance` |
-| Current gate | `release-maintenance report-quality validator dry-run evidence plan accepted locally` |
-| Next entry point | `report-quality validator dry-run evidence implementation` |
-| Latest accepted commit | `7990b8f docs: accept report quality validator dry-run plan` |
+| Current gate | `release-maintenance report-quality validator dry-run evidence accepted locally` |
+| Next entry point | `report-quality validator integration decision planning` |
+| Latest accepted commit | `1087c57 docs: add report quality validator dry-run evidence` |
 | Design truth | `docs/design.md` (v2.2) |
 | Control truth | `docs/implementation-control.md` |
 | Historical control snapshot | `docs/archive/implementation-control-history-20260525.md` |
@@ -96,6 +96,11 @@
 | Report-quality validator dry-run plan re-review: MiMo | `docs/reviews/release-maintenance-report-quality-validator-dry-run-evidence-plan-rereview-mimo-20260525.md` |
 | Report-quality validator dry-run plan re-review: GLM | `docs/reviews/release-maintenance-report-quality-validator-dry-run-evidence-plan-rereview-glm-20260525.md` |
 | Report-quality validator dry-run plan controller judgment | `docs/reviews/release-maintenance-report-quality-validator-dry-run-evidence-plan-controller-judgment-20260525.md` |
+| Report-quality validator dry-run evidence | `docs/reviews/release-maintenance-report-quality-validator-dry-run-evidence-20260525.md` |
+| Report-quality validator dry-run evidence review: MiMo | `docs/reviews/release-maintenance-report-quality-validator-dry-run-evidence-review-mimo-20260525.md` |
+| Report-quality validator dry-run evidence review: GLM | `docs/reviews/release-maintenance-report-quality-validator-dry-run-evidence-review-glm-20260525.md` |
+| Report-quality validator dry-run evidence re-review: MiMo | `docs/reviews/release-maintenance-report-quality-validator-dry-run-evidence-rereview-mimo-20260525.md` |
+| Report-quality validator dry-run evidence controller judgment | `docs/reviews/release-maintenance-report-quality-validator-dry-run-evidence-controller-judgment-20260525.md` |
 
 ### Current Decisions
 
@@ -126,6 +131,8 @@
 - Implementation review fixes aligned blocking data-gap semantics with `report_evidence.py`, removed duplicate `chapter_summary/report_level` emission, and collapsed fallback / fail-closed cascading issue output.
 - Report-quality validator dry-run evidence plan accepted commit `7990b8f` defines a single-bundle, synthetic, non-fixture dry-run evidence slice for proving validator consumer-contract behavior before any Service/CLI/renderer/FQ0-FQ6 or durable baseline integration.
 - The dry-run plan requires explicit `bundle_record_count == 1`, representative issues for fallback conflict, fail-closed source, `chapter_summary`, `N/A`, forward ref, backlink completeness, and `scoring_ready` precondition, plus boundary checks proving no product-flow integration.
+- Report-quality validator dry-run evidence accepted commit `1087c57` proves the validator can be consumed over a synthetic valid bundle and single-bundle JSONL, returns stable summary counts, pointers, run id, schema version, and representative issues, and still excludes product-flow integration.
+- Dry-run evidence residuals remain non-blocking: multi-bundle JSONL, exact unknown-upstream message assertions, non-scoring-ready `chapter_summary/report_level` policy, `nav_data`, derived calculations, durable baseline, fallback recovery, FOF taxonomy, real corpus evidence, and Host/Agent/Dayu runtime.
 
 ### Current Non-Goals
 
@@ -138,22 +145,19 @@
 
 ## Next Entry Point
 
-`report-quality validator dry-run evidence implementation`
+`report-quality validator integration decision planning`
 
-The next gate may implement only the accepted dry-run evidence slice from `docs/reviews/release-maintenance-report-quality-validator-dry-run-evidence-plan-20260525.md`.
+The next gate should decide whether and where the accepted validator should be integrated next. This is a planning gate, not an implementation gate.
 
-Allowed tracked output:
+The plan must answer:
 
-- `docs/reviews/release-maintenance-report-quality-validator-dry-run-evidence-20260525.md`
+- whether the next useful move is Service/CLI integration, a `docs/reviews/` scoring-run evidence loop, curated fixture planning, or more validator hardening;
+- what concrete consumer would call `validate_report_quality_bundle()` / `validate_report_quality_jsonl()`, with explicit inputs and outputs;
+- how integration would preserve the current rule that FQ0-FQ6 quality gate behavior is unchanged unless a later explicit gate changes it;
+- whether integration can remain inside Fund/report-quality tooling or must cross into Service/CLI boundaries;
+- what success evidence would prove product usefulness without promoting synthetic scratch files to durable baseline.
 
-Allowed temporary inputs:
-
-- `/tmp/fund-agent-report-quality-validator-dry-run-20260525/input.jsonl`
-- an untracked `/tmp` one-off script if inline Python becomes unreadable
-
-The implementation must invoke `validate_report_quality_bundle()` on an in-memory valid bundle and `validate_report_quality_jsonl()` on a single-bundle scratch JSONL. Evidence must include commands, exit codes, scratch paths, `bundle_record_count == 1`, bundle/score-issue line numbers, summary counts, `error_code_counts`, run id, schema version, representative issues, interpretation, and boundary checks.
-
-The implementation must stop before source code, tests, README files, tracked reports, fixtures, Service, CLI, renderer, `quality_gate.py` FQ0-FQ6, `extraction_score.py`, PDF/cache/source helper access, `FundDocumentRepository`, `extra_payload`, Host/Agent/dayu, `nav_data` projection, derived-calculation generation, durable baseline, real data acquisition, or product-flow integration.
+The planning gate must stop before source code changes. It must not modify Service, CLI, renderer, `quality_gate.py`, `extraction_score.py`, tracked reports, fixtures, repository/PDF/cache/source helpers, `FundDocumentRepository`, Host/Agent/dayu, `nav_data`, derived calculations, durable baseline, or product-flow behavior unless a later accepted implementation gate explicitly authorizes that scope.
 
 ## Open Residuals
 
@@ -173,7 +177,8 @@ The implementation must stop before source code, tests, README files, tracked re
 | `type_slot_membership_status` value domain | Completed in implementation | Executable enum/domain and derivation cover `matches_slot`, `type_gap`, `taxonomy_pending`, `unknown`, and `not_applicable` |
 | Projection guard / fallback test hardening | future robustness or scoring validation slice | Add tests for context validation guards, review-status fallback states, and unknown extraction-mode fallback when those paths become consumer-critical |
 | Report-quality content validator | Completed in implementation | Pure validator module and tests accepted at `9f9bbf5`; no CLI/Service/FQ0-FQ6 integration |
-| Report-quality validator dry-run evidence | current implementation gate | Implement accepted single-bundle synthetic dry-run evidence artifact under `docs/reviews/`; no source/test/product-flow changes |
+| Report-quality validator dry-run evidence | Completed in implementation | `1087c57` accepted synthetic single-bundle dry-run evidence; no source/test/product-flow changes |
+| Report-quality validator integration decision | next planning gate | Decide next consumer / integration path for validator output without changing product flow yet |
 | `nav_data` mapping | future `nav_data` source-contract slice | Keep excluded from initial facts projection until a safe mapping contract exists |
 | Document identity vs fund-type slot membership | Completed in S1 schema draft | S1 split document verification from type-slot membership so `verified_as_annual_report_but_type_gap` cannot become scoring-ready FOF evidence |
 | Review-state terminal states | Completed in S1 schema draft / future implementation validation | S1 defined rejected / deferred / expired semantics; S2 or later implementation must add executable value-domain validation if schema becomes code |
@@ -197,6 +202,7 @@ The implementation must stop before source code, tests, README files, tracked re
 | `report-quality scoring JSONL content validation plan` | accepted locally | `docs/reviews/release-maintenance-report-quality-scoring-jsonl-content-validation-plan-20260525.md`, `docs/reviews/release-maintenance-report-quality-scoring-jsonl-content-validation-plan-controller-judgment-20260525.md` | AgentCodex plan; AgentMiMo and AgentGLM `PASS_WITH_FINDINGS`; plan patched; both re-reviews `PASS`; commit `e40a394` | validator implementation, `nav_data` mapping, derived calculations, durable baseline, Host/Agent/dayu, fallback recovery, FOF taxonomy | `report-quality scoring JSONL content validation implementation` |
 | `report-quality scoring JSONL content validation implementation` | accepted locally | `docs/reviews/release-maintenance-report-quality-scoring-jsonl-content-validation-implementation-controller-judgment-20260525.md`, `docs/reviews/release-maintenance-report-quality-scoring-jsonl-content-validation-implementation-review-mimo-20260525.md`, `docs/reviews/release-maintenance-report-quality-scoring-jsonl-content-validation-implementation-review-glm-20260525.md` | AgentCodex implementation; AgentMiMo and AgentGLM `PASS_WITH_FINDINGS`; fixes completed; both re-reviews `PASS`; validation 25 focused tests / 92.34% coverage / 81 adjacent tests / ruff / boundary rg / diff check; commit `9f9bbf5` | dry-run evidence planning, multi-bundle JSONL, message-specific test hardening, `nav_data` mapping, derived calculations, durable baseline, Host/Agent/dayu, fallback recovery, FOF taxonomy | `report-quality validator dry-run evidence planning` |
 | `report-quality validator dry-run evidence planning` | accepted locally | `docs/reviews/release-maintenance-report-quality-validator-dry-run-evidence-plan-20260525.md`, `docs/reviews/release-maintenance-report-quality-validator-dry-run-evidence-plan-controller-judgment-20260525.md` | AgentCodex plan; AgentMiMo and AgentGLM `PASS_WITH_FINDINGS`; plan patched; both re-reviews `PASS`; commit `7990b8f` | dry-run evidence implementation, multi-bundle JSONL, message-specific test hardening, `nav_data` mapping, derived calculations, durable baseline, Host/Agent/dayu, fallback recovery, FOF taxonomy | `report-quality validator dry-run evidence implementation` |
+| `report-quality validator dry-run evidence implementation` | accepted locally | `docs/reviews/release-maintenance-report-quality-validator-dry-run-evidence-20260525.md`, `docs/reviews/release-maintenance-report-quality-validator-dry-run-evidence-controller-judgment-20260525.md` | AgentCodex evidence; AgentMiMo `PASS_WITH_FINDINGS`; AgentGLM `PASS`; MiMo targeted re-review `PASS`; validation evidence-only artifact / single-bundle JSONL / boundary rg / diff check; commit `1087c57` | integration decision planning, multi-bundle JSONL, message-specific test hardening, `nav_data` mapping, derived calculations, durable baseline, Host/Agent/dayu, fallback recovery, FOF taxonomy | `report-quality validator integration decision planning` |
 
 ## Historical Evidence Index
 
