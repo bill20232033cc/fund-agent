@@ -5,7 +5,7 @@
 > **设计真源**: `docs/design.md` (v2.2)
 > **规则真源**: `AGENTS.md`
 > **历史快照**: `docs/archive/implementation-control-history-20260525.md`
-> **当前状态**: release maintenance；report-quality scoring JSONL content validation plan 已本地接受；下一入口为 report-quality scoring JSONL content validation implementation
+> **当前状态**: release maintenance；report-quality scoring JSONL content validation implementation 已本地接受；下一入口为 report-quality validator dry-run evidence planning
 
 ---
 
@@ -25,9 +25,9 @@
 |---|---|
 | Branch | `codex/v0-release-readiness-plan` |
 | Current phase | `release maintenance` |
-| Current gate | `release-maintenance report-quality scoring JSONL content validation plan accepted locally` |
-| Next entry point | `report-quality scoring JSONL content validation implementation` |
-| Latest accepted commit | `e40a394 docs: accept report quality validation plan` |
+| Current gate | `release-maintenance report-quality scoring JSONL content validation implementation accepted locally` |
+| Next entry point | `report-quality validator dry-run evidence planning` |
+| Latest accepted commit | `9f9bbf5 feat: add report quality content validator` |
 | Design truth | `docs/design.md` (v2.2) |
 | Control truth | `docs/implementation-control.md` |
 | Historical control snapshot | `docs/archive/implementation-control-history-20260525.md` |
@@ -85,6 +85,11 @@
 | Report-quality validation plan re-review: MiMo | `docs/reviews/release-maintenance-report-quality-scoring-jsonl-content-validation-plan-rereview-mimo-20260525.md` |
 | Report-quality validation plan re-review: GLM | `docs/reviews/release-maintenance-report-quality-scoring-jsonl-content-validation-plan-rereview-glm-20260525.md` |
 | Report-quality validation plan controller judgment | `docs/reviews/release-maintenance-report-quality-scoring-jsonl-content-validation-plan-controller-judgment-20260525.md` |
+| Report-quality validation implementation review: MiMo | `docs/reviews/release-maintenance-report-quality-scoring-jsonl-content-validation-implementation-review-mimo-20260525.md` |
+| Report-quality validation implementation review: GLM | `docs/reviews/release-maintenance-report-quality-scoring-jsonl-content-validation-implementation-review-glm-20260525.md` |
+| Report-quality validation implementation re-review: MiMo | `docs/reviews/release-maintenance-report-quality-scoring-jsonl-content-validation-implementation-rereview-mimo-20260525.md` |
+| Report-quality validation implementation re-review: GLM | `docs/reviews/release-maintenance-report-quality-scoring-jsonl-content-validation-implementation-rereview-glm-20260525.md` |
+| Report-quality validation implementation controller judgment | `docs/reviews/release-maintenance-report-quality-scoring-jsonl-content-validation-implementation-controller-judgment-20260525.md` |
 
 ### Current Decisions
 
@@ -111,6 +116,8 @@
 - Implementation review residuals are non-blocking: projection-context guard tests, review-status fallback-state tests, unknown extraction-mode fallback test, and turnover-rate override path asymmetry documentation can be handled in later robustness/scoring-validation work.
 - Report-quality scoring JSONL content validation plan accepted commit `e40a394` defines a pure Fund capability validator over `ReportEvidenceBundle` / JSONL serialization, keeps FQ0-FQ6 unchanged, and excludes renderer, Service, CLI, Host/Agent, Dayu, `nav_data`, durable baseline, and fixtures.
 - The validation plan requires canonical `scoring_ready` precondition handling, `ReportSourceDocument` fallback consistency, `N/A` and `chapter_summary` semantics, enum-domain checks, id-reference checks, and fact/gap/issue/anchor link integrity.
+- Report-quality scoring JSONL content validation implementation accepted commit `9f9bbf5` adds `fund_agent/fund/report_quality_validation.py`, focused tests, README sync, implementation reviews, re-reviews, and controller judgment.
+- Implementation review fixes aligned blocking data-gap semantics with `report_evidence.py`, removed duplicate `chapter_summary/report_level` emission, and collapsed fallback / fail-closed cascading issue output.
 
 ### Current Non-Goals
 
@@ -123,18 +130,18 @@
 
 ## Next Entry Point
 
-`report-quality scoring JSONL content validation implementation`
+`report-quality validator dry-run evidence planning`
 
-The next gate may implement only the accepted validation slice:
+The next gate should plan how to produce and review minimal dry-run evidence for the accepted validator before integrating it into Service, CLI, renderer, FQ0-FQ6, durable baseline, or tracked reports.
 
-- add `fund_agent/fund/report_quality_validation.py` as a pure Fund capability validator over `ReportEvidenceBundle` / Mapping serialization and JSONL records;
-- add `tests/fund/test_report_quality_validation.py` with fixture-free fake records and the accepted positive / negative matrix;
-- optionally add a minimal serialization helper in `fund_agent/fund/report_evidence.py` and adjacent tests only if implementation proves it is necessary;
-- optionally update `fund_agent/fund/README.md` only as current-state module guide sync after source changes.
+The plan must answer:
 
-The implementation must reuse `report_evidence.py` typed domains, produce structured validation issues and summary counts, fail closed on blocking content violations, and stop before renderer, Service, CLI, `quality_gate.py` FQ0-FQ6, `extraction_score.py` scoring semantics, PDF/cache/source helper access, `FundDocumentRepository`, `extra_payload`, Host/Agent/dayu, `nav_data` projection, derived-calculation generation, durable fixtures, baseline promotion, or tracked `reports/` output changes.
+- what existing or synthetic `ReportEvidenceBundle` / JSONL input can exercise the validator without promoting durable fixtures;
+- which output artifact under `docs/reviews/` records validator issues, summary counts, and reviewer interpretation;
+- what acceptance criteria distinguish "validator works as a consumer contract" from "ready to wire into product flow";
+- whether multi-bundle JSONL, exact message assertions, or non-scoring-ready chapter-summary semantics should be handled now or deferred.
 
-Required validation includes focused validator tests, adjacent `test_report_evidence.py` / `test_extraction_score.py` / `test_quality_gate.py`, coverage for `fund_agent.fund.report_quality_validation` at or above 80%, `ruff check`, forbidden boundary `rg`, `nav_data` boundary check, and `git diff --check`.
+The planning gate must stop before source code changes unless a controller judgment explicitly advances to implementation. It must continue to exclude renderer, Service, CLI, `quality_gate.py` FQ0-FQ6, `extraction_score.py`, PDF/cache/source helper access, `FundDocumentRepository`, `extra_payload`, Host/Agent/dayu, `nav_data` projection, derived-calculation generation, durable fixtures, baseline promotion, and tracked `reports/` output changes.
 
 ## Open Residuals
 
@@ -148,12 +155,13 @@ Required validation includes focused validator tests, adjacent `test_report_evid
 | Fact/Evidence contract shape | Completed in S2 bundle plan | Accepted `ReportEvidenceBundle` wraps/projects from `StructuredFundDataBundle`; no parallel extraction path |
 | Anchor naming and review status derivation | Completed in S2 bundle plan / future implementation validation | S2 accepted namespaced ids, `sha256` locator hash, `data_gap_refs`, S0-aligned progression, and restrictive priority order |
 | Turnover-rate stability gap | Completed in S2 bundle plan / future chapter-contract implementation | S2 accepted narrow active-fund Chapter 3 wording constraint before extraction work |
-| JSONL content validation | future implementation / scoring validation slice | Add field-presence, enum-domain, invalid-combination, id-reference, `N/A`, `chapter_summary`, and content-level checks if schema becomes code |
+| JSONL content validation | Completed in implementation | `9f9bbf5` added pure validator module, focused tests, README sync, review artifacts, and controller judgment |
 | Typed model file placement | Completed in implementation | `209cc25` added `fund_agent/fund/report_evidence.py`, `tests/fund/test_report_evidence.py`, and minimal `fund_agent/fund/README.md` sync |
 | Bundle immutability | Completed in implementation | `ReportEvidenceBundle` and related records use frozen slotted dataclasses and tuple fields |
 | `type_slot_membership_status` value domain | Completed in implementation | Executable enum/domain and derivation cover `matches_slot`, `type_gap`, `taxonomy_pending`, `unknown`, and `not_applicable` |
 | Projection guard / fallback test hardening | future robustness or scoring validation slice | Add tests for context validation guards, review-status fallback states, and unknown extraction-mode fallback when those paths become consumer-critical |
-| Report-quality content validator | current implementation gate | Implement accepted pure validator module and tests from `e40a394`; no CLI/Service/FQ0-FQ6 integration |
+| Report-quality content validator | Completed in implementation | Pure validator module and tests accepted at `9f9bbf5`; no CLI/Service/FQ0-FQ6 integration |
+| Report-quality validator dry-run evidence | next planning gate | Plan minimal reviewed dry-run evidence for consuming validator output before product-flow integration or durable fixture promotion |
 | `nav_data` mapping | future `nav_data` source-contract slice | Keep excluded from initial facts projection until a safe mapping contract exists |
 | Document identity vs fund-type slot membership | Completed in S1 schema draft | S1 split document verification from type-slot membership so `verified_as_annual_report_but_type_gap` cannot become scoring-ready FOF evidence |
 | Review-state terminal states | Completed in S1 schema draft / future implementation validation | S1 defined rejected / deferred / expired semantics; S2 or later implementation must add executable value-domain validation if schema becomes code |
@@ -175,6 +183,7 @@ Required validation includes focused validator tests, adjacent `test_report_evid
 | `typed ReportEvidenceBundle model/projection implementation plan review` | accepted locally | `docs/reviews/release-maintenance-report-evidence-bundle-typed-model-projection-implementation-plan-20260525.md`, `docs/reviews/release-maintenance-report-evidence-bundle-typed-model-projection-implementation-plan-controller-judgment-20260525.md` | AgentCodex plan; AgentMiMo and AgentDS `PASS_WITH_FINDINGS`; plan patched; both re-reviews `PASS`; commit `81191c3` | code implementation, coverage, README sync, `nav_data` mapping, fallback category, FOF data_gap, fixture gate | `ReportEvidenceBundle typed model/projection implementation` |
 | `ReportEvidenceBundle typed model/projection implementation` | accepted locally | `docs/reviews/release-maintenance-report-evidence-bundle-typed-model-projection-implementation-controller-judgment-20260525.md`, `docs/reviews/release-maintenance-report-evidence-bundle-typed-model-projection-implementation-review-mimo-20260525.md`, `docs/reviews/release-maintenance-report-evidence-bundle-typed-model-projection-implementation-review-glm-20260525.md` | AgentCodex implementation; AgentMiMo `PASS_WITH_FINDINGS`; AgentGLM `PASS_WITH_FINDINGS`; GLM F1 fixed; both re-reviews `PASS`; validation 23 focused tests / 93% coverage / 40 adjacent tests / ruff / boundary rg / diff check; commit `209cc25` | JSONL content validation, guard/fallback hardening, `nav_data` mapping, fallback category, FOF data_gap, fixture gate | `report-quality scoring JSONL content validation plan` |
 | `report-quality scoring JSONL content validation plan` | accepted locally | `docs/reviews/release-maintenance-report-quality-scoring-jsonl-content-validation-plan-20260525.md`, `docs/reviews/release-maintenance-report-quality-scoring-jsonl-content-validation-plan-controller-judgment-20260525.md` | AgentCodex plan; AgentMiMo and AgentGLM `PASS_WITH_FINDINGS`; plan patched; both re-reviews `PASS`; commit `e40a394` | validator implementation, `nav_data` mapping, derived calculations, durable baseline, Host/Agent/dayu, fallback recovery, FOF taxonomy | `report-quality scoring JSONL content validation implementation` |
+| `report-quality scoring JSONL content validation implementation` | accepted locally | `docs/reviews/release-maintenance-report-quality-scoring-jsonl-content-validation-implementation-controller-judgment-20260525.md`, `docs/reviews/release-maintenance-report-quality-scoring-jsonl-content-validation-implementation-review-mimo-20260525.md`, `docs/reviews/release-maintenance-report-quality-scoring-jsonl-content-validation-implementation-review-glm-20260525.md` | AgentCodex implementation; AgentMiMo and AgentGLM `PASS_WITH_FINDINGS`; fixes completed; both re-reviews `PASS`; validation 25 focused tests / 92.34% coverage / 81 adjacent tests / ruff / boundary rg / diff check; commit `9f9bbf5` | dry-run evidence planning, multi-bundle JSONL, message-specific test hardening, `nav_data` mapping, derived calculations, durable baseline, Host/Agent/dayu, fallback recovery, FOF taxonomy | `report-quality validator dry-run evidence planning` |
 
 ## Historical Evidence Index
 
