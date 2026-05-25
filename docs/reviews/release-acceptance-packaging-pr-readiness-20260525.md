@@ -58,6 +58,14 @@ Draft PR state after creation:
 - mergeable: `MERGEABLE`
 - CI: `test` check `IN_PROGRESS` at first post-create poll
 
+Draft PR state after CI completion:
+
+- state: `OPEN`
+- draft: `true`
+- mergeable: `MERGEABLE`
+- CI `test`: `SUCCESS`
+- CI run: `https://github.com/bill20232033cc/fund-agent/actions/runs/26405381084/job/77727361922`
+
 ## Branch Diff for PR
 
 `origin/main..HEAD` currently contains 33 local commits.
@@ -257,8 +265,8 @@ Recommended PR body:
 
 Next gate after draft PR creation:
 
-- wait for PR 18 CI completion
-- review PR status and any review/check findings
-- if checks pass and no review blockers remain, request explicit user authorization before marking PR ready for review or merging
+- request explicit user authorization before marking PR 18 ready for review
+- after ready-for-review authorization, inspect review / mergeability state again
+- request explicit user authorization before merging
 
 Do not mark PR ready for review, merge, close PRs, or perform additional GitHub mutations without explicit user authorization.
