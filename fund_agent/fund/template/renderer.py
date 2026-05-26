@@ -15,7 +15,10 @@ from typing import Final, TypeVar
 
 from fund_agent.fund.analysis.alpha_judge import AlphaJudgment
 from fund_agent.fund.analysis.checklist import ChecklistResult
-from fund_agent.fund.analysis.consistency_check import ConsistencyCheckResult
+from fund_agent.fund.analysis.consistency_check import (
+    ConsistencyCheckResult,
+    ConsistencyDimensionResult,
+)
 from fund_agent.fund.analysis.final_judgment import FinalJudgment, FinalJudgmentDecision
 from fund_agent.fund.analysis.investor_return import InvestorExperienceResult
 from fund_agent.fund.analysis.r_abc import RabcAttribution
@@ -1096,26 +1099,154 @@ def _render_chapter_3(input_data: TemplateRenderInput) -> str:
     profile = input_data.structured_data.product_profile.value or {}
     strategy = input_data.structured_data.manager_strategy_text.value or {}
     manager_alignment = input_data.structured_data.manager_alignment.value or {}
+    active_missing_evidence = _is_active_fund(input_data.structured_data)
     lines = [
         get_template_chapter_heading(3),
         f"- 基金经理基本信息：{_value_text(input_data.structured_data.basic_identity.value or {}, 'fund_manager')}。",
         f"- 宣称的投资策略（§4）：{_value_text(strategy, 'strategy_summary')}。",
         f"- 实际投资行为（§8）：{_value_text(input_data.structured_data.holdings_snapshot.value or {}, 'top_holdings')}。",
-        f"- 言行一致性判断：{input_data.consistency_result.overall_signal} / {input_data.consistency_result.overall_status}。",
-        f"- 风格稳定性判断：{_INSUFFICIENT_TEXT}，当前需要多期持仓继续验证。",
+        _chapter_3_consistency_summary_line(input_data.consistency_result, active_missing_evidence),
+        _chapter_3_style_stability_line(active_missing_evidence),
         f"- 利益一致性判断：{_join_values(manager_alignment.values()) if manager_alignment else _MISSING_TEXT}。",
         f"- 管理人表述：{_value_text(strategy, 'strategy_summary')}；产品风格定位：{_value_text(profile, 'style_positioning')}。",
         f"- 利益一致性原始披露：{_join_values(manager_alignment.values()) if manager_alignment else _MISSING_TEXT}。",
-        f"- 言行一致性汇总：{input_data.consistency_result.overall_signal} / {input_data.consistency_result.overall_status}。",
+        _chapter_3_consistency_rollup_line(input_data.consistency_result, active_missing_evidence),
     ]
     for dimension in input_data.consistency_result.dimensions:
-        lines.append(
-            "- "
-            f"{dimension.dimension}：{dimension.signal} / {dimension.status}，"
-            f"宣称={_nullable_text(dimension.declared)}，实际={_nullable_text(dimension.actual)}，原因={dimension.reason}"
-        )
+        lines.append(_chapter_3_dimension_line(dimension, active_missing_evidence))
+    if active_missing_evidence:
+        lines.append(_chapter_3_next_minimum_validation_line())
     lines.append(_evidence_line(_collect_consistency_anchors(input_data)))
     return "\n".join(lines)
+
+
+def _is_active_fund(structured_data: StructuredFundDataBundle) -> bool:
+    """判断当前渲染输入是否为主动基金。
+
+    Args:
+        structured_data: P1 结构化基金数据包。
+
+    Returns:
+        基金类型为 `active_fund` 时返回 True。
+
+    Raises:
+        无显式抛出。
+    """
+
+    identity = structured_data.basic_identity.value
+    return isinstance(identity, Mapping) and identity.get("classified_fund_type") == "active_fund"
+
+
+def _chapter_3_consistency_summary_line(
+    consistency_result: ConsistencyCheckResult,
+    active_missing_evidence: bool,
+) -> str:
+    """渲染模板第 3 章言行一致性摘要行。
+
+    Args:
+        consistency_result: 言行一致性检查结果。
+        active_missing_evidence: 主动基金第 3 章是否缺少已复核换手率/风格证据。
+
+    Returns:
+        言行一致性摘要 bullet。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if active_missing_evidence:
+        return "- 不能据此判断：言行一致性判断：证据不足，当前缺少已复核的换手率或跨期风格变化证据，不能据此判断风格稳定、风格一致或言行一致。"
+    return f"- 言行一致性判断：{consistency_result.overall_signal} / {consistency_result.overall_status}。"
+
+
+def _chapter_3_style_stability_line(active_missing_evidence: bool) -> str:
+    """渲染模板第 3 章风格稳定性判断行。
+
+    Args:
+        active_missing_evidence: 主动基金第 3 章是否缺少已复核换手率/风格证据。
+
+    Returns:
+        风格稳定性判断 bullet。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if active_missing_evidence:
+        return "- 不能据此判断：风格稳定性判断：证据不足，当前缺少已复核的换手率或跨期风格变化证据，不能据此判断风格稳定、风格一致或言行一致。"
+    return f"- 风格稳定性判断：{_INSUFFICIENT_TEXT}，当前需要多期持仓继续验证。"
+
+
+def _chapter_3_consistency_rollup_line(
+    consistency_result: ConsistencyCheckResult,
+    active_missing_evidence: bool,
+) -> str:
+    """渲染模板第 3 章言行一致性汇总行。
+
+    Args:
+        consistency_result: 言行一致性检查结果。
+        active_missing_evidence: 主动基金第 3 章是否缺少已复核换手率/风格证据。
+
+    Returns:
+        言行一致性汇总 bullet。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if active_missing_evidence:
+        return "- 一致性汇总边界：证据不足，当前只保留宣称策略、持仓快照和利益一致性披露，不输出一致性结论。"
+    return f"- 言行一致性汇总：{consistency_result.overall_signal} / {consistency_result.overall_status}。"
+
+
+def _chapter_3_dimension_line(
+    dimension: ConsistencyDimensionResult,
+    active_missing_evidence: bool,
+) -> str:
+    """渲染模板第 3 章单项言行一致性维度行。
+
+    Args:
+        dimension: 单项一致性维度结果。
+        active_missing_evidence: 主动基金第 3 章是否缺少已复核换手率/风格证据。
+
+    Returns:
+        单项维度 bullet。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if active_missing_evidence:
+        reason = "当前缺少已复核的换手率或跨期风格变化证据，本项只展示宣称与实际输入，不输出一致性结论。"
+        return (
+            "- "
+            f"{dimension.dimension}：证据不足，"
+            f"宣称={_nullable_text(dimension.declared)}，实际={_nullable_text(dimension.actual)}，原因={reason}"
+        )
+    return (
+        "- "
+        f"{dimension.dimension}：{dimension.signal} / {dimension.status}，"
+        f"宣称={_nullable_text(dimension.declared)}，实际={_nullable_text(dimension.actual)}，原因={dimension.reason}"
+    )
+
+
+def _chapter_3_next_minimum_validation_line() -> str:
+    """渲染模板第 3 章下一步最小验证问题。
+
+    Args:
+        无。
+
+    Returns:
+        下一步最小验证问题 bullet。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return (
+        "- 下一步最小验证问题：复核年报§8换手率及跨期行业配置/持仓集中度变化后，"
+        "风格稳定性和言行一致性判断是否仍成立？"
+    )
 
 
 def _render_chapter_4(input_data: TemplateRenderInput) -> str:

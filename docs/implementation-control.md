@@ -5,7 +5,7 @@
 > **设计真源**: `docs/design.md` (v2.2)
 > **规则真源**: `AGENTS.md`
 > **历史快照**: `docs/archive/implementation-control-history-20260525.md`
-> **当前状态**: release maintenance；renderer minimal integration design accepted locally；下一入口为 renderer minimal integration implementation gate（需单独授权）
+> **当前状态**: release maintenance；renderer minimal integration implementation accepted locally；下一入口为 quality gate correctness report-year scope plan/review
 
 ---
 
@@ -25,9 +25,9 @@
 |---|---|
 | Branch | `codex/local-reconciliation` |
 | Current phase | `release maintenance` |
-| Current gate | `renderer minimal integration design accepted locally` |
-| Next entry point | `renderer minimal integration implementation gate; active-fund Chapter 3 missing-reviewed-evidence text only; requires explicit implementation authorization` |
-| Latest accepted gate checkpoint | `renderer minimal integration design local accepted commit; use latest branch HEAD for exact hash` |
+| Current gate | `renderer minimal integration implementation accepted locally` |
+| Next entry point | `quality gate correctness report-year scope plan/review; must use init-agents / multi-agent flow` |
+| Latest accepted gate checkpoint | `renderer minimal integration implementation local accepted commit; use latest branch HEAD for exact hash` |
 | Design truth | `docs/design.md` (v2.2) |
 | Control truth | `docs/implementation-control.md` |
 | Historical control snapshot | `docs/archive/implementation-control-history-20260525.md` |
@@ -163,6 +163,8 @@
 | Renderer minimal integration plan re-review: Hume | `docs/reviews/release-maintenance-renderer-minimal-integration-design-plan-rereview-hume-20260526.md` |
 | Renderer minimal integration plan re-review: Darwin | `docs/reviews/release-maintenance-renderer-minimal-integration-design-plan-rereview-darwin-20260526.md` |
 | Renderer minimal integration controller judgment | `docs/reviews/release-maintenance-renderer-minimal-integration-design-plan-controller-judgment-20260526.md` |
+| Renderer minimal integration implementation evidence | `docs/reviews/release-maintenance-renderer-minimal-integration-implementation-evidence-20260526.md` |
+| Renderer minimal integration implementation controller judgment | `docs/reviews/release-maintenance-renderer-minimal-integration-implementation-controller-judgment-20260526.md` |
 
 ### Current Decisions
 
@@ -217,6 +219,7 @@
 - Fund-layer CHAPTER_CONTRACT sidecar + dev-only report-writing audit implementation is accepted locally. `fund_agent/fund/template/chapter_contract_constraints.py` wraps the existing 0-7 chapter manifest and adds the first material active-fund Chapter 3 turnover/style-consistency evidence requirement; `fund_agent/fund/report_writing_audit.py` consumes explicit `ReportEvidenceBundle` / records / chapter draft surrogates and outputs deterministic issues and summaries. The accepted behavior requires resolvable evidence anchors for satisfying facts, explicit insufficient-evidence wording and next minimum validation question for compatible `data_gap`, fail-closed records input handling, and no renderer/FQ0-FQ6/Service/CLI/Host/Agent/dayu/source-helper integration.
 - Dev-only chapter audit × small baseline evaluation is accepted locally. Gate A confirmed sidecar/audit readiness and clean candidates `004393` / active, `004194` / enhanced index, and `006597` / bond. Gate B ran scratch-only dev-only audit under `/tmp/fund-agent-dev-only-chapter-audit-small-baseline-20260526/`; active-fund Chapter 3 material controls behaved as expected except for one next-question false positive. Gate C fixed that deterministic matcher issue and verified the original scratch controls now pass/fail as intended. Gate D accepts `renderer minimal integration design` as the next gate, but not renderer implementation.
 - Renderer minimal integration design is accepted locally. The future implementation scope is limited to active-fund Chapter 3 missing-reviewed-evidence report text: current renderer inputs do not expose explicit reviewed turnover/style evidence, so the minimal path must treat active-fund Chapter 3 as missing-reviewed-evidence by default, suppress unsupported positive `风格一致` / `言行一致` accepted-conclusion wording, and emit `证据不足` plus the next minimum validation question. This is an accepted future design only; it does not authorize current code implementation, Service/CLI changes, FQ0-FQ6 changes, Host/Agent/dayu, source-helper work, or durable fixture promotion.
+- Renderer minimal integration implementation is accepted locally. `fund_agent/fund/template/renderer.py` now treats active-fund Chapter 3 as missing-reviewed-evidence by default because current renderer inputs do not expose explicit reviewed turnover/style evidence. It emits `证据不足`, preserves C2 required markers under `不能据此判断：`, suppresses unsupported positive `green / aligned` and consistency reason conclusions, emits the next minimum validation question, and keeps non-active Chapter 3 text on the existing path. The implementation uses dev-only writing audit only in tests and does not change Service/CLI, FQ0-FQ6, Host/Agent/dayu, source helpers, `FundDocumentRepository`, or quality gate strategy.
 
 ### Current Non-Goals
 
@@ -229,19 +232,19 @@
 
 ## Next Entry Point
 
-`renderer minimal integration implementation gate`
+`quality gate correctness report-year scope plan/review`
 
-This next gate requires explicit implementation authorization. It is output-changing only for active-fund Chapter 3 missing-reviewed-evidence report text; it must not change default entrypoints, parameters, exit codes, Service control flow, FQ0-FQ6 semantics, or quality-gate policy.
+This next gate must start with Startup Packet replay and `$init-agents` / multi-agent flow. It is a plan/review gate first; implementation may start only after the plan is accepted.
 
 Scope allowed for the next gate:
 
-- Modify `fund_agent/fund/template/renderer.py` only as needed for active-fund Chapter 3 missing-reviewed-evidence fallback text.
-- Modify focused renderer tests and test-only audit validation as required by `docs/reviews/release-maintenance-renderer-minimal-integration-design-plan-controller-judgment-20260526.md`.
-- Preserve the current 8-chapter renderer structure, evidence appendix, `ProgrammaticAuditInput`, ITEM_RULE / preferred_lens behavior, forbidden investment advice validation, FQ0-FQ6 semantics, Service/CLI control flow, Host/Agent/dayu boundary, and source-helper boundary.
-- Treat positive reviewed-evidence rendering as out of scope unless a separate input-contract design gate accepts a new explicit evidence-status input.
-- Keep enhanced-index Chapter 2 and bond Chapter 6 as deferred/config-only until separate material coverage gates.
+- Plan and review a correctness oracle identity-key fix so strict golden-answer comparison is scoped by at least `fund_code + report_year`.
+- Review golden answer schema/build/load, extraction-score correctness compare, quality gate FQ1 behavior, and related tests.
+- Design compatibility for existing 2024 golden data and missing-year golden coverage (`not covered` / warn/info rather than wrong-year mismatch block).
+- Preserve 2024 warn behavior unless a real mismatch is proven.
+- Record checklist run-id naming confusion as P3 observability residual, not this gate's implementation target.
 
-Do not call `audit_report_writing_bundle()` from production renderer, Service, CLI, or quality gate. Do not project `ReportEvidenceBundle` inside renderer. Do not add new Service inputs or `TemplateRenderInput` fields for this slice. Do not modify Chapter 2 / Chapter 6 constraints, default analyze/checklist control flow, `FundDocumentRepository`, PDF/cache/source helpers, downloaders, production extractors, Host/Agent packages, or Dayu runtime.
+Do not modify renderer/report-writing audit, Host/Agent packages, Dayu runtime, `FundDocumentRepository` source strategy, quality gate policy semantics, or checklist run-id naming in the correctness year-scope gate unless a later accepted plan explicitly authorizes that scope.
 
 Do not push, create PR, mark ready, merge, close PRs, edit unrelated PRs, delete branches, or perform additional GitHub mutations without explicit user authorization. Do not modify Service, CLI, renderer, `quality_gate.py`, `extraction_score.py`, tracked reports, fixtures, repository/PDF/cache/source helpers, `FundDocumentRepository`, Host/Agent/dayu, `nav_data`, derived calculations, durable baseline, report-quality validator integration, or product-flow behavior unless a later explicit gate authorizes that scope.
 
@@ -280,7 +283,9 @@ Do not push, create PR, mark ready, merge, close PRs, edit unrelated PRs, delete
 | Renderer minimal integration design | Completed in design/plan/review | Accepted future implementation gate scope: active-fund Chapter 3 missing-reviewed-evidence text only; no Service/CLI/FQ0-FQ6/Host/Agent/dayu/source-helper change |
 | Report-writing audit duplicate occurrence ids | future audit-output ergonomics gate | Current deterministic `issue_id` values are class ids; add draft locator or occurrence ordinal only in a separate output-schema gate |
 | Report-writing audit records-mode breadth | future audit-output ergonomics gate | Current records helper is fail-closed and narrow to active-fund Chapter 3; broaden only after schema/design review |
-| Product renderer emission of active Chapter 3 insufficiency wording | next renderer minimal integration implementation gate | Implement only after explicit user authorization; scope is active-fund Chapter 3 missing-reviewed-evidence text and required test-only audit validation |
+| Product renderer emission of active Chapter 3 insufficiency wording | Completed in renderer minimal integration implementation | Accepted active-fund Chapter 3 missing-reviewed-evidence text-only change with test-only writing audit validation; no Service/CLI/FQ0-FQ6 changes |
+| Quality gate correctness report-year scope | next quality gate correctness plan/review | Fix strict golden-answer/correctness oracle identity from fund-only to at least fund_code + report_year; missing year coverage must not compare against wrong-year golden |
+| Checklist run-id naming observability | future observability gate | Current checklist quality-gate artifact directory may still use `analyze-...`; record as P3 residual, not part of correctness year-scope fix |
 | `nav_data` mapping | future `nav_data` source-contract slice | Keep excluded from initial facts projection until a safe mapping contract exists |
 | Document identity vs fund-type slot membership | Completed in S1 schema draft | S1 split document verification from type-slot membership so `verified_as_annual_report_but_type_gap` cannot become scoring-ready FOF evidence |
 | Review-state terminal states | Completed in S1 schema draft / future implementation validation | S1 defined rejected / deferred / expired semantics; S2 or later implementation must add executable value-domain validation if schema becomes code |
@@ -317,6 +322,7 @@ Do not push, create PR, mark ready, merge, close PRs, edit unrelated PRs, delete
 | `Fund-layer executable CHAPTER_CONTRACT sidecar + dev-only report-writing audit implementation` | accepted locally | `docs/reviews/release-maintenance-chapter-contract-sidecar-audit-implementation-controller-judgment-20260526.md` | Implementation, two code reviews, fixes, re-reviews, targeted re-review, focused tests `19 passed`, adjacent tests `147 passed`, ruff and boundary checks passed; accepted local HEAD recorded by `git log` | duplicate occurrence ids, records-mode breadth, coverage probe blocked by local numpy import issue, future renderer/report-writing emission | `future explicit renderer/report-writing output gate or audit-output ergonomics gate` |
 | `dev-only chapter audit × small baseline corpus evaluation` | accepted locally | `docs/reviews/release-maintenance-dev-only-chapter-audit-small-baseline-closeout-20260526.md` | Gate A readiness, Gate B scratch audit run, Gate C matcher tuning, post-tuning scratch rerun, focused tests `20 passed`, adjacent tests `147 passed`, ruff and diff check passed | Chapter 2/6 deferred config-only, index/QDII fallback-blocked, FOF data-gap, no renderer implementation yet | `renderer minimal integration design gate` |
 | `renderer minimal integration design` | accepted locally | `docs/reviews/release-maintenance-renderer-minimal-integration-design-plan-controller-judgment-20260526.md` | Design plan revised after two BLOCK reviews; both re-reviews `PASS`; `docs/design.md` records accepted future design; no source/test/runtime changes | implementation not authorized yet, positive reviewed-evidence path deferred to input-contract design, Chapter 2/6 deferred, index/QDII/FOF residuals | `renderer minimal integration implementation gate; requires explicit authorization` |
+| `renderer minimal integration implementation` | accepted locally | `docs/reviews/release-maintenance-renderer-minimal-integration-implementation-controller-judgment-20260526.md` | Active-fund Chapter 3 missing-reviewed-evidence text implemented; two code reviews `PASS_WITH_FINDINGS`; accepted fixes applied; focused renderer tests `61 passed`, sidecar/audit `20 passed`, full template `101 passed`, adjacent report-quality `152 passed`, ruff and diff check passed | positive reviewed-evidence path, raw disclosure vs conclusion audit attribution, NAV degradation, trading-advice detector sharing, report-quality wrapper ergonomics | `quality gate correctness report-year scope plan/review` |
 
 ## Historical Evidence Index
 

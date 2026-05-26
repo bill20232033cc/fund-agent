@@ -280,6 +280,7 @@ C2 当前只做确定性 marker / 元数据检查，不调用 LLM，不判断语
 - 输入契约是 `TemplateRenderInput`，显式聚合 `StructuredFundDataBundle`、`RabcAttribution`、`AlphaJudgment`、`ConsistencyCheckResult`、`InvestorExperienceResult`、`RiskCheckResult`、`StressTestResult`、`ChecklistResult`、`FinalJudgmentDecision` 和可选 `current_stage`
 - `TemplateRenderInput.valuation_state_resolution` 是估值状态结构化真源；若自建温度计被调用，模板第 7 章会输出免责声明，附录会渲染非年报 `external_api` 锚点
 - 输出 `report_markdown`，固定包含模板第 0-7 章：投资要点概览、产品本质、R=A+B-C、基金经理画像、投资者获得感、当前阶段、核心风险、最终判断；章节标题由 `CHAPTER_CONTRACT` manifest 提供
+- 主动基金第 3 章当前没有显式 reviewed turnover/style evidence 输入时，renderer 走缺证据降级路径：保留 `言行一致性判断` / `风格稳定性判断` required markers，明示 `证据不足` 和 `不能据此判断风格稳定、风格一致或言行一致`，并输出复核年报§8换手率及跨期行业配置 / 持仓集中度变化的下一步最小验证问题
 - 输出 `audit_input`，可直接传给 `run_programmatic_audit()`，其中携带 `report_markdown`、`chapter_blocks`、`rabc_attributions`、`checklist_result`、`valuation_state_resolution`、selected 判断、derived 判断、判断来源、`item_rule_decisions` 和 `item_rule_audit_context`
 - 输出 `evidence_anchors`，并在报告中渲染章节内 `> 📎 证据：年报{年份}§{章节} ...` 与附录 `证据与出处`
 - 输出 `chapter_blocks`，每个 `RenderedChapterBlock` 包含 `chapter_id`、`title`、`heading`、`markdown`、`body_markdown` 和对应 `ChapterContract`
@@ -425,6 +426,6 @@ C2 当前只做确定性 marker / 元数据检查，不调用 LLM，不判断语
 - 当前 `template/contracts.py` 实现第 0-7 章 CHAPTER_CONTRACT manifest、章节契约读取、基金类型 lens 解析和 fail-closed manifest 校验；不运行时解析 Markdown 注释。
 - 当前 `template/chapter_contract_constraints.py` 实现第 0-7 章默认 wrapper 和首个 material overlay：主动基金第 3 章换手率 / 风格变化证据约束。增强指数第 2 章和债券第 6 章只登记为 deferred `config_only` 要求，不执行材料级审计。
 - 当前 `template/item_rules.py` 实现 ITEM_RULE manifest、显式基金类型/facet 评估、审计上下文类型和唯一段落标记检查；不调用 LLM、不读取基金文档、不接入质量门禁。
-- 当前 `template/renderer.py` 实现 8 章 Markdown 模板渲染，按 CHAPTER_CONTRACT manifest 生成章节标题，按 ITEM_RULE 决策渲染/删除固定段落，并返回可直接用于程序审计的 `ProgrammaticAuditInput` 与 `RenderedChapterBlock` 章节块。
+- 当前 `template/renderer.py` 实现 8 章 Markdown 模板渲染，按 CHAPTER_CONTRACT manifest 生成章节标题，按 ITEM_RULE 决策渲染/删除固定段落，并返回可直接用于程序审计的 `ProgrammaticAuditInput` 与 `RenderedChapterBlock` 章节块；主动基金第 3 章在缺少显式 reviewed turnover/style evidence 输入时输出证据不足降级措辞，不输出风格稳定、风格一致或言行一致正向结论。
 - 当前 `report_writing_audit.py` 实现主动基金第 3 章写作审计：缺少已复核换手率 / 风格变化事实和可解析证据锚点时，禁止稳定性、风格一致或言行一致正向判断；若仅有兼容 `data_gap`，草稿必须明示证据不足和下一步最小验证问题。
 - `parser.py` 已具备 `§3` 定位修复，但真实样本扩展和更多章节/表格抽取仍在后续 slice 完成。
