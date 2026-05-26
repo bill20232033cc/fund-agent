@@ -5,7 +5,7 @@
 > **设计真源**: `docs/design.md` (v2.2)
 > **规则真源**: `AGENTS.md`
 > **历史快照**: `docs/archive/implementation-control-history-20260525.md`
-> **当前状态**: release maintenance；Fund-layer executable CHAPTER_CONTRACT sidecar + dev-only report-writing audit implementation accepted locally；下一入口需单独开 renderer/report-writing output-changing gate 或 audit-output ergonomics gate
+> **当前状态**: release maintenance；dev-only chapter audit × small baseline corpus evaluation accepted locally；下一入口为 renderer minimal integration design gate（design-only，不授权 implementation）
 
 ---
 
@@ -25,9 +25,9 @@
 |---|---|
 | Branch | `codex/local-reconciliation` |
 | Current phase | `release maintenance` |
-| Current gate | `Fund-layer executable CHAPTER_CONTRACT sidecar + dev-only report-writing audit implementation accepted locally` |
-| Next entry point | `future explicit gate: renderer/report-writing output emission or report-writing audit ergonomics; no product-flow integration authorized` |
-| Latest accepted gate checkpoint | `chapter contract sidecar + dev-only audit local accepted HEAD` |
+| Current gate | `dev-only chapter audit × small baseline corpus evaluation accepted locally` |
+| Next entry point | `renderer minimal integration design gate; active-fund Chapter 3 only; no implementation/product-flow integration authorized` |
+| Latest accepted gate checkpoint | `dev-only chapter audit × small baseline local accepted commit; use latest branch HEAD for exact hash` |
 | Design truth | `docs/design.md` (v2.2) |
 | Control truth | `docs/implementation-control.md` |
 | Historical control snapshot | `docs/archive/implementation-control-history-20260525.md` |
@@ -153,6 +153,10 @@
 | Sidecar implementation re-review: GLM | `docs/reviews/release-maintenance-chapter-contract-sidecar-audit-implementation-rereview-glm-20260526.md` |
 | Sidecar implementation targeted re-review: GLM | `docs/reviews/release-maintenance-chapter-contract-sidecar-audit-implementation-rereview2-glm-20260526.md` |
 | Sidecar implementation controller judgment | `docs/reviews/release-maintenance-chapter-contract-sidecar-audit-implementation-controller-judgment-20260526.md` |
+| Dev-only chapter audit readiness | `docs/reviews/release-maintenance-dev-only-chapter-audit-small-baseline-readiness-20260526.md` |
+| Dev-only chapter audit run | `docs/reviews/release-maintenance-dev-only-chapter-audit-small-baseline-run-20260526.md` |
+| Dev-only chapter audit taxonomy decision | `docs/reviews/release-maintenance-dev-only-chapter-audit-small-baseline-taxonomy-decision-20260526.md` |
+| Dev-only chapter audit closeout | `docs/reviews/release-maintenance-dev-only-chapter-audit-small-baseline-closeout-20260526.md` |
 
 ### Current Decisions
 
@@ -205,6 +209,7 @@
 - Chapter contract / report-writing upgrade design plan is accepted locally. Gate A synthesized Top 5 evidence-backed report-quality issues and separated chapter-contract, writing-template, data-extraction, and validator-consumer categories. Gate B accepted a dev-only executable sidecar/wrapper over existing `ChapterContract`, not a replacement and not a parallel truth source. Gate C selected the minimal first implementation slice: Fund-layer executable constraints plus dev-only report-writing audit centered on active-fund Chapter 3 claim safety, with no renderer, Service/CLI, FQ0-FQ6, Host/Agent/dayu, source-helper, product-entrypoint, or default behavior changes.
 - The accepted implementation plan fixes the audit module path to `fund_agent/fund/report_writing_audit.py`, stores `required_evidence`, `allowed_na_reason`, `failure_behavior`, and overlay severity in `fund_agent/fund/template/chapter_contract_constraints.py` as sidecar data, integrates active Chapter 3 gap wording with `ReportDataGapOverride.required_report_wording`, keeps Chapter 2/6 deferred extraction-dependent requirements informational/config-only, targets >=80% per-file coverage for new modules, and treats `scripts/report_quality_eval.py` integration as optional/deferrable.
 - Fund-layer CHAPTER_CONTRACT sidecar + dev-only report-writing audit implementation is accepted locally. `fund_agent/fund/template/chapter_contract_constraints.py` wraps the existing 0-7 chapter manifest and adds the first material active-fund Chapter 3 turnover/style-consistency evidence requirement; `fund_agent/fund/report_writing_audit.py` consumes explicit `ReportEvidenceBundle` / records / chapter draft surrogates and outputs deterministic issues and summaries. The accepted behavior requires resolvable evidence anchors for satisfying facts, explicit insufficient-evidence wording and next minimum validation question for compatible `data_gap`, fail-closed records input handling, and no renderer/FQ0-FQ6/Service/CLI/Host/Agent/dayu/source-helper integration.
+- Dev-only chapter audit × small baseline evaluation is accepted locally. Gate A confirmed sidecar/audit readiness and clean candidates `004393` / active, `004194` / enhanced index, and `006597` / bond. Gate B ran scratch-only dev-only audit under `/tmp/fund-agent-dev-only-chapter-audit-small-baseline-20260526/`; active-fund Chapter 3 material controls behaved as expected except for one next-question false positive. Gate C fixed that deterministic matcher issue and verified the original scratch controls now pass/fail as intended. Gate D accepts `renderer minimal integration design` as the next gate, but not renderer implementation.
 
 ### Current Non-Goals
 
@@ -217,14 +222,18 @@
 
 ## Next Entry Point
 
-No product-flow integration is authorized by the accepted sidecar gate. The next explicit gate should be one of:
+`renderer minimal integration design gate`
 
-- `renderer/report-writing output emission gate`: decide whether and how the current v0 renderer or a future chapter writer should emit active-fund Chapter 3 insufficiency wording; this must be opened separately because it changes user-visible output.
-- `report-writing audit ergonomics gate`: improve occurrence-level issue ids, broader records ingestion, or additional chapter/fund-type constraints without changing product defaults.
+This next gate is design-only unless a later user instruction explicitly opens an implementation gate.
 
-Any next gate must start from `docs/reviews/release-maintenance-chapter-contract-sidecar-audit-implementation-controller-judgment-20260526.md`, `docs/design.md` §3.2, and the current Startup Packet.
+Scope allowed for the next gate:
 
-Do not integrate this dev-only audit into renderer, Service, CLI, FQ0-FQ6, source helpers, `FundDocumentRepository`, Host/Agent/dayu runtime, product entry points, scratch fixture promotion, or product default behavior without a separate reviewed gate.
+- Design the minimal active-fund Chapter 3 renderer/report-writing output contract for insufficiency wording and next minimum validation question.
+- Use `docs/reviews/release-maintenance-dev-only-chapter-audit-small-baseline-closeout-20260526.md` as the direct evidence basis.
+- Preserve the current deterministic MVP and FQ0-FQ6 behavior.
+- Keep enhanced-index Chapter 2 and bond Chapter 6 as deferred/config-only until separate material coverage gates.
+
+Do not implement renderer changes, integrate this dev-only audit into renderer, Service, CLI, FQ0-FQ6, source helpers, `FundDocumentRepository`, Host/Agent/dayu runtime, product entry points, scratch fixture promotion, durable baseline, or product default behavior without a separate reviewed implementation gate.
 
 Do not push, create PR, mark ready, merge, close PRs, edit unrelated PRs, delete branches, or perform additional GitHub mutations without explicit user authorization. Do not modify Service, CLI, renderer, `quality_gate.py`, `extraction_score.py`, tracked reports, fixtures, repository/PDF/cache/source helpers, `FundDocumentRepository`, Host/Agent/dayu, `nav_data`, derived calculations, durable baseline, report-quality validator integration, or product-flow behavior unless a later explicit gate authorizes that scope.
 
@@ -259,6 +268,7 @@ Do not push, create PR, mark ready, merge, close PRs, edit unrelated PRs, delete
 | Renderer/report-writing contract emission | next chapter contract / report-writing design gate | Decide whether active-fund Chapter 3 accepted gap wording requires renderer/report-writing changes; stop if FQ0-FQ6 or default Service/CLI changes would be required without explicit reviewed scope |
 | Chapter contract / report-writing design plan | Completed in design/plan/review | Accepted Fund-layer sidecar + dev-only report-writing audit plan; first implementation slice must not change renderer/product flow |
 | Fund-layer CHAPTER_CONTRACT sidecar + dev-only report-writing audit | Completed in implementation | Accepted Fund-layer sidecar and dev-only audit; no renderer/FQ0-FQ6/Service/CLI/Host/Agent/dayu/source-helper integration |
+| Dev-only chapter audit × small baseline corpus evaluation | Completed in evidence + tuning | Active Chapter 3 audit stable after matcher tuning; renderer minimal integration may proceed to design-only gate |
 | Report-writing audit duplicate occurrence ids | future audit-output ergonomics gate | Current deterministic `issue_id` values are class ids; add draft locator or occurrence ordinal only in a separate output-schema gate |
 | Report-writing audit records-mode breadth | future audit-output ergonomics gate | Current records helper is fail-closed and narrow to active-fund Chapter 3; broaden only after schema/design review |
 | Product renderer emission of active Chapter 3 insufficiency wording | future output-changing renderer/report-writing gate | Open only after dev-only audit evidence proves the exact minimal output change required |
@@ -296,6 +306,7 @@ Do not push, create PR, mark ready, merge, close PRs, edit unrelated PRs, delete
 | `small baseline real evaluation run + first concrete quality fix + dev-only reporting tool` | accepted locally | `docs/reviews/release-maintenance-small-baseline-real-evaluation-controller-judgment-20260526.md`, `docs/reviews/release-maintenance-small-baseline-real-evaluation-final-review-mimo-20260526.md`, `docs/reviews/release-maintenance-small-baseline-real-evaluation-final-review-glm-20260526.md` | AgentCodex evidence / implementation; Gate A validated three clean fund-type slots; Gate B fixed combined JSONL validator ownership; Gate C added maintainer-only script; MiMo final review `PASS`, GLM final review `PASS_WITH_FINDINGS`; focused / adjacent tests, ruff, diff check passed | duplicate-index residual, index/QDII fallback recovery, FOF data-gap, durable baseline blocked, active Chapter 3 renderer/report-writing emission | `escalation readiness check; if complete, chapter contract implementation + report writing quality upgrade design gate` |
 | `chapter contract implementation + report writing quality upgrade design plan` | accepted locally | `docs/reviews/release-maintenance-chapter-contract-writing-upgrade-design-plan-controller-judgment-20260526.md` | Gate A evidence synthesis, Gate B executable contract design, Gate C minimal report-writing upgrade slice, Gate D plan reviews and controller judgment accepted; local commit `aeea2be` | implementation of Fund-layer sidecar and dev-only audit | `Fund-layer executable CHAPTER_CONTRACT sidecar + dev-only report-writing audit implementation gate` |
 | `Fund-layer executable CHAPTER_CONTRACT sidecar + dev-only report-writing audit implementation` | accepted locally | `docs/reviews/release-maintenance-chapter-contract-sidecar-audit-implementation-controller-judgment-20260526.md` | Implementation, two code reviews, fixes, re-reviews, targeted re-review, focused tests `19 passed`, adjacent tests `147 passed`, ruff and boundary checks passed; accepted local HEAD recorded by `git log` | duplicate occurrence ids, records-mode breadth, coverage probe blocked by local numpy import issue, future renderer/report-writing emission | `future explicit renderer/report-writing output gate or audit-output ergonomics gate` |
+| `dev-only chapter audit × small baseline corpus evaluation` | accepted locally | `docs/reviews/release-maintenance-dev-only-chapter-audit-small-baseline-closeout-20260526.md` | Gate A readiness, Gate B scratch audit run, Gate C matcher tuning, post-tuning scratch rerun, focused tests `20 passed`, adjacent tests `147 passed`, ruff and diff check passed | Chapter 2/6 deferred config-only, index/QDII fallback-blocked, FOF data-gap, no renderer implementation yet | `renderer minimal integration design gate` |
 
 ## Historical Evidence Index
 

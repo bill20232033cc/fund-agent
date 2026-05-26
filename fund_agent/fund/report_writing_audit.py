@@ -61,6 +61,7 @@ _NEGATED_STABILITY_PREFIXES = (
     "不能据此判断",
 )
 _QUESTIONING_STABILITY_SUFFIXES = ("是否", "能否")
+_QUESTIONING_STABILITY_PREFIXES = ("下一步最小验证问题", "复核", "验证", "确认")
 _INSUFFICIENT_WORDING = "证据不足"
 _TRADING_ADVICE_PHRASES = (
     "建议买入",
@@ -787,13 +788,62 @@ def _phrase_is_positive_claim(markdown: str, phrase: str) -> bool:
         window_start = max(0, index - 20)
         prefix = markdown[window_start:index]
         if not any(negated in prefix for negated in _NEGATED_STABILITY_PREFIXES):
-            suffix = markdown[index : index + len(phrase) + 8]
-            if any(questioning in suffix for questioning in _QUESTIONING_STABILITY_SUFFIXES):
+            sentence_start = _sentence_window_start(markdown, index)
+            sentence_end = _sentence_window_end(markdown, index)
+            sentence_prefix = markdown[sentence_start:index]
+            sentence_suffix = markdown[index:sentence_end]
+            if (
+                any(questioning in sentence_suffix for questioning in _QUESTIONING_STABILITY_SUFFIXES)
+                and any(
+                    question_prefix in sentence_prefix
+                    for question_prefix in _QUESTIONING_STABILITY_PREFIXES
+                )
+            ):
                 index = markdown.find(phrase, index + len(phrase))
                 continue
             return True
         index = markdown.find(phrase, index + len(phrase))
     return False
+
+
+def _sentence_window_start(markdown: str, index: int) -> int:
+    """查找稳定性短语所在句段的起点。
+
+    Args:
+        markdown: 草稿文本。
+        index: 稳定性短语起始位置。
+
+    Returns:
+        句段起始位置；未找到分隔符时返回 `0`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    separators = ("。", "！", "？", "\n", "；", ";")
+    previous_positions = (markdown.rfind(separator, 0, index) for separator in separators)
+    return max(previous_positions, default=-1) + 1
+
+
+def _sentence_window_end(markdown: str, index: int) -> int:
+    """查找稳定性短语所在句段的终点。
+
+    Args:
+        markdown: 草稿文本。
+        index: 稳定性短语起始位置。
+
+    Returns:
+        句段终点位置；未找到分隔符时返回全文长度。
+
+    Raises:
+        无显式抛出。
+    """
+
+    separators = ("。", "！", "？", "\n", "；", ";")
+    next_positions = tuple(
+        position for separator in separators if (position := markdown.find(separator, index)) >= 0
+    )
+    return min(next_positions, default=len(markdown))
 
 
 def _active_chapter_3_requirement() -> EvidenceRequirement:
