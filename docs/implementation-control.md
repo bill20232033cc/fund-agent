@@ -5,7 +5,7 @@
 > **设计真源**: `docs/design.md` (v2.2)
 > **规则真源**: `AGENTS.md`
 > **历史快照**: `docs/archive/implementation-control-history-20260525.md`
-> **当前状态**: release maintenance；source provenance bounded evidence classification plan accepted locally；下一入口为 source provenance bounded evidence run
+> **当前状态**: release maintenance；source provenance bounded evidence classification accepted locally；下一入口为 source provenance primary-failure-category propagation design gate
 
 ---
 
@@ -25,9 +25,9 @@
 |---|---|
 | Branch | `codex/local-reconciliation` |
 | Current phase | `release maintenance` |
-| Current gate | `source provenance bounded evidence classification plan accepted locally` |
-| Next entry point | `source provenance bounded evidence run; must use init-agents / tmux multi-agent flow` |
-| Latest accepted gate checkpoint | `source provenance bounded evidence classification plan local accepted commit; use latest branch HEAD for exact hash` |
+| Current gate | `source provenance bounded evidence classification accepted locally` |
+| Next entry point | `source provenance primary-failure-category propagation design gate; must use init-agents / tmux multi-agent flow` |
+| Latest accepted gate checkpoint | `source provenance bounded evidence classification local accepted commit; use latest branch HEAD for exact hash` |
 | Design truth | `docs/design.md` (v2.2) |
 | Control truth | `docs/implementation-control.md` |
 | Historical control snapshot | `docs/archive/implementation-control-history-20260525.md` |
@@ -262,6 +262,10 @@
 | source provenance bounded evidence plan re-review: MiMo | `docs/reviews/release-maintenance-source-provenance-bounded-evidence-classification-plan-rereview-mimo-20260527.md` |
 | source provenance bounded evidence plan re-review: GLM | `docs/reviews/release-maintenance-source-provenance-bounded-evidence-classification-plan-rereview-glm-20260527.md` |
 | source provenance bounded evidence plan controller judgment | `docs/reviews/release-maintenance-source-provenance-bounded-evidence-classification-plan-controller-judgment-20260527.md` |
+| source provenance bounded evidence classification | `docs/reviews/release-maintenance-source-provenance-bounded-evidence-classification-20260527.md` |
+| source provenance bounded evidence review: MiMo | `docs/reviews/release-maintenance-source-provenance-bounded-evidence-classification-review-mimo-20260527-061255.md` |
+| source provenance bounded evidence review: GLM | `docs/reviews/release-maintenance-source-provenance-bounded-evidence-classification-review-glm-20260527.md` |
+| source provenance bounded evidence controller judgment | `docs/reviews/release-maintenance-source-provenance-bounded-evidence-classification-controller-judgment-20260527.md` |
 
 ### Current Decisions
 
@@ -332,6 +336,7 @@
 - Source provenance public-output implementation plan is accepted locally. The implementation slice is limited to Fund-owned deterministic projection, `StructuredFundDataBundle.source_provenance` with safe not-applicable default factory, production population from `ParsedAnnualReport.metadata.source`, eight additive snapshot JSONL fields, a separate `## Source Provenance` summary table, and score/FQ0-FQ6 no-change tests. Bounded `110020` / `017641` evidence is deferred until after implementation and code review.
 - Source provenance public-output implementation is accepted locally. `fund_agent/fund/source_provenance.py` now projects public provenance without touching source strategy or helpers; snapshot JSONL and summary expose additive provenance fields, while score/FQ0-FQ6 and default CLI/service behavior remain unchanged. Because current public metadata still lacks `primary_failure_category`, fallback-backed rows normally remain `unknown_public_metadata_absent` until a future metadata schema gate.
 - Source provenance bounded evidence classification plan is accepted locally. The evidence run is bounded to public CLI commands for `110020` / 2024 and `017641` / 2024, must classify from public provenance fields and quality outputs only, and must record `promotion_disposition=not_promoted` for every row. The plan explicitly expects fallback-backed rows to remain `provenance_unknown_public_metadata_absent` under current metadata.
+- Source provenance bounded evidence classification is accepted locally. Public CLI evidence for `110020` / 2024 and `017641` / 2024 completed with both rows classified as `provenance_unknown_public_metadata_absent` and `promotion_disposition=not_promoted`. `110020` quality status is `warn`; `017641` quality status is `block`, but quality cannot become `quality_blocked_after_provenance` until public provenance first proves fallback eligibility. Both remain outside the clean denominator.
 
 ### Current Non-Goals
 
@@ -344,17 +349,17 @@
 
 ## Next Entry Point
 
-`source provenance bounded evidence run`
+`source provenance primary-failure-category propagation design gate`
 
-This next gate must start with Startup Packet replay and `$init-agents` / tmux multi-agent flow. It is an evidence classification gate over the newly implemented public provenance output. It may run bounded public CLI evidence for `110020` / 2024 and `017641` / 2024 only after plan/review handoff confirms command scope.
+This next gate must start with Startup Packet replay and `$init-agents` / tmux multi-agent flow. It is design/plan/review first. It may decide whether and how to persist or publicly project repository primary failure category into source provenance outputs so fallback-backed rows can be classified without private source/cache/PDF inspection.
 
 Scope allowed for the next gate:
 
-- Run only bounded public `fund-analysis extraction-snapshot`, `extraction-score`, and `quality-gate` commands for `110020` / 2024 and `017641` / 2024.
-- Classify each row using public provenance fields plus quality outputs; do not infer fallback eligibility from downstream success.
-- Keep `110020` and `017641` outside the clean denominator unless public provenance explicitly proves eligible fallback and a reviewed evidence gate accepts the classification.
-- Keep durable baseline/golden promotion blocked; FOF, bond baseline-blocking, and reviewed-fact blockers remain open.
-- Keep large outputs in scratch / ignored reports; tracked artifacts should contain summaries and evidence paths only.
+- Design the minimum explicit contract for public `primary_failure_category` propagation or durable absence.
+- Preserve `FundDocumentRepository` source strategy and fail-closed fallback semantics.
+- Keep `fallback_used=true` plus missing category as `unknown_public_metadata_absent`; do not infer eligibility from extraction success, score output, or quality status.
+- Decide implementation file/test/doc scope only after plan review.
+- Keep durable baseline/golden promotion blocked; `110020`, `017641`, FOF, bond baseline-blocking, and reviewed-fact blockers remain open.
 
 Do not enter `golden answer corpus v1` until coverage and source/fund-type blockers are resolved. Do not promote samples to durable baseline or golden answer corpus in this gate. Do not modify code, renderer, FQ0-FQ6 policy, default analyze/checklist behavior, Host/Agent packages, Dayu runtime, `FundDocumentRepository` source strategy, source-helper fallback semantics, extractor logic, `fund_type.py`, or golden/baseline fixtures unless a later accepted plan explicitly expands scope.
 
@@ -403,7 +408,7 @@ Do not push, create PR, mark ready, merge, close PRs, edit unrelated PRs, delete
 | NAV external-data degradation | Completed in core reliability implementation | NAV provider/cache/akshare failures degrade to `NavDataResult(unavailable=True, records=[])`; annual-report repository/PDF/source fail-closed semantics remain outside the catch boundary |
 | Pre-2026 turnover-rate missing semantics | Completed in core reliability implementation | Focused tests lock missing `turnover_rate` as P1 warn/insufficiency, not standalone hard block; FQ4 aggregate missing-rate semantics remain unchanged |
 | Small baseline corpus v1 | Completed in evidence run | Accepted 8 candidate rows / 7 unique fund codes as evidence only. `004393` / 2024 and `004194` / 2024 are quality-gate `warn`; `006597` / 2024 is quality-gate `block`; index/QDII fallback and FOF data-gap remain blockers. No durable baseline or golden promotion. |
-| Index/QDII source recovery for baseline coverage | next bounded provenance evidence classification gate | Public provenance output is now implemented; run bounded evidence for `110020` / `017641` to classify from public provenance fields. No durable baseline/golden promotion in that evidence gate. |
+| Index/QDII source recovery for baseline coverage | next source provenance primary-failure-category propagation design gate | Public provenance evidence classifies `110020` / `017641` as `provenance_unknown_public_metadata_absent`; design whether primary failure category can be safely persisted / projected before any recovery or promotion decision. |
 | FOF coverage / taxonomy | next baseline coverage / taxonomy gate | Find pure `fof_fund` repository-verified candidate, or open a taxonomy gate before counting QDII-FOF attempts as FOF coverage. |
 | `006597` bond quality-gate block | Completed for holdings applicability; future bond/holder/turnover evidence gates remain | `holdings_snapshot` equity-shape false blocker is resolved into `bond_risk_evidence_missing` / `FQ2F/warn`; 006597 now warns rather than blocks for this reason. Do not route to golden while `bond_risk_evidence_missing.baseline_blocking=true` or other P1 gaps remain. |
 | `006597` share_change ambiguity | next share_change focused implementation plan | Evidence classifies this as `extractor_gap`: §10 has multiple share columns and current rules cannot reliably choose the corresponding share class. Plan a narrow fix before implementation. |
@@ -462,6 +467,8 @@ Do not push, create PR, mark ready, merge, close PRs, edit unrelated PRs, delete
 | `coverage replacement / source provenance design` | accepted locally | `docs/reviews/release-maintenance-coverage-replacement-source-provenance-design-plan-controller-judgment-20260527.md` | AgentCodex plan; AgentMiMo and AgentGLM `PASS_WITH_FINDINGS`; plan patched for missing-category conservative semantics, projection ownership, consistency tests, and multi-source chain deferral; both targeted re-reviews `PASS`; `git diff --check` passed | implementation of additive public provenance output, metadata category availability, 110020/017641 evidence rerun, pure FOF residual, bond baseline-blocking residual, golden/baseline blocked | `source provenance public-output implementation gate` |
 | `source provenance public-output implementation plan` | accepted locally | `docs/reviews/release-maintenance-source-provenance-public-output-implementation-plan-controller-judgment-20260527.md` | AgentCodex plan; AgentMiMo/GLM `PASS_WITH_FINDINGS`; plan patched to use safe not-applicable default factory, exact summary format, SnapshotRecord population strategy, deterministic score no-change assertions, and v1 single strategy note; both targeted re-reviews `PASS`; `git diff --check` passed | code implementation and review, metadata category availability, bounded 110020/017641 evidence after implementation, pure FOF residual, bond baseline-blocking residual, golden/baseline blocked | `source provenance public-output implementation` |
 | `source provenance public-output implementation` | accepted locally | `docs/reviews/release-maintenance-source-provenance-public-output-implementation-controller-judgment-20260527.md` | AgentCodex implementation; MiMo review `PASS` with one low deferred finding; GLM review `PASS`; focused tests `67 passed`; adjacent tests `112 passed`; ruff and `git diff --check` passed | bounded 110020/017641 provenance evidence classification, metadata category availability, pure FOF residual, bond baseline-blocking residual, golden/baseline blocked | `post-implementation source provenance bounded evidence classification gate` |
+| `source provenance bounded evidence classification plan` | accepted locally | `docs/reviews/release-maintenance-source-provenance-bounded-evidence-classification-plan-controller-judgment-20260527.md` | AgentCodex plan; AgentMiMo initial/re-review `PASS`; AgentGLM initial `PASS_WITH_FINDINGS`, re-review `PASS`; plan patched for current metadata expectation and `primary_succeeded_no_fallback`; `git diff --check` passed; commit `26e61f7` | evidence run for `110020` / `017641`, metadata category availability, pure FOF residual, bond baseline-blocking residual, golden/baseline blocked | `source provenance bounded evidence run` |
+| `source provenance bounded evidence classification` | accepted locally | `docs/reviews/release-maintenance-source-provenance-bounded-evidence-classification-controller-judgment-20260527.md` | Public CLI snapshot/score/quality-gate ran for `110020` / 2024 and `017641` / 2024; both classify `provenance_unknown_public_metadata_absent`; MiMo review `PASS`; GLM review `PASS`; generated outputs stayed ignored; no promotion | public `primary_failure_category` absent, `017641` quality block, pure FOF residual, bond baseline-blocking residual, golden/baseline blocked | `source provenance primary-failure-category propagation design gate` |
 
 ## Historical Evidence Index
 
