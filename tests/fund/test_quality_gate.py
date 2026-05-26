@@ -359,6 +359,74 @@ def test_run_quality_gate_reports_no_comparable_fields_as_fq0_info(tmp_path: Pat
     assert issue.unavailable_records == 1
 
 
+def test_run_quality_gate_reports_correctness_year_not_covered_as_fq0_info(
+    tmp_path: Path,
+) -> None:
+    """验证当前年份缺 golden 覆盖时是 FQ0/info 而非 FQ1/block。
+
+    Args:
+        tmp_path: pytest 临时目录 fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 year_not_covered 被误阻断时抛出。
+    """
+
+    score_path = tmp_path / "score.json"
+    score_path.write_text(
+        json.dumps(
+            {
+                "field_scores": [_field_score("classified_fund_type", "P0", "pass", 1.0, 1.0)],
+                "fund_scores": [_fund_score("004393", "pass", "pass")],
+                "correctness": {
+                    "status": "available",
+                    "golden_answer_path": "reports/golden-answers/golden-answer.json",
+                    "coverage_scope": "year_not_covered",
+                    "coverage_reason": "year_not_covered",
+                    "coverage_required": False,
+                    "covered_fund_codes": [],
+                    "missing_fund_codes": ["004393"],
+                    "total_records": 2,
+                    "comparable_records": 0,
+                    "mismatched_records": 0,
+                    "unavailable_records": 2,
+                    "record_results": [
+                        {
+                            "fund_code": "004393",
+                            "report_year": 2024,
+                            "field_name": "classified_fund_type",
+                            "sub_field": "fund_type",
+                            "status": "unavailable",
+                            "expected_value": "active_fund",
+                            "actual_value": None,
+                            "normalized_expected": "active_fund",
+                            "normalized_actual": None,
+                            "reason": "snapshot 未显式暴露该 golden 子字段；不进入 correctness 分母。",
+                            "confidence": "high",
+                            "source": "年报2024 §2 page-5",
+                        }
+                    ],
+                },
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    result = run_quality_gate(score_path=score_path)
+    issue = next(issue for issue in result.issues if issue.rule_code == "FQ0")
+
+    assert result.status == GATE_STATUS_PASS
+    assert issue.severity == "info"
+    assert issue.fund_code == "004393"
+    assert issue.reason == "year_not_covered"
+    assert issue.coverage_scope == "year_not_covered"
+    assert issue.comparable_records == 0
+    assert not any(issue.rule_code == "FQ1" for issue in result.issues)
+
+
 def test_run_quality_gate_blocks_app_category_conflict_and_lens_mismatch(tmp_path: Path) -> None:
     """验证 App 类别冲突触发 FQ1，模板契约 mismatch 触发 FQ5。
 

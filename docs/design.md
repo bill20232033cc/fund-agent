@@ -774,6 +774,8 @@ P4-S1: extraction_snapshot  —— 精选基金池字段级抽取快照
 
 Golden Answer pipeline 由预填底稿、人工复核、strict JSON 构建和 correctness 比对组成。当前 quality gate 只消费可复核基准与结构化产物；基准覆盖不足时，应扩大 golden coverage 或降级为显式 residual risk，不能把少量 golden answer 误当全域正确性证明。`tracking_error` 生产 golden rows 只有在 reviewed direct observed disclosure evidence 被接受后才能添加。
 
+当前 correctness oracle 的身份键为 `fund_code + report_year + field_name + sub_field`。strict golden answer JSON 在基金级和记录级都保留 `report_year`；旧版 JSON 若缺少 `report_year`，仅按当前已复核 2024 corpus 兼容加载为 `2024`。同基金不同年份的 golden 记录可以并存，当前快照缺少同年 golden 时归类为 `year_not_covered` 并在 quality gate 中保留为 `FQ0/info`，不得拿其他年份 golden 做 mismatch 比对；同年同字段明确 mismatch 仍归类为 correctness mismatch 并触发 `FQ1/block`。
+
 ### 7.5 ITEM_RULE 合规审计（P12）
 
 **代码实现**：`fund_agent/fund/template/item_rules.py`
@@ -793,6 +795,8 @@ Golden Answer pipeline 由预填底稿、人工复核、strict JSON 构建和 co
 - `fund_agent/fund/golden_answer.py`—— Markdown → JSON 转换与校验
 
 流程：`GoldenPrefillService`（自动预填）→ 人工复核 → `GoldenAnswerService`（转 JSON）→ `extraction_score`（correctness 比对）
+
+strict golden answer 的可比身份键同样使用 `fund_code + report_year + field_name + sub_field`。构建阶段允许同一基金代码跨年份并存，但同一身份键重复会 fail-fast；读取阶段只为旧版缺少年份的当前 2024 corpus 提供兼容默认值，不表示跨年份可复用。
 
 ---
 

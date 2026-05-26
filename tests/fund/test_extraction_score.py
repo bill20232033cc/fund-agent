@@ -13,6 +13,7 @@ from fund_agent.fund.extraction_score import (
     CORRECTNESS_COVERAGE_NO_COMPARABLE_FIELDS,
     CORRECTNESS_COVERAGE_NOT_CONFIGURED,
     CORRECTNESS_COVERAGE_PARTIALLY_COVERED,
+    CORRECTNESS_COVERAGE_YEAR_NOT_COVERED,
     CORRECTNESS_STATUS_AVAILABLE,
     CORRECTNESS_STATUS_UNAVAILABLE,
     CORRECTNESS_UNAVAILABLE,
@@ -866,6 +867,7 @@ def test_compare_snapshot_correctness_perfect_match_and_skipped_denominator(tmp_
     assert summary.covered_fund_codes == ("004393",)
     assert summary.missing_fund_codes == ()
     assert summary.coverage_required is False
+    assert {row.report_year for row in summary.record_results} == {2024}
     statuses = {(row.field_name, row.sub_field): row.status for row in summary.record_results}
     assert statuses[("classified_fund_type", "fund_type")] == CORRECTNESS_MATCH
     assert statuses[("basic_identity", "fund_name")] == CORRECTNESS_MATCH
@@ -1002,6 +1004,47 @@ def test_compare_snapshot_correctness_marks_current_fund_not_covered(tmp_path: P
     assert summary.coverage_reason == CORRECTNESS_COVERAGE_FUND_NOT_COVERED
     assert summary.covered_fund_codes == ()
     assert summary.missing_fund_codes == ("000216",)
+
+
+def test_compare_snapshot_correctness_marks_current_year_not_covered(
+    tmp_path: Path,
+) -> None:
+    """验证同基金不同年报年份不会误用其它年份 golden answer。
+
+    Args:
+        tmp_path: pytest 临时目录 fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 2025 snapshot 被 2024 golden 误杀时抛出。
+    """
+
+    golden_path = _golden_answer_json(tmp_path, expected_fund_type="active_fund")
+    records = [
+        _snapshot_record(
+            "profile",
+            "classified_fund_type",
+            report_year=2025,
+            value_present=True,
+            anchor_present=True,
+            classified_fund_type="index_fund",
+            comparable_values={"fund_type": "index_fund"},
+        )
+    ]
+
+    summary = compare_snapshot_correctness(records=records, golden_answer_path=golden_path)
+
+    assert summary.status == CORRECTNESS_STATUS_AVAILABLE
+    assert summary.coverage_scope == CORRECTNESS_COVERAGE_YEAR_NOT_COVERED
+    assert summary.coverage_reason == CORRECTNESS_COVERAGE_YEAR_NOT_COVERED
+    assert summary.comparable_records == 0
+    assert summary.mismatched_records == 0
+    assert summary.covered_fund_codes == ()
+    assert summary.missing_fund_codes == ("004393",)
+    assert {row.report_year for row in summary.record_results} == {2024}
+    assert all(row.status == CORRECTNESS_UNAVAILABLE for row in summary.record_results)
 
 
 def test_compare_snapshot_correctness_marks_current_fund_no_comparable_fields(
@@ -1701,6 +1744,7 @@ def _snapshot_record(
     field_name: str,
     *,
     fund_code: str = "004393",
+    report_year: int = 2024,
     app_category: str = "国内股票类",
     value_present: bool,
     anchor_present: bool,
@@ -1713,6 +1757,7 @@ def _snapshot_record(
         field_group: 字段组。
         field_name: 字段名。
         fund_code: 基金代码。
+        report_year: 年报年份。
         app_category: App 类别。
         value_present: 是否存在字段值。
         anchor_present: 是否存在证据锚点。
@@ -1730,6 +1775,7 @@ def _snapshot_record(
         "fund_code": fund_code,
         "fund_name": f"测试基金{fund_code}",
         "app_category": app_category,
+        "report_year": report_year,
         "classified_fund_type": classified_fund_type,
         "field_group": field_group,
         "field_name": field_name,
@@ -1764,6 +1810,7 @@ def _golden_answer_json(
     records = [
         {
             "fund_code": "004393",
+            "report_year": 2024,
             "field_name": "classified_fund_type",
             "sub_field": "fund_type",
             "expected_value": expected_fund_type,
@@ -1772,6 +1819,7 @@ def _golden_answer_json(
         },
         {
             "fund_code": "004393",
+            "report_year": 2024,
             "field_name": "basic_identity",
             "sub_field": "fund_name",
             "expected_value": "测试基金",
@@ -1787,7 +1835,7 @@ def _golden_answer_json(
 def _golden_answer_json_from_records(
     tmp_path: Path,
     *,
-    records: list[dict[str, str]],
+    records: list[dict[str, object]],
     skipped_fields: list[str] | None = None,
 ) -> Path:
     """按指定记录写入测试用 strict golden answer JSON。
@@ -1806,6 +1854,7 @@ def _golden_answer_json_from_records(
 
     path = tmp_path / "golden-answer.json"
     fund_code = records[0]["fund_code"] if records else "004393"
+    report_year = int(records[0].get("report_year", "2024")) if records else 2024
     path.write_text(
         json.dumps(
             {
@@ -1816,6 +1865,7 @@ def _golden_answer_json_from_records(
                 "funds": [
                     {
                         "fund_code": fund_code,
+                        "report_year": report_year,
                         "title": "测试基金（国内股票类）",
                         "records": records,
                         "skipped_fields": skipped_fields or [],

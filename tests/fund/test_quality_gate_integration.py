@@ -90,6 +90,47 @@ def test_run_quality_gate_for_bundle_selected_member_without_golden_is_fq0_info(
     assert fq0_issue.coverage_scope == "fund_not_covered"
 
 
+def test_run_quality_gate_for_bundle_uses_bundle_report_year_for_correctness(
+    tmp_path: Path,
+) -> None:
+    """验证 2025 bundle 不会被 2024 golden answer 误判为 FQ1 mismatch。
+
+    Args:
+        tmp_path: pytest 临时目录 fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 report_year 未从 bundle 传播到 correctness 时抛出。
+    """
+
+    source_csv = _source_csv(tmp_path, "110011")
+    golden_path = _golden_answer_json(tmp_path, fund_code="110011")
+
+    result = run_quality_gate_for_bundle(
+        bundle=replace(_bundle(), report_year=2025),
+        source_csv=source_csv,
+        output_dir=tmp_path / "gate-run",
+        run_id="fixture-run",
+        golden_answer_path=golden_path,
+    )
+
+    score_payload = json.loads(result.score_result.score_json_path.read_text(encoding="utf-8"))
+    fq0_issue = next(
+        issue for issue in result.quality_gate_result.issues if issue.rule_code == "FQ0"
+    )
+
+    assert result.not_run_reason is None
+    assert result.quality_gate_result.status == "pass"
+    assert score_payload["correctness"]["coverage_scope"] == "year_not_covered"
+    assert score_payload["correctness"]["comparable_records"] == 0
+    assert score_payload["correctness"]["mismatched_records"] == 0
+    assert fq0_issue.reason == "year_not_covered"
+    assert fq0_issue.coverage_scope == "year_not_covered"
+    assert not any(issue.rule_code == "FQ1" for issue in result.quality_gate_result.issues)
+
+
 def test_run_quality_gate_for_bundle_not_run_when_fund_absent(tmp_path: Path) -> None:
     """验证基金不在精选池时不伪造 App 类别且不写运行产物。
 
@@ -196,6 +237,7 @@ def _golden_answer_json(tmp_path: Path, *, fund_code: str) -> Path:
     records = [
         {
             "fund_code": fund_code,
+            "report_year": 2024,
             "field_name": "classified_fund_type",
             "sub_field": "fund_type",
             "expected_value": "active_fund",
@@ -214,6 +256,7 @@ def _golden_answer_json(tmp_path: Path, *, fund_code: str) -> Path:
                 "funds": [
                     {
                         "fund_code": fund_code,
+                        "report_year": 2024,
                         "title": "测试基金（国内股票类）",
                         "records": records,
                         "skipped_fields": [],

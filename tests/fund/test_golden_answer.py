@@ -159,9 +159,11 @@ def test_build_golden_answer_json_writes_machine_readable_payload(tmp_path) -> N
     assert result.record_count == 1
     assert result.skipped_count == 1
     assert payload["schema_version"] == "fund-agent.golden-answer.v1"
+    assert payload["funds"][0]["report_year"] == 2024
     assert payload["records"] == [
         {
             "fund_code": "004393",
+            "report_year": 2024,
             "field_name": "basic_identity",
             "sub_field": "fund_name",
             "expected_value": "测试基金",
@@ -203,8 +205,159 @@ def test_load_golden_answer_json_reuses_strict_schema(tmp_path) -> None:
     funds = load_golden_answer_json(output_path)
 
     assert len(funds) == 1
+    assert funds[0].report_year == 2024
+    assert funds[0].records[0].report_year == 2024
     assert funds[0].records[0].field_name == "classified_fund_type"
     assert funds[0].records[0].expected_value == "active_fund"
+
+
+def test_load_golden_answer_json_defaults_legacy_report_year_to_2024(tmp_path: Path) -> None:
+    """验证 legacy JSON 缺少 report_year 时按当前 2024 golden 语义加载。
+
+    Args:
+        tmp_path: pytest 临时目录 fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 legacy report_year 兼容规则失效时抛出。
+    """
+
+    path = tmp_path / "legacy-golden-answer.json"
+    path.write_text(
+        json.dumps(
+            {
+                "schema_version": "fund-agent.golden-answer.v1",
+                "source_markdown": "fixture.md",
+                "fund_count": 1,
+                "record_count": 1,
+                "funds": [
+                    {
+                        "fund_code": "004393",
+                        "title": "测试基金（国内股票类）",
+                        "records": [
+                            {
+                                "fund_code": "004393",
+                                "field_name": "classified_fund_type",
+                                "sub_field": "fund_type",
+                                "expected_value": "active_fund",
+                                "confidence": "high",
+                                "source": "年报2024 §2 page-5",
+                            }
+                        ],
+                        "skipped_fields": [],
+                    }
+                ],
+                "records": [],
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    funds = load_golden_answer_json(path)
+
+    assert funds[0].report_year == 2024
+    assert funds[0].records[0].report_year == 2024
+
+
+def test_load_golden_answer_json_rejects_duplicate_same_year_identity(
+    tmp_path: Path,
+) -> None:
+    """验证同基金同年份同字段子键重复会被拒绝。
+
+    Args:
+        tmp_path: pytest 临时目录 fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当重复 identity 未被拒绝时抛出。
+    """
+
+    duplicate_record = {
+        "fund_code": "004393",
+        "report_year": 2024,
+        "field_name": "classified_fund_type",
+        "sub_field": "fund_type",
+        "expected_value": "active_fund",
+        "confidence": "high",
+        "source": "年报2024 §2 page-5",
+    }
+    path = tmp_path / "duplicate-golden-answer.json"
+    path.write_text(
+        json.dumps(
+            _golden_answer_payload(
+                funds=[
+                    _golden_answer_fund_payload(
+                        fund_code="004393",
+                        report_year=2024,
+                        records=[duplicate_record, dict(duplicate_record)],
+                    )
+                ]
+            ),
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(GoldenAnswerValidationError) as exc_info:
+        load_golden_answer_json(path)
+
+    assert "重复 golden answer 行 004393 2024 classified_fund_type.fund_type" in str(
+        exc_info.value
+    )
+
+
+def test_load_golden_answer_json_allows_same_fund_code_different_report_year(
+    tmp_path: Path,
+) -> None:
+    """验证同一 fund_code 可在不同 report_year 下独立出现。
+
+    Args:
+        tmp_path: pytest 临时目录 fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当跨年份同基金 golden 被误拒时抛出。
+    """
+
+    path = tmp_path / "multi-year-golden-answer.json"
+    path.write_text(
+        json.dumps(
+            _golden_answer_payload(
+                funds=[
+                    _golden_answer_fund_payload(
+                        fund_code="004393",
+                        report_year=2024,
+                        expected_value="active_fund",
+                    ),
+                    _golden_answer_fund_payload(
+                        fund_code="004393",
+                        report_year=2025,
+                        expected_value="enhanced_index",
+                    ),
+                ]
+            ),
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    funds = load_golden_answer_json(path)
+
+    assert [(fund.fund_code, fund.report_year) for fund in funds] == [
+        ("004393", 2024),
+        ("004393", 2025),
+    ]
+    assert [fund.records[0].expected_value for fund in funds] == [
+        "active_fund",
+        "enhanced_index",
+    ]
 
 
 def test_reviewed_golden_answer_contains_only_planned_p16_s2_index_profile_rows() -> None:
@@ -271,4 +424,74 @@ def test_reviewed_golden_answer_preserves_001548_index_profile_rows() -> None:
         "benchmark_identity_status": "identified",
         "benchmark_index_name": "上证50指数",
         "source_tier": "benchmark_context",
+    }
+
+
+def _golden_answer_payload(*, funds: list[dict[str, object]]) -> dict[str, object]:
+    """构造测试用 golden answer 顶层 payload。
+
+    Args:
+        funds: 基金级 payload 列表。
+
+    Returns:
+        strict golden answer JSON payload。
+
+    Raises:
+        无显式抛出。
+    """
+
+    records: list[object] = []
+    for fund in funds:
+        fund_records = fund.get("records")
+        if isinstance(fund_records, list):
+            records.extend(fund_records)
+    return {
+        "schema_version": "fund-agent.golden-answer.v1",
+        "source_markdown": "fixture.md",
+        "fund_count": len(funds),
+        "record_count": len(records),
+        "funds": funds,
+        "records": records,
+    }
+
+
+def _golden_answer_fund_payload(
+    *,
+    fund_code: str,
+    report_year: int,
+    expected_value: str = "active_fund",
+    records: list[dict[str, object]] | None = None,
+) -> dict[str, object]:
+    """构造测试用单基金 golden answer payload。
+
+    Args:
+        fund_code: 基金代码。
+        report_year: 年报年份。
+        expected_value: 默认基金类型期望值。
+        records: 显式记录列表；为空时生成一条 classified_fund_type。
+
+    Returns:
+        单基金 payload。
+
+    Raises:
+        无显式抛出。
+    """
+
+    resolved_records = records or [
+        {
+            "fund_code": fund_code,
+            "report_year": report_year,
+            "field_name": "classified_fund_type",
+            "sub_field": "fund_type",
+            "expected_value": expected_value,
+            "confidence": "high",
+            "source": f"年报{report_year} §2 page-5",
+        }
+    ]
+    return {
+        "fund_code": fund_code,
+        "report_year": report_year,
+        "title": "测试基金（国内股票类）",
+        "records": resolved_records,
+        "skipped_fields": [],
     }

@@ -124,8 +124,8 @@ chapter_lens = resolve_preferred_lens(chapter_id=2, fund_type="active_fund")
 - 同时输出单基金 `fund_quality`，从 snapshot 同源派生 App 类别匹配、`preferred_lens` 可解析状态、字段缺失率和缺失 P0/P1 字段；同一基金多行 `app_category` 或 `classified_fund_type` 冲突时显式标记，不取第一行静默通过
 - 显式提供 `errors_path` 时，同时输出 `failed_funds`，把 `errors.jsonl` 中完全抽取失败的基金带入后续 gate accounting
 - 阈值显式配置：pass 为 coverage/traceability 均不低于 90%，watch 为均不低于 70%，其余 fail
-- 可选读取 strict `golden-answer.json` 执行 correctness，比对范围只包括 snapshot `comparable_values` 显式暴露的可比 golden 子字段；只有白名单字段/子字段被 snapshot 明确标记缺失时才进入 mismatch，skipped 和 unavailable 不进分母
-- `CorrectnessSummary.status` 保持 `available / unavailable` 粗粒度状态，`coverage_scope` 额外区分 `not_configured / fund_not_covered / no_comparable_fields / partially_covered / covered`，并输出 `covered_fund_codes`、`missing_fund_codes`、`coverage_reason` 和 `coverage_required=false`
+- 可选读取 strict `golden-answer.json` 执行 correctness，比对 identity 为 `fund_code + report_year + field_name + sub_field`；比对范围只包括 snapshot `comparable_values` 显式暴露的可比 golden 子字段；只有白名单字段/子字段被同年 snapshot 明确标记缺失时才进入 mismatch，skipped 和 unavailable 不进分母
+- `CorrectnessSummary.status` 保持 `available / unavailable` 粗粒度状态，`coverage_scope` 额外区分 `not_configured / fund_not_covered / year_not_covered / no_comparable_fields / partially_covered / covered`，并输出 `covered_fund_codes`、`missing_fund_codes`、`coverage_reason` 和 `coverage_required=false`
 - 输出 `score.json`、`score.md` 和 `golden_set.json`
 
 `run_golden_prefill()` 返回 `GoldenPrefillResult`，当前用于生成 correctness golden answer 人工复核底稿：
@@ -141,8 +141,8 @@ chapter_lens = resolve_preferred_lens(chapter_id=2, fund_type="active_fund")
 - 校验有效行必须包含 `expected_value`、`confidence`、`source`
 - `confidence` 只允许 `high / medium / low`
 - `source` 必须是可复核来源，不能保留 `manual_required`
-- 输出 `fund-agent.golden-answer.v1` JSON，供 correctness 自动比对使用
-- `load_golden_answer_json()` 读取同一 strict JSON schema，供 Fund 内部比对复用，不重新解析 Markdown
+- 输出 `fund-agent.golden-answer.v1` JSON，包含基金级和记录级 `report_year`，供 correctness 自动比对使用
+- `load_golden_answer_json()` 读取同一 strict JSON schema，供 Fund 内部比对复用，不重新解析 Markdown；legacy JSON 缺少 `report_year` 时按当前已复核 2024 golden corpus 加载为 `2024`
 
 `run_quality_gate()` 返回 `QualityGateResult`，当前用于 P4-S4 报告质量 gate：
 
@@ -150,7 +150,7 @@ chapter_lens = resolve_preferred_lens(chapter_id=2, fund_type="active_fund")
 - P0 字段 `fail` 触发 `block`
 - 单基金 `fund_scores` 中 P0 `fail` 触发带 `fund_code` 的 `block`
 - P1 字段 `fail` 触发 `warn`
-- correctness 尚未接入、当前基金缺 strict golden 覆盖或当前基金有 golden 记录但无可比字段时只记录 `FQ0/info`，metadata 包含 `reason`、`coverage_scope`、`fund_code` 和记录计数
+- correctness 尚未接入、当前基金缺 strict golden 覆盖、当前基金有 golden 但当前 `report_year` 未覆盖，或当前基金有 golden 记录但无可比字段时只记录 `FQ0/info`，metadata 包含 `reason`、`coverage_scope`、`fund_code` 和记录计数
 - correctness 可用且出现明确 mismatch 时触发 `FQ1/block`
 - `fund_quality` 中 App 类别与基金类型明确冲突时触发 `FQ1/block`
 - `fund_quality.missing_field_rate` 达到 20% 触发 `FQ4/warn`，达到 35% 触发 `FQ4/block`

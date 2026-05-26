@@ -83,6 +83,7 @@ CORRECTNESS_STATUS_AVAILABLE: Final[str] = "available"
 CORRECTNESS_STATUS_UNAVAILABLE: Final[str] = "unavailable"
 CORRECTNESS_COVERAGE_NOT_CONFIGURED: Final[str] = "not_configured"
 CORRECTNESS_COVERAGE_FUND_NOT_COVERED: Final[str] = "fund_not_covered"
+CORRECTNESS_COVERAGE_YEAR_NOT_COVERED: Final[str] = "year_not_covered"
 CORRECTNESS_COVERAGE_NO_COMPARABLE_FIELDS: Final[str] = "no_comparable_fields"
 CORRECTNESS_COVERAGE_PARTIALLY_COVERED: Final[str] = "partially_covered"
 CORRECTNESS_COVERAGE_COVERED: Final[str] = "covered"
@@ -314,6 +315,7 @@ class CorrectnessRecordResult:
 
     Attributes:
         fund_code: 基金代码。
+        report_year: 年报年份。
         field_name: golden answer 字段名。
         sub_field: golden answer 子字段。
         status: `match / mismatch / unavailable`。
@@ -327,6 +329,7 @@ class CorrectnessRecordResult:
     """
 
     fund_code: str
+    report_year: int
     field_name: str
     sub_field: str
     status: str
@@ -869,7 +872,7 @@ def compare_snapshot_correctness(
     unavailable_records = sum(1 for row in record_results if row.status == CORRECTNESS_UNAVAILABLE)
     skipped_records = sum(len(fund.skipped_fields) for fund in golden_funds)
     coverage_scope, coverage_reason, covered_fund_codes, missing_fund_codes = _correctness_coverage(
-        snapshot_fund_codes=_snapshot_fund_codes(records),
+        snapshot_fund_identities=_snapshot_fund_identities(records),
         golden_funds=golden_funds,
         record_results=record_results,
     )
@@ -1040,6 +1043,32 @@ def _required_text(record: Mapping[str, object], key: str) -> str:
     if not text:
         raise ValueError(f"snapshot 记录字段不能为空：{key}")
     return text
+
+
+def _required_snapshot_int(record: Mapping[str, object], key: str) -> int:
+    """读取 snapshot 记录中的必需整数字段。
+
+    Args:
+        record: 单条 snapshot 记录。
+        key: 字段名。
+
+    Returns:
+        整数字段值。
+
+    Raises:
+        ValueError: 字段缺失、为空或不是整数时抛出。
+    """
+
+    value = record.get(key)
+    if value is None:
+        raise ValueError(f"snapshot 记录缺少字段：{key}")
+    if isinstance(value, bool):
+        raise ValueError(f"snapshot 记录字段必须是整数：{key}")
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str) and value.strip().isdigit():
+        return int(value.strip())
+    raise ValueError(f"snapshot 记录字段必须是整数：{key}")
 
 
 def _truthy_bool(value: object) -> bool:
@@ -1730,6 +1759,29 @@ def _optional_rate(numerator: int, denominator: int) -> float | None:
     return numerator / denominator
 
 
+def _snapshot_fund_identities(records: Sequence[Mapping[str, object]]) -> tuple[tuple[str, int], ...]:
+    """读取当前 snapshot run 中涉及的基金代码和年报年份。
+
+    Args:
+        records: P4-S1 snapshot 记录。
+
+    Returns:
+        去重排序后的 `(fund_code, report_year)`。
+
+    Raises:
+        ValueError: snapshot 记录缺少 `fund_code` 或 `report_year` 时抛出。
+    """
+
+    return tuple(
+        sorted(
+            {
+                (_required_text(record, "fund_code"), _required_snapshot_int(record, "report_year"))
+                for record in records
+            }
+        )
+    )
+
+
 def _snapshot_fund_codes(records: Sequence[Mapping[str, object]]) -> tuple[str, ...]:
     """读取当前 snapshot run 中涉及的基金代码。
 
@@ -1748,7 +1800,7 @@ def _snapshot_fund_codes(records: Sequence[Mapping[str, object]]) -> tuple[str, 
 
 def _correctness_coverage(
     *,
-    snapshot_fund_codes: tuple[str, ...],
+    snapshot_fund_identities: tuple[tuple[str, int], ...],
     golden_funds: Sequence[GoldenAnswerFund],
     record_results: Sequence[CorrectnessRecordResult],
 ) -> tuple[str, str, tuple[str, ...], tuple[str, ...]]:
@@ -1759,7 +1811,7 @@ def _correctness_coverage(
     correctness oracle 边界。
 
     Args:
-        snapshot_fund_codes: 当前 run 中的基金代码。
+        snapshot_fund_identities: 当前 run 中的基金代码和年报年份。
         golden_funds: strict golden answer 中的基金集合。
         record_results: 字段级 correctness 比对结果。
 
@@ -1770,27 +1822,39 @@ def _correctness_coverage(
         无显式抛出。
     """
 
-    if not snapshot_fund_codes:
+    if not snapshot_fund_identities:
         return (
             CORRECTNESS_COVERAGE_FUND_NOT_COVERED,
             CORRECTNESS_COVERAGE_FUND_NOT_COVERED,
             (),
             (),
         )
+    snapshot_fund_codes = tuple(sorted({fund_code for fund_code, _ in snapshot_fund_identities}))
     golden_codes = {fund.fund_code for fund in golden_funds}
+    golden_identities = {(fund.fund_code, fund.report_year) for fund in golden_funds}
+    target_identities = set(snapshot_fund_identities)
     comparable_codes = {
         row.fund_code
         for row in record_results
-        if row.fund_code in snapshot_fund_codes
+        if (row.fund_code, row.report_year) in target_identities
         and row.status in {CORRECTNESS_MATCH, CORRECTNESS_MISMATCH}
     }
-    target_results = [row for row in record_results if row.fund_code in snapshot_fund_codes]
+    target_results = [
+        row for row in record_results if (row.fund_code, row.report_year) in target_identities
+    ]
     covered_fund_codes = tuple(sorted(comparable_codes))
     missing_fund_codes = tuple(code for code in snapshot_fund_codes if code not in comparable_codes)
     if all(code not in golden_codes for code in snapshot_fund_codes):
         return (
             CORRECTNESS_COVERAGE_FUND_NOT_COVERED,
             CORRECTNESS_COVERAGE_FUND_NOT_COVERED,
+            (),
+            snapshot_fund_codes,
+        )
+    if not any(identity in golden_identities for identity in snapshot_fund_identities):
+        return (
+            CORRECTNESS_COVERAGE_YEAR_NOT_COVERED,
+            CORRECTNESS_COVERAGE_YEAR_NOT_COVERED,
             (),
             snapshot_fund_codes,
         )
@@ -1825,39 +1889,46 @@ def _correctness_coverage(
 
 def _snapshot_actual_index(
     records: Sequence[Mapping[str, object]],
-) -> dict[tuple[str, str, str], str | None]:
+) -> dict[tuple[str, int, str, str], str | None]:
     """构造 snapshot 可比字段索引。
 
     Args:
         records: P4-S1 snapshot 记录。
 
     Returns:
-        `(fund_code, field_name, sub_field)` 到实际值的索引；值为 `None` 表示字段明确缺失。
+        `(fund_code, report_year, field_name, sub_field)` 到实际值的索引；
+        值为 `None` 表示字段明确缺失。
 
     Raises:
         ValueError: snapshot 记录缺少 `fund_code` 或 `field_name` 时抛出。
     """
 
-    actual_index: dict[tuple[str, str, str], str | None] = {}
+    actual_index: dict[tuple[str, int, str, str], str | None] = {}
     for record in records:
         fund_code = _required_text(record, "fund_code")
+        report_year = _required_snapshot_int(record, "report_year")
         field_name = _required_text(record, "field_name")
         has_explicit_comparable_values = "comparable_values" in record
         if has_explicit_comparable_values:
             for sub_field in COMPARABLE_SUB_FIELDS_BY_FIELD.get(field_name, ()):
-                actual_index.setdefault((fund_code, field_name, sub_field), None)
+                actual_index.setdefault((fund_code, report_year, field_name, sub_field), None)
         for sub_field, value in _record_comparable_values(record).items():
             if not _is_comparable_sub_field(field_name, sub_field):
                 continue
             actual_value = _optional_scalar_text(value)
             if actual_value is not None:
-                actual_index[(fund_code, field_name, sub_field)] = actual_value
+                actual_index[(fund_code, report_year, field_name, sub_field)] = actual_value
         if field_name == CLASSIFIED_FUND_TYPE_FIELD:
             actual_value = _optional_record_text(record, CLASSIFIED_FUND_TYPE_FIELD)
             if not _truthy_bool(record.get("value_present")):
                 actual_value = None
             actual_index.setdefault(
-                (fund_code, CLASSIFIED_FUND_TYPE_FIELD, CLASSIFIED_FUND_TYPE_SUB_FIELD),
+                (
+                    fund_code,
+                    report_year,
+                    CLASSIFIED_FUND_TYPE_FIELD,
+                    CLASSIFIED_FUND_TYPE_SUB_FIELD,
+                ),
                 actual_value,
             )
     return actual_index
@@ -1865,7 +1936,7 @@ def _snapshot_actual_index(
 
 def _compare_golden_funds(
     golden_funds: Sequence[GoldenAnswerFund],
-    actual_index: Mapping[tuple[str, str, str], str | None],
+    actual_index: Mapping[tuple[str, int, str, str], str | None],
 ) -> list[CorrectnessRecordResult]:
     """对 golden answer 基金集合执行字段级 correctness 比对。
 
@@ -1889,7 +1960,7 @@ def _compare_golden_funds(
 
 def _compare_golden_record(
     record: GoldenAnswerRecord,
-    actual_index: Mapping[tuple[str, str, str], str | None],
+    actual_index: Mapping[tuple[str, int, str, str], str | None],
 ) -> CorrectnessRecordResult:
     """对单条 golden answer 记录执行 correctness 比对。
 
@@ -1905,6 +1976,7 @@ def _compare_golden_record(
     """
 
     fund_code = record.fund_code
+    report_year = record.report_year
     field_name = record.field_name
     sub_field = record.sub_field
     expected_value = record.expected_value
@@ -1915,10 +1987,11 @@ def _compare_golden_record(
         field_name=field_name,
         sub_field=sub_field,
     )
-    key = (fund_code, field_name, sub_field)
+    key = (fund_code, report_year, field_name, sub_field)
     if key not in actual_index:
         return CorrectnessRecordResult(
             fund_code=fund_code,
+            report_year=report_year,
             field_name=field_name,
             sub_field=sub_field,
             status=CORRECTNESS_UNAVAILABLE,
@@ -1934,6 +2007,7 @@ def _compare_golden_record(
     if actual_value is None:
         return CorrectnessRecordResult(
             fund_code=fund_code,
+            report_year=report_year,
             field_name=field_name,
             sub_field=sub_field,
             status=CORRECTNESS_MISMATCH,
@@ -1958,6 +2032,7 @@ def _compare_golden_record(
     )
     return CorrectnessRecordResult(
         fund_code=fund_code,
+        report_year=report_year,
         field_name=field_name,
         sub_field=sub_field,
         status=status,

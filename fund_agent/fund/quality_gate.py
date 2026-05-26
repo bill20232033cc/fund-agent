@@ -27,6 +27,7 @@ CORRECTNESS_STATUS_AVAILABLE: Final[str] = "available"
 CORRECTNESS_STATUS_UNAVAILABLE: Final[str] = "unavailable"
 CORRECTNESS_COVERAGE_NOT_CONFIGURED: Final[str] = "not_configured"
 CORRECTNESS_COVERAGE_FUND_NOT_COVERED: Final[str] = "fund_not_covered"
+CORRECTNESS_COVERAGE_YEAR_NOT_COVERED: Final[str] = "year_not_covered"
 CORRECTNESS_COVERAGE_NO_COMPARABLE_FIELDS: Final[str] = "no_comparable_fields"
 CORRECTNESS_COVERAGE_PARTIALLY_COVERED: Final[str] = "partially_covered"
 CORRECTNESS_COVERAGE_COVERED: Final[str] = "covered"
@@ -405,6 +406,7 @@ def _correctness_available_coverage_issue(
         )
     if coverage_scope in {
         CORRECTNESS_COVERAGE_FUND_NOT_COVERED,
+        CORRECTNESS_COVERAGE_YEAR_NOT_COVERED,
         CORRECTNESS_COVERAGE_NO_COMPARABLE_FIELDS,
     }:
         missing_codes = _optional_correctness_text_list(correctness, "missing_fund_codes")
@@ -495,6 +497,11 @@ def _correctness_coverage_message(*, fund_code: str | None, reason: str) -> str:
         return (
             f"{target} 已有 strict golden answer 记录，但当前 snapshot 合约没有可比字段；"
             "本次 correctness oracle 不进入阻断分母。"
+        )
+    if reason == CORRECTNESS_COVERAGE_YEAR_NOT_COVERED:
+        return (
+            f"{target} 已有 strict golden answer 记录，但当前年报年份尚未覆盖；"
+            "本次 correctness oracle 不使用其它年份 golden answer。"
         )
     return "strict golden answer 未配置；本次 quality gate 未执行 correctness oracle。"
 
