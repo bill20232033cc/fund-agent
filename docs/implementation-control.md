@@ -27,7 +27,7 @@
 | Current phase | `release maintenance` |
 | Current gate | `small baseline real evaluation + multi-bundle validator fix + dev-only report-quality eval tool accepted locally` |
 | Next entry point | `escalation readiness check; if complete, chapter contract implementation + report writing quality upgrade design gate` |
-| Latest accepted commit | `9124734 feat: add small baseline report quality eval loop` |
+| Latest accepted gate commit | `5ba9ca2 docs: reconcile small baseline eval control state` |
 | Design truth | `docs/design.md` (v2.2) |
 | Control truth | `docs/implementation-control.md` |
 | Historical control snapshot | `docs/archive/implementation-control-history-20260525.md` |
