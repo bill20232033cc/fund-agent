@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 from fund_agent.fund.report_evidence import (
     REPORT_EVIDENCE_SCHEMA_VERSION,
@@ -166,6 +167,112 @@ def test_jsonl_accepts_bundle_record_and_score_issue_records(tmp_path) -> None:
     assert result.summary.total_records == 2
     assert result.summary.failed_closed is False
     assert result.run_id == "score-run:test"
+
+
+def test_jsonl_multi_bundle_score_issue_records_use_nearest_preceding_bundle(tmp_path) -> None:
+    """验证多 bundle JSONL 的 score_issue 归属到最近前置 bundle。
+
+    Args:
+        tmp_path: pytest 临时目录。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 多 bundle score_issue 归属错误时抛出。
+    """
+
+    jsonl_path = tmp_path / "multi-bundle-quality.jsonl"
+    first_bundle = {"record_type": "bundle", **_valid_bundle_dict(review_status="fact_prefill_reviewed")}
+    second_bundle = {"record_type": "bundle", **_second_bundle_dict()}
+    first_issue = _external_score_issue(
+        issue_id="issue:first-pass",
+        evidence_anchor_refs=["anchor:004393:2024:annual_report:sec2:abc12345"],
+    )
+    second_issue = _external_score_issue(
+        issue_id="issue:second-pass",
+        evidence_anchor_refs=["anchor:004194:2024:annual_report:sec2:def67890"],
+    )
+    _write_jsonl_records(jsonl_path, (first_bundle, first_issue, second_bundle, second_issue))
+
+    result = validate_report_quality_jsonl(jsonl_path)
+
+    assert result.summary.total_records == 4
+    assert result.issues == ()
+    assert result.summary.failed_closed is False
+
+
+def test_jsonl_score_issue_after_second_bundle_cannot_reference_first_bundle_ids(tmp_path) -> None:
+    """验证 score_issue 不得引用所属 bundle 之外的 anchor 或 gap。
+
+    Args:
+        tmp_path: pytest 临时目录。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 跨 bundle 引用未阻断时抛出。
+    """
+
+    jsonl_path = tmp_path / "cross-bundle-ref.jsonl"
+    first_bundle = {"record_type": "bundle", **_valid_bundle_dict(review_status="fact_prefill_reviewed")}
+    first_bundle["data_gaps"] = [_gap_dict(gap_id="gap:first")]
+    second_bundle = {"record_type": "bundle", **_second_bundle_dict()}
+    second_bundle["data_gaps"] = [_gap_dict(gap_id="gap:second")]
+    cross_bundle_issue = _external_score_issue(
+        issue_id="issue:cross-bundle",
+        status="issue",
+        severity="material",
+        field_path="turnover_rate",
+        evidence_anchor_refs=["anchor:004393:2024:annual_report:sec2:abc12345"],
+        data_gap_refs=["gap:first"],
+        next_gate_recommendation="data_extraction",
+    )
+    _write_jsonl_records(jsonl_path, (first_bundle, second_bundle, cross_bundle_issue))
+
+    result = validate_report_quality_jsonl(jsonl_path)
+
+    assert _has_issue(
+        result.issues,
+        "RQV_REF_MISSING",
+        "blocking",
+        "line:3/score_issue/data_gap_refs/0",
+    )
+    assert _has_issue(
+        result.issues,
+        "RQV_REF_MISSING",
+        "blocking",
+        "line:3/score_issue/evidence_anchor_refs/0",
+    )
+    assert result.summary.failed_closed is True
+
+
+def test_jsonl_score_issue_before_bundle_is_blocking(tmp_path) -> None:
+    """验证 bundle 前的裸 score_issue 会 fail-closed。
+
+    Args:
+        tmp_path: pytest 临时目录。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 前置裸 score_issue 未阻断时抛出。
+    """
+
+    jsonl_path = tmp_path / "score-issue-before-bundle.jsonl"
+    score_issue = _external_score_issue(
+        issue_id="issue:orphan",
+        evidence_anchor_refs=["anchor:004393:2024:annual_report:sec2:abc12345"],
+    )
+    bundle = {"record_type": "bundle", **_valid_bundle_dict(review_status="fact_prefill_reviewed")}
+    _write_jsonl_records(jsonl_path, (score_issue, bundle))
+
+    result = validate_report_quality_jsonl(jsonl_path)
+
+    assert _has_issue(result.issues, "RQV_SCORE_ISSUE_ORPHANED", "blocking", "line:1")
+    assert result.summary.failed_closed is True
 
 
 def test_missing_required_bundle_field_is_blocking() -> None:
@@ -906,6 +1013,34 @@ def _gap_dict(
     }
 
 
+def _second_bundle_dict() -> dict[str, object]:
+    """构造第二只基金的最小合法 bundle serialization。
+
+    Args:
+        无。
+
+    Returns:
+        第二只 fake bundle dict。
+    """
+
+    bundle = _valid_bundle_dict(review_status="fact_prefill_reviewed")
+    bundle["bundle_id"] = "bundle:004194:2024"
+    bundle["fund_code"] = "004194"
+    bundle["classified_fund_type"] = "enhanced_index"
+    bundle["fund_type_slot"] = "enhanced_index"
+    bundle["preferred_lens"]["fund_type"] = "enhanced_index"  # type: ignore[index]
+    bundle["source_documents"][0]["document_id"] = "doc:004194:2024:annual_report"  # type: ignore[index]
+    bundle["facts"][0]["source_anchor_ids"] = [  # type: ignore[index]
+        "anchor:004194:2024:annual_report:sec2:def67890"
+    ]
+    bundle["facts"][0]["source_document_ids"] = ["doc:004194:2024:annual_report"]  # type: ignore[index]
+    bundle["evidence_anchors"][0]["anchor_id"] = (  # type: ignore[index]
+        "anchor:004194:2024:annual_report:sec2:def67890"
+    )
+    bundle["evidence_anchors"][0]["document_id"] = "doc:004194:2024:annual_report"  # type: ignore[index]
+    return bundle
+
+
 def _issue_dict(
     *,
     issue_id: str = "issue:turnover",
@@ -966,6 +1101,63 @@ def _issue_dict(
         "na_reason": na_reason,
         "reviewer_note": reviewer_note,
     }
+
+
+def _external_score_issue(
+    *,
+    issue_id: str,
+    status: str = "pass",
+    severity: str | None = None,
+    field_path: str | None = None,
+    evidence_anchor_refs: list[str] | None = None,
+    data_gap_refs: list[str] | None = None,
+    next_gate_recommendation: str = "review_acceptance",
+) -> dict[str, object]:
+    """构造 JSONL 独立 score_issue record。
+
+    Args:
+        issue_id: issue id。
+        status: issue 状态。
+        severity: 严重程度。
+        field_path: 字段路径。
+        evidence_anchor_refs: anchor refs。
+        data_gap_refs: gap refs。
+        next_gate_recommendation: 下一 gate 建议。
+
+    Returns:
+        独立 score_issue record。
+    """
+
+    return {
+        "record_type": "score_issue",
+        "issue_id": issue_id,
+        "score_run_id": "score-run:test",
+        "chapter_id": "chapter_2",
+        "dimension": "fact_coverage",
+        "status": status,
+        "next_gate_recommendation": next_gate_recommendation,
+        "severity": severity,
+        "field_path": field_path,
+        "evidence_anchor_refs": evidence_anchor_refs or [],
+        "data_gap_refs": data_gap_refs or [],
+    }
+
+
+def _write_jsonl_records(path: Path, records: tuple[dict[str, object], ...]) -> None:
+    """写入测试 JSONL records。
+
+    Args:
+        path: JSONL 输出路径。
+        records: 待写入 records。
+
+    Returns:
+        无返回值。
+    """
+
+    path.write_text(
+        "\n".join(json.dumps(record, ensure_ascii=False) for record in records),
+        encoding="utf-8",
+    )
 
 
 def _has_issue(

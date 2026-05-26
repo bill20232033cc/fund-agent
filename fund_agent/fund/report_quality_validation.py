@@ -262,6 +262,22 @@ class _BundleIndexes:
     issues_by_id: Mapping[str, _JsonRecord]
 
 
+@dataclass(slots=True)
+class _ScoreIssueRecordGroup:
+    """JSONL 中一个 bundle 及其后续独立 score_issue records。
+
+    Args:
+        无。
+
+    Attributes:
+        bundle: 所属 bundle record。
+        score_issue_records: 归属于该 bundle 的独立 score_issue 行号与 record。
+    """
+
+    bundle: _JsonRecord
+    score_issue_records: list[tuple[int, _JsonRecord]]
+
+
 def validate_report_quality_bundle(
     bundle: ReportEvidenceBundle | Mapping[str, object],
     *,
@@ -377,18 +393,20 @@ def validate_report_quality_jsonl(
             records.append((line_number, str(record_type), parsed))
 
     bundle_records = [(line, record) for line, record_type, record in records if record_type == "bundle"]
-    score_issue_records = [
-        (line, record) for line, record_type, record in records if record_type == "score_issue"
-    ]
-
-    if not bundle_records and score_issue_records:
-        for line_number, record in score_issue_records:
+    score_issue_record_groups: list[_ScoreIssueRecordGroup] = []
+    current_group: _ScoreIssueRecordGroup | None = None
+    for line_number, record_type, record in records:
+        if record_type == "bundle":
+            current_group = _ScoreIssueRecordGroup(bundle=record, score_issue_records=[])
+            score_issue_record_groups.append(current_group)
+            continue
+        if current_group is None:
             issues.append(
                 _make_issue(
-                    error_code="RQV_RECORD_TYPE_INVALID",
+                    error_code="RQV_SCORE_ISSUE_ORPHANED",
                     severity="blocking",
                     pointer=f"line:{line_number}",
-                    message="score_issue record 需要同一 JSONL artifact 内存在 bundle record。",
+                    message="score_issue record 需要出现在所属 bundle record 之后。",
                     context=_ValidationContext(
                         source_path=source_path,
                         line_prefix=f"line:{line_number}",
@@ -397,9 +415,11 @@ def validate_report_quality_jsonl(
                     record_type="score_issue",
                     record_id=_string_or_none(record.get("issue_id")),
                     expected="bundle record",
-                    actual="none",
+                    actual="no preceding bundle",
                 )
             )
+            continue
+        current_group.score_issue_records.append((line_number, record))
 
     for line_number, bundle_record in bundle_records:
         context = _ValidationContext(
@@ -410,14 +430,12 @@ def validate_report_quality_jsonl(
         )
         issues.extend(_validate_bundle_record(bundle_record, context))
 
-    if bundle_records:
-        primary_bundle = bundle_records[0][1]
-        extra_score_issues = tuple(record for _, record in score_issue_records)
-        if extra_score_issues:
+    for score_issue_record_group in score_issue_record_groups:
+        if score_issue_record_group.score_issue_records:
             issues.extend(
                 _validate_score_issue_records_against_bundle(
-                    primary_bundle,
-                    tuple(score_issue_records),
+                    score_issue_record_group.bundle,
+                    tuple(score_issue_record_group.score_issue_records),
                     _ValidationContext(source_path=source_path, run_id=run_id),
                 )
             )

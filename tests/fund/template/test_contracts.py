@@ -250,6 +250,41 @@ def test_current_stage_contract_separates_change_facts_from_risk_and_final_judgm
     assert "不重复基金经理长期画像或成本收益总评。" in chapter.must_not_cover
 
 
+def test_active_fund_chapter_3_contract_requires_reviewed_turnover_or_style_change_before_stability_claim() -> None:
+    """验证主动基金第 3 章稳定性判断必须先具备已复核换手率或风格变化证据。
+
+    Args:
+        无。
+
+    Returns:
+        无。
+
+    Raises:
+        AssertionError: 第 3 章契约未声明证据前提或主动基金 lens 漂移。
+    """
+
+    chapter = get_chapter_contract(3)
+    lens = resolve_preferred_lens(3, "active_fund")
+    manifest = load_template_contract_manifest()
+    lens_keys = set(manifest.chapters[3].preferred_lens)
+
+    assert (
+        "言行一致性判断：说的和做的一样吗？主动基金如缺少已复核的换手率或风格变化证据，不得据此判断言行一致。"
+        in chapter.must_answer
+    )
+    assert (
+        "风格稳定性判断：跨期风格是否漂移？主动基金必须基于已复核的换手率或风格变化证据。"
+        in chapter.must_answer
+    )
+    assert (
+        "不在换手率或风格变化证据缺失、不可用、未复核时，推断主动基金风格稳定、风格一致或言行一致。"
+        in chapter.must_not_cover
+    )
+    assert "换手率/风格变化证据缺口说明与下一步最小验证问题" not in chapter.required_output_items
+    assert lens.priority == "core"
+    assert set(_SUPPORTED_FUND_TYPES) <= lens_keys
+
+
 def test_core_risk_contract_translates_changes_into_risk_veto_and_stress_test() -> None:
     """验证第 6 章承载风险、否决项和压力测试边界。
 

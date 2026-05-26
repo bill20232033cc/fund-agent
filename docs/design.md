@@ -145,7 +145,7 @@ CLI（Typer app）
 
 ### 3.2 CHAPTER_CONTRACT 机制
 
-**代码实现**：`fund_agent/fund/template/contracts.py`
+**代码实现**：`fund_agent/fund/template/contracts.py`；dev-only 可执行 sidecar 在 `fund_agent/fund/template/chapter_contract_constraints.py`
 
 每个章节都有 `ChapterContract` dataclass，定义：
 
@@ -160,6 +160,10 @@ CLI（Typer app）
 **机器契约清单**：`TemplateContractManifest` 聚合 8 章 `ChapterContract`，提供 `load_template_contract_manifest()` 和 `validate_template_contract_manifest()` 函数。
 
 **preferred_lens 规则**：`TemplateLensRule` 包含 `fund_type`、`statements`、`facets_any`、`priority` 字段。通过 `resolve_preferred_lens(manifest, fund_type)` 获取当前基金类型的 lens 规则。
+
+**可执行 sidecar**：`ChapterContractConstraintManifest` 包裹既有 `TemplateContractManifest`，默认覆盖第 0-7 章并复制既有 `must_answer` / `must_not_cover`，避免形成平行章节真源。当前 material 实现只覆盖 `active_fund` 第 3 章换手率 / 风格变化证据约束：若缺少已复核事实和可解析证据锚点，报告不得输出风格稳定、风格一致或言行一致正向判断；若仅有兼容 `data_gap`，必须明示证据不足和下一步最小验证问题。增强指数第 2 章和债券第 6 章仅登记为 deferred `config_only` 要求。
+
+**dev-only 写作审计**：`fund_agent/fund/report_writing_audit.py` 只消费调用方显式传入的 `ReportEvidenceBundle`、已解析 records 和 `ChapterDraftSurrogate`，输出 deterministic issue list / summary / failure category / evidence requirement gaps。它不读取基金文档、不调用 `FundDocumentRepository`、不接入 renderer、Service/CLI 默认链路、FQ0-FQ6 quality gate、Host/Agent 或 Dayu runtime。
 
 ### 3.3 ITEM_RULE 机制
 

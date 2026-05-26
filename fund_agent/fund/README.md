@@ -101,7 +101,7 @@ chapter_lens = resolve_preferred_lens(chapter_id=2, fund_type="active_fund")
 - 只消费 `ReportEvidenceBundle`、JSON-like Mapping 或 JSONL record，不读取文档仓库、PDF/cache/source helper、renderer、Service 或 FQ0-FQ6 输出
 - 复用 `report_evidence.py` 的 Literal domain、schema version 和 typed dataclass 字段名，不创建平行评分输入 schema
 - 输出冻结 slotted dataclass 结果，包括字段缺失、enum domain、invalid combinations、id refs、`N/A`、`chapter_summary`、fallback consistency、`scoring_ready` 前置条件和链接完整性 issue
-- JSONL 当前支持 `record_type="bundle"` 与 `record_type="score_issue"`，并保留稳定行号 / 字段 pointer，供后续 scoring-run artifact 复盘
+- JSONL 当前支持 `record_type="bundle"` 与 `record_type="score_issue"`；多 bundle artifact 中，独立 `score_issue` 归属到最近的前置 bundle，bundle 前的裸 `score_issue` 会 fail-closed，并保留稳定行号 / 字段 pointer，供后续 scoring-run artifact 复盘
 - validator 只做内容可消费性判断，不替代 `run_quality_gate()` 的 FQ0-FQ6，也不生成 durable baseline 或 curated fixture
 
 `run_extraction_snapshot()` 返回 `SnapshotRunResult`，当前覆盖 P4-S1 精选基金池字段级抽取快照：
@@ -296,6 +296,7 @@ C2 当前只做确定性 marker / 元数据检查，不调用 LLM，不判断语
 
 - manifest 位于 Fund 模板层 `fund_agent/fund/template/contracts.py`，自带章节标题，不依赖 renderer 私有 `_CHAPTER_TITLES`
 - 每章包含 `narrative_mode`、`must_answer`、`must_not_cover`、`required_output_items` 和 `preferred_lens`
+- 第 3 章主动基金契约要求：风格稳定、风格一致或言行一致判断必须基于已复核的换手率或风格变化证据；证据缺失、不可用或未复核时，契约禁止推断主动基金风格稳定、风格一致或言行一致
 - 第 5 章“当前阶段与关键变化”只承载当前阶段、上一期或历史对比下的关键变化、变化是否影响原始投资假设和下一步最小验证问题；不得给最终判断或展开风险清单
 - 第 6 章“核心风险与否决项”承载结构性/阶段性风险、否决项、压力测试和最可能改变最终判断的信息缺口；不得复述阶段事实，除非明确转译为风险、压力测试或否决项
 - `preferred_lens` key 只允许当前标准基金类型 `index_fund`、`active_fund`、`bond_fund`、`enhanced_index`、`qdii_fund`、`fof_fund` 和 `default`
@@ -390,7 +391,9 @@ C2 当前只做确定性 marker / 元数据检查，不调用 LLM，不判断语
 - `analysis/`：分析计算模块。当前包含 `r_abc.py`、`alpha_judge.py`、`consistency_check.py`、`investor_return.py`、`risk_check.py` 与内部比例解析 helper，只消费 P1/P2 结构化数据和显式判断证据，不直接读取年报文件。
 - `template/`：模板渲染能力。当前包含 `renderer.py`，只消费 P1/P2 结构化结果并输出 8 章 Markdown、章节块与程序审计输入。
 - `template/contracts.py`：模板契约能力，维护第 0-7 章 CHAPTER_CONTRACT 机器契约、章节契约读取和基金类型 lens 解析。
+- `template/chapter_contract_constraints.py`：CHAPTER_CONTRACT 可执行写作约束 sidecar，包裹既有章节契约并为 dev-only 写作审计提供 required evidence / N/A / failure behavior 配置。
 - `template/item_rules.py`：模板 ITEM_RULE manifest，维护当前四条 conditional 规则、确定性触发评估和段落标记检查。
+- `report_writing_audit.py`：dev-only 报告写作审计，只消费调用方显式传入的 `ReportEvidenceBundle`、已解析 records 和章节草稿代理，不读取基金文档、不接入 renderer、Service/CLI 或 FQ0-FQ6 质量门。
 - `pdf/`：底层 PDF helper。当前包含：
   - `downloader.py`：仅供仓库内部使用的 PDF 下载 helper，会写入本地缓存
   - `parser.py`：PDF 全文、表格与章节定位原型
@@ -420,6 +423,8 @@ C2 当前只做确定性 marker / 元数据检查，不调用 LLM，不判断语
 - 当前 `analysis/checklist.py` 实现 7 问题检查清单，消费分析结果和显式用户输入，不读取外部数据。
 - 当前 `audit/audit_programmatic.py` 实现 MVP 程序审计，不调用 LLM 或证据复核。
 - 当前 `template/contracts.py` 实现第 0-7 章 CHAPTER_CONTRACT manifest、章节契约读取、基金类型 lens 解析和 fail-closed manifest 校验；不运行时解析 Markdown 注释。
+- 当前 `template/chapter_contract_constraints.py` 实现第 0-7 章默认 wrapper 和首个 material overlay：主动基金第 3 章换手率 / 风格变化证据约束。增强指数第 2 章和债券第 6 章只登记为 deferred `config_only` 要求，不执行材料级审计。
 - 当前 `template/item_rules.py` 实现 ITEM_RULE manifest、显式基金类型/facet 评估、审计上下文类型和唯一段落标记检查；不调用 LLM、不读取基金文档、不接入质量门禁。
 - 当前 `template/renderer.py` 实现 8 章 Markdown 模板渲染，按 CHAPTER_CONTRACT manifest 生成章节标题，按 ITEM_RULE 决策渲染/删除固定段落，并返回可直接用于程序审计的 `ProgrammaticAuditInput` 与 `RenderedChapterBlock` 章节块。
+- 当前 `report_writing_audit.py` 实现主动基金第 3 章写作审计：缺少已复核换手率 / 风格变化事实和可解析证据锚点时，禁止稳定性、风格一致或言行一致正向判断；若仅有兼容 `data_gap`，草稿必须明示证据不足和下一步最小验证问题。
 - `parser.py` 已具备 `§3` 定位修复，但真实样本扩展和更多章节/表格抽取仍在后续 slice 完成。

@@ -274,6 +274,12 @@ _MUST_NOT_COVER_COVERAGE_RULES: Final[tuple[ContractMustNotCoverCoverageRule, ..
         "这是模板第 2/3 章职责边界，不能靠固定 forbidden marker 完整判定。",
     ),
     ContractMustNotCoverCoverageRule(
+        3,
+        "不在换手率或风格变化证据缺失、不可用、未复核时，推断主动基金风格稳定、风格一致或言行一致。",
+        "narrative_guidance",
+        "这是主动基金第 3 章证据不足时的语义禁止项，缺少稳定低误报字面 marker，当前由叙事指引和人工/语义复核覆盖。",
+    ),
+    ContractMustNotCoverCoverageRule(
         5,
         "不罗列所有变化，只保留最关键的 1-3 个。",
         "narrative_guidance",
@@ -418,8 +424,18 @@ _MUST_ANSWER_COVERAGE_RULES: Final[tuple[ContractMustAnswerCoverageRule, ...]] =
         "covered_by_required_item",
         ("实际投资行为（§8）",),
     ),
-    ContractMustAnswerCoverageRule(3, "言行一致性判断：说的和做的一样吗？", "covered_by_required_item", ("言行一致性判断",)),
-    ContractMustAnswerCoverageRule(3, "风格稳定性判断：跨期风格是否漂移？", "covered_by_required_item", ("风格稳定性判断",)),
+    ContractMustAnswerCoverageRule(
+        3,
+        "言行一致性判断：说的和做的一样吗？主动基金如缺少已复核的换手率或风格变化证据，不得据此判断言行一致。",
+        "covered_by_required_item",
+        ("言行一致性判断",),
+    ),
+    ContractMustAnswerCoverageRule(
+        3,
+        "风格稳定性判断：跨期风格是否漂移？主动基金必须基于已复核的换手率或风格变化证据。",
+        "covered_by_required_item",
+        ("风格稳定性判断",),
+    ),
     ContractMustAnswerCoverageRule(3, "利益一致性判断：基金经理是否持有本基金？", "covered_by_required_item", ("利益一致性判断",)),
     ContractMustAnswerCoverageRule(4, "基金产品收益（净值增长率）。", "covered_by_required_item", ("基金产品收益 vs 投资者实际收益",)),
     ContractMustAnswerCoverageRule(
