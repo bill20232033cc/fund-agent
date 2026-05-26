@@ -5,7 +5,7 @@
 > **设计真源**: `docs/design.md` (v2.2)
 > **规则真源**: `AGENTS.md`
 > **历史快照**: `docs/archive/implementation-control-history-20260525.md`
-> **当前状态**: release maintenance；source provenance public-output implementation accepted locally；下一入口为 post-implementation source provenance bounded evidence classification gate
+> **当前状态**: release maintenance；source provenance bounded evidence classification plan accepted locally；下一入口为 source provenance bounded evidence run
 
 ---
 
@@ -25,9 +25,9 @@
 |---|---|
 | Branch | `codex/local-reconciliation` |
 | Current phase | `release maintenance` |
-| Current gate | `source provenance public-output implementation accepted locally` |
-| Next entry point | `post-implementation source provenance bounded evidence classification gate; must use init-agents / tmux multi-agent flow` |
-| Latest accepted gate checkpoint | `source provenance public-output implementation local accepted commit; use latest branch HEAD for exact hash` |
+| Current gate | `source provenance bounded evidence classification plan accepted locally` |
+| Next entry point | `source provenance bounded evidence run; must use init-agents / tmux multi-agent flow` |
+| Latest accepted gate checkpoint | `source provenance bounded evidence classification plan local accepted commit; use latest branch HEAD for exact hash` |
 | Design truth | `docs/design.md` (v2.2) |
 | Control truth | `docs/implementation-control.md` |
 | Historical control snapshot | `docs/archive/implementation-control-history-20260525.md` |
@@ -256,6 +256,12 @@
 | source provenance implementation review: MiMo | `docs/reviews/release-maintenance-source-provenance-public-output-implementation-review-mimo-20260527.md` |
 | source provenance implementation review: GLM | `docs/reviews/release-maintenance-source-provenance-public-output-implementation-review-glm-20260527.md` |
 | source provenance implementation controller judgment | `docs/reviews/release-maintenance-source-provenance-public-output-implementation-controller-judgment-20260527.md` |
+| source provenance bounded evidence classification plan | `docs/reviews/release-maintenance-source-provenance-bounded-evidence-classification-plan-20260527.md` |
+| source provenance bounded evidence plan review: MiMo | `docs/reviews/release-maintenance-source-provenance-bounded-evidence-classification-plan-review-mimo-20260527.md` |
+| source provenance bounded evidence plan review: GLM | `docs/reviews/release-maintenance-source-provenance-bounded-evidence-classification-plan-review-glm-20260527.md` |
+| source provenance bounded evidence plan re-review: MiMo | `docs/reviews/release-maintenance-source-provenance-bounded-evidence-classification-plan-rereview-mimo-20260527.md` |
+| source provenance bounded evidence plan re-review: GLM | `docs/reviews/release-maintenance-source-provenance-bounded-evidence-classification-plan-rereview-glm-20260527.md` |
+| source provenance bounded evidence plan controller judgment | `docs/reviews/release-maintenance-source-provenance-bounded-evidence-classification-plan-controller-judgment-20260527.md` |
 
 ### Current Decisions
 
@@ -325,6 +331,7 @@
 - Coverage replacement / source provenance design is accepted locally. Because no approved replacement candidates exist, the next safe path is additive public source provenance output, not replacement probing. The accepted future contract exposes reviewed public provenance fields while preserving `FundDocumentRepository` source strategy and fail-closed fallback categories. `fallback_used=true` with missing `primary_failure_category` must classify as `unknown_public_metadata_absent`, never `eligible`.
 - Source provenance public-output implementation plan is accepted locally. The implementation slice is limited to Fund-owned deterministic projection, `StructuredFundDataBundle.source_provenance` with safe not-applicable default factory, production population from `ParsedAnnualReport.metadata.source`, eight additive snapshot JSONL fields, a separate `## Source Provenance` summary table, and score/FQ0-FQ6 no-change tests. Bounded `110020` / `017641` evidence is deferred until after implementation and code review.
 - Source provenance public-output implementation is accepted locally. `fund_agent/fund/source_provenance.py` now projects public provenance without touching source strategy or helpers; snapshot JSONL and summary expose additive provenance fields, while score/FQ0-FQ6 and default CLI/service behavior remain unchanged. Because current public metadata still lacks `primary_failure_category`, fallback-backed rows normally remain `unknown_public_metadata_absent` until a future metadata schema gate.
+- Source provenance bounded evidence classification plan is accepted locally. The evidence run is bounded to public CLI commands for `110020` / 2024 and `017641` / 2024, must classify from public provenance fields and quality outputs only, and must record `promotion_disposition=not_promoted` for every row. The plan explicitly expects fallback-backed rows to remain `provenance_unknown_public_metadata_absent` under current metadata.
 
 ### Current Non-Goals
 
@@ -337,7 +344,7 @@
 
 ## Next Entry Point
 
-`post-implementation source provenance bounded evidence classification gate`
+`source provenance bounded evidence run`
 
 This next gate must start with Startup Packet replay and `$init-agents` / tmux multi-agent flow. It is an evidence classification gate over the newly implemented public provenance output. It may run bounded public CLI evidence for `110020` / 2024 and `017641` / 2024 only after plan/review handoff confirms command scope.
 
