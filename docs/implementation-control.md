@@ -5,7 +5,7 @@
 > **设计真源**: `docs/design.md` (v2.2)
 > **规则真源**: `AGENTS.md`
 > **历史快照**: `docs/archive/implementation-control-history-20260525.md`
-> **当前状态**: release maintenance；index/QDII source recovery evidence accepted locally；下一入口为 coverage replacement candidate selection or source provenance output design gate
+> **当前状态**: release maintenance；coverage replacement / source provenance design accepted locally；下一入口为 source provenance public-output implementation gate
 
 ---
 
@@ -25,9 +25,9 @@
 |---|---|
 | Branch | `codex/local-reconciliation` |
 | Current phase | `release maintenance` |
-| Current gate | `index/QDII source recovery evidence accepted locally` |
-| Next entry point | `coverage replacement candidate selection or source provenance output design gate; must use init-agents / tmux multi-agent flow` |
-| Latest accepted gate checkpoint | `index/QDII source recovery evidence local accepted commit; use latest branch HEAD for exact hash` |
+| Current gate | `coverage replacement / source provenance design accepted locally` |
+| Next entry point | `source provenance public-output implementation gate; must use init-agents / tmux multi-agent flow` |
+| Latest accepted gate checkpoint | `coverage replacement / source provenance design local accepted commit; use latest branch HEAD for exact hash` |
 | Design truth | `docs/design.md` (v2.2) |
 | Control truth | `docs/implementation-control.md` |
 | Historical control snapshot | `docs/archive/implementation-control-history-20260525.md` |
@@ -240,6 +240,12 @@
 | index/QDII source recovery evidence review: MiMo | `docs/reviews/release-maintenance-index-qdii-source-recovery-evidence-review-mimo-20260527.md` |
 | index/QDII source recovery evidence review: GLM | `docs/reviews/release-maintenance-index-qdii-source-recovery-evidence-review-glm-20260527.md` |
 | index/QDII source recovery evidence controller judgment | `docs/reviews/release-maintenance-index-qdii-source-recovery-evidence-controller-judgment-20260527.md` |
+| coverage replacement / source provenance design plan | `docs/reviews/release-maintenance-coverage-replacement-source-provenance-design-plan-20260527.md` |
+| coverage replacement / source provenance plan review: MiMo | `docs/reviews/release-maintenance-coverage-replacement-source-provenance-design-plan-review-mimo-20260527.md` |
+| coverage replacement / source provenance plan review: GLM | `docs/reviews/release-maintenance-coverage-replacement-source-provenance-design-plan-review-glm-20260527.md` |
+| coverage replacement / source provenance plan re-review: MiMo | `docs/reviews/release-maintenance-coverage-replacement-source-provenance-design-plan-rereview-mimo-20260527.md` |
+| coverage replacement / source provenance plan re-review: GLM | `docs/reviews/release-maintenance-coverage-replacement-source-provenance-design-plan-rereview-glm-20260527.md` |
+| coverage replacement / source provenance plan controller judgment | `docs/reviews/release-maintenance-coverage-replacement-source-provenance-design-plan-controller-judgment-20260527.md` |
 
 ### Current Decisions
 
@@ -306,6 +312,7 @@
 - Baseline coverage recovery decision plan is accepted locally. The next safe gate is `index/QDII source recovery and replacement decision gate`, not durable baseline/golden preflight. The accepted reason is that source-safe representative coverage remains the dominant blocker: `110020` and `017641` are still fallback-blocked with unknown upstream failure category, while `006597` improved to warn but remains baseline-blocked by `bond_risk_evidence_missing.baseline_blocking=true` and other residual P1 gaps. The next gate must be plan-before-evidence and preserve fail-closed source semantics.
 - Index/QDII source recovery and replacement plan is accepted locally. The next evidence gate may run bounded public CLI evidence for `110020` / 2024 and `017641` / 2024 through existing Fund paths, classify each row into one accepted terminal state, and write only summary/path artifacts. Rows remain outside the clean denominator unless an eligible upstream failure category is recovered or an approved replacement is verified.
 - Index/QDII source recovery evidence is accepted locally. Public CLI snapshot/score/quality-gate runs completed for `110020` / 2024 and `017641` / 2024, but public outputs did not expose the original upstream failure category. Both rows are classified `unrecoverable_safe_path` and remain outside the clean denominator; replacement subgate closes as `not_run_no_approved_candidates` because no approved replacements were provided.
+- Coverage replacement / source provenance design is accepted locally. Because no approved replacement candidates exist, the next safe path is additive public source provenance output, not replacement probing. The accepted future contract exposes reviewed public provenance fields while preserving `FundDocumentRepository` source strategy and fail-closed fallback categories. `fallback_used=true` with missing `primary_failure_category` must classify as `unknown_public_metadata_absent`, never `eligible`.
 
 ### Current Non-Goals
 
@@ -318,20 +325,20 @@
 
 ## Next Entry Point
 
-`coverage replacement candidate selection or source provenance output design gate`
+`source provenance public-output implementation gate`
 
-This next gate must start with Startup Packet replay and `$init-agents` / tmux multi-agent flow. It is a plan/review decision gate first; no source/output implementation, replacement probing, corpus expansion, or fixture promotion may start until the plan is accepted.
+This next gate must start with Startup Packet replay and `$init-agents` / tmux multi-agent flow. It must produce a code-generation-ready implementation plan and pass plan review before code changes. Implementation is limited to additive public source provenance output under the accepted design; if the current metadata boundary cannot supply failure-category information, the implementation must preserve conservative `unknown_public_metadata_absent` rather than reaching into source helpers.
 
 Scope allowed for the next gate:
 
-- Choose between an additive public-output contract for repository source fallback provenance and a controller-approved replacement-candidate selection path for index/QDII coverage.
-- If choosing source provenance output design, keep source strategy and fail-closed fallback semantics unchanged; expose provenance only through reviewed public output contracts.
-- If choosing replacement candidate selection, require controller-supplied or accepted-artifact-derived candidates before any evidence run; no ad hoc web/search.
-- Keep `110020` and `017641` outside the clean denominator unless a future accepted gate recovers eligible provenance or verifies replacements.
+- Implement only additive public provenance fields for extraction snapshot / summary / score-compatible public outputs after plan review.
+- Keep source strategy and fail-closed fallback semantics unchanged; expose provenance only through reviewed public output contracts.
+- Own provenance projection in `fund_agent/fund` as deterministic pure logic; Service/public output may consume the projection but must not access source internals.
+- Keep `110020` and `017641` outside the clean denominator unless a future accepted evidence gate recovers eligible provenance or verifies replacements.
 - Keep durable baseline/golden promotion blocked; FOF, bond baseline-blocking, and reviewed-fact blockers remain open.
 - Keep large outputs in scratch / ignored reports; tracked artifacts should contain summaries and evidence paths only.
 
-Do not enter `golden answer corpus v1` until coverage and source/fund-type blockers are resolved. Do not promote samples to durable baseline or golden answer corpus in this gate. Do not modify renderer, FQ0-FQ6 policy, Service/CLI behavior, Host/Agent packages, Dayu runtime, `FundDocumentRepository` source strategy, source-helper fallback semantics, extractor logic, `fund_type.py`, or golden/baseline fixtures unless a later accepted plan explicitly expands scope.
+Do not enter `golden answer corpus v1` until coverage and source/fund-type blockers are resolved. Do not promote samples to durable baseline or golden answer corpus in this gate. Do not modify renderer, FQ0-FQ6 policy, default analyze/checklist behavior, Host/Agent packages, Dayu runtime, `FundDocumentRepository` source strategy, source-helper fallback semantics, extractor logic, `fund_type.py`, or golden/baseline fixtures unless a later accepted plan explicitly expands scope.
 
 Do not push, create PR, mark ready, merge, close PRs, edit unrelated PRs, delete branches, or perform additional GitHub mutations without explicit user authorization. Do not add tracked scratch reports, PDF/cache outputs, source dumps, durable fixtures, or golden corpus files.
 
@@ -378,7 +385,7 @@ Do not push, create PR, mark ready, merge, close PRs, edit unrelated PRs, delete
 | NAV external-data degradation | Completed in core reliability implementation | NAV provider/cache/akshare failures degrade to `NavDataResult(unavailable=True, records=[])`; annual-report repository/PDF/source fail-closed semantics remain outside the catch boundary |
 | Pre-2026 turnover-rate missing semantics | Completed in core reliability implementation | Focused tests lock missing `turnover_rate` as P1 warn/insufficiency, not standalone hard block; FQ4 aggregate missing-rate semantics remain unchanged |
 | Small baseline corpus v1 | Completed in evidence run | Accepted 8 candidate rows / 7 unique fund codes as evidence only. `004393` / 2024 and `004194` / 2024 are quality-gate `warn`; `006597` / 2024 is quality-gate `block`; index/QDII fallback and FOF data-gap remain blockers. No durable baseline or golden promotion. |
-| Index/QDII source recovery for baseline coverage | future source provenance output or replacement-candidate gate | Public CLI evidence could not expose original upstream failure category for `110020` / `017641`; both are `unrecoverable_safe_path` and remain outside the clean denominator. Next safe paths are additive public provenance output design or approved replacement candidates. |
+| Index/QDII source recovery for baseline coverage | next source provenance public-output implementation gate | Public CLI evidence could not expose original upstream failure category for `110020` / `017641`; both are `unrecoverable_safe_path` and remain outside the clean denominator. Accepted design chooses additive public provenance output first because no approved replacements exist. |
 | FOF coverage / taxonomy | next baseline coverage / taxonomy gate | Find pure `fof_fund` repository-verified candidate, or open a taxonomy gate before counting QDII-FOF attempts as FOF coverage. |
 | `006597` bond quality-gate block | Completed for holdings applicability; future bond/holder/turnover evidence gates remain | `holdings_snapshot` equity-shape false blocker is resolved into `bond_risk_evidence_missing` / `FQ2F/warn`; 006597 now warns rather than blocks for this reason. Do not route to golden while `bond_risk_evidence_missing.baseline_blocking=true` or other P1 gaps remain. |
 | `006597` share_change ambiguity | next share_change focused implementation plan | Evidence classifies this as `extractor_gap`: §10 has multiple share columns and current rules cannot reliably choose the corresponding share class. Plan a narrow fix before implementation. |
@@ -434,6 +441,7 @@ Do not push, create PR, mark ready, merge, close PRs, edit unrelated PRs, delete
 | `baseline coverage recovery decision plan` | accepted locally | `docs/reviews/release-maintenance-baseline-coverage-recovery-decision-plan-controller-judgment-20260527.md` | AgentCodex plan; AgentMiMo `PASS_WITH_FINDINGS`; AgentGLM `PASS_WITH_FINDINGS`; plan patched for closeout and plan-before-evidence guard; GLM targeted re-review `PASS`; `git diff --check` passed | source-safe recovery/replacement for `110020` and `017641`, pure FOF residual, bond positive-risk evidence residual, golden/baseline blocked | `index/QDII source recovery and replacement decision gate` |
 | `index/QDII source recovery and replacement plan` | accepted locally | `docs/reviews/release-maintenance-index-qdii-source-recovery-replacement-plan-controller-judgment-20260527.md` | AgentCodex plan; AgentMiMo `PASS`; AgentGLM `PASS_WITH_FINDINGS`; plan patched to define `excluded`; `git diff --check` passed | evidence run for `110020` / `017641`, approved replacement candidates absent, pure FOF residual, golden/baseline blocked | `index/QDII source recovery evidence gate` |
 | `index/QDII source recovery evidence` | accepted locally | `docs/reviews/release-maintenance-index-qdii-source-recovery-evidence-controller-judgment-20260527.md` | Public CLI snapshot/score/quality-gate ran for `110020` and `017641`; MiMo review `PASS`; GLM review `PASS_WITH_FINDINGS`; terminal-state documentation fixed; `git diff --check` passed | public output lacks upstream failure category, no approved replacements, pure FOF residual, bond baseline-blocking residual, golden/baseline blocked | `coverage replacement candidate selection or source provenance output design gate` |
+| `coverage replacement / source provenance design` | accepted locally | `docs/reviews/release-maintenance-coverage-replacement-source-provenance-design-plan-controller-judgment-20260527.md` | AgentCodex plan; AgentMiMo and AgentGLM `PASS_WITH_FINDINGS`; plan patched for missing-category conservative semantics, projection ownership, consistency tests, and multi-source chain deferral; both targeted re-reviews `PASS`; `git diff --check` passed | implementation of additive public provenance output, metadata category availability, 110020/017641 evidence rerun, pure FOF residual, bond baseline-blocking residual, golden/baseline blocked | `source provenance public-output implementation gate` |
 
 ## Historical Evidence Index
 

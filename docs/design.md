@@ -621,6 +621,8 @@ Evidence Store / Fact Store
 - Parsed report 缓存：JSON 格式，带 `PARSED_REPORT_SCHEMA_VERSION` 版本号
 - 来源元数据：`AnnualReportSourceMetadata` 记录下载来源、URL、fallback 状态
 
+**已接受的未来设计：公共来源 provenance 输出契约**：后续若进入单独 implementation gate，公共 extraction snapshot / summary / score-compatible 输出可增加 additive source provenance 字段，用于让维护者从公共 artifact 判断 fallback-backed 样本是否具备来源安全性。最小字段包括 `source_provenance_schema_version`、`source_strategy`、`resolved_source_name`、`fallback_used`、`primary_failure_category`、`fallback_eligibility`、`source_provenance_status` 和 `source_provenance_reason`。该设计只暴露已审查的公共 provenance，不改变 `FundDocumentRepository` 来源策略、fallback 资格判定、source helper、下载器或 cache 语义；`schema_drift`、`identity_mismatch`、`integrity_error` 仍必须 fail-closed。若 `fallback_used=true` 但当前元数据未持久化 `primary_failure_category`，`fallback_eligibility` 必须为 `unknown_public_metadata_absent`，不得推断为 `eligible`。`fund_agent/fund` 应拥有 deterministic 纯 projection，Service 只消费 projection 结果并写入公共输出，不得反向访问来源内部。该设计不授权 baseline/golden promotion，不改变 renderer、FQ0-FQ6、默认 analyze/checklist 行为、Host/Agent/dayu 或任何生产来源编排。
+
 ### 6.2 结构化抽取层
 
 **代码实现**：`fund_agent/fund/extractors/`
