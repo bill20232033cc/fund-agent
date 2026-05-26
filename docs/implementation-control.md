@@ -5,7 +5,7 @@
 > **设计真源**: `docs/design.md` (v2.2)
 > **规则真源**: `AGENTS.md`
 > **历史快照**: `docs/archive/implementation-control-history-20260525.md`
-> **当前状态**: release maintenance；bond-lens contract + baseline coverage recovery plan accepted locally；下一入口为 bond-lens score applicability design gate
+> **当前状态**: release maintenance；bond-lens score applicability design accepted locally；下一入口为 bond-lens score applicability implementation gate
 
 ---
 
@@ -25,9 +25,9 @@
 |---|---|
 | Branch | `codex/local-reconciliation` |
 | Current phase | `release maintenance` |
-| Current gate | `bond-lens contract + baseline coverage recovery plan accepted locally` |
-| Next entry point | `bond-lens score applicability design gate; must use init-agents / tmux multi-agent flow` |
-| Latest accepted gate checkpoint | `bond-lens contract + baseline coverage recovery plan local accepted commit; use latest branch HEAD for exact hash` |
+| Current gate | `bond-lens score applicability design accepted locally` |
+| Next entry point | `bond-lens score applicability implementation gate; must use init-agents / tmux multi-agent flow` |
+| Latest accepted gate checkpoint | `bond-lens score applicability design local accepted commit; use latest branch HEAD for exact hash` |
 | Design truth | `docs/design.md` (v2.2) |
 | Control truth | `docs/implementation-control.md` |
 | Historical control snapshot | `docs/archive/implementation-control-history-20260525.md` |
@@ -217,6 +217,10 @@
 | bond-lens plan review: MiMo | `docs/reviews/release-maintenance-bond-lens-contract-baseline-coverage-plan-review-mimo-20260527.md` |
 | bond-lens plan review: GLM | `docs/reviews/release-maintenance-bond-lens-contract-baseline-coverage-plan-review-glm-20260527.md` |
 | bond-lens plan controller judgment | `docs/reviews/release-maintenance-bond-lens-contract-baseline-coverage-plan-controller-judgment-20260527.md` |
+| bond-lens score applicability design plan | `docs/reviews/release-maintenance-bond-lens-score-applicability-design-plan-20260527.md` |
+| bond-lens score applicability design review: MiMo | `docs/reviews/release-maintenance-bond-lens-score-applicability-design-plan-review-mimo-20260527.md` |
+| bond-lens score applicability design review: GLM | `docs/reviews/release-maintenance-bond-lens-score-applicability-design-plan-review-glm-20260527.md` |
+| bond-lens score applicability design controller judgment | `docs/reviews/release-maintenance-bond-lens-score-applicability-design-plan-controller-judgment-20260527.md` |
 
 ### Current Decisions
 
@@ -278,6 +282,7 @@
 - Baseline coverage / source recovery / taxonomy + bond triage is accepted locally. Subgate 1 classified `006597` / 2024 fields from public CLI evidence only: `share_change` is a concrete `extractor_gap` caused by §10 share-class selection ambiguity; `holdings_snapshot` is a `bond_lens_contract_gap`; `turnover_rate` and `holder_structure` remain `needs_more_evidence`; `investor_return` and `nav_data` anchor status are `score_contract_gap`. Track 1B replacement probing closed as `not_run_no_approved_candidates`; index/QDII fallback and FOF data-gap remain open. No implementation is authorized by this evidence gate.
 - share_change focused implementation is accepted locally. `fund_agent/fund/extractors/holdings_share_change.py` now supports deterministic share-class mapping beyond A/C using same-source §2 subordinate fund name / trading-code rows and a unique matching §10 value column, while preserving fail-closed ambiguity. A-Z bare suffix detection was hardened so ETF/LOF/NAV style Latin suffixes do not become false share-class labels, while Chinese fund-name suffixes such as `债券A` still match. Focused tests `23 passed`, ruff, 006597 public snapshot/score/quality-gate rerun, and diff check passed. The real 006597 row remains `share_change` missing with explicit ambiguity, so quality gate remains `block`; no FQ rule was weakened.
 - Bond-lens contract + baseline coverage recovery plan is accepted locally. Equity-shaped `holdings_snapshot` is accepted as a category error for `bond_fund`, but bond-risk evidence must not become silent N/A. The future design must make this slot fund-type-dependent and replace it with explicit bond risk evidence, issue taxonomy, allowed N/A reasons, and failure behavior. Reviews accepted one low-severity refinement: include convertible-bond / equity-exposure evidence in the next bond-risk contract design. Future implementation must compute/report the FQ4 denominator effect and prove `006597` is not improved only by suppressing equity evidence without a replacement bond-risk issue.
+- Bond-lens score applicability design is accepted locally. For exact `bond_fund`, equity-shaped `holdings_snapshot` must be excluded from stock-holdings denominator only when paired with explicit `bond_risk_evidence.v1` replacement issue output. Unknown/conflicted fund types remain fail-closed. The implementation basis is limited to `extraction_score.py`, `quality_gate.py`, focused tests, and README sync only if behavior/test documentation changes. Required refinements include explicit `BondRiskEvidenceGroup` fields, missing-key compatibility for old score JSON, raw/applicable denominator observability, and 006597 anti-mis-pass evidence.
 
 ### Current Non-Goals
 
@@ -290,21 +295,20 @@
 
 ## Next Entry Point
 
-`bond-lens score applicability design gate`
+`bond-lens score applicability implementation gate`
 
-This next gate must start with Startup Packet replay and `$init-agents` / tmux multi-agent flow. It is a design/plan/review gate first; source/test implementation may start only after a separate implementation plan is accepted.
+This next gate must start with Startup Packet replay and `$init-agents` / tmux multi-agent flow. It is a narrow implementation gate based on the accepted design plan and controller judgment; it still requires worker implementation, two independent code reviews, controller judgment, validation, control-doc update, and a local accepted commit.
 
 Scope allowed for the next gate:
 
-- Design the exact bond-fund score-applicability contract that replaces equity-shaped `holdings_snapshot` semantics with explicit bond-risk evidence.
-- Include duration / rate risk, credit risk, leverage / liquidity, asset allocation / holdings mix, drawdown / stress, redemption / share pressure, and convertible-bond / equity-exposure handling.
-- Specify allowed N/A reasons, failure behavior, issue taxonomy, denominator behavior, and how the replacement issue prevents silent quality-gate weakening.
-- Define a future minimal implementation slice and validation matrix, including proof that active/index/enhanced behavior remains unchanged and `006597` is not improved only by suppressing equity evidence.
-- Keep index/QDII source recovery and pure FOF recovery as separate evidence gates unless the controller explicitly opens those tracks.
+- Implement exact `bond_fund` score applicability for equity-shaped `holdings_snapshot`, paired with explicit `bond_risk_evidence.v1` replacement issue output.
+- Preserve FQ0-FQ6 policy semantics: FQ2F warning projection is allowed; thresholds, severity policy, Service/CLI behavior, and quality gate block/warn strategy must not change.
+- Add raw/applicable denominator observability and compute/report the 006597 anti-mis-pass evidence.
+- Keep active, index, enhanced-index, unknown, and conflicted fund-type behavior conservative and covered by focused tests.
 - Keep `turnover_rate` and `holder_structure` as evidence-only / needs-more-evidence; do not implement them from absence alone.
 - Keep `investor_return` and `nav_data` in future score/evidence-contract work.
 
-Do not enter `golden answer corpus v1` until coverage and source/fund-type blockers are resolved. Do not promote samples to durable baseline or golden answer corpus in this gate. Do not modify renderer, FQ0-FQ6, Service/CLI behavior, Host/Agent packages, Dayu runtime, `FundDocumentRepository` source strategy, source-helper fallback semantics, extractor logic, or golden/baseline fixtures unless a later accepted implementation plan explicitly authorizes that scope.
+Allowed files are limited to `fund_agent/fund/extraction_score.py`, `fund_agent/fund/quality_gate.py`, focused tests, optional Fund/tests README sync if documentation changes, and tracked implementation/review artifacts. Do not enter `golden answer corpus v1` until coverage and source/fund-type blockers are resolved. Do not promote samples to durable baseline or golden answer corpus in this gate. Do not modify renderer, FQ0-FQ6 policy, Service/CLI behavior, Host/Agent packages, Dayu runtime, `FundDocumentRepository` source strategy, source-helper fallback semantics, extractor logic, `fund_type.py`, or golden/baseline fixtures unless a later accepted plan explicitly expands scope.
 
 Do not push, create PR, mark ready, merge, close PRs, edit unrelated PRs, delete branches, or perform additional GitHub mutations without explicit user authorization. Do not add tracked scratch reports, PDF/cache outputs, source dumps, durable fixtures, or golden corpus files.
 
@@ -356,7 +360,7 @@ Do not push, create PR, mark ready, merge, close PRs, edit unrelated PRs, delete
 | `006597` bond quality-gate block | next bond extraction triage gate | Determine whether missing `holder_structure`, `holdings_snapshot`, `share_change`, `investor_return`, and related bond-lens gaps are extractor fixes, applicability policy, or evidence-anchor gaps. Do not route to golden until resolved. |
 | `006597` share_change ambiguity | next share_change focused implementation plan | Evidence classifies this as `extractor_gap`: §10 has multiple share columns and current rules cannot reliably choose the corresponding share class. Plan a narrow fix before implementation. |
 | `006597` share_change implementation | Completed in focused implementation | A-Z share-class mapping and subordinate §2 rows are supported with fail-closed ambiguity; ETF/LOF/NAV false-positive suffix risk fixed. Real 006597 still lacks deterministic public evidence and remains missing. |
-| `006597` holdings_snapshot bond-lens contract | next bond-lens score applicability design gate | Plan accepted that equity-shaped `holdings_snapshot` is a category error for `bond_fund`, but bond risk evidence must not become silent N/A. Next design must specify bond-risk evidence, convertible-bond / equity-exposure handling, denominator behavior, and replacement issue semantics before implementation. |
+| `006597` holdings_snapshot bond-lens contract | next bond-lens score applicability implementation gate | Design accepted that exact `bond_fund` excludes equity-shaped `holdings_snapshot` from stock-holdings denominator only with explicit `bond_risk_evidence.v1` replacement issue output. Implementation must preserve unknown/conflicted fail-closed behavior, FQ semantics, and 006597 anti-mis-pass evidence. |
 | `006597` turnover_rate / holder_structure | future evidence or policy gate | Evidence remains `needs_more_evidence`; do not infer from missing public output or implement without accepted source/policy proof. |
 | `006597` investor_return / nav_data anchor | future score/evidence-contract gate | Evidence classifies both as `score_contract_gap`; they are not immediate P1 bond extractor blockers. |
 | `nav_data` mapping | future `nav_data` source-contract slice | Keep excluded from initial facts projection until a safe mapping contract exists |
@@ -402,6 +406,7 @@ Do not push, create PR, mark ready, merge, close PRs, edit unrelated PRs, delete
 | `baseline coverage / source recovery / taxonomy + bond triage` | accepted locally | `docs/reviews/release-maintenance-baseline-coverage-source-taxonomy-bond-triage-evidence-controller-judgment-20260527.md` | Plan review MiMo `PASS_WITH_FINDINGS`, GLM `PASS`; both re-reviews `PASS`; Subgate 1 evidence reviewed by MiMo/GLM `PASS`; `git diff --check` passed; no code/product-flow changes | `share_change` extractor ambiguity, bond-lens `holdings_snapshot` contract, `turnover_rate` / `holder_structure` needs-more-evidence, score-contract gaps, coverage blockers | `share_change focused implementation plan + bond-lens contract design choice plan/review` |
 | `share_change focused implementation` | accepted locally | `docs/reviews/release-maintenance-share-change-focused-implementation-controller-judgment-20260527.md` | Plan reviews MiMo `PASS`, GLM `PASS_WITH_FINDINGS`; implementation reviews found A-Z suffix false-positive risk; fix applied; both targeted re-reviews `PASS`; focused tests `23 passed`, ruff, 006597 snapshot/score/quality gate rerun, and diff check passed | real 006597 still missing share_change; bond-lens `holdings_snapshot`, turnover/holder evidence, investor_return/nav_data contracts, coverage blockers | `bond-lens contract design + baseline coverage recovery plan/review` |
 | `bond-lens contract + baseline coverage recovery plan` | accepted locally | `docs/reviews/release-maintenance-bond-lens-contract-baseline-coverage-plan-controller-judgment-20260527.md` | AgentCodex plan; AgentMiMo `PASS`; AgentGLM `PASS_WITH_FINDINGS` with no blocking findings; controller accepted plan and deferred/accepted refinements; `git diff --check` passed | bond-risk evidence contract details, convertible/equity-exposure handling, FQ4 denominator proof, index/QDII fallback blockers, pure FOF coverage, `turnover_rate` / `holder_structure` evidence gaps | `bond-lens score applicability design gate` |
+| `bond-lens score applicability design` | accepted locally | `docs/reviews/release-maintenance-bond-lens-score-applicability-design-plan-controller-judgment-20260527.md` | AgentCodex design plan; AgentMiMo and AgentGLM `PASS_WITH_FINDINGS` with no blocking findings; controller accepted implementation constraints; `git diff --check` passed | implementation of additive score-applicability outputs, FQ2F projection, 006597 denominator proof, old score JSON compatibility | `bond-lens score applicability implementation gate` |
 
 ## Historical Evidence Index
 
