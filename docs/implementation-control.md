@@ -5,7 +5,7 @@
 > **设计真源**: `docs/design.md` (v2.2)
 > **规则真源**: `AGENTS.md`
 > **历史快照**: `docs/archive/implementation-control-history-20260525.md`
-> **当前状态**: release maintenance；bond-lens score applicability implementation accepted locally；下一入口为 baseline coverage recovery decision gate
+> **当前状态**: release maintenance；baseline coverage recovery decision plan accepted locally；下一入口为 index/QDII source recovery and replacement decision gate
 
 ---
 
@@ -25,9 +25,9 @@
 |---|---|
 | Branch | `codex/local-reconciliation` |
 | Current phase | `release maintenance` |
-| Current gate | `bond-lens score applicability implementation accepted locally` |
-| Next entry point | `baseline coverage recovery decision gate; must use init-agents / tmux multi-agent flow` |
-| Latest accepted gate checkpoint | `bond-lens score applicability implementation local accepted commit; use latest branch HEAD for exact hash` |
+| Current gate | `baseline coverage recovery decision plan accepted locally` |
+| Next entry point | `index/QDII source recovery and replacement decision gate; must use init-agents / tmux multi-agent flow` |
+| Latest accepted gate checkpoint | `baseline coverage recovery decision plan local accepted commit; use latest branch HEAD for exact hash` |
 | Design truth | `docs/design.md` (v2.2) |
 | Control truth | `docs/implementation-control.md` |
 | Historical control snapshot | `docs/archive/implementation-control-history-20260525.md` |
@@ -227,6 +227,11 @@
 | bond-lens score applicability implementation re-review: MiMo | `docs/reviews/release-maintenance-bond-lens-score-applicability-implementation-rereview-mimo-20260527.md` |
 | bond-lens score applicability implementation re-review: GLM | `docs/reviews/release-maintenance-bond-lens-score-applicability-implementation-rereview-glm-20260527.md` |
 | bond-lens score applicability implementation controller judgment | `docs/reviews/release-maintenance-bond-lens-score-applicability-implementation-controller-judgment-20260527.md` |
+| baseline coverage recovery decision plan | `docs/reviews/release-maintenance-baseline-coverage-recovery-decision-plan-20260527.md` |
+| baseline coverage recovery decision review: MiMo | `docs/reviews/release-maintenance-baseline-coverage-recovery-decision-plan-review-mimo-20260527.md` |
+| baseline coverage recovery decision review: GLM | `docs/reviews/release-maintenance-baseline-coverage-recovery-decision-plan-review-glm-20260527.md` |
+| baseline coverage recovery decision re-review: GLM | `docs/reviews/release-maintenance-baseline-coverage-recovery-decision-plan-rereview-glm-20260527.md` |
+| baseline coverage recovery decision controller judgment | `docs/reviews/release-maintenance-baseline-coverage-recovery-decision-plan-controller-judgment-20260527.md` |
 
 ### Current Decisions
 
@@ -290,6 +295,7 @@
 - Bond-lens contract + baseline coverage recovery plan is accepted locally. Equity-shaped `holdings_snapshot` is accepted as a category error for `bond_fund`, but bond-risk evidence must not become silent N/A. The future design must make this slot fund-type-dependent and replace it with explicit bond risk evidence, issue taxonomy, allowed N/A reasons, and failure behavior. Reviews accepted one low-severity refinement: include convertible-bond / equity-exposure evidence in the next bond-risk contract design. Future implementation must compute/report the FQ4 denominator effect and prove `006597` is not improved only by suppressing equity evidence without a replacement bond-risk issue.
 - Bond-lens score applicability design is accepted locally. For exact `bond_fund`, equity-shaped `holdings_snapshot` must be excluded from stock-holdings denominator only when paired with explicit `bond_risk_evidence.v1` replacement issue output. Unknown/conflicted fund types remain fail-closed. The implementation basis is limited to `extraction_score.py`, `quality_gate.py`, focused tests, and README sync only if behavior/test documentation changes. Required refinements include explicit `BondRiskEvidenceGroup` fields, missing-key compatibility for old score JSON, raw/applicable denominator observability, and 006597 anti-mis-pass evidence.
 - Bond-lens score applicability implementation is accepted locally. `extraction_score.py` now emits additive `field_applicability_decisions` and `score_applicability_issues`; exact `bond_fund` excludes equity-shaped `holdings_snapshot` only with `bond_risk_evidence.v1` / `bond_risk_evidence_missing` replacement issue. `quality_gate.py` consumes missing-key-compatible score-applicability issues and projects the replacement issue to existing warn-level `FQ2F` without changing FQ thresholds or policy. 006597 evidence moved from raw FQ4 block `5/14 = 35.71%` to applicable FQ4 warn `4/13 = 30.77%` with explicit replacement issue and final gate `warn`, not `pass`.
+- Baseline coverage recovery decision plan is accepted locally. The next safe gate is `index/QDII source recovery and replacement decision gate`, not durable baseline/golden preflight. The accepted reason is that source-safe representative coverage remains the dominant blocker: `110020` and `017641` are still fallback-blocked with unknown upstream failure category, while `006597` improved to warn but remains baseline-blocked by `bond_risk_evidence_missing.baseline_blocking=true` and other residual P1 gaps. The next gate must be plan-before-evidence and preserve fail-closed source semantics.
 
 ### Current Non-Goals
 
@@ -302,18 +308,18 @@
 
 ## Next Entry Point
 
-`baseline coverage recovery decision gate`
+`index/QDII source recovery and replacement decision gate`
 
-This next gate must start with Startup Packet replay and `$init-agents` / tmux multi-agent flow. It is a plan/review decision gate first; do not run broad corpus collection or implementation until the plan is accepted.
+This next gate must start with Startup Packet replay and `$init-agents` / tmux multi-agent flow. It is plan-before-evidence: no source recovery evidence run or candidate replacement probing may start until the next gate has its own accepted plan/review/controller judgment.
 
 Scope allowed for the next gate:
 
-- Reconcile small baseline coverage after bond-lens score applicability: `006597` is now quality-gate `warn` but still carries `bond_risk_evidence_missing`, `holder_structure`, `share_change`, and `turnover_rate` residuals.
-- Decide whether next safe gate should be index/QDII source recovery, pure FOF candidate recovery, bond positive-risk evidence design, holder/turnover evidence triage, or a durable baseline/golden preflight.
-- Keep `bond_risk_evidence_missing.baseline_blocking=true` out of durable baseline/golden promotion until a future baseline/golden gate defines the consumer.
-- Preserve source fallback fail-closed semantics for `110020` / `017641`; only `not_found` / `unavailable` may be fallback-eligible.
-- Do not count QDII-FOF as pure FOF without a taxonomy gate.
-- Keep large outputs in scratch / ignored reports; tracked artifacts should contain summaries and evidence paths.
+- Plan a bounded, repository-safe path to recover the upstream failure category for `110020` / 2024 and `017641` / 2024, or exclude/replace those candidates.
+- Use only `FundDocumentRepository`-backed public/product paths in any later evidence gate; treat `extraction-snapshot` as real repository access, not a lightweight read-only probe.
+- Preserve source fallback fail-closed semantics: only `not_found` / `unavailable` may be fallback-eligible; `schema_drift`, `identity_mismatch`, and `integrity_error` remain fail-closed.
+- Require controller-approved or accepted-artifact-derived replacement candidates before any replacement probing.
+- Keep durable baseline/golden promotion blocked; `006597` remains baseline-blocked while `bond_risk_evidence_missing.baseline_blocking=true` or other P1 residuals remain.
+- Keep large outputs in scratch / ignored reports; tracked artifacts should contain summaries and evidence paths only.
 
 Do not enter `golden answer corpus v1` until coverage and source/fund-type blockers are resolved. Do not promote samples to durable baseline or golden answer corpus in this gate. Do not modify renderer, FQ0-FQ6 policy, Service/CLI behavior, Host/Agent packages, Dayu runtime, `FundDocumentRepository` source strategy, source-helper fallback semantics, extractor logic, `fund_type.py`, or golden/baseline fixtures unless a later accepted plan explicitly expands scope.
 
@@ -415,6 +421,7 @@ Do not push, create PR, mark ready, merge, close PRs, edit unrelated PRs, delete
 | `bond-lens contract + baseline coverage recovery plan` | accepted locally | `docs/reviews/release-maintenance-bond-lens-contract-baseline-coverage-plan-controller-judgment-20260527.md` | AgentCodex plan; AgentMiMo `PASS`; AgentGLM `PASS_WITH_FINDINGS` with no blocking findings; controller accepted plan and deferred/accepted refinements; `git diff --check` passed | bond-risk evidence contract details, convertible/equity-exposure handling, FQ4 denominator proof, index/QDII fallback blockers, pure FOF coverage, `turnover_rate` / `holder_structure` evidence gaps | `bond-lens score applicability design gate` |
 | `bond-lens score applicability design` | accepted locally | `docs/reviews/release-maintenance-bond-lens-score-applicability-design-plan-controller-judgment-20260527.md` | AgentCodex design plan; AgentMiMo and AgentGLM `PASS_WITH_FINDINGS` with no blocking findings; controller accepted implementation constraints; `git diff --check` passed | implementation of additive score-applicability outputs, FQ2F projection, 006597 denominator proof, old score JSON compatibility | `bond-lens score applicability implementation gate` |
 | `bond-lens score applicability implementation` | accepted locally | `docs/reviews/release-maintenance-bond-lens-score-applicability-implementation-controller-judgment-20260527.md` | AgentCodex implementation; code reviews MiMo/GLM `PASS_WITH_FINDINGS`; issue-id validation fix applied; targeted re-reviews `PASS`; focused tests `72 passed`, quality-gate targeted `30 passed`, ruff, diff check, and 006597 score/gate evidence passed | positive bond-risk evidence input absent, `baseline_blocking` consumer future, 006597 `holder_structure` / `share_change` / `turnover_rate`, index/QDII/FOF coverage blockers | `baseline coverage recovery decision gate` |
+| `baseline coverage recovery decision plan` | accepted locally | `docs/reviews/release-maintenance-baseline-coverage-recovery-decision-plan-controller-judgment-20260527.md` | AgentCodex plan; AgentMiMo `PASS_WITH_FINDINGS`; AgentGLM `PASS_WITH_FINDINGS`; plan patched for closeout and plan-before-evidence guard; GLM targeted re-review `PASS`; `git diff --check` passed | source-safe recovery/replacement for `110020` and `017641`, pure FOF residual, bond positive-risk evidence residual, golden/baseline blocked | `index/QDII source recovery and replacement decision gate` |
 
 ## Historical Evidence Index
 
