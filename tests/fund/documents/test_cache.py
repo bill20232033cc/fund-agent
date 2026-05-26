@@ -17,7 +17,9 @@ from fund_agent.fund.documents.cache import (
 from fund_agent.fund.documents.models import (
     AnnualReportCacheProvenance,
     AnnualReportMetadata,
+    AnnualReportSourceFailureCategory,
     AnnualReportSourceMetadata,
+    AnnualReportSourceName,
     DocumentKey,
     ParsedAnnualReport,
     ReportSection,
@@ -129,6 +131,76 @@ def _eid_metadata(fund_code: str = "110011", year: int = 2024) -> AnnualReportSo
     )
 
 
+def test_source_metadata_round_trips_primary_failure_category() -> None:
+    """验证来源元数据会序列化并反序列化主来源失败类别。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当字段 key 或往返值不稳定时抛出。
+    """
+
+    metadata = AnnualReportSourceMetadata(
+        source="eastmoney",
+        fallback_used=True,
+        primary_failure_category="unavailable",
+    )
+
+    payload = metadata.to_dict()
+    restored = AnnualReportSourceMetadata.from_dict(payload)
+
+    assert payload["primary_failure_category"] == "unavailable"
+    assert restored.primary_failure_category == "unavailable"
+
+
+def test_source_metadata_legacy_or_unknown_failure_category_degrades_to_none() -> None:
+    """验证旧元数据或未知失败类别兼容降级为空分类。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当旧缓存无法兼容读取时抛出。
+    """
+
+    legacy = AnnualReportSourceMetadata.from_dict({"source": "eastmoney", "fallback_used": True})
+    unknown = AnnualReportSourceMetadata.from_dict(
+        {
+            "source": "eastmoney",
+            "fallback_used": True,
+            "primary_failure_category": "unexpected",
+        }
+    )
+
+    assert legacy.primary_failure_category is None
+    assert unknown.primary_failure_category is None
+
+
+def test_document_models_exports_source_failure_category_without_sources_import() -> None:
+    """验证 models 层独立拥有来源名称和失败类别类型。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 models 类型无法独立导入时抛出。
+    """
+
+    assert AnnualReportSourceMetadata(source="eid").source == "eid"
+    assert AnnualReportSourceName is not None
+    assert AnnualReportSourceFailureCategory is not None
+
+
 @pytest.mark.asyncio
 async def test_cache_persists_pdf_metadata_and_parsed_report(tmp_path: Path) -> None:
     """验证缓存会同时物化 documents 元信息与 parsed report 内容。
@@ -190,6 +262,11 @@ async def test_cache_persists_pdf_source_metadata(tmp_path: Path) -> None:
     pdf_path = tmp_path / "110011_2024_annual_report.pdf"
     pdf_path.write_bytes(b"pdf")
     metadata = _eid_metadata()
+    metadata = replace(
+        metadata,
+        fallback_used=True,
+        primary_failure_category="not_found",
+    )
 
     await cache.record_pdf_path(document_key, pdf_path, source_metadata=metadata)
     entry = await cache.get_pdf_entry(document_key)
@@ -197,6 +274,7 @@ async def test_cache_persists_pdf_source_metadata(tmp_path: Path) -> None:
     assert entry is not None
     assert entry.pdf_path == pdf_path
     assert entry.source_metadata == metadata
+    assert entry.source_metadata.primary_failure_category == "not_found"
 
 
 @pytest.mark.asyncio

@@ -61,7 +61,7 @@ class PublicSourceProvenance:
         source_strategy: 公共来源策略标签；v1 仅描述当前主源后 fallback 策略，不开放策略面。
         resolved_source_name: 仓库元数据解析出的公开来源名。
         fallback_used: 本次成功年报是否来自 fallback 来源。
-        primary_failure_category: 主来源失败分类；当前仓库公共元数据通常不持久化该字段。
+        primary_failure_category: 主来源失败分类；只来自仓库元数据或显式测试覆盖。
         fallback_eligibility: fallback 是否符合公开安全分类。
         source_provenance_status: provenance 完整性状态。
         source_provenance_reason: 稳定短原因码，不包含原始异常文本。
@@ -111,7 +111,7 @@ def project_public_source_provenance(
 
     Args:
         source_metadata: `ParsedAnnualReport.metadata.source` 暴露的来源元数据。
-        primary_failure_category: 显式传入的主来源失败分类；当前生产路径通常为空。
+        primary_failure_category: 显式传入的主来源失败分类；生产路径优先使用元数据字段。
 
     Returns:
         可写入公共 snapshot / summary 的稳定 provenance。
@@ -136,24 +136,30 @@ def project_public_source_provenance(
             source_provenance_reason=SOURCE_PROVENANCE_REASON_PRIMARY_NO_FALLBACK,
         )
 
-    if primary_failure_category in _ELIGIBLE_FAILURE_CATEGORIES:
+    effective_category = (
+        source_metadata.primary_failure_category
+        if source_metadata.primary_failure_category is not None
+        else primary_failure_category
+    )
+
+    if effective_category in _ELIGIBLE_FAILURE_CATEGORIES:
         return PublicSourceProvenance(
             source_provenance_schema_version=PUBLIC_SOURCE_PROVENANCE_SCHEMA_VERSION,
             source_strategy="primary_then_fallback",
             resolved_source_name=resolved_source_name,
             fallback_used=True,
-            primary_failure_category=primary_failure_category,
+            primary_failure_category=effective_category,
             fallback_eligibility="eligible",
             source_provenance_status="complete",
             source_provenance_reason=SOURCE_PROVENANCE_REASON_FALLBACK_ELIGIBLE,
         )
-    if primary_failure_category in _FAIL_CLOSED_FAILURE_CATEGORIES:
+    if effective_category in _FAIL_CLOSED_FAILURE_CATEGORIES:
         return PublicSourceProvenance(
             source_provenance_schema_version=PUBLIC_SOURCE_PROVENANCE_SCHEMA_VERSION,
             source_strategy="primary_then_fallback",
             resolved_source_name=resolved_source_name,
             fallback_used=True,
-            primary_failure_category=primary_failure_category,
+            primary_failure_category=effective_category,
             fallback_eligibility="fail_closed",
             source_provenance_status="incomplete",
             source_provenance_reason=SOURCE_PROVENANCE_REASON_FALLBACK_FAIL_CLOSED,

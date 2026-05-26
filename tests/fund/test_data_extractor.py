@@ -290,6 +290,40 @@ async def test_data_extractor_projects_fallback_metadata_as_unknown_when_categor
     assert bundle.source_provenance.source_provenance_status == "incomplete"
 
 
+@pytest.mark.asyncio
+async def test_data_extractor_projects_metadata_primary_failure_category() -> None:
+    """验证生产 extractor 使用年报来源元数据中的主源失败分类。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当生产投影没有消费 metadata 分类时抛出。
+    """
+
+    repository = _FakeRepository(
+        _annual_report(
+            source_metadata=AnnualReportSourceMetadata(
+                source="eastmoney",
+                fallback_used=True,
+                primary_failure_category="not_found",
+            )
+        )
+    )
+    extractor = FundDataExtractor(repository=repository, nav_provider=_RecordingNavProvider())
+
+    bundle = await extractor.extract("110011", 2024)
+
+    assert bundle.source_provenance.resolved_source_name == "eastmoney"
+    assert bundle.source_provenance.fallback_used is True
+    assert bundle.source_provenance.primary_failure_category == "not_found"
+    assert bundle.source_provenance.fallback_eligibility == "eligible"
+    assert bundle.source_provenance.source_provenance_status == "complete"
+
+
 def _annual_report(
     *,
     source_metadata: AnnualReportSourceMetadata | None = None,

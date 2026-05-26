@@ -18,18 +18,15 @@ from typing import Any, Awaitable, Callable, Final, Literal, Protocol
 
 import httpx
 
-from fund_agent.fund.documents.models import AnnualReportSourceMetadata, AnnualReportSourceName
+from fund_agent.fund.documents.models import (
+    AnnualReportSourceFailureCategory,
+    AnnualReportSourceMetadata,
+    AnnualReportSourceName,
+)
 from fund_agent.fund.pdf.downloader import DEFAULT_CACHE_DIR, _download_annual_report_pdf
 
 AnnualReportDownloader = Callable[..., Awaitable[Path]]
 EidClientFactory = Callable[..., AbstractAsyncContextManager[Any]]
-AnnualReportSourceFailureCategory = Literal[
-    "not_found",
-    "unavailable",
-    "schema_drift",
-    "identity_mismatch",
-    "integrity_error",
-]
 
 EID_BASE_URL = "http://eid.csrc.gov.cn/fund"
 EID_VALIDATE_FUND_PATH = "/fund/disclose/validate_fund.do"
@@ -655,7 +652,10 @@ class AnnualReportSourceOrchestrator:
                 failures.append(failure)
                 _raise_fallback_blocked(tuple(failures), failure, exc)
             if failures:
-                return _mark_fallback_used(result)
+                return _mark_fallback_used(
+                    result,
+                    primary_failure_category=failures[0].category,
+                )
             return result
         return _raise_exhausted_sources(tuple(failures))
 
@@ -764,11 +764,16 @@ def _raise_fallback_blocked(
     raise AnnualReportSourceFallbackBlockedError(failures, blocking_failure) from exc
 
 
-def _mark_fallback_used(result: AnnualReportSourceResult) -> AnnualReportSourceResult:
+def _mark_fallback_used(
+    result: AnnualReportSourceResult,
+    *,
+    primary_failure_category: AnnualReportSourceFailureCategory | None = None,
+) -> AnnualReportSourceResult:
     """标记来源结果来自 fallback。
 
     Args:
         result: 原始来源结果。
+        primary_failure_category: 触发 fallback 的主来源失败类别。
 
     Returns:
         标记 fallback 后的新结果。
@@ -777,7 +782,14 @@ def _mark_fallback_used(result: AnnualReportSourceResult) -> AnnualReportSourceR
         无显式抛出。
     """
 
-    return replace(result, metadata=replace(result.metadata, fallback_used=True))
+    return replace(
+        result,
+        metadata=replace(
+            result.metadata,
+            fallback_used=True,
+            primary_failure_category=primary_failure_category,
+        ),
+    )
 
 
 def _raise_exhausted_sources(

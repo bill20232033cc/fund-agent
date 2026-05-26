@@ -6,17 +6,17 @@ CI 当前固定 Python 3.11，使用 `uv sync --extra dev --frozen` 安装锁定
 
 ## 当前目录
 
-- `tests/fund/documents/test_repository.py`：文档仓库契约测试，验证仓库对外返回 `ParsedAnnualReport`，不暴露本地 `Path`，并覆盖来源元数据、cache provenance、metadata-aware/legacy loader 和并发防串扰
-- `tests/fund/documents/test_annual_report_sources.py`：年报来源编排测试，使用 fake source 和 fake EID network 覆盖 EID 主源、Eastmoney fallback、显式 fallback 分类、fail-closed 阻断 provenance、请求级 timeout、PDF 校验、PDF cache 完整性校验、原子写入、`force_refresh` 转发和 PDF 适配器来源调用；不触发真实 EID/Eastmoney/akshare 网络
-- `tests/fund/documents/test_cache.py`：文档缓存最小闭环测试，覆盖 PDF 元信息缓存、source metadata JSON、损坏来源元数据降级、parsed report 物化、parsed payload 原子替换失败清理、损坏 parsed payload 回退未命中、legacy metadata 兼容和缓存失效回退
+- `tests/fund/documents/test_repository.py`：文档仓库契约测试，验证仓库对外返回 `ParsedAnnualReport`，不暴露本地 `Path`，并覆盖来源元数据、fallback 主源失败分类、cache provenance、metadata-aware/legacy loader 和并发防串扰
+- `tests/fund/documents/test_annual_report_sources.py`：年报来源编排测试，使用 fake source 和 fake EID network 覆盖 EID 主源、Eastmoney fallback、主源失败分类持久化、fail-closed 阻断 provenance、请求级 timeout、PDF 校验、PDF cache 完整性校验、原子写入、`force_refresh` 转发和 PDF 适配器来源调用；不触发真实 EID/Eastmoney/akshare 网络
+- `tests/fund/documents/test_cache.py`：文档缓存最小闭环测试，覆盖 PDF 元信息缓存、source metadata JSON、主源失败分类往返、损坏来源元数据降级、parsed report 物化、parsed payload 原子替换失败清理、损坏 parsed payload 回退未命中、legacy metadata 兼容和缓存失效回退
 - `tests/fund/pdf/test_downloader.py`：PDF 下载 helper 测试，验证内部缓存命中、损坏缓存刷新、非 PDF 响应拒绝、强制刷新下载和年报 URL 组装
 - `tests/fund/pdf/test_parser.py`：章节定位测试，覆盖 `§3` 正文命中、目录误判回归和偏移单调递增
 - `tests/fund/extractors/test_profile.py`：基础画像 extractor 测试，覆盖分类先行、`classified_fund_type` / `classification_basis` 稳定输出、纯指数/指数增强/非指数 `index_profile`，以及费率/基准/规模/经理 anchor
 - `tests/fund/extractors/test_performance.py`：`§3` 表现 extractor 测试，覆盖冒号行与年度表现表中的净值增长率/基准收益率 anchor、投资者收益率 `direct / estimated / missing` 三态，以及跟踪误差直接披露、目标/限制、mixed actual/target、manager narrative、benchmark-only、standard-deviation-only、unparseable、table/text inconsistency、多候选、表格多候选、`§2` fallback 和早期 blocker 后继续扫描
 - `tests/fund/extractors/test_manager_ownership.py`：`§4/§8/§9` 管理人/持有人 extractor 测试，覆盖编号标题策略文本、换手率、持有披露表、跨页持有人结构和 `missing` 路径
 - `tests/fund/extractors/test_holdings_share_change.py`：`§8/§10` 持仓/份额 extractor 测试，覆盖前十大重仓、行业分布、净变动表、申购/赎回拆分表、多份额列选择、非 A 份额不默认 A 类、歧义多列表 missing、利润变动表误命中回归和表格型 anchor
-- `tests/fund/test_source_provenance.py`：公共来源 provenance 投影测试，覆盖主源 not-applicable、fallback 缺失分类 unknown、eligible/fail-closed 分类映射和稳定字典输出；不读取文档仓库、PDF、cache 或来源 helper
-- `tests/fund/test_data_extractor.py`：P1 结构化数据 façade 测试，覆盖 `FundDataExtractor` 在年报仓库成功后对 NAV provider/cache/akshare 失败降级为 `NavDataResult(unavailable=True)`、从 `ParsedAnnualReport.metadata.source` 显式投影 `source_provenance`，以及年报仓库/PDF 类异常不被 NAV 降级吞掉；使用 fake repository 和 fake nav provider，不触发真实网络、PDF 或 akshare
+- `tests/fund/test_source_provenance.py`：公共来源 provenance 投影测试，覆盖主源 not-applicable、fallback 缺失分类 unknown、metadata-owned eligible/fail-closed 分类映射、metadata 优先级、kwarg 兼容路径和稳定字典输出；不读取文档仓库、PDF、cache 或来源 helper
+- `tests/fund/test_data_extractor.py`：P1 结构化数据 façade 测试，覆盖 `FundDataExtractor` 在年报仓库成功后对 NAV provider/cache/akshare 失败降级为 `NavDataResult(unavailable=True)`、从 `ParsedAnnualReport.metadata.source` 显式投影 `source_provenance` 与 metadata 主源失败分类，以及年报仓库/PDF 类异常不被 NAV 降级吞掉；使用 fake repository 和 fake nav provider，不触发真实网络、PDF 或 akshare
 - `tests/fund/test_extraction_snapshot.py`：P4-S1/P5-S3/P13/P14-S1 精选基金池字段级抽取快照测试，覆盖 CSV 校验、snapshot schema、公共来源 provenance 字段、`comparable_values` 白名单子字段、`index_profile` / `tracking_error` dataclass 子字段序列化、summary 重复代码标红、Source Provenance 表、单基金失败继续和 `004393` known failure 捕获；使用 fake extractor，不触发真实网络或 PDF
 - `tests/fund/test_extraction_score.py`：P4-S2/P4-R10/P5-S2/P5-S3/P5-S4/P6-S5/P9-S2/P14-S1 字段级评分测试，覆盖 snapshot JSONL coverage / traceability / status / priority 映射、单基金质量汇总、指数质量字段按基金类型条件进入 P1 分母、`fund_quality` 模板契约适用性派生、`failed_funds` accounting、score 输出、additive 来源 provenance 不改变 score/FQ 输出、最小 golden set 选择、correctness perfect match、mismatch、白名单缺失、旧 snapshot 兼容、skipped 分母处理和 report-year scoped golden coverage scope；不触发真实网络或 PDF
 - `tests/fund/test_golden_prefill.py`：correctness golden answer 预填底稿测试，覆盖模板基金代码识别、dict/dataclass 字段预填、证据 source 和跳过字段保留；使用 fake extractor，不触发真实网络或 PDF

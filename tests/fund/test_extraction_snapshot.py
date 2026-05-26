@@ -238,10 +238,10 @@ def test_build_snapshot_records_copies_identical_bundle_source_provenance_to_all
         source_strategy="primary_then_fallback",
         resolved_source_name="eastmoney",
         fallback_used=True,
-        primary_failure_category=None,
-        fallback_eligibility="unknown_public_metadata_absent",
-        source_provenance_status="incomplete",
-        source_provenance_reason="fallback_used_primary_failure_category_absent",
+        primary_failure_category="not_found",
+        fallback_eligibility="eligible",
+        source_provenance_status="complete",
+        source_provenance_reason="fallback_used_primary_failure_category_eligible",
     )
     bundle = _build_bundle("110011", "active_fund", source_provenance=provenance)
     selected_fund = SelectedFundRecord(
@@ -267,8 +267,9 @@ def test_build_snapshot_records_copies_identical_bundle_source_provenance_to_all
     first_record = records[0]
     assert first_record.resolved_source_name == "eastmoney"
     assert first_record.fallback_used is True
-    assert first_record.fallback_eligibility == "unknown_public_metadata_absent"
-    assert first_record.source_provenance_status == "incomplete"
+    assert first_record.primary_failure_category == "not_found"
+    assert first_record.fallback_eligibility == "eligible"
+    assert first_record.source_provenance_status == "complete"
 
 
 def test_build_snapshot_records_preserves_unavailable_nav_reason() -> None:

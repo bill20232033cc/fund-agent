@@ -112,6 +112,35 @@ def test_fallback_without_public_failure_category_is_incomplete_unknown() -> Non
 
 
 @pytest.mark.parametrize("category", ["not_found", "unavailable"])
+def test_fallback_with_metadata_owned_eligible_category_is_complete(
+    category: PrimaryFailureCategory,
+) -> None:
+    """验证元数据持久化的 eligible 分类会被生产投影消费。
+
+    Args:
+        category: 主源失败分类。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当元数据分类没有优先用于投影时抛出。
+    """
+
+    provenance = project_public_source_provenance(
+        AnnualReportSourceMetadata(
+            source="eastmoney",
+            fallback_used=True,
+            primary_failure_category=category,
+        )
+    )
+
+    assert provenance.primary_failure_category == category
+    assert provenance.fallback_eligibility == "eligible"
+    assert provenance.source_provenance_status == "complete"
+
+
+@pytest.mark.parametrize("category", ["not_found", "unavailable"])
 def test_fallback_with_eligible_category_is_complete(category: PrimaryFailureCategory) -> None:
     """验证允许 fallback 的失败分类映射为 eligible。
 
@@ -133,6 +162,35 @@ def test_fallback_with_eligible_category_is_complete(category: PrimaryFailureCat
     assert provenance.primary_failure_category == category
     assert provenance.fallback_eligibility == "eligible"
     assert provenance.source_provenance_status == "complete"
+
+
+@pytest.mark.parametrize("category", ["schema_drift", "identity_mismatch", "integrity_error"])
+def test_fallback_with_metadata_owned_fail_closed_category_is_incomplete(
+    category: PrimaryFailureCategory,
+) -> None:
+    """验证元数据中的 fail-closed 分类不会被下游状态覆盖。
+
+    Args:
+        category: 主源失败分类。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 fail-closed 分类被误标为 eligible 时抛出。
+    """
+
+    provenance = project_public_source_provenance(
+        AnnualReportSourceMetadata(
+            source="eastmoney",
+            fallback_used=True,
+            primary_failure_category=category,
+        )
+    )
+
+    assert provenance.primary_failure_category == category
+    assert provenance.fallback_eligibility == "fail_closed"
+    assert provenance.source_provenance_status == "incomplete"
 
 
 @pytest.mark.parametrize("category", ["schema_drift", "identity_mismatch", "integrity_error"])
@@ -160,6 +218,56 @@ def test_fallback_with_fail_closed_category_is_incomplete(
     assert provenance.fallback_eligibility == "fail_closed"
     assert provenance.source_provenance_status == "incomplete"
     assert provenance.source_provenance_status != "not_applicable"
+
+
+def test_metadata_failure_category_wins_over_keyword_override() -> None:
+    """验证元数据字段优先于显式测试覆盖参数。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 kwarg 覆盖了元数据同源分类时抛出。
+    """
+
+    provenance = project_public_source_provenance(
+        AnnualReportSourceMetadata(
+            source="eastmoney",
+            fallback_used=True,
+            primary_failure_category="schema_drift",
+        ),
+        primary_failure_category="not_found",
+    )
+
+    assert provenance.primary_failure_category == "schema_drift"
+    assert provenance.fallback_eligibility == "fail_closed"
+    assert provenance.source_provenance_reason == "fallback_used_primary_failure_category_fail_closed"
+
+
+def test_keyword_failure_category_still_applies_when_metadata_category_missing() -> None:
+    """验证元数据缺分类时仍保留测试用显式分类兼容路径。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当兼容 kwarg 路径失效时抛出。
+    """
+
+    provenance = project_public_source_provenance(
+        AnnualReportSourceMetadata(source="eastmoney", fallback_used=True),
+        primary_failure_category="unavailable",
+    )
+
+    assert provenance.primary_failure_category == "unavailable"
+    assert provenance.fallback_eligibility == "eligible"
+    assert provenance.source_provenance_status == "complete"
 
 
 def test_source_provenance_to_dict_serializes_stable_keys() -> None:

@@ -5,7 +5,7 @@
 > **设计真源**: `docs/design.md` (v2.2)
 > **规则真源**: `AGENTS.md`
 > **历史快照**: `docs/archive/implementation-control-history-20260525.md`
-> **当前状态**: release maintenance；source provenance primary-failure-category propagation design plan accepted locally；下一入口为 source provenance primary-failure-category propagation implementation gate
+> **当前状态**: release maintenance；source provenance primary-failure-category propagation implementation accepted locally；下一入口为 source provenance post-implementation bounded evidence rerun plan/review gate
 
 ---
 
@@ -25,9 +25,9 @@
 |---|---|
 | Branch | `codex/local-reconciliation` |
 | Current phase | `release maintenance` |
-| Current gate | `source provenance primary-failure-category propagation design plan accepted locally` |
-| Next entry point | `source provenance primary-failure-category propagation implementation gate; must use init-agents / tmux multi-agent flow` |
-| Latest accepted gate checkpoint | `source provenance primary-failure-category propagation design plan local accepted commit; use latest branch HEAD for exact hash` |
+| Current gate | `source provenance primary-failure-category propagation implementation accepted locally` |
+| Next entry point | `source provenance post-implementation bounded evidence rerun plan/review gate; must use init-agents / tmux multi-agent flow` |
+| Latest accepted gate checkpoint | `source provenance primary-failure-category propagation implementation local accepted commit; use latest branch HEAD for exact hash` |
 | Design truth | `docs/design.md` (v2.2) |
 | Control truth | `docs/implementation-control.md` |
 | Historical control snapshot | `docs/archive/implementation-control-history-20260525.md` |
@@ -272,6 +272,10 @@
 | source provenance primary-failure-category propagation plan re-review: MiMo | `docs/reviews/release-maintenance-source-provenance-primary-failure-category-propagation-design-plan-rereview-mimo-20260527.md` |
 | source provenance primary-failure-category propagation plan re-review: GLM | `docs/reviews/release-maintenance-source-provenance-primary-failure-category-propagation-design-plan-rereview-glm-20260527.md` |
 | source provenance primary-failure-category propagation plan controller judgment | `docs/reviews/release-maintenance-source-provenance-primary-failure-category-propagation-design-plan-controller-judgment-20260527.md` |
+| source provenance primary-failure-category propagation implementation evidence | `docs/reviews/release-maintenance-source-provenance-primary-failure-category-propagation-implementation-evidence-20260527.md` |
+| source provenance primary-failure-category propagation implementation review: MiMo | `docs/reviews/release-maintenance-source-provenance-primary-failure-category-propagation-implementation-review-mimo-20260527.md` |
+| source provenance primary-failure-category propagation implementation review: GLM | `docs/reviews/release-maintenance-source-provenance-primary-failure-category-propagation-implementation-review-glm-20260527.md` |
+| source provenance primary-failure-category propagation implementation controller judgment | `docs/reviews/release-maintenance-source-provenance-primary-failure-category-propagation-implementation-controller-judgment-20260527.md` |
 
 ### Current Decisions
 
@@ -344,6 +348,7 @@
 - Source provenance bounded evidence classification plan is accepted locally. The evidence run is bounded to public CLI commands for `110020` / 2024 and `017641` / 2024, must classify from public provenance fields and quality outputs only, and must record `promotion_disposition=not_promoted` for every row. The plan explicitly expects fallback-backed rows to remain `provenance_unknown_public_metadata_absent` under current metadata.
 - Source provenance bounded evidence classification is accepted locally. Public CLI evidence for `110020` / 2024 and `017641` / 2024 completed with both rows classified as `provenance_unknown_public_metadata_absent` and `promotion_disposition=not_promoted`. `110020` quality status is `warn`; `017641` quality status is `block`, but quality cannot become `quality_blocked_after_provenance` until public provenance first proves fallback eligibility. Both remain outside the clean denominator.
 - Source provenance primary-failure-category propagation design plan is accepted locally. The next minimal implementation slice may move `AnnualReportSourceFailureCategory` ownership to `documents/models.py`, add optional `primary_failure_category` to `AnnualReportSourceMetadata`, populate it only in `AnnualReportSourceOrchestrator` success-after-primary-failure fallback path, and project it through existing public provenance fields. Missing category must remain `unknown_public_metadata_absent`; fail-closed categories must remain fail-closed; no source strategy, FQ0-FQ6, renderer, default CLI, Host/Agent/dayu, baseline, or golden behavior is authorized.
+- Source provenance primary-failure-category propagation implementation is accepted locally. `AnnualReportSourceMetadata` now persists optional `primary_failure_category`, successful fallback after eligible primary `not_found` / `unavailable` stores `failures[0].category`, and public provenance uses metadata-owned category before test-only keyword fallback. Old metadata remains `unknown_public_metadata_absent`; fail-closed categories remain fail-closed. Focused tests, ruff, `git diff --check`, and two code reviews passed without changing source strategy, renderer, FQ0-FQ6, default analyze/checklist behavior, Host/Agent/dayu, baseline, or golden state.
 
 ### Current Non-Goals
 
@@ -356,18 +361,17 @@
 
 ## Next Entry Point
 
-`source provenance primary-failure-category propagation implementation gate`
+`source provenance post-implementation bounded evidence rerun plan/review gate`
 
-This next gate must start with Startup Packet replay and `$init-agents` / tmux multi-agent flow. It may implement only the accepted minimal metadata propagation slice from the design plan and must complete implementation, validation, two independent code reviews, any required fixes / re-reviews, controller judgment, and a local accepted commit before any evidence rerun.
+This next gate must start with Startup Packet replay and `$init-agents` / tmux multi-agent flow. It is plan/review first. It may plan a bounded public evidence rerun for `110020` / 2024 and `017641` / 2024 using the newly implemented public `primary_failure_category` metadata propagation, but must explicitly handle old cached metadata behavior before running evidence.
 
 Scope allowed for the next gate:
 
-- Move `AnnualReportSourceFailureCategory` ownership to `fund_agent/fund/documents/models.py`.
-- Add optional `primary_failure_category` to `AnnualReportSourceMetadata`, including `to_dict()` / `from_dict()` compatibility and `_normalize_failure_category()`.
-- Populate the category only in `AnnualReportSourceOrchestrator` success-after-primary-failure fallback path via `_mark_fallback_used(..., *, primary_failure_category=...)`.
-- Project metadata-owned category through `fund_agent/fund/source_provenance.py` with the accepted `effective_category` precedence rule.
-- Preserve `FundDocumentRepository` source strategy and fail-closed fallback semantics.
-- Keep `fallback_used=true` plus missing category as `unknown_public_metadata_absent`; do not infer eligibility from extraction success, score output, or quality status.
+- Define exact bounded public CLI commands and run ids for `110020` / 2024 and `017641` / 2024.
+- Decide whether `force_refresh` or cache-refresh strategy is necessary to avoid old metadata masking the new field; do not delete cache or source outputs without an accepted plan.
+- Classify each row only from public snapshot provenance and public quality outputs.
+- Keep successful extraction, score output, quality status, source name, and cache state from becoming fallback eligibility evidence.
+- Keep `promotion_disposition=not_promoted` for every row.
 - Keep durable baseline/golden promotion blocked; `110020`, `017641`, FOF, bond baseline-blocking, and reviewed-fact blockers remain open.
 
 Do not enter `golden answer corpus v1` until coverage and source/fund-type blockers are resolved. Do not promote samples to durable baseline or golden answer corpus in this gate. Do not modify code, renderer, FQ0-FQ6 policy, default analyze/checklist behavior, Host/Agent packages, Dayu runtime, `FundDocumentRepository` source strategy, source-helper fallback semantics, extractor logic, `fund_type.py`, or golden/baseline fixtures unless a later accepted plan explicitly expands scope.
@@ -417,7 +421,7 @@ Do not push, create PR, mark ready, merge, close PRs, edit unrelated PRs, delete
 | NAV external-data degradation | Completed in core reliability implementation | NAV provider/cache/akshare failures degrade to `NavDataResult(unavailable=True, records=[])`; annual-report repository/PDF/source fail-closed semantics remain outside the catch boundary |
 | Pre-2026 turnover-rate missing semantics | Completed in core reliability implementation | Focused tests lock missing `turnover_rate` as P1 warn/insufficiency, not standalone hard block; FQ4 aggregate missing-rate semantics remain unchanged |
 | Small baseline corpus v1 | Completed in evidence run | Accepted 8 candidate rows / 7 unique fund codes as evidence only. `004393` / 2024 and `004194` / 2024 are quality-gate `warn`; `006597` / 2024 is quality-gate `block`; index/QDII fallback and FOF data-gap remain blockers. No durable baseline or golden promotion. |
-| Index/QDII source recovery for baseline coverage | next source provenance primary-failure-category propagation implementation gate | Public provenance evidence classifies `110020` / `017641` as `provenance_unknown_public_metadata_absent`; accepted design says primary failure category should be persisted / projected from repository metadata before any recovery or promotion decision. |
+| Index/QDII source recovery for baseline coverage | next source provenance post-implementation bounded evidence rerun plan/review gate | Primary failure category propagation is implemented; plan/review a bounded public rerun for `110020` / `017641` and explicitly handle old cached metadata before any recovery or promotion decision. |
 | FOF coverage / taxonomy | next baseline coverage / taxonomy gate | Find pure `fof_fund` repository-verified candidate, or open a taxonomy gate before counting QDII-FOF attempts as FOF coverage. |
 | `006597` bond quality-gate block | Completed for holdings applicability; future bond/holder/turnover evidence gates remain | `holdings_snapshot` equity-shape false blocker is resolved into `bond_risk_evidence_missing` / `FQ2F/warn`; 006597 now warns rather than blocks for this reason. Do not route to golden while `bond_risk_evidence_missing.baseline_blocking=true` or other P1 gaps remain. |
 | `006597` share_change ambiguity | next share_change focused implementation plan | Evidence classifies this as `extractor_gap`: §10 has multiple share columns and current rules cannot reliably choose the corresponding share class. Plan a narrow fix before implementation. |
@@ -479,6 +483,7 @@ Do not push, create PR, mark ready, merge, close PRs, edit unrelated PRs, delete
 | `source provenance bounded evidence classification plan` | accepted locally | `docs/reviews/release-maintenance-source-provenance-bounded-evidence-classification-plan-controller-judgment-20260527.md` | AgentCodex plan; AgentMiMo initial/re-review `PASS`; AgentGLM initial `PASS_WITH_FINDINGS`, re-review `PASS`; plan patched for current metadata expectation and `primary_succeeded_no_fallback`; `git diff --check` passed; commit `26e61f7` | evidence run for `110020` / `017641`, metadata category availability, pure FOF residual, bond baseline-blocking residual, golden/baseline blocked | `source provenance bounded evidence run` |
 | `source provenance bounded evidence classification` | accepted locally | `docs/reviews/release-maintenance-source-provenance-bounded-evidence-classification-controller-judgment-20260527.md` | Public CLI snapshot/score/quality-gate ran for `110020` / 2024 and `017641` / 2024; both classify `provenance_unknown_public_metadata_absent`; MiMo review `PASS`; GLM review `PASS`; generated outputs stayed ignored; no promotion | public `primary_failure_category` absent, `017641` quality block, pure FOF residual, bond baseline-blocking residual, golden/baseline blocked | `source provenance primary-failure-category propagation design gate` |
 | `source provenance primary-failure-category propagation design plan` | accepted locally | `docs/reviews/release-maintenance-source-provenance-primary-failure-category-propagation-design-plan-controller-judgment-20260527.md` | AgentCodex design plan; AgentMiMo initial review `PASS`; AgentGLM initial review `pass-with-risks`; plan patched for type ownership, projection precedence, actual orchestrator naming, serialization and `_mark_fallback_used` details; both targeted re-reviews `PASS`; `git diff --check` passed | implementation of metadata propagation, old-cache unknown behavior, 110020/017641 bounded evidence rerun after implementation, pure FOF residual, bond baseline-blocking residual, golden/baseline blocked | `source provenance primary-failure-category propagation implementation gate` |
+| `source provenance primary-failure-category propagation implementation` | accepted locally | `docs/reviews/release-maintenance-source-provenance-primary-failure-category-propagation-implementation-controller-judgment-20260527.md` | AgentCodex implementation; code reviews MiMo/GLM `PASS`; focused validations 69/23/8/44/44 tests passed; ruff and `git diff --check` passed; docs/README sync completed | old-cache unknown behavior, 110020/017641 bounded evidence rerun, pure FOF residual, bond baseline-blocking residual, golden/baseline blocked | `source provenance post-implementation bounded evidence rerun plan/review gate` |
 
 ## Historical Evidence Index
 
