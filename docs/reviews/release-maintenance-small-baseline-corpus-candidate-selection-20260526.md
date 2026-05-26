@@ -1,7 +1,7 @@
 # Gate A Small Baseline Corpus Candidate Selection
 
-> Date: 2026-05-26  
-> Worker: AgentCodex evidence/planning specialist  
+> Date: 2026-05-26
+> Worker: AgentCodex evidence/planning specialist
 > Scope: small baseline corpus candidate selection artifact only; no source, tests, README, renderer, FQ0-FQ6, Service/CLI, Host/Agent/dayu, fixtures, run output, commit, push, or PR work.
 
 ## Truth Sources

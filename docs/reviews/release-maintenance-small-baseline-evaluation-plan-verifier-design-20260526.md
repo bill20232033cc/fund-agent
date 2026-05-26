@@ -1,7 +1,7 @@
 # Gate B Small Baseline Evaluation Plan / Verifier Design
 
-> Date: 2026-05-26  
-> Worker: AgentCodex planning specialist  
+> Date: 2026-05-26
+> Worker: AgentCodex planning specialist
 > Scope: planning artifact only. No source, tests, README, renderer, FQ0-FQ6, Service/CLI, Host/Agent/dayu, fixtures, run outputs, commit, push, PR, annual-report fetch, annual-report parse, `FundDocumentRepository`, PDF/cache/source helper, downloader, or source-adapter work.
 
 ## Truth Sources

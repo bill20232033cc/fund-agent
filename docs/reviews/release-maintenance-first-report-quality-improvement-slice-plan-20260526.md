@@ -1,7 +1,7 @@
 # Gate C First Report-Quality Improvement Slice Plan
 
-> Date: 2026-05-26  
-> Worker: AgentCodex planning specialist  
+> Date: 2026-05-26
+> Worker: AgentCodex planning specialist
 > Scope: code-generation-ready implementation plan only. No source, tests, README, renderer, FQ0-FQ6, Service/CLI, Host/Agent/dayu, fixture, run-output, commit, push, PR, destructive git, annual-report fetch, annual-report parse, `FundDocumentRepository`, PDF/cache/source helper, downloader, or source-adapter work was performed in this gate.
 
 ## Truth Sources

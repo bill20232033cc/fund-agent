@@ -5,7 +5,7 @@
 > **设计真源**: `docs/design.md` (v2.2)
 > **规则真源**: `AGENTS.md`
 > **历史快照**: `docs/archive/implementation-control-history-20260525.md`
-> **当前状态**: release maintenance；small baseline real evaluation + multi-bundle validator fix + dev-only report-quality eval tool accepted locally；下一入口为 escalation readiness check, then chapter contract implementation + report writing quality upgrade design gate only if all readiness evidence remains complete
+> **当前状态**: release maintenance；small baseline real evaluation + multi-bundle validator fix + dev-only report-quality eval tool accepted locally；escalation readiness check accepted locally；下一入口为 PR ready authorization, then chapter contract implementation + report writing quality upgrade design gate only if PR readiness evidence remains complete
 
 ---
 
@@ -25,8 +25,8 @@
 |---|---|
 | Branch | `codex/local-reconciliation` |
 | Current phase | `release maintenance` |
-| Current gate | `small baseline real evaluation + multi-bundle validator fix + dev-only report-quality eval tool accepted locally` |
-| Next entry point | `escalation readiness check; if complete, chapter contract implementation + report writing quality upgrade design gate` |
+| Current gate | `small baseline real evaluation + multi-bundle validator fix + dev-only report-quality eval tool accepted locally; escalation readiness accepted locally` |
+| Next entry point | `PR ready authorization; if complete, chapter contract implementation + report writing quality upgrade design gate` |
 | Latest accepted gate commit | `5ba9ca2 docs: reconcile small baseline eval control state` |
 | Design truth | `docs/design.md` (v2.2) |
 | Control truth | `docs/implementation-control.md` |
@@ -133,6 +133,9 @@
 | Small baseline final aggregate review: MiMo | `docs/reviews/release-maintenance-small-baseline-real-evaluation-final-review-mimo-20260526.md` |
 | Small baseline final aggregate review: GLM | `docs/reviews/release-maintenance-small-baseline-real-evaluation-final-review-glm-20260526.md` |
 | Deepreview controller judgment evidence-chain artifact | `docs/reviews/release-maintenance-deepreview-controller-judgment-20260526.md` |
+| Escalation readiness check | `docs/reviews/release-maintenance-escalation-readiness-check-20260526.md` |
+| Escalation readiness re-review: MiMo | `docs/reviews/release-maintenance-escalation-readiness-rereview-mimo-20260526.md` |
+| Escalation readiness re-review: GLM | `docs/reviews/release-maintenance-escalation-readiness-rereview-glm-20260526.md` |
 
 ### Current Decisions
 
@@ -194,17 +197,17 @@
 
 ## Next Entry Point
 
-`escalation readiness check; if complete, chapter contract implementation + report writing quality upgrade design gate`
+`PR ready authorization; if complete, chapter contract implementation + report writing quality upgrade design gate`
 
 The next gate is local-only unless the user explicitly authorizes more GitHub operations.
 
-The readiness check must answer:
+The readiness check answered:
 
-- whether small baseline real evaluation covered at least three fund-type slots with bundle / JSONL / validator summary / failure categories;
-- whether the concrete validator fix directly corresponds to Gate A failure categories and has tests, ruff, `git diff --check`, and two independent reviews / re-reviews;
-- whether `docs/implementation-control.md` is reconciled, the worktree is clean after accepted commits, and no scratch/report output is staged.
+- small baseline real evaluation covered three fund-type slots with bundle / JSONL / validator summary / failure categories;
+- the concrete validator fix directly corresponds to Gate A failure categories and has tests, ruff, `git diff --check`, and two independent reviews / re-reviews;
+- `docs/implementation-control.md` is reconciled, scratch/report output remains untracked, and the remaining local requirement is a final clean-worktree / CI pass after the readiness closeout commit.
 
-If readiness passes, the next design gate should plan chapter contract implementation plus report-writing quality upgrade for the active-fund Chapter 3 turnover/style-consistency wording path. It must not enter renderer/FQ0-FQ6/Service/CLI default changes without reviewed proof that such scope is the minimum necessary change.
+After PR ready authorization and final CI pass, the next design gate should plan chapter contract implementation plus report-writing quality upgrade for the active-fund Chapter 3 turnover/style-consistency wording path. It must not enter renderer/FQ0-FQ6/Service/CLI default changes without reviewed proof that such scope is the minimum necessary change.
 
 Do not push, create PR, mark ready, merge, close PRs, edit unrelated PRs, delete branches, or perform additional GitHub mutations without explicit user authorization. Do not modify Service, CLI, renderer, `quality_gate.py`, `extraction_score.py`, tracked reports, fixtures, repository/PDF/cache/source helpers, `FundDocumentRepository`, Host/Agent/dayu, `nav_data`, derived calculations, durable baseline, report-quality validator integration, or product-flow behavior unless a later explicit gate authorizes that scope.
 
