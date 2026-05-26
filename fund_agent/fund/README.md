@@ -122,6 +122,7 @@ chapter_lens = resolve_preferred_lens(chapter_id=2, fund_type="active_fund")
 - 输出字段级 `field_group`、`field_name`、`priority`、`records`、`coverage_rate`、`traceability_rate` 和 `status`
 - 同时输出单基金 `fund_scores`，汇总每只基金的 P0/P1 状态与失败字段，避免字段聚合均值掩盖单只基金不可用问题
 - 同时输出单基金 `fund_quality`，从 snapshot 同源派生 App 类别匹配、`preferred_lens` 可解析状态、字段缺失率和缺失 P0/P1 字段；同一基金多行 `app_category` 或 `classified_fund_type` 冲突时显式标记，不取第一行静默通过
+- 对 exact `bond_fund`，权益持仓形态的 `holdings_snapshot` 不进入股票持仓 coverage / traceability / `fund_quality.missing_field_rate` 分母；该排除必须同时输出 `field_applicability_decisions` 和 `score_applicability_issues` 中的 `bond_risk_evidence.v1` / `bond_risk_evidence_missing` 替代风险证据缺口。未知或冲突基金类型保持 fail-closed，不排除该字段
 - 显式提供 `errors_path` 时，同时输出 `failed_funds`，把 `errors.jsonl` 中完全抽取失败的基金带入后续 gate accounting
 - 阈值显式配置：pass 为 coverage/traceability 均不低于 90%，watch 为均不低于 70%，其余 fail
 - 可选读取 strict `golden-answer.json` 执行 correctness，比对 identity 为 `fund_code + report_year + field_name + sub_field`；比对范围只包括 snapshot `comparable_values` 显式暴露的可比 golden 子字段；只有白名单字段/子字段被同年 snapshot 明确标记缺失时才进入 mismatch，skipped 和 unavailable 不进分母
@@ -157,6 +158,7 @@ chapter_lens = resolve_preferred_lens(chapter_id=2, fund_type="active_fund")
 - `fund_quality.preferred_lens_status` 使用 `resolved / not_applicable / mismatch` 表达模板契约适用性；`mismatch` 触发 `FQ5/block`，`resolved` 和 `not_applicable` 只进入 `quality_gate.json.rule_results`
 - FQ5 只消费 `score.json` 中由 CHAPTER_CONTRACT / ITEM_RULE manifest 派生的适用性事实，不解析最终报告 Markdown，也不证明 renderer 已遵守 preferred_lens 或 ITEM_RULE 段落；renderer/audit 的 ITEM_RULE 合规由程序审计 C2 在报告渲染后验证
 - `failed_funds` 中的完全抽取失败基金触发 `FQ6/block`
+- `score_applicability_issues` 中的 `bond_risk_evidence_missing` 投影为 `FQ2F/warn`，用于防止债券基金因排除权益持仓分母而误通过；旧 `score.json` 缺少该字段时按空列表兼容
 - 旧 `score.json` 缺少 `fund_quality` 时只记录 `FQ0/info`，不作为 fatal schema 错误
 - 旧 `score.json` 中 `preferred_lens_status=match` 兼容为 `resolved`
 - 输出 `quality_gate.json` 和 `quality_gate.md`，其中 `rule_results` 记录未触发 issue 的 FQ5 解释性结果

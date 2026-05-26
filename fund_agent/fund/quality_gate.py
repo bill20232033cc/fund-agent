@@ -39,6 +39,8 @@ PREFERRED_LENS_STATUS_NOT_APPLICABLE: Final[str] = "not_applicable"
 LEGACY_PREFERRED_LENS_STATUS_MATCH: Final[str] = "match"
 FQ4_WARN_MISSING_FIELD_RATE: Final[float] = 0.20
 FQ4_BLOCK_MISSING_FIELD_RATE: Final[float] = 0.35
+BOND_RISK_EVIDENCE_MISSING_ISSUE_CODE: Final[str] = "bond_risk_evidence_missing"
+BOND_RISK_EVIDENCE_CONTRACT_ID: Final[str] = "bond_risk_evidence.v1"
 
 
 @dataclass(frozen=True, slots=True)
@@ -286,6 +288,15 @@ def _evaluate_score_payload(score_payload: Mapping[str, object]) -> _ScoreEvalua
             if not isinstance(raw_row, dict):
                 raise ValueError(f"failed_funds[{index}] 必须是 JSON object")
             issues.append(_evaluate_failed_fund(raw_row, index))
+    score_applicability_issues = score_payload.get("score_applicability_issues", [])
+    if not isinstance(score_applicability_issues, list):
+        raise ValueError("score.json 的 score_applicability_issues 必须是 JSON array")
+    for index, raw_row in enumerate(score_applicability_issues):
+        if not isinstance(raw_row, dict):
+            raise ValueError(f"score_applicability_issues[{index}] 必须是 JSON object")
+        projected_issue = _evaluate_score_applicability_issue(raw_row, index)
+        if projected_issue is not None:
+            issues.append(projected_issue)
     return _ScoreEvaluation(issues=tuple(issues), rule_results=tuple(rule_results))
 
 
@@ -873,6 +884,63 @@ def _evaluate_failed_fund(row: Mapping[str, object], index: int) -> QualityGateI
     )
 
 
+def _evaluate_score_applicability_issue(
+    row: Mapping[str, object],
+    index: int,
+) -> QualityGateIssue | None:
+    """评估 score applicability issue 并投影到 quality gate。
+
+    Args:
+        row: `score_applicability_issues` 中的单行。
+        index: 行号，用于错误信息。
+
+    Returns:
+        需要进入 gate 的 issue；info-only 且当前 gate 不消费的 issue 返回 `None`。
+
+    Raises:
+        ValueError: issue 结构非法或不满足确定性契约时抛出。
+    """
+
+    issue_id = _required_applicability_text(row, "issue_id", index)
+    issue_code = _required_applicability_text(row, "issue_code", index)
+    severity = _required_applicability_text(row, "severity", index)
+    fund_code = _required_applicability_text(row, "fund_code", index)
+    report_year = _required_applicability_text(row, "report_year", index)
+    field_name = _required_applicability_text(row, "field_name", index)
+    contract_id = _required_applicability_text(row, "contract_id", index)
+    message = _required_applicability_text(row, "message", index)
+    priority = _optional_applicability_text(row, "priority") or PRIORITY_P1
+    classified_fund_type = _optional_applicability_text(row, "classified_fund_type")
+    if severity not in {SEVERITY_BLOCK, SEVERITY_WARN, SEVERITY_INFO}:
+        raise ValueError(f"score_applicability_issues[{index}].severity 不受支持：{severity}")
+    _validate_score_applicability_issue_id(
+        issue_id=issue_id,
+        issue_code=issue_code,
+        fund_code=fund_code,
+        report_year=report_year,
+        field_name=field_name,
+        contract_id=contract_id,
+        index=index,
+    )
+    if issue_code != BOND_RISK_EVIDENCE_MISSING_ISSUE_CODE:
+        return None
+    if contract_id != BOND_RISK_EVIDENCE_CONTRACT_ID:
+        raise ValueError(
+            f"score_applicability_issues[{index}].contract_id 必须是 "
+            f"{BOND_RISK_EVIDENCE_CONTRACT_ID}"
+        )
+    return QualityGateIssue(
+        rule_code="FQ2F",
+        severity=SEVERITY_WARN,
+        fund_code=fund_code,
+        field_name=field_name,
+        priority=priority,
+        message=message,
+        classified_fund_type=classified_fund_type,
+        reason=issue_code,
+    )
+
+
 def _required_text(row: Mapping[str, object], key: str, index: int) -> str:
     """读取字段评分行中的必需文本。
 
@@ -1041,6 +1109,85 @@ def _optional_failed_fund_text(row: Mapping[str, object], key: str) -> str | Non
         return None
     text = str(value).strip()
     return text or None
+
+
+def _required_applicability_text(row: Mapping[str, object], key: str, index: int) -> str:
+    """读取 score applicability issue 中的必需文本。
+
+    Args:
+        row: score applicability issue 行。
+        key: 字段名。
+        index: 行号。
+
+    Returns:
+        非空文本。
+
+    Raises:
+        ValueError: 缺少字段或字段非文本时抛出。
+    """
+
+    value = row.get(key)
+    if not isinstance(value, str) or not value:
+        raise ValueError(f"score_applicability_issues[{index}].{key} 必须是非空字符串")
+    return value
+
+
+def _optional_applicability_text(row: Mapping[str, object], key: str) -> str | None:
+    """读取 score applicability issue 中的可选文本。
+
+    Args:
+        row: score applicability issue 行。
+        key: 字段名。
+
+    Returns:
+        文本或 `None`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    value = row.get(key)
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
+
+
+def _validate_score_applicability_issue_id(
+    *,
+    issue_id: str,
+    issue_code: str,
+    fund_code: str,
+    report_year: str,
+    field_name: str,
+    contract_id: str,
+    index: int,
+) -> None:
+    """校验 score applicability issue id 的确定性格式。
+
+    Args:
+        issue_id: 实际 issue id。
+        issue_code: issue 分类码。
+        fund_code: 基金代码。
+        report_year: 年报年份文本。
+        field_name: 字段名。
+        contract_id: 契约编号。
+        index: 行号。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        ValueError: issue id 不符合稳定格式时抛出。
+    """
+
+    expected_id = (
+        f"score-applicability:{fund_code}:{report_year}:{field_name}:{issue_code}:{contract_id}"
+    )
+    if issue_id != expected_id:
+        raise ValueError(
+            f"score_applicability_issues[{index}].issue_id 不符合确定性格式：{issue_id}"
+        )
 
 
 def _required_correctness_text(row: Mapping[str, object], key: str, index: int) -> str:

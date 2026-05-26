@@ -25,6 +25,8 @@ from fund_agent.fund.extraction_score import (
     STATUS_PASS,
     STATUS_WATCH,
     derive_fund_quality_records,
+    derive_field_applicability_decisions,
+    derive_score_applicability_issues,
     load_snapshot_error_records,
     run_extraction_score,
     compare_snapshot_correctness,
@@ -409,6 +411,236 @@ def test_holdings_snapshot_coverage_requires_explicit_status_source_allowlist() 
     assert quality_rows["004395"].missing_p1_fields == ()
 
 
+def test_bond_fund_excludes_equity_holdings_with_replacement_issue() -> None:
+    """验证债券基金权益持仓字段排除时必须输出替代风险证据 issue。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当分母排除或替代 issue 不符合契约时抛出。
+    """
+
+    records = [
+        _snapshot_record(
+            "profile",
+            "classified_fund_type",
+            fund_code="006597",
+            app_category="国内债券类",
+            classified_fund_type="bond_fund",
+            value_present=True,
+            anchor_present=True,
+        ),
+        _snapshot_record(
+            "holdings",
+            "holdings_snapshot",
+            fund_code="006597",
+            app_category="国内债券类",
+            classified_fund_type="bond_fund",
+            value_present=True,
+            anchor_present=True,
+            comparable_values={
+                "top_holdings_status": "missing",
+                "top_holdings_source": "none",
+            },
+        ),
+    ]
+
+    field_rows = {row.field_name: row for row in score_snapshot_records(records)}
+    fund_score = score_fund_records(records)[0]
+    fund_quality = derive_fund_quality_records(records)[0]
+    decisions = derive_field_applicability_decisions(records)
+    issues = derive_score_applicability_issues(records)
+
+    assert "holdings_snapshot" not in field_rows
+    assert fund_score.records == 1
+    assert fund_score.p1_failed_fields == ()
+    assert fund_quality.total_field_count == 1
+    assert fund_quality.missing_p1_fields == ()
+    assert len(decisions) == 1
+    assert decisions[0].applicability_status == "not_applicable_replaced"
+    assert decisions[0].reason_code == "not_applicable_to_bond_fund_equity_holdings"
+    assert decisions[0].raw_total_field_count == 2
+    assert decisions[0].applicable_total_field_count == 1
+    assert decisions[0].replacement_issue_ids == (
+        "score-applicability:006597:2024:holdings_snapshot:bond_risk_evidence_missing:bond_risk_evidence.v1",
+    )
+    assert len(issues) == 1
+    assert issues[0].issue_id == decisions[0].replacement_issue_ids[0]
+    assert issues[0].issue_code == "bond_risk_evidence_missing"
+    assert issues[0].contract_id == "bond_risk_evidence.v1"
+    assert issues[0].baseline_blocking is True
+    assert "convertible_bond_equity_exposure" in issues[0].missing_evidence_groups
+    assert len(issues[0].missing_evidence_groups) == 7
+
+
+def test_bond_score_applicability_issue_id_is_deterministic() -> None:
+    """验证债券替代 issue id 使用计划要求的稳定格式。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 issue id 不稳定时抛出。
+    """
+
+    records = [
+        _snapshot_record(
+            "holdings",
+            "holdings_snapshot",
+            fund_code="006597",
+            report_year=2023,
+            app_category="国内债券类",
+            classified_fund_type="bond_fund",
+            value_present=False,
+            anchor_present=False,
+        )
+    ]
+
+    issue = derive_score_applicability_issues(records)[0]
+
+    assert issue.issue_id == (
+        "score-applicability:006597:2023:holdings_snapshot:bond_risk_evidence_missing:bond_risk_evidence.v1"
+    )
+
+
+def test_active_fund_keeps_holdings_snapshot_applicable() -> None:
+    """验证主动基金持仓字段继续进入 P1 分母。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当主动基金被错误套用债券排除时抛出。
+    """
+
+    records = [
+        _snapshot_record(
+            "holdings",
+            "holdings_snapshot",
+            classified_fund_type="active_fund",
+            value_present=True,
+            anchor_present=True,
+            comparable_values={
+                "top_holdings_status": "missing",
+                "top_holdings_source": "none",
+            },
+        )
+    ]
+
+    field_row = score_snapshot_records(records)[0]
+    fund_quality = derive_fund_quality_records(records)[0]
+
+    assert field_row.field_name == "holdings_snapshot"
+    assert field_row.records == 1
+    assert fund_quality.missing_p1_fields == ("holdings_snapshot",)
+    assert derive_score_applicability_issues(records) == ()
+
+
+def test_index_and_enhanced_keep_holdings_snapshot_applicable() -> None:
+    """验证指数和增强指数基金不被债券持仓替代规则影响。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当非债券基金 holdings_snapshot 被排除时抛出。
+    """
+
+    records = [
+        _snapshot_record(
+            "holdings",
+            "holdings_snapshot",
+            fund_code="510300",
+            classified_fund_type="index_fund",
+            value_present=False,
+            anchor_present=False,
+        ),
+        _snapshot_record(
+            "holdings",
+            "holdings_snapshot",
+            fund_code="161725",
+            classified_fund_type="enhanced_index",
+            value_present=False,
+            anchor_present=False,
+        ),
+    ]
+
+    fund_quality = {row.fund_code: row for row in derive_fund_quality_records(records)}
+
+    assert all(row.field_name == "holdings_snapshot" for row in score_snapshot_records(records))
+    assert fund_quality["510300"].missing_p1_fields == ("holdings_snapshot",)
+    assert fund_quality["161725"].missing_p1_fields == ("holdings_snapshot",)
+    assert derive_score_applicability_issues(records) == ()
+
+
+def test_unknown_or_conflicted_fund_type_keeps_holdings_fail_closed() -> None:
+    """验证未知或冲突基金类型不排除 holdings_snapshot，也不生成债券替代 issue。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 fail-closed 分母被错误排除时抛出。
+    """
+
+    unknown_records = [
+        _snapshot_record(
+            "holdings",
+            "holdings_snapshot",
+            fund_code="000001",
+            classified_fund_type="",
+            value_present=False,
+            anchor_present=False,
+        )
+    ]
+    conflicted_records = [
+        _snapshot_record(
+            "profile",
+            "classified_fund_type",
+            fund_code="000002",
+            classified_fund_type="active_fund",
+            value_present=True,
+            anchor_present=True,
+        ),
+        _snapshot_record(
+            "holdings",
+            "holdings_snapshot",
+            fund_code="000002",
+            classified_fund_type="bond_fund",
+            value_present=False,
+            anchor_present=False,
+        ),
+    ]
+
+    unknown_quality = derive_fund_quality_records(unknown_records)[0]
+    conflicted_quality = derive_fund_quality_records(conflicted_records)[0]
+    unknown_decision = derive_field_applicability_decisions(unknown_records)[0]
+    conflicted_decision = derive_field_applicability_decisions(conflicted_records)[0]
+
+    assert unknown_quality.missing_p1_fields == ("holdings_snapshot",)
+    assert conflicted_quality.missing_p1_fields == ("holdings_snapshot",)
+    assert unknown_decision.applicability_status == "unknown_fail_closed"
+    assert conflicted_decision.applicability_status == "unknown_fail_closed"
+    assert derive_score_applicability_issues(unknown_records) == ()
+    assert derive_score_applicability_issues(conflicted_records) == ()
+
+
 def test_derive_fund_quality_records_resolves_all_standard_fund_types() -> None:
     """验证所有标准基金类型都能解析当前模板契约。
 
@@ -719,6 +951,9 @@ def test_run_extraction_score_writes_score_outputs(tmp_path: Path) -> None:
     assert decisions_by_rule["chapter_1_index_constituents"]["status"] == "delete"
     assert decisions_by_rule["chapter_2_tracking_error_analysis"]["status"] == "delete"
     assert "## Fund Quality" in markdown
+    assert score_payload["field_applicability_decisions"] == []
+    assert score_payload["score_applicability_issues"] == []
+    assert "## Score Applicability Issues" in markdown
     assert "delete=2/render=2" in markdown
     assert score_payload["correctness"]["status"] == CORRECTNESS_STATUS_UNAVAILABLE
     assert score_payload["p0_status"] == STATUS_FAIL

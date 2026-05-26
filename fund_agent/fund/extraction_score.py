@@ -110,6 +110,17 @@ TOP_HOLDINGS_COVERED_STATUS_SOURCE_PAIRS: Final[frozenset[tuple[str, str]]] = fr
     }
 )
 TOP_HOLDINGS_STATUS_MISSING: Final[str] = "missing"
+BOND_FUND_TYPE: Final[str] = "bond_fund"
+BOND_RISK_EVIDENCE_CONTRACT_ID: Final[str] = "bond_risk_evidence.v1"
+BOND_RISK_REPLACEMENT_FIELD_NAME: Final[str] = "bond_risk_evidence"
+BOND_RISK_EVIDENCE_MISSING_ISSUE_CODE: Final[str] = "bond_risk_evidence_missing"
+BOND_HOLDINGS_NOT_APPLICABLE_REASON: Final[str] = "not_applicable_to_bond_fund_equity_holdings"
+APPLICABILITY_STATUS_NOT_APPLICABLE_REPLACED: Final[str] = "not_applicable_replaced"
+APPLICABILITY_STATUS_UNKNOWN_FAIL_CLOSED: Final[str] = "unknown_fail_closed"
+DENOMINATOR_EFFECT_EXCLUDED_WITH_REPLACEMENT_ISSUE: Final[str] = (
+    "excluded_with_replacement_issue"
+)
+DENOMINATOR_EFFECT_INCLUDED_FAIL_CLOSED: Final[str] = "included_fail_closed"
 BENCHMARK_FIELD_NAME: Final[str] = "benchmark"
 BENCHMARK_NORMALIZED_SUB_FIELDS: Final[tuple[str, ...]] = ("benchmark_name", "benchmark_text")
 INTRA_CHINESE_VISUAL_WHITESPACE_PATTERN: Final[re.Pattern[str]] = re.compile(
@@ -132,6 +143,116 @@ APP_CATEGORY_ALLOWED_FUND_TYPES: Final[dict[str, tuple[str, ...]]] = {
     "黄金类": ("qdii_fund", "fof_fund", "index_fund", "enhanced_index"),
 }
 TEMPLATE_NOT_APPLICABLE_CATEGORIES: Final[tuple[str, ...]] = (MONEY_MARKET_CATEGORY,)
+
+
+@dataclass(frozen=True, slots=True)
+class BondRiskEvidenceGroup:
+    """债券基金替代风险证据组。
+
+    这些组定义 `bond_risk_evidence.v1` 最小证据契约，见模板第 6 章核心风险
+    与债券基金 preferred_lens。当前 slice 只声明并保守评估缺口，不读取年报。
+
+    Attributes:
+        group_id: 证据组稳定标识。
+        required_evidence: 可满足该组的证据类型说明。
+        allowed_na_reasons: 允许的显式不可得原因。
+        failure_behavior: 缺少该组证据时的处理方式。
+        severity: 当前 score-applicability issue 严重级别。
+        baseline_blocking: 是否阻断 baseline / golden 候选。
+    """
+
+    group_id: str
+    required_evidence: str
+    allowed_na_reasons: tuple[str, ...]
+    failure_behavior: str
+    severity: str
+    baseline_blocking: bool
+
+
+BOND_RISK_EVIDENCE_GROUPS: Final[tuple[BondRiskEvidenceGroup, ...]] = (
+    BondRiskEvidenceGroup(
+        group_id="duration_rate_risk",
+        required_evidence=(
+            "组合久期、平均剩余期限、利率敏感性披露、利率风险说明，或带证据锚点的已复核派生证据"
+        ),
+        allowed_na_reasons=(
+            "bond_duration_rate_risk_not_disclosed",
+            "bond_duration_rate_risk_not_yet_reviewed",
+        ),
+        failure_behavior="missing_reviewed_evidence_emits_bond_risk_evidence_missing",
+        severity="warn",
+        baseline_blocking=True,
+    ),
+    BondRiskEvidenceGroup(
+        group_id="credit_risk",
+        required_evidence=(
+            "债券评级分布、信用债敞口、违约/减值风险披露、非政策性金融债敞口或发行人信用集中度"
+        ),
+        allowed_na_reasons=(
+            "bond_credit_risk_not_disclosed",
+            "bond_credit_risk_not_yet_reviewed",
+        ),
+        failure_behavior="missing_reviewed_evidence_emits_bond_risk_evidence_missing",
+        severity="warn",
+        baseline_blocking=True,
+    ),
+    BondRiskEvidenceGroup(
+        group_id="leverage_liquidity",
+        required_evidence="杠杆率、回购/融资敞口、流动性风险说明或大额赎回/持有人集中度披露",
+        allowed_na_reasons=(
+            "bond_leverage_liquidity_not_disclosed",
+            "bond_leverage_liquidity_not_yet_reviewed",
+        ),
+        failure_behavior="missing_reviewed_evidence_emits_bond_risk_evidence_missing",
+        severity="warn",
+        baseline_blocking=True,
+    ),
+    BondRiskEvidenceGroup(
+        group_id="asset_allocation_holdings_mix",
+        required_evidence="债券/现金/金融工具结构、前五大债券持仓、发行人或行业集中度披露",
+        allowed_na_reasons=(
+            "bond_asset_mix_not_disclosed",
+            "bond_asset_mix_not_yet_reviewed",
+        ),
+        failure_behavior="missing_reviewed_evidence_emits_bond_risk_evidence_missing",
+        severity="warn",
+        baseline_blocking=True,
+    ),
+    BondRiskEvidenceGroup(
+        group_id="drawdown_stress",
+        required_evidence="最大回撤、波动率、压力测试阈值状态，或带来源锚点的回撤/压力计算",
+        allowed_na_reasons=(
+            "bond_drawdown_stress_not_disclosed",
+            "bond_drawdown_stress_not_yet_reviewed",
+        ),
+        failure_behavior="missing_reviewed_evidence_emits_bond_risk_evidence_missing",
+        severity="warn",
+        baseline_blocking=True,
+    ),
+    BondRiskEvidenceGroup(
+        group_id="redemption_share_pressure",
+        required_evidence="份额变化、申赎趋势、持有人集中压力、大额赎回披露或显式歧义/数据缺口",
+        allowed_na_reasons=(
+            "bond_redemption_pressure_not_disclosed",
+            "bond_redemption_pressure_ambiguous",
+            "bond_redemption_pressure_not_yet_reviewed",
+        ),
+        failure_behavior="missing_or_ambiguous_evidence_emits_bond_risk_evidence_missing",
+        severity="warn",
+        baseline_blocking=True,
+    ),
+    BondRiskEvidenceGroup(
+        group_id="convertible_bond_equity_exposure",
+        required_evidence="可转债敞口、股票敞口、二级债/混合债权益配置，或无权益/可转债敞口披露",
+        allowed_na_reasons=(
+            "bond_convertible_equity_exposure_not_disclosed",
+            "bond_convertible_equity_exposure_not_yet_reviewed",
+        ),
+        failure_behavior="missing_reviewed_evidence_emits_bond_risk_evidence_missing",
+        severity="warn",
+        baseline_blocking=True,
+    ),
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -289,6 +410,94 @@ class ItemRuleDecisionSummary:
 
 
 @dataclass(frozen=True, slots=True)
+class FieldApplicabilityDecision:
+    """字段评分适用性决策。
+
+    该决策用于解释字段是否进入 coverage / traceability 分母，见模板第 6 章债券风险
+    preferred_lens。债券基金的权益持仓字段只有在替代 `bond_risk_evidence.v1`
+    issue 同时存在时才允许排除。
+
+    Attributes:
+        fund_code: 基金代码。
+        report_year: 年报年份；缺失时为 `unknown-year`。
+        field_name: 原始 snapshot 字段名。
+        classified_fund_type: 已解析基金类型；未知或冲突时为空。
+        applicability_status: 适用性状态。
+        reason_code: 机器可读原因。
+        replacement_field_name: 替代字段名。
+        contract_id: 替代证据契约编号。
+        denominator_effect: 对评分分母的影响。
+        raw_total_field_count: 原始字段记录数。
+        raw_missing_field_count: 原始缺失记录数。
+        raw_missing_field_rate: 原始缺失率。
+        applicable_total_field_count: 适用性过滤后的字段记录数。
+        applicable_missing_field_count: 适用性过滤后的缺失记录数。
+        applicable_missing_field_rate: 适用性过滤后的缺失率。
+        excluded_non_applicable_fields: 被排除的非适用字段。
+        replacement_issue_ids: 与排除决策配对的替代 issue id。
+    """
+
+    fund_code: str
+    report_year: str
+    field_name: str
+    classified_fund_type: str | None
+    applicability_status: str
+    reason_code: str
+    replacement_field_name: str | None
+    contract_id: str | None
+    denominator_effect: str
+    raw_total_field_count: int
+    raw_missing_field_count: int
+    raw_missing_field_rate: float
+    applicable_total_field_count: int
+    applicable_missing_field_count: int
+    applicable_missing_field_rate: float
+    excluded_non_applicable_fields: tuple[str, ...]
+    replacement_issue_ids: tuple[str, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class ScoreApplicabilityIssue:
+    """评分适用性替代 issue。
+
+    Attributes:
+        issue_id: 稳定 issue id。
+        issue_code: issue 分类码。
+        severity: gate 聚合严重级别。
+        fund_code: 基金代码。
+        report_year: 年报年份；缺失时为 `unknown-year`。
+        field_name: 被替代的原始字段名。
+        classified_fund_type: 已解析基金类型。
+        replacement_field_name: 替代字段名。
+        contract_id: 替代证据契约编号。
+        priority: 字段优先级。
+        message: 人类可读说明。
+        baseline_blocking: 是否阻断 baseline / golden 候选。
+        rule_code_hint: 推荐 quality gate 规则码。
+        denominator_excluded_fields: 该 issue 支撑排除的字段。
+        required_evidence_groups: 契约要求证据组。
+        missing_evidence_groups: 当前缺失证据组。
+    """
+
+    issue_id: str
+    issue_code: str
+    severity: str
+    fund_code: str
+    report_year: str
+    field_name: str
+    classified_fund_type: str | None
+    replacement_field_name: str
+    contract_id: str
+    priority: str
+    message: str
+    baseline_blocking: bool
+    rule_code_hint: str
+    denominator_excluded_fields: tuple[str, ...]
+    required_evidence_groups: tuple[str, ...]
+    missing_evidence_groups: tuple[str, ...]
+
+
+@dataclass(frozen=True, slots=True)
 class FailedFundRow:
     """完全抽取失败的基金行。
 
@@ -433,6 +642,8 @@ class ExtractionScoreResult:
         field_scores: 字段级评分行。
         fund_scores: 单只基金质量汇总行。
         fund_quality: 单只基金质量派生判断行。
+        field_applicability_decisions: 字段适用性决策。
+        score_applicability_issues: 评分适用性替代 issue。
         failed_funds: 完全抽取失败的基金行。
         golden_set: 最小 golden set 选择结果。
         thresholds: 本次评分阈值。
@@ -448,6 +659,8 @@ class ExtractionScoreResult:
     field_scores: tuple[FieldScoreRow, ...]
     fund_scores: tuple[FundScoreRow, ...]
     fund_quality: tuple[FundQualityRow, ...]
+    field_applicability_decisions: tuple[FieldApplicabilityDecision, ...]
+    score_applicability_issues: tuple[ScoreApplicabilityIssue, ...]
     failed_funds: tuple[FailedFundRow, ...]
     golden_set: GoldenSetSelection
     thresholds: ScoreThresholds
@@ -639,6 +852,79 @@ def derive_fund_quality_records(
     )
 
 
+def derive_field_applicability_decisions(
+    records: Sequence[Mapping[str, object]],
+) -> tuple[FieldApplicabilityDecision, ...]:
+    """从 snapshot 记录派生字段适用性决策。
+
+    当前只输出会改变分母的债券基金权益持仓排除，以及未知/冲突基金类型下
+    holdings_snapshot 的 fail-closed 可观测决策。见模板第 6 章债券风险证据要求。
+
+    Args:
+        records: P4-S1 `snapshot.jsonl` 解析后的字段级记录。
+
+    Returns:
+        字段适用性决策元组。
+
+    Raises:
+        ValueError: 记录缺少 `fund_code`、`field_name` 或 `report_year` 非法时抛出。
+    """
+
+    records_by_fund: dict[str, list[Mapping[str, object]]] = {}
+    for record in records:
+        fund_code = _required_text(record, "fund_code")
+        records_by_fund.setdefault(fund_code, []).append(record)
+
+    decisions: list[FieldApplicabilityDecision] = []
+    for fund_code, fund_records in sorted(records_by_fund.items()):
+        decisions.extend(_fund_field_applicability_decisions(fund_code, fund_records))
+    return tuple(decisions)
+
+
+def derive_score_applicability_issues(
+    records: Sequence[Mapping[str, object]],
+) -> tuple[ScoreApplicabilityIssue, ...]:
+    """从 snapshot 记录派生评分适用性替代 issue。
+
+    当前实现对 exact `bond_fund` 保守生成聚合 `bond_risk_evidence_missing`，
+    以防 `holdings_snapshot` 排除后被误判为通过。见模板第 6 章核心风险。
+
+    Args:
+        records: P4-S1 `snapshot.jsonl` 解析后的字段级记录。
+
+    Returns:
+        评分适用性 issue 元组。
+
+    Raises:
+        ValueError: 记录缺少 `fund_code`、`field_name` 或 `report_year` 非法时抛出。
+    """
+
+    records_by_fund: dict[str, list[Mapping[str, object]]] = {}
+    for record in records:
+        fund_code = _required_text(record, "fund_code")
+        records_by_fund.setdefault(fund_code, []).append(record)
+
+    issues: list[ScoreApplicabilityIssue] = []
+    for fund_code, fund_records in sorted(records_by_fund.items()):
+        classified_fund_type, _fund_type_reason = _unique_optional_text(
+            fund_records,
+            "classified_fund_type",
+        )
+        if classified_fund_type != BOND_FUND_TYPE:
+            continue
+        if not any(_is_bond_holdings_replacement_record(record) for record in fund_records):
+            continue
+        report_year = _fund_report_year_text(fund_records)
+        issues.append(
+            _bond_risk_evidence_missing_issue(
+                fund_code=fund_code,
+                report_year=report_year,
+                classified_fund_type=classified_fund_type,
+            )
+        )
+    return tuple(issues)
+
+
 def select_minimal_golden_set(source_csv: Path = DEFAULT_SELECTED_FUNDS_CSV) -> GoldenSetSelection:
     """从精选基金池 CSV 选择 P4-S2 最小 golden set。
 
@@ -774,6 +1060,8 @@ def write_extraction_score_records(
     field_scores = score_snapshot_records(records, thresholds=thresholds)
     fund_scores = score_fund_records(records, thresholds=thresholds)
     fund_quality = derive_fund_quality_records(records)
+    field_applicability_decisions = derive_field_applicability_decisions(records)
+    score_applicability_issues = derive_score_applicability_issues(records)
     resolved_golden_set = golden_set or GoldenSetSelection(
         source_csv=str(source_csv),
         records=(),
@@ -799,6 +1087,8 @@ def write_extraction_score_records(
         field_scores=field_scores,
         fund_scores=fund_scores,
         fund_quality=fund_quality,
+        field_applicability_decisions=field_applicability_decisions,
+        score_applicability_issues=score_applicability_issues,
         failed_funds=tuple(failed_funds),
         golden_set=resolved_golden_set,
         thresholds=thresholds,
@@ -1307,6 +1597,8 @@ def _build_fund_quality_row(
         app_category_status=app_category_status,
         fund_type_reason=fund_type_reason,
     )
+    # FundQualityRow 的缺失率是基金类型适用性过滤后的 applicable rate；
+    # 原始/适用分母差异写入 field_applicability_decisions，避免 FQ4 阈值语义漂移。
     total_field_count = len(scorable_records)
     missing_field_count = sum(1 for record in scorable_records if not _record_is_covered(record))
     reasons = [
@@ -1337,6 +1629,253 @@ def _build_fund_quality_row(
             contract_applicability.preferred_lens_unresolved_chapter_ids
         ),
         item_rule_decisions=contract_applicability.item_rule_decisions,
+    )
+
+
+def _fund_field_applicability_decisions(
+    fund_code: str,
+    records: Sequence[Mapping[str, object]],
+) -> tuple[FieldApplicabilityDecision, ...]:
+    """构造单基金字段适用性决策。
+
+    Args:
+        fund_code: 基金代码。
+        records: 单基金 snapshot 记录。
+
+    Returns:
+        适用性决策元组。
+
+    Raises:
+        ValueError: `report_year` 非法时抛出。
+    """
+
+    classified_fund_type, _fund_type_reason = _unique_optional_text(records, "classified_fund_type")
+    decisions: list[FieldApplicabilityDecision] = []
+    if not any(_required_text(record, "field_name") == HOLDINGS_SNAPSHOT_FIELD_NAME for record in records):
+        return ()
+
+    raw_records = _records_after_index_applicability(
+        records,
+        classified_fund_type=classified_fund_type,
+        use_record_fund_type=False,
+    )
+    raw_total_field_count = len(raw_records)
+    raw_missing_field_count = sum(1 for record in raw_records if not _record_is_covered(record))
+    applicable_records = _scorable_records(
+        records,
+        classified_fund_type=classified_fund_type,
+        use_record_fund_type=False,
+    )
+    applicable_missing_field_count = sum(
+        1 for record in applicable_records if not _record_is_covered(record)
+    )
+    report_year = _fund_report_year_text(records)
+    if classified_fund_type == BOND_FUND_TYPE:
+        replacement_issue_id = _score_applicability_issue_id(
+            fund_code=fund_code,
+            report_year=report_year,
+            field_name=HOLDINGS_SNAPSHOT_FIELD_NAME,
+            issue_code=BOND_RISK_EVIDENCE_MISSING_ISSUE_CODE,
+            contract_id=BOND_RISK_EVIDENCE_CONTRACT_ID,
+        )
+        decisions.append(
+            FieldApplicabilityDecision(
+                fund_code=fund_code,
+                report_year=report_year,
+                field_name=HOLDINGS_SNAPSHOT_FIELD_NAME,
+                classified_fund_type=classified_fund_type,
+                applicability_status=APPLICABILITY_STATUS_NOT_APPLICABLE_REPLACED,
+                reason_code=BOND_HOLDINGS_NOT_APPLICABLE_REASON,
+                replacement_field_name=BOND_RISK_REPLACEMENT_FIELD_NAME,
+                contract_id=BOND_RISK_EVIDENCE_CONTRACT_ID,
+                denominator_effect=DENOMINATOR_EFFECT_EXCLUDED_WITH_REPLACEMENT_ISSUE,
+                raw_total_field_count=raw_total_field_count,
+                raw_missing_field_count=raw_missing_field_count,
+                raw_missing_field_rate=_rate(raw_missing_field_count, raw_total_field_count),
+                applicable_total_field_count=len(applicable_records),
+                applicable_missing_field_count=applicable_missing_field_count,
+                applicable_missing_field_rate=_rate(
+                    applicable_missing_field_count,
+                    len(applicable_records),
+                ),
+                excluded_non_applicable_fields=(HOLDINGS_SNAPSHOT_FIELD_NAME,),
+                replacement_issue_ids=(replacement_issue_id,),
+            )
+        )
+    elif classified_fund_type is None:
+        decisions.append(
+            FieldApplicabilityDecision(
+                fund_code=fund_code,
+                report_year=report_year,
+                field_name=HOLDINGS_SNAPSHOT_FIELD_NAME,
+                classified_fund_type=None,
+                applicability_status=APPLICABILITY_STATUS_UNKNOWN_FAIL_CLOSED,
+                reason_code="unknown_fund_type_fail_closed",
+                replacement_field_name=None,
+                contract_id=None,
+                denominator_effect=DENOMINATOR_EFFECT_INCLUDED_FAIL_CLOSED,
+                raw_total_field_count=raw_total_field_count,
+                raw_missing_field_count=raw_missing_field_count,
+                raw_missing_field_rate=_rate(raw_missing_field_count, raw_total_field_count),
+                applicable_total_field_count=len(applicable_records),
+                applicable_missing_field_count=applicable_missing_field_count,
+                applicable_missing_field_rate=_rate(
+                    applicable_missing_field_count,
+                    len(applicable_records),
+                ),
+                excluded_non_applicable_fields=(),
+                replacement_issue_ids=(),
+            )
+        )
+    return tuple(decisions)
+
+
+def _bond_risk_evidence_missing_issue(
+    *,
+    fund_code: str,
+    report_year: str,
+    classified_fund_type: str,
+) -> ScoreApplicabilityIssue:
+    """构造债券风险替代证据缺口 issue。
+
+    Args:
+        fund_code: 基金代码。
+        report_year: 年报年份文本。
+        classified_fund_type: 已解析基金类型。
+
+    Returns:
+        `bond_risk_evidence_missing` issue。
+
+    Raises:
+        无显式抛出。
+    """
+
+    group_ids = tuple(group.group_id for group in BOND_RISK_EVIDENCE_GROUPS)
+    return ScoreApplicabilityIssue(
+        issue_id=_score_applicability_issue_id(
+            fund_code=fund_code,
+            report_year=report_year,
+            field_name=HOLDINGS_SNAPSHOT_FIELD_NAME,
+            issue_code=BOND_RISK_EVIDENCE_MISSING_ISSUE_CODE,
+            contract_id=BOND_RISK_EVIDENCE_CONTRACT_ID,
+        ),
+        issue_code=BOND_RISK_EVIDENCE_MISSING_ISSUE_CODE,
+        severity="warn",
+        fund_code=fund_code,
+        report_year=report_year,
+        field_name=HOLDINGS_SNAPSHOT_FIELD_NAME,
+        classified_fund_type=classified_fund_type,
+        replacement_field_name=BOND_RISK_REPLACEMENT_FIELD_NAME,
+        contract_id=BOND_RISK_EVIDENCE_CONTRACT_ID,
+        priority=FIELD_PRIORITY_BY_NAME[HOLDINGS_SNAPSHOT_FIELD_NAME],
+        message=(
+            f"基金 `{fund_code}` 为债券基金，权益持仓型 holdings_snapshot 不进入股票持仓分母；"
+            f"但 `{BOND_RISK_EVIDENCE_CONTRACT_ID}` 尚无已复核债券风险证据。"
+        ),
+        baseline_blocking=True,
+        rule_code_hint="FQ2F",
+        denominator_excluded_fields=(HOLDINGS_SNAPSHOT_FIELD_NAME,),
+        required_evidence_groups=group_ids,
+        missing_evidence_groups=group_ids,
+    )
+
+
+def _score_applicability_issue_id(
+    *,
+    fund_code: str,
+    report_year: str,
+    field_name: str,
+    issue_code: str,
+    contract_id: str,
+) -> str:
+    """生成确定性 score applicability issue id。
+
+    Args:
+        fund_code: 六位基金代码。
+        report_year: 年报年份文本。
+        field_name: 原始字段名。
+        issue_code: issue 分类码。
+        contract_id: 替代证据契约编号。
+
+    Returns:
+        稳定小写 issue id。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return f"score-applicability:{fund_code}:{report_year}:{field_name}:{issue_code}:{contract_id}"
+
+
+def _fund_report_year_text(records: Sequence[Mapping[str, object]]) -> str:
+    """读取单基金 report_year 文本。
+
+    Args:
+        records: 单基金 snapshot 记录。
+
+    Returns:
+        唯一年份文本；缺失时返回 `unknown-year`，冲突时也 fail-closed 为 `unknown-year`。
+
+    Raises:
+        ValueError: 存在非整数年份字段时抛出。
+    """
+
+    values = sorted(
+        {
+            _required_snapshot_int(record, "report_year")
+            for record in records
+            if record.get("report_year") is not None
+        }
+    )
+    if len(values) == 1:
+        return str(values[0])
+    return "unknown-year"
+
+
+def _is_bond_holdings_replacement_record(record: Mapping[str, object]) -> bool:
+    """判断记录是否触发债券基金 holdings 替代契约。
+
+    Args:
+        record: snapshot 字段记录。
+
+    Returns:
+        `holdings_snapshot` 记录返回 `True`。
+
+    Raises:
+        ValueError: 记录缺少 `field_name` 时抛出。
+    """
+
+    return _required_text(record, "field_name") == HOLDINGS_SNAPSHOT_FIELD_NAME
+
+
+def _records_after_index_applicability(
+    records: Sequence[Mapping[str, object]],
+    *,
+    classified_fund_type: str | None = None,
+    use_record_fund_type: bool = True,
+) -> tuple[Mapping[str, object], ...]:
+    """过滤既有指数质量适用性后的记录。
+
+    Args:
+        records: snapshot 记录集合。
+        classified_fund_type: 已解析的单基金类型；为空时使用记录自身类型。
+        use_record_fund_type: 已解析类型为空时是否回看单条记录类型。
+
+    Returns:
+        未应用债券 holdings 替代规则的基准评分记录。
+
+    Raises:
+        ValueError: 指数质量记录缺少 `field_name` 时抛出。
+    """
+
+    return tuple(
+        record
+        for record in records
+        if not _is_non_applicable_index_quality_record(
+            record,
+            classified_fund_type=classified_fund_type,
+            use_record_fund_type=use_record_fund_type,
+        )
     )
 
 
@@ -1438,7 +1977,7 @@ def _scorable_records(
     classified_fund_type: str | None = None,
     use_record_fund_type: bool = True,
 ) -> tuple[Mapping[str, object], ...]:
-    """过滤非适用指数质量字段后的评分记录。
+    """过滤非适用字段后的评分记录。
 
     Args:
         records: snapshot 记录集合。
@@ -1449,7 +1988,7 @@ def _scorable_records(
         参与 coverage、traceability 和缺失分母的记录。
 
     Raises:
-        ValueError: 指数质量记录缺少 `field_name` 时抛出。
+        ValueError: 适用性判断记录缺少 `field_name` 时抛出。
     """
 
     return tuple(
@@ -1460,7 +1999,40 @@ def _scorable_records(
             classified_fund_type=classified_fund_type,
             use_record_fund_type=use_record_fund_type,
         )
+        and not _is_bond_holdings_replacement_record_for_type(
+            record,
+            classified_fund_type=classified_fund_type,
+            use_record_fund_type=use_record_fund_type,
+        )
     )
+
+
+def _is_bond_holdings_replacement_record_for_type(
+    record: Mapping[str, object],
+    *,
+    classified_fund_type: str | None = None,
+    use_record_fund_type: bool = True,
+) -> bool:
+    """判断记录是否为 exact bond_fund 下被替代的权益持仓字段。
+
+    Args:
+        record: snapshot 字段记录。
+        classified_fund_type: 已解析的单基金类型；为空时读取记录上的类型。
+        use_record_fund_type: 已解析类型为空时是否回看单条记录类型。
+
+    Returns:
+        exact `bond_fund` 的 `holdings_snapshot` 返回 `True`；未知或冲突类型返回 `False`。
+
+    Raises:
+        ValueError: 记录缺少 `field_name` 时抛出。
+    """
+
+    if _required_text(record, "field_name") != HOLDINGS_SNAPSHOT_FIELD_NAME:
+        return False
+    fund_type = classified_fund_type
+    if fund_type is None and use_record_fund_type:
+        fund_type = _optional_record_text(record, "classified_fund_type")
+    return fund_type == BOND_FUND_TYPE
 
 
 def _is_non_applicable_index_quality_record(
@@ -2366,6 +2938,12 @@ def _score_json_payload(result: ExtractionScoreResult) -> dict[str, object]:
         "field_scores": [asdict(row) for row in result.field_scores],
         "fund_scores": [asdict(row) for row in result.fund_scores],
         "fund_quality": [asdict(row) for row in result.fund_quality],
+        "field_applicability_decisions": [
+            asdict(row) for row in result.field_applicability_decisions
+        ],
+        "score_applicability_issues": [
+            asdict(row) for row in result.score_applicability_issues
+        ],
         "failed_funds": [asdict(row) for row in result.failed_funds],
         "golden_set": asdict(result.golden_set),
         "correctness": asdict(result.correctness),
@@ -2417,6 +2995,7 @@ def _score_markdown(result: ExtractionScoreResult) -> str:
         f"- field_count: {len(result.field_scores)}",
         f"- fund_count: {len(result.fund_scores)}",
         f"- failed_fund_count: {len(result.failed_funds)}",
+        f"- score_applicability_issue_count: {len(result.score_applicability_issues)}",
         f"- p0_status: `{_aggregate_status([row for row in result.field_scores if row.priority == 'P0'])}`",
         f"- thresholds: coverage pass `{result.thresholds.pass_coverage:.0%}` / watch `{result.thresholds.watch_coverage:.0%}`, traceability pass `{result.thresholds.pass_traceability:.0%}` / watch `{result.thresholds.watch_traceability:.0%}`",
         f"- correctness: `{result.correctness.status}`",
@@ -2512,6 +3091,32 @@ def _score_markdown(result: ExtractionScoreResult) -> str:
             f"{', '.join(row.missing_p1_fields)} | "
             f"{_escape_markdown_cell(row.reason)} |"
         )
+
+    lines.extend(
+        [
+            "",
+            "## Score Applicability Issues",
+            "",
+            "| issue_id | issue_code | severity | fund_code | field | contract | baseline_blocking | missing_groups | message |",
+            "|---|---|---|---|---|---|---|---|---|",
+        ]
+    )
+    if result.score_applicability_issues:
+        for row in result.score_applicability_issues:
+            lines.append(
+                "| "
+                f"{row.issue_id} | "
+                f"{row.issue_code} | "
+                f"{row.severity} | "
+                f"{row.fund_code} | "
+                f"{row.field_name} | "
+                f"{row.contract_id} | "
+                f"{row.baseline_blocking} | "
+                f"{', '.join(row.missing_evidence_groups)} | "
+                f"{_escape_markdown_cell(row.message)} |"
+            )
+    else:
+        lines.append("|  |  |  |  |  |  |  |  |  |")
 
     lines.extend(
         [
