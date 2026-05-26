@@ -5,7 +5,7 @@
 > **设计真源**: `docs/design.md` (v2.2)
 > **规则真源**: `AGENTS.md`
 > **历史快照**: `docs/archive/implementation-control-history-20260525.md`
-> **当前状态**: release maintenance；core analyze/checklist reliability hardening accepted locally；下一入口为 small baseline corpus v1 plan/review
+> **当前状态**: release maintenance；small baseline corpus v1 accepted locally；下一入口为 baseline coverage / source recovery / taxonomy + bond extraction triage plan/review
 
 ---
 
@@ -25,9 +25,9 @@
 |---|---|
 | Branch | `codex/local-reconciliation` |
 | Current phase | `release maintenance` |
-| Current gate | `core analyze/checklist reliability hardening accepted locally` |
-| Next entry point | `small baseline corpus v1 plan/review; reconcile that active-fund Chapter 3 renderer minimal integration is already accepted; must use init-agents / tmux multi-agent flow` |
-| Latest accepted gate checkpoint | `core analyze/checklist reliability hardening local accepted commit; use latest branch HEAD for exact hash` |
+| Current gate | `small baseline corpus v1 accepted locally` |
+| Next entry point | `baseline coverage / source recovery / taxonomy + bond extraction triage plan/review; must use init-agents / tmux multi-agent flow` |
+| Latest accepted gate checkpoint | `small baseline corpus v1 local accepted commit; use latest branch HEAD for exact hash` |
 | Design truth | `docs/design.md` (v2.2) |
 | Control truth | `docs/implementation-control.md` |
 | Historical control snapshot | `docs/archive/implementation-control-history-20260525.md` |
@@ -183,6 +183,16 @@
 | Core reliability implementation review: MiMo | `docs/reviews/release-maintenance-core-analyze-checklist-reliability-hardening-implementation-review-mimo-20260527.md` |
 | Core reliability implementation review: GLM | `docs/reviews/release-maintenance-core-analyze-checklist-reliability-hardening-implementation-review-glm-20260527.md` |
 | Core reliability implementation controller judgment | `docs/reviews/release-maintenance-core-analyze-checklist-reliability-hardening-implementation-controller-judgment-20260527.md` |
+| Small baseline corpus v1 plan | `docs/reviews/release-maintenance-small-baseline-corpus-v1-plan-20260527.md` |
+| Small baseline corpus v1 plan review: MiMo | `docs/reviews/release-maintenance-small-baseline-corpus-v1-plan-review-mimo-20260527.md` |
+| Small baseline corpus v1 plan review: GLM | `docs/reviews/release-maintenance-small-baseline-corpus-v1-plan-review-glm-20260527.md` |
+| Small baseline corpus v1 plan re-review: MiMo | `docs/reviews/release-maintenance-small-baseline-corpus-v1-plan-rereview-mimo-20260527.md` |
+| Small baseline corpus v1 plan re-review: GLM | `docs/reviews/release-maintenance-small-baseline-corpus-v1-plan-rereview-glm-20260527.md` |
+| Small baseline corpus v1 plan controller judgment | `docs/reviews/release-maintenance-small-baseline-corpus-v1-plan-controller-judgment-20260527.md` |
+| Small baseline corpus v1 run | `docs/reviews/release-maintenance-small-baseline-corpus-v1-run-20260527.md` |
+| Small baseline corpus v1 run review: MiMo | `docs/reviews/release-maintenance-small-baseline-corpus-v1-run-review-mimo-20260527.md` |
+| Small baseline corpus v1 run review: GLM | `docs/reviews/release-maintenance-small-baseline-corpus-v1-run-review-glm-20260527.md` |
+| Small baseline corpus v1 run controller judgment | `docs/reviews/release-maintenance-small-baseline-corpus-v1-run-controller-judgment-20260527.md` |
 
 ### Current Decisions
 
@@ -240,6 +250,7 @@
 - Renderer minimal integration implementation is accepted locally. `fund_agent/fund/template/renderer.py` now treats active-fund Chapter 3 as missing-reviewed-evidence by default because current renderer inputs do not expose explicit reviewed turnover/style evidence. It emits `证据不足`, preserves C2 required markers under `不能据此判断：`, suppresses unsupported positive `green / aligned` and consistency reason conclusions, emits the next minimum validation question, and keeps non-active Chapter 3 text on the existing path. The implementation uses dev-only writing audit only in tests and does not change Service/CLI, FQ0-FQ6, Host/Agent/dayu, source helpers, `FundDocumentRepository`, or quality gate strategy.
 - Quality gate correctness report-year scope is accepted locally. strict golden answer and correctness comparison now use `fund_code + report_year + field_name + sub_field` as the oracle identity; legacy strict JSON missing `report_year` loads as the current reviewed 2024 corpus; missing same-year golden coverage is reported as `year_not_covered` / `FQ0/info`; same-year mismatch still triggers `FQ1/block`. Focused tests, full pytest, ruff, diff check, and 004393 2024/2025 analyze/checklist smoke commands passed without changing renderer, Service/CLI control flow, FQ0-FQ6 policy semantics, Host/Agent/dayu, source helpers, NAV, turnover rules, or checklist run-id naming.
 - Core analyze/checklist reliability hardening is accepted locally. `FundDataExtractor` now degrades NAV provider/cache/akshare failures to `NavDataResult(unavailable=True, records=[])` while keeping annual-report repository/PDF/source failures outside the catch boundary and fail-closed. `FundAnalysisRequest.command_source` and Service normalization make default quality-gate artifacts distinguish `analyze-...` from `checklist-...`, while explicit `quality_gate_run_id` remains authoritative. Focused tests prove pre-2026 missing `turnover_rate` remains P1 warn/insufficiency and not a standalone hard blocker; FQ0-FQ6/FQ4 semantics are unchanged. Full pytest, ruff, diff check, two code reviews, and 004393 2024/2025 analyze/checklist smoke passed.
+- Small baseline corpus v1 is accepted locally as an evidence run, not as a durable baseline or golden corpus. It evaluated eight candidate rows across seven unique fund codes. `004393` / 2024 and `004194` / 2024 are quality-gate `warn`; `006597` / 2024 is quality-gate `block` due to missing-field / bond-lens extraction gaps, not correctness mismatch. `004393` / 2025 remains probe-only with year-scoped golden non-coverage. `110020` / index and `017641` / QDII remain fallback-blocked; FOF remains a `data_gap` / taxonomy residual. This gate does not satisfy entry conditions for `golden answer corpus v1`.
 
 ### Current Non-Goals
 
@@ -252,19 +263,20 @@
 
 ## Next Entry Point
 
-`small baseline corpus v1 plan/review`
+`baseline coverage / source recovery / taxonomy + bond extraction triage plan/review`
 
 This next gate must start with Startup Packet replay and `$init-agents` / tmux multi-agent flow. It is a plan/review gate first; implementation may start only after the plan is accepted.
 
 Scope allowed for the next gate:
 
-- Reconcile that the user-sequenced active-fund Chapter 3 renderer minimal integration gate is already accepted in current truth; do not repeat renderer implementation unless a new discrepancy is proven.
-- Select and run a small baseline corpus v1 plan/review using current accepted candidates and current product commands / dev-only audit evidence where appropriate.
-- Expand from `004393` toward 5-10 representative samples covering active/index/enhanced-index/bond/QDII/FOF where repository evidence permits; keep FOF as `data_gap` if unavailable.
-- For each sample, record annual-report availability, extraction field gaps, quality gate status, report-quality issue categories, false-positive suspicion, and whether it is suitable for a future golden corpus gate.
+- Reconcile that `small baseline corpus v1` is accepted but not sufficient for `golden answer corpus v1`.
+- Recover or replace fallback-blocked index/QDII candidates (`110020`, `017641`) without weakening fail-closed source semantics.
+- Find a pure FOF candidate, or open a fund-type taxonomy gate before counting QDII-FOF as FOF coverage.
+- Triage `006597` / 2024 bond quality-gate block: decide whether missing `holder_structure`, `holdings_snapshot`, `share_change`, `investor_return`, and related fields are extractor fixes, field-applicability policy, or bond-lens evidence-anchor gaps.
+- Preserve `004393` / 2025 as probe-only unless a later gate accepts report-year identity and reviewed facts.
 - Keep large outputs in scratch / ignored reports; tracked artifact should contain only summary and evidence paths.
 
-Do not promote samples to durable baseline or golden answer corpus in this gate. Do not modify renderer, FQ0-FQ6, Service/CLI behavior, Host/Agent packages, Dayu runtime, `FundDocumentRepository` source strategy, source-helper fallback semantics, or extractor logic unless a later accepted plan explicitly authorizes that scope.
+Do not enter `golden answer corpus v1` until coverage and source/fund-type blockers are resolved. Do not promote samples to durable baseline or golden answer corpus in this gate. Do not modify renderer, FQ0-FQ6, Service/CLI behavior, Host/Agent packages, Dayu runtime, `FundDocumentRepository` source strategy, source-helper fallback semantics, or extractor logic unless a later accepted plan explicitly authorizes that scope.
 
 Do not push, create PR, mark ready, merge, close PRs, edit unrelated PRs, delete branches, or perform additional GitHub mutations without explicit user authorization. Do not add tracked scratch reports, PDF/cache outputs, source dumps, durable fixtures, or golden corpus files in the small baseline corpus v1 gate.
 
@@ -310,6 +322,10 @@ Do not push, create PR, mark ready, merge, close PRs, edit unrelated PRs, delete
 | Checklist run-id naming observability | Completed in core reliability implementation | Default Service-generated quality gate run id/path now uses `analyze-...` or `checklist-...`; explicit `quality_gate_run_id` remains authoritative |
 | NAV external-data degradation | Completed in core reliability implementation | NAV provider/cache/akshare failures degrade to `NavDataResult(unavailable=True, records=[])`; annual-report repository/PDF/source fail-closed semantics remain outside the catch boundary |
 | Pre-2026 turnover-rate missing semantics | Completed in core reliability implementation | Focused tests lock missing `turnover_rate` as P1 warn/insufficiency, not standalone hard block; FQ4 aggregate missing-rate semantics remain unchanged |
+| Small baseline corpus v1 | Completed in evidence run | Accepted 8 candidate rows / 7 unique fund codes as evidence only. `004393` / 2024 and `004194` / 2024 are quality-gate `warn`; `006597` / 2024 is quality-gate `block`; index/QDII fallback and FOF data-gap remain blockers. No durable baseline or golden promotion. |
+| Index/QDII source recovery for baseline coverage | next baseline coverage / source recovery gate | Recover fail category for `110020` and `017641`, or replace candidates. Only `not_found` / `unavailable` may be fallback-eligible; `schema_drift`, `identity_mismatch`, and `integrity_error` remain fail-closed. |
+| FOF coverage / taxonomy | next baseline coverage / taxonomy gate | Find pure `fof_fund` repository-verified candidate, or open a taxonomy gate before counting QDII-FOF attempts as FOF coverage. |
+| `006597` bond quality-gate block | next bond extraction triage gate | Determine whether missing `holder_structure`, `holdings_snapshot`, `share_change`, `investor_return`, and related bond-lens gaps are extractor fixes, applicability policy, or evidence-anchor gaps. Do not route to golden until resolved. |
 | `nav_data` mapping | future `nav_data` source-contract slice | Keep excluded from initial facts projection until a safe mapping contract exists |
 | Document identity vs fund-type slot membership | Completed in S1 schema draft | S1 split document verification from type-slot membership so `verified_as_annual_report_but_type_gap` cannot become scoring-ready FOF evidence |
 | Review-state terminal states | Completed in S1 schema draft / future implementation validation | S1 defined rejected / deferred / expired semantics; S2 or later implementation must add executable value-domain validation if schema becomes code |
@@ -349,6 +365,7 @@ Do not push, create PR, mark ready, merge, close PRs, edit unrelated PRs, delete
 | `renderer minimal integration implementation` | accepted locally | `docs/reviews/release-maintenance-renderer-minimal-integration-implementation-controller-judgment-20260526.md` | Active-fund Chapter 3 missing-reviewed-evidence text implemented; two code reviews `PASS_WITH_FINDINGS`; accepted fixes applied; focused renderer tests `61 passed`, sidecar/audit `20 passed`, full template `101 passed`, adjacent report-quality `152 passed`, ruff and diff check passed | positive reviewed-evidence path, raw disclosure vs conclusion audit attribution, NAV degradation, trading-advice detector sharing, report-quality wrapper ergonomics | `quality gate correctness report-year scope plan/review` |
 | `quality gate correctness report-year scope` | accepted locally | `docs/reviews/release-maintenance-quality-gate-correctness-year-scope-implementation-controller-judgment-20260527.md` | strict golden/correctness identity is scoped by `fund_code + report_year + field_name + sub_field`; `year_not_covered` maps to `FQ0/info`; same-year mismatch remains `FQ1/block`; plan reviews and code reviews completed; focused tests `74 passed`, full pytest `737 passed`, ruff, diff check, and 004393 2024/2025 analyze/checklist smoke passed | multi-year metadata granularity, year-not-covered CLI summary visibility, NAV degradation, turnover wording, checklist run-id naming | `core analyze/checklist reliability hardening plan/review` |
 | `core analyze/checklist reliability hardening` | accepted locally | `docs/reviews/release-maintenance-core-analyze-checklist-reliability-hardening-implementation-controller-judgment-20260527.md` | NAV unavailable degradation, `command_source` run-id distinction, and turnover missing regression locks implemented; two code reviews `PASS`; focused tests `10/31/29/39 passed`, full pytest `746 passed`, ruff, diff check, and 004393 2024/2025 analyze/checklist smoke passed | broad NAV catch diagnostic residual, P2 nav_data missing signal, future FQ4 field-applicability if evidence proves false blocker, small baseline corpus coverage | `small baseline corpus v1 plan/review` |
+| `small baseline corpus v1` | accepted locally | `docs/reviews/release-maintenance-small-baseline-corpus-v1-run-controller-judgment-20260527.md` | Plan review MiMo/GLM `PASS_WITH_FINDINGS` then both re-reviews `PASS`; bounded run evaluated 8 rows / 7 unique fund codes; run reviews MiMo `PASS`, GLM `PASS_WITH_FINDINGS`; `git diff --check` passed; bulk outputs stayed in scratch/ignored paths | insufficient clean coverage, `006597` bond block, index/QDII fallback-blocked, FOF data-gap/taxonomy, `004393` 2025 probe-only | `baseline coverage / source recovery / taxonomy + bond extraction triage plan/review` |
 
 ## Historical Evidence Index
 
