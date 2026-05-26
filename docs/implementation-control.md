@@ -5,7 +5,7 @@
 > **设计真源**: `docs/design.md` (v2.2)
 > **规则真源**: `AGENTS.md`
 > **历史快照**: `docs/archive/implementation-control-history-20260525.md`
-> **当前状态**: release maintenance；source provenance post-implementation bounded evidence rerun plan accepted locally；下一入口为 source provenance post-implementation bounded evidence rerun
+> **当前状态**: release maintenance；source provenance post-implementation bounded evidence rerun accepted locally；下一入口为 post-provenance coverage recovery decision plan/review gate
 
 ---
 
@@ -25,9 +25,9 @@
 |---|---|
 | Branch | `codex/local-reconciliation` |
 | Current phase | `release maintenance` |
-| Current gate | `source provenance post-implementation bounded evidence rerun plan accepted locally` |
-| Next entry point | `source provenance post-implementation bounded evidence rerun; must use init-agents / tmux multi-agent flow` |
-| Latest accepted gate checkpoint | `source provenance post-implementation bounded evidence rerun plan local accepted commit; use latest branch HEAD for exact hash` |
+| Current gate | `source provenance post-implementation bounded evidence rerun accepted locally` |
+| Next entry point | `post-provenance coverage recovery decision plan/review gate; must use init-agents / tmux multi-agent flow` |
+| Latest accepted gate checkpoint | `source provenance post-implementation bounded evidence rerun local accepted commit; use latest branch HEAD for exact hash` |
 | Design truth | `docs/design.md` (v2.2) |
 | Control truth | `docs/implementation-control.md` |
 | Historical control snapshot | `docs/archive/implementation-control-history-20260525.md` |
@@ -280,6 +280,10 @@
 | source provenance post-implementation bounded evidence rerun plan review: MiMo | `docs/reviews/release-maintenance-source-provenance-post-implementation-bounded-evidence-rerun-plan-review-mimo-20260527.md` |
 | source provenance post-implementation bounded evidence rerun plan review: GLM | `docs/reviews/release-maintenance-source-provenance-post-implementation-bounded-evidence-rerun-plan-review-glm-20260527.md` |
 | source provenance post-implementation bounded evidence rerun plan controller judgment | `docs/reviews/release-maintenance-source-provenance-post-implementation-bounded-evidence-rerun-plan-controller-judgment-20260527.md` |
+| source provenance post-implementation bounded evidence rerun | `docs/reviews/release-maintenance-source-provenance-post-implementation-bounded-evidence-rerun-20260527.md` |
+| source provenance post-implementation bounded evidence rerun review: MiMo | `docs/reviews/release-maintenance-source-provenance-post-implementation-bounded-evidence-rerun-review-mimo-20260527-070813.md` |
+| source provenance post-implementation bounded evidence rerun review: GLM | `docs/reviews/release-maintenance-source-provenance-post-implementation-bounded-evidence-rerun-review-glm-20260527.md` |
+| source provenance post-implementation bounded evidence rerun controller judgment | `docs/reviews/release-maintenance-source-provenance-post-implementation-bounded-evidence-rerun-controller-judgment-20260527.md` |
 
 ### Current Decisions
 
@@ -354,6 +358,7 @@
 - Source provenance primary-failure-category propagation design plan is accepted locally. The next minimal implementation slice may move `AnnualReportSourceFailureCategory` ownership to `documents/models.py`, add optional `primary_failure_category` to `AnnualReportSourceMetadata`, populate it only in `AnnualReportSourceOrchestrator` success-after-primary-failure fallback path, and project it through existing public provenance fields. Missing category must remain `unknown_public_metadata_absent`; fail-closed categories must remain fail-closed; no source strategy, FQ0-FQ6, renderer, default CLI, Host/Agent/dayu, baseline, or golden behavior is authorized.
 - Source provenance primary-failure-category propagation implementation is accepted locally. `AnnualReportSourceMetadata` now persists optional `primary_failure_category`, successful fallback after eligible primary `not_found` / `unavailable` stores `failures[0].category`, and public provenance uses metadata-owned category before test-only keyword fallback. Old metadata remains `unknown_public_metadata_absent`; fail-closed categories remain fail-closed. Focused tests, ruff, `git diff --check`, and two code reviews passed without changing source strategy, renderer, FQ0-FQ6, default analyze/checklist behavior, Host/Agent/dayu, baseline, or golden state.
 - Source provenance post-implementation bounded evidence rerun plan is accepted locally. The evidence worker may run only public CLI commands for `110020` / 2024 and `017641` / 2024, using `extraction-snapshot --force-refresh` to avoid old cached metadata masking `primary_failure_category`. It must classify only from public provenance and quality outputs, write one tracked summary artifact, keep generated reports ignored, and keep every row `promotion_disposition=not_promoted`.
+- Source provenance post-implementation bounded evidence rerun is accepted locally. Public `--force-refresh` reruns for `110020` / 2024 and `017641` / 2024 now expose `fallback_used=true`, `primary_failure_category=unavailable`, `fallback_eligibility=eligible`, and `source_provenance_status=complete`. `110020` is `quality_gate_status=warn` and `provenance_eligible_for_next_review`; `017641` is `quality_gate_status=block` and `quality_blocked_after_provenance`. Both remain `promotion_disposition=not_promoted`; this gate does not create durable baseline, clean denominator, fixture, or golden corpus state.
 
 ### Current Non-Goals
 
@@ -366,21 +371,19 @@
 
 ## Next Entry Point
 
-`source provenance post-implementation bounded evidence rerun`
+`post-provenance coverage recovery decision plan/review gate`
 
-This next gate must start with Startup Packet replay and `$init-agents` / tmux multi-agent flow. It may run only the accepted bounded public CLI evidence commands and write the tracked summary artifact.
+This next gate must start with Startup Packet replay and `$init-agents` / tmux multi-agent flow. It is a plan/review decision gate, not an implementation or promotion gate.
 
 Scope allowed for the next gate:
 
-- Run accepted public CLI commands for `110020` / 2024 and `017641` / 2024.
-- Use `fund-analysis extraction-snapshot --force-refresh` through the public CLI path; do not manually delete, inspect, or patch cache/source/PDF files.
-- Classify each row only from public snapshot provenance and public quality outputs.
-- Keep successful extraction, score output, quality status, source name, and cache state from becoming fallback eligibility evidence.
-- Keep `promotion_disposition=not_promoted` for every row.
-- Write only `docs/reviews/release-maintenance-source-provenance-post-implementation-bounded-evidence-rerun-20260527.md` as tracked summary.
-- Keep durable baseline/golden promotion blocked; `110020`, `017641`, FOF, bond baseline-blocking, and reviewed-fact blockers remain open.
+- Reconcile the accepted provenance rerun evidence with small baseline corpus v1 coverage needs.
+- Decide through a reviewed plan whether `110020` should become a later reviewed coverage candidate, whether `017641` requires extraction repair or replacement, and which residual blocks `golden answer corpus v1`.
+- Produce plan/review/controller artifacts under `docs/reviews/`.
+- Update `docs/implementation-control.md` after controller judgment.
+- Keep `promotion_disposition=not_promoted` unless a later dedicated baseline/golden promotion gate explicitly accepts a candidate.
 
-Do not enter `golden answer corpus v1` until coverage and source/fund-type blockers are resolved. Do not promote samples to durable baseline or golden answer corpus in this gate. Do not modify code, renderer, FQ0-FQ6 policy, default analyze/checklist behavior, Host/Agent packages, Dayu runtime, `FundDocumentRepository` source strategy, source-helper fallback semantics, extractor logic, `fund_type.py`, or golden/baseline fixtures unless a later accepted plan explicitly expands scope.
+Do not enter `golden answer corpus v1` until coverage, source, quality, fund-type, and fixture-promotion blockers are resolved. Do not promote samples to durable baseline or golden answer corpus in this gate. Do not modify code, renderer, FQ0-FQ6 policy, default analyze/checklist behavior, Host/Agent packages, Dayu runtime, `FundDocumentRepository` source strategy, source-helper fallback semantics, extractor logic, `fund_type.py`, or golden/baseline fixtures unless a later accepted plan explicitly expands scope.
 
 Do not push, create PR, mark ready, merge, close PRs, edit unrelated PRs, delete branches, or perform additional GitHub mutations without explicit user authorization. Do not add tracked scratch reports, PDF/cache outputs, source dumps, durable fixtures, or golden corpus files.
 
@@ -427,7 +430,7 @@ Do not push, create PR, mark ready, merge, close PRs, edit unrelated PRs, delete
 | NAV external-data degradation | Completed in core reliability implementation | NAV provider/cache/akshare failures degrade to `NavDataResult(unavailable=True, records=[])`; annual-report repository/PDF/source fail-closed semantics remain outside the catch boundary |
 | Pre-2026 turnover-rate missing semantics | Completed in core reliability implementation | Focused tests lock missing `turnover_rate` as P1 warn/insufficiency, not standalone hard block; FQ4 aggregate missing-rate semantics remain unchanged |
 | Small baseline corpus v1 | Completed in evidence run | Accepted 8 candidate rows / 7 unique fund codes as evidence only. `004393` / 2024 and `004194` / 2024 are quality-gate `warn`; `006597` / 2024 is quality-gate `block`; index/QDII fallback and FOF data-gap remain blockers. No durable baseline or golden promotion. |
-| Index/QDII source recovery for baseline coverage | next source provenance post-implementation bounded evidence rerun | Primary failure category propagation is implemented; plan/review accepted a bounded public rerun for `110020` / `017641` with `--force-refresh`; classify public outputs before any recovery or promotion decision. |
+| Index/QDII source recovery for baseline coverage | next post-provenance coverage recovery decision plan/review gate | Post-implementation public rerun resolved source provenance for `110020` / `017641` as eligible fallback after primary `unavailable`. `110020` is provenance-complete with quality `warn` and only eligible for next review; `017641` is provenance-complete but quality `block` due to `manager_strategy_text`. No promotion occurred. |
 | FOF coverage / taxonomy | next baseline coverage / taxonomy gate | Find pure `fof_fund` repository-verified candidate, or open a taxonomy gate before counting QDII-FOF attempts as FOF coverage. |
 | `006597` bond quality-gate block | Completed for holdings applicability; future bond/holder/turnover evidence gates remain | `holdings_snapshot` equity-shape false blocker is resolved into `bond_risk_evidence_missing` / `FQ2F/warn`; 006597 now warns rather than blocks for this reason. Do not route to golden while `bond_risk_evidence_missing.baseline_blocking=true` or other P1 gaps remain. |
 | `006597` share_change ambiguity | next share_change focused implementation plan | Evidence classifies this as `extractor_gap`: §10 has multiple share columns and current rules cannot reliably choose the corresponding share class. Plan a narrow fix before implementation. |
@@ -491,6 +494,7 @@ Do not push, create PR, mark ready, merge, close PRs, edit unrelated PRs, delete
 | `source provenance primary-failure-category propagation design plan` | accepted locally | `docs/reviews/release-maintenance-source-provenance-primary-failure-category-propagation-design-plan-controller-judgment-20260527.md` | AgentCodex design plan; AgentMiMo initial review `PASS`; AgentGLM initial review `pass-with-risks`; plan patched for type ownership, projection precedence, actual orchestrator naming, serialization and `_mark_fallback_used` details; both targeted re-reviews `PASS`; `git diff --check` passed | implementation of metadata propagation, old-cache unknown behavior, 110020/017641 bounded evidence rerun after implementation, pure FOF residual, bond baseline-blocking residual, golden/baseline blocked | `source provenance primary-failure-category propagation implementation gate` |
 | `source provenance primary-failure-category propagation implementation` | accepted locally | `docs/reviews/release-maintenance-source-provenance-primary-failure-category-propagation-implementation-controller-judgment-20260527.md` | AgentCodex implementation; code reviews MiMo/GLM `PASS`; focused validations 69/23/8/44/44 tests passed; ruff and `git diff --check` passed; docs/README sync completed | old-cache unknown behavior, 110020/017641 bounded evidence rerun, pure FOF residual, bond baseline-blocking residual, golden/baseline blocked | `source provenance post-implementation bounded evidence rerun plan/review gate` |
 | `source provenance post-implementation bounded evidence rerun plan` | accepted locally | `docs/reviews/release-maintenance-source-provenance-post-implementation-bounded-evidence-rerun-plan-controller-judgment-20260527.md` | AgentCodex plan; AgentMiMo review `PASS`; AgentGLM review `PASS`; plan requires public `extraction-snapshot --force-refresh`, public-only classification, ignored generated outputs, and `not_promoted` for every row; `git diff --check` passed | evidence run for `110020` / `017641`, possible external source-state change, pure FOF residual, bond baseline-blocking residual, golden/baseline blocked | `source provenance post-implementation bounded evidence rerun` |
+| `source provenance post-implementation bounded evidence rerun` | accepted locally | `docs/reviews/release-maintenance-source-provenance-post-implementation-bounded-evidence-rerun-controller-judgment-20260527.md` | Public CLI `--force-refresh` snapshot/score/quality-gate ran for `110020` / 2024 and `017641` / 2024; both now expose complete eligible fallback provenance with `primary_failure_category=unavailable`; MiMo review `PASS`; GLM review `PASS`; generated outputs stayed ignored; no promotion | `110020` requires next coverage review before any promotion; `017641` remains quality-blocked on `manager_strategy_text`; pure FOF residual, bond baseline-blocking residual, golden/baseline blocked | `post-provenance coverage recovery decision plan/review gate` |
 
 ## Historical Evidence Index
 
