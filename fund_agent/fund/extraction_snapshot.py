@@ -946,6 +946,8 @@ def _build_nav_record(
     nav_data = bundle.nav_data
     value_present = _has_nav_records(nav_data)
     note = f"source={nav_data.source}; cached={nav_data.cached}; records={len(nav_data.records)}"
+    if nav_data.unavailable:
+        note = f"{note}; unavailable=True; reason={nav_data.unavailable_reason}"
     return _snapshot_record(
         bundle=bundle,
         selected_fund=selected_fund,

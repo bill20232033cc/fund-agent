@@ -91,6 +91,69 @@ def test_run_quality_gate_warns_failed_p1_without_blocking(tmp_path: Path) -> No
     assert any(issue.severity == "info" and issue.rule_code == "FQ0" for issue in result.issues)
 
 
+def test_run_quality_gate_warns_turnover_only_p1_failure_without_fq4(
+    tmp_path: Path,
+) -> None:
+    """验证换手率单项 P1 失败只产生 warning，不触发 FQ4。
+
+    Args:
+        tmp_path: pytest 临时目录 fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当换手率 P1 缺口被误判为 block 或 FQ4 时抛出。
+    """
+
+    score_path = tmp_path / "score.json"
+    score_path.write_text(
+        json.dumps(
+            {
+                "field_scores": [
+                    _field_score("basic_identity", "P0", "pass", 1.0, 1.0),
+                    _field_score("turnover_rate", "P1", "fail", 0.0, 0.0),
+                ],
+                "fund_scores": [
+                    _fund_score(
+                        "004393",
+                        "pass",
+                        "fail",
+                        p1_failed_fields=["turnover_rate"],
+                    ),
+                ],
+                "fund_quality": [
+                    _fund_quality(
+                        missing_field_rate=0.01,
+                        reason="仅 turnover_rate 缺失",
+                    ),
+                ],
+                "correctness": {"status": "not_implemented"},
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    result = run_quality_gate(score_path=score_path)
+
+    assert result.status == GATE_STATUS_WARN
+    assert any(
+        issue.rule_code == "FQ2"
+        and issue.severity == "warn"
+        and issue.field_name == "turnover_rate"
+        for issue in result.issues
+    )
+    assert any(
+        issue.rule_code == "FQ2F"
+        and issue.severity == "warn"
+        and issue.priority == "P1"
+        for issue in result.issues
+    )
+    assert not any(issue.severity == "block" for issue in result.issues)
+    assert not any(issue.rule_code == "FQ4" for issue in result.issues)
+
+
 def test_run_quality_gate_blocks_single_fund_p0_failure_even_when_field_aggregate_passes(
     tmp_path: Path,
 ) -> None:

@@ -5,7 +5,7 @@
 > **设计真源**: `docs/design.md` (v2.2)
 > **规则真源**: `AGENTS.md`
 > **历史快照**: `docs/archive/implementation-control-history-20260525.md`
-> **当前状态**: release maintenance；quality gate correctness report-year scope accepted locally；下一入口为 core analyze/checklist reliability hardening plan/review
+> **当前状态**: release maintenance；core analyze/checklist reliability hardening accepted locally；下一入口为 small baseline corpus v1 plan/review
 
 ---
 
@@ -25,9 +25,9 @@
 |---|---|
 | Branch | `codex/local-reconciliation` |
 | Current phase | `release maintenance` |
-| Current gate | `quality gate correctness report-year scope accepted locally` |
-| Next entry point | `core analyze/checklist reliability hardening plan/review; must use init-agents / tmux multi-agent flow` |
-| Latest accepted gate checkpoint | `quality gate correctness report-year scope local accepted commit; use latest branch HEAD for exact hash` |
+| Current gate | `core analyze/checklist reliability hardening accepted locally` |
+| Next entry point | `small baseline corpus v1 plan/review; reconcile that active-fund Chapter 3 renderer minimal integration is already accepted; must use init-agents / tmux multi-agent flow` |
+| Latest accepted gate checkpoint | `core analyze/checklist reliability hardening local accepted commit; use latest branch HEAD for exact hash` |
 | Design truth | `docs/design.md` (v2.2) |
 | Control truth | `docs/implementation-control.md` |
 | Historical control snapshot | `docs/archive/implementation-control-history-20260525.md` |
@@ -173,6 +173,16 @@
 | Quality gate correctness implementation review: MiMo | `docs/reviews/release-maintenance-quality-gate-correctness-year-scope-implementation-review-mimo-20260527.md` |
 | Quality gate correctness implementation review: GLM | `docs/reviews/release-maintenance-quality-gate-correctness-year-scope-implementation-review-glm-20260527.md` |
 | Quality gate correctness implementation controller judgment | `docs/reviews/release-maintenance-quality-gate-correctness-year-scope-implementation-controller-judgment-20260527.md` |
+| Core analyze/checklist reliability hardening plan | `docs/reviews/release-maintenance-core-analyze-checklist-reliability-hardening-plan-20260527.md` |
+| Core reliability plan review: MiMo | `docs/reviews/release-maintenance-core-analyze-checklist-reliability-hardening-plan-review-mimo-20260527.md` |
+| Core reliability plan review: GLM | `docs/reviews/release-maintenance-core-analyze-checklist-reliability-hardening-plan-review-glm-20260527.md` |
+| Core reliability plan re-review: MiMo | `docs/reviews/release-maintenance-core-analyze-checklist-reliability-hardening-plan-rereview-mimo-20260527.md` |
+| Core reliability plan re-review: GLM | `docs/reviews/release-maintenance-core-analyze-checklist-reliability-hardening-plan-rereview-glm-20260527.md` |
+| Core reliability plan controller judgment | `docs/reviews/release-maintenance-core-analyze-checklist-reliability-hardening-plan-controller-judgment-20260527.md` |
+| Core reliability implementation evidence | `docs/reviews/release-maintenance-core-analyze-checklist-reliability-hardening-implementation-evidence-20260527.md` |
+| Core reliability implementation review: MiMo | `docs/reviews/release-maintenance-core-analyze-checklist-reliability-hardening-implementation-review-mimo-20260527.md` |
+| Core reliability implementation review: GLM | `docs/reviews/release-maintenance-core-analyze-checklist-reliability-hardening-implementation-review-glm-20260527.md` |
+| Core reliability implementation controller judgment | `docs/reviews/release-maintenance-core-analyze-checklist-reliability-hardening-implementation-controller-judgment-20260527.md` |
 
 ### Current Decisions
 
@@ -229,6 +239,7 @@
 - Renderer minimal integration design is accepted locally. The future implementation scope is limited to active-fund Chapter 3 missing-reviewed-evidence report text: current renderer inputs do not expose explicit reviewed turnover/style evidence, so the minimal path must treat active-fund Chapter 3 as missing-reviewed-evidence by default, suppress unsupported positive `风格一致` / `言行一致` accepted-conclusion wording, and emit `证据不足` plus the next minimum validation question. This is an accepted future design only; it does not authorize current code implementation, Service/CLI changes, FQ0-FQ6 changes, Host/Agent/dayu, source-helper work, or durable fixture promotion.
 - Renderer minimal integration implementation is accepted locally. `fund_agent/fund/template/renderer.py` now treats active-fund Chapter 3 as missing-reviewed-evidence by default because current renderer inputs do not expose explicit reviewed turnover/style evidence. It emits `证据不足`, preserves C2 required markers under `不能据此判断：`, suppresses unsupported positive `green / aligned` and consistency reason conclusions, emits the next minimum validation question, and keeps non-active Chapter 3 text on the existing path. The implementation uses dev-only writing audit only in tests and does not change Service/CLI, FQ0-FQ6, Host/Agent/dayu, source helpers, `FundDocumentRepository`, or quality gate strategy.
 - Quality gate correctness report-year scope is accepted locally. strict golden answer and correctness comparison now use `fund_code + report_year + field_name + sub_field` as the oracle identity; legacy strict JSON missing `report_year` loads as the current reviewed 2024 corpus; missing same-year golden coverage is reported as `year_not_covered` / `FQ0/info`; same-year mismatch still triggers `FQ1/block`. Focused tests, full pytest, ruff, diff check, and 004393 2024/2025 analyze/checklist smoke commands passed without changing renderer, Service/CLI control flow, FQ0-FQ6 policy semantics, Host/Agent/dayu, source helpers, NAV, turnover rules, or checklist run-id naming.
+- Core analyze/checklist reliability hardening is accepted locally. `FundDataExtractor` now degrades NAV provider/cache/akshare failures to `NavDataResult(unavailable=True, records=[])` while keeping annual-report repository/PDF/source failures outside the catch boundary and fail-closed. `FundAnalysisRequest.command_source` and Service normalization make default quality-gate artifacts distinguish `analyze-...` from `checklist-...`, while explicit `quality_gate_run_id` remains authoritative. Focused tests prove pre-2026 missing `turnover_rate` remains P1 warn/insufficiency and not a standalone hard blocker; FQ0-FQ6/FQ4 semantics are unchanged. Full pytest, ruff, diff check, two code reviews, and 004393 2024/2025 analyze/checklist smoke passed.
 
 ### Current Non-Goals
 
@@ -241,20 +252,21 @@
 
 ## Next Entry Point
 
-`core analyze/checklist reliability hardening plan/review`
+`small baseline corpus v1 plan/review`
 
 This next gate must start with Startup Packet replay and `$init-agents` / tmux multi-agent flow. It is a plan/review gate first; implementation may start only after the plan is accepted.
 
 Scope allowed for the next gate:
 
-- Plan and review NAV external-data failure degradation so annual-report analyze/checklist can continue when `nav_data` is unavailable, while preserving fail-closed annual-report identity / integrity / source semantics.
-- Plan and review the pre-2026 turnover-rate missing-data mouthpiece so missing `turnover_rate` remains explainable warning / insufficiency rather than a hard blocker.
-- Plan and review quality-gate artifact run-id / path observability so `analyze` and `checklist` runs are distinguishable.
-- Preserve the accepted correctness report-year scope behavior: missing same-year golden coverage is `year_not_covered` / `FQ0/info`, and same-year mismatch remains `FQ1/block`.
+- Reconcile that the user-sequenced active-fund Chapter 3 renderer minimal integration gate is already accepted in current truth; do not repeat renderer implementation unless a new discrepancy is proven.
+- Select and run a small baseline corpus v1 plan/review using current accepted candidates and current product commands / dev-only audit evidence where appropriate.
+- Expand from `004393` toward 5-10 representative samples covering active/index/enhanced-index/bond/QDII/FOF where repository evidence permits; keep FOF as `data_gap` if unavailable.
+- For each sample, record annual-report availability, extraction field gaps, quality gate status, report-quality issue categories, false-positive suspicion, and whether it is suitable for a future golden corpus gate.
+- Keep large outputs in scratch / ignored reports; tracked artifact should contain only summary and evidence paths.
 
-Do not modify renderer Chapter 3 report writing, Host/Agent packages, Dayu runtime, `FundDocumentRepository` source strategy, source-helper fallback semantics, or FQ0-FQ6 block/warn policy semantics in the core reliability gate unless a later accepted plan explicitly authorizes that scope.
+Do not promote samples to durable baseline or golden answer corpus in this gate. Do not modify renderer, FQ0-FQ6, Service/CLI behavior, Host/Agent packages, Dayu runtime, `FundDocumentRepository` source strategy, source-helper fallback semantics, or extractor logic unless a later accepted plan explicitly authorizes that scope.
 
-Do not push, create PR, mark ready, merge, close PRs, edit unrelated PRs, delete branches, or perform additional GitHub mutations without explicit user authorization. Do not modify renderer/report-writing audit, tracked reports, fixtures, repository/PDF/cache/source helpers, `FundDocumentRepository`, Host/Agent/dayu, derived calculations, durable baseline, report-quality validator integration, or product-flow behavior outside the accepted reliability slice.
+Do not push, create PR, mark ready, merge, close PRs, edit unrelated PRs, delete branches, or perform additional GitHub mutations without explicit user authorization. Do not add tracked scratch reports, PDF/cache outputs, source dumps, durable fixtures, or golden corpus files in the small baseline corpus v1 gate.
 
 ## Open Residuals
 
@@ -295,7 +307,9 @@ Do not push, create PR, mark ready, merge, close PRs, edit unrelated PRs, delete
 | Quality gate correctness report-year scope | Completed in implementation | Accepted strict golden-answer/correctness oracle identity `fund_code + report_year + field_name + sub_field`; missing same-year golden is `year_not_covered` / `FQ0/info`; same-year mismatch remains `FQ1/block` |
 | Multi-year correctness metadata granularity | future golden corpus / multi-year baseline gate | Current FQ0 metadata keeps `covered_fund_codes` / `missing_fund_codes` fund-code granular; revisit `(fund_code, report_year)` metadata when batch multi-year corpus becomes product-critical |
 | Year-not-covered CLI summary visibility | future observability gate | Gate JSON records `year_not_covered`; CLI stderr summary may not surface a dedicated `quality_gate_info` line for every warn/info path |
-| Checklist run-id naming observability | core analyze/checklist reliability hardening gate | Current checklist quality-gate artifact directory may still use `analyze-...`; plan and implement only the naming/observability distinction without changing FQ0-FQ6 semantics |
+| Checklist run-id naming observability | Completed in core reliability implementation | Default Service-generated quality gate run id/path now uses `analyze-...` or `checklist-...`; explicit `quality_gate_run_id` remains authoritative |
+| NAV external-data degradation | Completed in core reliability implementation | NAV provider/cache/akshare failures degrade to `NavDataResult(unavailable=True, records=[])`; annual-report repository/PDF/source fail-closed semantics remain outside the catch boundary |
+| Pre-2026 turnover-rate missing semantics | Completed in core reliability implementation | Focused tests lock missing `turnover_rate` as P1 warn/insufficiency, not standalone hard block; FQ4 aggregate missing-rate semantics remain unchanged |
 | `nav_data` mapping | future `nav_data` source-contract slice | Keep excluded from initial facts projection until a safe mapping contract exists |
 | Document identity vs fund-type slot membership | Completed in S1 schema draft | S1 split document verification from type-slot membership so `verified_as_annual_report_but_type_gap` cannot become scoring-ready FOF evidence |
 | Review-state terminal states | Completed in S1 schema draft / future implementation validation | S1 defined rejected / deferred / expired semantics; S2 or later implementation must add executable value-domain validation if schema becomes code |
@@ -334,6 +348,7 @@ Do not push, create PR, mark ready, merge, close PRs, edit unrelated PRs, delete
 | `renderer minimal integration design` | accepted locally | `docs/reviews/release-maintenance-renderer-minimal-integration-design-plan-controller-judgment-20260526.md` | Design plan revised after two BLOCK reviews; both re-reviews `PASS`; `docs/design.md` records accepted future design; no source/test/runtime changes | implementation not authorized yet, positive reviewed-evidence path deferred to input-contract design, Chapter 2/6 deferred, index/QDII/FOF residuals | `renderer minimal integration implementation gate; requires explicit authorization` |
 | `renderer minimal integration implementation` | accepted locally | `docs/reviews/release-maintenance-renderer-minimal-integration-implementation-controller-judgment-20260526.md` | Active-fund Chapter 3 missing-reviewed-evidence text implemented; two code reviews `PASS_WITH_FINDINGS`; accepted fixes applied; focused renderer tests `61 passed`, sidecar/audit `20 passed`, full template `101 passed`, adjacent report-quality `152 passed`, ruff and diff check passed | positive reviewed-evidence path, raw disclosure vs conclusion audit attribution, NAV degradation, trading-advice detector sharing, report-quality wrapper ergonomics | `quality gate correctness report-year scope plan/review` |
 | `quality gate correctness report-year scope` | accepted locally | `docs/reviews/release-maintenance-quality-gate-correctness-year-scope-implementation-controller-judgment-20260527.md` | strict golden/correctness identity is scoped by `fund_code + report_year + field_name + sub_field`; `year_not_covered` maps to `FQ0/info`; same-year mismatch remains `FQ1/block`; plan reviews and code reviews completed; focused tests `74 passed`, full pytest `737 passed`, ruff, diff check, and 004393 2024/2025 analyze/checklist smoke passed | multi-year metadata granularity, year-not-covered CLI summary visibility, NAV degradation, turnover wording, checklist run-id naming | `core analyze/checklist reliability hardening plan/review` |
+| `core analyze/checklist reliability hardening` | accepted locally | `docs/reviews/release-maintenance-core-analyze-checklist-reliability-hardening-implementation-controller-judgment-20260527.md` | NAV unavailable degradation, `command_source` run-id distinction, and turnover missing regression locks implemented; two code reviews `PASS`; focused tests `10/31/29/39 passed`, full pytest `746 passed`, ruff, diff check, and 004393 2024/2025 analyze/checklist smoke passed | broad NAV catch diagnostic residual, P2 nav_data missing signal, future FQ4 field-applicability if evidence proves false blocker, small baseline corpus coverage | `small baseline corpus v1 plan/review` |
 
 ## Historical Evidence Index
 

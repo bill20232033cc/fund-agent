@@ -86,7 +86,7 @@ chapter_lens = resolve_preferred_lens(chapter_id=2, fund_type="active_fund")
 - `holdings_snapshot`：`§8` 表格中的前十大重仓，以及已披露的行业分布
 - `share_change`：`§10` 表格中的期初份额、期末份额、净变动；当前支持申购/赎回拆分表，并在缺少净变动行时用期末减期初计算
 
-`FundDataExtractor.extract()` 返回 `StructuredFundDataBundle`，当前聚合 P1 已接受的 14 项结构化数据，并附带净值数据读取结果。新增 `index_profile` 只承载指数画像上下文，新增 `tracking_error` 只承载年报直接披露或后续已接受计算路径形成的跟踪误差；开发覆盖不写入结构化数据包。它只做 orchestration，不直接读文件、不直接写缓存。
+`FundDataExtractor.extract()` 返回 `StructuredFundDataBundle`，当前聚合 P1 已接受的 14 项结构化数据，并附带净值数据读取结果。新增 `index_profile` 只承载指数画像上下文，新增 `tracking_error` 只承载年报直接披露或后续已接受计算路径形成的跟踪误差；开发覆盖不写入结构化数据包。它只做 orchestration，不直接读文件、不直接写缓存。年报仓库和 PDF 来源失败仍按来源策略向上抛出；仅 NAV provider / cache / akshare 等外部净值数据失败会降级为 `NavDataResult(unavailable=True, records=[])`，让年报字段抽取和 `analyze` / `checklist` 主路径继续运行。
 
 `project_report_evidence_bundle()` 位于 `fund_agent/fund/report_evidence.py`，当前把已经创建的 `StructuredFundDataBundle` 投影为 typed `ReportEvidenceBundle`：
 

@@ -218,6 +218,7 @@ def analyze(
         force_refresh=force_refresh,
         mode="developer_override" if dev_override else "product",
         developer_overrides=developer_overrides,
+        command_source="analyze",
     )
     try:
         result = asyncio.run(FundAnalysisService().analyze(request))
@@ -295,6 +296,7 @@ def checklist(
         thermometer_cache_dir=thermometer_cache_dir,
         user_money_horizon_years=user_money_horizon_years,
         force_refresh=force_refresh,
+        command_source="checklist",
     )
     try:
         result = asyncio.run(FundAnalysisService().checklist(request))

@@ -833,6 +833,7 @@ def test_analyze_cli_calls_service_and_prints_report(monkeypatch) -> None:  # ty
     assert _FakeService.last_request.valuation_state == "low"
     assert _FakeService.last_request.thermometer_cache_dir == Path("cache/thermometer-fixture")
     assert _FakeService.last_request.force_refresh is True
+    assert _FakeService.last_request.command_source == "analyze"
     assert _FakeService.last_request.developer_overrides.quality_gate_policy == "warn"
     assert _FakeService.last_request.developer_overrides.quality_gate_source_csv == Path(
         "docs/code_20260519.csv"
@@ -1212,6 +1213,7 @@ def test_checklist_cli_calls_service_and_prints_summary(monkeypatch) -> None:  #
     assert _FakeChecklistService.last_request.fund_code == "110011"
     assert _FakeChecklistService.last_request.valuation_state == "low"
     assert _FakeChecklistService.last_request.user_money_horizon_years == "4"
+    assert _FakeChecklistService.last_request.command_source == "checklist"
     assert "overall_signal: green" in result.output
     assert "valuation_state: low" in result.output
     assert "final_judgment: worth_holding" in result.output

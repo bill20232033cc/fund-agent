@@ -5,7 +5,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Protocol
 
-from fund_agent.fund.data.nav_data import FundNavDataAdapter, NavDataResult
+from fund_agent.fund.data.nav_data import (
+    FundNavDataAdapter,
+    NavDataResult,
+    unavailable_nav_data_result,
+)
 from fund_agent.fund.documents import FundDocumentRepository
 from fund_agent.fund.documents.models import ParsedAnnualReport
 from fund_agent.fund.extractors import (
@@ -155,7 +159,7 @@ class FundDataExtractor:
             P1 结构化基金数据包。
 
         Raises:
-            Exception: 允许仓库、净值适配器或 extractor 异常向上抛出。
+            Exception: 允许仓库或年报 extractor 异常向上抛出；净值外部数据异常会降级为不可用结果。
         """
 
         report = await self._repository.load_annual_report(
@@ -163,7 +167,11 @@ class FundDataExtractor:
             report_year,
             force_refresh=force_refresh,
         )
-        nav_data = await self._nav_provider.load_nav_data(fund_code, force_refresh=force_refresh)
+        nav_data = await _load_nav_data_or_unavailable(
+            self._nav_provider,
+            fund_code,
+            force_refresh=force_refresh,
+        )
         profile_result = extract_profile(report)
         performance_result = extract_performance(report)
         manager_ownership_result = extract_manager_ownership(report)
@@ -190,6 +198,35 @@ class FundDataExtractor:
             holdings_snapshot=holdings_share_change_result.holdings_snapshot,
             holder_structure=manager_ownership_result.holder_structure,
             nav_data=nav_data,
+        )
+
+
+async def _load_nav_data_or_unavailable(
+    nav_provider: _NavDataProvider,
+    fund_code: str,
+    *,
+    force_refresh: bool,
+) -> NavDataResult:
+    """加载净值数据，失败时返回显式不可用结果。
+
+    Args:
+        nav_provider: 净值数据提供者。
+        fund_code: 基金代码。
+        force_refresh: 是否强制刷新净值缓存。
+
+    Returns:
+        净值数据结果；外部数据失败时返回 `unavailable=True` 的空结果。
+
+    Raises:
+        无显式抛出；仅捕获净值 provider 单次调用中的异常并降级。
+    """
+
+    try:
+        return await nav_provider.load_nav_data(fund_code, force_refresh=force_refresh)
+    except Exception as exc:
+        return unavailable_nav_data_result(
+            fund_code,
+            reason=f"{type(exc).__name__}: {exc}",
         )
 
 

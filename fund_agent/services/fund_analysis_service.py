@@ -7,7 +7,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from decimal import Decimal
 from datetime import datetime, timezone
 from pathlib import Path
@@ -58,6 +58,7 @@ ValuationState = Literal["low", "fair", "high", "unavailable"]
 MoneyHorizon = Literal["long_enough", "uncertain", "too_short"]
 QualityGatePolicy = Literal["off", "warn", "block"]
 AnalyzeMode = Literal["product", "developer_override"]
+AnalyzeCommandSource = Literal["analyze", "checklist"]
 DEFAULT_GOLDEN_ANSWER_PATH = DEFAULT_GOLDEN_ANSWER_JSON
 
 
@@ -167,6 +168,7 @@ class FundAnalysisRequest:
         force_refresh: 是否强制刷新底层数据。
         mode: analyze 契约模式，默认 product。
         developer_overrides: 开发覆盖参数；product mode 下必须为空。
+        command_source: 触发分析核心的命令来源，用于默认 quality gate run_id 命名。
     """
 
     fund_code: str
@@ -179,6 +181,7 @@ class FundAnalysisRequest:
     force_refresh: bool = False
     mode: AnalyzeMode = "product"
     developer_overrides: FundAnalysisDeveloperOverrides | None = None
+    command_source: AnalyzeCommandSource = "analyze"
 
 
 @dataclass(frozen=True, slots=True)
@@ -447,7 +450,9 @@ class FundAnalysisService:
             Exception: 允许底层抽取器或 Agent 层基金能力传播异常。
         """
 
-        core_result = await self._run_analysis_core(request)
+        core_result = await self._run_analysis_core(
+            replace(request, command_source="analyze")
+        )
         render_result = render_template_report(
             TemplateRenderInput(
                 structured_data=core_result.structured_data,
@@ -499,7 +504,9 @@ class FundAnalysisService:
             Exception: 允许底层抽取器或 Agent 层基金能力传播异常。
         """
 
-        core_result = await self._run_analysis_core(request)
+        core_result = await self._run_analysis_core(
+            replace(request, command_source="checklist")
+        )
         return FundChecklistResult(
             structured_data=core_result.structured_data,
             rabc_attribution=core_result.rabc_attribution,
@@ -613,6 +620,7 @@ class FundAnalysisService:
         quality_gate_result, quality_gate_not_run_reason = _run_quality_gate_if_enabled(
             structured_data=structured_data,
             resolved_contract=resolved_contract,
+            command_source=request.command_source,
         )
         if resolved_contract.quality_gate_policy == "block":
             if quality_gate_result is None:
@@ -794,6 +802,8 @@ def _validate_request(
         raise ValueError("fund_code 必须是 6 位数字")
     if request.report_year <= 0:
         raise ValueError("report_year 必须为正整数")
+    if request.command_source not in {"analyze", "checklist"}:
+        raise ValueError("command_source 必须是 analyze / checklist")
     if resolved_contract.quality_gate_policy not in {"off", "warn", "block"}:
         raise ValueError("quality_gate_policy 必须是 off / warn / block")
     if (
@@ -847,12 +857,14 @@ def _run_quality_gate_if_enabled(
     *,
     structured_data: StructuredFundDataBundle,
     resolved_contract: ResolvedAnalyzeContract,
+    command_source: AnalyzeCommandSource,
 ) -> tuple[QualityGateResult | None, str | None]:
     """按请求策略运行输入质量 gate。
 
     Args:
         structured_data: 已抽取的结构化基金数据包，避免重复读取年报。
         resolved_contract: 解析后的 analyze 契约。
+        command_source: 触发 quality gate 的命令来源。
 
     Returns:
         `(quality_gate_result, not_run_reason)`。
@@ -870,7 +882,11 @@ def _run_quality_gate_if_enabled(
         bundle=structured_data,
         source_csv=resolved_contract.quality_gate_source_csv,
         output_dir=resolved_contract.quality_gate_output_dir,
-        run_id=resolved_contract.quality_gate_run_id or _default_quality_gate_run_id(structured_data),
+        run_id=resolved_contract.quality_gate_run_id
+        or _default_quality_gate_run_id(
+            structured_data,
+            command_source=command_source,
+        ),
         golden_answer_path=golden_answer_path,
     )
     return integration_result.quality_gate_result, integration_result.not_run_reason
@@ -925,11 +941,16 @@ def _resolve_golden_answer_path(path: Path | None) -> Path | None:
     return None
 
 
-def _default_quality_gate_run_id(structured_data: StructuredFundDataBundle) -> str:
+def _default_quality_gate_run_id(
+    structured_data: StructuredFundDataBundle,
+    *,
+    command_source: AnalyzeCommandSource,
+) -> str:
     """生成默认 quality gate 运行 ID。
 
     Args:
         structured_data: 已抽取的结构化基金数据包。
+        command_source: 触发 quality gate 的命令来源。
 
     Returns:
         包含基金代码、年报年份和 UTC 时间戳的运行 ID。
@@ -939,7 +960,7 @@ def _default_quality_gate_run_id(structured_data: StructuredFundDataBundle) -> s
     """
 
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
-    return f"analyze-{structured_data.fund_code}-{structured_data.report_year}-{timestamp}"
+    return f"{command_source}-{structured_data.fund_code}-{structured_data.report_year}-{timestamp}"
 
 
 def _extract_fund_type(structured_data: StructuredFundDataBundle) -> FundType:

@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from fund_agent.fund.data.nav_data import NavDataResult
+from fund_agent.fund.data.nav_data import NavDataResult, unavailable_nav_data_result
 from fund_agent.fund.data_extractor import StructuredFundDataBundle
 from fund_agent.fund.extraction_snapshot import (
     SNAPSHOT_FIELD_ORDER,
@@ -197,6 +197,68 @@ def test_build_snapshot_records_contains_required_schema_and_all_fields() -> Non
         "top_holdings_status": "direct_top_ten",
         "top_holdings_source": "top_ten",
     }
+
+
+def test_build_snapshot_records_preserves_unavailable_nav_reason() -> None:
+    """验证 NAV 降级原因进入 snapshot note。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 NAV 降级 note 缺少来源、记录数或原因时抛出。
+    """
+
+    bundle = _build_bundle("110011", "active_fund")
+    unavailable_bundle = StructuredFundDataBundle(
+        fund_code=bundle.fund_code,
+        report_year=bundle.report_year,
+        basic_identity=bundle.basic_identity,
+        product_profile=bundle.product_profile,
+        benchmark=bundle.benchmark,
+        index_profile=bundle.index_profile,
+        fee_schedule=bundle.fee_schedule,
+        turnover_rate=bundle.turnover_rate,
+        nav_benchmark_performance=bundle.nav_benchmark_performance,
+        investor_return=bundle.investor_return,
+        tracking_error=bundle.tracking_error,
+        share_change=bundle.share_change,
+        manager_alignment=bundle.manager_alignment,
+        manager_strategy_text=bundle.manager_strategy_text,
+        holdings_snapshot=bundle.holdings_snapshot,
+        holder_structure=bundle.holder_structure,
+        nav_data=unavailable_nav_data_result(
+            "110011",
+            reason="RuntimeError: network down",
+        ),
+    )
+    selected_fund = SelectedFundRecord(
+        line_number=2,
+        fund_name="易方达中小盘混合",
+        fund_code="110011",
+        app_category="国内股票类",
+    )
+
+    records = build_snapshot_records(
+        bundle=unavailable_bundle,
+        selected_fund=selected_fund,
+        run_id="unit-run",
+        extraction_timestamp="2026-05-19T00:00:00+00:00",
+        source_csv="docs/code_20260519.csv",
+    )
+
+    nav_record = next(record for record in records if record.field_name == "nav_data")
+    assert nav_record.extraction_mode == "missing"
+    assert nav_record.value_present is False
+    assert nav_record.note is not None
+    assert "source=nav_unavailable" in nav_record.note
+    assert "cached=False" in nav_record.note
+    assert "records=0" in nav_record.note
+    assert "unavailable=True" in nav_record.note
+    assert "reason=RuntimeError: network down" in nav_record.note
 
 
 def test_build_snapshot_records_serializes_index_quality_dataclass_comparable_values() -> None:

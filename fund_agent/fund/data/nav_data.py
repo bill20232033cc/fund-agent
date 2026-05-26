@@ -105,12 +105,55 @@ class NavDataResult:
         records: 净值记录列表。
         source: 数据来源。
         cached: 是否命中缓存。
+        unavailable: 净值外部数据是否不可用。
+        unavailable_reason: 净值数据不可用原因。
     """
 
     fund_code: str
     records: NavPayload
     source: str
     cached: bool
+    unavailable: bool = False
+    unavailable_reason: str | None = None
+
+
+def unavailable_nav_data_result(
+    fund_code: str,
+    *,
+    reason: str,
+    source: str = "nav_unavailable",
+) -> NavDataResult:
+    """构造净值数据不可用的降级结果。
+
+    Args:
+        fund_code: 基金代码。
+        reason: 不可用原因，调用方应包含异常类型和异常信息。
+        source: 降级来源标记。
+
+    Returns:
+        空净值序列的不可用结果。
+
+    Raises:
+        ValueError: 基金代码、原因或来源为空时抛出。
+    """
+
+    normalized_fund_code = fund_code.strip()
+    normalized_reason = reason.strip()
+    normalized_source = source.strip()
+    if not normalized_fund_code:
+        raise ValueError("fund_code 不能为空")
+    if not normalized_reason:
+        raise ValueError("reason 不能为空")
+    if not normalized_source:
+        raise ValueError("source 不能为空")
+    return NavDataResult(
+        fund_code=normalized_fund_code,
+        records=[],
+        source=normalized_source,
+        cached=False,
+        unavailable=True,
+        unavailable_reason=normalized_reason,
+    )
 
 
 class FundNavDataAdapter:
