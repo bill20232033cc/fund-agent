@@ -391,7 +391,9 @@ C2 当前只做确定性 marker / 元数据检查，不调用 LLM，不判断语
 - `analysis/`：分析计算模块。当前包含 `r_abc.py`、`alpha_judge.py`、`consistency_check.py`、`investor_return.py`、`risk_check.py` 与内部比例解析 helper，只消费 P1/P2 结构化数据和显式判断证据，不直接读取年报文件。
 - `template/`：模板渲染能力。当前包含 `renderer.py`，只消费 P1/P2 结构化结果并输出 8 章 Markdown、章节块与程序审计输入。
 - `template/contracts.py`：模板契约能力，维护第 0-7 章 CHAPTER_CONTRACT 机器契约、章节契约读取和基金类型 lens 解析。
+- `template/chapter_contract_constraints.py`：CHAPTER_CONTRACT 可执行写作约束 sidecar，包裹既有章节契约并为 dev-only 写作审计提供 required evidence / N/A / failure behavior 配置。
 - `template/item_rules.py`：模板 ITEM_RULE manifest，维护当前四条 conditional 规则、确定性触发评估和段落标记检查。
+- `report_writing_audit.py`：dev-only 报告写作审计，只消费调用方显式传入的 `ReportEvidenceBundle`、已解析 records 和章节草稿代理，不读取基金文档、不接入 renderer、Service/CLI 或 FQ0-FQ6 质量门。
 - `pdf/`：底层 PDF helper。当前包含：
   - `downloader.py`：仅供仓库内部使用的 PDF 下载 helper，会写入本地缓存
   - `parser.py`：PDF 全文、表格与章节定位原型
@@ -421,6 +423,8 @@ C2 当前只做确定性 marker / 元数据检查，不调用 LLM，不判断语
 - 当前 `analysis/checklist.py` 实现 7 问题检查清单，消费分析结果和显式用户输入，不读取外部数据。
 - 当前 `audit/audit_programmatic.py` 实现 MVP 程序审计，不调用 LLM 或证据复核。
 - 当前 `template/contracts.py` 实现第 0-7 章 CHAPTER_CONTRACT manifest、章节契约读取、基金类型 lens 解析和 fail-closed manifest 校验；不运行时解析 Markdown 注释。
+- 当前 `template/chapter_contract_constraints.py` 实现第 0-7 章默认 wrapper 和首个 material overlay：主动基金第 3 章换手率 / 风格变化证据约束。增强指数第 2 章和债券第 6 章只登记为 deferred `config_only` 要求，不执行材料级审计。
 - 当前 `template/item_rules.py` 实现 ITEM_RULE manifest、显式基金类型/facet 评估、审计上下文类型和唯一段落标记检查；不调用 LLM、不读取基金文档、不接入质量门禁。
 - 当前 `template/renderer.py` 实现 8 章 Markdown 模板渲染，按 CHAPTER_CONTRACT manifest 生成章节标题，按 ITEM_RULE 决策渲染/删除固定段落，并返回可直接用于程序审计的 `ProgrammaticAuditInput` 与 `RenderedChapterBlock` 章节块。
+- 当前 `report_writing_audit.py` 实现主动基金第 3 章写作审计：缺少已复核换手率 / 风格变化事实和可解析证据锚点时，禁止稳定性、风格一致或言行一致正向判断；若仅有兼容 `data_gap`，草稿必须明示证据不足和下一步最小验证问题。
 - `parser.py` 已具备 `§3` 定位修复，但真实样本扩展和更多章节/表格抽取仍在后续 slice 完成。
