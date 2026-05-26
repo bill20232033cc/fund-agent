@@ -5,8 +5,14 @@ from __future__ import annotations
 import pytest
 
 from fund_agent.fund.data.nav_data import NavDataResult
-from fund_agent.fund.data_extractor import FundDataExtractor
-from fund_agent.fund.documents.models import DocumentKey, ParsedAnnualReport
+from fund_agent.fund.data_extractor import FundDataExtractor, StructuredFundDataBundle
+from fund_agent.fund.documents.models import (
+    AnnualReportMetadata,
+    AnnualReportSourceMetadata,
+    DocumentKey,
+    ParsedAnnualReport,
+)
+from fund_agent.fund.extractors import ExtractedField
 
 
 class _FakeRepository:
@@ -156,6 +162,8 @@ async def test_data_extractor_degrades_nav_failure_without_blocking_annual_repor
     assert bundle.nav_data.cached is False
     assert bundle.nav_data.unavailable is True
     assert bundle.nav_data.unavailable_reason == "RuntimeError: network down"
+    assert bundle.source_provenance.fallback_eligibility == "not_applicable"
+    assert bundle.source_provenance.source_provenance_status == "not_applicable"
 
 
 @pytest.mark.asyncio
@@ -183,11 +191,113 @@ async def test_data_extractor_does_not_mask_repository_failure() -> None:
     assert nav_provider.calls == []
 
 
-def _annual_report() -> ParsedAnnualReport:
-    """构造可被当前 extractor 解析的最小年报。
+def test_structured_bundle_default_source_provenance_is_not_none() -> None:
+    """验证 fake bundle 未显式传 provenance 时使用安全默认值。
 
     Args:
         无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 bundle provenance 为 `None` 或非 not_applicable 时抛出。
+    """
+
+    report = _annual_report()
+    bundle = StructuredFundDataBundle(
+        fund_code=report.key.fund_code,
+        report_year=report.key.year,
+        basic_identity=_fake_field(),
+        product_profile=_fake_field(),
+        benchmark=_fake_field(),
+        index_profile=_fake_field(),
+        fee_schedule=_fake_field(),
+        turnover_rate=_fake_field(),
+        nav_benchmark_performance=_fake_field(),
+        investor_return=_fake_field(),
+        tracking_error=_fake_field(),
+        share_change=_fake_field(),
+        manager_alignment=_fake_field(),
+        manager_strategy_text=_fake_field(),
+        holdings_snapshot=_fake_field(),
+        holder_structure=_fake_field(),
+        nav_data=NavDataResult(fund_code="110011", records=[], source="fixture", cached=False),
+    )
+
+    assert bundle.source_provenance is not None
+    assert bundle.source_provenance.fallback_used is False
+    assert bundle.source_provenance.fallback_eligibility == "not_applicable"
+    assert bundle.source_provenance.source_provenance_status == "not_applicable"
+
+
+@pytest.mark.asyncio
+async def test_data_extractor_projects_primary_source_metadata() -> None:
+    """验证生产 extractor 从年报元数据投影主源 provenance。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当生产路径没有读取 `ParsedAnnualReport.metadata.source` 时抛出。
+    """
+
+    repository = _FakeRepository(
+        _annual_report(
+            source_metadata=AnnualReportSourceMetadata(source="eid", fallback_used=False)
+        )
+    )
+    extractor = FundDataExtractor(repository=repository, nav_provider=_RecordingNavProvider())
+
+    bundle = await extractor.extract("110011", 2024)
+
+    assert bundle.source_provenance.resolved_source_name == "eid"
+    assert bundle.source_provenance.fallback_used is False
+    assert bundle.source_provenance.fallback_eligibility == "not_applicable"
+    assert bundle.source_provenance.source_provenance_status == "not_applicable"
+
+
+@pytest.mark.asyncio
+async def test_data_extractor_projects_fallback_metadata_as_unknown_when_category_absent() -> None:
+    """验证生产 extractor 对缺少失败分类的 fallback 保持 unknown。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当缺少失败分类的 fallback 被推断为 eligible 时抛出。
+    """
+
+    repository = _FakeRepository(
+        _annual_report(
+            source_metadata=AnnualReportSourceMetadata(source="eastmoney", fallback_used=True)
+        )
+    )
+    extractor = FundDataExtractor(repository=repository, nav_provider=_RecordingNavProvider())
+
+    bundle = await extractor.extract("110011", 2024)
+
+    assert bundle.source_provenance.resolved_source_name == "eastmoney"
+    assert bundle.source_provenance.fallback_used is True
+    assert bundle.source_provenance.primary_failure_category is None
+    assert bundle.source_provenance.fallback_eligibility == "unknown_public_metadata_absent"
+    assert bundle.source_provenance.source_provenance_status == "incomplete"
+
+
+def _annual_report(
+    *,
+    source_metadata: AnnualReportSourceMetadata | None = None,
+) -> ParsedAnnualReport:
+    """构造可被当前 extractor 解析的最小年报。
+
+    Args:
+        source_metadata: 可选年报来源元数据。
 
     Returns:
         最小年报解析结果。
@@ -231,4 +341,21 @@ def _annual_report() -> ParsedAnnualReport:
         raw_text=raw_text,
         sections={},
         tables=(),
+        metadata=AnnualReportMetadata(source=source_metadata),
     )
+
+
+def _fake_field() -> ExtractedField[dict[str, object]]:
+    """构造 bundle 默认 provenance 测试用最小字段。
+
+    Args:
+        无。
+
+    Returns:
+        当前测试不读取内容的字段对象。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return ExtractedField(value={}, anchors=(), extraction_mode="missing")

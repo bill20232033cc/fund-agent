@@ -189,6 +189,14 @@ class SnapshotRecord:
         row_id: 行级定位。
         comparable_values: correctness 可直接比较的白名单子字段值。
         note: 缺失、降级或异常说明。
+        source_provenance_schema_version: 公共来源 provenance schema 版本。
+        source_strategy: 公共来源策略标签。
+        resolved_source_name: 解析出的公开来源名。
+        fallback_used: 是否使用 fallback 来源。
+        primary_failure_category: 主来源失败分类；缺失时为 `None`。
+        fallback_eligibility: fallback 公开安全分类。
+        source_provenance_status: provenance 完整性状态。
+        source_provenance_reason: 稳定短原因码。
     """
 
     run_id: str
@@ -211,6 +219,14 @@ class SnapshotRecord:
     row_id: str | None
     comparable_values: dict[str, str]
     note: str | None
+    source_provenance_schema_version: str
+    source_strategy: str
+    resolved_source_name: str | None
+    fallback_used: bool
+    primary_failure_category: str | None
+    fallback_eligibility: str
+    source_provenance_status: str
+    source_provenance_reason: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -648,6 +664,7 @@ def write_snapshot_summary(
             f"{_format_ratio(summary.anchor_present, summary.total)} |"
         )
 
+    lines.extend(_source_provenance_summary_lines(records, errors))
     lines.extend(
         [
             "",
@@ -1008,6 +1025,7 @@ def _snapshot_record(
         无显式抛出。
     """
 
+    provenance = bundle.source_provenance
     return SnapshotRecord(
         run_id=run_id,
         extraction_timestamp=extraction_timestamp,
@@ -1029,7 +1047,96 @@ def _snapshot_record(
         row_id=anchor.row_locator if anchor else None,
         comparable_values=comparable_values,
         note=note,
+        source_provenance_schema_version=provenance.source_provenance_schema_version,
+        source_strategy=provenance.source_strategy,
+        resolved_source_name=provenance.resolved_source_name,
+        fallback_used=provenance.fallback_used,
+        primary_failure_category=provenance.primary_failure_category,
+        fallback_eligibility=provenance.fallback_eligibility,
+        source_provenance_status=provenance.source_provenance_status,
+        source_provenance_reason=provenance.source_provenance_reason,
     )
+
+
+def _source_provenance_summary_lines(
+    records: Sequence[SnapshotRecord],
+    errors: Sequence[SnapshotErrorRecord],
+) -> list[str]:
+    """构造 snapshot summary 的公共来源 provenance 表。
+
+    Args:
+        records: 已生成的字段级记录。
+        errors: 单基金失败记录。
+
+    Returns:
+        Markdown 行列表；失败基金 v1 不进入表格，只输出简短说明。
+
+    Raises:
+        无显式抛出。
+    """
+
+    first_records_by_fund: dict[str, SnapshotRecord] = {}
+    for record in records:
+        first_records_by_fund.setdefault(record.fund_code, record)
+
+    lines = [
+        "",
+        "## Source Provenance",
+        "",
+        "| fund_code | resolved_source_name | fallback_used | fallback_eligibility | source_provenance_status | source_provenance_reason |",
+        "|---|---|---|---|---|---|",
+    ]
+    for fund_code in sorted(first_records_by_fund):
+        record = first_records_by_fund[fund_code]
+        lines.append(
+            "| "
+            f"{record.fund_code} | "
+            f"{_summary_nullable_text(record.resolved_source_name)} | "
+            f"{_summary_bool_text(record.fallback_used)} | "
+            f"{record.fallback_eligibility} | "
+            f"{record.source_provenance_status} | "
+            f"{record.source_provenance_reason} |"
+        )
+    if errors:
+        lines.extend(
+            [
+                "",
+                "_Failed funds without snapshot records are omitted from Source Provenance v1._",
+            ]
+        )
+    return lines
+
+
+def _summary_nullable_text(value: str | None) -> str:
+    """把 summary 表中的空值格式化为稳定 `null`。
+
+    Args:
+        value: 可选文本。
+
+    Returns:
+        非空文本或 `null`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return value if value is not None else "null"
+
+
+def _summary_bool_text(value: bool) -> str:
+    """把 summary 表中的布尔值格式化为小写 JSON 风格文本。
+
+    Args:
+        value: 布尔值。
+
+    Returns:
+        `true` 或 `false`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return "true" if value else "false"
 
 
 def _comparable_values_for_field(

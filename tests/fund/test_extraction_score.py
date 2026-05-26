@@ -36,6 +36,34 @@ from fund_agent.fund.extraction_score import (
 )
 from fund_agent.fund.extraction_snapshot import load_selected_funds
 
+_SCORE_JSON_TOP_LEVEL_KEYS = {
+    "snapshot_path",
+    "source_csv",
+    "thresholds",
+    "field_count",
+    "fund_count",
+    "status_counts",
+    "p0_status",
+    "field_scores",
+    "fund_scores",
+    "fund_quality",
+    "field_applicability_decisions",
+    "score_applicability_issues",
+    "failed_funds",
+    "golden_set",
+    "correctness",
+}
+_PUBLIC_SOURCE_PROVENANCE_PAYLOAD = {
+    "source_provenance_schema_version": "repository_source_provenance.v1",
+    "source_strategy": "primary_then_fallback",
+    "resolved_source_name": "eastmoney",
+    "fallback_used": True,
+    "primary_failure_category": None,
+    "fallback_eligibility": "unknown_public_metadata_absent",
+    "source_provenance_status": "incomplete",
+    "source_provenance_reason": "fallback_used_primary_failure_category_absent",
+}
+
 
 def test_score_snapshot_records_computes_coverage_traceability_status_and_priority() -> None:
     """验证字段级评分覆盖 coverage、traceability、status 和 priority 映射。
@@ -112,6 +140,53 @@ def test_score_snapshot_records_status_thresholds_are_deterministic() -> None:
     assert rows_by_name["basic_identity"].status == STATUS_PASS
     assert rows_by_name["benchmark"].status == STATUS_WATCH
     assert rows_by_name["fee_schedule"].status == STATUS_FAIL
+
+
+def test_source_provenance_keys_do_not_change_score_outputs() -> None:
+    """验证 additive provenance 字段不改变 score / FQ0-FQ6 敏感输出。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 provenance 字段影响评分语义时抛出。
+    """
+
+    legacy_records = [
+        _snapshot_record("profile", "basic_identity", value_present=True, anchor_present=True),
+        _snapshot_record("profile", "benchmark", value_present=False, anchor_present=False),
+    ]
+    provenance_records = [
+        _snapshot_record(
+            "profile",
+            "basic_identity",
+            value_present=True,
+            anchor_present=True,
+            include_source_provenance=True,
+        ),
+        _snapshot_record(
+            "profile",
+            "benchmark",
+            value_present=False,
+            anchor_present=False,
+            include_source_provenance=True,
+        ),
+    ]
+
+    assert score_snapshot_records(provenance_records) == score_snapshot_records(legacy_records)
+    assert score_fund_records(provenance_records) == score_fund_records(legacy_records)
+    assert derive_fund_quality_records(provenance_records) == derive_fund_quality_records(
+        legacy_records
+    )
+    assert derive_field_applicability_decisions(
+        provenance_records
+    ) == derive_field_applicability_decisions(legacy_records)
+    assert derive_score_applicability_issues(
+        provenance_records
+    ) == derive_score_applicability_issues(legacy_records)
 
 
 def test_score_fund_records_exposes_single_fund_p0_failure_when_aggregate_can_pass() -> None:
@@ -933,6 +1008,7 @@ def test_run_extraction_score_writes_score_outputs(tmp_path: Path) -> None:
     assert result.score_json_path.exists()
     assert result.score_markdown_path.exists()
     assert result.golden_set_path.exists()
+    assert set(score_payload) == _SCORE_JSON_TOP_LEVEL_KEYS
     assert score_payload["fund_count"] == 1
     assert score_payload["failed_funds"] == []
     assert score_payload["fund_scores"][0]["fund_code"] == "004393"
@@ -961,6 +1037,90 @@ def test_run_extraction_score_writes_score_outputs(tmp_path: Path) -> None:
     assert "## Fund Scores" in markdown
     assert "## Field Scores" in markdown
     assert MANDATORY_GOLDEN_CODE in {record["fund_code"] for record in golden_payload["records"]}
+
+
+def test_run_extraction_score_output_ignores_additive_source_provenance(
+    tmp_path: Path,
+) -> None:
+    """验证 score.json key 集合和 gate 敏感输出不因 provenance 字段变化。
+
+    Args:
+        tmp_path: pytest 临时目录 fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 additive provenance 改变 score.json 或 FQ 输出时抛出。
+    """
+
+    legacy_snapshot_path = tmp_path / "legacy-snapshot.jsonl"
+    provenance_snapshot_path = tmp_path / "provenance-snapshot.jsonl"
+    legacy_records = [
+        _snapshot_record("profile", "basic_identity", value_present=True, anchor_present=True),
+        _snapshot_record("profile", "benchmark", value_present=False, anchor_present=False),
+    ]
+    provenance_records = [
+        _snapshot_record(
+            "profile",
+            "basic_identity",
+            value_present=True,
+            anchor_present=True,
+            include_source_provenance=True,
+        ),
+        _snapshot_record(
+            "profile",
+            "benchmark",
+            value_present=False,
+            anchor_present=False,
+            include_source_provenance=True,
+        ),
+    ]
+    legacy_snapshot_path.write_text(
+        "\n".join(json.dumps(record, ensure_ascii=False) for record in legacy_records) + "\n",
+        encoding="utf-8",
+    )
+    provenance_snapshot_path.write_text(
+        "\n".join(json.dumps(record, ensure_ascii=False) for record in provenance_records) + "\n",
+        encoding="utf-8",
+    )
+
+    legacy_result = run_extraction_score(
+        snapshot_path=legacy_snapshot_path,
+        source_csv=Path("docs/code_20260519.csv"),
+        output_dir=tmp_path / "legacy-score",
+    )
+    provenance_result = run_extraction_score(
+        snapshot_path=provenance_snapshot_path,
+        source_csv=Path("docs/code_20260519.csv"),
+        output_dir=tmp_path / "provenance-score",
+    )
+
+    legacy_payload = json.loads(legacy_result.score_json_path.read_text(encoding="utf-8"))
+    provenance_payload = json.loads(
+        provenance_result.score_json_path.read_text(encoding="utf-8")
+    )
+    for payload in (legacy_payload, provenance_payload):
+        assert set(payload) == _SCORE_JSON_TOP_LEVEL_KEYS
+
+    gate_sensitive_keys = (
+        "thresholds",
+        "field_count",
+        "fund_count",
+        "status_counts",
+        "p0_status",
+        "field_scores",
+        "fund_scores",
+        "fund_quality",
+        "field_applicability_decisions",
+        "score_applicability_issues",
+        "failed_funds",
+        "golden_set",
+        "correctness",
+    )
+    assert {
+        key: legacy_payload[key] for key in gate_sensitive_keys
+    } == {key: provenance_payload[key] for key in gate_sensitive_keys}
 
 
 def test_run_extraction_score_includes_failed_funds_from_errors_path(tmp_path: Path) -> None:
@@ -1985,6 +2145,7 @@ def _snapshot_record(
     anchor_present: bool,
     classified_fund_type: str = "active_fund",
     comparable_values: dict[str, str] | None = None,
+    include_source_provenance: bool = False,
 ) -> dict[str, object]:
     """构造测试用 snapshot 记录。
 
@@ -1998,6 +2159,7 @@ def _snapshot_record(
         anchor_present: 是否存在证据锚点。
         classified_fund_type: 系统识别基金类型。
         comparable_values: correctness 可比子字段；为空时模拟旧 snapshot。
+        include_source_provenance: 是否追加 additive 公共来源 provenance 字段。
 
     Returns:
         符合评分最小输入契约的字典。
@@ -2019,6 +2181,8 @@ def _snapshot_record(
     }
     if comparable_values is not None:
         record["comparable_values"] = comparable_values
+    if include_source_provenance:
+        record.update(_PUBLIC_SOURCE_PROVENANCE_PAYLOAD)
     return record
 
 

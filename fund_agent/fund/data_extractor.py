@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Protocol
 
 from fund_agent.fund.data.nav_data import (
@@ -22,6 +22,11 @@ from fund_agent.fund.extractors import (
     extract_profile,
 )
 from fund_agent.fund.fund_type import FundType
+from fund_agent.fund.source_provenance import (
+    PublicSourceProvenance,
+    default_public_source_provenance,
+    project_public_source_provenance,
+)
 
 _TRACKING_ERROR_APPLICABLE_FUND_TYPES: frozenset[FundType] = frozenset(
     ("index_fund", "enhanced_index")
@@ -93,6 +98,7 @@ class StructuredFundDataBundle:
         holdings_snapshot: 前十大重仓与行业分布。
         holder_structure: 机构/个人持有人结构。
         nav_data: 净值数据结果。
+        source_provenance: 年报公共来源 provenance，不暴露 `None`。
     """
 
     fund_code: str
@@ -112,6 +118,9 @@ class StructuredFundDataBundle:
     holdings_snapshot: ExtractedField[dict[str, object]]
     holder_structure: ExtractedField[dict[str, object]]
     nav_data: NavDataResult
+    source_provenance: PublicSourceProvenance = field(
+        default_factory=default_public_source_provenance
+    )
 
 
 class FundDataExtractor:
@@ -198,6 +207,7 @@ class FundDataExtractor:
             holdings_snapshot=holdings_share_change_result.holdings_snapshot,
             holder_structure=manager_ownership_result.holder_structure,
             nav_data=nav_data,
+            source_provenance=project_public_source_provenance(report.metadata.source),
         )
 
 

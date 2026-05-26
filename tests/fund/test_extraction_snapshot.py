@@ -25,6 +25,18 @@ from fund_agent.fund.extractors import (
     IndexProfileValue,
     TrackingErrorValue,
 )
+from fund_agent.fund.source_provenance import PublicSourceProvenance
+
+_SOURCE_PROVENANCE_FIELDS = {
+    "source_provenance_schema_version",
+    "source_strategy",
+    "resolved_source_name",
+    "fallback_used",
+    "primary_failure_category",
+    "fallback_eligibility",
+    "source_provenance_status",
+    "source_provenance_reason",
+}
 
 
 class _FakeExtractor:
@@ -163,7 +175,16 @@ def test_build_snapshot_records_contains_required_schema_and_all_fields() -> Non
         "row_id",
         "comparable_values",
         "note",
+        *_SOURCE_PROVENANCE_FIELDS,
     }
+    assert first_payload["source_provenance_schema_version"] == "repository_source_provenance.v1"
+    assert first_payload["source_strategy"] == "primary_then_fallback"
+    assert first_payload["resolved_source_name"] is None
+    assert first_payload["fallback_used"] is False
+    assert first_payload["primary_failure_category"] is None
+    assert first_payload["fallback_eligibility"] == "not_applicable"
+    assert first_payload["source_provenance_status"] == "not_applicable"
+    assert first_payload["source_provenance_reason"] == "source_metadata_absent_no_fallback_evidence"
     records_by_name = {record.field_name: record for record in records}
     assert records[0].section_id == "§2"
     assert records[0].anchor_present is True
@@ -197,6 +218,57 @@ def test_build_snapshot_records_contains_required_schema_and_all_fields() -> Non
         "top_holdings_status": "direct_top_ten",
         "top_holdings_source": "top_ten",
     }
+
+
+def test_build_snapshot_records_copies_identical_bundle_source_provenance_to_all_rows() -> None:
+    """验证同一基金所有字段记录复制同一 bundle provenance。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当字段级记录 provenance 缺失或不一致时抛出。
+    """
+
+    provenance = PublicSourceProvenance(
+        source_provenance_schema_version="repository_source_provenance.v1",
+        source_strategy="primary_then_fallback",
+        resolved_source_name="eastmoney",
+        fallback_used=True,
+        primary_failure_category=None,
+        fallback_eligibility="unknown_public_metadata_absent",
+        source_provenance_status="incomplete",
+        source_provenance_reason="fallback_used_primary_failure_category_absent",
+    )
+    bundle = _build_bundle("110011", "active_fund", source_provenance=provenance)
+    selected_fund = SelectedFundRecord(
+        line_number=2,
+        fund_name="易方达中小盘混合",
+        fund_code="110011",
+        app_category="国内股票类",
+    )
+
+    records = build_snapshot_records(
+        bundle=bundle,
+        selected_fund=selected_fund,
+        run_id="unit-run",
+        extraction_timestamp="2026-05-19T00:00:00+00:00",
+        source_csv="docs/code_20260519.csv",
+    )
+
+    provenance_payloads = {
+        tuple((field, asdict(record)[field]) for field in sorted(_SOURCE_PROVENANCE_FIELDS))
+        for record in records
+    }
+    assert len(provenance_payloads) == 1
+    first_record = records[0]
+    assert first_record.resolved_source_name == "eastmoney"
+    assert first_record.fallback_used is True
+    assert first_record.fallback_eligibility == "unknown_public_metadata_absent"
+    assert first_record.source_provenance_status == "incomplete"
 
 
 def test_build_snapshot_records_preserves_unavailable_nav_reason() -> None:
@@ -411,10 +483,27 @@ async def test_run_snapshot_summary_highlights_duplicates_and_continues_failures
     assert result.failed_fund_codes == ("000001",)
     assert result.record_count == len(SNAPSHOT_FIELD_ORDER)
     assert len(snapshot_lines) == len(SNAPSHOT_FIELD_ORDER)
+    first_snapshot_payload = json.loads(snapshot_lines[0])
+    assert first_snapshot_payload["source_provenance_schema_version"] == "repository_source_provenance.v1"
+    assert first_snapshot_payload["fallback_eligibility"] == "not_applicable"
     assert len(error_lines) == 1
     assert json.loads(error_lines[0])["error_message"] == "fixture failure"
     assert "<mark>004393</mark>" in summary_text
     assert "failed_funds: 1" in summary_text
+    assert "## Source Provenance" in summary_text
+    assert (
+        "| fund_code | resolved_source_name | fallback_used | fallback_eligibility | "
+        "source_provenance_status | source_provenance_reason |"
+    ) in summary_text
+    assert (
+        "| 004393 | null | false | not_applicable | not_applicable | "
+        "source_metadata_absent_no_fallback_evidence |"
+    ) in summary_text
+    source_provenance_section = summary_text.split("## Source Provenance", maxsplit=1)[1].split(
+        "## Fund Results", maxsplit=1
+    )[0]
+    assert "Failed funds without snapshot records are omitted from Source Provenance v1." in summary_text
+    assert "| 000001 |" not in source_provenance_section
 
 
 @pytest.mark.asyncio
@@ -460,6 +549,7 @@ def _build_bundle(
     *,
     include_index_quality: bool = False,
     include_composite_index_profile: bool = False,
+    source_provenance: PublicSourceProvenance | None = None,
 ) -> StructuredFundDataBundle:
     """构造测试用结构化基金数据包。
 
@@ -468,6 +558,7 @@ def _build_bundle(
         classified_fund_type: fake 分类结果。
         include_index_quality: 是否填充指数画像和跟踪误差 dataclass 值。
         include_composite_index_profile: 是否填充复合基准指数画像 fixture。
+        source_provenance: 可选公共来源 provenance fixture。
 
     Returns:
         fake 结构化基金数据包。
@@ -639,6 +730,7 @@ def _build_bundle(
             source="fixture",
             cached=True,
         ),
+        **({"source_provenance": source_provenance} if source_provenance is not None else {}),
     )
 
 

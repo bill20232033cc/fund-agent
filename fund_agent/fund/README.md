@@ -111,8 +111,9 @@ chapter_lens = resolve_preferred_lens(chapter_id=2, fund_type="active_fund")
 - 只通过 `FundDataExtractor.extract(...)` 获取结构化数据包，不直接读取 PDF、cache 或底层解析文件
 - 将 `StructuredFundDataBundle` 拆成 16 个字段级记录：`basic_identity`、`product_profile`、`benchmark`、`index_profile`、`fee_schedule`、`classified_fund_type`、`nav_benchmark_performance`、`investor_return`、`tracking_error`、`manager_strategy_text`、`turnover_rate`、`manager_alignment`、`holder_structure`、`holdings_snapshot`、`share_change`、`nav_data`
 - 每条记录包含 `comparable_values`，只暴露 correctness 可直接比较的白名单子字段；当前覆盖 `basic_identity`、`benchmark`、`index_profile`、`nav_benchmark_performance`、`tracking_error` 和 `classified_fund_type` 的稳定标量子字段
+- 每条记录包含 additive 公共来源 provenance 字段：`source_provenance_schema_version`、`source_strategy`、`resolved_source_name`、`fallback_used`、`primary_failure_category`、`fallback_eligibility`、`source_provenance_status` 和 `source_provenance_reason`；这些字段只来自 `StructuredFundDataBundle.source_provenance` 投影，不改变来源编排或 fallback 资格判定
 - `index_profile` 和 `tracking_error` 对 `index_fund` / `enhanced_index` 作为条件 P1 字段进入 FQ2 coverage、traceability 和单基金缺失分母；非指数基金从这些指数质量字段分母中排除，未知基金类型继续保守计分
-- 输出 `snapshot.jsonl`、`summary.md` 和 `errors.jsonl`；单只基金失败时继续后续基金并记录错误
+- 输出 `snapshot.jsonl`、`summary.md` 和 `errors.jsonl`；`summary.md` 额外包含独立 `Source Provenance` 表，完全失败且没有 snapshot 记录的基金在 v1 表中省略并保留说明；单只基金失败时继续后续基金并记录错误
 - snapshot 只记录当前 extractor 的真实输出，不为特定基金覆盖字段值；`004393` 曾被误判为 `index_fund` 的问题已在 P4-S3a 修复为 `active_fund`
 
 `run_extraction_score()` 返回 `ExtractionScoreResult`，当前覆盖 P4-S2 字段级评分和 P4-R10 correctness 最小闭环：
