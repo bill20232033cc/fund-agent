@@ -297,6 +297,165 @@ def _share_change_table_with_a_and_d_classes() -> ParsedTable:
     )
 
 
+def _bond_share_change_table_with_multiple_classes() -> ParsedTable:
+    """构造债券基金 A/C/E/F 多份额变动表。
+
+    Args:
+        无。
+
+    Returns:
+        份额变动表格。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return ParsedTable(
+        page_number=60,
+        table_index=0,
+        headers=("项目", "国泰利享中短债债券A", "国泰利享中短债债券C", "国泰利享中短债债券E", "国泰利享中短债债券F"),
+        rows=(
+            ("本报告期期初基金份额总额", "7,699,969,800.13", "1,000,000.00", "2,000,000.00", "3,000,000.00"),
+            ("本报告期基金总申购份额", "100,000,000.00", "20,000.00", "30,000.00", "40,000.00"),
+            ("减：本报告期基金总赎回份额", "2,088,745,533.04", "10,000.00", "20,000.00", "30,000.00"),
+            ("本报告期期末基金份额总额", "5,711,224,267.09", "1,010,000.00", "2,010,000.00", "3,010,000.00"),
+        ),
+    )
+
+
+def _section_two_bond_share_class_table() -> ParsedTable:
+    """构造债券基金 §2 分级基金简称/交易代码表。
+
+    Args:
+        无。
+
+    Returns:
+        §2 基金简介表。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return ParsedTable(
+        page_number=4,
+        table_index=0,
+        headers=("基金名称", "国泰利享中短债债券型证券投资基金", "", "", ""),
+        rows=(
+            ("基金简称", "国泰利享中短债债券", "", "", ""),
+            ("基金主代码", "006597", "", "", ""),
+            (
+                "下属分级基金的基金简称",
+                "国泰利享中短债债券A",
+                "国泰利享中短债债券C",
+                "国泰利享中短债债券E",
+                "国泰利享中短债债券F",
+            ),
+            ("下属分级基金的交易代码", "006597", "006598", "015900", "021260"),
+        ),
+    )
+
+
+def _section_two_bond_share_class_table_without_name_header() -> ParsedTable:
+    """构造仅含下属份额映射行的 §2 表格。
+
+    Args:
+        无。
+
+    Returns:
+        §2 基金份额映射表。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return ParsedTable(
+        page_number=5,
+        table_index=1,
+        headers=("项目", "A类", "C类", "E类", "F类"),
+        rows=(
+            (
+                "下属分级基金的基金简称",
+                "国泰利享中短债债券A",
+                "国泰利享中短债债券C",
+                "国泰利享中短债债券E",
+                "国泰利享中短债债券F",
+            ),
+            ("下属分级基金的交易代码", "006597", "006598", "015900", "021260"),
+        ),
+    )
+
+
+def _ambiguous_bond_share_change_table_with_duplicate_a_columns() -> ParsedTable:
+    """构造多个 A 类候选列的债券份额变动表。
+
+    Args:
+        无。
+
+    Returns:
+        份额变动表格。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return ParsedTable(
+        page_number=61,
+        table_index=0,
+        headers=("项目", "国泰利享中短债债券A", "国泰利享中短债债券A类", "国泰利享中短债债券C"),
+        rows=(
+            ("本报告期期初基金份额总额", "7,699,969,800.13", "7,699,969,800.13", "1,000,000.00"),
+            ("本报告期期末基金份额总额", "5,711,224,267.09", "5,711,224,267.09", "1,010,000.00"),
+            ("本期申购赎回净额", "-1,988,745,533.04", "-1,988,745,533.04", "10,000.00"),
+        ),
+    )
+
+
+def _english_suffix_header_table() -> ParsedTable:
+    """构造 ETF/LOF/NAV 等英文后缀表头样表。
+
+    Args:
+        无。
+
+    Returns:
+        英文后缀表头表格。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return ParsedTable(
+        page_number=62,
+        table_index=0,
+        headers=("项目", "目标ETF", "场内LOF", "累计NAV"),
+        rows=(("基金合同生效日", "1,000.00", "2,000.00", "3,000.00"),),
+    )
+
+
+def _share_change_table_with_etf_and_bond_a_headers() -> ParsedTable:
+    """构造 ETF 后缀与中文基金名 A 后缀并存的份额变动表。
+
+    Args:
+        无。
+
+    Returns:
+        份额变动表格。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return ParsedTable(
+        page_number=63,
+        table_index=0,
+        headers=("项目", "目标ETF", "国泰利享中短债债券A"),
+        rows=(
+            ("本报告期期初基金份额总额", "1,000.00", "7,699,969,800.13"),
+            ("本报告期期末基金份额总额", "2,000.00", "5,711,224,267.09"),
+            ("本期申购赎回净额", "1,000.00", "-1,988,745,533.04"),
+        ),
+    )
+
+
 def _share_change_table_with_other_code_and_a_class() -> ParsedTable:
     """构造包含非当前基金代码列和 A 类列的歧义表。
 
@@ -652,6 +811,180 @@ def test_extract_holdings_share_change_selects_a_class_from_adjacent_split_table
         "share_class_selection_reason": "section_2_share_class_evidence",
     }
     assert result.share_change.anchors[0].page_number == 64
+
+
+def test_extract_holdings_share_change_selects_bond_a_class_from_section_two_mapping() -> None:
+    """验证债券基金 A/C/E/F 份额表可用 §2 映射选择当前基金代码列。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 §2 映射未能选择当前份额列时抛出。
+    """
+
+    raw_text = (
+        "§2 基金简介\n"
+        "国泰利享中短债债券A 006597 国泰利享中短债债券C 006598 "
+        "国泰利享中短债债券E 015900 国泰利享中短债债券F 021260\n"
+        "§8 投资组合报告\n§10 基金份额变动\n"
+    )
+    report = _build_report(
+        (
+            _section_two_bond_share_class_table(),
+            _bond_share_change_table_with_multiple_classes(),
+        ),
+        fund_code="006597",
+        raw_text=raw_text,
+        include_section_two=True,
+    )
+
+    result = extract_holdings_share_change(report)
+
+    assert result.share_change.extraction_mode == "direct"
+    assert result.share_change.value == {
+        "beginning_share": "7,699,969,800.13",
+        "ending_share": "5,711,224,267.09",
+        "net_change": "-1,988,745,533.04",
+        "share_class_column": "国泰利享中短债债券A",
+        "share_class_selection_reason": "section_2_share_class_evidence",
+    }
+
+
+def test_extract_holdings_share_change_selects_bond_class_from_subordinate_rows_only() -> None:
+    """验证 §2 子份额映射行即使不在基金名称表中也可作为确定性证据。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当子份额映射行未被识别时抛出。
+    """
+
+    raw_text = (
+        "§2 基金简介\n"
+        "下属分级基金的基金简称 国泰利享中短债债券A 国泰利享中短债债券C "
+        "下属分级基金的交易代码 006597 006598\n"
+        "§8 投资组合报告\n§10 基金份额变动\n"
+    )
+    report = _build_report(
+        (
+            _section_two_bond_share_class_table_without_name_header(),
+            _bond_share_change_table_with_multiple_classes(),
+        ),
+        fund_code="006597",
+        raw_text=raw_text,
+        include_section_two=True,
+    )
+
+    result = extract_holdings_share_change(report)
+
+    assert result.share_change.extraction_mode == "direct"
+    assert result.share_change.value is not None
+    assert result.share_change.value["share_class_column"] == "国泰利享中短债债券A"
+    assert result.share_change.value["share_class_selection_reason"] == "section_2_share_class_evidence"
+
+
+def test_extract_holdings_share_change_fails_closed_for_duplicate_bond_class_columns() -> None:
+    """验证 §10 存在多个同类候选列时不静默选择第一列。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当重复类别列被误选时抛出。
+    """
+
+    raw_text = (
+        "§2 基金简介\n"
+        "国泰利享中短债债券A 006597 国泰利享中短债债券C 006598\n"
+        "§8 投资组合报告\n§10 基金份额变动\n"
+    )
+    report = _build_report(
+        (
+            _section_two_bond_share_class_table(),
+            _ambiguous_bond_share_change_table_with_duplicate_a_columns(),
+        ),
+        fund_code="006597",
+        raw_text=raw_text,
+        include_section_two=True,
+    )
+
+    result = extract_holdings_share_change(report)
+
+    assert result.share_change.extraction_mode == "missing"
+    assert result.share_change.value is None
+    assert "多个份额列" in (result.share_change.note or "")
+
+
+def test_extract_holdings_share_change_does_not_treat_etf_lof_nav_suffixes_as_share_classes() -> None:
+    """验证 ETF/LOF/NAV 英文后缀不会被误识别为 F/V 份额类别。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当英文后缀触发拆表或份额列选择时抛出。
+    """
+
+    report = _build_report((_english_suffix_header_table(), _split_share_data_table()), fund_code="004393")
+
+    result = extract_holdings_share_change(report)
+
+    assert result.share_change.extraction_mode == "missing"
+    assert result.share_change.value is None
+
+
+def test_extract_holdings_share_change_ignores_etf_suffix_but_keeps_chinese_fund_name_suffix() -> None:
+    """验证 ETF 后缀不算份额类别，但中文基金名 `债券A` 后缀仍可匹配。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 ETF 后缀污染份额列选择或中文后缀失效时抛出。
+    """
+
+    raw_text = (
+        "§2 基金简介\n"
+        "国泰利享中短债债券A 006597 国泰利享中短债债券C 006598\n"
+        "§8 投资组合报告\n§10 基金份额变动\n"
+    )
+    report = _build_report(
+        (
+            _section_two_bond_share_class_table(),
+            _share_change_table_with_etf_and_bond_a_headers(),
+        ),
+        fund_code="006597",
+        raw_text=raw_text,
+        include_section_two=True,
+    )
+
+    result = extract_holdings_share_change(report)
+
+    assert result.share_change.extraction_mode == "direct"
+    assert result.share_change.value == {
+        "beginning_share": "7,699,969,800.13",
+        "ending_share": "5,711,224,267.09",
+        "net_change": "-1,988,745,533.04",
+        "share_class_column": "国泰利享中短债债券A",
+        "share_class_selection_reason": "section_2_share_class_evidence",
+    }
 
 
 def test_extract_holdings_share_change_fails_closed_without_section_two_class_evidence() -> None:

@@ -5,7 +5,7 @@
 > **设计真源**: `docs/design.md` (v2.2)
 > **规则真源**: `AGENTS.md`
 > **历史快照**: `docs/archive/implementation-control-history-20260525.md`
-> **当前状态**: release maintenance；baseline coverage / source recovery / taxonomy + bond triage accepted locally；下一入口为 share_change focused implementation plan + bond-lens contract design choice plan/review
+> **当前状态**: release maintenance；share_change focused implementation accepted locally；下一入口为 bond-lens contract design + baseline coverage recovery plan/review
 
 ---
 
@@ -25,9 +25,9 @@
 |---|---|
 | Branch | `codex/local-reconciliation` |
 | Current phase | `release maintenance` |
-| Current gate | `baseline coverage / source recovery / taxonomy + bond triage accepted locally` |
-| Next entry point | `share_change focused implementation plan + bond-lens contract design choice plan/review; must use init-agents / tmux multi-agent flow` |
-| Latest accepted gate checkpoint | `baseline coverage / source recovery / taxonomy + bond triage local accepted commit; use latest branch HEAD for exact hash` |
+| Current gate | `share_change focused implementation accepted locally` |
+| Next entry point | `bond-lens contract design + baseline coverage recovery plan/review; must use init-agents / tmux multi-agent flow` |
+| Latest accepted gate checkpoint | `share_change focused implementation local accepted commit; use latest branch HEAD for exact hash` |
 | Design truth | `docs/design.md` (v2.2) |
 | Control truth | `docs/implementation-control.md` |
 | Historical control snapshot | `docs/archive/implementation-control-history-20260525.md` |
@@ -203,6 +203,16 @@
 | Baseline triage evidence review: MiMo | `docs/reviews/release-maintenance-baseline-coverage-source-taxonomy-bond-triage-evidence-review-mimo-20260527.md` |
 | Baseline triage evidence review: GLM | `docs/reviews/release-maintenance-baseline-coverage-source-taxonomy-bond-triage-evidence-review-glm-20260527.md` |
 | Baseline triage evidence controller judgment | `docs/reviews/release-maintenance-baseline-coverage-source-taxonomy-bond-triage-evidence-controller-judgment-20260527.md` |
+| share_change focused implementation plan | `docs/reviews/release-maintenance-share-change-focused-implementation-plan-20260527.md` |
+| share_change focused plan review: MiMo | `docs/reviews/release-maintenance-share-change-focused-implementation-plan-review-mimo-20260527.md` |
+| share_change focused plan review: GLM | `docs/reviews/release-maintenance-share-change-focused-implementation-plan-review-glm-20260527.md` |
+| share_change focused plan controller judgment | `docs/reviews/release-maintenance-share-change-focused-implementation-plan-controller-judgment-20260527.md` |
+| share_change focused implementation evidence | `docs/reviews/release-maintenance-share-change-focused-implementation-evidence-20260527.md` |
+| share_change focused implementation review: MiMo | `docs/reviews/release-maintenance-share-change-focused-implementation-review-mimo-20260527.md` |
+| share_change focused implementation review: GLM | `docs/reviews/release-maintenance-share-change-focused-implementation-review-glm-20260527.md` |
+| share_change focused implementation re-review: MiMo | `docs/reviews/release-maintenance-share-change-focused-implementation-rereview-mimo-20260527.md` |
+| share_change focused implementation re-review: GLM | `docs/reviews/release-maintenance-share-change-focused-implementation-rereview-glm-20260527.md` |
+| share_change focused implementation controller judgment | `docs/reviews/release-maintenance-share-change-focused-implementation-controller-judgment-20260527.md` |
 
 ### Current Decisions
 
@@ -262,6 +272,7 @@
 - Core analyze/checklist reliability hardening is accepted locally. `FundDataExtractor` now degrades NAV provider/cache/akshare failures to `NavDataResult(unavailable=True, records=[])` while keeping annual-report repository/PDF/source failures outside the catch boundary and fail-closed. `FundAnalysisRequest.command_source` and Service normalization make default quality-gate artifacts distinguish `analyze-...` from `checklist-...`, while explicit `quality_gate_run_id` remains authoritative. Focused tests prove pre-2026 missing `turnover_rate` remains P1 warn/insufficiency and not a standalone hard blocker; FQ0-FQ6/FQ4 semantics are unchanged. Full pytest, ruff, diff check, two code reviews, and 004393 2024/2025 analyze/checklist smoke passed.
 - Small baseline corpus v1 is accepted locally as an evidence run, not as a durable baseline or golden corpus. It evaluated eight candidate rows across seven unique fund codes. `004393` / 2024 and `004194` / 2024 are quality-gate `warn`; `006597` / 2024 is quality-gate `block` due to missing-field / bond-lens extraction gaps, not correctness mismatch. `004393` / 2025 remains probe-only with year-scoped golden non-coverage. `110020` / index and `017641` / QDII remain fallback-blocked; FOF remains a `data_gap` / taxonomy residual. This gate does not satisfy entry conditions for `golden answer corpus v1`.
 - Baseline coverage / source recovery / taxonomy + bond triage is accepted locally. Subgate 1 classified `006597` / 2024 fields from public CLI evidence only: `share_change` is a concrete `extractor_gap` caused by §10 share-class selection ambiguity; `holdings_snapshot` is a `bond_lens_contract_gap`; `turnover_rate` and `holder_structure` remain `needs_more_evidence`; `investor_return` and `nav_data` anchor status are `score_contract_gap`. Track 1B replacement probing closed as `not_run_no_approved_candidates`; index/QDII fallback and FOF data-gap remain open. No implementation is authorized by this evidence gate.
+- share_change focused implementation is accepted locally. `fund_agent/fund/extractors/holdings_share_change.py` now supports deterministic share-class mapping beyond A/C using same-source §2 subordinate fund name / trading-code rows and a unique matching §10 value column, while preserving fail-closed ambiguity. A-Z bare suffix detection was hardened so ETF/LOF/NAV style Latin suffixes do not become false share-class labels, while Chinese fund-name suffixes such as `债券A` still match. Focused tests `23 passed`, ruff, 006597 public snapshot/score/quality-gate rerun, and diff check passed. The real 006597 row remains `share_change` missing with explicit ambiguity, so quality gate remains `block`; no FQ rule was weakened.
 
 ### Current Non-Goals
 
@@ -274,15 +285,16 @@
 
 ## Next Entry Point
 
-`share_change focused implementation plan + bond-lens contract design choice plan/review`
+`bond-lens contract design + baseline coverage recovery plan/review`
 
 This next gate must start with Startup Packet replay and `$init-agents` / tmux multi-agent flow. It is a plan/review gate first; implementation may start only after the plan is accepted.
 
 Scope allowed for the next gate:
 
-- Reconcile that baseline triage accepted only `share_change` as an actionable extractor gap; no implementation is yet authorized.
-- Produce a plan/review for the narrowest safe `share_change` ambiguity fix, using the public snapshot note that §10 has multiple share columns and current rules cannot reliably select the corresponding share class.
-- Decide whether `holdings_snapshot` requires a bond-lens CHAPTER_CONTRACT / score-applicability design gate before implementation.
+- Reconcile that `share_change` implementation was accepted but the real `006597` sample still remains quality-gate `block`.
+- Design the next safe gate for bond-lens holdings/risk evidence: whether `holdings_snapshot` should become fund-type-dependent, be replaced by bond-specific risk fields, or be treated as not-applicable with explicit bond evidence requirements.
+- Decide whether additional same-source diagnostics for `006597` share-change are needed before any further extractor changes.
+- Recover or replace index/QDII and pure FOF coverage candidates only through reviewed plan/evidence, without weakening source fallback semantics or counting QDII-FOF as pure FOF.
 - Keep `turnover_rate` and `holder_structure` as evidence-only / needs-more-evidence; do not implement them from absence alone.
 - Keep `investor_return` and `nav_data` in future score/evidence-contract work.
 - Keep large outputs in scratch / ignored reports; tracked artifact should contain only summary and evidence paths.
@@ -338,6 +350,7 @@ Do not push, create PR, mark ready, merge, close PRs, edit unrelated PRs, delete
 | FOF coverage / taxonomy | next baseline coverage / taxonomy gate | Find pure `fof_fund` repository-verified candidate, or open a taxonomy gate before counting QDII-FOF attempts as FOF coverage. |
 | `006597` bond quality-gate block | next bond extraction triage gate | Determine whether missing `holder_structure`, `holdings_snapshot`, `share_change`, `investor_return`, and related bond-lens gaps are extractor fixes, applicability policy, or evidence-anchor gaps. Do not route to golden until resolved. |
 | `006597` share_change ambiguity | next share_change focused implementation plan | Evidence classifies this as `extractor_gap`: §10 has multiple share columns and current rules cannot reliably choose the corresponding share class. Plan a narrow fix before implementation. |
+| `006597` share_change implementation | Completed in focused implementation | A-Z share-class mapping and subordinate §2 rows are supported with fail-closed ambiguity; ETF/LOF/NAV false-positive suffix risk fixed. Real 006597 still lacks deterministic public evidence and remains missing. |
 | `006597` holdings_snapshot bond-lens contract | next bond-lens contract design choice | Evidence classifies this as `bond_lens_contract_gap`; define bond-specific holdings/risk evidence before score/applicability or extractor implementation. |
 | `006597` turnover_rate / holder_structure | future evidence or policy gate | Evidence remains `needs_more_evidence`; do not infer from missing public output or implement without accepted source/policy proof. |
 | `006597` investor_return / nav_data anchor | future score/evidence-contract gate | Evidence classifies both as `score_contract_gap`; they are not immediate P1 bond extractor blockers. |
@@ -382,6 +395,7 @@ Do not push, create PR, mark ready, merge, close PRs, edit unrelated PRs, delete
 | `core analyze/checklist reliability hardening` | accepted locally | `docs/reviews/release-maintenance-core-analyze-checklist-reliability-hardening-implementation-controller-judgment-20260527.md` | NAV unavailable degradation, `command_source` run-id distinction, and turnover missing regression locks implemented; two code reviews `PASS`; focused tests `10/31/29/39 passed`, full pytest `746 passed`, ruff, diff check, and 004393 2024/2025 analyze/checklist smoke passed | broad NAV catch diagnostic residual, P2 nav_data missing signal, future FQ4 field-applicability if evidence proves false blocker, small baseline corpus coverage | `small baseline corpus v1 plan/review` |
 | `small baseline corpus v1` | accepted locally | `docs/reviews/release-maintenance-small-baseline-corpus-v1-run-controller-judgment-20260527.md` | Plan review MiMo/GLM `PASS_WITH_FINDINGS` then both re-reviews `PASS`; bounded run evaluated 8 rows / 7 unique fund codes; run reviews MiMo `PASS`, GLM `PASS_WITH_FINDINGS`; `git diff --check` passed; bulk outputs stayed in scratch/ignored paths | insufficient clean coverage, `006597` bond block, index/QDII fallback-blocked, FOF data-gap/taxonomy, `004393` 2025 probe-only | `baseline coverage / source recovery / taxonomy + bond extraction triage plan/review` |
 | `baseline coverage / source recovery / taxonomy + bond triage` | accepted locally | `docs/reviews/release-maintenance-baseline-coverage-source-taxonomy-bond-triage-evidence-controller-judgment-20260527.md` | Plan review MiMo `PASS_WITH_FINDINGS`, GLM `PASS`; both re-reviews `PASS`; Subgate 1 evidence reviewed by MiMo/GLM `PASS`; `git diff --check` passed; no code/product-flow changes | `share_change` extractor ambiguity, bond-lens `holdings_snapshot` contract, `turnover_rate` / `holder_structure` needs-more-evidence, score-contract gaps, coverage blockers | `share_change focused implementation plan + bond-lens contract design choice plan/review` |
+| `share_change focused implementation` | accepted locally | `docs/reviews/release-maintenance-share-change-focused-implementation-controller-judgment-20260527.md` | Plan reviews MiMo `PASS`, GLM `PASS_WITH_FINDINGS`; implementation reviews found A-Z suffix false-positive risk; fix applied; both targeted re-reviews `PASS`; focused tests `23 passed`, ruff, 006597 snapshot/score/quality gate rerun, and diff check passed | real 006597 still missing share_change; bond-lens `holdings_snapshot`, turnover/holder evidence, investor_return/nav_data contracts, coverage blockers | `bond-lens contract design + baseline coverage recovery plan/review` |
 
 ## Historical Evidence Index
 
