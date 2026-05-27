@@ -52,6 +52,7 @@ FIELD_PRIORITY_BY_NAME: Final[dict[str, str]] = {
     "holder_structure": "P1",
     "manager_alignment": "P1",
     "holdings_snapshot": "P1",
+    "bond_risk_evidence": "P1",
     "share_change": "P1",
     "investor_return": "P2",
     "nav_data": "P2",
@@ -115,6 +116,9 @@ BOND_RISK_EVIDENCE_CONTRACT_ID: Final[str] = "bond_risk_evidence.v1"
 BOND_RISK_REPLACEMENT_FIELD_NAME: Final[str] = "bond_risk_evidence"
 BOND_RISK_EVIDENCE_MISSING_ISSUE_CODE: Final[str] = "bond_risk_evidence_missing"
 BOND_HOLDINGS_NOT_APPLICABLE_REASON: Final[str] = "not_applicable_to_bond_fund_equity_holdings"
+BOND_RISK_CONTRACT_STATUS_SATISFIED: Final[str] = "satisfied"
+BOND_RISK_CONTRACT_STATUS_PARTIAL: Final[str] = "partial"
+BOND_RISK_CONTRACT_STATUS_MISSING: Final[str] = "missing"
 APPLICABILITY_STATUS_NOT_APPLICABLE_REPLACED: Final[str] = "not_applicable_replaced"
 APPLICABILITY_STATUS_UNKNOWN_FAIL_CLOSED: Final[str] = "unknown_fail_closed"
 DENOMINATOR_EFFECT_EXCLUDED_WITH_REPLACEMENT_ISSUE: Final[str] = (
@@ -915,13 +919,20 @@ def derive_score_applicability_issues(
         if not any(_is_bond_holdings_replacement_record(record) for record in fund_records):
             continue
         report_year = _fund_report_year_text(fund_records)
-        issues.append(
-            _bond_risk_evidence_missing_issue(
-                fund_code=fund_code,
-                report_year=report_year,
-                classified_fund_type=classified_fund_type,
-            )
+        bond_risk_record = _bond_risk_evidence_record_for_fund(
+            fund_records,
+            report_year=report_year,
         )
+        missing_groups = _bond_risk_unsatisfied_groups(bond_risk_record)
+        if missing_groups:
+            issues.append(
+                _bond_risk_evidence_missing_issue(
+                    fund_code=fund_code,
+                    report_year=report_year,
+                    classified_fund_type=classified_fund_type,
+                    missing_evidence_groups=missing_groups,
+                )
+            )
     return tuple(issues)
 
 
@@ -1671,13 +1682,22 @@ def _fund_field_applicability_decisions(
     )
     report_year = _fund_report_year_text(records)
     if classified_fund_type == BOND_FUND_TYPE:
-        replacement_issue_id = _score_applicability_issue_id(
-            fund_code=fund_code,
+        bond_risk_record = _bond_risk_evidence_record_for_fund(
+            records,
             report_year=report_year,
-            field_name=HOLDINGS_SNAPSHOT_FIELD_NAME,
-            issue_code=BOND_RISK_EVIDENCE_MISSING_ISSUE_CODE,
-            contract_id=BOND_RISK_EVIDENCE_CONTRACT_ID,
         )
+        missing_groups = _bond_risk_unsatisfied_groups(bond_risk_record)
+        replacement_issue_ids = ()
+        if missing_groups:
+            replacement_issue_ids = (
+                _score_applicability_issue_id(
+                    fund_code=fund_code,
+                    report_year=report_year,
+                    field_name=HOLDINGS_SNAPSHOT_FIELD_NAME,
+                    issue_code=BOND_RISK_EVIDENCE_MISSING_ISSUE_CODE,
+                    contract_id=BOND_RISK_EVIDENCE_CONTRACT_ID,
+                ),
+            )
         decisions.append(
             FieldApplicabilityDecision(
                 fund_code=fund_code,
@@ -1699,7 +1719,7 @@ def _fund_field_applicability_decisions(
                     len(applicable_records),
                 ),
                 excluded_non_applicable_fields=(HOLDINGS_SNAPSHOT_FIELD_NAME,),
-                replacement_issue_ids=(replacement_issue_id,),
+                replacement_issue_ids=replacement_issue_ids,
             )
         )
     elif classified_fund_type is None:
@@ -1735,6 +1755,7 @@ def _bond_risk_evidence_missing_issue(
     fund_code: str,
     report_year: str,
     classified_fund_type: str,
+    missing_evidence_groups: tuple[str, ...] | None = None,
 ) -> ScoreApplicabilityIssue:
     """构造债券风险替代证据缺口 issue。
 
@@ -1742,6 +1763,7 @@ def _bond_risk_evidence_missing_issue(
         fund_code: 基金代码。
         report_year: 年报年份文本。
         classified_fund_type: 已解析基金类型。
+        missing_evidence_groups: 当前缺失或未满足的证据组；为空时按全量缺失处理。
 
     Returns:
         `bond_risk_evidence_missing` issue。
@@ -1751,6 +1773,7 @@ def _bond_risk_evidence_missing_issue(
     """
 
     group_ids = tuple(group.group_id for group in BOND_RISK_EVIDENCE_GROUPS)
+    resolved_missing_groups = missing_evidence_groups or group_ids
     return ScoreApplicabilityIssue(
         issue_id=_score_applicability_issue_id(
             fund_code=fund_code,
@@ -1776,8 +1799,198 @@ def _bond_risk_evidence_missing_issue(
         rule_code_hint="FQ2F",
         denominator_excluded_fields=(HOLDINGS_SNAPSHOT_FIELD_NAME,),
         required_evidence_groups=group_ids,
-        missing_evidence_groups=group_ids,
+        missing_evidence_groups=resolved_missing_groups,
     )
+
+
+def _bond_risk_evidence_record_for_fund(
+    records: Sequence[Mapping[str, object]],
+    *,
+    report_year: str,
+) -> Mapping[str, object] | None:
+    """查找同基金同年份的债券风险证据 snapshot 行。
+
+    Args:
+        records: 单基金 snapshot 记录。
+        report_year: 已解析的基金级年报年份文本。
+
+    Returns:
+        同年份 `bond_risk_evidence` 记录；不存在或年份冲突时返回 `None`。
+
+    Raises:
+        ValueError: 记录缺少 `field_name` 或 `report_year` 非法时抛出。
+    """
+
+    matching_records = []
+    for record in records:
+        if _required_text(record, "field_name") != BOND_RISK_REPLACEMENT_FIELD_NAME:
+            continue
+        if _record_report_year_text(record) != report_year:
+            continue
+        matching_records.append(record)
+    if len(matching_records) != 1:
+        return None
+    return matching_records[0]
+
+
+def _bond_risk_contract_satisfied(record: Mapping[str, object] | None) -> bool:
+    """判断 `bond_risk_evidence.v1` 是否完整满足评分替代契约。
+
+    该判断只消费 Slice 4 暴露的结构化 snapshot 字段，不读取自由文本 `note`。
+    见模板第 6 章“核心风险”的债券基金 preferred_lens。
+
+    Args:
+        record: `bond_risk_evidence` snapshot 行；缺失时为 `None`。
+
+    Returns:
+        契约状态为 satisfied、七组全部满足且存在锚点时返回 `True`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return not _bond_risk_unsatisfied_groups(record)
+
+
+def _bond_risk_unsatisfied_groups(record: Mapping[str, object] | None) -> tuple[str, ...]:
+    """从结构化债券风险 snapshot 字段派生未满足证据组。
+
+    缺失行、字段 malformed、contract_status 缺失/整体 missing 或整条记录无锚点时，
+    保守返回全部七组；partial 行只返回缺失、弱、歧义或未出现在 satisfied 中的组。
+
+    Args:
+        record: `bond_risk_evidence` snapshot 行；缺失时为 `None`。
+
+    Returns:
+        按 `BOND_RISK_EVIDENCE_GROUPS` 顺序排列的未满足证据组。
+
+    Raises:
+        无显式抛出。
+    """
+
+    group_ids = _bond_risk_required_group_ids()
+    if record is None:
+        return group_ids
+    if not _truthy_bool(record.get("value_present")):
+        return group_ids
+    if not _truthy_bool(record.get("anchor_present")):
+        return group_ids
+
+    contract_status = _optional_record_text(record, "bond_risk_contract_status")
+    if contract_status not in {
+        BOND_RISK_CONTRACT_STATUS_SATISFIED,
+        BOND_RISK_CONTRACT_STATUS_PARTIAL,
+        BOND_RISK_CONTRACT_STATUS_MISSING,
+    }:
+        return group_ids
+    if contract_status == BOND_RISK_CONTRACT_STATUS_MISSING:
+        return group_ids
+
+    parsed_groups = _bond_risk_structured_groups(record)
+    if parsed_groups is None:
+        return group_ids
+    satisfied_groups, missing_groups, weak_groups, ambiguous_groups = parsed_groups
+    if not _bond_risk_group_ids_are_known(
+        (*satisfied_groups, *missing_groups, *weak_groups, *ambiguous_groups)
+    ):
+        return group_ids
+
+    explicit_unsatisfied = {*missing_groups, *weak_groups, *ambiguous_groups}
+    absent_from_satisfied = set(group_ids) - set(satisfied_groups)
+    unsatisfied = explicit_unsatisfied | absent_from_satisfied
+    if contract_status == BOND_RISK_CONTRACT_STATUS_SATISFIED and not unsatisfied:
+        return ()
+    if contract_status == BOND_RISK_CONTRACT_STATUS_PARTIAL and unsatisfied:
+        return tuple(group_id for group_id in group_ids if group_id in unsatisfied)
+    return group_ids
+
+
+def _bond_risk_structured_groups(
+    record: Mapping[str, object],
+) -> tuple[tuple[str, ...], tuple[str, ...], tuple[str, ...], tuple[str, ...]] | None:
+    """读取 Slice 4 债券风险结构化证据组字段。
+
+    Args:
+        record: `bond_risk_evidence` snapshot 行。
+
+    Returns:
+        `(satisfied, missing, weak, ambiguous)` 四组元组；任一字段缺失或 malformed
+        时返回 `None`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    values = (
+        _string_tuple_field(record, "bond_risk_satisfied_groups"),
+        _string_tuple_field(record, "bond_risk_missing_groups"),
+        _string_tuple_field(record, "bond_risk_weak_groups"),
+        _string_tuple_field(record, "bond_risk_ambiguous_groups"),
+    )
+    if any(value is None for value in values):
+        return None
+    return cast(tuple[tuple[str, ...], tuple[str, ...], tuple[str, ...], tuple[str, ...]], values)
+
+
+def _string_tuple_field(record: Mapping[str, object], key: str) -> tuple[str, ...] | None:
+    """读取 snapshot 中的字符串序列字段。
+
+    Args:
+        record: snapshot 记录。
+        key: 字段名。
+
+    Returns:
+        字符串元组；字段缺失、非序列、包含非文本或空文本时返回 `None`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    value = record.get(key)
+    if value is None or isinstance(value, str) or not isinstance(value, Sequence):
+        return None
+    groups: list[str] = []
+    for item in value:
+        if not isinstance(item, str):
+            return None
+        text = item.strip()
+        if not text:
+            return None
+        groups.append(text)
+    return tuple(groups)
+
+
+def _bond_risk_group_ids_are_known(group_ids: Sequence[str]) -> bool:
+    """判断债券风险证据组是否全部属于当前七组契约。
+
+    Args:
+        group_ids: 待校验的证据组标识。
+
+    Returns:
+        全部属于 `BOND_RISK_EVIDENCE_GROUPS` 时返回 `True`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    known_group_ids = set(_bond_risk_required_group_ids())
+    return all(group_id in known_group_ids for group_id in group_ids)
+
+
+def _bond_risk_required_group_ids() -> tuple[str, ...]:
+    """返回债券风险证据契约要求的七组有序标识。
+
+    Args:
+        无。
+
+    Returns:
+        `BOND_RISK_EVIDENCE_GROUPS` 的有序 group id 元组。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return tuple(group.group_id for group in BOND_RISK_EVIDENCE_GROUPS)
 
 
 def _score_applicability_issue_id(
@@ -1830,6 +2043,22 @@ def _fund_report_year_text(records: Sequence[Mapping[str, object]]) -> str:
     if len(values) == 1:
         return str(values[0])
     return "unknown-year"
+
+
+def _record_report_year_text(record: Mapping[str, object]) -> str:
+    """读取单条 snapshot 记录的 report_year 文本。
+
+    Args:
+        record: snapshot 记录。
+
+    Returns:
+        年报年份文本。
+
+    Raises:
+        ValueError: `report_year` 缺失或非法时抛出。
+    """
+
+    return str(_required_snapshot_int(record, "report_year"))
 
 
 def _is_bond_holdings_replacement_record(record: Mapping[str, object]) -> bool:
@@ -2004,6 +2233,11 @@ def _scorable_records(
             classified_fund_type=classified_fund_type,
             use_record_fund_type=use_record_fund_type,
         )
+        and not _is_non_applicable_bond_risk_evidence_record_for_type(
+            record,
+            classified_fund_type=classified_fund_type,
+            use_record_fund_type=use_record_fund_type,
+        )
     )
 
 
@@ -2033,6 +2267,37 @@ def _is_bond_holdings_replacement_record_for_type(
     if fund_type is None and use_record_fund_type:
         fund_type = _optional_record_text(record, "classified_fund_type")
     return fund_type == BOND_FUND_TYPE
+
+
+def _is_non_applicable_bond_risk_evidence_record_for_type(
+    record: Mapping[str, object],
+    *,
+    classified_fund_type: str | None = None,
+    use_record_fund_type: bool = True,
+) -> bool:
+    """判断记录是否为非债券基金下不适用的债券风险替代证据。
+
+    `bond_risk_evidence.v1` 只替代 exact `bond_fund` 的权益持仓风险分母；
+    非债券基金、未知或冲突基金类型均不因该替代字段进入 P1 评分。见模板第 6 章。
+
+    Args:
+        record: snapshot 字段记录。
+        classified_fund_type: 已解析的单基金类型；为空时读取记录上的类型。
+        use_record_fund_type: 已解析类型为空时是否回看单条记录类型。
+
+    Returns:
+        非 exact `bond_fund` 的 `bond_risk_evidence` 返回 `True`。
+
+    Raises:
+        ValueError: 记录缺少 `field_name` 时抛出。
+    """
+
+    if _required_text(record, "field_name") != BOND_RISK_REPLACEMENT_FIELD_NAME:
+        return False
+    fund_type = classified_fund_type
+    if fund_type is None and use_record_fund_type:
+        fund_type = _optional_record_text(record, "classified_fund_type")
+    return fund_type != BOND_FUND_TYPE
 
 
 def _is_non_applicable_index_quality_record(

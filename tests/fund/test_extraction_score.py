@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 
 from fund_agent.fund.extraction_score import (
+    BOND_RISK_EVIDENCE_GROUPS,
     CORRECTNESS_MATCH,
     CORRECTNESS_MISMATCH,
     CORRECTNESS_COVERAGE_COVERED,
@@ -63,6 +64,7 @@ _PUBLIC_SOURCE_PROVENANCE_PAYLOAD = {
     "source_provenance_status": "incomplete",
     "source_provenance_reason": "fallback_used_primary_failure_category_absent",
 }
+_BOND_RISK_GROUP_IDS = tuple(group.group_id for group in BOND_RISK_EVIDENCE_GROUPS)
 
 
 def test_score_snapshot_records_computes_coverage_traceability_status_and_priority() -> None:
@@ -550,6 +552,341 @@ def test_bond_fund_excludes_equity_holdings_with_replacement_issue() -> None:
     assert issues[0].baseline_blocking is True
     assert "convertible_bond_equity_exposure" in issues[0].missing_evidence_groups
     assert len(issues[0].missing_evidence_groups) == 7
+
+
+def test_field_priority_includes_bond_risk_evidence_as_p1() -> None:
+    """验证债券风险替代证据字段进入 P1 优先级。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 `bond_risk_evidence` 未注册为 P1 时抛出。
+    """
+
+    assert FIELD_PRIORITY_BY_NAME["bond_risk_evidence"] == "P1"
+
+
+def test_complete_bond_risk_evidence_record_scores_p1_pass_without_issue() -> None:
+    """验证完整债券风险证据行满足 P1 coverage/traceability 且不再发缺口 issue。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当完整结构化证据仍触发 blocker 或分数异常时抛出。
+    """
+
+    records = [
+        _snapshot_record(
+            "profile",
+            "classified_fund_type",
+            fund_code="006597",
+            app_category="国内债券类",
+            classified_fund_type="bond_fund",
+            value_present=True,
+            anchor_present=True,
+        ),
+        _snapshot_record(
+            "holdings",
+            "holdings_snapshot",
+            fund_code="006597",
+            app_category="国内债券类",
+            classified_fund_type="bond_fund",
+            value_present=True,
+            anchor_present=True,
+        ),
+        _bond_risk_snapshot_record(
+            fund_code="006597",
+            contract_status="satisfied",
+            satisfied_groups=_BOND_RISK_GROUP_IDS,
+            anchor_present=True,
+        ),
+    ]
+
+    field_rows = {row.field_name: row for row in score_snapshot_records(records)}
+    fund_score = score_fund_records(records)[0]
+    fund_quality = derive_fund_quality_records(records)[0]
+    decisions = derive_field_applicability_decisions(records)
+
+    assert field_rows["bond_risk_evidence"].priority == "P1"
+    assert field_rows["bond_risk_evidence"].records == 1
+    assert field_rows["bond_risk_evidence"].coverage_rate == 1.0
+    assert field_rows["bond_risk_evidence"].traceability_rate == 1.0
+    assert field_rows["bond_risk_evidence"].status == STATUS_PASS
+    assert fund_score.p1_status == STATUS_PASS
+    assert fund_quality.missing_p1_fields == ()
+    assert decisions[0].replacement_issue_ids == ()
+    assert derive_score_applicability_issues(records) == ()
+
+
+def test_weak_drawdown_bond_risk_evidence_issue_lists_only_drawdown_group() -> None:
+    """验证弱回撤证据只让 drawdown_stress 保持阻断。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当弱证据组扩散到其他组时抛出。
+    """
+
+    issue = _single_bond_issue(
+        _bond_risk_snapshot_record(
+            contract_status="partial",
+            satisfied_groups=tuple(
+                group_id for group_id in _BOND_RISK_GROUP_IDS if group_id != "drawdown_stress"
+            ),
+            weak_groups=("drawdown_stress",),
+            anchor_present=True,
+        )
+    )
+
+    assert issue.required_evidence_groups == _BOND_RISK_GROUP_IDS
+    assert issue.missing_evidence_groups == ("drawdown_stress",)
+    assert issue.baseline_blocking is True
+
+
+def test_ambiguous_redemption_bond_risk_evidence_issue_lists_only_redemption_group() -> None:
+    """验证申赎压力歧义只让 redemption_share_pressure 保持阻断。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当歧义证据组扩散到其他组时抛出。
+    """
+
+    issue = _single_bond_issue(
+        _bond_risk_snapshot_record(
+            contract_status="partial",
+            satisfied_groups=tuple(
+                group_id
+                for group_id in _BOND_RISK_GROUP_IDS
+                if group_id != "redemption_share_pressure"
+            ),
+            ambiguous_groups=("redemption_share_pressure",),
+            anchor_present=True,
+        )
+    )
+
+    assert issue.required_evidence_groups == _BOND_RISK_GROUP_IDS
+    assert issue.missing_evidence_groups == ("redemption_share_pressure",)
+
+
+def test_partial_bond_risk_evidence_keeps_required_groups_full_and_missing_dynamic() -> None:
+    """验证 partial 记录 required 全量固定、missing 只列实际未满足组。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当动态缺口组或契约全量组不符合预期时抛出。
+    """
+
+    unsatisfied = ("leverage_liquidity", "drawdown_stress", "redemption_share_pressure")
+    issue = _single_bond_issue(
+        _bond_risk_snapshot_record(
+            contract_status="partial",
+            satisfied_groups=tuple(
+                group_id for group_id in _BOND_RISK_GROUP_IDS if group_id not in unsatisfied
+            ),
+            missing_groups=("leverage_liquidity",),
+            weak_groups=("drawdown_stress",),
+            ambiguous_groups=("redemption_share_pressure",),
+            anchor_present=True,
+        )
+    )
+
+    assert issue.required_evidence_groups == _BOND_RISK_GROUP_IDS
+    assert issue.missing_evidence_groups == unsatisfied
+
+
+def test_anchor_missing_accepted_bond_risk_evidence_remains_all_seven_blocking() -> None:
+    """验证缺少锚点的 accepted-looking 记录按整条契约不满足处理。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当无锚点记录被误判为满足时抛出。
+    """
+
+    issue = _single_bond_issue(
+        _bond_risk_snapshot_record(
+            contract_status="satisfied",
+            satisfied_groups=_BOND_RISK_GROUP_IDS,
+            anchor_present=False,
+        )
+    )
+
+    assert issue.required_evidence_groups == _BOND_RISK_GROUP_IDS
+    assert issue.missing_evidence_groups == _BOND_RISK_GROUP_IDS
+    assert issue.baseline_blocking is True
+
+
+def test_value_missing_accepted_bond_risk_evidence_remains_all_seven_blocking() -> None:
+    """验证缺少字段值的 accepted-looking 记录按整条契约不满足处理。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 value_present=false 的记录被误判为满足时抛出。
+    """
+
+    issue = _single_bond_issue(
+        _bond_risk_snapshot_record(
+            contract_status="satisfied",
+            satisfied_groups=_BOND_RISK_GROUP_IDS,
+            value_present=False,
+            anchor_present=True,
+        )
+    )
+
+    assert issue.issue_code == "bond_risk_evidence_missing"
+    assert issue.required_evidence_groups == _BOND_RISK_GROUP_IDS
+    assert issue.missing_evidence_groups == _BOND_RISK_GROUP_IDS
+    assert issue.baseline_blocking is True
+
+
+def test_malformed_bond_risk_evidence_record_remains_all_seven_blocking() -> None:
+    """验证结构化组字段 malformed 时 fail-closed 为全量缺口。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 malformed 结构化字段被当作满足时抛出。
+    """
+
+    record = _bond_risk_snapshot_record(
+        contract_status="satisfied",
+        satisfied_groups=_BOND_RISK_GROUP_IDS,
+        anchor_present=True,
+    )
+    record["bond_risk_satisfied_groups"] = "duration_rate_risk"
+
+    issue = _single_bond_issue(record)
+
+    assert issue.missing_evidence_groups == _BOND_RISK_GROUP_IDS
+
+
+def test_missing_contract_status_bond_risk_evidence_remains_all_seven_blocking() -> None:
+    """验证缺少 contract_status 时 fail-closed 为全量缺口。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当缺少契约状态的记录被误判为满足时抛出。
+    """
+
+    issue = _single_bond_issue(
+        _bond_risk_snapshot_record(
+            contract_status=None,
+            satisfied_groups=_BOND_RISK_GROUP_IDS,
+            anchor_present=True,
+        )
+    )
+
+    assert issue.missing_evidence_groups == _BOND_RISK_GROUP_IDS
+
+
+def test_non_bond_fund_ignores_bond_risk_evidence_record() -> None:
+    """验证非债基不因债券风险替代证据进入 P1 分母或触发 issue。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当非债基被 bond_risk_evidence 影响评分时抛出。
+    """
+
+    records = [
+        _snapshot_record(
+            "holdings",
+            "holdings_snapshot",
+            fund_code="004393",
+            classified_fund_type="active_fund",
+            value_present=True,
+            anchor_present=True,
+            comparable_values={
+                "top_holdings_status": "direct_top_ten",
+                "top_holdings_source": "top_ten",
+            },
+        ),
+        _bond_risk_snapshot_record(
+            fund_code="004393",
+            classified_fund_type="active_fund",
+            contract_status="missing",
+            missing_groups=_BOND_RISK_GROUP_IDS,
+            value_present=False,
+            anchor_present=False,
+        ),
+    ]
+
+    field_rows = {row.field_name: row for row in score_snapshot_records(records)}
+    fund_quality = derive_fund_quality_records(records)[0]
+
+    assert "bond_risk_evidence" not in field_rows
+    assert fund_quality.missing_p1_fields == ()
+    assert derive_score_applicability_issues(records) == ()
+
+
+def test_bond_risk_score_does_not_parse_note_for_satisfaction() -> None:
+    """验证评分不读取 note 文本来决定债券风险证据是否满足。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 note 伪造满足状态影响评分时抛出。
+    """
+
+    record = _bond_risk_snapshot_record(
+        contract_status="missing",
+        missing_groups=_BOND_RISK_GROUP_IDS,
+        value_present=False,
+        anchor_present=True,
+    )
+    record["note"] = "contract_status=satisfied; all seven groups satisfied"
+
+    issue = _single_bond_issue(record)
+
+    assert issue.missing_evidence_groups == _BOND_RISK_GROUP_IDS
 
 
 def test_bond_score_applicability_issue_id_is_deterministic() -> None:
@@ -2132,6 +2469,103 @@ def test_select_minimal_golden_set_uses_only_csv_codes_and_excludes_money_market
     assert selection.excluded_categories == (MONEY_MARKET_CATEGORY,)
     assert {"黄金类", "海外股票类", "海外债券/稳健类", "国内债券类"} <= selected_categories
     assert sum(1 for record in selection.records if record.app_category == "国内股票类") >= 2
+
+
+def _single_bond_issue(bond_risk_record: dict[str, object]) -> object:
+    """构造单只债基评分输入并返回唯一债券风险缺口 issue。
+
+    Args:
+        bond_risk_record: 待测试的 `bond_risk_evidence` snapshot 行。
+
+    Returns:
+        唯一 `bond_risk_evidence_missing` issue。
+
+    Raises:
+        AssertionError: 当 issue 数量不为 1 时抛出。
+    """
+
+    records = [
+        _snapshot_record(
+            "profile",
+            "classified_fund_type",
+            fund_code="006597",
+            app_category="国内债券类",
+            classified_fund_type="bond_fund",
+            value_present=True,
+            anchor_present=True,
+        ),
+        _snapshot_record(
+            "holdings",
+            "holdings_snapshot",
+            fund_code="006597",
+            app_category="国内债券类",
+            classified_fund_type="bond_fund",
+            value_present=True,
+            anchor_present=True,
+        ),
+        bond_risk_record,
+    ]
+    issues = derive_score_applicability_issues(records)
+    assert len(issues) == 1
+    return issues[0]
+
+
+def _bond_risk_snapshot_record(
+    *,
+    fund_code: str = "006597",
+    report_year: int = 2024,
+    app_category: str = "国内债券类",
+    classified_fund_type: str = "bond_fund",
+    value_present: bool = True,
+    anchor_present: bool,
+    contract_status: str | None,
+    satisfied_groups: tuple[str, ...] = (),
+    missing_groups: tuple[str, ...] = (),
+    weak_groups: tuple[str, ...] = (),
+    ambiguous_groups: tuple[str, ...] = (),
+) -> dict[str, object]:
+    """构造 Slice 4 结构化债券风险 snapshot 记录。
+
+    Args:
+        fund_code: 基金代码。
+        report_year: 年报年份。
+        app_category: App 类别。
+        classified_fund_type: 系统识别基金类型。
+        value_present: 是否存在字段值。
+        anchor_present: 是否存在年报证据锚点。
+        contract_status: 债券风险证据契约状态。
+        satisfied_groups: 已满足证据组。
+        missing_groups: 缺失证据组。
+        weak_groups: 弱证据组。
+        ambiguous_groups: 歧义证据组。
+
+    Returns:
+        带 Slice 4 结构化字段的 snapshot 字典。
+
+    Raises:
+        无显式抛出。
+    """
+
+    record = _snapshot_record(
+        "risk",
+        "bond_risk_evidence",
+        fund_code=fund_code,
+        report_year=report_year,
+        app_category=app_category,
+        classified_fund_type=classified_fund_type,
+        value_present=value_present,
+        anchor_present=anchor_present,
+    )
+    record.update(
+        {
+            "bond_risk_contract_status": contract_status,
+            "bond_risk_satisfied_groups": satisfied_groups,
+            "bond_risk_missing_groups": missing_groups,
+            "bond_risk_weak_groups": weak_groups,
+            "bond_risk_ambiguous_groups": ambiguous_groups,
+        }
+    )
+    return record
 
 
 def _snapshot_record(
