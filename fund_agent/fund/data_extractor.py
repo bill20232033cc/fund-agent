@@ -13,9 +13,11 @@ from fund_agent.fund.data.nav_data import (
 from fund_agent.fund.documents import FundDocumentRepository
 from fund_agent.fund.documents.models import ParsedAnnualReport
 from fund_agent.fund.extractors import (
+    BondRiskEvidenceValue,
     ExtractedField,
     IndexProfileValue,
     TrackingErrorValue,
+    extract_bond_risk_evidence,
     extract_holdings_share_change,
     extract_manager_ownership,
     extract_performance,
@@ -76,6 +78,27 @@ class _NavDataProvider(Protocol):
         """
 
 
+def _default_bond_risk_evidence_field() -> ExtractedField[BondRiskEvidenceValue]:
+    """构造测试夹具默认债券风险证据字段，见模板第 6 章“核心风险”。
+
+    Args:
+        无。
+
+    Returns:
+        未执行生产抽取时使用的显式缺失字段。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return ExtractedField(
+        value=None,
+        anchors=(),
+        extraction_mode="missing",
+        note="bond_risk_evidence_not_extracted",
+    )
+
+
 @dataclass(frozen=True, slots=True)
 class StructuredFundDataBundle:
     """P1 结构化基金数据包。
@@ -97,6 +120,7 @@ class StructuredFundDataBundle:
         manager_strategy_text: 管理人报告策略原文。
         holdings_snapshot: 前十大重仓与行业分布。
         holder_structure: 机构/个人持有人结构。
+        bond_risk_evidence: 债券基金模板第 6 章“核心风险”七组证据；非债券基金为不适用缺失字段。
         nav_data: 净值数据结果。
         source_provenance: 年报公共来源 provenance，不暴露 `None`。
     """
@@ -120,6 +144,9 @@ class StructuredFundDataBundle:
     nav_data: NavDataResult
     source_provenance: PublicSourceProvenance = field(
         default_factory=default_public_source_provenance
+    )
+    bond_risk_evidence: ExtractedField[BondRiskEvidenceValue] = field(
+        default_factory=_default_bond_risk_evidence_field
     )
 
 
@@ -185,6 +212,11 @@ class FundDataExtractor:
         performance_result = extract_performance(report)
         manager_ownership_result = extract_manager_ownership(report)
         holdings_share_change_result = extract_holdings_share_change(report)
+        classified_fund_type = _classified_fund_type(profile_result.basic_identity)
+        bond_risk_evidence = extract_bond_risk_evidence(
+            report,
+            classified_fund_type=classified_fund_type,
+        )
 
         return StructuredFundDataBundle(
             fund_code=report.key.fund_code,
@@ -199,7 +231,7 @@ class FundDataExtractor:
             investor_return=performance_result.investor_return,
             tracking_error=_tracking_error_for_fund_type(
                 performance_result.tracking_error,
-                _classified_fund_type(profile_result.basic_identity),
+                classified_fund_type,
             ),
             share_change=holdings_share_change_result.share_change,
             manager_alignment=manager_ownership_result.manager_alignment,
@@ -208,6 +240,7 @@ class FundDataExtractor:
             holder_structure=manager_ownership_result.holder_structure,
             nav_data=nav_data,
             source_provenance=project_public_source_provenance(report.metadata.source),
+            bond_risk_evidence=bond_risk_evidence,
         )
 
 

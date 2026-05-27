@@ -13,6 +13,7 @@ from fund_agent.fund.documents.models import (
     ParsedAnnualReport,
 )
 from fund_agent.fund.extractors import ExtractedField
+from fund_agent.fund.extractors import bond_risk_evidence as bond_risk_module
 
 
 class _FakeRepository:
@@ -164,6 +165,9 @@ async def test_data_extractor_degrades_nav_failure_without_blocking_annual_repor
     assert bundle.nav_data.unavailable_reason == "RuntimeError: network down"
     assert bundle.source_provenance.fallback_eligibility == "not_applicable"
     assert bundle.source_provenance.source_provenance_status == "not_applicable"
+    assert bundle.bond_risk_evidence.value is None
+    assert bundle.bond_risk_evidence.extraction_mode == "missing"
+    assert bundle.bond_risk_evidence.note == "not_applicable_non_bond_fund"
 
 
 @pytest.mark.asyncio
@@ -229,6 +233,86 @@ def test_structured_bundle_default_source_provenance_is_not_none() -> None:
     assert bundle.source_provenance.fallback_used is False
     assert bundle.source_provenance.fallback_eligibility == "not_applicable"
     assert bundle.source_provenance.source_provenance_status == "not_applicable"
+    assert bundle.bond_risk_evidence.value is None
+    assert bundle.bond_risk_evidence.note == "bond_risk_evidence_not_extracted"
+
+
+@pytest.mark.asyncio
+async def test_data_extractor_returns_bundle_with_bond_risk_evidence() -> None:
+    """验证 fake 仓库抽取结果显式携带债券风险证据字段。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 bundle 未携带债券风险证据字段或 provenance 行为改变时抛出。
+    """
+
+    repository = _FakeRepository(_annual_report())
+    nav_provider = _RecordingNavProvider()
+    extractor = FundDataExtractor(repository=repository, nav_provider=nav_provider)
+
+    bundle = await extractor.extract("110011", 2024)
+
+    assert repository.calls == [("110011", 2024, False)]
+    assert nav_provider.calls == [("110011", False)]
+    assert bundle.bond_risk_evidence.value is None
+    assert bundle.bond_risk_evidence.anchors == ()
+    assert bundle.bond_risk_evidence.extraction_mode == "missing"
+    assert bundle.bond_risk_evidence.note == "not_applicable_non_bond_fund"
+    assert bundle.source_provenance.fallback_used is False
+    assert bundle.source_provenance.fallback_eligibility == "not_applicable"
+    assert bundle.source_provenance.source_provenance_status == "not_applicable"
+
+
+@pytest.mark.asyncio
+async def test_data_extractor_non_bond_bond_risk_evidence_does_not_scan_groups(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """验证非债券基金通过显式分类早退，不扫描模板第 6 章七组债券风险证据。
+
+    Args:
+        monkeypatch: pytest 局部 monkeypatch 工具。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当非债券路径扫描七组 extractor 或产生满足组时抛出。
+    """
+
+    def _fail_group_scan(_report: ParsedAnnualReport) -> object:
+        """非债券路径若触发七组扫描则使测试失败。
+
+        Args:
+            _report: 已解析年报。
+
+        Returns:
+            无返回值。
+
+        Raises:
+            AssertionError: 始终抛出，表示不应扫描七组债券风险证据。
+        """
+
+        raise AssertionError("non-bond path must not scan bond evidence groups")
+
+    monkeypatch.setattr(bond_risk_module, "_extract_duration_rate_risk", _fail_group_scan)
+    extractor = FundDataExtractor(
+        repository=_FakeRepository(_annual_report()),
+        nav_provider=_RecordingNavProvider(),
+    )
+
+    bundle = await extractor.extract("110011", 2024)
+
+    assert bundle.basic_identity.value is not None
+    assert bundle.basic_identity.value["classified_fund_type"] == "active_fund"
+    assert bundle.bond_risk_evidence.value is None
+    assert bundle.bond_risk_evidence.anchors == ()
+    assert bundle.bond_risk_evidence.extraction_mode == "missing"
+    assert bundle.bond_risk_evidence.note == "not_applicable_non_bond_fund"
 
 
 @pytest.mark.asyncio
