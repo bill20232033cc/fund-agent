@@ -22,7 +22,7 @@ from fund_agent.config.paths import (
 from fund_agent.fund._value_utils import value_mapping
 from fund_agent.fund.data.nav_data import NavDataResult
 from fund_agent.fund.data_extractor import FundDataExtractor, StructuredFundDataBundle
-from fund_agent.fund.extractors import EvidenceAnchor, ExtractedField
+from fund_agent.fund.extractors import BondRiskEvidenceValue, EvidenceAnchor, ExtractedField
 
 DEFAULT_SELECTED_FUNDS_CSV: Final[Path] = _DEFAULT_SELECTED_FUNDS_CSV
 DEFAULT_SNAPSHOT_OUTPUT_ROOT: Final[Path] = DEFAULT_EXTRACTION_SNAPSHOT_ROOT
@@ -42,6 +42,7 @@ SNAPSHOT_FIELD_ORDER: Final[tuple[tuple[str, str], ...]] = (
     ("manager", "manager_alignment"),
     ("holder", "holder_structure"),
     ("holdings", "holdings_snapshot"),
+    ("risk", "bond_risk_evidence"),
     ("share_change", "share_change"),
     ("nav", "nav_data"),
 )
@@ -197,6 +198,11 @@ class SnapshotRecord:
         fallback_eligibility: fallback 公开安全分类。
         source_provenance_status: provenance 完整性状态。
         source_provenance_reason: 稳定短原因码。
+        bond_risk_contract_status: 债券风险证据契约状态，见模板第 6 章“核心风险”。
+        bond_risk_satisfied_groups: 已满足的债券风险证据组。
+        bond_risk_missing_groups: 缺失的债券风险证据组。
+        bond_risk_weak_groups: 弱证据债券风险证据组。
+        bond_risk_ambiguous_groups: 歧义债券风险证据组。
     """
 
     run_id: str
@@ -227,6 +233,11 @@ class SnapshotRecord:
     fallback_eligibility: str
     source_provenance_status: str
     source_provenance_reason: str
+    bond_risk_contract_status: str | None = None
+    bond_risk_satisfied_groups: tuple[str, ...] = ()
+    bond_risk_missing_groups: tuple[str, ...] = ()
+    bond_risk_weak_groups: tuple[str, ...] = ()
+    bond_risk_ambiguous_groups: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -555,6 +566,21 @@ def build_snapshot_records(
         if field_name == "nav_data":
             records.append(
                 _build_nav_record(
+                    bundle=bundle,
+                    selected_fund=selected_fund,
+                    run_id=run_id,
+                    extraction_timestamp=extraction_timestamp,
+                    source_csv=source_csv,
+                    classified_fund_type=classified_fund_type,
+                    classification_basis=classification_basis,
+                    field_group=field_group,
+                    field_name=field_name,
+                )
+            )
+            continue
+        if field_name == "bond_risk_evidence":
+            records.append(
+                _build_bond_risk_evidence_record(
                     bundle=bundle,
                     selected_fund=selected_fund,
                     run_id=run_id,
@@ -983,6 +1009,75 @@ def _build_nav_record(
     )
 
 
+def _build_bond_risk_evidence_record(
+    *,
+    bundle: StructuredFundDataBundle,
+    selected_fund: SelectedFundRecord,
+    run_id: str,
+    extraction_timestamp: str,
+    source_csv: str,
+    classified_fund_type: str | None,
+    classification_basis: tuple[str, ...],
+    field_group: str,
+    field_name: str,
+) -> SnapshotRecord:
+    """构造债券风险证据快照记录，见模板第 6 章“核心风险”。
+
+    Args:
+        bundle: 结构化基金数据包。
+        selected_fund: CSV 中的基金记录。
+        run_id: 本次运行 ID。
+        extraction_timestamp: ISO-8601 抽取时间戳。
+        source_csv: CSV 路径文本。
+        classified_fund_type: 当前分类结果。
+        classification_basis: 当前分类依据。
+        field_group: 字段组。
+        field_name: 字段名。
+
+    Returns:
+        债券风险证据字段级快照记录。
+
+    Raises:
+        无显式抛出。
+    """
+
+    extracted_field = bundle.bond_risk_evidence
+    value = extracted_field.value
+    structured_value = value if isinstance(value, BondRiskEvidenceValue) else None
+    anchor = _first_annual_report_anchor(extracted_field.anchors)
+    return _snapshot_record(
+        bundle=bundle,
+        selected_fund=selected_fund,
+        run_id=run_id,
+        extraction_timestamp=extraction_timestamp,
+        source_csv=source_csv,
+        classified_fund_type=classified_fund_type,
+        classification_basis=classification_basis,
+        field_group=field_group,
+        field_name=field_name,
+        extraction_mode=extracted_field.extraction_mode,
+        value_present=_bond_risk_value_present(structured_value),
+        anchor=anchor,
+        comparable_values={},
+        note=_bond_risk_note(structured_value, extracted_field.note),
+        bond_risk_contract_status=(
+            structured_value.contract_status if structured_value is not None else None
+        ),
+        bond_risk_satisfied_groups=_string_tuple(
+            structured_value.satisfied_group_ids if structured_value is not None else ()
+        ),
+        bond_risk_missing_groups=_string_tuple(
+            structured_value.missing_group_ids if structured_value is not None else ()
+        ),
+        bond_risk_weak_groups=_string_tuple(
+            structured_value.weak_group_ids if structured_value is not None else ()
+        ),
+        bond_risk_ambiguous_groups=_string_tuple(
+            structured_value.ambiguous_group_ids if structured_value is not None else ()
+        ),
+    )
+
+
 def _snapshot_record(
     *,
     bundle: StructuredFundDataBundle,
@@ -999,6 +1094,11 @@ def _snapshot_record(
     anchor: EvidenceAnchor | None,
     comparable_values: dict[str, str],
     note: str | None,
+    bond_risk_contract_status: str | None = None,
+    bond_risk_satisfied_groups: tuple[str, ...] = (),
+    bond_risk_missing_groups: tuple[str, ...] = (),
+    bond_risk_weak_groups: tuple[str, ...] = (),
+    bond_risk_ambiguous_groups: tuple[str, ...] = (),
 ) -> SnapshotRecord:
     """构造字段级快照记录的公共部分。
 
@@ -1017,6 +1117,11 @@ def _snapshot_record(
         anchor: 首个证据锚点。
         comparable_values: correctness 可直接比较的白名单子字段值。
         note: 附加说明。
+        bond_risk_contract_status: 债券风险证据契约状态。
+        bond_risk_satisfied_groups: 已满足的债券风险证据组。
+        bond_risk_missing_groups: 缺失的债券风险证据组。
+        bond_risk_weak_groups: 弱证据债券风险证据组。
+        bond_risk_ambiguous_groups: 歧义债券风险证据组。
 
     Returns:
         字段级快照记录。
@@ -1055,6 +1160,11 @@ def _snapshot_record(
         fallback_eligibility=provenance.fallback_eligibility,
         source_provenance_status=provenance.source_provenance_status,
         source_provenance_reason=provenance.source_provenance_reason,
+        bond_risk_contract_status=bond_risk_contract_status,
+        bond_risk_satisfied_groups=bond_risk_satisfied_groups,
+        bond_risk_missing_groups=bond_risk_missing_groups,
+        bond_risk_weak_groups=bond_risk_weak_groups,
+        bond_risk_ambiguous_groups=bond_risk_ambiguous_groups,
     )
 
 
@@ -1233,6 +1343,92 @@ def _has_present_value(value: object) -> bool:
     if isinstance(value, str):
         return bool(value.strip())
     return True
+
+
+def _bond_risk_value_present(value: BondRiskEvidenceValue | None) -> bool:
+    """判断债券风险证据契约值是否可视为已存在，见模板第 6 章“核心风险”。
+
+    Args:
+        value: 债券风险证据契约值；缺失或 malformed 时为 `None`。
+
+    Returns:
+        仅当结构化值存在且契约状态不是 `missing` 时返回 `True`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return value is not None and value.contract_status != _EXTRACTION_MODE_MISSING
+
+
+def _first_annual_report_anchor(anchors: Sequence[EvidenceAnchor]) -> EvidenceAnchor | None:
+    """返回首个字段级年报锚点。
+
+    Args:
+        anchors: 字段级证据锚点序列。
+
+    Returns:
+        首个 `source_kind=annual_report` 的锚点；不存在时返回 `None`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    for anchor in anchors:
+        if anchor.source_kind == "annual_report":
+            return anchor
+    return None
+
+
+def _bond_risk_note(value: BondRiskEvidenceValue | None, note: str | None) -> str | None:
+    """构造债券风险证据 snapshot 备注 token，见模板第 6 章“核心风险”。
+
+    Args:
+        value: 债券风险证据契约值。
+        note: 底层字段备注。
+
+    Returns:
+        可读备注；结构化字段仍是机器判定真源。
+
+    Raises:
+        无显式抛出。
+    """
+
+    notes: list[str] = []
+    if value is not None:
+        notes.append(
+            " ".join(
+                (
+                    f"contract_id={value.contract_id};",
+                    f"contract_status={value.contract_status};",
+                    f"satisfied_groups={','.join(value.satisfied_group_ids)};",
+                    f"missing_groups={','.join(value.missing_group_ids)};",
+                    f"weak_groups={','.join(value.weak_group_ids)};",
+                    f"ambiguous_groups={','.join(value.ambiguous_group_ids)}",
+                )
+            )
+        )
+    if note:
+        notes.append(note)
+    if not notes:
+        return None
+    return " ".join(notes)
+
+
+def _string_tuple(values: Sequence[object]) -> tuple[str, ...]:
+    """把结构化组 ID 序列规范化为字符串元组。
+
+    Args:
+        values: 任意组 ID 序列。
+
+    Returns:
+        字符串元组，保持原始顺序。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return tuple(str(value) for value in values)
 
 
 def _has_nav_records(nav_data: NavDataResult) -> bool:

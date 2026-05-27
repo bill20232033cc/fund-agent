@@ -12,6 +12,7 @@ import pytest
 from fund_agent.fund.data.nav_data import NavDataResult, unavailable_nav_data_result
 from fund_agent.fund.data_extractor import StructuredFundDataBundle
 from fund_agent.fund.extraction_snapshot import (
+    COMPARABLE_SUB_FIELDS_BY_FIELD,
     SNAPSHOT_FIELD_ORDER,
     SelectedFundRecord,
     build_snapshot_records,
@@ -20,10 +21,18 @@ from fund_agent.fund.extraction_snapshot import (
     validate_selected_fund_pool,
 )
 from fund_agent.fund.extractors import (
+    BondRiskEvidenceValue,
     EvidenceAnchor,
     ExtractedField,
     IndexProfileValue,
     TrackingErrorValue,
+)
+from fund_agent.fund.extractors.models import (
+    BOND_RISK_EVIDENCE_CONTRACT_ID,
+    BOND_RISK_EVIDENCE_GROUP_IDS,
+    BondRiskEvidenceAnchorRef,
+    BondRiskEvidenceGroupId,
+    BondRiskEvidenceGroupRecord,
 )
 from fund_agent.fund.source_provenance import PublicSourceProvenance
 
@@ -36,6 +45,13 @@ _SOURCE_PROVENANCE_FIELDS = {
     "fallback_eligibility",
     "source_provenance_status",
     "source_provenance_reason",
+}
+_BOND_RISK_SNAPSHOT_FIELDS = {
+    "bond_risk_contract_status",
+    "bond_risk_satisfied_groups",
+    "bond_risk_missing_groups",
+    "bond_risk_weak_groups",
+    "bond_risk_ambiguous_groups",
 }
 
 
@@ -176,6 +192,7 @@ def test_build_snapshot_records_contains_required_schema_and_all_fields() -> Non
         "comparable_values",
         "note",
         *_SOURCE_PROVENANCE_FIELDS,
+        *_BOND_RISK_SNAPSHOT_FIELDS,
     }
     assert first_payload["source_provenance_schema_version"] == "repository_source_provenance.v1"
     assert first_payload["source_strategy"] == "primary_then_fallback"
@@ -218,6 +235,196 @@ def test_build_snapshot_records_contains_required_schema_and_all_fields() -> Non
         "top_holdings_status": "direct_top_ten",
         "top_holdings_source": "top_ten",
     }
+    assert records_by_name["bond_risk_evidence"].comparable_values == {}
+    assert "bond_risk_evidence" not in COMPARABLE_SUB_FIELDS_BY_FIELD
+    assert (
+        list(SNAPSHOT_FIELD_ORDER).index(("risk", "bond_risk_evidence"))
+        == list(SNAPSHOT_FIELD_ORDER).index(("holdings", "holdings_snapshot")) + 1
+    )
+
+
+def test_build_snapshot_records_projects_complete_bond_risk_evidence_row() -> None:
+    """验证完整债券风险证据会投影为结构化 snapshot 行。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当债券风险证据行未按契约投影时抛出。
+    """
+
+    bond_value = _bond_risk_value()
+    bundle = _build_bundle("006597", "bond_fund", bond_risk_evidence=_bond_risk_field(bond_value))
+    selected_fund = SelectedFundRecord(
+        line_number=4,
+        fund_name="广发中债7-10年国开债指数A",
+        fund_code="006597",
+        app_category="国内债券类",
+    )
+
+    records = build_snapshot_records(
+        bundle=bundle,
+        selected_fund=selected_fund,
+        run_id="unit-run",
+        extraction_timestamp="2026-05-19T00:00:00+00:00",
+        source_csv="docs/code_20260519.csv",
+    )
+
+    bond_record = next(record for record in records if record.field_name == "bond_risk_evidence")
+    assert bond_record.field_group == "risk"
+    assert bond_record.value_present is True
+    assert bond_record.anchor_present is True
+    assert bond_record.section_id == "§8"
+    assert bond_record.page == 59
+    assert bond_record.table_id == "page-59-table-1"
+    assert bond_record.row_id == "bond_risk_evidence"
+    assert bond_record.comparable_values == {}
+    assert bond_record.bond_risk_contract_status == "satisfied"
+    assert bond_record.bond_risk_satisfied_groups == tuple(BOND_RISK_EVIDENCE_GROUP_IDS)
+    assert bond_record.bond_risk_missing_groups == ()
+    assert bond_record.bond_risk_weak_groups == ()
+    assert bond_record.bond_risk_ambiguous_groups == ()
+    assert bond_record.note is not None
+    assert "contract_id=bond_risk_evidence.v1" in bond_record.note
+    assert "contract_status=satisfied" in bond_record.note
+
+
+def test_build_snapshot_records_projects_partial_bond_risk_evidence_groups() -> None:
+    """验证部分债券风险证据通过结构化字段暴露缺失、弱证据和歧义组。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当部分契约字段未稳定投影时抛出。
+    """
+
+    bond_value = _bond_risk_value(
+        overrides={
+            "drawdown_stress": "weak",
+            "redemption_share_pressure": "ambiguous",
+            "convertible_bond_equity_exposure": "missing",
+        }
+    )
+    bundle = _build_bundle("006597", "bond_fund", bond_risk_evidence=_bond_risk_field(bond_value))
+    selected_fund = SelectedFundRecord(
+        line_number=4,
+        fund_name="广发中债7-10年国开债指数A",
+        fund_code="006597",
+        app_category="国内债券类",
+    )
+
+    records = build_snapshot_records(
+        bundle=bundle,
+        selected_fund=selected_fund,
+        run_id="unit-run",
+        extraction_timestamp="2026-05-19T00:00:00+00:00",
+        source_csv="docs/code_20260519.csv",
+    )
+
+    bond_record = next(record for record in records if record.field_name == "bond_risk_evidence")
+    assert bond_record.value_present is True
+    assert bond_record.anchor_present is True
+    assert bond_record.bond_risk_contract_status == "partial"
+    assert bond_record.bond_risk_satisfied_groups == tuple(BOND_RISK_EVIDENCE_GROUP_IDS[:4])
+    assert bond_record.bond_risk_missing_groups == ("convertible_bond_equity_exposure",)
+    assert bond_record.bond_risk_weak_groups == ("drawdown_stress",)
+    assert bond_record.bond_risk_ambiguous_groups == ("redemption_share_pressure",)
+    assert bond_record.comparable_values == {}
+    assert bond_record.note is not None
+    assert "missing_groups=convertible_bond_equity_exposure" in bond_record.note
+    assert "weak_groups=drawdown_stress" in bond_record.note
+    assert "ambiguous_groups=redemption_share_pressure" in bond_record.note
+
+
+def test_build_snapshot_records_projects_missing_bond_risk_evidence_for_non_bond() -> None:
+    """验证非债券或缺失债券风险证据不会误报 value/anchor。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当缺失契约被误判为存在时抛出。
+    """
+
+    bundle = _build_bundle("110011", "active_fund")
+    selected_fund = SelectedFundRecord(
+        line_number=2,
+        fund_name="易方达中小盘混合",
+        fund_code="110011",
+        app_category="国内股票类",
+    )
+
+    records = build_snapshot_records(
+        bundle=bundle,
+        selected_fund=selected_fund,
+        run_id="unit-run",
+        extraction_timestamp="2026-05-19T00:00:00+00:00",
+        source_csv="docs/code_20260519.csv",
+    )
+
+    bond_record = next(record for record in records if record.field_name == "bond_risk_evidence")
+    assert bond_record.value_present is False
+    assert bond_record.anchor_present is False
+    assert bond_record.section_id is None
+    assert bond_record.page is None
+    assert bond_record.table_id is None
+    assert bond_record.row_id is None
+    assert bond_record.bond_risk_contract_status is None
+    assert bond_record.bond_risk_satisfied_groups == ()
+    assert bond_record.bond_risk_missing_groups == ()
+    assert bond_record.bond_risk_weak_groups == ()
+    assert bond_record.bond_risk_ambiguous_groups == ()
+    assert bond_record.comparable_values == {}
+
+
+def test_build_snapshot_records_treats_missing_bond_risk_contract_as_not_present() -> None:
+    """验证结构化值存在但契约状态为 missing 时不会计入 value_present。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 missing 契约被误判为存在时抛出。
+    """
+
+    bond_value = _bond_risk_value(
+        overrides={group_id: "missing" for group_id in BOND_RISK_EVIDENCE_GROUP_IDS}
+    )
+    bundle = _build_bundle("006597", "bond_fund", bond_risk_evidence=_bond_risk_field(bond_value))
+    selected_fund = SelectedFundRecord(
+        line_number=4,
+        fund_name="广发中债7-10年国开债指数A",
+        fund_code="006597",
+        app_category="国内债券类",
+    )
+
+    records = build_snapshot_records(
+        bundle=bundle,
+        selected_fund=selected_fund,
+        run_id="unit-run",
+        extraction_timestamp="2026-05-19T00:00:00+00:00",
+        source_csv="docs/code_20260519.csv",
+    )
+
+    bond_record = next(record for record in records if record.field_name == "bond_risk_evidence")
+    assert bond_record.value_present is False
+    assert bond_record.anchor_present is True
+    assert bond_record.bond_risk_contract_status == "missing"
+    assert bond_record.bond_risk_missing_groups == tuple(BOND_RISK_EVIDENCE_GROUP_IDS)
+    assert bond_record.bond_risk_satisfied_groups == ()
 
 
 def test_build_snapshot_records_copies_identical_bundle_source_provenance_to_all_rows() -> None:
@@ -551,6 +758,7 @@ def _build_bundle(
     include_index_quality: bool = False,
     include_composite_index_profile: bool = False,
     source_provenance: PublicSourceProvenance | None = None,
+    bond_risk_evidence: ExtractedField[BondRiskEvidenceValue] | None = None,
 ) -> StructuredFundDataBundle:
     """构造测试用结构化基金数据包。
 
@@ -560,6 +768,7 @@ def _build_bundle(
         include_index_quality: 是否填充指数画像和跟踪误差 dataclass 值。
         include_composite_index_profile: 是否填充复合基准指数画像 fixture。
         source_provenance: 可选公共来源 provenance fixture。
+        bond_risk_evidence: 可选债券风险证据 fixture，见模板第 6 章“核心风险”。
 
     Returns:
         fake 结构化基金数据包。
@@ -732,6 +941,152 @@ def _build_bundle(
             cached=True,
         ),
         **({"source_provenance": source_provenance} if source_provenance is not None else {}),
+        **({"bond_risk_evidence": bond_risk_evidence} if bond_risk_evidence is not None else {}),
+    )
+
+
+def _bond_risk_value(
+    *,
+    overrides: dict[BondRiskEvidenceGroupId, str] | None = None,
+) -> BondRiskEvidenceValue:
+    """构造债券风险证据契约值 fixture，见模板第 6 章“核心风险”。
+
+    Args:
+        overrides: 风险组到状态的覆盖映射。
+
+    Returns:
+        fake `BondRiskEvidenceValue`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    status_by_group = overrides or {}
+    groups = tuple(
+        _bond_risk_group_record(group_id, status_by_group.get(group_id, "accepted"))
+        for group_id in BOND_RISK_EVIDENCE_GROUP_IDS
+    )
+    anchors = tuple(
+        BondRiskEvidenceAnchorRef(
+            anchor_id=f"bond-risk:006597:2024:{group_id}:1",
+            section_id="§8",
+            page_number=59,
+            table_id="page-59-table-1",
+            row_locator="bond_risk_evidence",
+            evidence_role="fixture",
+        )
+        for group_id in BOND_RISK_EVIDENCE_GROUP_IDS
+        if status_by_group.get(group_id, "accepted") != "missing"
+    )
+    satisfied_group_ids = tuple(
+        group.group_id for group in groups if group.status in {"accepted", "accepted_absence"}
+    )
+    missing_group_ids = tuple(group.group_id for group in groups if group.status == "missing")
+    weak_group_ids = tuple(group.group_id for group in groups if group.status == "weak")
+    ambiguous_group_ids = tuple(group.group_id for group in groups if group.status == "ambiguous")
+    if len(satisfied_group_ids) == len(BOND_RISK_EVIDENCE_GROUP_IDS):
+        contract_status = "satisfied"
+    elif satisfied_group_ids or weak_group_ids or ambiguous_group_ids:
+        contract_status = "partial"
+    else:
+        contract_status = "missing"
+    return BondRiskEvidenceValue(
+        schema_version=BOND_RISK_EVIDENCE_CONTRACT_ID,
+        contract_id=BOND_RISK_EVIDENCE_CONTRACT_ID,
+        fund_code="006597",
+        report_year=2024,
+        groups=groups,
+        anchors=anchors,
+        satisfied_group_ids=satisfied_group_ids,
+        missing_group_ids=missing_group_ids,
+        weak_group_ids=weak_group_ids,
+        ambiguous_group_ids=ambiguous_group_ids,
+        contract_status=contract_status,
+    )
+
+
+def _bond_risk_group_record(
+    group_id: BondRiskEvidenceGroupId,
+    status: str,
+) -> BondRiskEvidenceGroupRecord:
+    """构造单个债券风险证据组 fixture，见模板第 6 章“核心风险”。
+
+    Args:
+        group_id: 债券风险证据组 ID。
+        status: 证据状态。
+
+    Returns:
+        fake `BondRiskEvidenceGroupRecord`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if status == "missing":
+        return BondRiskEvidenceGroupRecord(
+            group_id=group_id,
+            status="missing",
+            strength="missing",
+            summary="fixture missing",
+            measurement_kind="not_found",
+            metric_name=None,
+            metric_value=None,
+            metric_unit=None,
+            period_label=None,
+            source_anchor_ids=(),
+            na_reason="fixture_missing",
+            reviewer_note=None,
+        )
+    if status == "weak":
+        strength = "qualitative_control_intent"
+    elif status == "ambiguous":
+        strength = "ambiguous"
+    else:
+        strength = "qualitative_direct"
+    return BondRiskEvidenceGroupRecord(
+        group_id=group_id,
+        status=status,  # type: ignore[arg-type]
+        strength=strength,  # type: ignore[arg-type]
+        summary=f"{group_id} fixture evidence",
+        measurement_kind="risk_disclosure",
+        metric_name=None,
+        metric_value=None,
+        metric_unit=None,
+        period_label="2024 年报",
+        source_anchor_ids=(f"bond-risk:006597:2024:{group_id}:1",),
+        na_reason=None,
+        reviewer_note=None,
+    )
+
+
+def _bond_risk_field(value: BondRiskEvidenceValue) -> ExtractedField[BondRiskEvidenceValue]:
+    """构造债券风险证据 ExtractedField fixture，见模板第 6 章“核心风险”。
+
+    Args:
+        value: 债券风险证据契约值。
+
+    Returns:
+        fake `ExtractedField`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return ExtractedField(
+        value=value,
+        anchors=(
+            EvidenceAnchor(
+                source_kind="annual_report",
+                document_year=2024,
+                section_id="§8",
+                page_number=59,
+                table_id="page-59-table-1",
+                row_locator="bond_risk_evidence",
+                note="bond_risk_evidence fixture",
+            ),
+        ),
+        extraction_mode="direct" if value.contract_status == "satisfied" else "estimated",
+        note="fixture bond risk evidence",
     )
 
 
