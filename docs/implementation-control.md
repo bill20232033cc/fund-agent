@@ -5,7 +5,7 @@
 > **设计真源**: `docs/design.md` (v2.2)
 > **规则真源**: `AGENTS.md`
 > **历史快照**: `docs/archive/implementation-control-history-20260525.md`
-> **当前状态**: release maintenance；baseline coverage disposition decision plan accepted locally；下一入口为 replacement/exclusion candidate selection gate
+> **当前状态**: release maintenance；replacement/exclusion candidate selection accepted locally；下一入口为 QDII replacement candidate selection plan gate
 
 ---
 
@@ -25,9 +25,9 @@
 |---|---|
 | Branch | `codex/local-reconciliation` |
 | Current phase | `release maintenance` |
-| Current gate | `baseline coverage disposition decision plan accepted locally` |
-| Next entry point | `replacement/exclusion candidate selection gate for QDII/index/FOF coverage; must use init-agents / tmux multi-agent flow` |
-| Latest accepted gate checkpoint | `baseline coverage disposition decision plan local accepted commit; use latest branch HEAD for exact hash` |
+| Current gate | `replacement/exclusion candidate selection accepted locally` |
+| Next entry point | `QDII replacement candidate selection plan gate; must use init-agents / tmux multi-agent flow` |
+| Latest accepted gate checkpoint | `replacement/exclusion candidate selection local accepted commit; use latest branch HEAD for exact hash` |
 | Design truth | `docs/design.md` (v2.2) |
 | Control truth | `docs/implementation-control.md` |
 | Historical control snapshot | `docs/archive/implementation-control-history-20260525.md` |
@@ -311,6 +311,10 @@
 | baseline coverage disposition plan review: MiMo | `docs/reviews/release-maintenance-baseline-coverage-disposition-decision-plan-review-mimo-20260527.md` |
 | baseline coverage disposition plan review: GLM | `docs/reviews/release-maintenance-baseline-coverage-disposition-decision-plan-review-glm-20260527.md` |
 | baseline coverage disposition plan controller judgment | `docs/reviews/release-maintenance-baseline-coverage-disposition-decision-plan-controller-judgment-20260527.md` |
+| replacement/exclusion candidate selection | `docs/reviews/release-maintenance-replacement-exclusion-candidate-selection-20260527.md` |
+| replacement/exclusion selection review: MiMo | `docs/reviews/release-maintenance-replacement-exclusion-candidate-selection-review-mimo-20260527.md` |
+| replacement/exclusion selection review: DS | `docs/reviews/release-maintenance-replacement-exclusion-candidate-selection-review-ds-20260527.md` |
+| replacement/exclusion selection controller judgment | `docs/reviews/release-maintenance-replacement-exclusion-candidate-selection-controller-judgment-20260527.md` |
 
 ### Current Decisions
 
@@ -393,6 +397,7 @@
 - 017641 manager_strategy_text quality triage plan is accepted locally. The plan and two independent reviews agree that current `quality_gate_status=block` is not enough to infer an extractor gap; the next safe gate is public-only evidence triage using existing `extraction-snapshot`, `extraction-score`, and `quality-gate` commands. Next evidence must classify exactly one terminal state, keep `017641` `not_promoted`, explicitly compare any policy/taxonomy classification against current `design.md` P0 applicability, and stop on provenance regression, indirect evidence, direct PDF/cache/source-helper access, quality-gate weakening, or promotion.
 - 017641 manager_strategy_text public evidence triage is accepted locally. Public CLI evidence kept complete eligible fallback provenance and confirmed `manager_strategy_text` remains a P0 quality block with no value, no anchor, and no locator. Reviews accepted terminal classification `disclosure_data_gap_not_baseline_ready`; this does not authorize extractor implementation, policy/taxonomy changes, baseline/golden promotion, or fixture promotion. Future similar evidence artifacts should cite exact JSON locations and independent `classification_basis` context where available.
 - Baseline coverage disposition decision plan is accepted locally. The next cursor is `replacement/exclusion candidate selection gate for QDII/index/FOF coverage`, because current accepted states require disposition before more evidence, extractor work, durable baseline, or golden corpus. The next gate must produce a reviewed disposition matrix with owner and revisit condition for every slot. `004393` and `004194` remain carry-forward evaluated candidates only; `006597` bond disposition remains a separate follow-up and golden blocker until `bond_risk_evidence_missing.baseline_blocking=true` is resolved or dispositioned.
+- Replacement/exclusion candidate selection is accepted locally. Accepted dispositions: `110020=include_for_later_review`, `017641=replace`, `FOF=needs_taxonomy_gate`, `004393/004194=include_for_later_review`, and `006597=needs_evidence_gate` as a separate bond follow-up. The next cursor is renamed to `QDII replacement candidate selection plan gate` so plan/review happens before any evidence CLI. No row is promoted.
 
 ### Current Non-Goals
 
@@ -405,19 +410,16 @@
 
 ## Next Entry Point
 
-`replacement/exclusion candidate selection gate for QDII/index/FOF coverage`
+`QDII replacement candidate selection plan gate`
 
-This next gate must start with Startup Packet replay and `$init-agents` / tmux multi-agent flow. It is a decision/planning gate, not an implementation or evidence gate, and must not implement extractor changes or run new evidence unless a later reviewed evidence gate is accepted.
+This next gate must start with Startup Packet replay and `$init-agents` / tmux multi-agent flow. It is a plan gate, not an evidence or implementation gate, and must not run replacement evidence CLI commands unless a later reviewed evidence gate is accepted.
 
 Scope allowed for the next gate:
 
-- Build a candidate disposition matrix for index, QDII, and FOF coverage using accepted evidence only.
-- Allowed dispositions include `include_for_later_review`, `replace`, `exclude_from_v1`, `needs_taxonomy_gate`, and `needs_evidence_gate`.
-- Assign an owner and revisit condition for every disposition outcome.
-- Preserve that `017641` cannot enter durable baseline, clean denominator, fixture, report-quality corpus, or golden answer corpus from this evidence alone.
-- Preserve that `110020` is only reviewed coverage candidate input, not baseline/golden ready.
-- Preserve that `004393` and `004194` are carry-forward evaluated candidates, not promoted fixtures, and that `006597` bond disposition remains a separate follow-up / golden blocker.
-- Produce a decision artifact, two independent plan reviews, and controller judgment before any implementation.
+- Define valid QDII replacement criteria, candidate source, source-safety requirements, stop conditions, exact future evidence commands, and no-promotion guardrails.
+- Preserve accepted disposition `017641=replace` and `not_promoted`; do not reinterpret it as extractor gap or policy/taxonomy issue.
+- Preserve accepted dispositions for `110020`, FOF, `004393`, `004194`, and `006597`.
+- Produce a plan artifact, two independent plan reviews, and controller judgment before any evidence or implementation.
 - Update `docs/implementation-control.md` after controller judgment.
 
 Do not enter `golden answer corpus v1` until coverage, source, quality, fund-type, and fixture-promotion blockers are resolved. Do not promote samples to durable baseline or golden answer corpus in this gate. Do not modify code, renderer, FQ0-FQ6 policy, default analyze/checklist behavior, Host/Agent packages, Dayu runtime, `FundDocumentRepository` source strategy, source-helper fallback semantics, extractor logic, `fund_type.py`, or golden/baseline fixtures unless a later accepted plan explicitly expands scope.
@@ -467,7 +469,7 @@ Do not push, create PR, mark ready, merge, close PRs, edit unrelated PRs, delete
 | NAV external-data degradation | Completed in core reliability implementation | NAV provider/cache/akshare failures degrade to `NavDataResult(unavailable=True, records=[])`; annual-report repository/PDF/source fail-closed semantics remain outside the catch boundary |
 | Pre-2026 turnover-rate missing semantics | Completed in core reliability implementation | Focused tests lock missing `turnover_rate` as P1 warn/insufficiency, not standalone hard block; FQ4 aggregate missing-rate semantics remain unchanged |
 | Small baseline corpus v1 | Completed in evidence run | Accepted 8 candidate rows / 7 unique fund codes as evidence only. `004393` / 2024 and `004194` / 2024 are quality-gate `warn`; `006597` / 2024 is quality-gate `block`; index/QDII fallback and FOF data-gap remain blockers. No durable baseline or golden promotion. |
-| Index/QDII source recovery for baseline coverage | replacement/exclusion candidate selection gate | Post-implementation public rerun resolved source provenance for `110020` / `017641` as eligible fallback after primary `unavailable`. `110020` evidence is accepted as reviewed coverage candidate input and remains not promoted; `017641` is provenance-complete but quality `block` due to `manager_strategy_text` and now classified `disclosure_data_gap_not_baseline_ready`. Produce reviewed disposition matrix before golden/baseline work. |
+| Index/QDII source recovery for baseline coverage | QDII replacement candidate selection plan gate | Post-implementation public rerun resolved source provenance for `110020` / `017641` as eligible fallback after primary `unavailable`. `110020` evidence is accepted as reviewed coverage candidate input and remains not promoted; `017641` is provenance-complete but quality `block` due to `manager_strategy_text` and now classified `disclosure_data_gap_not_baseline_ready`; accepted disposition is `replace`. Plan QDII replacement selection before any replacement evidence run. |
 | Source metadata `fallback_used` strict bool parsing | future source provenance hardening gate | Repo review F3 found that `AnnualReportSourceMetadata.from_dict()` can coerce string `"false"` to `True`. This docs-only gate defers implementation; future gate should plan/review a strict bool parser and tests without weakening provenance semantics. |
 | FOF coverage / taxonomy | next baseline coverage / taxonomy gate | Find pure `fof_fund` repository-verified candidate, or open a taxonomy gate before counting QDII-FOF attempts as FOF coverage. |
 | `006597` bond quality-gate block | Completed for holdings applicability; future bond/holder/turnover evidence gates remain | `holdings_snapshot` equity-shape false blocker is resolved into `bond_risk_evidence_missing` / `FQ2F/warn`; 006597 now warns rather than blocks for this reason. Do not route to golden while `bond_risk_evidence_missing.baseline_blocking=true` or other P1 gaps remain. |
@@ -540,6 +542,7 @@ Do not push, create PR, mark ready, merge, close PRs, edit unrelated PRs, delete
 | `017641 manager_strategy_text quality triage plan` | accepted locally | `docs/reviews/release-maintenance-017641-manager-strategy-text-quality-triage-plan-controller-judgment-20260527.md` | AgentCodex plan; MiMo review `PASS`; GLM review `PASS_WITH_FINDINGS`; non-blocking findings accepted as next-gate guidance; `git diff --check` passed; no code/product-flow changes | public evidence run, root-cause classification, QDII P0 applicability comparison if policy/taxonomy path, no promotion, golden/baseline blocked | `017641 manager_strategy_text public-only evidence triage gate` |
 | `017641 manager_strategy_text public evidence triage` | accepted locally | `docs/reviews/release-maintenance-017641-manager-strategy-text-public-evidence-triage-controller-judgment-20260527.md` | Public snapshot/score/quality-gate and `git diff --check` exited 0; MiMo/GLM reviews `PASS_WITH_FINDINGS`; terminal `disclosure_data_gap_not_baseline_ready`; no promotion | QDII coverage remains not baseline-ready, replacement/exclusion decision, FOF/taxonomy, bond positive-risk evidence, golden/baseline blocked | `baseline coverage disposition decision gate` |
 | `baseline coverage disposition decision plan` | accepted locally | `docs/reviews/release-maintenance-baseline-coverage-disposition-decision-plan-controller-judgment-20260527.md` | AgentCodex plan; MiMo/GLM reviews `PASS_WITH_FINDINGS`; informational findings accepted as next-gate requirements; `git diff --check` passed; no code/evidence/product-flow changes | disposition matrix for index/QDII/FOF, owners/revisit conditions, bond follow-up, golden/baseline blocked | `replacement/exclusion candidate selection gate for QDII/index/FOF coverage` |
+| `replacement/exclusion candidate selection` | accepted locally | `docs/reviews/release-maintenance-replacement-exclusion-candidate-selection-controller-judgment-20260527.md` | AgentCodex decision artifact; MiMo review `PASS`; DS review `PASS_WITH_FINDINGS`; DS F1 accepted by renaming next cursor to plan-first; `git diff --check` passed; no evidence/code/control/product-flow changes before controller judgment | QDII replacement criteria and plan, FOF taxonomy, index reviewed facts, bond positive-risk evidence, golden/baseline blocked | `QDII replacement candidate selection plan gate` |
 
 ## Historical Evidence Index
 
