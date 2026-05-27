@@ -167,7 +167,7 @@ CLI（Typer app）
 
 **dev-only 写作审计**：`fund_agent/fund/report_writing_audit.py` 只消费调用方显式传入的 `ReportEvidenceBundle`、已解析 records 和 `ChapterDraftSurrogate`，输出 deterministic issue list / summary / failure category / evidence requirement gaps。它不读取基金文档、不调用 `FundDocumentRepository`、不接入 renderer、Service/CLI 默认链路、FQ0-FQ6 quality gate、Host/Agent 或 Dayu runtime。
 
-**已接受的未来设计：active-fund 第 3 章 renderer 最小输出契约**：后续若进入单独 implementation gate，renderer 只允许先在 `active_fund` 第 3 章补齐缺证据降级措辞。当当前 renderer 输入缺少显式已复核换手率或跨期风格变化证据时，不得输出风格稳定、风格一致或言行一致正向判断，必须明示 `证据不足`、说明不能据此判断风格稳定 / 风格一致 / 言行一致，并给出一个复核年报§8换手率及跨期行业配置 / 持仓集中度变化的下一步最小验证问题。该设计不授权当前代码实现，不接入 dev-only audit 到 renderer，不改变 Service/CLI、FQ0-FQ6，也不扩大到增强指数第 2 章或债券第 6 章；若未来 implementation gate 被接受，只允许 active-fund 第 3 章缺证据文本发生 scoped output change，默认入口、参数、退出码、Service 控制流和 quality-gate 语义必须保持不变。由于当前 renderer 输入没有显式 reviewed turnover/style evidence 状态，未来最小实现必须把 active-fund 第 3 章视为 missing-reviewed-evidence 默认路径；任何正向 reviewed-evidence 分支都需要单独 input-contract design gate。
+**当前已实现：active-fund 第 3 章 renderer 最小输出契约**：`fund_agent/fund/template/renderer.py` 当前只在 `active_fund` 第 3 章实现缺证据降级措辞。当 renderer 输入缺少显式已复核换手率或跨期风格变化证据时，不输出风格稳定、风格一致或言行一致正向判断，而是明示 `证据不足`，说明不能据此判断风格稳定 / 风格一致 / 言行一致，并给出复核年报§8换手率及跨期行业配置 / 持仓集中度变化的下一步最小验证问题。该实现不接入 dev-only audit 到 renderer，不改变 Service/CLI、FQ0-FQ6、默认入口、参数、退出码或 Service 控制流，也不扩大到增强指数第 2 章或债券第 6 章。由于当前 renderer 输入没有显式 reviewed turnover/style evidence 状态，当前实现把 active-fund 第 3 章视为 missing-reviewed-evidence 默认路径；任何正向 reviewed-evidence 分支仍属于已接受的未来设计，必须先进入单独 input-contract design gate。
 
 ### 3.3 ITEM_RULE 机制
 
@@ -832,8 +832,10 @@ strict golden answer 的可比身份键同样使用 `fund_code + report_year + f
 | 判断值 | 含义 | 触发条件 |
 |--------|------|----------|
 | `worth_holding` | 值得持有 | 无否决项，检查清单通过，质量门控通过 |
-| `needs_attention` | 需要关注 | 存在需要监控的风险信号，但未达替换标准 |
-| `suggest_replace` | 建议替换 | 存在否决项，或检查清单未通过，或质量门控阻断 |
+| `needs_attention` | 需要关注 | quality gate `block/not_run`、数据质量不足、检查清单黄/灰、风险 watch 或压力测试接近边界，但未达替换标准 |
+| `suggest_replace` | 建议替换 | 存在否决项，或检查清单红灯，或基础 `minus_20` 压力场景越过用户承受能力 |
+
+该推导口径与第 4.8 节一致：quality gate `block/not_run` 表示数据质量不足，只派生 `needs_attention`；它不是基金产品本身应替换的同源证据，不能单独触发 `suggest_replace`。`suggest_replace` 只来自否决项、检查清单红灯、基础 `minus_20` 压力场景越过用户承受能力等产品或用户风险证据。
 
 **开发者覆盖模式**：
 - 允许开发者显式传入 `final_judgment_override` 覆盖推导结果
