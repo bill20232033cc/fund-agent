@@ -5,7 +5,7 @@
 > **设计真源**: `docs/design.md` (v2.2)
 > **规则真源**: `AGENTS.md`
 > **历史快照**: `docs/archive/implementation-control-history-20260525.md`
-> **当前状态**: release maintenance；QDII replacement candidate evidence plan accepted locally；下一入口为 QDII replacement candidate evidence gate
+> **当前状态**: release maintenance；QDII replacement candidate evidence accepted locally；下一入口为 QDII replacement fallback candidate evidence plan gate for 040046
 
 ---
 
@@ -25,9 +25,9 @@
 |---|---|
 | Branch | `codex/local-reconciliation` |
 | Current phase | `release maintenance` |
-| Current gate | `QDII replacement candidate evidence plan accepted locally` |
-| Next entry point | `QDII replacement candidate evidence gate; must use init-agents / tmux multi-agent flow` |
-| Latest accepted gate checkpoint | `QDII replacement candidate evidence plan local accepted commit; use latest branch HEAD for exact hash` |
+| Current gate | `QDII replacement candidate evidence accepted locally` |
+| Next entry point | `QDII replacement fallback candidate evidence plan gate for 040046; must use init-agents / tmux multi-agent flow` |
+| Latest accepted gate checkpoint | `QDII replacement candidate evidence local accepted commit; use latest branch HEAD for exact hash` |
 | Design truth | `docs/design.md` (v2.2) |
 | Control truth | `docs/implementation-control.md` |
 | Historical control snapshot | `docs/archive/implementation-control-history-20260525.md` |
@@ -327,6 +327,12 @@
 | QDII replacement evidence plan review: MiMo | `docs/reviews/release-maintenance-qdii-replacement-candidate-evidence-plan-review-mimo-20260527.md` |
 | QDII replacement evidence plan review: DS | `docs/reviews/release-maintenance-qdii-replacement-candidate-evidence-plan-review-ds-20260527.md` |
 | QDII replacement evidence plan controller judgment | `docs/reviews/release-maintenance-qdii-replacement-candidate-evidence-plan-controller-judgment-20260527.md` |
+| QDII replacement candidate evidence: 096001 | `docs/reviews/release-maintenance-qdii-replacement-candidate-evidence-20260527.md` |
+| QDII replacement evidence review: DS | `docs/reviews/release-maintenance-qdii-replacement-candidate-evidence-review-ds-20260527.md` |
+| QDII replacement evidence review: GLM | `docs/reviews/release-maintenance-qdii-replacement-candidate-evidence-review-glm-20260527.md` |
+| QDII replacement evidence re-review: DS | `docs/reviews/release-maintenance-qdii-replacement-candidate-evidence-rereview-ds-20260527.md` |
+| QDII replacement evidence re-review: GLM | `docs/reviews/release-maintenance-qdii-replacement-candidate-evidence-rereview-glm-20260527.md` |
+| QDII replacement evidence controller judgment | `docs/reviews/release-maintenance-qdii-replacement-candidate-evidence-controller-judgment-20260527.md` |
 
 ### Current Decisions
 
@@ -413,6 +419,7 @@
 - QDII replacement candidate selection plan is accepted locally. Current accepted artifacts contain no controller-approved QDII replacement candidate, so the next cursor is `QDII replacement candidate enumeration plan gate`, not evidence. The next plan must independently scan `docs/code_20260519.csv` as a candidate universe, flag QDII naming/category conflicts such as `013308`, include accepted-source-provenance status or `provenance_unknown`, and include CSV category / asset-class context so equity-QDII vs bond-QDII replacement fitness is visible.
 - QDII replacement candidate enumeration plan is accepted locally. The CSV universe scan accounts for all QDII-relevant rows; `017641` remains excluded as `replace` / `not_promoted` / `disclosure_data_gap_not_baseline_ready`; QDII-FOF rows remain excluded until a taxonomy gate accepts them; `013308` is explicitly flagged as QDII-name vs `国内股票类` conflict. `096001` is accepted only as the single candidate for the next evidence plan gate, with `source_provenance=provenance_unknown`, quality unknown, and no source-safe / scoring-ready / baseline / golden / replacement promotion.
 - QDII replacement candidate evidence plan is accepted locally. The next evidence gate may run public CLI preflight and then a bounded `096001` / 2024 public evidence sequence only if flags match. Source provenance must be interpreted before quality; fail-closed source categories stop; `manager_strategy_text` P0 is interpreted only after eligible provenance; every terminal outcome remains `promotion_disposition=not_promoted`. Plan-review process note: one review referenced CLI help despite no-command handoff, so future review/evidence handoffs must be explicit that CLI help is forbidden unless authorized; that new help fact was not used as acceptance evidence.
+- QDII replacement candidate evidence for `096001` / 2024 is accepted locally. Public provenance is complete eligible fallback (`resolved_source_name=eastmoney`, `fallback_used=true`, `primary_failure_category=unavailable`, `fallback_eligibility=eligible`, `source_provenance_status=complete`), but quality gate is `block` with terminal `quality_blocked_after_provenance`; P0 blocker is `nav_benchmark_performance`, FQ4 missing-field-rate is `42.9%`, and `manager_strategy_text` passes. `096001` remains `not_promoted` and is not replacement-ready, baseline-ready, scoring-ready, golden-ready, or source-safe for promotion.
 
 ### Current Non-Goals
 
@@ -425,27 +432,21 @@
 
 ## Next Entry Point
 
-`QDII replacement candidate evidence gate`
+`QDII replacement fallback candidate evidence plan gate for 040046`
 
-This next gate must start with Startup Packet replay and `$init-agents` / tmux multi-agent flow. It is a bounded evidence gate for `096001` / 2024 only. It may run the accepted public CLI preflight and evidence commands, but must not promote the candidate or change product behavior.
+This next gate must start with Startup Packet replay and `$init-agents` / tmux multi-agent flow. It is a plan gate, not an evidence gate. It must not run fallback evidence CLI commands until the plan is reviewed and accepted.
 
 Scope allowed for the next gate:
 
-- Run public CLI help/preflight first and stop with `terminal_classification=cli_flag_mismatch_not_run` if required flags differ.
-- Run evidence only for `096001` / 2024.
-- Use the accepted public command sequence: `extraction-snapshot`, `extraction-score`, and `quality-gate`.
-- Pass explicit paths, especially `--score-path`; do not rely on CLI defaults.
-- Keep generated outputs in ignored report paths and record actual generated paths in a tracked summary artifact.
-- Interpret public source provenance before quality or promotion language.
-- Stop on fail-closed source categories: `schema_drift`, `identity_mismatch`, `integrity_error`.
-- Treat missing/incomplete public provenance as not eligible, not as fallback permission.
-- Interpret `manager_strategy_text` P0 only after provenance is eligible.
-- Record terminal classification and `promotion_disposition=not_promoted` for every outcome.
-- Do not run fallback candidates in this gate.
+- Produce a plan artifact for `040046` / 2024 as the next fallback candidate from the accepted enumeration fallback order.
+- Treat `040046` as `provenance_unknown`, `quality_unknown`, and `promotion_disposition=not_promoted` until future evidence proves otherwise.
+- Reuse the accepted public evidence-plan shape: CLI preflight, public snapshot / score / quality-gate commands, generated-output provenance reading, provenance-before-quality ordering, fail-closed stop categories, terminal classification matrix, and `promotion_disposition=not_promoted`.
+- Do not run evidence in the plan gate.
+- Do not run `019172` or any later fallback candidate in this plan gate.
 - Keep `017641` excluded; keep QDII-FOF excluded unless a separate taxonomy gate accepts QDII-FOF for the QDII slot.
 - Keep `013308` out of evidence until its QDII-name vs `国内股票类` conflict is resolved by a future taxonomy/controller gate.
 - Preserve accepted dispositions for `017641`, `110020`, FOF, `004393`, `004194`, `006597`, and all QDII enumeration rows.
-- Produce a tracked evidence summary artifact, two independent evidence reviews, and controller judgment.
+- Produce a plan artifact, two independent plan reviews, and controller judgment before any fallback evidence run.
 - Update `docs/implementation-control.md` after controller judgment.
 
 Do not enter `golden answer corpus v1` until coverage, source, quality, fund-type, and fixture-promotion blockers are resolved. Do not promote samples to durable baseline or golden answer corpus in this gate. Do not modify code, renderer, FQ0-FQ6 policy, default analyze/checklist behavior, Host/Agent packages, Dayu runtime, `FundDocumentRepository` source strategy, source-helper fallback semantics, extractor logic, `fund_type.py`, or golden/baseline fixtures unless a later accepted plan explicitly expands scope.
@@ -495,7 +496,7 @@ Do not push, create PR, mark ready, merge, close PRs, edit unrelated PRs, delete
 | NAV external-data degradation | Completed in core reliability implementation | NAV provider/cache/akshare failures degrade to `NavDataResult(unavailable=True, records=[])`; annual-report repository/PDF/source fail-closed semantics remain outside the catch boundary |
 | Pre-2026 turnover-rate missing semantics | Completed in core reliability implementation | Focused tests lock missing `turnover_rate` as P1 warn/insufficiency, not standalone hard block; FQ4 aggregate missing-rate semantics remain unchanged |
 | Small baseline corpus v1 | Completed in evidence run | Accepted 8 candidate rows / 7 unique fund codes as evidence only. `004393` / 2024 and `004194` / 2024 are quality-gate `warn`; `006597` / 2024 is quality-gate `block`; index/QDII fallback and FOF data-gap remain blockers. No durable baseline or golden promotion. |
-| Index/QDII source recovery for baseline coverage | QDII replacement candidate evidence gate | Post-implementation public rerun resolved source provenance for `110020` / `017641` as eligible fallback after primary `unavailable`. `110020` evidence is accepted as reviewed coverage candidate input and remains not promoted; `017641` is provenance-complete but quality `block` due to `manager_strategy_text` and now classified `disclosure_data_gap_not_baseline_ready`; accepted disposition is `replace`. Evidence plan accepted `096001` only as the single bounded evidence candidate, not as source-safe or promoted. |
+| Index/QDII source recovery for baseline coverage | QDII replacement fallback candidate evidence plan gate for 040046 | Post-implementation public rerun resolved source provenance for `110020` / `017641` as eligible fallback after primary `unavailable`. `110020` evidence is accepted as reviewed coverage candidate input and remains not promoted; `017641` is provenance-complete but quality `block` due to `manager_strategy_text` and now classified `disclosure_data_gap_not_baseline_ready`; accepted disposition is `replace`. `096001` evidence is source-provenance eligible but quality `block` (`quality_blocked_after_provenance`) and remains not promoted; plan the next fallback candidate `040046` before any evidence. |
 | Source metadata `fallback_used` strict bool parsing | future source provenance hardening gate | Repo review F3 found that `AnnualReportSourceMetadata.from_dict()` can coerce string `"false"` to `True`. This docs-only gate defers implementation; future gate should plan/review a strict bool parser and tests without weakening provenance semantics. |
 | FOF coverage / taxonomy | next baseline coverage / taxonomy gate | Find pure `fof_fund` repository-verified candidate, or open a taxonomy gate before counting QDII-FOF attempts as FOF coverage. |
 | `006597` bond quality-gate block | Completed for holdings applicability; future bond/holder/turnover evidence gates remain | `holdings_snapshot` equity-shape false blocker is resolved into `bond_risk_evidence_missing` / `FQ2F/warn`; 006597 now warns rather than blocks for this reason. Do not route to golden while `bond_risk_evidence_missing.baseline_blocking=true` or other P1 gaps remain. |
@@ -572,6 +573,7 @@ Do not push, create PR, mark ready, merge, close PRs, edit unrelated PRs, delete
 | `QDII replacement candidate selection plan` | accepted locally | `docs/reviews/release-maintenance-qdii-replacement-candidate-selection-plan-controller-judgment-20260527.md` | AgentCodex plan; MiMo review `PASS`; DS review `PASS_WITH_FINDINGS`; findings accepted as enumeration-gate requirements; `git diff --check` passed; no evidence/code/control/product-flow changes before controller judgment | QDII candidate enumeration from CSV universe, category conflicts, provenance unknown flags, golden/baseline blocked | `QDII replacement candidate enumeration plan gate` |
 | `QDII replacement candidate enumeration plan` | accepted locally | `docs/reviews/release-maintenance-qdii-replacement-candidate-enumeration-plan-controller-judgment-20260527.md` | AgentCodex plan scanned `docs/code_20260519.csv`; MiMo review `PASS`; DS review `PASS_WITH_FINDINGS`; non-blocking findings accepted/deferred; `git diff --check` passed; no evidence/code/control/product-flow changes before controller judgment | `096001` provenance/quality unknown, `013308` category conflict, bond QDII asset-class mismatch, QDII-FOF taxonomy, golden/baseline blocked | `QDII replacement candidate evidence plan gate` |
 | `QDII replacement candidate evidence plan` | accepted locally | `docs/reviews/release-maintenance-qdii-replacement-candidate-evidence-plan-controller-judgment-20260527.md` | AgentCodex plan; MiMo/DS reviews `PASS_WITH_FINDINGS`; non-blocking findings accepted as evidence-gate requirements; `git diff --check` passed; no evidence/code/control/product-flow changes before controller judgment | `096001` provenance/quality unknown, actual generated paths, CLI explicit path discipline, no promotion, golden/baseline blocked | `QDII replacement candidate evidence gate` |
+| `QDII replacement candidate evidence: 096001` | accepted locally | `docs/reviews/release-maintenance-qdii-replacement-candidate-evidence-controller-judgment-20260527.md` | Evidence initially blocked by DS/GLM because public generated provenance was not read; artifact fixed; DS/GLM re-reviews `PASS`; public provenance eligible, quality gate `block`, terminal `quality_blocked_after_provenance`; `git diff --check` passed; reports stayed ignored | `096001` P0 `nav_benchmark_performance`, FQ4 missing-rate, P1 gaps, Eastmoney fallback source, golden/baseline blocked | `QDII replacement fallback candidate evidence plan gate for 040046` |
 
 ## Historical Evidence Index
 
