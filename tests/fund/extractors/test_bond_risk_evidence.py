@@ -6,6 +6,9 @@ from dataclasses import replace
 
 import pytest
 
+import fund_agent.fund.extractors.bond_risk_evidence as bond_risk_module
+from fund_agent.fund.documents.models import DocumentKey, ParsedAnnualReport, ParsedTable, ReportSection
+from fund_agent.fund.extractors.bond_risk_evidence import extract_bond_risk_evidence
 from fund_agent.fund.extractors.models import (
     BOND_RISK_EVIDENCE_CONTRACT_ID,
     BOND_RISK_EVIDENCE_GROUP_IDS,
@@ -200,6 +203,278 @@ def test_explicit_absence_convertible_equity_record_is_accepted() -> None:
     assert "convertible_bond_equity_exposure" in value.satisfied_group_ids
 
 
+def test_table_backed_credit_risk_is_accepted_with_row_level_anchor() -> None:
+    """信用评级表格行应形成模板第 6 章信用风险 accepted 证据。"""
+
+    report = _build_report(
+        raw_text=_base_bond_raw_text(),
+        tables=(
+            ParsedTable(
+                page_number=53,
+                table_index=0,
+                headers=("信用评级", "占基金资产净值比例"),
+                rows=(("AAA 信用评级债券", "80.00%"),),
+            ),
+        ),
+    )
+
+    field = extract_bond_risk_evidence(report, "bond_fund")
+    assert field.value is not None
+    group = _group_by_id(field.value, "credit_risk")
+
+    assert group.status == "accepted"
+    assert group.strength == "quantitative_direct"
+    assert group.measurement_kind == "actual_exposure"
+    assert group.source_anchor_ids == ("bond-risk:006597:2024:credit_risk:1",)
+    anchor = _anchor_ref_by_id(field.value, group.source_anchor_ids[0])
+    assert anchor.table_id == "page-53-table-0"
+    assert anchor.row_locator.startswith("row:1:")
+
+
+def test_flexible_leverage_strategy_text_alone_is_weak() -> None:
+    """杠杆策略文本没有回购/融资行时只能作为弱证据。"""
+
+    report = _build_report(
+        raw_text=_base_bond_raw_text(
+            section_four_extra="本基金报告期内灵活运用杠杆策略，注重组合收益弹性。",
+        ),
+        tables=(),
+    )
+
+    field = extract_bond_risk_evidence(report, "bond_fund")
+    assert field.value is not None
+    group = _group_by_id(field.value, "leverage_liquidity")
+
+    assert group.status == "weak"
+    assert group.strength == "qualitative_direct"
+    assert group.na_reason == "repo_or_liquidity_table_not_found"
+    assert "leverage_liquidity" in field.value.weak_group_ids
+    assert "leverage_liquidity" not in field.value.satisfied_group_ids
+
+
+def test_repo_table_row_plus_liquidity_text_satisfies_leverage_liquidity() -> None:
+    """回购表格行配合流动性风险文本可满足模板第 6 章杠杆/流动性组。"""
+
+    report = _build_report(
+        raw_text=_base_bond_raw_text(section_four_extra="管理人严格控制流动性风险，保持组合流动性。"),
+        tables=(
+            ParsedTable(
+                page_number=59,
+                table_index=1,
+                headers=("项目", "金额"),
+                rows=(("买入返售金融资产-回购", "10,000,000.00"),),
+            ),
+        ),
+    )
+
+    field = extract_bond_risk_evidence(report, "bond_fund")
+    assert field.value is not None
+    group = _group_by_id(field.value, "leverage_liquidity")
+
+    assert group.status == "accepted"
+    assert group.strength == "quantitative_direct"
+    assert group.measurement_kind == "actual_exposure"
+    assert len(group.source_anchor_ids) == 2
+    assert "leverage_liquidity" in field.value.satisfied_group_ids
+
+
+def test_drawdown_control_text_alone_is_weak() -> None:
+    """回撤控制意图不能被提升为最大回撤或压力测试证据。"""
+
+    report = _build_report(
+        raw_text=_base_bond_raw_text(section_four_extra="本基金力争保持净值稳定并控制回撤。"),
+        tables=(),
+    )
+
+    field = extract_bond_risk_evidence(report, "bond_fund")
+    assert field.value is not None
+    group = _group_by_id(field.value, "drawdown_stress")
+
+    assert group.status == "weak"
+    assert group.strength == "qualitative_control_intent"
+    assert group.measurement_kind == "control_intent"
+    assert "drawdown_stress" in field.value.weak_group_ids
+    assert "drawdown_stress" not in field.value.satisfied_group_ids
+
+
+def test_multi_share_class_share_change_selects_target_class_when_disambiguated() -> None:
+    """§2 代码/简称映射明确时，份额变动表只选择目标份额类别列。"""
+
+    report = _build_report(
+        raw_text=_base_bond_raw_text(
+            section_two_extra="下属分级基金的基金简称 易方达安悦 A 易方达安悦 C\n"
+            "下属分级基金的交易代码 006597 006598",
+        ),
+        tables=(_share_change_table(),),
+    )
+
+    field = extract_bond_risk_evidence(report, "bond_fund")
+    assert field.value is not None
+    group = _group_by_id(field.value, "redemption_share_pressure")
+
+    assert group.status == "accepted"
+    assert group.strength == "quantitative_direct"
+    notes = tuple(anchor.note for anchor in field.anchors if anchor.section_id == "§10")
+    assert "期初基金份额总额=1,000,000.00" in notes
+    assert "本期基金总申购份额=200,000.00" in notes
+    assert "本期基金总赎回份额=300,000.00" in notes
+    assert "期末基金份额总额=900,000.00" in notes
+
+
+def test_ambiguous_multi_share_class_share_change_stays_ambiguous() -> None:
+    """缺少 §2 消歧证据时，多份额类别份额变动表不能满足赎回压力组。"""
+
+    report = _build_report(raw_text=_base_bond_raw_text(), tables=(_share_change_table(),))
+
+    field = extract_bond_risk_evidence(report, "bond_fund")
+    assert field.value is not None
+    group = _group_by_id(field.value, "redemption_share_pressure")
+
+    assert group.status == "ambiguous"
+    assert group.strength == "ambiguous"
+    assert group.na_reason == "ambiguous_share_class_selection"
+    assert "redemption_share_pressure" in field.value.ambiguous_group_ids
+    assert "redemption_share_pressure" not in field.value.satisfied_group_ids
+
+
+def test_convertible_and_equity_dash_rows_become_accepted_absence() -> None:
+    """权益和可转债 '-' 行应形成 accepted_absence 证据。"""
+
+    report = _build_report(
+        raw_text=_base_bond_raw_text(),
+        tables=(
+            ParsedTable(
+                page_number=59,
+                table_index=1,
+                headers=("项目", "金额", "占基金总资产比例"),
+                rows=(("股票", "-", "-"), ("可转债（可交换债）", "-", "-")),
+            ),
+        ),
+    )
+
+    field = extract_bond_risk_evidence(report, "bond_fund")
+    assert field.value is not None
+    group = _group_by_id(field.value, "convertible_bond_equity_exposure")
+
+    assert group.status == "accepted_absence"
+    assert group.strength == "quantitative_absence"
+    assert group.measurement_kind == "explicit_absence"
+    assert len(group.source_anchor_ids) == 2
+    assert "convertible_bond_equity_exposure" in field.value.satisfied_group_ids
+
+
+def test_non_bond_type_returns_missing_without_scanning_group_extractors(monkeypatch: pytest.MonkeyPatch) -> None:
+    """非债券或未知类型必须早退，不扫描七组风险 extractor。"""
+
+    def _fail_group_scan(_report: ParsedAnnualReport) -> object:
+        raise AssertionError("non-bond path must not scan bond evidence groups")
+
+    monkeypatch.setattr(bond_risk_module, "_extract_duration_rate_risk", _fail_group_scan)
+    field = extract_bond_risk_evidence(_build_report(raw_text=_base_bond_raw_text(), tables=()), "active_fund")
+
+    assert field.value is None
+    assert field.anchors == ()
+    assert field.extraction_mode == "missing"
+    assert field.note == "not_applicable_non_bond_fund"
+
+
+def test_none_fund_type_returns_missing_without_scanning_group_extractors(monkeypatch: pytest.MonkeyPatch) -> None:
+    """classified_fund_type 为 None 时必须早退，不扫描七组风险 extractor。"""
+
+    def _fail_group_scan(_report: ParsedAnnualReport) -> object:
+        raise AssertionError("None fund type must not scan bond evidence groups")
+
+    monkeypatch.setattr(bond_risk_module, "_extract_duration_rate_risk", _fail_group_scan)
+    field = extract_bond_risk_evidence(_build_report(raw_text=_base_bond_raw_text(), tables=()), None)
+
+    assert field.value is None
+    assert field.anchors == ()
+    assert field.extraction_mode == "missing"
+    assert field.note == "not_applicable_non_bond_fund"
+
+
+def test_partial_extraction_with_mixed_groups_produces_estimated_mode() -> None:
+    """部分组满足时 extraction_mode 应为 estimated，不得伪装为 direct 或 missing。"""
+
+    report = _build_report(
+        raw_text=_base_bond_raw_text(section_four_extra="本基金通过久期管理控制利率风险。"),
+        tables=(
+            ParsedTable(
+                page_number=53,
+                table_index=0,
+                headers=("信用评级", "占基金资产净值比例"),
+                rows=(("AAA 信用评级债券", "80.00%"),),
+            ),
+        ),
+    )
+
+    field = extract_bond_risk_evidence(report, "bond_fund")
+    assert field.value is not None
+    assert field.value.contract_status == "partial"
+    assert field.extraction_mode == "estimated"
+    assert "duration_rate_risk" in field.value.satisfied_group_ids
+    assert "credit_risk" in field.value.satisfied_group_ids
+    assert len(field.value.satisfied_group_ids) < len(BOND_RISK_EVIDENCE_GROUP_IDS)
+    assert len(field.value.missing_group_ids) > 0
+    assert field.extraction_mode != "direct"
+    assert field.value.contract_status != "satisfied"
+
+
+def test_incomplete_seven_group_coverage_does_not_masquerade_as_complete() -> None:
+    """不完整七组覆盖不得伪装为 satisfied 或 direct。"""
+
+    report = _build_report(
+        raw_text=_base_bond_raw_text(section_four_extra="本基金力争保持净值稳定并控制回撤。"),
+        tables=(),
+    )
+
+    field = extract_bond_risk_evidence(report, "bond_fund")
+    assert field.value is not None
+    assert field.extraction_mode != "direct"
+    assert field.value.contract_status != "satisfied"
+    assert len(field.value.satisfied_group_ids) < len(BOND_RISK_EVIDENCE_GROUP_IDS)
+
+
+def test_non_zero_equity_row_does_not_produce_accepted_absence() -> None:
+    """股票行值为非零或非横线时不应产生 accepted_absence 证据。"""
+
+    report = _build_report(
+        raw_text=_base_bond_raw_text(),
+        tables=(
+            ParsedTable(
+                page_number=59,
+                table_index=1,
+                headers=("项目", "金额", "占基金总资产比例"),
+                rows=(("股票", "100,000.00", "5.00%"),),
+            ),
+        ),
+    )
+
+    field = extract_bond_risk_evidence(report, "bond_fund")
+    assert field.value is not None
+    group = _group_by_id(field.value, "convertible_bond_equity_exposure")
+
+    assert group.status == "missing"
+    assert group.strength == "missing"
+    assert "convertible_bond_equity_exposure" not in field.value.satisfied_group_ids
+
+
+def test_boilerplate_rate_risk_text_alone_does_not_satisfy_duration_group() -> None:
+    """样板利率风险披露文本不应满足久期/利率风险组。"""
+
+    report = _build_report(
+        raw_text=_base_bond_raw_text(section_four_extra="本基金面临利率风险。"),
+        tables=(),
+    )
+
+    field = extract_bond_risk_evidence(report, "bond_fund")
+    assert field.value is not None
+    group = _group_by_id(field.value, "duration_rate_risk")
+
+    assert group.status == "missing"
+    assert "duration_rate_risk" not in field.value.satisfied_group_ids
+
+
 def _complete_value(
     *,
     overrides: dict[BondRiskEvidenceGroupId, BondRiskEvidenceGroupRecord] | None = None,
@@ -339,3 +614,98 @@ def _group_by_id(
     """
 
     return next(group for group in value.groups if group.group_id == group_id)
+
+
+def _anchor_ref_by_id(value: BondRiskEvidenceValue, anchor_id: str) -> BondRiskEvidenceAnchorRef:
+    """按锚点 ID 读取模板第 6 章稳定锚点。
+
+    Args:
+        value: 债券风险证据契约值。
+        anchor_id: 目标锚点 ID。
+
+    Returns:
+        匹配的组级锚点。
+    """
+
+    return next(anchor for anchor in value.anchors if anchor.anchor_id == anchor_id)
+
+
+def _build_report(*, raw_text: str, tables: tuple[ParsedTable, ...]) -> ParsedAnnualReport:
+    """构造模板第 6 章 extractor 测试用最小年报。
+
+    Args:
+        raw_text: 年报全文。
+        tables: 年报表格。
+
+    Returns:
+        最小 ``ParsedAnnualReport``。
+    """
+
+    sections = {}
+    section_order = ("§2", "§4", "§5", "§8", "§9", "§10")
+    for index, section_id in enumerate(section_order):
+        start = raw_text.index(section_id)
+        if index + 1 < len(section_order):
+            end = raw_text.index(section_order[index + 1])
+        else:
+            end = len(raw_text)
+        sections[section_id] = ReportSection(
+            section_id=section_id,
+            title=f"{section_id} fixture",
+            start_offset=start,
+            end_offset=end,
+            matched_rule="fixture",
+            confidence=1.0,
+        )
+    return ParsedAnnualReport(
+        key=DocumentKey(fund_code="006597", year=2024),
+        raw_text=raw_text,
+        sections=sections,
+        tables=tables,
+    )
+
+
+def _base_bond_raw_text(section_two_extra: str = "", section_four_extra: str = "") -> str:
+    """构造含 §2/§4/§5/§8/§9/§10 的最小年报文本。
+
+    Args:
+        section_two_extra: §2 追加文本。
+        section_four_extra: §4 追加文本。
+
+    Returns:
+        年报全文。
+    """
+
+    return (
+        "§2 基金简介\n"
+        f"{section_two_extra}\n"
+        "§4 管理人报告\n"
+        f"{section_four_extra}\n"
+        "§5 托管人报告\n"
+        "§8 投资组合报告\n"
+        "§9 基金份额持有人信息\n"
+        "§10 开放式基金份额变动\n"
+    )
+
+
+def _share_change_table() -> ParsedTable:
+    """构造多份额类别份额变动表。
+
+    Args:
+        无。
+
+    Returns:
+        份额变动表。
+    """
+
+    return ParsedTable(
+        page_number=65,
+        table_index=0,
+        headers=("项目", "易方达安悦 A", "易方达安悦 C", "合计"),
+        rows=(
+            ("期初基金份额总额", "1,000,000.00", "2,000,000.00", "3,000,000.00"),
+            ("本期基金总申购份额", "200,000.00", "400,000.00", "600,000.00"),
+            ("本期基金总赎回份额", "300,000.00", "100,000.00", "400,000.00"),
+            ("期末基金份额总额", "900,000.00", "2,300,000.00", "3,200,000.00"),
+        ),
+    )
