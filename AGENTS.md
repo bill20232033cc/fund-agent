@@ -49,6 +49,13 @@
 - `docs/implementation-control.md` 中的 archive / historical section 只能作为证据链，不得覆盖 Startup Packet、当前 gate 或 `docs/design.md` 当前设计章节。
 - 后续更新 control doc 时，应优先压缩而不是追加长日志；新增日志如果不是恢复当前 gate 所必需，必须写入独立 artifact 并在 control doc 中引用路径。
 
+## Gate 轻重分类规则
+
+- `fast_path`：只允许用于低风险文档、注释、格式、局部说明或已验证事实的控制面同步；不得改变代码行为、public contract、schema、质量门控语义、final judgment、Host/Agent/dayu、外部来源策略、baseline/golden 资格或 release/PR 外部状态。
+- `standard`：默认分类，适用于普通 plan/review/implementation/evidence/disposition gate；需要明确验证矩阵、至少两份独立 review（除非记录 reviewer 不可用）、controller judgment、必要文档更新和 local accepted commit。
+- `heavy`：用于架构边界、公共契约、schema/migration、质量门控语义、final judgment、Host/Agent/dayu、外部来源策略、baseline/golden promotion、release readiness 或 PR 外部状态等高影响 gate；需要更完整的 plan/review、实现/验证矩阵和残余风险 owner。
+- 分类不确定时选择更重一级；默认使用 `standard`。
+
 ## 建议
 
 - 共享终端经常会被前一次的 heredoc 污染，执行脚本时每次都启用新的后台 terminal 运行命令，避免受旧会话影响。

@@ -6,7 +6,7 @@
 > **规则真源**: `AGENTS.md`
 > **历史快照**: `docs/archive/implementation-control-history-20260525.md`
 > **release-maintenance 长账本**: `docs/archive/implementation-control-release-maintenance-ledger-20260527.md`
-> **当前状态**: release maintenance；release-maintenance consolidation / QDII post-021539 disposition accepted locally；下一入口为 bond positive-risk evidence gate
+> **当前状态**: release maintenance；bond positive-risk evidence accepted locally；下一入口为 bond risk evidence extractor / anchor hardening design gate
 
 ---
 
@@ -27,11 +27,11 @@
 |---|---|
 | Branch | `codex/local-reconciliation` |
 | Current phase | `release maintenance` |
-| Current gate | `release-maintenance consolidation / QDII post-021539 disposition accepted locally` |
+| Current gate | `bond positive-risk evidence accepted locally` |
 | Current gate classification | `standard` |
-| Next entry point | `bond positive-risk evidence gate; must use init-agents / tmux multi-agent flow` |
+| Next entry point | `bond risk evidence extractor / anchor hardening design gate; must use init-agents / tmux multi-agent flow` |
 | Next gate classification | `standard` |
-| Latest accepted gate checkpoint | `release-maintenance consolidation / QDII post-021539 disposition local accepted commit; use latest branch HEAD for exact hash` |
+| Latest accepted gate checkpoint | `bond positive-risk evidence local accepted commit; use latest branch HEAD for exact hash` |
 | Design truth | `docs/design.md` (v2.2) |
 | Control truth | `docs/implementation-control.md` |
 | Historical control snapshots | `docs/archive/implementation-control-history-20260525.md`; `docs/archive/implementation-control-release-maintenance-ledger-20260527.md` |
@@ -43,34 +43,43 @@
 
 | Purpose | Artifact |
 |---|---|
-| Consolidation / QDII post-021539 disposition artifact | `docs/reviews/release-maintenance-consolidation-post-021539-disposition-20260527.md` |
-| Disposition review: DS | `docs/reviews/release-maintenance-consolidation-post-021539-disposition-review-ds-20260527.md` |
-| Disposition review: MiMo | `docs/reviews/release-maintenance-consolidation-post-021539-disposition-review-mimo-20260527.md` |
-| Controller judgment | `docs/reviews/release-maintenance-consolidation-post-021539-disposition-controller-judgment-20260527.md` |
-| Archived release-maintenance ledger | `docs/archive/implementation-control-release-maintenance-ledger-20260527.md` |
+| Truth preflight | `docs/reviews/release-maintenance-bond-positive-risk-truth-preflight-20260527.md` |
+| Evidence plan | `docs/reviews/release-maintenance-bond-positive-risk-evidence-plan-20260527.md` |
+| Plan review: DS | `docs/reviews/release-maintenance-bond-positive-risk-evidence-plan-review-ds-20260527.md` |
+| Plan review: MiMo | `docs/reviews/release-maintenance-bond-positive-risk-evidence-plan-review-mimo-20260527.md` |
+| Plan re-review: MiMo | `docs/reviews/release-maintenance-bond-positive-risk-evidence-plan-rereview-mimo-20260527.md` |
+| Plan controller judgment | `docs/reviews/release-maintenance-bond-positive-risk-evidence-plan-controller-judgment-20260527.md` |
+| Evidence artifact | `docs/reviews/release-maintenance-bond-positive-risk-evidence-20260527.md` |
+| Evidence review: DS | `docs/reviews/release-maintenance-bond-positive-risk-evidence-review-ds-20260527.md` |
+| Evidence review: MiMo | `docs/reviews/release-maintenance-bond-positive-risk-evidence-review-mimo-20260527.md` |
+| Controller judgment | `docs/reviews/release-maintenance-bond-positive-risk-evidence-controller-judgment-20260527.md` |
 
 ### Current Decision Summary
 
-- `docs/implementation-control.md` is accepted as the compressed current control-plane entrypoint; the release-maintenance long ledger is archived at `docs/archive/implementation-control-release-maintenance-ledger-20260527.md` and remains evidence chain only.
+- Truth preflight found and closed a docs-only mismatch: `docs/implementation-control.md` referenced `AGENTS.md` Gate classification rules before `AGENTS.md` defined `fast_path` / `standard` / `heavy`; `AGENTS.md` now defines the rules.
 - Automatic QDII replacement probing is stopped. Do not run additional QDII candidates until a separate QDII diagnosis, taxonomy / asset-class fitness, or explicit coverage-blocked gate is accepted.
 - `096001`, `040046`, `019172`, and `021539` are all preserved as source-provenance eligible, quality `block`, terminal `quality_blocked_after_provenance`, and `not_promoted`.
 - QDII coverage is blocked for baseline/golden v1; no QDII row is replacement-ready, baseline-ready, scoring-ready, golden-ready, or source-safe for promotion.
 - Coverage disposition matrix remains: active `004393` and enhanced-index `004194` are carry-forward evaluated candidates; index `110020` is terminal `reviewed_coverage_candidate_input_accepted` but `not_promoted`; bond `006597` remains blocked by `bond_risk_evidence_missing.baseline_blocking=true`; FOF remains `data_gap` / `taxonomy_pending`.
+- `006597` / 2024 annual report contains same-fund/year candidate bond-risk evidence for all seven `bond_risk_evidence.v1` groups, but current public CLI/score cannot express positive `bond_risk_evidence` records or durable group-level anchors. Final state is `extractor/evidence anchor issue requiring future gate`, not data gap and not blocker解除.
+- Future bond risk extractor/anchor work must preserve evidence-strength distinctions: `drawdown_stress` currently has qualitative drawdown-control intent rather than a quantitative metric, and `leverage_liquidity` needs precise table/row anchors before consumption.
 - Golden answer corpus v1 remains blocked until coverage, source, quality, fund-type, and fixture-promotion blockers are resolved or explicitly deferred.
 
 ## Next Entry Point
 
-`bond positive-risk evidence gate`
+`bond risk evidence extractor / anchor hardening design gate`
 
-This next gate must start with Startup Packet replay and `$init-agents` / tmux multi-agent flow. It is a plan/review-first evidence gate for the `006597` bond baseline blocker, not a QDII, FOF, golden corpus, release-readiness, extractor implementation, renderer, or quality-gate gate.
+This next gate must start with Startup Packet replay and `$init-agents` / tmux multi-agent flow. It is a design/plan-first gate for representing positive `bond_risk_evidence.v1` records and durable anchors for `006597`; it is not a golden corpus, QDII, FOF, release-readiness, renderer, or quality-gate weakening gate.
 
 Allowed scope:
 
-- Plan/review before any evidence run.
-- Scope the gate to `006597` / 2024 positive bond-risk evidence and `bond_risk_evidence_missing.baseline_blocking=true`.
-- Decide what public evidence would satisfy or fail the positive bond-risk replacement issue without suppressing risk evidence.
+- Plan/review before any implementation.
+- Define the explicit model/contract for positive `bond_risk_evidence.v1` records and anchors before changing extractor or score behavior.
+- Use the accepted 006597 evidence locators as candidate input, but do not treat all evidence groups as equally strong.
+- Decide how to handle qualitative drawdown-control text versus quantitative drawdown/volatility evidence.
+- Decide how to anchor leverage/liquidity evidence with precise page/table/row locators rather than broad page ranges.
 - Preserve existing FQ0-FQ6 semantics, renderer output, Service/CLI behavior, source strategy, and `FundDocumentRepository` boundaries.
-- Do not run QDII probing, FOF taxonomy work, golden corpus preflight, release readiness, extractor implementation, Host/Agent/dayu work, baseline/golden promotion, or GitHub mutation.
+- Do not enter QDII probing, FOF taxonomy work, golden corpus preflight, release readiness, Host/Agent/dayu work, baseline/golden promotion, or GitHub mutation.
 - Produce two independent reviews and controller judgment before acceptance.
 
 ## Current Non-Goals
@@ -93,7 +102,7 @@ Allowed scope:
 | `110020` reviewed coverage candidate | future golden/baseline preflight | Accepted only as reviewed coverage candidate input; remains `not_promoted`; methodology / constituents evidence remains insufficient. |
 | `017641` QDII data gap | disposition / taxonomy follow-up | Original QDII row is provenance-complete but quality `block` due to `manager_strategy_text`; accepted disposition is `replace`, not promotion. |
 | FOF coverage / taxonomy | future fund-type taxonomy gate | Find pure `fof_fund` repository-verified candidate, or open taxonomy gate before counting QDII-FOF attempts as FOF coverage. |
-| `006597` bond baseline blocker | future bond positive-risk evidence gate | `holdings_snapshot` false blocker is resolved to `bond_risk_evidence_missing` / `FQ2F/warn`; do not route to golden while `baseline_blocking=true` or other P1 gaps remain. |
+| `006597` bond risk evidence extractor / anchor gap | `bond risk evidence extractor / anchor hardening design gate` | Same-fund/year annual-report candidate evidence exists, but current CLI/score cannot express positive `bond_risk_evidence.v1`; keep `bond_risk_evidence_missing.baseline_blocking=true` until a reviewed extractor/anchor gate resolves it. |
 | Source metadata strict bool parsing | future source provenance hardening gate | Plan/review strict bool parser for `AnnualReportSourceMetadata.from_dict()`; current known issue: string `"false"` coerces truthy. |
 | Stray untracked `--help` file | artifact disposition / user-authorized cleanup | Do not stage or promote; delete only with explicit authorization or accepted disposition. |
 | Untracked review/evidence artifacts | artifact disposition gate if needed | Decide whether to accept, archive, or leave untracked; do not silently stage unrelated artifacts. |
@@ -111,6 +120,7 @@ Allowed scope:
 | `replacement/exclusion candidate selection` | accepted locally | `docs/reviews/release-maintenance-replacement-exclusion-candidate-selection-controller-judgment-20260527.md` | Accepted `017641=replace`, `FOF=needs_taxonomy_gate`, `006597=needs_evidence_gate`; no promotion | QDII replacement plan |
 | `QDII replacement evidence sequence` | accepted locally | `docs/reviews/release-maintenance-qdii-replacement-candidate-evidence-controller-judgment-20260527.md`; `docs/reviews/release-maintenance-qdii-replacement-fallback-040046-evidence-controller-judgment-20260527.md`; `docs/reviews/release-maintenance-qdii-replacement-fallback-019172-evidence-controller-judgment-20260527.md`; `docs/reviews/release-maintenance-qdii-replacement-fallback-021539-evidence-controller-judgment-20260527.md` | `096001`, `040046`, `019172`, `021539` all provenance-eligible but quality `block`; `021539` triggers hard stop | QDII post-021539 disposition decision |
 | `release-maintenance consolidation / QDII post-021539 disposition` | accepted locally | `docs/reviews/release-maintenance-consolidation-post-021539-disposition-controller-judgment-20260527.md` | Control-doc compression accepted; QDII automatic probing stopped; QDII coverage blocked; golden corpus v1 remains blocked; DS/MiMo reviews `PASS_WITH_FINDINGS`; no code/product changes | bond positive-risk evidence |
+| `bond positive-risk evidence` | accepted locally | `docs/reviews/release-maintenance-bond-positive-risk-evidence-controller-judgment-20260527.md` | Truth preflight fixed Gate classification rules in `AGENTS.md`; 006597 evidence run found candidate annual-report evidence for all seven bond-risk groups, but current CLI/score cannot express positive records; DS/MiMo reviews `PASS_WITH_FINDINGS`; no code/product changes | bond risk evidence extractor / anchor hardening design |
 
 ## Historical Evidence Index
 
