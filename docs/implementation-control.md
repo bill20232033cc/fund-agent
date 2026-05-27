@@ -5,7 +5,7 @@
 > **设计真源**: `docs/design.md` (v2.2)
 > **规则真源**: `AGENTS.md`
 > **历史快照**: `docs/archive/implementation-control-history-20260525.md`
-> **当前状态**: release maintenance；docs-only truth reconciliation accepted locally；下一入口为 post-provenance coverage recovery decision plan/review gate
+> **当前状态**: release maintenance；post-provenance coverage recovery decision plan accepted locally；下一入口为 110020 reviewed coverage candidate decision gate
 
 ---
 
@@ -25,9 +25,9 @@
 |---|---|
 | Branch | `codex/local-reconciliation` |
 | Current phase | `release maintenance` |
-| Current gate | `docs-only truth reconciliation accepted locally` |
-| Next entry point | `post-provenance coverage recovery decision plan/review gate; must use init-agents / tmux multi-agent flow` |
-| Latest accepted gate checkpoint | `docs-only truth reconciliation local accepted commit; use latest branch HEAD for exact hash` |
+| Current gate | `post-provenance coverage recovery decision plan accepted locally` |
+| Next entry point | `110020 reviewed coverage candidate decision gate; must use init-agents / tmux multi-agent flow` |
+| Latest accepted gate checkpoint | `post-provenance coverage recovery decision plan local accepted commit; use latest branch HEAD for exact hash` |
 | Design truth | `docs/design.md` (v2.2) |
 | Control truth | `docs/implementation-control.md` |
 | Historical control snapshot | `docs/archive/implementation-control-history-20260525.md` |
@@ -285,6 +285,10 @@
 | source provenance post-implementation bounded evidence rerun review: GLM | `docs/reviews/release-maintenance-source-provenance-post-implementation-bounded-evidence-rerun-review-glm-20260527.md` |
 | source provenance post-implementation bounded evidence rerun controller judgment | `docs/reviews/release-maintenance-source-provenance-post-implementation-bounded-evidence-rerun-controller-judgment-20260527.md` |
 | docs-only truth reconciliation | `docs/reviews/release-maintenance-docs-truth-reconciliation-20260527.md` |
+| post-provenance coverage recovery decision plan | `docs/reviews/release-maintenance-post-provenance-coverage-recovery-decision-plan-20260527.md` |
+| post-provenance coverage recovery plan review: MiMo | `docs/reviews/release-maintenance-post-provenance-coverage-recovery-decision-plan-review-mimo-20260527.md` |
+| post-provenance coverage recovery plan review: GLM | `docs/reviews/release-maintenance-post-provenance-coverage-recovery-decision-plan-review-glm-20260527.md` |
+| post-provenance coverage recovery plan controller judgment | `docs/reviews/release-maintenance-post-provenance-coverage-recovery-decision-plan-controller-judgment-20260527.md` |
 
 ### Current Decisions
 
@@ -361,6 +365,7 @@
 - Source provenance post-implementation bounded evidence rerun plan is accepted locally. The evidence worker may run only public CLI commands for `110020` / 2024 and `017641` / 2024, using `extraction-snapshot --force-refresh` to avoid old cached metadata masking `primary_failure_category`. It must classify only from public provenance and quality outputs, write one tracked summary artifact, keep generated reports ignored, and keep every row `promotion_disposition=not_promoted`.
 - Source provenance post-implementation bounded evidence rerun is accepted locally. Public `--force-refresh` reruns for `110020` / 2024 and `017641` / 2024 now expose `fallback_used=true`, `primary_failure_category=unavailable`, `fallback_eligibility=eligible`, and `source_provenance_status=complete`. `110020` is `quality_gate_status=warn` and `provenance_eligible_for_next_review`; `017641` is `quality_gate_status=block` and `quality_blocked_after_provenance`. Both remain `promotion_disposition=not_promoted`; this gate does not create durable baseline, clean denominator, fixture, or golden corpus state.
 - Docs-only truth reconciliation is accepted locally. Repository review `docs/reviews/repo-review-20260527-065237.md` F1/F2 were accepted as current truth-source conflicts and closed in `docs/design.md`: active-fund Chapter 3 renderer minimal integration is now documented as current implemented scoped behavior, with positive reviewed-evidence input-contract retained as future design; final judgment docs now consistently keep quality gate `block/not_run` as `needs_attention` rather than `suggest_replace`. F3 is deferred as a source provenance hardening residual because this gate forbids production code changes. Validation passed: `uv run ruff check .`, `uv run pytest -q` (`789 passed`), and `git diff --check`.
+- Post-provenance coverage recovery decision plan is accepted locally. Cursor-driven reconciliation says roadmap gates 1-4 are already accepted and must not be rerun; Gate 5 `golden answer corpus v1` is not ready because coverage, FOF/taxonomy, QDII quality, bond baseline-blocking residuals, reviewed-fact readiness, and fixture-promotion blockers remain. The next primary cursor is `110020 reviewed coverage candidate decision gate`; `017641 manager_strategy_text extraction/quality triage gate` is also allowed as a separate narrow gate. Both must remain `not_promoted` and plan/review first.
 
 ### Current Non-Goals
 
@@ -373,19 +378,20 @@
 
 ## Next Entry Point
 
-`post-provenance coverage recovery decision plan/review gate`
+`110020 reviewed coverage candidate decision gate`
 
-This next gate must start with Startup Packet replay and `$init-agents` / tmux multi-agent flow. It is a plan/review decision gate, not an implementation or promotion gate.
+This next gate must start with Startup Packet replay and `$init-agents` / tmux multi-agent flow. It is a plan/review decision gate, not a promotion gate.
 
 Scope allowed for the next gate:
 
-- Reconcile the accepted provenance rerun evidence with small baseline corpus v1 coverage needs.
-- Decide through a reviewed plan whether `110020` should become a later reviewed coverage candidate, whether `017641` requires extraction repair or replacement, and which residual blocks `golden answer corpus v1`.
+- Reconcile accepted public source-provenance evidence for `110020` / 2024 with small baseline corpus v1 index coverage needs.
+- Decide through a reviewed plan whether `110020` should enter a later reviewed coverage-candidate evidence gate.
+- List unresolved `110020` risks before any baseline or golden decision, including `turnover_rate` P1 warn, strict golden not configured, reviewed-fact readiness, and no fixture-promotion gate.
 - Produce plan/review/controller artifacts under `docs/reviews/`.
 - Update `docs/implementation-control.md` after controller judgment.
 - Keep `promotion_disposition=not_promoted` unless a later dedicated baseline/golden promotion gate explicitly accepts a candidate.
 
-Do not enter `golden answer corpus v1` until coverage, source, quality, fund-type, and fixture-promotion blockers are resolved. Do not promote samples to durable baseline or golden answer corpus in this gate. Do not modify code, renderer, FQ0-FQ6 policy, default analyze/checklist behavior, Host/Agent packages, Dayu runtime, `FundDocumentRepository` source strategy, source-helper fallback semantics, extractor logic, `fund_type.py`, or golden/baseline fixtures unless a later accepted plan explicitly expands scope.
+`017641 manager_strategy_text extraction/quality triage gate` may be prepared as a separate adjacent gate if controller keeps artifacts, handoffs, and review judgments separate. Do not enter `golden answer corpus v1` until coverage, source, quality, fund-type, and fixture-promotion blockers are resolved. Do not promote samples to durable baseline or golden answer corpus in this gate. Do not modify code, renderer, FQ0-FQ6 policy, default analyze/checklist behavior, Host/Agent packages, Dayu runtime, `FundDocumentRepository` source strategy, source-helper fallback semantics, extractor logic, `fund_type.py`, or golden/baseline fixtures unless a later accepted plan explicitly expands scope.
 
 Do not push, create PR, mark ready, merge, close PRs, edit unrelated PRs, delete branches, or perform additional GitHub mutations without explicit user authorization. Do not add tracked scratch reports, PDF/cache outputs, source dumps, durable fixtures, or golden corpus files.
 
@@ -432,7 +438,7 @@ Do not push, create PR, mark ready, merge, close PRs, edit unrelated PRs, delete
 | NAV external-data degradation | Completed in core reliability implementation | NAV provider/cache/akshare failures degrade to `NavDataResult(unavailable=True, records=[])`; annual-report repository/PDF/source fail-closed semantics remain outside the catch boundary |
 | Pre-2026 turnover-rate missing semantics | Completed in core reliability implementation | Focused tests lock missing `turnover_rate` as P1 warn/insufficiency, not standalone hard block; FQ4 aggregate missing-rate semantics remain unchanged |
 | Small baseline corpus v1 | Completed in evidence run | Accepted 8 candidate rows / 7 unique fund codes as evidence only. `004393` / 2024 and `004194` / 2024 are quality-gate `warn`; `006597` / 2024 is quality-gate `block`; index/QDII fallback and FOF data-gap remain blockers. No durable baseline or golden promotion. |
-| Index/QDII source recovery for baseline coverage | next post-provenance coverage recovery decision plan/review gate | Post-implementation public rerun resolved source provenance for `110020` / `017641` as eligible fallback after primary `unavailable`. `110020` is provenance-complete with quality `warn` and only eligible for next review; `017641` is provenance-complete but quality `block` due to `manager_strategy_text`. No promotion occurred. |
+| Index/QDII source recovery for baseline coverage | next 110020 reviewed coverage candidate decision gate and adjacent 017641 manager_strategy_text triage gate | Post-implementation public rerun resolved source provenance for `110020` / `017641` as eligible fallback after primary `unavailable`. `110020` is provenance-complete with quality `warn` and only eligible for next review; `017641` is provenance-complete but quality `block` due to `manager_strategy_text`. No promotion occurred. |
 | Source metadata `fallback_used` strict bool parsing | future source provenance hardening gate | Repo review F3 found that `AnnualReportSourceMetadata.from_dict()` can coerce string `"false"` to `True`. This docs-only gate defers implementation; future gate should plan/review a strict bool parser and tests without weakening provenance semantics. |
 | FOF coverage / taxonomy | next baseline coverage / taxonomy gate | Find pure `fof_fund` repository-verified candidate, or open a taxonomy gate before counting QDII-FOF attempts as FOF coverage. |
 | `006597` bond quality-gate block | Completed for holdings applicability; future bond/holder/turnover evidence gates remain | `holdings_snapshot` equity-shape false blocker is resolved into `bond_risk_evidence_missing` / `FQ2F/warn`; 006597 now warns rather than blocks for this reason. Do not route to golden while `bond_risk_evidence_missing.baseline_blocking=true` or other P1 gaps remain. |
@@ -499,6 +505,7 @@ Do not push, create PR, mark ready, merge, close PRs, edit unrelated PRs, delete
 | `source provenance post-implementation bounded evidence rerun plan` | accepted locally | `docs/reviews/release-maintenance-source-provenance-post-implementation-bounded-evidence-rerun-plan-controller-judgment-20260527.md` | AgentCodex plan; AgentMiMo review `PASS`; AgentGLM review `PASS`; plan requires public `extraction-snapshot --force-refresh`, public-only classification, ignored generated outputs, and `not_promoted` for every row; `git diff --check` passed | evidence run for `110020` / `017641`, possible external source-state change, pure FOF residual, bond baseline-blocking residual, golden/baseline blocked | `source provenance post-implementation bounded evidence rerun` |
 | `source provenance post-implementation bounded evidence rerun` | accepted locally | `docs/reviews/release-maintenance-source-provenance-post-implementation-bounded-evidence-rerun-controller-judgment-20260527.md` | Public CLI `--force-refresh` snapshot/score/quality-gate ran for `110020` / 2024 and `017641` / 2024; both now expose complete eligible fallback provenance with `primary_failure_category=unavailable`; MiMo review `PASS`; GLM review `PASS`; generated outputs stayed ignored; no promotion | `110020` requires next coverage review before any promotion; `017641` remains quality-blocked on `manager_strategy_text`; pure FOF residual, bond baseline-blocking residual, golden/baseline blocked | `post-provenance coverage recovery decision plan/review gate` |
 | `docs-only truth reconciliation` | accepted locally | `docs/reviews/release-maintenance-docs-truth-reconciliation-20260527.md` | Repo review F1/F2 accepted and closed in `docs/design.md`; F3 deferred to source provenance hardening; `uv run ruff check .`, `uv run pytest -q` (`789 passed`), and `git diff --check` passed | source metadata strict bool parsing residual from F3; unaccepted post-provenance plan/review artifacts remain non-truth until controller judgment | `post-provenance coverage recovery decision plan/review gate` |
+| `post-provenance coverage recovery decision plan` | accepted locally | `docs/reviews/release-maintenance-post-provenance-coverage-recovery-decision-plan-controller-judgment-20260527.md` | AgentCodex plan; MiMo review `PASS`; GLM review `PASS_WITH_FINDINGS`; non-blocking findings accepted as next-gate guidance; roadmap gates 1-4 skipped as accepted; golden answer corpus v1 blocked; `git diff --check` passed | `110020` candidate review, `017641` manager_strategy_text triage, FOF/taxonomy, bond positive-risk evidence, source metadata strict bool parsing, golden/baseline blocked | `110020 reviewed coverage candidate decision gate` |
 
 ## Historical Evidence Index
 
