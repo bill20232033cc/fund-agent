@@ -6,7 +6,7 @@
 > **规则真源**: `AGENTS.md`
 > **历史快照**: `docs/archive/implementation-control-history-20260525.md`
 > **release-maintenance 长账本**: `docs/archive/implementation-control-release-maintenance-ledger-20260527.md`
-> **当前状态**: release maintenance；bond positive-risk evidence accepted locally；下一入口为 bond risk evidence extractor / anchor hardening design gate
+> **当前状态**: release maintenance；bond risk evidence extractor / anchor hardening Slice 6 blocked with reason；下一入口为 drawdown_stress evidence contract / NAV-derived risk metric design gate 或已授权的 extractor-hardening amendment
 
 ---
 
@@ -27,11 +27,11 @@
 |---|---|
 | Branch | `codex/local-reconciliation` |
 | Current phase | `release maintenance` |
-| Current gate | `bond positive-risk evidence accepted locally` |
+| Current gate | `bond risk evidence extractor / anchor hardening Slice 6 blocked with reason` |
 | Current gate classification | `standard` |
-| Next entry point | `bond risk evidence extractor / anchor hardening design gate; must use init-agents / tmux multi-agent flow` |
+| Next entry point | `drawdown_stress evidence contract / NAV-derived risk metric design gate, or authorized extractor-hardening amendment for credit_risk + redemption_share_pressure` |
 | Next gate classification | `standard` |
-| Latest accepted gate checkpoint | `bond positive-risk evidence local accepted commit; use latest branch HEAD for exact hash` |
+| Latest accepted gate checkpoint | `bond risk evidence extractor / anchor hardening Slice 5 local accepted commit; Slice 6 validation is blocked-with-reason, not accepted as unblocked` |
 | Design truth | `docs/design.md` (v2.2) |
 | Control truth | `docs/implementation-control.md` |
 | Historical control snapshots | `docs/archive/implementation-control-history-20260525.md`; `docs/archive/implementation-control-release-maintenance-ledger-20260527.md` |
@@ -67,17 +67,17 @@
 
 ## Next Entry Point
 
-`bond risk evidence extractor / anchor hardening design gate`
+`drawdown_stress evidence contract / NAV-derived risk metric design gate`, or an explicitly authorized `bond risk evidence extractor / anchor hardening amendment` for `credit_risk` and `redemption_share_pressure`.
 
-This next gate must start with Startup Packet replay and `$init-agents` / tmux multi-agent flow. It is a design/plan-first gate for representing positive `bond_risk_evidence.v1` records and durable anchors for `006597`; it is not a golden corpus, QDII, FOF, release-readiness, renderer, or quality-gate weakening gate.
+This next gate must start with Startup Packet replay and `$init-agents` / tmux multi-agent flow. Slice 1-5 already define and emit positive `bond_risk_evidence.v1`; Slice 6 real validation remains blocked because `006597` / 2024 still has `drawdown_stress` as weak qualitative evidence and score keeps `bond_risk_evidence_missing.baseline_blocking=true`.
 
 Allowed scope:
 
 - Plan/review before any implementation.
-- Define the explicit model/contract for positive `bond_risk_evidence.v1` records and anchors before changing extractor or score behavior.
-- Use the accepted 006597 evidence locators as candidate input, but do not treat all evidence groups as equally strong.
-- Decide how to handle qualitative drawdown-control text versus quantitative drawdown/volatility evidence.
-- Decide how to anchor leverage/liquidity evidence with precise page/table/row locators rather than broad page ranges.
+- If continuing extractor hardening, limit scope to `credit_risk` rating distribution table detection and `redemption_share_pressure` §2 share-class mapping / §10 share-change table selection.
+- If pursuing full blocker解除, define a separate contract for NAV-derived max drawdown / volatility evidence, including source anchors and score applicability semantics.
+- Keep qualitative drawdown-control text weak unless a reviewed contract explicitly changes the rule.
+- Preserve evidence-strength distinctions and do not treat weak or ambiguous groups as accepted.
 - Preserve existing FQ0-FQ6 semantics, renderer output, Service/CLI behavior, source strategy, and `FundDocumentRepository` boundaries.
 - Do not enter QDII probing, FOF taxonomy work, golden corpus preflight, release readiness, Host/Agent/dayu work, baseline/golden promotion, or GitHub mutation.
 - Produce two independent reviews and controller judgment before acceptance.
@@ -102,7 +102,7 @@ Allowed scope:
 | `110020` reviewed coverage candidate | future golden/baseline preflight | Accepted only as reviewed coverage candidate input; remains `not_promoted`; methodology / constituents evidence remains insufficient. |
 | `017641` QDII data gap | disposition / taxonomy follow-up | Original QDII row is provenance-complete but quality `block` due to `manager_strategy_text`; accepted disposition is `replace`, not promotion. |
 | FOF coverage / taxonomy | future fund-type taxonomy gate | Find pure `fof_fund` repository-verified candidate, or open taxonomy gate before counting QDII-FOF attempts as FOF coverage. |
-| `006597` bond risk evidence extractor / anchor gap | `bond risk evidence extractor / anchor hardening design gate` | Same-fund/year annual-report candidate evidence exists, but current CLI/score cannot express positive `bond_risk_evidence.v1`; keep `bond_risk_evidence_missing.baseline_blocking=true` until a reviewed extractor/anchor gate resolves it. |
+| `006597` bond risk evidence blocker | `drawdown_stress evidence contract / NAV-derived risk metric design gate` or authorized extractor-hardening amendment | Slice 6 real validation emitted positive `bond_risk_evidence.v1` but score still has `bond_risk_evidence_missing.baseline_blocking=true`; `credit_risk` and `redemption_share_pressure` are extractor misses, while `drawdown_stress` has only qualitative control-drawdown text and remains weak under current contract. Do not claim blocker解除 without quantitative drawdown/volatility evidence or a reviewed contract change. |
 | Source metadata strict bool parsing | future source provenance hardening gate | Plan/review strict bool parser for `AnnualReportSourceMetadata.from_dict()`; current known issue: string `"false"` coerces truthy. |
 | Stray untracked `--help` file | artifact disposition / user-authorized cleanup | Do not stage or promote; delete only with explicit authorization or accepted disposition. |
 | Untracked review/evidence artifacts | artifact disposition gate if needed | Decide whether to accept, archive, or leave untracked; do not silently stage unrelated artifacts. |
@@ -121,6 +121,7 @@ Allowed scope:
 | `QDII replacement evidence sequence` | accepted locally | `docs/reviews/release-maintenance-qdii-replacement-candidate-evidence-controller-judgment-20260527.md`; `docs/reviews/release-maintenance-qdii-replacement-fallback-040046-evidence-controller-judgment-20260527.md`; `docs/reviews/release-maintenance-qdii-replacement-fallback-019172-evidence-controller-judgment-20260527.md`; `docs/reviews/release-maintenance-qdii-replacement-fallback-021539-evidence-controller-judgment-20260527.md` | `096001`, `040046`, `019172`, `021539` all provenance-eligible but quality `block`; `021539` triggers hard stop | QDII post-021539 disposition decision |
 | `release-maintenance consolidation / QDII post-021539 disposition` | accepted locally | `docs/reviews/release-maintenance-consolidation-post-021539-disposition-controller-judgment-20260527.md` | Control-doc compression accepted; QDII automatic probing stopped; QDII coverage blocked; golden corpus v1 remains blocked; DS/MiMo reviews `PASS_WITH_FINDINGS`; no code/product changes | bond positive-risk evidence |
 | `bond positive-risk evidence` | accepted locally | `docs/reviews/release-maintenance-bond-positive-risk-evidence-controller-judgment-20260527.md` | Truth preflight fixed Gate classification rules in `AGENTS.md`; 006597 evidence run found candidate annual-report evidence for all seven bond-risk groups, but current CLI/score cannot express positive records; DS/MiMo reviews `PASS_WITH_FINDINGS`; no code/product changes | bond risk evidence extractor / anchor hardening design |
+| `bond risk evidence extractor / anchor hardening` | blocked with reason | `docs/reviews/release-maintenance-bond-risk-evidence-extractor-anchor-hardening-slice6-controller-judgment-20260528.md` | Slice 1-5 accepted locally and emit structured `bond_risk_evidence.v1`; Slice 6 real validation still has `bond_risk_evidence_missing.baseline_blocking=true` for `credit_risk`, `drawdown_stress`, `redemption_share_pressure`; DS/GLM agree only two groups are extractor misses and drawdown remains weak | drawdown evidence contract / NAV-derived risk metric design gate, or authorized extractor-hardening amendment |
 
 ## Historical Evidence Index
 
