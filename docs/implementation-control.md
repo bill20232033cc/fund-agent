@@ -5,7 +5,7 @@
 > **设计真源**: `docs/design.md` (v2.2)
 > **规则真源**: `AGENTS.md`
 > **历史快照**: `docs/archive/implementation-control-history-20260525.md`
-> **当前状态**: release maintenance；QDII replacement candidate selection plan accepted locally；下一入口为 QDII replacement candidate enumeration plan gate
+> **当前状态**: release maintenance；QDII replacement candidate enumeration plan accepted locally；下一入口为 QDII replacement candidate evidence plan gate
 
 ---
 
@@ -25,9 +25,9 @@
 |---|---|
 | Branch | `codex/local-reconciliation` |
 | Current phase | `release maintenance` |
-| Current gate | `QDII replacement candidate selection plan accepted locally` |
-| Next entry point | `QDII replacement candidate enumeration plan gate; must use init-agents / tmux multi-agent flow` |
-| Latest accepted gate checkpoint | `QDII replacement candidate selection plan local accepted commit; use latest branch HEAD for exact hash` |
+| Current gate | `QDII replacement candidate enumeration plan accepted locally` |
+| Next entry point | `QDII replacement candidate evidence plan gate; must use init-agents / tmux multi-agent flow` |
+| Latest accepted gate checkpoint | `QDII replacement candidate enumeration plan local accepted commit; use latest branch HEAD for exact hash` |
 | Design truth | `docs/design.md` (v2.2) |
 | Control truth | `docs/implementation-control.md` |
 | Historical control snapshot | `docs/archive/implementation-control-history-20260525.md` |
@@ -319,6 +319,10 @@
 | QDII replacement selection plan review: MiMo | `docs/reviews/release-maintenance-qdii-replacement-candidate-selection-plan-review-mimo-20260527.md` |
 | QDII replacement selection plan review: DS | `docs/reviews/release-maintenance-qdii-replacement-candidate-selection-plan-review-ds-20260527.md` |
 | QDII replacement selection plan controller judgment | `docs/reviews/release-maintenance-qdii-replacement-candidate-selection-plan-controller-judgment-20260527.md` |
+| QDII replacement candidate enumeration plan | `docs/reviews/release-maintenance-qdii-replacement-candidate-enumeration-plan-20260527.md` |
+| QDII replacement enumeration plan review: MiMo | `docs/reviews/release-maintenance-qdii-replacement-candidate-enumeration-plan-review-mimo-20260527.md` |
+| QDII replacement enumeration plan review: DS | `docs/reviews/release-maintenance-qdii-replacement-candidate-enumeration-plan-review-ds-20260527.md` |
+| QDII replacement enumeration plan controller judgment | `docs/reviews/release-maintenance-qdii-replacement-candidate-enumeration-plan-controller-judgment-20260527.md` |
 
 ### Current Decisions
 
@@ -403,6 +407,7 @@
 - Baseline coverage disposition decision plan is accepted locally. The next cursor is `replacement/exclusion candidate selection gate for QDII/index/FOF coverage`, because current accepted states require disposition before more evidence, extractor work, durable baseline, or golden corpus. The next gate must produce a reviewed disposition matrix with owner and revisit condition for every slot. `004393` and `004194` remain carry-forward evaluated candidates only; `006597` bond disposition remains a separate follow-up and golden blocker until `bond_risk_evidence_missing.baseline_blocking=true` is resolved or dispositioned.
 - Replacement/exclusion candidate selection is accepted locally. Accepted dispositions: `110020=include_for_later_review`, `017641=replace`, `FOF=needs_taxonomy_gate`, `004393/004194=include_for_later_review`, and `006597=needs_evidence_gate` as a separate bond follow-up. The next cursor is renamed to `QDII replacement candidate selection plan gate` so plan/review happens before any evidence CLI. No row is promoted.
 - QDII replacement candidate selection plan is accepted locally. Current accepted artifacts contain no controller-approved QDII replacement candidate, so the next cursor is `QDII replacement candidate enumeration plan gate`, not evidence. The next plan must independently scan `docs/code_20260519.csv` as a candidate universe, flag QDII naming/category conflicts such as `013308`, include accepted-source-provenance status or `provenance_unknown`, and include CSV category / asset-class context so equity-QDII vs bond-QDII replacement fitness is visible.
+- QDII replacement candidate enumeration plan is accepted locally. The CSV universe scan accounts for all QDII-relevant rows; `017641` remains excluded as `replace` / `not_promoted` / `disclosure_data_gap_not_baseline_ready`; QDII-FOF rows remain excluded until a taxonomy gate accepts them; `013308` is explicitly flagged as QDII-name vs `国内股票类` conflict. `096001` is accepted only as the single candidate for the next evidence plan gate, with `source_provenance=provenance_unknown`, quality unknown, and no source-safe / scoring-ready / baseline / golden / replacement promotion.
 
 ### Current Non-Goals
 
@@ -415,17 +420,20 @@
 
 ## Next Entry Point
 
-`QDII replacement candidate enumeration plan gate`
+`QDII replacement candidate evidence plan gate`
 
-This next gate must start with Startup Packet replay and `$init-agents` / tmux multi-agent flow. It is a plan gate, not an evidence or implementation gate, and must not run replacement evidence CLI commands unless a later reviewed evidence gate is accepted.
+This next gate must start with Startup Packet replay and `$init-agents` / tmux multi-agent flow. It is a plan gate, not an evidence or implementation gate, and must not run replacement evidence CLI commands unless the evidence plan is reviewed, accepted, and a later evidence gate is entered.
 
 Scope allowed for the next gate:
 
-- Build a candidate-order table from `docs/code_20260519.csv` as candidate universe only, not as approved replacement list.
-- Exclude `017641`; exclude QDII-FOF unless a separate taxonomy gate accepts QDII-FOF for the QDII slot.
-- Include source row identity, QDII/QDII-FOF taxonomy status, CSV category / asset-class context, source-provenance status from accepted artifacts or `provenance_unknown`, candidate-order rationale, owner, and revisit condition.
-- Explicitly flag naming/category conflicts, including QDII naming with domestic-stock CSV category.
-- Preserve accepted dispositions for `017641`, `110020`, FOF, `004393`, `004194`, and `006597`.
+- Select `096001` / 2024 as the single planned evidence candidate unless the controller explicitly changes the candidate.
+- Verify exact public CLI flags for `extraction-snapshot`, `extraction-score`, and `quality-gate` before any later run.
+- Define source provenance stop checks before quality or promotion interpretation.
+- Define quality stop checks for P0 issues, especially `manager_strategy_text`.
+- Preserve fallback order only as contingency planning: `040046`, then `019172`, then remaining eligible equity QDII rows if `096001` fails in a later accepted evidence gate.
+- Keep `017641` excluded; keep QDII-FOF excluded unless a separate taxonomy gate accepts QDII-FOF for the QDII slot.
+- Keep `013308` out of evidence until its QDII-name vs `国内股票类` conflict is resolved by a future taxonomy/controller gate.
+- Preserve accepted dispositions for `017641`, `110020`, FOF, `004393`, `004194`, `006597`, and all QDII enumeration rows.
 - Produce a plan artifact, two independent plan reviews, and controller judgment before any evidence or implementation.
 - Update `docs/implementation-control.md` after controller judgment.
 
@@ -476,7 +484,7 @@ Do not push, create PR, mark ready, merge, close PRs, edit unrelated PRs, delete
 | NAV external-data degradation | Completed in core reliability implementation | NAV provider/cache/akshare failures degrade to `NavDataResult(unavailable=True, records=[])`; annual-report repository/PDF/source fail-closed semantics remain outside the catch boundary |
 | Pre-2026 turnover-rate missing semantics | Completed in core reliability implementation | Focused tests lock missing `turnover_rate` as P1 warn/insufficiency, not standalone hard block; FQ4 aggregate missing-rate semantics remain unchanged |
 | Small baseline corpus v1 | Completed in evidence run | Accepted 8 candidate rows / 7 unique fund codes as evidence only. `004393` / 2024 and `004194` / 2024 are quality-gate `warn`; `006597` / 2024 is quality-gate `block`; index/QDII fallback and FOF data-gap remain blockers. No durable baseline or golden promotion. |
-| Index/QDII source recovery for baseline coverage | QDII replacement candidate enumeration plan gate | Post-implementation public rerun resolved source provenance for `110020` / `017641` as eligible fallback after primary `unavailable`. `110020` evidence is accepted as reviewed coverage candidate input and remains not promoted; `017641` is provenance-complete but quality `block` due to `manager_strategy_text` and now classified `disclosure_data_gap_not_baseline_ready`; accepted disposition is `replace`. Enumerate candidate universe before any replacement evidence run. |
+| Index/QDII source recovery for baseline coverage | QDII replacement candidate evidence plan gate | Post-implementation public rerun resolved source provenance for `110020` / `017641` as eligible fallback after primary `unavailable`. `110020` evidence is accepted as reviewed coverage candidate input and remains not promoted; `017641` is provenance-complete but quality `block` due to `manager_strategy_text` and now classified `disclosure_data_gap_not_baseline_ready`; accepted disposition is `replace`. Enumeration accepted `096001` only as the single candidate for the next evidence plan gate, not as source-safe or promoted. |
 | Source metadata `fallback_used` strict bool parsing | future source provenance hardening gate | Repo review F3 found that `AnnualReportSourceMetadata.from_dict()` can coerce string `"false"` to `True`. This docs-only gate defers implementation; future gate should plan/review a strict bool parser and tests without weakening provenance semantics. |
 | FOF coverage / taxonomy | next baseline coverage / taxonomy gate | Find pure `fof_fund` repository-verified candidate, or open a taxonomy gate before counting QDII-FOF attempts as FOF coverage. |
 | `006597` bond quality-gate block | Completed for holdings applicability; future bond/holder/turnover evidence gates remain | `holdings_snapshot` equity-shape false blocker is resolved into `bond_risk_evidence_missing` / `FQ2F/warn`; 006597 now warns rather than blocks for this reason. Do not route to golden while `bond_risk_evidence_missing.baseline_blocking=true` or other P1 gaps remain. |
@@ -551,6 +559,7 @@ Do not push, create PR, mark ready, merge, close PRs, edit unrelated PRs, delete
 | `baseline coverage disposition decision plan` | accepted locally | `docs/reviews/release-maintenance-baseline-coverage-disposition-decision-plan-controller-judgment-20260527.md` | AgentCodex plan; MiMo/GLM reviews `PASS_WITH_FINDINGS`; informational findings accepted as next-gate requirements; `git diff --check` passed; no code/evidence/product-flow changes | disposition matrix for index/QDII/FOF, owners/revisit conditions, bond follow-up, golden/baseline blocked | `replacement/exclusion candidate selection gate for QDII/index/FOF coverage` |
 | `replacement/exclusion candidate selection` | accepted locally | `docs/reviews/release-maintenance-replacement-exclusion-candidate-selection-controller-judgment-20260527.md` | AgentCodex decision artifact; MiMo review `PASS`; DS review `PASS_WITH_FINDINGS`; DS F1 accepted by renaming next cursor to plan-first; `git diff --check` passed; no evidence/code/control/product-flow changes before controller judgment | QDII replacement criteria and plan, FOF taxonomy, index reviewed facts, bond positive-risk evidence, golden/baseline blocked | `QDII replacement candidate selection plan gate` |
 | `QDII replacement candidate selection plan` | accepted locally | `docs/reviews/release-maintenance-qdii-replacement-candidate-selection-plan-controller-judgment-20260527.md` | AgentCodex plan; MiMo review `PASS`; DS review `PASS_WITH_FINDINGS`; findings accepted as enumeration-gate requirements; `git diff --check` passed; no evidence/code/control/product-flow changes before controller judgment | QDII candidate enumeration from CSV universe, category conflicts, provenance unknown flags, golden/baseline blocked | `QDII replacement candidate enumeration plan gate` |
+| `QDII replacement candidate enumeration plan` | accepted locally | `docs/reviews/release-maintenance-qdii-replacement-candidate-enumeration-plan-controller-judgment-20260527.md` | AgentCodex plan scanned `docs/code_20260519.csv`; MiMo review `PASS`; DS review `PASS_WITH_FINDINGS`; non-blocking findings accepted/deferred; `git diff --check` passed; no evidence/code/control/product-flow changes before controller judgment | `096001` provenance/quality unknown, `013308` category conflict, bond QDII asset-class mismatch, QDII-FOF taxonomy, golden/baseline blocked | `QDII replacement candidate evidence plan gate` |
 
 ## Historical Evidence Index
 
