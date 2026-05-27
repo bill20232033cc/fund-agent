@@ -5,7 +5,7 @@
 > **设计真源**: `docs/design.md` (v2.2)
 > **规则真源**: `AGENTS.md`
 > **历史快照**: `docs/archive/implementation-control-history-20260525.md`
-> **当前状态**: release maintenance；017641 manager_strategy_text quality triage plan accepted locally；下一入口为 017641 manager_strategy_text public-only evidence triage gate
+> **当前状态**: release maintenance；017641 manager_strategy_text public evidence triage accepted locally；下一入口为 baseline coverage disposition decision gate
 
 ---
 
@@ -25,9 +25,9 @@
 |---|---|
 | Branch | `codex/local-reconciliation` |
 | Current phase | `release maintenance` |
-| Current gate | `017641 manager_strategy_text quality triage plan accepted locally` |
-| Next entry point | `017641 manager_strategy_text public-only evidence triage gate; must use init-agents / tmux multi-agent flow` |
-| Latest accepted gate checkpoint | `017641 manager_strategy_text quality triage plan local accepted commit; use latest branch HEAD for exact hash` |
+| Current gate | `017641 manager_strategy_text public evidence triage accepted locally` |
+| Next entry point | `baseline coverage disposition decision gate; must use init-agents / tmux multi-agent flow` |
+| Latest accepted gate checkpoint | `017641 manager_strategy_text public evidence triage local accepted commit; use latest branch HEAD for exact hash` |
 | Design truth | `docs/design.md` (v2.2) |
 | Control truth | `docs/implementation-control.md` |
 | Historical control snapshot | `docs/archive/implementation-control-history-20260525.md` |
@@ -303,6 +303,10 @@
 | 017641 quality triage plan review: MiMo | `docs/reviews/release-maintenance-017641-manager-strategy-text-quality-triage-plan-review-mimo-20260527.md` |
 | 017641 quality triage plan review: GLM | `docs/reviews/release-maintenance-017641-manager-strategy-text-quality-triage-plan-review-glm-20260527.md` |
 | 017641 quality triage plan controller judgment | `docs/reviews/release-maintenance-017641-manager-strategy-text-quality-triage-plan-controller-judgment-20260527.md` |
+| 017641 manager_strategy_text public evidence triage | `docs/reviews/release-maintenance-017641-manager-strategy-text-public-evidence-triage-20260527.md` |
+| 017641 public evidence review: MiMo | `docs/reviews/release-maintenance-017641-manager-strategy-text-public-evidence-triage-review-mimo-20260527.md` |
+| 017641 public evidence review: GLM | `docs/reviews/release-maintenance-017641-manager-strategy-text-public-evidence-triage-review-glm-20260527.md` |
+| 017641 public evidence controller judgment | `docs/reviews/release-maintenance-017641-manager-strategy-text-public-evidence-triage-controller-judgment-20260527.md` |
 
 ### Current Decisions
 
@@ -383,6 +387,7 @@
 - 110020 reviewed coverage candidate decision plan is accepted locally. `110020` / 2024 is accepted only as input to a later public-only evidence gate, not as durable baseline, clean denominator, fixture, report-quality corpus, or golden answer corpus. The accepted plan records `fund_type_slot=index_fund`, complete eligible fallback provenance after primary `unavailable`, quality `warn`, and `not_promoted`; it requires independent `index_evidence_assessment`, CSV identity/version note, strict golden absence as carried-forward residual, and stop conditions for new P0/P1 warnings, source/provenance regression, reviewer `BLOCK`, direct PDF/cache/source-helper access, and any promotion attempt.
 - 110020 reviewed coverage candidate evidence is accepted locally. Public CLI `--force-refresh` snapshot, score, and quality-gate runs all exited 0; provenance tuple matched the accepted complete eligible fallback tuple; quality status remained `warn` with only the accepted known warning set; `index_profile` and `tracking_error` are reviewable from public outputs; methodology / constituents evidence remains insufficient and carried forward. Terminal state is `reviewed_coverage_candidate_input_accepted`; promotion disposition remains `not_promoted`.
 - 017641 manager_strategy_text quality triage plan is accepted locally. The plan and two independent reviews agree that current `quality_gate_status=block` is not enough to infer an extractor gap; the next safe gate is public-only evidence triage using existing `extraction-snapshot`, `extraction-score`, and `quality-gate` commands. Next evidence must classify exactly one terminal state, keep `017641` `not_promoted`, explicitly compare any policy/taxonomy classification against current `design.md` P0 applicability, and stop on provenance regression, indirect evidence, direct PDF/cache/source-helper access, quality-gate weakening, or promotion.
+- 017641 manager_strategy_text public evidence triage is accepted locally. Public CLI evidence kept complete eligible fallback provenance and confirmed `manager_strategy_text` remains a P0 quality block with no value, no anchor, and no locator. Reviews accepted terminal classification `disclosure_data_gap_not_baseline_ready`; this does not authorize extractor implementation, policy/taxonomy changes, baseline/golden promotion, or fixture promotion. Future similar evidence artifacts should cite exact JSON locations and independent `classification_basis` context where available.
 
 ### Current Non-Goals
 
@@ -395,18 +400,16 @@
 
 ## Next Entry Point
 
-`017641 manager_strategy_text public-only evidence triage gate`
+`baseline coverage disposition decision gate`
 
-This next gate must start with Startup Packet replay and `$init-agents` / tmux multi-agent flow. It is an evidence gate, not an implementation gate, and must not implement extractor changes unless a later implementation plan/review gate is accepted.
+This next gate must start with Startup Packet replay and `$init-agents` / tmux multi-agent flow. It is a decision/planning gate, not an implementation gate, and must not implement extractor changes unless a later implementation plan/review gate is accepted.
 
 Scope allowed for the next gate:
 
-- Reconcile accepted source-provenance evidence for `017641` / 2024: complete eligible fallback after primary `unavailable`, but quality `block`.
-- Run only public CLI evidence through existing repository-backed paths: `extraction-snapshot --force-refresh`, `extraction-score`, and `quality-gate`.
-- Classify the `manager_strategy_text` FQ2/FQ3 P0 blocker using public output only: extractor gap, disclosure/data gap, policy/taxonomy issue, replacement/exclusion, or reject/exclude.
-- Produce one tracked evidence summary artifact, two independent evidence reviews, and controller judgment before any implementation.
-- If classifying policy/taxonomy issue, explicitly compare the evidence to current `docs/design.md` P0 field applicability before recommending a future design gate.
-- Keep `017641` `promotion_disposition=not_promoted`.
+- Reconcile accepted coverage evidence after `110020` and `017641`: `110020` is reviewed coverage candidate input and `017641` is `disclosure_data_gap_not_baseline_ready`; both remain `not_promoted`.
+- Decide the next cursor for baseline/golden readiness: replacement/exclusion candidate selection, FOF/taxonomy coverage, bond positive-risk evidence, or another coverage blocker.
+- Preserve that `017641` cannot enter durable baseline, clean denominator, fixture, report-quality corpus, or golden answer corpus from this evidence alone.
+- Produce a decision artifact, two independent plan reviews, and controller judgment before any implementation.
 - Update `docs/implementation-control.md` after controller judgment.
 
 Do not enter `golden answer corpus v1` until coverage, source, quality, fund-type, and fixture-promotion blockers are resolved. Do not promote samples to durable baseline or golden answer corpus in this gate. Do not modify code, renderer, FQ0-FQ6 policy, default analyze/checklist behavior, Host/Agent packages, Dayu runtime, `FundDocumentRepository` source strategy, source-helper fallback semantics, extractor logic, `fund_type.py`, or golden/baseline fixtures unless a later accepted plan explicitly expands scope.
@@ -456,7 +459,7 @@ Do not push, create PR, mark ready, merge, close PRs, edit unrelated PRs, delete
 | NAV external-data degradation | Completed in core reliability implementation | NAV provider/cache/akshare failures degrade to `NavDataResult(unavailable=True, records=[])`; annual-report repository/PDF/source fail-closed semantics remain outside the catch boundary |
 | Pre-2026 turnover-rate missing semantics | Completed in core reliability implementation | Focused tests lock missing `turnover_rate` as P1 warn/insufficiency, not standalone hard block; FQ4 aggregate missing-rate semantics remain unchanged |
 | Small baseline corpus v1 | Completed in evidence run | Accepted 8 candidate rows / 7 unique fund codes as evidence only. `004393` / 2024 and `004194` / 2024 are quality-gate `warn`; `006597` / 2024 is quality-gate `block`; index/QDII fallback and FOF data-gap remain blockers. No durable baseline or golden promotion. |
-| Index/QDII source recovery for baseline coverage | next 017641 manager_strategy_text public-only evidence triage gate | Post-implementation public rerun resolved source provenance for `110020` / `017641` as eligible fallback after primary `unavailable`. `110020` evidence is accepted as reviewed coverage candidate input and remains not promoted; `017641` is provenance-complete but quality `block` due to `manager_strategy_text`. The accepted plan requires public-only root-cause classification before any extractor, policy, replacement, baseline, or golden action. |
+| Index/QDII source recovery for baseline coverage | baseline coverage disposition decision gate | Post-implementation public rerun resolved source provenance for `110020` / `017641` as eligible fallback after primary `unavailable`. `110020` evidence is accepted as reviewed coverage candidate input and remains not promoted; `017641` is provenance-complete but quality `block` due to `manager_strategy_text` and now classified `disclosure_data_gap_not_baseline_ready`. Decide replacement/exclusion or other coverage cursor before golden/baseline work. |
 | Source metadata `fallback_used` strict bool parsing | future source provenance hardening gate | Repo review F3 found that `AnnualReportSourceMetadata.from_dict()` can coerce string `"false"` to `True`. This docs-only gate defers implementation; future gate should plan/review a strict bool parser and tests without weakening provenance semantics. |
 | FOF coverage / taxonomy | next baseline coverage / taxonomy gate | Find pure `fof_fund` repository-verified candidate, or open a taxonomy gate before counting QDII-FOF attempts as FOF coverage. |
 | `006597` bond quality-gate block | Completed for holdings applicability; future bond/holder/turnover evidence gates remain | `holdings_snapshot` equity-shape false blocker is resolved into `bond_risk_evidence_missing` / `FQ2F/warn`; 006597 now warns rather than blocks for this reason. Do not route to golden while `bond_risk_evidence_missing.baseline_blocking=true` or other P1 gaps remain. |
@@ -527,6 +530,7 @@ Do not push, create PR, mark ready, merge, close PRs, edit unrelated PRs, delete
 | `110020 reviewed coverage candidate decision plan` | accepted locally | `docs/reviews/release-maintenance-110020-reviewed-coverage-candidate-decision-plan-controller-judgment-20260527.md` | AgentCodex plan; MiMo/GLM initial reviews `PASS_WITH_FINDINGS`; plan patched; targeted re-reviews MiMo/GLM `PASS`; `git diff --check` passed | `110020` public evidence run, strict golden absence, reviewed-fact freeze, index evidence sufficiency, `017641` manager_strategy_text triage, FOF/taxonomy, bond positive-risk evidence, golden/baseline blocked | `110020 reviewed coverage candidate evidence gate` |
 | `110020 reviewed coverage candidate evidence` | accepted locally | `docs/reviews/release-maintenance-110020-reviewed-coverage-candidate-evidence-controller-judgment-20260527.md` | Public snapshot/score/quality-gate and `git diff --check` exited 0; MiMo review `PASS`; GLM review `PASS_WITH_FINDINGS`; terminal `reviewed_coverage_candidate_input_accepted`; no promotion | strict golden absence, reviewed-fact freeze, methodology / constituents insufficient, `017641` manager_strategy_text triage, FOF/taxonomy, bond positive-risk evidence, golden/baseline blocked | `017641 manager_strategy_text extraction/quality triage gate` |
 | `017641 manager_strategy_text quality triage plan` | accepted locally | `docs/reviews/release-maintenance-017641-manager-strategy-text-quality-triage-plan-controller-judgment-20260527.md` | AgentCodex plan; MiMo review `PASS`; GLM review `PASS_WITH_FINDINGS`; non-blocking findings accepted as next-gate guidance; `git diff --check` passed; no code/product-flow changes | public evidence run, root-cause classification, QDII P0 applicability comparison if policy/taxonomy path, no promotion, golden/baseline blocked | `017641 manager_strategy_text public-only evidence triage gate` |
+| `017641 manager_strategy_text public evidence triage` | accepted locally | `docs/reviews/release-maintenance-017641-manager-strategy-text-public-evidence-triage-controller-judgment-20260527.md` | Public snapshot/score/quality-gate and `git diff --check` exited 0; MiMo/GLM reviews `PASS_WITH_FINDINGS`; terminal `disclosure_data_gap_not_baseline_ready`; no promotion | QDII coverage remains not baseline-ready, replacement/exclusion decision, FOF/taxonomy, bond positive-risk evidence, golden/baseline blocked | `baseline coverage disposition decision gate` |
 
 ## Historical Evidence Index
 
