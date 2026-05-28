@@ -6,7 +6,7 @@
 > **规则真源**: `AGENTS.md`
 > **历史快照**: `docs/archive/implementation-control-history-20260525.md`
 > **release-maintenance 长账本**: `docs/archive/implementation-control-release-maintenance-ledger-20260527.md`
-> **当前状态**: release maintenance；CSRC EID accumulated NAV adapter normalization implementation gate 已 accepted local validation；006597/2024 的 `credit_risk` 与 `redemption_share_pressure` false negative 已解除；typed NAV runtime path 已能通过 `FundNavRepository()` 默认 CSRC EID source 取得 006597 家族 A/C/E/F 分份额 `accumulated_nav` series；stock-sdk 仍仅 evidence-only；bond blocker 仍因缺 reviewed `drawdown_stress` metric implementation 保留；下一入口为 drawdown_stress NAV-derived metric contract / implementation gate
+> **当前状态**: release maintenance；drawdown_stress NAV-derived metric implementation gate 已 accepted local validation；006597/2024 的 `credit_risk`、`redemption_share_pressure` 与 `drawdown_stress` false negative / residual 已通过真实 snapshot / score / quality gate 验证解除；score 不再包含 `bond_risk_evidence_missing.baseline_blocking=true`；golden promotion 未进入；下一入口为非 mutating readiness / residual reconciliation gate
 
 ---
 
@@ -27,11 +27,11 @@
 |---|---|
 | Branch | `codex/local-reconciliation` |
 | Current phase | `release maintenance` |
-| Current gate | `CSRC EID accumulated NAV adapter normalization implementation gate accepted local validation` |
+| Current gate | `drawdown_stress NAV-derived metric implementation gate accepted local validation` |
 | Current gate classification | `heavy` |
-| Next entry point | `drawdown_stress NAV-derived metric contract / implementation gate` |
+| Next entry point | `bond risk evidence local readiness reconciliation gate` |
 | Next gate classification | `heavy` |
-| Latest accepted gate checkpoint | `CSRC EID adapter normalization accepted: FundNavRepository() defaults to CsrcEidNavSource and returns verified A/C/E/F accumulated_nav typed series for 006597 family; strong_drawdown_evidence_eligible=True is source-level only; no drawdown metric, score, snapshot, quality gate, golden, PR, push, merge, release or promotion changes; drawdown_stress blocker remains.` |
+| Latest accepted gate checkpoint | `Drawdown NAV-derived metric accepted: 006597/A 2024 CSRC EID accumulated_nav series produces accepted max drawdown evidence for bond_risk_evidence.v1.drawdown_stress through FundNavRepository typed boundary; latest 006597 snapshot is satisfied, score_applicability_issues=[], and quality gate has no bond_risk_evidence_missing; score/quality/golden semantics unchanged; no PR, push, merge, release or promotion changes.` |
 | Design truth | `docs/design.md` (v2.2) |
 | Control truth | `docs/implementation-control.md` |
 | Historical control snapshots | `docs/archive/implementation-control-history-20260525.md`; `docs/archive/implementation-control-release-maintenance-ledger-20260527.md` |
@@ -57,6 +57,12 @@
 | CSRC EID adapter normalization implementation reviews | `docs/reviews/release-maintenance-csrc-eid-accumulated-nav-adapter-normalization-implementation-review-mimo-20260529.md`; `docs/reviews/release-maintenance-csrc-eid-accumulated-nav-adapter-normalization-implementation-review-glm-20260529.md` |
 | CSRC EID adapter normalization aggregate deepreviews | `docs/reviews/release-maintenance-csrc-eid-accumulated-nav-adapter-normalization-aggregate-deepreview-mimo-20260529.md`; `docs/reviews/release-maintenance-csrc-eid-accumulated-nav-adapter-normalization-aggregate-deepreview-glm-20260529.md` |
 | CSRC EID adapter normalization controller judgment | `docs/reviews/release-maintenance-csrc-eid-accumulated-nav-adapter-normalization-controller-judgment-20260529.md` |
+| Drawdown NAV-derived metric plan | `docs/reviews/release-maintenance-drawdown-stress-nav-derived-metric-implementation-plan-20260529.md` |
+| Drawdown NAV-derived metric plan reviews | `docs/reviews/release-maintenance-drawdown-stress-nav-derived-metric-implementation-plan-review-glm-20260529.md`; `docs/reviews/release-maintenance-drawdown-stress-nav-derived-metric-implementation-plan-review-mimo-20260529.md`; `docs/reviews/release-maintenance-drawdown-stress-nav-derived-metric-implementation-plan-rereview-glm-20260529.md`; `docs/reviews/release-maintenance-drawdown-stress-nav-derived-metric-implementation-plan-rereview-mimo-20260529.md` |
+| Drawdown NAV-derived metric implementation evidence | `docs/reviews/release-maintenance-drawdown-stress-nav-derived-metric-implementation-evidence-20260529.md` |
+| Drawdown NAV-derived metric implementation reviews | `docs/reviews/release-maintenance-drawdown-stress-nav-derived-metric-implementation-review-glm-20260529.md`; `docs/reviews/release-maintenance-drawdown-stress-nav-derived-metric-implementation-review-mimo-20260529.md`; `docs/reviews/release-maintenance-drawdown-stress-nav-derived-metric-implementation-rereview-glm-20260529.md`; `docs/reviews/release-maintenance-drawdown-stress-nav-derived-metric-implementation-rereview-mimo-20260529.md` |
+| Drawdown NAV-derived metric aggregate deepreviews | `docs/reviews/release-maintenance-drawdown-stress-nav-derived-metric-aggregate-deepreview-glm-20260529.md`; `docs/reviews/release-maintenance-drawdown-stress-nav-derived-metric-aggregate-deepreview-mimo-20260529.md` |
+| Drawdown NAV-derived metric controller judgment | `docs/reviews/release-maintenance-drawdown-stress-nav-derived-metric-controller-judgment-20260529.md` |
 | Typed implementation plan | `docs/reviews/release-maintenance-nav-source-adapter-typed-contract-implementation-plan-20260528.md` |
 | Typed implementation evidence | `docs/reviews/release-maintenance-nav-source-adapter-typed-contract-implementation-evidence-20260528.md` |
 | Aggregate deepreview: DS | `docs/reviews/release-maintenance-nav-source-adapter-typed-contract-aggregate-deepreview-ds-20260528.md` |
@@ -74,30 +80,32 @@
 - `累计收益率走势` / `LJSYLZS` remains `adjustment_basis_unknown` and is not accepted as total-return evidence.
 - Legacy `FundNavDataAdapter.load_nav_data()` behavior remains compatible; cache hit still reports `source="nav_cache"` while typed source path can expose origin source/cache updated metadata.
 - Current production typed NAV path now defaults to CSRC EID accumulated NAV through `FundNavRepository()`. Real smoke accepted A/C/E/F typed series for 006597 family: `006597=A/5755:2030-1010` and `006598=C/5755:2030-1020` from 2018-12-18 to 2026-05-28 with 1807 records each, `014217=E/5755:2030-1040` from 2022-04-25 to 2026-05-28 with 994 records, and `022176=F/5755:2030-1050` from 2024-10-08 to 2026-05-28 with 398 records.
-- CSRC EID accumulated series uses `nav_type="accumulated_nav"`, `adjusted_basis="accumulated_nav"`, `dividend_adjustment_status="not_applicable"`, `identity_status="verified"`, and `strong_drawdown_evidence_eligible=true`. This is source-level eligibility only and does not implement a drawdown metric or解除 `drawdown_stress` blocker.
+- CSRC EID accumulated series uses `nav_type="accumulated_nav"`, `adjusted_basis="accumulated_nav"`, `dividend_adjustment_status="not_applicable"`, `identity_status="verified"`, and `strong_drawdown_evidence_eligible=true`. In the prior adapter gate this was source-level eligibility only; the current drawdown metric gate has now consumed it through the typed repository to produce reviewed max drawdown evidence.
 - Legacy `FundNavDataAdapter.load_nav_data()` behavior remains compatible. Raw-unit typed compatibility remains available only through constructor-injected raw adapters and stays `raw_unit_nav`, `requested_code_only`, and `strong_drawdown_evidence_eligible=false`.
-- `drawdown_stress` remains weak qualitative. Latest 006597 score remains `bond_risk_evidence_missing.baseline_blocking=true`, with `missing_evidence_groups` only `drawdown_stress`.
+- Drawdown NAV-derived metric implementation accepted max drawdown as the minimum quantitative metric for this gate. It uses `006597 / A`, period `2024-01-01` to `2024-12-31`, and the CSRC EID typed `accumulated_nav` series only through `FundNavRepository.load_nav_series()`.
+- Latest real metric for `006597 / A` is max drawdown `-0.0010059518819683125157179982` (`-0.10%`), with peak `2024-09-26 / 1.1929`, trough `2024-10-09 / 1.1917`, and `243` period records.
+- `bond_risk_evidence.v1.drawdown_stress` now accepts reviewed `quantitative_derived / derived_metric` evidence. Annual-report “控制回撤” qualitative text remains weak when no accepted NAV-derived metric exists.
+- Latest 006597 rerun `bond-risk-drawdown-nav-006597-2024-20260529` has snapshot `bond_risk_contract_status="satisfied"`, all seven bond risk groups satisfied, `score_applicability_issues=[]`, and no quality-gate `bond_risk_evidence_missing` issue.
 - Full validation passed for the CSRC EID adapter normalization gate: `uv run ruff check .`; `uv run pytest --cov=fund_agent --cov-report=term-missing --cov-fail-under=50 -q` with `925 passed`, total coverage `92.37%`. Real CSRC EID smoke passed for A/C/E/F through `FundNavRepository()` with `force_refresh=True`.
-- No score, snapshot, quality gate, golden fixture, PR, push, merge, release, or promotion change occurred in this gate.
+- Full validation passed for the drawdown metric implementation gate: `uv run ruff check .`; `uv run pytest --cov=fund_agent --cov-report=term-missing --cov-fail-under=50 -q` with `939 passed`, total coverage `92.42%`. Real CSRC EID NAV smoke, extraction snapshot, extraction score, and quality gate reruns passed for the gate scope.
+- No score policy, quality gate semantics, golden fixture, PR, push, merge, release, or promotion change occurred in this gate.
 - Golden answer corpus v1 remains blocked until coverage, source, quality, fund-type, and fixture-promotion blockers are resolved or explicitly deferred.
 
 ## Next Entry Point
 
-`drawdown_stress NAV-derived metric contract / implementation gate`.
+`bond risk evidence local readiness reconciliation gate`.
 
-This next gate must start with Startup Packet replay and `$init-agents` / tmux multi-agent flow if multi-agent panes are used. `credit_risk` and `redemption_share_pressure` false negatives are locally repaired and validated for `006597` / 2024. CSRC EID accumulated NAV adapter normalization is now implemented through the Fund data typed boundary, but real validation still keeps `bond_risk_evidence_missing.baseline_blocking=true` because no reviewed max drawdown / volatility / stress metric contract has been implemented and projected into `bond_risk_evidence.v1.drawdown_stress`.
+This next gate must start with Startup Packet replay and `$init-agents` / tmux multi-agent flow if multi-agent panes are used. `credit_risk` and `redemption_share_pressure` false negatives are locally repaired and validated for `006597` / 2024. `drawdown_stress` now has reviewed NAV-derived max drawdown evidence through the Fund data typed boundary. Latest real validation no longer contains `bond_risk_evidence_missing.baseline_blocking=true`; remaining quality warnings are unrelated to the bond risk evidence blocker.
 
 Allowed scope:
 
-- Consume only `FundNavRepository.load_nav_series()` for NAV-derived drawdown work.
+- Reconcile local readiness after `006597 / 2024` bond risk blocker解除 without entering golden promotion.
+- Confirm latest snapshot / score / quality artifacts and remaining unrelated FQ warnings before any later golden-readiness preflight.
+- Consume only `FundNavRepository.load_nav_series()` for any NAV-derived follow-up.
 - Pass explicit `fund_code`, `share_class`, `start_date`, `end_date`, `minimum_records`, and other required parameters; do not use `extra_payload`.
 - Reject `raw_unit_nav` and `requested_code_only` as strong drawdown evidence.
-- Consume the already implemented CSRC EID `accumulated_nav` typed series only through `FundNavRepository.load_nav_series()`.
-- Require a reviewed metric contract before using `accumulated_nav`, adjusted, dividend-adjusted, or total-return basis to produce quantitative `drawdown_stress`.
-- Define metric period, share-class handling, formula, provenance, evidence projection, fail-closed conditions, and how source-level `strong_drawdown_evidence_eligible=True` becomes metric-level evidence, if accepted.
 - Keep A/C/E/F NAV series separated; do not mix share classes into one product-level NAV path.
 - Preserve fail-closed taxonomy for `schema_drift`, `identity_mismatch`, `integrity_error`, `adjustment_basis_unknown`, `missing_date_range`, `insufficient_records`, `not_found`, and `unavailable`.
-- Do not change `bond_risk_evidence` satisfaction, score acceptance, snapshot schema, quality gate semantics, or baseline status in the adapter normalization implementation gate.
 - Keep qualitative drawdown-control text weak unless a reviewed contract explicitly changes the rule.
 - Preserve evidence-strength distinctions and do not treat weak or ambiguous groups as accepted.
 - Preserve existing FQ0-FQ6 semantics, renderer output, Service/CLI behavior, source strategy, and `FundDocumentRepository` boundaries.
@@ -124,7 +132,9 @@ Allowed scope:
 | `110020` reviewed coverage candidate | future golden/baseline preflight | Accepted only as reviewed coverage candidate input; remains `not_promoted`; methodology / constituents evidence remains insufficient. |
 | `017641` QDII data gap | disposition / taxonomy follow-up | Original QDII row is provenance-complete but quality `block` due to `manager_strategy_text`; accepted disposition is `replace`, not promotion. |
 | FOF coverage / taxonomy | future fund-type taxonomy gate | Find pure `fof_fund` repository-verified candidate, or open taxonomy gate before counting QDII-FOF attempts as FOF coverage. |
-| `006597` bond risk evidence blocker | future `drawdown_stress NAV-derived metric contract / implementation gate` | `credit_risk` and `redemption_share_pressure` false negatives are repaired and validated locally. Runtime typed NAV path now defaults to CSRC EID accumulated NAV for A/C/E/F through `FundNavRepository()`, and source-level `strong_drawdown_evidence_eligible=true` is accepted for verified accumulated series. No reviewed drawdown metric has been implemented or projected into `bond_risk_evidence.v1`; latest `006597` score still has `bond_risk_evidence_missing.baseline_blocking=true`, with `missing_evidence_groups` only `drawdown_stress`. Do not claim blocker解除 without a reviewed drawdown metric implementation and score/snapshot/quality-gate gate. |
+| `006597` bond risk evidence blocker | closed by drawdown metric gate | `credit_risk`, `redemption_share_pressure`, and `drawdown_stress` are repaired and validated locally. Latest `006597` snapshot has all seven bond risk groups satisfied; score has `score_applicability_issues=[]`; quality gate has no `bond_risk_evidence_missing`. Keep this closed status unless a later regression appears. |
+| `006597` remaining quality warnings | future readiness / residual reconciliation gate | Latest quality gate remains `warn` for unrelated `turnover_rate`, `holder_structure`, `share_change`, fund-level P1 failures, FQ0 golden not configured, and FQ4 missing field rate. Do not treat these as bond-risk evidence residuals without a separate gate. |
+| Snapshot multi-anchor projection | future snapshot evidence display hardening gate | Current snapshot field-level projection exposes one traceable anchor. Derived provenance is present in extractor evidence; if consumers need simultaneous annual-report and derived anchors in snapshot rows, open a narrow projection gate. |
 | CSRC EID NAV provenance cleanup | future NAV provenance hardening gate | `source_query_params` currently mixes HTTP query params and request context such as `force_refresh`; accepted as low risk. Consider splitting HTTP params from request context if a consumer needs replayable provenance. |
 | CSRC EID source generalization | future NAV source generalization gate | Current adapter is scoped to verified 006597 family constants and a hardcoded F direct-search gap. Extend only with reviewed identity evidence for additional fund families or share-class search gaps. |
 | CSRC EID parser/source resilience | future schema-drift / caching strategy gate | Detail-page text parsing and public endpoint availability are accepted low residuals. Existing behavior fail-closes on schema/identity/integrity issues; caching strategy should wait for accepted metric consumer requirements. |
@@ -155,6 +165,7 @@ Allowed scope:
 | `NAV adjusted-basis source identity` | accepted local evidence with partial acceptance | `docs/reviews/release-maintenance-nav-adjusted-basis-source-identity-controller-judgment-20260528.md`; plan/evidence and DS/GLM review artifacts | Accepted Eastmoney / 天天基金 `Data_ACWorthTrend` / `累计净值走势` as future `accumulated_nav` source/basis identity candidate for A/C/E and F source-inception-forward windows; `LJSYLZS` remains `adjustment_basis_unknown`; raw unit NAV remains not strong evidence; no code/test/runtime/score/snapshot/quality/golden changes. | NAV accumulated-nav source adapter normalization implementation gate |
 | `CSRC EID and stock-sdk accumulated NAV source evaluation` | accepted local evidence | `docs/reviews/release-maintenance-csrc-eid-stock-sdk-nav-source-evaluation-controller-judgment-20260528.md`; plan/evidence and DS/GLM review artifacts | Accepted CSRC EID as future primary `accumulated_nav` source candidate: public search verifies internal ID `5755`, classification pages separate A/C/E/F, and E-class distribution cross-check matches annual report §3.3. stock-sdk remains evidence-only because it wraps Eastmoney and `getFundNavHistory` has date `integrity_error`. No code/test/dependency/runtime/score/snapshot/quality/golden changes. | CSRC EID accumulated NAV adapter normalization implementation gate |
 | `CSRC EID accumulated NAV adapter normalization implementation` | accepted local validation | `docs/reviews/release-maintenance-csrc-eid-accumulated-nav-adapter-normalization-controller-judgment-20260529.md`; implementation evidence and MiMo/GLM aggregate deepreviews | Implemented CSRC EID accumulated NAV source adapter through `FundNavRepository()` typed boundary. A/C/E/F real smoke passed; full ruff and full pytest passed. `strong_drawdown_evidence_eligible=true` is source-level only; no drawdown metric, score, snapshot, quality gate, golden, PR, push, release or promotion changes. | drawdown_stress NAV-derived metric contract / implementation gate |
+| `drawdown_stress NAV-derived metric implementation` | accepted local validation | `docs/reviews/release-maintenance-drawdown-stress-nav-derived-metric-controller-judgment-20260529.md`; implementation evidence and MiMo/GLM aggregate deepreviews | Implemented reviewed max drawdown evidence for `006597/A` 2024 through `FundNavRepository()` and CSRC EID accumulated NAV. Latest snapshot satisfies all seven bond risk groups, score has no `bond_risk_evidence_missing`, quality gate has no bond-risk blocker. Full ruff and full pytest passed. No golden, PR, push, release or promotion changes. | bond risk evidence local readiness reconciliation gate |
 
 ## Historical Evidence Index
 
