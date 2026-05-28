@@ -117,6 +117,38 @@ class NavDataResult:
     unavailable_reason: str | None = None
 
 
+@dataclass(frozen=True, slots=True)
+class _NavCacheEntry:
+    """净值缓存条目。
+
+    该私有模型只在 source adapter 内部使用，用于让 typed repository 能看到
+    cache hit 背后的 origin source 和缓存更新时间，同时保持旧 `load_nav_data()`
+    的 `source="nav_cache"` 兼容行为。
+    """
+
+    records: NavPayload
+    source: str
+    updated_at: str
+
+
+@dataclass(frozen=True, slots=True)
+class _RawNavSourceResult:
+    """净值 source adapter 原始结果。
+
+    该私有 DTO 是 `FundNavDataAdapter` 与 `FundNavRepository` 之间的边界，
+    只承载原始 records 与来源/缓存元数据，不表达模板第 2 章 R=A+B-C 或
+    第 6 章核心风险所需的调整基础判断。
+    """
+
+    fund_code: str
+    records: NavPayload
+    source: str
+    origin_source: str
+    cached: bool
+    retrieved_at: str | None
+    cache_updated_at: str | None
+
+
 def unavailable_nav_data_result(
     fund_code: str,
     *,
@@ -264,6 +296,66 @@ class FundNavDataAdapter:
             cached=False,
         )
 
+    async def load_raw_nav_source(
+        self,
+        fund_code: str,
+        *,
+        force_refresh: bool = False,
+    ) -> _RawNavSourceResult:
+        """读取原始 NAV source 结果及缓存元数据。
+
+        Args:
+            fund_code: 基金代码。
+            force_refresh: 是否强制刷新缓存。
+
+        Returns:
+            原始 records 与 source/cache 元数据。
+
+        Raises:
+            ValueError: 基金代码为空时抛出。
+            sqlite3.Error: 缓存读写失败时抛出。
+            Exception: 抓取函数异常时向上抛出。
+        """
+
+        normalized_fund_code = fund_code.strip()
+        if not normalized_fund_code:
+            raise ValueError("fund_code 不能为空")
+
+        await self.initialize()
+        if not force_refresh:
+            cache_entry = await asyncio.to_thread(
+                self._load_cached_with_metadata,
+                normalized_fund_code,
+            )
+            if cache_entry is not None:
+                return _RawNavSourceResult(
+                    fund_code=normalized_fund_code,
+                    records=cache_entry.records,
+                    source="nav_cache",
+                    origin_source=cache_entry.source,
+                    cached=True,
+                    retrieved_at=None,
+                    cache_updated_at=cache_entry.updated_at,
+                )
+
+        fetched_records = await self._call_fetcher(normalized_fund_code)
+        retrieved_at = _utc_timestamp()
+        await asyncio.to_thread(
+            self._save_cached_sync,
+            normalized_fund_code,
+            fetched_records,
+            retrieved_at,
+        )
+        return _RawNavSourceResult(
+            fund_code=normalized_fund_code,
+            records=fetched_records,
+            source="akshare",
+            origin_source="akshare",
+            cached=False,
+            retrieved_at=retrieved_at,
+            cache_updated_at=None,
+        )
+
     async def _call_fetcher(self, fund_code: str) -> NavPayload:
         """调用净值抓取函数。
 
@@ -282,8 +374,35 @@ class FundNavDataAdapter:
             return await payload
         return payload
 
+    def _load_cached_with_metadata(self, fund_code: str) -> _NavCacheEntry | None:
+        """同步读取带元数据的净值缓存。
+
+        Args:
+            fund_code: 基金代码。
+
+        Returns:
+            命中时返回缓存条目，否则返回 `None`。
+
+        Raises:
+            sqlite3.Error: 查询 SQLite 失败时抛出。
+            json.JSONDecodeError: 缓存 JSON 非法时抛出。
+        """
+
+        with sqlite3.connect(self.sqlite_path) as connection:
+            row = connection.execute(
+                "SELECT payload_json, source, updated_at FROM nav_cache WHERE fund_code = ?",
+                (fund_code,),
+            ).fetchone()
+        if row is None:
+            return None
+        return _NavCacheEntry(
+            records=list(json.loads(str(row[0]))),
+            source=str(row[1]),
+            updated_at=str(row[2]),
+        )
+
     def _load_cached_sync(self, fund_code: str) -> NavPayload | None:
-        """同步读取净值缓存。
+        """同步读取净值缓存 records。
 
         Args:
             fund_code: 基金代码。
@@ -296,21 +415,23 @@ class FundNavDataAdapter:
             json.JSONDecodeError: 缓存 JSON 非法时抛出。
         """
 
-        with sqlite3.connect(self.sqlite_path) as connection:
-            row = connection.execute(
-                "SELECT payload_json FROM nav_cache WHERE fund_code = ?",
-                (fund_code,),
-            ).fetchone()
-        if row is None:
+        cache_entry = self._load_cached_with_metadata(fund_code)
+        if cache_entry is None:
             return None
-        return list(json.loads(str(row[0])))
+        return cache_entry.records
 
-    def _save_cached_sync(self, fund_code: str, records: NavPayload) -> None:
+    def _save_cached_sync(
+        self,
+        fund_code: str,
+        records: NavPayload,
+        updated_at: str | None = None,
+    ) -> None:
         """同步写入净值缓存。
 
         Args:
             fund_code: 基金代码。
             records: 净值记录列表。
+            updated_at: 缓存更新时间；为空时使用当前 UTC 时间。
 
         Returns:
             无返回值。
@@ -337,7 +458,7 @@ class FundNavDataAdapter:
                     fund_code,
                     json.dumps(records, ensure_ascii=False),
                     "akshare",
-                    _utc_timestamp(),
+                    updated_at or _utc_timestamp(),
                 ),
             )
             connection.commit()

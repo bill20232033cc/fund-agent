@@ -101,6 +101,59 @@ async def test_nav_data_adapter_force_refresh_bypasses_cache(tmp_path: Path) -> 
     assert calls == ["110011", "110011"]
 
 
+@pytest.mark.asyncio
+async def test_nav_data_adapter_raw_source_exposes_cache_origin_metadata(
+    tmp_path: Path,
+) -> None:
+    """验证 typed source 边界能看到 cache origin，但旧入口仍返回 nav_cache。
+
+    Args:
+        tmp_path: pytest 提供的临时目录。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 cache metadata 或旧入口兼容行为不符合预期时抛出。
+    """
+
+    calls: list[str] = []
+
+    async def _fake_fetcher(fund_code: str) -> list[dict[str, object]]:
+        """构造中文 fake 净值数据。
+
+        Args:
+            fund_code: 基金代码。
+
+        Returns:
+            fake 中文净值记录。
+
+        Raises:
+            无显式抛出。
+        """
+
+        calls.append(fund_code)
+        return [{"净值日期": "2024-12-31", "单位净值": "1.2345"}]
+
+    adapter = FundNavDataAdapter(root_dir=tmp_path / "nav-cache", fetcher=_fake_fetcher)
+
+    first_raw = await adapter.load_raw_nav_source("006597")
+    second_raw = await adapter.load_raw_nav_source("006597")
+    legacy_result = await adapter.load_nav_data("006597")
+
+    assert first_raw.cached is False
+    assert first_raw.source == "akshare"
+    assert first_raw.origin_source == "akshare"
+    assert first_raw.cache_updated_at is None
+    assert second_raw.cached is True
+    assert second_raw.source == "nav_cache"
+    assert second_raw.origin_source == "akshare"
+    assert second_raw.cache_updated_at is not None
+    assert legacy_result.cached is True
+    assert legacy_result.source == "nav_cache"
+    assert calls == ["006597"]
+
+
 def test_unavailable_nav_data_result_returns_explicit_empty_result() -> None:
     """验证净值不可用 helper 返回兼容的空结果。
 

@@ -21,6 +21,7 @@ from fund_agent.fund.data.nav_models import (
     NavType,
     ShareClassMapping,
 )
+from fund_agent.fund.data.nav_repository import FundNavRepository
 from fund_agent.fund.data.thermometer import (
     FundThermometerAdapter,
     IndexTemperature,
@@ -85,6 +86,7 @@ __all__ = [
     "DividendAdjustmentStatus",
     "FundNavDataAdapter",
     "FundNavRecord",
+    "FundNavRepository",
     "FundNavSeries",
     "FundThermometerAdapter",
     "IndexTemperature",
