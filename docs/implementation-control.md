@@ -6,7 +6,7 @@
 > **规则真源**: `AGENTS.md`
 > **历史快照**: `docs/archive/implementation-control-history-20260525.md`
 > **release-maintenance 长账本**: `docs/archive/implementation-control-release-maintenance-ledger-20260527.md`
-> **当前状态**: release maintenance；NAV adjusted-basis source identity gate 已 accepted local evidence with partial acceptance；006597/2024 的 `credit_risk` 与 `redemption_share_pressure` false negative 已解除；typed NAV path 仍只实现 raw-unit-only series，但 source evidence 已接受 Eastmoney / 天天基金 `累计净值走势` / `Data_ACWorthTrend` 作为未来 `accumulated_nav` adapter normalization candidate；bond blocker 仍因 `drawdown_stress` 缺 reviewed metric implementation 保留；下一入口为 NAV accumulated-nav source adapter normalization implementation gate
+> **当前状态**: release maintenance；CSRC EID and stock-sdk accumulated NAV source evaluation gate 已 accepted local evidence；006597/2024 的 `credit_risk` 与 `redemption_share_pressure` false negative 已解除；typed NAV runtime path 仍只实现 raw-unit-only series，但 source evidence 已接受 CSRC EID 作为 future primary `accumulated_nav` adapter candidate，stock-sdk 仅 evidence-only；bond blocker 仍因 `drawdown_stress` 缺 adapter normalization 与 reviewed metric implementation 保留；下一入口为 CSRC EID accumulated NAV adapter normalization implementation gate
 
 ---
 
@@ -27,11 +27,11 @@
 |---|---|
 | Branch | `codex/local-reconciliation` |
 | Current phase | `release maintenance` |
-| Current gate | `NAV adjusted-basis source identity gate accepted local evidence with partial acceptance` |
+| Current gate | `CSRC EID and stock-sdk accumulated NAV source evaluation gate accepted local evidence` |
 | Current gate classification | `heavy` |
-| Next entry point | `NAV accumulated-nav source adapter normalization implementation gate` |
+| Next entry point | `CSRC EID accumulated NAV adapter normalization implementation gate` |
 | Next gate classification | `heavy` |
-| Latest accepted gate checkpoint | `NAV source identity evidence accepted with partial acceptance: Eastmoney / 天天基金 Data_ACWorthTrend / 累计净值走势 is accepted as accumulated_nav source/basis identity candidate for A/C/E and F source-inception-forward windows; LJSYLZS remains adjustment_basis_unknown; raw_unit_nav remains not strong evidence; drawdown_stress blocker remains.` |
+| Latest accepted gate checkpoint | `CSRC EID source evaluation accepted: eid.csrc.gov.cn internal ID 5755 maps to 国泰利享中短债债券 A/C/E through public search and exposes A/C/E/F share-class classification NAV tables; CSRC EID is accepted as future primary accumulated_nav source candidate; stock-sdk is evidence-only due Eastmoney lineage and date integrity_error; raw_unit_nav remains not strong evidence; drawdown_stress blocker remains.` |
 | Design truth | `docs/design.md` (v2.2) |
 | Control truth | `docs/implementation-control.md` |
 | Historical control snapshots | `docs/archive/implementation-control-history-20260525.md`; `docs/archive/implementation-control-release-maintenance-ledger-20260527.md` |
@@ -48,6 +48,10 @@
 | NAV source identity evidence | `docs/reviews/release-maintenance-nav-adjusted-basis-source-identity-evidence-20260528.md` |
 | NAV source identity evidence reviews | `docs/reviews/release-maintenance-nav-adjusted-basis-source-identity-evidence-review-ds-20260528.md`; `docs/reviews/release-maintenance-nav-adjusted-basis-source-identity-evidence-review-glm-20260528.md` |
 | NAV source identity controller judgment | `docs/reviews/release-maintenance-nav-adjusted-basis-source-identity-controller-judgment-20260528.md` |
+| CSRC EID / stock-sdk source evaluation plan | `docs/reviews/release-maintenance-csrc-eid-stock-sdk-nav-source-evaluation-plan-20260528.md` |
+| CSRC EID / stock-sdk source evaluation evidence | `docs/reviews/release-maintenance-csrc-eid-stock-sdk-nav-source-evaluation-evidence-20260528.md` |
+| CSRC EID / stock-sdk source evaluation reviews | `docs/reviews/release-maintenance-csrc-eid-stock-sdk-nav-source-evaluation-evidence-review-ds-20260528.md`; `docs/reviews/release-maintenance-csrc-eid-stock-sdk-nav-source-evaluation-evidence-review-glm-20260528.md` |
+| CSRC EID / stock-sdk source evaluation judgment | `docs/reviews/release-maintenance-csrc-eid-stock-sdk-nav-source-evaluation-controller-judgment-20260528.md` |
 | Typed implementation plan | `docs/reviews/release-maintenance-nav-source-adapter-typed-contract-implementation-plan-20260528.md` |
 | Typed implementation evidence | `docs/reviews/release-maintenance-nav-source-adapter-typed-contract-implementation-evidence-20260528.md` |
 | Aggregate deepreview: DS | `docs/reviews/release-maintenance-nav-source-adapter-typed-contract-aggregate-deepreview-ds-20260528.md` |
@@ -60,9 +64,11 @@
 - `FundNavRepository.load_nav_series("006597", minimum_records=30)` real smoke succeeded with 1809 records, `share_class="A"`, `nav_type="unit_nav"`, `adjusted_basis="raw_unit_nav"`, `dividend_adjustment_status="not_adjusted"`, `identity_status="requested_code_only"`, `strong_drawdown_evidence_eligible=false`, `source="nav_cache"`, `origin_source="akshare"`.
 - NAV adjusted-basis source identity evidence accepted Eastmoney / 天天基金 `累计净值走势` / `Data_ACWorthTrend` as `accumulated_nav` source/basis identity candidate for A/C/E and F source-inception-forward windows. The E-class proof is anchored by `FundDocumentRepository` annual-report distribution evidence and provider exact date `2023-01-11`, where accumulated minus unit NAV changed by `0.0080`, matching every 10 shares `0.080`.
 - Accepted limitations: A/C acceptance is inferential through same-provider/same-variable E-class behavior plus independent zero-distribution evidence; identity is cross-endpoint same-provider binding (`fund_open_fund_info_em` data plus `pingzhongdata/{code}.js` identity), not same-response metadata; F is `missing_date_range` for pre-2024-10-08 windows.
+- CSRC EID / stock-sdk source evaluation accepted CSRC EID as future primary `accumulated_nav` source candidate. CSRC EID public search maps `国泰利享中短债债券`, `006597`, `006598`, and `014217` to internal ID `5755`; the verified detail page exposes A/C/E/F classification NAV tables with `估值日期`, `单位净值`, `累计净值`, share-class identity and pagination. E-class CSRC rows reproduce the `2023-01-11` distribution effect: accumulated minus unit NAV changes by `0.0080`, matching annual-report §3.3.
+- stock-sdk remains evidence-only: it wraps Eastmoney `pingzhongdata/{code}.js`; `getFundDividendList` cross-checks the E-class 2023 dividend, but `getFundNavHistory` has a date-normalization `integrity_error`, so it is not accepted as runtime or typed secondary source as-is.
 - `累计收益率走势` / `LJSYLZS` remains `adjustment_basis_unknown` and is not accepted as total-return evidence.
 - Legacy `FundNavDataAdapter.load_nav_data()` behavior remains compatible; cache hit still reports `source="nav_cache"` while typed source path can expose origin source/cache updated metadata.
-- Current production typed NAV path is still raw-unit-only and requested-code-only; the accepted `accumulated_nav` source identity exists only as evidence for the next adapter normalization gate and is not yet implemented in runtime.
+- Current production typed NAV path is still raw-unit-only and requested-code-only; accepted CSRC EID / Eastmoney `accumulated_nav` source identities exist only as evidence for the next adapter normalization gate and are not yet implemented in runtime.
 - `drawdown_stress` remains weak qualitative. Latest 006597 score remains `bond_risk_evidence_missing.baseline_blocking=true`, with `missing_evidence_groups` only `drawdown_stress`.
 - Full validation passed: `uv run ruff check .`; `uv run pytest --cov=fund_agent --cov-report=term-missing --cov-fail-under=50 -q` with `893 passed`, total coverage `92.40%`.
 - No score, snapshot, quality gate, golden fixture, PR, push, merge, release, or promotion change occurred in this gate.
@@ -70,16 +76,17 @@
 
 ## Next Entry Point
 
-`NAV accumulated-nav source adapter normalization implementation gate`.
+`CSRC EID accumulated NAV adapter normalization implementation gate`.
 
-This next gate must start with Startup Packet replay and `$init-agents` / tmux multi-agent flow if multi-agent panes are used. `credit_risk` and `redemption_share_pressure` false negatives are locally repaired and validated for `006597` / 2024. Real validation still keeps `bond_risk_evidence_missing.baseline_blocking=true` because `drawdown_stress` remains weak qualitative evidence under the current score contract. The typed NAV implementation gate proved the current repository boundary is reachable for 006597, but the runtime series remains `raw_unit_nav`, `not_adjusted`, `requested_code_only`, and `strong_drawdown_evidence_eligible=False`. The source identity gate accepted a future `accumulated_nav` candidate, so the next implementation gate should normalize that candidate through the Fund data boundary before any drawdown metric gate.
+This next gate must start with Startup Packet replay and `$init-agents` / tmux multi-agent flow if multi-agent panes are used. `credit_risk` and `redemption_share_pressure` false negatives are locally repaired and validated for `006597` / 2024. Real validation still keeps `bond_risk_evidence_missing.baseline_blocking=true` because `drawdown_stress` remains weak qualitative evidence under the current score contract. The typed NAV implementation gate proved the current repository boundary is reachable for 006597, but the runtime series remains `raw_unit_nav`, `not_adjusted`, `requested_code_only`, and `strong_drawdown_evidence_eligible=False`. CSRC EID is now accepted as future primary `accumulated_nav` source candidate, so the next implementation gate should normalize CSRC EID through the Fund data boundary before any drawdown metric gate.
 
 Allowed scope:
 
 - Consume only `FundNavRepository.load_nav_series()` for NAV-derived drawdown work.
 - Pass explicit `fund_code`, `share_class`, `start_date`, `end_date`, `minimum_records`, and other required parameters; do not use `extra_payload`.
 - Reject `raw_unit_nav` and `requested_code_only` as strong drawdown evidence.
-- Normalize accepted `accumulated_nav` source identity into the typed NAV boundary before any quantitative `drawdown_stress` work.
+- Normalize CSRC EID `accumulated_nav` source identity into the typed NAV boundary before any quantitative `drawdown_stress` work.
+- Bind CSRC EID public search / internal ID `5755` / A-C-E-F classification links and fail closed on search, identity, pagination, blank accumulated NAV, schema drift, duplicate date, bad decimal, or missing-date-window issues.
 - Require an additional reviewed metric contract before using `accumulated_nav`, adjusted, dividend-adjusted, or total-return basis to produce quantitative `drawdown_stress`.
 - Keep A/C/E/F NAV series separated; do not mix share classes into one product-level NAV path.
 - Preserve fail-closed taxonomy for `schema_drift`, `identity_mismatch`, `integrity_error`, `adjustment_basis_unknown`, `missing_date_range`, `insufficient_records`, `not_found`, and `unavailable`.
@@ -110,7 +117,7 @@ Allowed scope:
 | `110020` reviewed coverage candidate | future golden/baseline preflight | Accepted only as reviewed coverage candidate input; remains `not_promoted`; methodology / constituents evidence remains insufficient. |
 | `017641` QDII data gap | disposition / taxonomy follow-up | Original QDII row is provenance-complete but quality `block` due to `manager_strategy_text`; accepted disposition is `replace`, not promotion. |
 | FOF coverage / taxonomy | future fund-type taxonomy gate | Find pure `fof_fund` repository-verified candidate, or open taxonomy gate before counting QDII-FOF attempts as FOF coverage. |
-| `006597` bond risk evidence blocker | future `NAV accumulated-nav source adapter normalization implementation gate`, then separate drawdown metric contract / implementation gate | `credit_risk` and `redemption_share_pressure` false negatives are repaired and validated locally. Runtime typed NAV path remains `raw_unit_nav`, `not_adjusted`, `requested_code_only`, and `strong_drawdown_evidence_eligible=false`. Source evidence accepted `Data_ACWorthTrend` / `累计净值走势` as `accumulated_nav` candidate for A/C/E and F source-inception-forward windows, with limitations recorded. Latest `006597` score still has `bond_risk_evidence_missing.baseline_blocking=true`, with `missing_evidence_groups` only `drawdown_stress`. Do not claim blocker解除 without adapter normalization and a reviewed drawdown metric implementation. |
+| `006597` bond risk evidence blocker | future `CSRC EID accumulated NAV adapter normalization implementation gate`, then separate drawdown metric contract / implementation gate | `credit_risk` and `redemption_share_pressure` false negatives are repaired and validated locally. Runtime typed NAV path remains `raw_unit_nav`, `not_adjusted`, `requested_code_only`, and `strong_drawdown_evidence_eligible=false`. Source evidence accepted CSRC EID as future primary `accumulated_nav` candidate for A/C/E/F share-class NAV tables, with A/C blank-row, F search-index, HTML schema and pagination caveats recorded; stock-sdk is evidence-only due date `integrity_error`. Latest `006597` score still has `bond_risk_evidence_missing.baseline_blocking=true`, with `missing_evidence_groups` only `drawdown_stress`. Do not claim blocker解除 without adapter normalization and a reviewed drawdown metric implementation. |
 | Source metadata strict bool parsing | future source provenance hardening gate | Plan/review strict bool parser for `AnnualReportSourceMetadata.from_dict()`; current known issue: string `"false"` coerces truthy. |
 | Stray untracked `--help` file | artifact disposition / user-authorized cleanup | Do not stage or promote; delete only with explicit authorization or accepted disposition. |
 | Untracked review/evidence artifacts | artifact disposition gate if needed | Decide whether to accept, archive, or leave untracked; do not silently stage unrelated artifacts. |
@@ -136,6 +143,7 @@ Allowed scope:
 | `NAV repository/source adapter adjusted-basis contract` | accepted blocked-with-contract-gap | `docs/reviews/release-maintenance-nav-source-adapter-adjusted-basis-contract-controller-judgment-20260528.md`; primer / plan / evidence artifacts and DS/GLM reviews | Accepted fund NAV / share-class / adjusted-basis primer and typed adapter contract. Independent reviews confirmed 006597 2025 E-class year-end NAV is `1.1967` via `FundDocumentRepository`, and current `FundNavDataAdapter` remains raw-unit-only without share_class / adjusted_basis / provenance / identity / failure taxonomy. No production code, score, quality gate, schema, golden, PR, push, or promotion changes. | NAV repository/source adapter typed contract implementation gate |
 | `NAV repository/source adapter typed contract implementation` | accepted local validation | `docs/reviews/release-maintenance-nav-source-adapter-typed-contract-implementation-controller-judgment-20260528.md`; implementation evidence and aggregate deepreviews | Implemented typed NAV models, adapter metadata, repository normalization, docs, tests, and real 006597 smoke. Full ruff and full pytest passed. Current 006597 NAV remains raw-unit-only/requested-code-only/not strong eligible; `drawdown_stress` blocker remains. No score, snapshot, quality gate, golden, PR, push, release, or promotion changes. | drawdown_stress NAV-derived metric implementation gate or NAV adjusted-basis source identity gate |
 | `NAV adjusted-basis source identity` | accepted local evidence with partial acceptance | `docs/reviews/release-maintenance-nav-adjusted-basis-source-identity-controller-judgment-20260528.md`; plan/evidence and DS/GLM review artifacts | Accepted Eastmoney / 天天基金 `Data_ACWorthTrend` / `累计净值走势` as future `accumulated_nav` source/basis identity candidate for A/C/E and F source-inception-forward windows; `LJSYLZS` remains `adjustment_basis_unknown`; raw unit NAV remains not strong evidence; no code/test/runtime/score/snapshot/quality/golden changes. | NAV accumulated-nav source adapter normalization implementation gate |
+| `CSRC EID and stock-sdk accumulated NAV source evaluation` | accepted local evidence | `docs/reviews/release-maintenance-csrc-eid-stock-sdk-nav-source-evaluation-controller-judgment-20260528.md`; plan/evidence and DS/GLM review artifacts | Accepted CSRC EID as future primary `accumulated_nav` source candidate: public search verifies internal ID `5755`, classification pages separate A/C/E/F, and E-class distribution cross-check matches annual report §3.3. stock-sdk remains evidence-only because it wraps Eastmoney and `getFundNavHistory` has date `integrity_error`. No code/test/dependency/runtime/score/snapshot/quality/golden changes. | CSRC EID accumulated NAV adapter normalization implementation gate |
 
 ## Historical Evidence Index
 
