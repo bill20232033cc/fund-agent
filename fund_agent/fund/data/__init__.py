@@ -7,6 +7,20 @@
 from pathlib import Path
 
 from fund_agent.fund.data.nav_data import FundNavDataAdapter, NavDataResult
+from fund_agent.fund.data.nav_models import (
+    AdjustmentBasis,
+    DividendAdjustmentStatus,
+    FundNavRecord,
+    FundNavSeries,
+    NavCompletenessStatus,
+    NavContractError,
+    NavDataContractError,
+    NavFailureCategory,
+    NavIdentityStatus,
+    NavSourceMetadata,
+    NavType,
+    ShareClassMapping,
+)
 from fund_agent.fund.data.thermometer import (
     FundThermometerAdapter,
     IndexTemperature,
@@ -67,14 +81,26 @@ def create_default_thermometer_source() -> AkshareThermometerSource:
 
 __all__ = [
     "ALL_A_MARKET_CODE",
+    "AdjustmentBasis",
+    "DividendAdjustmentStatus",
     "FundNavDataAdapter",
+    "FundNavRecord",
+    "FundNavSeries",
     "FundThermometerAdapter",
     "IndexTemperature",
     "MacroTemperature",
     "MarketTemperature",
+    "NavCompletenessStatus",
+    "NavContractError",
     "NavDataResult",
+    "NavDataContractError",
+    "NavFailureCategory",
+    "NavIdentityStatus",
+    "NavSourceMetadata",
+    "NavType",
     "PePbHistory",
     "PePbPoint",
+    "ShareClassMapping",
     "ThermometerBatchResult",
     "ThermometerReading",
     "ThermometerSnapshot",
