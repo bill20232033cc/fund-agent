@@ -16,15 +16,16 @@ CI 当前固定 Python 3.11，使用 `uv sync --extra dev --frozen` 安装锁定
 - `tests/fund/extractors/test_manager_ownership.py`：`§4/§8/§9` 管理人/持有人 extractor 测试，覆盖编号标题策略文本、换手率、持有披露表、跨页持有人结构和 `missing` 路径
 - `tests/fund/extractors/test_holdings_share_change.py`：`§8/§10` 持仓/份额 extractor 测试，覆盖前十大重仓、行业分布、净变动表、申购/赎回拆分表、多份额列选择、非 A 份额不默认 A 类、歧义多列表 missing、利润变动表误命中回归和表格型 anchor
 - `tests/fund/test_source_provenance.py`：公共来源 provenance 投影测试，覆盖主源 not-applicable、fallback 缺失分类 unknown、metadata-owned eligible/fail-closed 分类映射、metadata 优先级、kwarg 兼容路径和稳定字典输出；不读取文档仓库、PDF、cache 或来源 helper
-- `tests/fund/test_data_extractor.py`：P1 结构化数据 façade 测试，覆盖 `FundDataExtractor` 在年报仓库成功后对 NAV provider/cache/akshare 失败降级为 `NavDataResult(unavailable=True)`、从 `ParsedAnnualReport.metadata.source` 显式投影 `source_provenance` 与 metadata 主源失败分类，以及年报仓库/PDF 类异常不被 NAV 降级吞掉；使用 fake repository 和 fake nav provider，不触发真实网络、PDF 或 akshare
-- `tests/fund/test_extraction_snapshot.py`：P4-S1/P5-S3/P13/P14-S1 精选基金池字段级抽取快照测试，覆盖 CSV 校验、snapshot schema、公共来源 provenance 字段、`comparable_values` 白名单子字段、`index_profile` / `tracking_error` dataclass 子字段序列化、summary 重复代码标红、Source Provenance 表、单基金失败继续和 `004393` known failure 捕获；使用 fake extractor，不触发真实网络或 PDF
-- `tests/fund/test_extraction_score.py`：P4-S2/P4-R10/P5-S2/P5-S3/P5-S4/P6-S5/P9-S2/P14-S1 字段级评分测试，覆盖 snapshot JSONL coverage / traceability / status / priority 映射、单基金质量汇总、指数质量字段按基金类型条件进入 P1 分母、`fund_quality` 模板契约适用性派生、`failed_funds` accounting、score 输出、additive 来源 provenance 不改变 score/FQ 输出、最小 golden set 选择、correctness perfect match、mismatch、白名单缺失、旧 snapshot 兼容、skipped 分母处理和 report-year scoped golden coverage scope；不触发真实网络或 PDF
+- `tests/fund/test_data_extractor.py`：P1 结构化数据 façade 测试，覆盖 `FundDataExtractor` 在年报仓库成功后对 NAV provider/cache/akshare 失败降级为 `NavDataResult(unavailable=True)`、从 `ParsedAnnualReport.metadata.source` 显式投影 `source_provenance` 与 metadata 主源失败分类、债券基金通过 fake typed NAV repository 只加载 A 类年度最大回撤且不混合 A/C/E/F，以及年报仓库/PDF 类异常不被 NAV 降级吞掉；使用 fake repository、fake nav provider 和 fake typed NAV repository，不触发真实网络、PDF 或 akshare
+- `tests/fund/test_extraction_snapshot.py`：P4-S1/P5-S3/P13/P14-S1 精选基金池字段级抽取快照测试，覆盖 CSV 校验、snapshot schema、公共来源 provenance 字段、`comparable_values` 白名单子字段、`index_profile` / `tracking_error` dataclass 子字段序列化、derived-only `bond_risk_evidence` 锚点投影、summary 重复代码标红、Source Provenance 表、单基金失败继续和 `004393` known failure 捕获；使用 fake extractor，不触发真实网络或 PDF
+- `tests/fund/test_extraction_score.py`：P4-S2/P4-R10/P5-S2/P5-S3/P5-S4/P6-S5/P9-S2/P14-S1 字段级评分测试，覆盖 snapshot JSONL coverage / traceability / status / priority 映射、单基金质量汇总、指数质量字段按基金类型条件进入 P1 分母、`fund_quality` 模板契约适用性派生、`failed_funds` accounting、score 输出、additive 来源 provenance 不改变 score/FQ 输出、债券风险七组满足时不发 `bond_risk_evidence_missing`、只有 `drawdown_stress` 未满足时继续发 blocker、最小 golden set 选择、correctness perfect match、mismatch、白名单缺失、旧 snapshot 兼容、skipped 分母处理和 report-year scoped golden coverage scope；不触发真实网络或 PDF
 - `tests/fund/test_golden_prefill.py`：correctness golden answer 预填底稿测试，覆盖模板基金代码识别、dict/dataclass 字段预填、证据 source 和跳过字段保留；使用 fake extractor，不触发真实网络或 PDF
 - `tests/fund/test_golden_answer.py`：人工审核后的 golden answer Markdown 转 JSON 与 strict JSON loader 测试，覆盖 strict 校验、跳过字段、转义竖线、report_year legacy 默认值、跨年份重复 identity 和机器可读 JSON 输出；不触发真实网络或 PDF
-- `tests/fund/test_quality_gate.py`：P4-S4/P5-S2/P5-S4/P6-S5/P9-S2 报告质量 gate 测试，覆盖字段级与单基金 P0 fail 阻断、P1 fail 警告、correctness 未接入 info、correctness coverage FQ0 metadata、report-year coverage gap、correctness mismatch 触发 FQ1、App 类别冲突 FQ1、缺失率 FQ4、模板契约适用性 FQ5、`rule_results`、失败基金 FQ6 和旧 score 兼容；只消费 score JSON，不触发真实网络或 PDF
+- `tests/fund/test_quality_gate.py`：P4-S4/P5-S2/P5-S4/P6-S5/P9-S2 报告质量 gate 测试，覆盖字段级与单基金 P0 fail 阻断、P1 fail 警告、correctness 未接入 info、correctness coverage FQ0 metadata、report-year coverage gap、correctness mismatch 触发 FQ1、App 类别冲突 FQ1、缺失率 FQ4、模板契约适用性 FQ5、`rule_results`、失败基金 FQ6、`bond_risk_evidence_missing` 仅来自 score issue 的自然投影和旧 score 兼容；只消费 score JSON，不触发真实网络或 PDF
 - `tests/fund/test_quality_gate_integration.py`：P5-S1/P9-S2 单基金 quality gate adapter 测试，覆盖从已抽取 `StructuredFundDataBundle` 生成 snapshot/score/gate 产物、精选池成员缺 golden coverage 或当前 report_year 缺 golden coverage 仍运行 gate，以及基金不在精选池时返回 not-run reason；不触发真实网络或 PDF
 - `tests/fund/data/test_nav_data.py`：净值数据适配器测试，覆盖 `nav_cache` 命中、强制刷新和 typed source DTO 的 cache origin/source_nav_type/source_adjustment_basis metadata；不触发真实网络
 - `tests/fund/data/test_nav_repository_contract.py`：NAV repository typed contract 测试，覆盖 `FundNavSeries` model invariant、`FundNavRepository.load_nav_series()` raw 中文 row 与 CSRC EID accumulated row 归一化、显式参数签名、source/cache/query provenance、`raw_unit_nav` 非强回撤证据资格、CSRC source-level eligibility、A/C/E/F 分离、A/C 早期空累计净值、单位净值 diagnostics，以及 `schema_drift`、`identity_mismatch`、`integrity_error`、`missing_date_range`、`insufficient_records`、`unavailable` 等 fail-closed 分类；使用 fake adapter，不触发真实网络
+- `tests/fund/data/test_nav_metrics.py`：NAV 派生指标测试，覆盖 accumulated NAV 最大回撤公式、单调路径零回撤、期内 `minimum_records` 独立检查、重复日期、非正 NAV、raw-unit / 非强证据资格 fail-closed 和百分比格式化；使用 typed fixture，不触发真实网络
 - `tests/fund/data/test_csrc_eid_nav_source.py`：CSRC EID accumulated NAV source adapter 测试，使用 `httpx.MockTransport` 覆盖 public search/detail/classification endpoint、A/C/E/F identity、F direct-search gap、pagination total/last-page edge、空累计净值 rows、stock-sdk runtime rejection 和 date-shift integrity_error；不触发真实网络
 - `tests/fund/data/test_thermometer.py`：有知有行温度计适配器测试，覆盖全市场/指数/宏观解析、24h 缓存复用、强制刷新、抓取失败 stale fallback、无缓存 unavailable 和 malformed HTML
 - `tests/fund/data/test_thermometer_source.py`：自建温度计 akshare 数据源测试，覆盖沪深300/中证500 PE/PB 表合并、指数与全 A PE/PB 顺序抓取、全 A `wind_all_a` PE/PB 共同日期合并、同日期重复修正行确定性折叠、不支持代码和 schema drift fail-closed
@@ -77,6 +78,7 @@ pytest tests/fund/test_data_extractor.py -q
 pytest tests/fund/test_extraction_score.py -q
 pytest tests/fund/data/test_nav_data.py -q
 pytest tests/fund/data/test_nav_repository_contract.py -q
+pytest tests/fund/data/test_nav_metrics.py -q
 pytest tests/fund/data/test_thermometer.py -q
 pytest tests/fund/data/test_thermometer_source.py tests/fund/data/test_thermometer_cache.py -q
 pytest tests/fund/analysis/test_ratios.py -q
@@ -117,7 +119,7 @@ fund-analysis thermometer --index wind_all_a,000300,000905 --json
 fund-analysis thermometer --index wind_all_a,000300,000905 --force-refresh --json
 ```
 
-真实 006597 NAV repository smoke 会触发真实 CSRC EID source 路径，不放入常规 pytest；它只作为 implementation evidence 验证 `FundNavRepository().load_nav_series("006597", share_class="A", minimum_records=30, force_refresh=True)` 的 accumulated typed path 可达。常规 deterministic tests 必须继续使用 fake adapter 或 `httpx.MockTransport`，不依赖真实网络；该 smoke 即使成功也只证明 `accumulated_nav` source identity 与 basis 的 source-level eligibility，不能证明 dividend-adjusted / total-return basis，不能证明 drawdown metric evidence，也不解除 `drawdown_stress` blocker。
+真实 006597 NAV repository / drawdown smoke 会触发真实 CSRC EID source 路径，不放入常规 pytest；它只作为 implementation evidence 验证 `FundNavRepository().load_nav_series("006597", share_class="A", start_date=date(2024,1,1), end_date=date(2024,12,31), minimum_records=30, force_refresh=True)` 的 accumulated typed path 可达，并可继续用 `calculate_max_drawdown_from_nav_series()` 验证 2024 年度最大回撤派生指标。常规 deterministic tests 必须继续使用 fake adapter、typed fixture 或 `httpx.MockTransport`，不依赖真实网络；该 smoke 即使成功也不证明 dividend-adjusted / total-return basis，不授权 volatility、golden promotion 或 score/quality gate 语义变更。
 
 如果只验证当前 extractor worktree，可运行：
 

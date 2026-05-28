@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import date
 from typing import Protocol
 
 from fund_agent.fund.data.nav_data import (
@@ -10,6 +11,9 @@ from fund_agent.fund.data.nav_data import (
     NavDataResult,
     unavailable_nav_data_result,
 )
+from fund_agent.fund.data.nav_metrics import NavMaxDrawdownMetric, calculate_max_drawdown_from_nav_series
+from fund_agent.fund.data.nav_models import FundNavSeries, NavDataContractError
+from fund_agent.fund.data.nav_repository import FundNavRepository
 from fund_agent.fund.documents import FundDocumentRepository
 from fund_agent.fund.documents.models import ParsedAnnualReport
 from fund_agent.fund.extractors import (
@@ -33,6 +37,8 @@ from fund_agent.fund.source_provenance import (
 _TRACKING_ERROR_APPLICABLE_FUND_TYPES: frozenset[FundType] = frozenset(
     ("index_fund", "enhanced_index")
 )
+_BOND_DRAWDOWN_SHARE_CLASS = "A"
+_BOND_DRAWDOWN_MINIMUM_RECORDS = 30
 
 
 class _AnnualReportRepository(Protocol):
@@ -75,6 +81,37 @@ class _NavDataProvider(Protocol):
 
         Raises:
             Exception: 允许具体适配器传播加载异常。
+        """
+
+
+class _NavSeriesRepository(Protocol):
+    """typed NAV 序列仓库协议。"""
+
+    async def load_nav_series(
+        self,
+        fund_code: str,
+        *,
+        share_class: str | None = None,
+        start_date: date | None = None,
+        end_date: date | None = None,
+        minimum_records: int | None = None,
+        force_refresh: bool = False,
+    ) -> FundNavSeries:
+        """加载 typed NAV series。
+
+        Args:
+            fund_code: 基金代码。
+            share_class: 份额类别。
+            start_date: 起始日期约束。
+            end_date: 截止日期约束。
+            minimum_records: 最少记录数约束。
+            force_refresh: 是否强制刷新 source。
+
+        Returns:
+            typed NAV series。
+
+        Raises:
+            Exception: 允许具体 repository 传播 source 或契约异常。
         """
 
 
@@ -160,12 +197,14 @@ class FundDataExtractor:
         self,
         repository: _AnnualReportRepository | None = None,
         nav_provider: _NavDataProvider | None = None,
+        nav_series_repository: _NavSeriesRepository | None = None,
     ) -> None:
         """初始化结构化数据 façade。
 
         Args:
             repository: 年报仓库；未提供时使用 `FundDocumentRepository`。
             nav_provider: 净值数据提供者；未提供时使用 `FundNavDataAdapter`。
+            nav_series_repository: typed NAV 序列仓库；未提供时使用 `FundNavRepository`。
 
         Returns:
             无返回值。
@@ -176,6 +215,7 @@ class FundDataExtractor:
 
         self._repository = repository or FundDocumentRepository()
         self._nav_provider = nav_provider or FundNavDataAdapter()
+        self._nav_series_repository = nav_series_repository or FundNavRepository()
 
     async def extract(
         self,
@@ -213,9 +253,18 @@ class FundDataExtractor:
         manager_ownership_result = extract_manager_ownership(report)
         holdings_share_change_result = extract_holdings_share_change(report)
         classified_fund_type = _classified_fund_type(profile_result.basic_identity)
+        drawdown_metric, drawdown_metric_error = await _load_drawdown_metric_for_bond_fund(
+            self._nav_series_repository,
+            fund_code=report.key.fund_code,
+            report_year=report.key.year,
+            classified_fund_type=classified_fund_type,
+            force_refresh=force_refresh,
+        )
         bond_risk_evidence = extract_bond_risk_evidence(
             report,
             classified_fund_type=classified_fund_type,
+            drawdown_metric=drawdown_metric,
+            drawdown_metric_error=drawdown_metric_error,
         )
 
         return StructuredFundDataBundle(
@@ -242,6 +291,63 @@ class FundDataExtractor:
             source_provenance=project_public_source_provenance(report.metadata.source),
             bond_risk_evidence=bond_risk_evidence,
         )
+
+
+async def _load_drawdown_metric_for_bond_fund(
+    nav_series_repository: _NavSeriesRepository,
+    *,
+    fund_code: str,
+    report_year: int,
+    classified_fund_type: FundType | None,
+    force_refresh: bool,
+) -> tuple[NavMaxDrawdownMetric | None, NavDataContractError | None]:
+    """为债券基金加载并计算 NAV 派生最大回撤，见模板第 6 章“核心风险”。
+
+    Args:
+        nav_series_repository: typed NAV 序列仓库。
+        fund_code: 基金代码。
+        report_year: 年报年份。
+        classified_fund_type: 标准基金类型。
+        force_refresh: 是否强制刷新 NAV source。
+
+    Returns:
+        `(metric, error)`；非债券基金或失败时 metric 为空。
+
+    Raises:
+        无显式抛出；NAV source 与指标失败都会降级为结构化缺口原因。
+    """
+
+    if classified_fund_type != "bond_fund":
+        return None, None
+
+    period_start = date(report_year, 1, 1)
+    period_end = date(report_year, 12, 31)
+    try:
+        series = await nav_series_repository.load_nav_series(
+            fund_code,
+            share_class=_BOND_DRAWDOWN_SHARE_CLASS,
+            start_date=period_start,
+            end_date=period_end,
+            minimum_records=_BOND_DRAWDOWN_MINIMUM_RECORDS,
+            force_refresh=force_refresh,
+        )
+        metric = calculate_max_drawdown_from_nav_series(
+            series,
+            period_start=period_start,
+            period_end=period_end,
+            minimum_records=_BOND_DRAWDOWN_MINIMUM_RECORDS,
+        )
+    except NavDataContractError as exc:
+        return None, exc
+    except Exception as exc:
+        return None, NavDataContractError(
+            category="unavailable",
+            message=f"NAV drawdown metric 不可用: {type(exc).__name__}: {exc}",
+            source="nav_series_repository",
+            fund_code=fund_code,
+            cause=exc,
+        )
+    return metric, None
 
 
 async def _load_nav_data_or_unavailable(

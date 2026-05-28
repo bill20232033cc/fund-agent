@@ -3,10 +3,14 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from datetime import date, datetime, timezone
+from decimal import Decimal
 
 import pytest
 
 import fund_agent.fund.extractors.bond_risk_evidence as bond_risk_module
+from fund_agent.fund.data.nav_metrics import NavMaxDrawdownMetric
+from fund_agent.fund.data.nav_models import NavDataContractError, NavSourceMetadata
 from fund_agent.fund.documents.models import DocumentKey, ParsedAnnualReport, ParsedTable, ReportSection
 from fund_agent.fund.extractors.bond_risk_evidence import extract_bond_risk_evidence
 from fund_agent.fund.extractors.models import (
@@ -188,6 +192,36 @@ def test_weak_drawdown_control_record_validates_but_is_unsatisfied() -> None:
     assert "drawdown_stress" not in value.satisfied_group_ids
     assert value.weak_group_ids == ("drawdown_stress",)
     assert value.contract_status == "partial"
+
+
+def test_quantitative_derived_drawdown_requires_derived_metric_kind() -> None:
+    """验证派生定量回撤证据必须使用 derived_metric，见模板第 6 章“核心风险”。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当语义矛盾组合通过契约校验时抛出。
+    """
+
+    good_group = _group_record(
+        "drawdown_stress",
+        status="accepted",
+        strength="quantitative_derived",
+        measurement_kind="derived_metric",
+    )
+    good_value = _complete_value(overrides={"drawdown_stress": good_group})
+
+    validate_bond_risk_evidence_value(good_value)
+
+    for measurement_kind in ("actual_metric", "actual_exposure", "risk_disclosure"):
+        bad_group = replace(good_group, measurement_kind=measurement_kind)
+        bad_value = _complete_value(overrides={"drawdown_stress": bad_group})
+        with pytest.raises(ValueError, match="quantitative_derived 必须使用 derived_metric"):
+            validate_bond_risk_evidence_value(bad_value)
 
 
 def test_explicit_absence_convertible_equity_record_is_accepted() -> None:
@@ -521,6 +555,142 @@ def test_drawdown_control_text_alone_is_weak() -> None:
     assert group.status == "weak"
     assert group.strength == "qualitative_control_intent"
     assert group.measurement_kind == "control_intent"
+    assert "drawdown_stress" in field.value.weak_group_ids
+    assert "drawdown_stress" not in field.value.satisfied_group_ids
+
+
+def test_nav_derived_drawdown_metric_satisfies_drawdown_group() -> None:
+    """验证 NAV 派生最大回撤可作为 drawdown_stress 派生定量证据。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当派生指标没有形成 accepted 证据或 provenance 缺失时抛出。
+    """
+
+    report = _build_report(
+        raw_text=_base_bond_raw_text(section_four_extra="本基金力争保持净值稳定并控制回撤。"),
+        tables=(),
+    )
+
+    field = extract_bond_risk_evidence(
+        report,
+        "bond_fund",
+        drawdown_metric=_drawdown_metric(),
+    )
+
+    assert field.value is not None
+    group = _group_by_id(field.value, "drawdown_stress")
+    assert group.status == "accepted"
+    assert group.strength == "quantitative_derived"
+    assert group.summary == "CSRC EID A 类累计净值路径计算 2024 年报期间最大回撤"
+    assert group.measurement_kind == "derived_metric"
+    assert group.metric_name == "最大回撤"
+    assert group.metric_value == "-10.00%"
+    assert group.metric_unit == "ratio"
+    assert group.period_label == "2024-01-01 至 2024-12-31"
+    assert group.na_reason is None
+    assert "drawdown_stress" in field.value.satisfied_group_ids
+    assert "drawdown_stress" not in field.value.weak_group_ids
+
+    anchor_ref = _anchor_ref_by_id(field.value, group.source_anchor_ids[0])
+    extractor_anchor = next(anchor for anchor in field.anchors if anchor.section_id == "derived:nav")
+    assert anchor_ref.section_id == "derived:nav"
+    assert anchor_ref.row_locator == "metric:max_drawdown:A:2024-01-01:2024-12-31"
+    assert anchor_ref.evidence_role == "derived_max_drawdown_metric"
+    assert extractor_anchor.source_kind == "derived"
+    assert extractor_anchor.note is not None
+    for token in (
+        "source=CSRC EID",
+        "source_name=csrc_eid",
+        "source_id=5755:2030-1010",
+        "source_url=https://eid.csrc.gov.cn/fund/5755",
+        "source_query_params=fund_code=006597,share_class=A",
+        "retrieved_at=2026-05-29T00:00:00+00:00",
+        "fund_code=006597",
+        "share_class=A",
+        "date_range=2024-01-01..2024-12-31",
+        "record_count=244",
+        "nav_type=accumulated_nav",
+        "adjusted_basis=accumulated_nav",
+        "dividend_adjustment_status=not_applicable",
+        "identity_status=verified",
+        "calculation_method=max_drawdown_on_accumulated_nav_path",
+        "peak_date=2024-03-01",
+        "trough_date=2024-04-01",
+        "max_drawdown_ratio=-0.10",
+    ):
+        assert token in extractor_anchor.note
+
+
+def test_nav_derived_drawdown_metric_summary_uses_report_year() -> None:
+    """验证派生最大回撤摘要使用年报上下文年份而非硬编码年份。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当摘要没有使用年报年份时抛出。
+    """
+
+    report = _build_report(
+        raw_text=_base_bond_raw_text(section_four_extra="本基金力争保持净值稳定并控制回撤。"),
+        tables=(),
+        year=2023,
+    )
+
+    field = extract_bond_risk_evidence(
+        report,
+        "bond_fund",
+        drawdown_metric=_drawdown_metric(),
+    )
+
+    assert field.value is not None
+    group = _group_by_id(field.value, "drawdown_stress")
+    assert group.summary == "CSRC EID A 类累计净值路径计算 2023 年报期间最大回撤"
+
+
+def test_nav_metric_error_keeps_drawdown_control_text_weak() -> None:
+    """验证 NAV 指标失败时，年报回撤控制意图仍只是弱证据。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当弱文本被错误提升为 accepted 时抛出。
+    """
+
+    report = _build_report(
+        raw_text=_base_bond_raw_text(section_four_extra="本基金力争保持净值稳定并控制回撤。"),
+        tables=(),
+    )
+    field = extract_bond_risk_evidence(
+        report,
+        "bond_fund",
+        drawdown_metric_error=NavDataContractError(
+            category="unavailable",
+            message="fixture unavailable",
+            source="csrc_eid",
+            fund_code="006597",
+        ),
+    )
+
+    assert field.value is not None
+    group = _group_by_id(field.value, "drawdown_stress")
+    assert group.status == "weak"
+    assert group.strength == "qualitative_control_intent"
+    assert group.measurement_kind == "control_intent"
+    assert group.na_reason == "drawdown_nav_unavailable"
     assert "drawdown_stress" in field.value.weak_group_ids
     assert "drawdown_stress" not in field.value.satisfied_group_ids
 
@@ -1415,6 +1585,51 @@ def _anchor(group_id: BondRiskEvidenceGroupId) -> BondRiskEvidenceAnchorRef:
     )
 
 
+def _drawdown_metric() -> NavMaxDrawdownMetric:
+    """构造 NAV 派生最大回撤指标 fixture。
+
+    Args:
+        无。
+
+    Returns:
+        `NavMaxDrawdownMetric` fixture。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return NavMaxDrawdownMetric(
+        fund_code="006597",
+        share_class="A",
+        period_start=date(2024, 1, 1),
+        period_end=date(2024, 12, 31),
+        record_count=244,
+        max_drawdown_ratio=Decimal("-0.10"),
+        peak_date=date(2024, 3, 1),
+        peak_value=Decimal("1.20"),
+        trough_date=date(2024, 4, 1),
+        trough_value=Decimal("1.08"),
+        calculation_method="max_drawdown_on_accumulated_nav_path",
+        source=NavSourceMetadata(
+            source_name="csrc_eid",
+            origin_source="csrc_eid",
+            source_id="5755:2030-1010",
+            source_url="https://eid.csrc.gov.cn/fund/5755",
+            cached=False,
+            retrieved_at=datetime(2026, 5, 29, tzinfo=timezone.utc),
+            cache_updated_at=None,
+            requested_fund_code="006597",
+            returned_fund_code="006597",
+            returned_fund_name="国泰利享中短债债券A",
+            source_query_params=(("fund_code", "006597"), ("share_class", "A")),
+        ),
+        nav_type="accumulated_nav",
+        adjusted_basis="accumulated_nav",
+        dividend_adjustment_status="not_applicable",
+        identity_status="verified",
+    )
+
+
 def _group_by_id(
     value: BondRiskEvidenceValue,
     group_id: BondRiskEvidenceGroupId,
@@ -1460,12 +1675,18 @@ def _extractor_anchor_by_locator(field: object, row_locator: str) -> EvidenceAnc
     return next(anchor for anchor in field.anchors if anchor.row_locator == row_locator)
 
 
-def _build_report(*, raw_text: str, tables: tuple[ParsedTable, ...]) -> ParsedAnnualReport:
+def _build_report(
+    *,
+    raw_text: str,
+    tables: tuple[ParsedTable, ...],
+    year: int = 2024,
+) -> ParsedAnnualReport:
     """构造模板第 6 章 extractor 测试用最小年报。
 
     Args:
         raw_text: 年报全文。
         tables: 年报表格。
+        year: 年报年份。
 
     Returns:
         最小 ``ParsedAnnualReport``。
@@ -1488,7 +1709,7 @@ def _build_report(*, raw_text: str, tables: tuple[ParsedTable, ...]) -> ParsedAn
             confidence=1.0,
         )
     return ParsedAnnualReport(
-        key=DocumentKey(fund_code="006597", year=2024),
+        key=DocumentKey(fund_code="006597", year=year),
         raw_text=raw_text,
         sections=sections,
         tables=tables,

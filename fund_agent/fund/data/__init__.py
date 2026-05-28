@@ -21,6 +21,11 @@ from fund_agent.fund.data.nav_models import (
     NavType,
     ShareClassMapping,
 )
+from fund_agent.fund.data.nav_metrics import (
+    NavMaxDrawdownMetric,
+    calculate_max_drawdown_from_nav_series,
+    format_max_drawdown_percent,
+)
 from fund_agent.fund.data.nav_repository import FundNavRepository
 from fund_agent.fund.data.thermometer import (
     FundThermometerAdapter,
@@ -95,6 +100,7 @@ __all__ = [
     "NavCompletenessStatus",
     "NavContractError",
     "NavDataResult",
+    "NavMaxDrawdownMetric",
     "NavDataContractError",
     "NavFailureCategory",
     "NavIdentityStatus",
@@ -111,6 +117,8 @@ __all__ = [
     "classify_thermometer_code",
     "create_default_thermometer_history_cache",
     "create_default_thermometer_source",
+    "calculate_max_drawdown_from_nav_series",
+    "format_max_drawdown_percent",
     "parse_thermometer_pages",
     "thermometer_display_name",
 ]

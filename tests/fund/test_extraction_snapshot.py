@@ -292,6 +292,62 @@ def test_build_snapshot_records_projects_complete_bond_risk_evidence_row() -> No
     assert "contract_status=satisfied" in bond_record.note
 
 
+def test_build_snapshot_records_projects_derived_bond_risk_anchor_when_no_annual_anchor() -> None:
+    """验证 derived NAV 锚点可投影到 snapshot，不要求伪装成年报锚点。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 derived-only 锚点丢失 traceability 时抛出。
+    """
+
+    bond_value = _bond_risk_value()
+    bundle = _build_bundle(
+        "006597",
+        "bond_fund",
+        bond_risk_evidence=_bond_risk_field(
+            bond_value,
+            anchors=(
+                EvidenceAnchor(
+                    source_kind="derived",
+                    document_year=2024,
+                    section_id="derived:nav",
+                    page_number=None,
+                    table_id=None,
+                    row_locator="metric:max_drawdown:A:2024-01-01:2024-12-31",
+                    note="source=CSRC EID; calculation_method=max_drawdown_on_accumulated_nav_path",
+                ),
+            ),
+        ),
+    )
+    selected_fund = SelectedFundRecord(
+        line_number=4,
+        fund_name="国泰利享中短债债券A",
+        fund_code="006597",
+        app_category="国内债券类",
+    )
+
+    records = build_snapshot_records(
+        bundle=bundle,
+        selected_fund=selected_fund,
+        run_id="unit-run",
+        extraction_timestamp="2026-05-19T00:00:00+00:00",
+        source_csv="docs/code_20260519.csv",
+    )
+
+    bond_record = next(record for record in records if record.field_name == "bond_risk_evidence")
+    assert bond_record.anchor_present is True
+    assert bond_record.section_id == "derived:nav"
+    assert bond_record.page is None
+    assert bond_record.table_id is None
+    assert bond_record.row_id == "metric:max_drawdown:A:2024-01-01:2024-12-31"
+    assert bond_record.bond_risk_contract_status == "satisfied"
+
+
 def test_build_snapshot_records_projects_partial_bond_risk_evidence_groups() -> None:
     """验证部分债券风险证据通过结构化字段暴露缺失、弱证据和歧义组。
 
@@ -1059,11 +1115,16 @@ def _bond_risk_group_record(
     )
 
 
-def _bond_risk_field(value: BondRiskEvidenceValue) -> ExtractedField[BondRiskEvidenceValue]:
+def _bond_risk_field(
+    value: BondRiskEvidenceValue,
+    *,
+    anchors: tuple[EvidenceAnchor, ...] | None = None,
+) -> ExtractedField[BondRiskEvidenceValue]:
     """构造债券风险证据 ExtractedField fixture，见模板第 6 章“核心风险”。
 
     Args:
         value: 债券风险证据契约值。
+        anchors: 可选字段级锚点。
 
     Returns:
         fake `ExtractedField`。
@@ -1074,7 +1135,7 @@ def _bond_risk_field(value: BondRiskEvidenceValue) -> ExtractedField[BondRiskEvi
 
     return ExtractedField(
         value=value,
-        anchors=(
+        anchors=anchors or (
             EvidenceAnchor(
                 source_kind="annual_report",
                 document_year=2024,

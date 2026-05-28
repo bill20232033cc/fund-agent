@@ -316,6 +316,53 @@ def test_run_quality_gate_treats_missing_score_applicability_issues_as_empty(
     assert not any(issue.reason == "bond_risk_evidence_missing" for issue in result.issues)
 
 
+def test_run_quality_gate_has_no_bond_risk_fq2f_when_score_issue_absent(
+    tmp_path: Path,
+) -> None:
+    """验证七组债券风险证据满足后，quality gate 不凭其它字段生成 bond blocker。
+
+    Args:
+        tmp_path: pytest 临时目录 fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 score 未给 issue 仍生成 bond_risk_evidence_missing 时抛出。
+    """
+
+    score_path = tmp_path / "score.json"
+    score_path.write_text(
+        json.dumps(
+            {
+                "field_scores": [_field_score("classified_fund_type", "P0", "pass", 1.0, 1.0)],
+                "fund_scores": [_fund_score("006597", "pass", "pass")],
+                "fund_quality": [
+                    _fund_quality(
+                        fund_code="006597",
+                        app_category="国内债券类",
+                        classified_fund_type="bond_fund",
+                        preferred_lens_key="bond_fund",
+                        missing_field_rate=0.0,
+                    )
+                ],
+                "score_applicability_issues": [],
+                "correctness": {"status": "unavailable"},
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    result = run_quality_gate(score_path=score_path)
+
+    assert result.status == GATE_STATUS_PASS
+    assert not any(
+        issue.rule_code == "FQ2F" and issue.reason == "bond_risk_evidence_missing"
+        for issue in result.issues
+    )
+
+
 def test_run_quality_gate_blocks_single_fund_p0_failure_even_when_field_aggregate_passes(
     tmp_path: Path,
 ) -> None:

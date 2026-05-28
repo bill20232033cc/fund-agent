@@ -12,6 +12,7 @@ EvidenceSourceKind = Literal["annual_report", "external_api", "derived"]
 BondRiskEvidenceStatus = Literal["accepted", "accepted_absence", "weak", "ambiguous", "missing"]
 BondRiskEvidenceStrength = Literal[
     "quantitative_direct",
+    "quantitative_derived",
     "quantitative_absence",
     "qualitative_direct",
     "qualitative_control_intent",
@@ -29,6 +30,7 @@ BondRiskEvidenceGroupId = Literal[
 ]
 BondRiskEvidenceMeasurementKind = Literal[
     "actual_metric",
+    "derived_metric",
     "actual_exposure",
     "explicit_absence",
     "risk_disclosure",
@@ -56,6 +58,7 @@ _BOND_RISK_EVIDENCE_STATUSES = frozenset(
 _BOND_RISK_EVIDENCE_STRENGTHS = frozenset(
     (
         "quantitative_direct",
+        "quantitative_derived",
         "quantitative_absence",
         "qualitative_direct",
         "qualitative_control_intent",
@@ -66,6 +69,7 @@ _BOND_RISK_EVIDENCE_STRENGTHS = frozenset(
 _BOND_RISK_EVIDENCE_MEASUREMENT_KINDS = frozenset(
     (
         "actual_metric",
+        "derived_metric",
         "actual_exposure",
         "explicit_absence",
         "risk_disclosure",
@@ -74,7 +78,9 @@ _BOND_RISK_EVIDENCE_MEASUREMENT_KINDS = frozenset(
         "not_found",
     )
 )
-_BOND_RISK_ACCEPTED_STRENGTHS = frozenset(("quantitative_direct", "qualitative_direct"))
+_BOND_RISK_ACCEPTED_STRENGTHS = frozenset(
+    ("quantitative_direct", "quantitative_derived", "qualitative_direct")
+)
 _BOND_RISK_ACCEPTED_ANCHORED_STATUSES = frozenset(("accepted", "accepted_absence", "weak"))
 
 
@@ -284,6 +290,8 @@ def _validate_bond_risk_status_strength(group: BondRiskEvidenceGroupRecord) -> N
 
     if group.status == "accepted" and group.strength not in _BOND_RISK_ACCEPTED_STRENGTHS:
         raise ValueError(f"bond_risk_evidence {group.group_id} accepted 强度不兼容")
+    if group.strength == "quantitative_derived" and group.measurement_kind != "derived_metric":
+        raise ValueError(f"bond_risk_evidence {group.group_id} quantitative_derived 必须使用 derived_metric")
     if group.status == "accepted_absence":
         if group.strength != "quantitative_absence" or group.measurement_kind != "explicit_absence":
             raise ValueError(f"bond_risk_evidence {group.group_id} accepted_absence 必须是显式定量缺席")

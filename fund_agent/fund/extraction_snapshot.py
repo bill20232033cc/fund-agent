@@ -1044,7 +1044,7 @@ def _build_bond_risk_evidence_record(
     extracted_field = bundle.bond_risk_evidence
     value = extracted_field.value
     structured_value = value if isinstance(value, BondRiskEvidenceValue) else None
-    anchor = _first_annual_report_anchor(extracted_field.anchors)
+    anchor = _first_traceable_anchor(extracted_field.anchors)
     return _snapshot_record(
         bundle=bundle,
         selected_fund=selected_fund,
@@ -1361,14 +1361,14 @@ def _bond_risk_value_present(value: BondRiskEvidenceValue | None) -> bool:
     return value is not None and value.contract_status != _EXTRACTION_MODE_MISSING
 
 
-def _first_annual_report_anchor(anchors: Sequence[EvidenceAnchor]) -> EvidenceAnchor | None:
-    """返回首个字段级年报锚点。
+def _first_traceable_anchor(anchors: Sequence[EvidenceAnchor]) -> EvidenceAnchor | None:
+    """返回首个字段级可追溯锚点。
 
     Args:
         anchors: 字段级证据锚点序列。
 
     Returns:
-        首个 `source_kind=annual_report` 的锚点；不存在时返回 `None`。
+        首个 `source_kind=annual_report` 的锚点；不存在年报锚点时返回首个任意锚点。
 
     Raises:
         无显式抛出。
@@ -1377,7 +1377,7 @@ def _first_annual_report_anchor(anchors: Sequence[EvidenceAnchor]) -> EvidenceAn
     for anchor in anchors:
         if anchor.source_kind == "annual_report":
             return anchor
-    return None
+    return anchors[0] if anchors else None
 
 
 def _bond_risk_note(value: BondRiskEvidenceValue | None, note: str | None) -> str | None:

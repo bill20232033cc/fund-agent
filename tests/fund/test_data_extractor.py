@@ -2,15 +2,26 @@
 
 from __future__ import annotations
 
+from datetime import date, datetime, timedelta, timezone
+from decimal import Decimal
+
 import pytest
 
 from fund_agent.fund.data.nav_data import NavDataResult
+from fund_agent.fund.data.nav_models import (
+    FundNavRecord,
+    FundNavSeries,
+    NavDataContractError,
+    NavSourceMetadata,
+    ShareClassMapping,
+)
 from fund_agent.fund.data_extractor import FundDataExtractor, StructuredFundDataBundle
 from fund_agent.fund.documents.models import (
     AnnualReportMetadata,
     AnnualReportSourceMetadata,
     DocumentKey,
     ParsedAnnualReport,
+    ReportSection,
 )
 from fund_agent.fund.extractors import ExtractedField
 from fund_agent.fund.extractors import bond_risk_evidence as bond_risk_module
@@ -132,6 +143,58 @@ class _RecordingNavProvider:
 
         self.calls.append((fund_code, force_refresh))
         return NavDataResult(fund_code=fund_code, records=[], source="fixture", cached=False)
+
+
+class _RecordingNavSeriesRepository:
+    """测试用 typed NAV series repository。"""
+
+    def __init__(self, result: FundNavSeries | Exception) -> None:
+        """初始化测试 repository。
+
+        Args:
+            result: 预置 NAV series 或待抛异常。
+
+        Returns:
+            无返回值。
+
+        Raises:
+            无显式抛出。
+        """
+
+        self.result = result
+        self.calls: list[tuple[str, str | None, date | None, date | None, int | None, bool]] = []
+
+    async def load_nav_series(
+        self,
+        fund_code: str,
+        *,
+        share_class: str | None = None,
+        start_date: date | None = None,
+        end_date: date | None = None,
+        minimum_records: int | None = None,
+        force_refresh: bool = False,
+    ) -> FundNavSeries:
+        """记录 typed NAV 请求并返回预置结果。
+
+        Args:
+            fund_code: 基金代码。
+            share_class: 份额类别。
+            start_date: 起始日期。
+            end_date: 截止日期。
+            minimum_records: 最少记录数。
+            force_refresh: 是否强制刷新。
+
+        Returns:
+            预置 `FundNavSeries`。
+
+        Raises:
+            Exception: 当初始化传入异常时抛出。
+        """
+
+        self.calls.append((fund_code, share_class, start_date, end_date, minimum_records, force_refresh))
+        if isinstance(self.result, Exception):
+            raise self.result
+        return self.result
 
 
 @pytest.mark.asyncio
@@ -303,6 +366,7 @@ async def test_data_extractor_non_bond_bond_risk_evidence_does_not_scan_groups(
     extractor = FundDataExtractor(
         repository=_FakeRepository(_annual_report()),
         nav_provider=_RecordingNavProvider(),
+        nav_series_repository=_RecordingNavSeriesRepository(RuntimeError("must not call typed NAV")),
     )
 
     bundle = await extractor.extract("110011", 2024)
@@ -313,6 +377,90 @@ async def test_data_extractor_non_bond_bond_risk_evidence_does_not_scan_groups(
     assert bundle.bond_risk_evidence.anchors == ()
     assert bundle.bond_risk_evidence.extraction_mode == "missing"
     assert bundle.bond_risk_evidence.note == "not_applicable_non_bond_fund"
+
+
+@pytest.mark.asyncio
+async def test_data_extractor_bond_fund_uses_a_share_nav_metric_without_mixing_classes() -> None:
+    """验证债券基金只通过 typed repository 加载 006597/A 年度最大回撤。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 typed NAV 调用参数、份额混合或证据投影错误时抛出。
+    """
+
+    nav_series_repository = _RecordingNavSeriesRepository(_nav_series())
+    extractor = FundDataExtractor(
+        repository=_FakeRepository(_bond_annual_report()),
+        nav_provider=_RecordingNavProvider(),
+        nav_series_repository=nav_series_repository,
+    )
+
+    bundle = await extractor.extract("006597", 2024, force_refresh=True)
+
+    assert nav_series_repository.calls == [
+        ("006597", "A", date(2024, 1, 1), date(2024, 12, 31), 30, True)
+    ]
+    assert bundle.bond_risk_evidence.value is not None
+    group = next(
+        group
+        for group in bundle.bond_risk_evidence.value.groups
+        if group.group_id == "drawdown_stress"
+    )
+    assert group.status == "accepted"
+    assert group.strength == "quantitative_derived"
+    assert group.measurement_kind == "derived_metric"
+    assert group.metric_value == "-10.00%"
+    assert "drawdown_stress" in bundle.bond_risk_evidence.value.satisfied_group_ids
+
+
+@pytest.mark.asyncio
+async def test_data_extractor_raw_unit_nav_error_keeps_drawdown_weak() -> None:
+    """验证 raw-unit 或不合格 NAV 失败不会把回撤组提升为 accepted。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当不合格 NAV 被当成强回撤证据时抛出。
+    """
+
+    nav_series_repository = _RecordingNavSeriesRepository(
+        NavDataContractError(
+            category="adjustment_basis_unknown",
+            message="raw_unit_nav fixture",
+            source="fixture",
+            fund_code="006597",
+        )
+    )
+    extractor = FundDataExtractor(
+        repository=_FakeRepository(_bond_annual_report()),
+        nav_provider=_RecordingNavProvider(),
+        nav_series_repository=nav_series_repository,
+    )
+
+    bundle = await extractor.extract("006597", 2024)
+
+    assert nav_series_repository.calls == [
+        ("006597", "A", date(2024, 1, 1), date(2024, 12, 31), 30, False)
+    ]
+    assert bundle.bond_risk_evidence.value is not None
+    group = next(
+        group
+        for group in bundle.bond_risk_evidence.value.groups
+        if group.group_id == "drawdown_stress"
+    )
+    assert group.status == "weak"
+    assert group.strength == "qualitative_control_intent"
+    assert group.na_reason == "drawdown_nav_adjustment_basis_unknown"
+    assert "drawdown_stress" in bundle.bond_risk_evidence.value.weak_group_ids
 
 
 @pytest.mark.asyncio
@@ -460,6 +608,148 @@ def _annual_report(
         sections={},
         tables=(),
         metadata=AnnualReportMetadata(source=source_metadata),
+    )
+
+
+def _bond_annual_report() -> ParsedAnnualReport:
+    """构造债券基金年报 fixture。
+
+    Args:
+        无。
+
+    Returns:
+        可触发债券风险七组扫描的年报 fixture。
+
+    Raises:
+        无显式抛出。
+    """
+
+    section_one = "\n".join(
+        [
+            "基金名称：国泰利享中短债债券A",
+            "基金代码：006597",
+            "基金类别：债券型",
+        ]
+    )
+    section_two = "\n".join(
+        [
+            "投资目标：在严格控制风险的前提下追求稳健收益",
+            "投资范围：本基金主要投资于债券资产。",
+            "业绩比较基准：中债综合财富指数收益率",
+        ]
+    )
+    section_four = "\n".join(
+        [
+            "4.4 报告期内基金投资策略和运作分析",
+            "本基金通过久期管理控制利率风险，主要投资中高等级信用债，控制信用风险。",
+            "本基金严格控制流动性风险并力争控制回撤。",
+        ]
+    )
+    raw_text = f"{section_one}\n{section_two}\n{section_four}"
+    section_one_start = 0
+    section_two_start = len(section_one) + 1
+    section_four_start = section_two_start + len(section_two) + 1
+    return ParsedAnnualReport(
+        key=DocumentKey(fund_code="006597", year=2024),
+        raw_text=raw_text,
+        sections={
+            "§1": ReportSection(
+                section_id="§1",
+                title="基金简介",
+                start_offset=section_one_start,
+                end_offset=len(section_one),
+                matched_rule="fixture",
+                confidence=1.0,
+            ),
+            "§2": ReportSection(
+                section_id="§2",
+                title="产品概况",
+                start_offset=section_two_start,
+                end_offset=section_two_start + len(section_two),
+                matched_rule="fixture",
+                confidence=1.0,
+            ),
+            "§4": ReportSection(
+                section_id="§4",
+                title="管理人报告",
+                start_offset=section_four_start,
+                end_offset=section_four_start + len(section_four),
+                matched_rule="fixture",
+                confidence=1.0,
+            ),
+        },
+        tables=(),
+        metadata=AnnualReportMetadata(),
+    )
+
+
+def _nav_series() -> FundNavSeries:
+    """构造 2024 年度累计净值 series fixture。
+
+    Args:
+        无。
+
+    Returns:
+        可计算 -10% 最大回撤的 `FundNavSeries`。
+
+    Raises:
+        NavDataContractError: 当 fixture 不满足 typed contract 时抛出。
+    """
+
+    start = date(2024, 1, 1)
+    values = [Decimal("1.00") + Decimal(index) / Decimal("1000") for index in range(30)]
+    values[20] = Decimal("1.20")
+    values[21] = Decimal("1.08")
+    for index in range(22, 30):
+        values[index] = Decimal("1.21") + Decimal(index) / Decimal("1000")
+    records = tuple(
+        FundNavRecord(
+            date=start + timedelta(days=index),
+            share_class="A",
+            nav_value=value,
+            nav_type="accumulated_nav",
+            adjusted_basis="accumulated_nav",
+            raw_change_rate=None,
+            raw_payload={},
+        )
+        for index, value in enumerate(values)
+    )
+    return FundNavSeries(
+        fund_code="006597",
+        share_class="A",
+        records=records,
+        nav_type="accumulated_nav",
+        adjusted_basis="accumulated_nav",
+        dividend_adjustment_status="not_applicable",
+        identity_status="verified",
+        completeness_status="complete_enough",
+        strong_drawdown_evidence_eligible=True,
+        strong_drawdown_ineligibility_reason=None,
+        source=NavSourceMetadata(
+            source_name="csrc_eid",
+            origin_source="csrc_eid",
+            source_id="5755:2030-1010",
+            source_url="https://eid.csrc.gov.cn/fund/5755",
+            cached=False,
+            retrieved_at=datetime(2026, 5, 29, tzinfo=timezone.utc),
+            cache_updated_at=None,
+            requested_fund_code="006597",
+            returned_fund_code="006597",
+            returned_fund_name="国泰利享中短债债券A",
+            source_query_params=(("fund_code", "006597"), ("share_class", "A")),
+        ),
+        share_class_mapping=ShareClassMapping(
+            requested_fund_code="006597",
+            requested_share_class="A",
+            resolved_fund_code="006597",
+            resolved_share_class="A",
+            mapping_status="verified",
+            identity_status="verified",
+            mapping_evidence=("fixture",),
+        ),
+        date_range_start=records[0].date,
+        date_range_end=records[-1].date,
+        record_count=len(records),
     )
 
 

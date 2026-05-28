@@ -11,6 +11,8 @@ from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
 from typing import Final
 
+from fund_agent.fund.data.nav_metrics import NavMaxDrawdownMetric, format_max_drawdown_percent
+from fund_agent.fund.data.nav_models import NavDataContractError
 from fund_agent.fund.documents.models import ParsedAnnualReport, ParsedTable
 from fund_agent.fund.extractors.models import (
     BOND_RISK_EVIDENCE_CONTRACT_ID,
@@ -272,12 +274,18 @@ class _ShareChangeAggregation:
 def extract_bond_risk_evidence(
     report: ParsedAnnualReport,
     classified_fund_type: str | None,
+    *,
+    drawdown_metric: NavMaxDrawdownMetric | None = None,
+    drawdown_metric_error: NavDataContractError | None = None,
 ) -> ExtractedField[BondRiskEvidenceValue]:
     """抽取模板第 6 章债券风险证据。
 
     Args:
         report: 已通过统一文档仓库加载并解析的年报。
         classified_fund_type: 上游显式基金类型；只有精确 ``bond_fund`` 才执行七组扫描。
+        drawdown_metric: 可选 NAV 派生最大回撤指标；由上游通过 `FundNavRepository`
+            显式加载并计算，本 extractor 不执行 IO。
+        drawdown_metric_error: NAV 派生指标失败分类；仅用于保留失败关闭原因。
 
     Returns:
         债券基金返回带 ``BondRiskEvidenceValue`` 的字段；非债券或未知类型返回不适用缺失字段。
@@ -299,7 +307,11 @@ def extract_bond_risk_evidence(
         _extract_credit_risk(report),
         _extract_leverage_liquidity(report),
         _extract_asset_allocation_holdings_mix(report),
-        _extract_drawdown_stress(report),
+        _extract_drawdown_stress(
+            report,
+            drawdown_metric=drawdown_metric,
+            drawdown_metric_error=drawdown_metric_error,
+        ),
         _extract_redemption_share_pressure(report),
         _extract_convertible_bond_equity_exposure(report),
     )
@@ -497,11 +509,18 @@ def _extract_asset_allocation_holdings_mix(report: ParsedAnnualReport) -> _Group
     return _missing_group(group_id, "年报未定位到债券资产配置或持仓结构表格")
 
 
-def _extract_drawdown_stress(report: ParsedAnnualReport) -> _GroupExtraction:
+def _extract_drawdown_stress(
+    report: ParsedAnnualReport,
+    *,
+    drawdown_metric: NavMaxDrawdownMetric | None = None,
+    drawdown_metric_error: NavDataContractError | None = None,
+) -> _GroupExtraction:
     """抽取模板第 6 章回撤和压力证据。
 
     Args:
         report: 已解析年报。
+        drawdown_metric: 可选 NAV 派生最大回撤指标。
+        drawdown_metric_error: NAV 派生指标失败分类。
 
     Returns:
         回撤/压力组抽取结果。
@@ -511,6 +530,9 @@ def _extract_drawdown_stress(report: ParsedAnnualReport) -> _GroupExtraction:
     """
 
     group_id: BondRiskEvidenceGroupId = "drawdown_stress"
+    if drawdown_metric is not None:
+        return _derived_drawdown_metric_group(report, drawdown_metric)
+
     metric_draft = _first_row_anchor_draft(
         report.tables,
         group_id=group_id,
@@ -546,9 +568,53 @@ def _extract_drawdown_stress(report: ParsedAnnualReport) -> _GroupExtraction:
             summary="年报仅披露回撤控制意图，不能等同于最大回撤或波动率指标",
             measurement_kind="control_intent",
             drafts=(_text_anchor_draft(group_id, control_match, "drawdown_control_intent"),),
-            na_reason="drawdown_metric_not_found",
+            na_reason=_drawdown_error_reason(drawdown_metric_error) or "drawdown_metric_not_found",
         )
+    if drawdown_metric_error is not None:
+        return _missing_group(group_id, _drawdown_error_reason(drawdown_metric_error) or drawdown_metric_error.message)
     return _missing_group(group_id, "年报未定位到回撤指标或回撤控制文本")
+
+
+def _derived_drawdown_metric_group(
+    report: ParsedAnnualReport,
+    drawdown_metric: NavMaxDrawdownMetric,
+) -> _GroupExtraction:
+    """构造 NAV 派生最大回撤强证据组，见模板第 6 章“核心风险”。
+
+    Args:
+        report: 已解析年报。
+        drawdown_metric: NAV 派生最大回撤指标。
+
+    Returns:
+        accepted 派生定量证据组。
+
+    Raises:
+        无显式抛出。
+    """
+
+    group_id: BondRiskEvidenceGroupId = "drawdown_stress"
+    draft = _derived_nav_metric_anchor_draft(group_id, drawdown_metric)
+    anchors, anchor_refs = _build_group_anchors(report, group_id, (draft,))
+    record = BondRiskEvidenceGroupRecord(
+        group_id=group_id,
+        status="accepted",
+        strength="quantitative_derived",
+        summary=f"CSRC EID A 类累计净值路径计算 {report.key.year} 年报期间最大回撤",
+        measurement_kind="derived_metric",
+        metric_name="最大回撤",
+        metric_value=format_max_drawdown_percent(drawdown_metric.max_drawdown_ratio),
+        metric_unit="ratio",
+        period_label=(
+            f"{drawdown_metric.period_start.isoformat()} 至 {drawdown_metric.period_end.isoformat()}"
+        ),
+        source_anchor_ids=tuple(anchor.anchor_id for anchor in anchor_refs),
+        na_reason=None,
+        reviewer_note=(
+            "annual-report drawdown control intent remains weak companion; "
+            "quantitative source is CSRC EID accumulated NAV"
+        ),
+    )
+    return _GroupExtraction(record=record, anchors=anchors, anchor_refs=anchor_refs)
 
 
 def _extract_redemption_share_pressure(report: ParsedAnnualReport) -> _GroupExtraction:
@@ -862,9 +928,10 @@ def _build_group_anchors(
     anchor_refs: list[BondRiskEvidenceAnchorRef] = []
     for ordinal, draft in enumerate(sorted_drafts, start=1):
         anchor_id = f"bond-risk:{report.key.fund_code}:{report.key.year}:{group_id}:{ordinal}"
+        source_kind = "derived" if draft.section_id.startswith("derived:") else "annual_report"
         evidence_anchors.append(
             EvidenceAnchor(
-                source_kind="annual_report",
+                source_kind=source_kind,
                 document_year=report.key.year,
                 section_id=draft.section_id,
                 page_number=draft.page_number,
@@ -884,6 +951,114 @@ def _build_group_anchors(
             )
         )
     return tuple(evidence_anchors), tuple(anchor_refs)
+
+
+def _derived_nav_metric_anchor_draft(
+    group_id: BondRiskEvidenceGroupId,
+    metric: NavMaxDrawdownMetric,
+) -> _AnchorDraft:
+    """构造 NAV 派生指标锚点草稿。
+
+    Args:
+        group_id: 风险组 ID。
+        metric: NAV 派生最大回撤指标。
+
+    Returns:
+        派生 NAV 指标锚点草稿。
+
+    Raises:
+        无显式抛出。
+    """
+
+    row_locator = (
+        "metric:max_drawdown:"
+        f"{metric.share_class}:{metric.period_start.isoformat()}:{metric.period_end.isoformat()}"
+    )
+    note = "; ".join(
+        (
+            "source=CSRC EID",
+            f"source_name={metric.source.source_name}",
+            f"source_id={metric.source.source_id}",
+            f"source_url={metric.source.source_url}",
+            f"source_query_params={_stable_query_params(metric.source.source_query_params)}",
+            f"retrieved_at={_optional_isoformat(metric.source.retrieved_at)}",
+            f"fund_code={metric.fund_code}",
+            f"share_class={metric.share_class}",
+            f"date_range={metric.period_start.isoformat()}..{metric.period_end.isoformat()}",
+            f"record_count={metric.record_count}",
+            f"nav_type={metric.nav_type}",
+            f"adjusted_basis={metric.adjusted_basis}",
+            f"dividend_adjustment_status={metric.dividend_adjustment_status}",
+            f"identity_status={metric.identity_status}",
+            f"calculation_method={metric.calculation_method}",
+            f"peak_date={metric.peak_date.isoformat()}",
+            f"peak_value={metric.peak_value}",
+            f"trough_date={metric.trough_date.isoformat()}",
+            f"trough_value={metric.trough_value}",
+            f"max_drawdown_ratio={metric.max_drawdown_ratio}",
+        )
+    )
+    return _AnchorDraft(
+        group_id=group_id,
+        section_id="derived:nav",
+        page_number=None,
+        table_id=None,
+        row_locator=row_locator,
+        evidence_role="derived_max_drawdown_metric",
+        note=note,
+    )
+
+
+def _drawdown_error_reason(error: NavDataContractError | None) -> str | None:
+    """把 NAV 指标失败映射为模板第 6 章回撤组缺口原因。
+
+    Args:
+        error: NAV 数据契约错误。
+
+    Returns:
+        稳定 `drawdown_` 前缀原因；无错误时返回 `None`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if error is None:
+        return None
+    return f"drawdown_nav_{error.category}"
+
+
+def _stable_query_params(params: tuple[tuple[str, str], ...]) -> str:
+    """稳定序列化 NAV source query params。
+
+    Args:
+        params: source 元数据中的 query params。
+
+    Returns:
+        按 key/value 排序后的文本。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return ",".join(f"{key}={value}" for key, value in sorted(params))
+
+
+def _optional_isoformat(value: object) -> str:
+    """把可选 datetime-like 值转为 ISO 文本。
+
+    Args:
+        value: 可选对象。
+
+    Returns:
+        ISO 文本或 `None`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if hasattr(value, "isoformat"):
+        return str(value.isoformat())  # type: ignore[attr-defined]
+    return "None"
 
 
 def _text_anchor_draft(
