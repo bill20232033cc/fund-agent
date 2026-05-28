@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from decimal import Decimal, InvalidOperation
 from typing import Final
 
 from fund_agent.fund.documents.models import ParsedAnnualReport, ParsedTable
@@ -37,6 +38,48 @@ _NOT_APPLICABLE_NOTE: Final[str] = "not_applicable_non_bond_fund"
 _MISSING_NOTE: Final[str] = "bond_risk_evidence_missing"
 _MAX_TEXT_ANCHOR_LENGTH: Final[int] = 120
 _SHARE_CLASS_LABELS: Final[tuple[str, ...]] = tuple("ABCDEFGHIJKLMNOPQRSTUVWXYZ")
+_DECIMAL_TOLERANCE: Final[Decimal] = Decimal("0.01")
+_DECIMAL_UNIT_SUFFIXES: Final[tuple[str, ...]] = ("份",)
+_DASH_ZERO_VALUES: Final[tuple[str, ...]] = ("-", "－", "—", "--")
+_CURRENT_PERIOD_HEADER_KEYWORDS: Final[tuple[str, ...]] = ("本期", "本期末", "期末", "报告期末")
+_PRIOR_PERIOD_HEADER_KEYWORDS: Final[tuple[str, ...]] = ("上年度", "上年", "上期", "期初", "年初")
+_PERCENTAGE_HEADER_KEYWORDS: Final[tuple[str, ...]] = ("比例", "占比")
+_CREDIT_RATING_LABELS: Final[tuple[str, ...]] = (
+    "A-1",
+    "AAA以下",
+    "未评级",
+    "AAA",
+    "AA+",
+    "AA-",
+    "AA",
+    "A+",
+    "A-",
+    "A",
+    "BBB",
+    "合计",
+)
+_FUND_OWN_RATING_KEYWORDS: Final[tuple[str, ...]] = ("本基金评级", "基金评级信息", "基金自身评级", "基金信用评级")
+_HOLDING_RATING_QUALIFIERS: Final[tuple[str, ...]] = ("持有", "持仓", "证券", "债券", "投资组合", "组合")
+_SHARE_CHANGE_FINANCIAL_STATEMENT_KEYWORDS: Final[tuple[str, ...]] = ("实收基金", "未分配利润", "净资产合计")
+_SHARE_SUBSCRIPTION_KEYWORD_GROUPS: Final[tuple[tuple[str, ...], ...]] = (("总申购",), ("申购份额",))
+_SHARE_REDEMPTION_KEYWORD_GROUPS: Final[tuple[tuple[str, ...], ...]] = (("总赎回",), ("赎回份额",))
+_SHARE_SUBSCRIPTION_EXCLUDED_KEYWORDS: Final[tuple[str, ...]] = ("净申购", "累计申购")
+_SHARE_REDEMPTION_EXCLUDED_KEYWORDS: Final[tuple[str, ...]] = ("净赎回", "累计赎回")
+_SHARE_CHANGE_ROW_LABEL_KEYWORDS: Final[tuple[str, ...]] = (
+    "期初",
+    "申购",
+    "赎回",
+    "期末",
+    "拆分",
+    "变动",
+    "份额",
+    "项目",
+)
+_PROFILE_CLASS_NAME_ROW_KEYWORD: Final[str] = "下属分级基金的基金简称"
+_PROFILE_CLASS_CODE_ROW_KEYWORD: Final[str] = "下属分级基金的交易代码"
+_PROFILE_CLASS_ENDING_ROW_KEYWORD: Final[str] = "报告期末下属分级基金的份额总额"
+_SHARE_CHANGE_ALIGNMENT_EXPLICIT: Final[str] = "explicit_headers"
+_SHARE_CHANGE_ALIGNMENT_UNLABELED: Final[str] = "section2_order_unlabeled_headers"
 
 
 @dataclass(frozen=True, slots=True)
@@ -93,16 +136,137 @@ class _TextMatch:
 
 
 @dataclass(frozen=True, slots=True)
-class _ShareClassEvidence:
-    """模板第 6 章赎回压力组的份额类别消歧证据。
+class _CreditRatingDistributionEvidence:
+    """模板第 6 章信用评级分布表证据。
 
     Attributes:
-        class_label: 当前基金代码对应的份额类别。
-        source_note: 证据来源说明。
+        drafts: 评级分布表行级锚点草稿。
+        metric_value: 代表性当前期持仓评级分布摘要。
+    """
+
+    drafts: tuple[_AnchorDraft, ...]
+    metric_value: str
+
+
+@dataclass(frozen=True, slots=True)
+class _ShareClassMapping:
+    """模板第 6 章份额类别映射。
+
+    Attributes:
+        class_labels: 份额类别标签序列。
+        fund_codes: 与份额类别一一对应的基金代码序列。
+        source_note: 映射来源说明。
+        source_anchor_draft: 可选 §2 表格锚点草稿。
+    """
+
+    class_labels: tuple[str, ...]
+    fund_codes: tuple[str, ...]
+    source_note: str
+    source_anchor_draft: _AnchorDraft | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class _ShareChangeTableSelection:
+    """模板第 6 章份额变动表选择结果。
+
+    Attributes:
+        table: 唯一命中的 §10 份额变动表。
+        na_reason: 未能唯一选择时的失败原因。
+    """
+
+    table: ParsedTable | None
+    na_reason: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class _ShareChangeColumnMapping:
+    """模板第 6 章份额变动表列映射。
+
+    Attributes:
+        class_to_column: 份额类别到 §10 表格列下标的映射。
+        alignment_note: 列对齐方式说明。
+        na_reason: 无法对齐时的失败原因。
+    """
+
+    class_to_column: dict[str, int]
+    alignment_note: str | None
+    na_reason: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class _ShareClassEndingCrossCheck:
+    """模板第 6 章 §2 份额类别期末份额交叉校验。
+
+    Attributes:
+        ending_by_class: 按份额类别记录的 §2 期末份额。
+        source_anchor_draft: §2 profile 表交叉校验锚点草稿。
+    """
+
+    ending_by_class: dict[str, Decimal]
+    source_anchor_draft: _AnchorDraft
+
+
+@dataclass(frozen=True, slots=True)
+class _ShareChangeRows:
+    """模板第 6 章份额变动表行定位结果。
+
+    Attributes:
+        beginning: 期初份额行。
+        subscription: 申购份额行。
+        redemption: 赎回份额行。
+        split: 拆分变动行；未披露时为 ``None`` 并按零处理。
+        ending: 期末份额行。
+    """
+
+    beginning: tuple[int, tuple[str, ...]]
+    subscription: tuple[int, tuple[str, ...]]
+    redemption: tuple[int, tuple[str, ...]]
+    split: tuple[int, tuple[str, ...]] | None
+    ending: tuple[int, tuple[str, ...]]
+
+
+@dataclass(frozen=True, slots=True)
+class _ShareClassChange:
+    """模板第 6 章单一份额类别变动计算结果。
+
+    Attributes:
+        class_label: 份额类别。
+        fund_code: 基金代码。
+        beginning: 期初份额。
+        subscription: 申购份额。
+        redemption: 赎回份额。
+        split: 拆分变动份额。
+        ending: 期末份额。
+        net_change: 净变动份额。
+        net_change_ratio: 净变动比例；期初为零时为 ``None``。
+        note: 类别级补充说明。
     """
 
     class_label: str
-    source_note: str
+    fund_code: str
+    beginning: Decimal
+    subscription: Decimal
+    redemption: Decimal
+    split: Decimal
+    ending: Decimal
+    net_change: Decimal
+    net_change_ratio: Decimal | None
+    note: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class _ShareChangeAggregation:
+    """模板第 6 章全份额类别赎回压力汇总。
+
+    Attributes:
+        metric_value: 确定性指标摘要。
+        drafts: §10 必需行级锚点及可选 §2 映射锚点。
+        na_reason: 失败关闭原因。
+    """
+
+    metric_value: str | None
+    drafts: tuple[_AnchorDraft, ...]
+    na_reason: str | None
 
 
 def extract_bond_risk_evidence(
@@ -197,25 +361,18 @@ def _extract_credit_risk(report: ParsedAnnualReport) -> _GroupExtraction:
     """
 
     group_id: BondRiskEvidenceGroupId = "credit_risk"
-    table_draft = _first_row_anchor_draft(
-        report.tables,
-        group_id=group_id,
-        section_id=_SECTION_PORTFOLIO,
-        table_keywords=("信用", "评级"),
-        row_keywords=("信用", "评级"),
-        evidence_role="credit_rating_distribution",
-    )
-    if table_draft is not None:
+    rating_distribution = _credit_rating_distribution_evidence(report.tables, group_id)
+    if rating_distribution is not None:
         return _anchored_group(
             report,
             group_id=group_id,
             status="accepted",
             strength="quantitative_direct",
-            summary="年报表格披露信用评级或信用风险暴露",
+            summary="年报表格披露持有债券/证券的信用评级分布",
             measurement_kind="actual_exposure",
-            metric_name="信用风险暴露",
-            metric_value=table_draft.note,
-            drafts=(table_draft,),
+            metric_name="持仓评级分布",
+            metric_value=rating_distribution.metric_value,
+            drafts=rating_distribution.drafts,
         )
 
     text_match = _find_text_match(
@@ -408,64 +565,59 @@ def _extract_redemption_share_pressure(report: ParsedAnnualReport) -> _GroupExtr
     """
 
     group_id: BondRiskEvidenceGroupId = "redemption_share_pressure"
-    share_table = _find_share_change_table(report.tables)
-    if share_table is None:
+    table_selection = _find_share_change_table(report.tables)
+    if table_selection.table is None:
+        if table_selection.na_reason is not None:
+            return _plain_group(
+                group_id=group_id,
+                status="ambiguous",
+                strength="ambiguous",
+                summary="份额变动表候选无法唯一确定，已失败关闭",
+                measurement_kind="actual_exposure",
+                na_reason=table_selection.na_reason,
+            )
         return _missing_group(group_id, "年报未定位到基金份额变动表")
 
-    selection = _select_share_change_column(
-        share_table,
-        fund_code=report.key.fund_code,
-        share_class_evidence=_share_class_evidence(report),
-    )
-    if selection is None:
+    mapping = _share_class_mapping(report, group_id)
+    if mapping is None:
         return _plain_group(
             group_id=group_id,
             status="ambiguous",
             strength="ambiguous",
-            summary="份额变动表存在多份额类别但无法明确选择当前基金代码对应列",
+            summary="份额变动表存在但 §2 份额类别映射不完整，不能聚合全份额类别",
             measurement_kind="actual_exposure",
             na_reason="ambiguous_share_class_selection",
         )
 
-    roles = (
-        ("share_beginning", ("期初",)),
-        ("subscription", ("申购",)),
-        ("redemption", ("赎回",)),
-        ("share_ending", ("期末",)),
+    aggregation = _aggregate_share_change(
+        table_selection.table,
+        report=report,
+        group_id=group_id,
+        mapping=mapping,
     )
-    drafts = tuple(
-        draft
-        for draft in (
-            _row_anchor_draft(
-                share_table,
-                group_id=group_id,
-                section_id=_SECTION_SHARE_CHANGE,
-                row_keywords=keywords,
-                evidence_role=role,
-                value_column_index=selection,
-            )
-            for role, keywords in roles
-        )
-        if draft is not None
-    )
-    if len(drafts) < len(roles):
+    if aggregation.metric_value is None:
         return _plain_group(
             group_id=group_id,
             status="ambiguous",
             strength="ambiguous",
-            summary="份额变动表缺少期初、申购、赎回或期末的完整行级定位",
+            summary="份额变动表无法完成 A/C/E/F 全类别聚合与对账，已失败关闭",
             measurement_kind="actual_exposure",
-            na_reason="incomplete_share_change_rows",
+            na_reason=aggregation.na_reason or "ambiguous_share_change_aggregation",
         )
+
+    drafts = aggregation.drafts
+    if mapping.source_anchor_draft is not None:
+        drafts = (*drafts, mapping.source_anchor_draft)
+
     return _anchored_group(
         report,
         group_id=group_id,
         status="accepted",
         strength="quantitative_direct",
-        summary="年报份额变动表可明确选择当前基金份额类别并定位申购赎回数据",
+        summary="年报份额变动表可按 §2 A/C/E/F 映射聚合全份额类别申购赎回数据",
         measurement_kind="actual_exposure",
-        metric_name="份额变动",
-        metric_value="; ".join(draft.note for draft in drafts),
+        metric_name="A/C/E/F 份额变动汇总",
+        metric_value=aggregation.metric_value,
         drafts=drafts,
     )
 
@@ -931,111 +1083,448 @@ def _find_text_match(
     return None
 
 
-def _find_share_change_table(tables: tuple[ParsedTable, ...]) -> ParsedTable | None:
+def _credit_rating_distribution_evidence(
+    tables: tuple[ParsedTable, ...],
+    group_id: BondRiskEvidenceGroupId,
+) -> _CreditRatingDistributionEvidence | None:
+    """识别模板第 6 章持仓信用评级分布表。
+
+    Args:
+        tables: 年报表格。
+        group_id: 风险组 ID。
+
+    Returns:
+        命中持仓评级分布且具备当前期数值和行级锚点时返回证据，否则返回 ``None``。
+
+    Raises:
+        无显式抛出。
+    """
+
+    drafts: list[_AnchorDraft] = []
+    representative_metric: str | None = None
+    for table in tables:
+        table_rows = _credit_rating_distribution_rows(table, group_id)
+        if not table_rows:
+            continue
+        if representative_metric is None:
+            representative_metric = _credit_rating_distribution_metric(table_rows)
+        drafts.extend(draft for draft, _label, _value in table_rows)
+
+    if not drafts or representative_metric is None:
+        return None
+    return _CreditRatingDistributionEvidence(
+        drafts=tuple(drafts),
+        metric_value=_trim_note(representative_metric),
+    )
+
+
+def _credit_rating_distribution_rows(
+    table: ParsedTable,
+    group_id: BondRiskEvidenceGroupId,
+) -> tuple[tuple[_AnchorDraft, str, Decimal], ...]:
+    """抽取单张持仓信用评级分布表的有效评级行。
+
+    Args:
+        table: 候选年报表格。
+        group_id: 风险组 ID。
+
+    Returns:
+        行锚点、评级标签和当前期数值三元组；不满足契约时返回空元组。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if not _is_holding_rating_distribution_table(table):
+        return ()
+
+    rows: list[tuple[_AnchorDraft, str, Decimal]] = []
+    non_zero_numeric_rows = 0
+    for row_index, row in enumerate(table.rows, start=1):
+        rating_label = _rating_label_from_row(row)
+        if rating_label is None:
+            continue
+        current_value_column_index = _current_period_value_column_index(table.headers, row)
+        if current_value_column_index is None:
+            continue
+        current_value = _parse_plain_decimal(row[current_value_column_index])
+        if current_value is None:
+            continue
+        if current_value != Decimal("0"):
+            non_zero_numeric_rows += 1
+        row_label = _normalize_cell(row[0]) if row else f"row-{row_index}"
+        drafts_note = _format_row_note(row, value_column_index=current_value_column_index)
+        rows.append(
+            (
+                _AnchorDraft(
+                    group_id=group_id,
+                    section_id=_SECTION_PORTFOLIO,
+                    page_number=table.page_number,
+                    table_id=_table_id(table),
+                    row_locator=f"row:{row_index}:{row_label}",
+                    evidence_role="holding_rating_distribution",
+                    note=drafts_note,
+                ),
+                rating_label,
+                current_value,
+            )
+        )
+
+    if len(rows) < 2 or non_zero_numeric_rows == 0:
+        return ()
+    return tuple(rows)
+
+
+def _is_holding_rating_distribution_table(table: ParsedTable) -> bool:
+    """判断表格是否为持仓债券/证券信用评级分布，而非基金自身评级。
+
+    Args:
+        table: 候选年报表格。
+
+    Returns:
+        满足持仓评级分布语义时返回 ``True``。
+
+    Raises:
+        无显式抛出。
+    """
+
+    table_text = _compact_text(_joined_table_text(table))
+    if any(keyword in table_text for keyword in _FUND_OWN_RATING_KEYWORDS):
+        return False
+    has_rating_semantics = "信用评级" in table_text or "短期信用评级" in table_text or "长期信用评级" in table_text
+    if not has_rating_semantics:
+        return False
+    has_holding_qualifier = any(keyword in table_text for keyword in _HOLDING_RATING_QUALIFIERS)
+    if "本基金" in table_text and "评级" in table_text and not has_holding_qualifier:
+        return False
+    return True
+
+
+def _rating_label_from_row(row: tuple[str, ...]) -> str | None:
+    """从评级分布行识别评级标签。
+
+    Args:
+        row: 表格行。
+
+    Returns:
+        评级标签；未识别时返回 ``None``。
+
+    Raises:
+        无显式抛出。
+    """
+
+    row_label = _compact_text(row[0]).upper() if row else ""
+    for label in _CREDIT_RATING_LABELS:
+        if row_label == label.upper():
+            return label
+    for label in _CREDIT_RATING_LABELS:
+        if _is_compound_rating_label(row_label, label.upper()):
+            return label
+    return None
+
+
+def _is_compound_rating_label(row_label: str, label: str) -> bool:
+    """判断复合评级行是否包含可接受的评级标签。
+
+    Args:
+        row_label: 已规整并大写的行标签。
+        label: 已大写的候选评级标签。
+
+    Returns:
+        复合行标签可映射到候选评级时返回 ``True``。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if label not in row_label:
+        return False
+    before, _matched, after = row_label.partition(label)
+    rating_token_chars = set("ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789+-")
+    if before and before[-1] in rating_token_chars:
+        return False
+    if after and after[0] in rating_token_chars:
+        return False
+    return True
+
+
+def _current_period_value_column_index(headers: tuple[str, ...], row: tuple[str, ...]) -> int | None:
+    """查找评级分布行当前期金额列。
+
+    Args:
+        headers: 表格表头。
+        row: 表格行。
+
+    Returns:
+        当前期金额列下标；无有效金额或多列无法可靠区分时返回 ``None``。
+
+    Raises:
+        无显式抛出。
+    """
+
+    numeric_columns = []
+    for index, cell in enumerate(row[1:], start=1):
+        if "%" in str(cell):
+            continue
+        if _parse_plain_decimal(cell) is not None:
+            numeric_columns.append(index)
+    if not numeric_columns:
+        return None
+
+    current_columns = tuple(
+        index
+        for index in numeric_columns
+        if _is_current_period_amount_header(_header_at(headers, index))
+    )
+    if len(current_columns) == 1:
+        return current_columns[0]
+    if len(current_columns) > 1:
+        return None
+
+    non_prior_columns = tuple(
+        index
+        for index in numeric_columns
+        if not _is_prior_period_header(_header_at(headers, index))
+    )
+    if len(numeric_columns) == 1 and len(non_prior_columns) == 1:
+        return non_prior_columns[0]
+    return None
+
+
+def _header_at(headers: tuple[str, ...], index: int) -> str:
+    """读取指定表头单元格。
+
+    Args:
+        headers: 表格表头。
+        index: 列下标。
+
+    Returns:
+        对应表头；越界时返回空字符串。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if index >= len(headers):
+        return ""
+    return headers[index]
+
+
+def _is_current_period_amount_header(header: str) -> bool:
+    """判断表头是否表达当前期金额列。
+
+    Args:
+        header: 表头文本。
+
+    Returns:
+        具备当前期语义且非前期/比例语义时返回 ``True``。
+
+    Raises:
+        无显式抛出。
+    """
+
+    compact_header = _compact_text(header)
+    has_current_period = any(keyword in compact_header for keyword in _CURRENT_PERIOD_HEADER_KEYWORDS)
+    has_percentage = any(keyword in compact_header for keyword in _PERCENTAGE_HEADER_KEYWORDS)
+    return has_current_period and not has_percentage and not _is_prior_period_header(header)
+
+
+def _is_prior_period_header(header: str) -> bool:
+    """判断表头是否表达前期或期初列。
+
+    Args:
+        header: 表头文本。
+
+    Returns:
+        命中前期/期初语义时返回 ``True``。
+
+    Raises:
+        无显式抛出。
+    """
+
+    compact_header = _compact_text(header)
+    return any(keyword in compact_header for keyword in _PRIOR_PERIOD_HEADER_KEYWORDS)
+
+
+def _credit_rating_distribution_metric(rows: tuple[tuple[_AnchorDraft, str, Decimal], ...]) -> str:
+    """格式化代表性持仓评级分布摘要。
+
+    Args:
+        rows: 单张表的有效评级行。
+
+    Returns:
+        当前期评级分布摘要。
+
+    Raises:
+        无显式抛出。
+    """
+
+    parts = [f"{label}={_format_decimal(value)}" for _draft, label, value in rows]
+    return f"holding_rating_distribution: {', '.join(parts)}"
+
+
+def _find_share_change_table(tables: tuple[ParsedTable, ...]) -> _ShareChangeTableSelection:
     """查找模板第 6 章份额变动表。
 
     Args:
         tables: 年报表格。
 
     Returns:
-        命中时返回份额变动表，否则返回 ``None``。
+        唯一命中时返回份额变动表；无命中或歧义时携带失败原因。
+
+    Raises:
+        无显式抛出。
+    """
+
+    candidates: list[tuple[int, ParsedTable]] = []
+    for table in tables:
+        score = _share_change_table_score(table)
+        if score > 0:
+            candidates.append((score, table))
+
+    if not candidates:
+        return _ShareChangeTableSelection(table=None, na_reason=None)
+    best_score = max(score for score, _table in candidates)
+    best_tables = tuple(table for score, table in candidates if score == best_score)
+    if len(best_tables) != 1:
+        return _ShareChangeTableSelection(table=None, na_reason="ambiguous_share_change_table")
+    return _ShareChangeTableSelection(table=best_tables[0], na_reason=None)
+
+
+def _share_change_table_score(table: ParsedTable) -> int:
+    """为 §10 份额变动表候选打分。
+
+    Args:
+        table: 候选年报表格。
+
+    Returns:
+        正数表示候选表；零表示拒绝。
+
+    Raises:
+        无显式抛出。
+    """
+
+    table_text = _compact_text(_joined_table_text(table))
+    if any(keyword in table_text for keyword in _SHARE_CHANGE_FINANCIAL_STATEMENT_KEYWORDS):
+        return 0
+    has_boundary_row = "期初" in table_text or "期末" in table_text
+    has_flow_row = "申购" in table_text or "赎回" in table_text
+    has_share_semantics = "基金份额" in table_text or "份额总额" in table_text
+    if not (has_boundary_row and has_flow_row and has_share_semantics):
+        return 0
+
+    score = 1
+    for keyword in ("基金份额", "份额总额", "基金总申购份额", "基金总赎回份额", "基金份额总额"):
+        if keyword in table_text:
+            score += 2
+    if "拆分" in table_text or "变动" in table_text:
+        score += 1
+    return score
+
+
+def _share_class_mapping(report: ParsedAnnualReport, group_id: BondRiskEvidenceGroupId) -> _ShareClassMapping | None:
+    """从 §2 表格或文本识别全份额类别映射。
+
+    Args:
+        report: 已解析年报。
+        group_id: 风险组 ID。
+
+    Returns:
+        A/C/E/F 等份额类别到基金代码的完整映射；无法唯一识别时返回 ``None``。
+
+    Raises:
+        无显式抛出。
+    """
+
+    table_mapping = _share_class_mapping_from_profile_tables(report.tables, group_id)
+    if table_mapping is not None:
+        return table_mapping
+
+    section_two = report.get_section_text(_SECTION_PROFILE) or ""
+    return _share_class_mapping_from_profile_lines(section_two)
+
+
+def _share_class_mapping_from_profile_tables(
+    tables: tuple[ParsedTable, ...],
+    group_id: BondRiskEvidenceGroupId,
+) -> _ShareClassMapping | None:
+    """从 §2 表格式简称/交易代码行识别份额类别映射。
+
+    Args:
+        tables: 年报表格。
+        group_id: 风险组 ID。
+
+    Returns:
+        唯一完整映射；否则返回 ``None``。
 
     Raises:
         无显式抛出。
     """
 
     for table in tables:
-        table_text = _compact_text(_joined_table_text(table))
-        if "期初" in table_text and "期末" in table_text and ("申购" in table_text or "赎回" in table_text):
-            return table
+        for name_index, name_row in enumerate(table.rows, start=1):
+            if not name_row or "基金简称" not in _compact_text(name_row[0]):
+                continue
+            code_match = _next_profile_code_row(table.rows, name_index)
+            if code_match is None:
+                continue
+            code_index, code_row = code_match
+            class_labels = _share_class_labels_from_profile_name_cells(name_row)
+            fund_codes = tuple(_normalize_cell(cell) for cell in code_row[1:] if re.fullmatch(r"\d{6}", _compact_text(cell)))
+            if len(class_labels) != len(fund_codes) or len(set(class_labels)) != len(class_labels):
+                continue
+            note = "; ".join(
+                f"{class_label}={fund_code}" for class_label, fund_code in zip(class_labels, fund_codes, strict=True)
+            )
+            return _ShareClassMapping(
+                class_labels=class_labels,
+                fund_codes=fund_codes,
+                source_note=f"§2 下属分级基金简称/交易代码表: {note}",
+                source_anchor_draft=_AnchorDraft(
+                    group_id=group_id,
+                    section_id=_SECTION_PROFILE,
+                    page_number=table.page_number,
+                    table_id=_table_id(table),
+                    row_locator=f"rows:{name_index},{code_index}:share_class_mapping",
+                    evidence_role="share_class_mapping",
+                    note=_trim_note(note),
+                ),
+            )
     return None
 
 
-def _select_share_change_column(
-    table: ParsedTable,
-    *,
-    fund_code: str,
-    share_class_evidence: _ShareClassEvidence | None,
-) -> int | None:
-    """选择模板第 6 章份额变动表值列。
+def _next_profile_code_row(
+    rows: tuple[tuple[str, ...], ...],
+    start_row_number: int,
+) -> tuple[int, tuple[str, ...]] | None:
+    """查找 §2 基金简称行之后最近的交易代码行。
 
     Args:
-        table: 份额变动表。
-        fund_code: 当前基金代码。
-        share_class_evidence: §2 当前基金代码到份额类别的显式映射。
+        rows: 表格行。
+        start_row_number: 简称行的一基行号。
 
     Returns:
-        可确定时返回值列下标；歧义时返回 ``None``。
+        交易代码行号和行内容；未命中返回 ``None``。
 
     Raises:
         无显式抛出。
     """
 
-    value_columns = [(index, _normalize_cell(header)) for index, header in enumerate(table.headers) if index > 0]
-    code_matches = [(index, header) for index, header in value_columns if fund_code in _compact_text(header)]
-    if len(code_matches) == 1:
-        return code_matches[0][0]
-    if code_matches:
-        return None
-    if len(value_columns) == 1:
-        return value_columns[0][0]
-    if share_class_evidence is None:
-        return None
-    class_matches = [
-        (index, header)
-        for index, header in value_columns
-        if _contains_share_class_label(header, share_class_evidence.class_label)
-        and not _is_total_share_header(header)
-    ]
-    if len(class_matches) == 1:
-        return class_matches[0][0]
+    for row_number, row in enumerate(rows[start_row_number:], start=start_row_number + 1):
+        row_text = _compact_text(" ".join(row))
+        if "交易代码" in row_text and re.search(r"\d{6}", row_text):
+            return row_number, row
     return None
 
 
-def _share_class_evidence(report: ParsedAnnualReport) -> _ShareClassEvidence | None:
-    """从 §2 识别当前基金代码对应的份额类别。
-
-    Args:
-        report: 已解析年报。
-
-    Returns:
-        唯一匹配时返回份额类别证据，否则返回 ``None``。
-
-    Raises:
-        无显式抛出。
-    """
-
-    raw_section_two = report.get_section_text(_SECTION_PROFILE) or ""
-    evidence_from_lines = _share_class_evidence_from_profile_lines(raw_section_two, report.key.fund_code)
-    if evidence_from_lines is not None:
-        return evidence_from_lines
-
-    section_two = _compact_text(raw_section_two)
-    if report.key.fund_code not in section_two:
-        return None
-    matches = [
-        class_label
-        for class_label in _SHARE_CLASS_LABELS
-        if _section_two_contains_class_mapping(section_two, report.key.fund_code, class_label)
-    ]
-    unique_matches = tuple(sorted(set(matches)))
-    if len(unique_matches) != 1:
-        return None
-    return _ShareClassEvidence(
-        class_label=unique_matches[0],
-        source_note="§2 下属分级基金代码/简称映射",
-    )
-
-
-def _share_class_evidence_from_profile_lines(section_two: str, fund_code: str) -> _ShareClassEvidence | None:
-    """从 §2 简称行与交易代码行按顺序配对识别份额类别。
+def _share_class_mapping_from_profile_lines(section_two: str) -> _ShareClassMapping | None:
+    """从 §2 文本行识别全份额类别映射。
 
     Args:
         section_two: §2 原始文本。
-        fund_code: 当前基金代码。
 
     Returns:
-        唯一配对命中时返回份额类别证据，否则返回 ``None``。
+        唯一完整映射；否则返回 ``None``。
 
     Raises:
         无显式抛出。
@@ -1049,21 +1538,684 @@ def _share_class_evidence_from_profile_lines(section_two: str, fund_code: str) -
         if code_line is None:
             continue
         class_labels = _share_class_labels_from_profile_name_line(line)
-        fund_codes = re.findall(r"\d{6}", code_line)
-        if len(class_labels) != len(fund_codes):
+        fund_codes = tuple(re.findall(r"\d{6}", code_line))
+        if len(class_labels) != len(fund_codes) or len(set(class_labels)) != len(class_labels):
             continue
-        matches = [
-            class_label
-            for class_label, candidate_code in zip(class_labels, fund_codes, strict=True)
-            if candidate_code == fund_code
-        ]
-        unique_matches = tuple(sorted(set(matches)))
-        if len(unique_matches) == 1:
-            return _ShareClassEvidence(
-                class_label=unique_matches[0],
-                source_note="§2 下属分级基金简称/交易代码行",
-            )
+        note = "; ".join(
+            f"{class_label}={fund_code}" for class_label, fund_code in zip(class_labels, fund_codes, strict=True)
+        )
+        return _ShareClassMapping(
+            class_labels=class_labels,
+            fund_codes=fund_codes,
+            source_note=f"§2 下属分级基金简称/交易代码行: {note}",
+        )
     return None
+
+
+def _share_class_labels_from_profile_name_cells(row: tuple[str, ...]) -> tuple[str, ...]:
+    """从 §2 简称表格行提取份额类别序列。
+
+    Args:
+        row: 下属基金简称行。
+
+    Returns:
+        按列顺序排列的份额类别。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return tuple(
+        label
+        for cell in row[1:]
+        for label in _share_class_labels_from_profile_name_line(cell)
+    )
+
+
+def _aggregate_share_change(
+    table: ParsedTable,
+    *,
+    report: ParsedAnnualReport,
+    group_id: BondRiskEvidenceGroupId,
+    mapping: _ShareClassMapping,
+) -> _ShareChangeAggregation:
+    """聚合模板第 6 章 A/C/E/F 全份额类别份额变动。
+
+    Args:
+        table: §10 份额变动表。
+        report: 已解析年报。
+        group_id: 风险组 ID。
+        mapping: §2 份额类别映射。
+
+    Returns:
+        成功时返回 metric 和锚点；失败时返回 ``na_reason``。
+
+    Raises:
+        无显式抛出。
+    """
+
+    column_mapping = _align_share_change_columns(table, mapping)
+    if column_mapping.na_reason is not None:
+        return _ShareChangeAggregation(metric_value=None, drafts=(), na_reason=column_mapping.na_reason)
+
+    rows = _find_share_change_rows(table)
+    if rows is None:
+        return _ShareChangeAggregation(metric_value=None, drafts=(), na_reason="incomplete_share_change_rows")
+
+    class_changes = _calculate_share_class_changes(rows, mapping, column_mapping.class_to_column)
+    if isinstance(class_changes, str):
+        return _ShareChangeAggregation(metric_value=None, drafts=(), na_reason=class_changes)
+
+    aggregate_beginning = sum((item.beginning for item in class_changes), Decimal("0"))
+    aggregate_subscription = sum((item.subscription for item in class_changes), Decimal("0"))
+    aggregate_redemption = sum((item.redemption for item in class_changes), Decimal("0"))
+    aggregate_split = sum((item.split for item in class_changes), Decimal("0"))
+    aggregate_ending = sum((item.ending for item in class_changes), Decimal("0"))
+    aggregate_net_change = aggregate_subscription - aggregate_redemption + aggregate_split
+    if aggregate_beginning == Decimal("0"):
+        return _ShareChangeAggregation(metric_value=None, drafts=(), na_reason="aggregate_beginning_zero")
+    if not _decimal_close(aggregate_beginning + aggregate_net_change, aggregate_ending):
+        return _ShareChangeAggregation(metric_value=None, drafts=(), na_reason="share_change_arithmetic_mismatch")
+
+    cross_check_draft: _AnchorDraft | None = None
+    if column_mapping.alignment_note == _SHARE_CHANGE_ALIGNMENT_UNLABELED:
+        cross_check = _share_class_ending_cross_check_from_profile_tables(
+            report.tables,
+            mapping=mapping,
+            group_id=group_id,
+            excluded_table=table,
+        )
+        if cross_check is None:
+            return _ShareChangeAggregation(
+                metric_value=None,
+                drafts=(),
+                na_reason="share_class_ending_cross_check_missing",
+            )
+        cross_check_result = _validate_share_class_ending_cross_check(class_changes, cross_check)
+        if cross_check_result is not None:
+            return _ShareChangeAggregation(metric_value=None, drafts=(), na_reason=cross_check_result)
+        cross_check_draft = cross_check.source_anchor_draft
+
+    metric_value = _format_share_change_metric(
+        class_changes=class_changes,
+        aggregate_beginning=aggregate_beginning,
+        aggregate_subscription=aggregate_subscription,
+        aggregate_redemption=aggregate_redemption,
+        aggregate_split=aggregate_split,
+        aggregate_ending=aggregate_ending,
+        aggregate_net_change=aggregate_net_change,
+        aggregate_net_change_ratio=aggregate_net_change / aggregate_beginning,
+        source_note=mapping.source_note,
+        alignment_note=column_mapping.alignment_note,
+    )
+    drafts = _share_change_row_anchor_drafts(table, group_id, rows)
+    if len(drafts) < 4:
+        return _ShareChangeAggregation(metric_value=None, drafts=(), na_reason="incomplete_share_change_rows")
+    if cross_check_draft is not None:
+        drafts = (*drafts, cross_check_draft)
+    return _ShareChangeAggregation(metric_value=metric_value, drafts=drafts, na_reason=None)
+
+
+def _align_share_change_columns(
+    table: ParsedTable,
+    mapping: _ShareClassMapping,
+) -> _ShareChangeColumnMapping:
+    """把 §10 份额变动表值列对齐到 §2 份额类别映射。
+
+    Args:
+        table: §10 份额变动表。
+        mapping: §2 份额类别映射。
+
+    Returns:
+        类别到值列下标的映射；失败时给出原因。
+
+    Raises:
+        无显式抛出。
+    """
+
+    value_columns = tuple(
+        (index, _normalized_header_text(table.headers[index]))
+        for index in _share_change_value_columns(table)
+    )
+    if len(value_columns) != len(mapping.class_labels):
+        return _ShareChangeColumnMapping(
+            class_to_column={},
+            alignment_note=None,
+            na_reason="share_class_column_count_mismatch",
+        )
+
+    class_to_column: dict[str, int] = {}
+    used_columns: set[int] = set()
+    for class_label, fund_code in zip(mapping.class_labels, mapping.fund_codes, strict=True):
+        matches = [
+            index
+            for index, header in value_columns
+            if _header_has_explicit_share_class(header, class_label, fund_code)
+        ]
+        unique_matches = tuple(dict.fromkeys(matches))
+        if len(unique_matches) != 1 or unique_matches[0] in used_columns:
+            break
+        class_to_column[class_label] = unique_matches[0]
+        used_columns.add(unique_matches[0])
+    else:
+        return _ShareChangeColumnMapping(
+            class_to_column=class_to_column,
+            alignment_note=_SHARE_CHANGE_ALIGNMENT_EXPLICIT,
+            na_reason=None,
+        )
+
+    signal_count = sum(
+        1
+        for _index, header in value_columns
+        for class_label, fund_code in zip(mapping.class_labels, mapping.fund_codes, strict=True)
+        if _header_has_explicit_share_class(header, class_label, fund_code)
+    )
+    if signal_count > 0:
+        return _ShareChangeColumnMapping(
+            class_to_column={},
+            alignment_note=None,
+            na_reason="share_class_column_alignment_ambiguous",
+        )
+
+    return _ShareChangeColumnMapping(
+        class_to_column={
+            class_label: column_index
+            for class_label, (column_index, _header) in zip(mapping.class_labels, value_columns, strict=True)
+        },
+        alignment_note=_SHARE_CHANGE_ALIGNMENT_UNLABELED,
+        na_reason=None,
+    )
+
+
+def _share_change_value_columns(table: ParsedTable) -> tuple[int, ...]:
+    """识别 §10 份额变动表的类别值列。
+
+    Args:
+        table: §10 份额变动表。
+
+    Returns:
+        类别值列下标；首列行标签语义无法确认时返回空元组。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if not table.headers:
+        return ()
+    if _parse_plain_decimal(table.headers[0]) is not None:
+        return ()
+    if not any(
+        row
+        and any(keyword in _compact_text(row[0]) for keyword in _SHARE_CHANGE_ROW_LABEL_KEYWORDS)
+        for row in table.rows
+    ):
+        return ()
+    return tuple(
+        index
+        for index, header in enumerate(table.headers)
+        if index > 0 and not _is_total_share_header(header)
+    )
+
+
+def _normalized_header_text(header: str) -> str:
+    """规范化表头文本以支持跨行份额类别匹配。
+
+    Args:
+        header: 原始表头。
+
+    Returns:
+        删除空白后的表头文本。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return _compact_text(_normalize_cell(header))
+
+
+def _header_has_explicit_share_class(header: str, class_label: str, fund_code: str) -> bool:
+    """判断 §10 表头是否显式指向某个份额类别。
+
+    Args:
+        header: 规范化或原始表头。
+        class_label: §2 份额类别。
+        fund_code: §2 基金代码。
+
+    Returns:
+        表头包含基金代码或明确份额类别标签时返回 ``True``。
+
+    Raises:
+        无显式抛出。
+    """
+
+    compact_header = _compact_text(header)
+    return fund_code in compact_header or _contains_share_class_label(compact_header, class_label)
+
+
+def _share_class_ending_cross_check_from_profile_tables(
+    tables: tuple[ParsedTable, ...],
+    *,
+    mapping: _ShareClassMapping,
+    group_id: BondRiskEvidenceGroupId,
+    excluded_table: ParsedTable,
+) -> _ShareClassEndingCrossCheck | None:
+    """从 §2 profile 同表三行读取份额类别期末份额交叉校验。
+
+    Args:
+        tables: 年报表格。
+        mapping: §2 份额类别映射。
+        group_id: 风险组 ID。
+        excluded_table: 当前 §10 份额变动表，必须排除以避免自证。
+
+    Returns:
+        可证明 A/C/E/F 顺序的期末份额交叉校验；无法证明时返回 ``None``。
+
+    Raises:
+        无显式抛出。
+    """
+
+    excluded_identity = (excluded_table.page_number, excluded_table.table_index)
+    for table in tables:
+        if (table.page_number, table.table_index) == excluded_identity:
+            continue
+        row_matches = _profile_cross_check_rows(table)
+        if row_matches is None:
+            continue
+        name_match, code_match, ending_match = row_matches
+        name_index, name_row = name_match
+        code_index, code_row = code_match
+        ending_index, ending_row = ending_match
+        class_labels = _share_class_labels_from_profile_name_cells(name_row)
+        fund_codes = tuple(
+            _normalize_cell(cell)
+            for cell in code_row[1:]
+            if re.fullmatch(r"\d{6}", _compact_text(cell))
+        )
+        if class_labels != mapping.class_labels or fund_codes != mapping.fund_codes:
+            continue
+        ending_values = _profile_ending_values_by_class(ending_row, mapping.class_labels)
+        if ending_values is None:
+            continue
+        note = "; ".join(
+            f"{class_label}={_format_decimal(ending_values[class_label])}"
+            for class_label in mapping.class_labels
+        )
+        return _ShareClassEndingCrossCheck(
+            ending_by_class=ending_values,
+            source_anchor_draft=_AnchorDraft(
+                group_id=group_id,
+                section_id=_SECTION_PROFILE,
+                page_number=table.page_number,
+                table_id=_table_id(table),
+                row_locator=f"rows:{name_index},{code_index},{ending_index}:share_class_ending_cross_check",
+                evidence_role="share_class_ending_cross_check",
+                note=_trim_note(note),
+            ),
+        )
+    return None
+
+
+def _profile_cross_check_rows(
+    table: ParsedTable,
+) -> tuple[
+    tuple[int, tuple[str, ...]],
+    tuple[int, tuple[str, ...]],
+    tuple[int, tuple[str, ...]],
+] | None:
+    """定位同一 §2 profile 表内的简称、代码和期末份额三行。
+
+    Args:
+        table: 候选 profile 表。
+
+    Returns:
+        三行一基行号和行内容；三类行不齐全时返回 ``None``。
+
+    Raises:
+        无显式抛出。
+    """
+
+    name_match: tuple[int, tuple[str, ...]] | None = None
+    code_match: tuple[int, tuple[str, ...]] | None = None
+    ending_match: tuple[int, tuple[str, ...]] | None = None
+    for row_index, row in enumerate(table.rows, start=1):
+        if not row:
+            continue
+        row_label = _compact_text(row[0])
+        if _PROFILE_CLASS_NAME_ROW_KEYWORD in row_label:
+            name_match = (row_index, row)
+        elif _PROFILE_CLASS_CODE_ROW_KEYWORD in row_label:
+            code_match = (row_index, row)
+        elif _PROFILE_CLASS_ENDING_ROW_KEYWORD in row_label:
+            ending_match = (row_index, row)
+    if name_match is None or code_match is None or ending_match is None:
+        return None
+    return name_match, code_match, ending_match
+
+
+def _profile_ending_values_by_class(
+    ending_row: tuple[str, ...],
+    class_labels: tuple[str, ...],
+) -> dict[str, Decimal] | None:
+    """解析 §2 profile 期末份额行中的类别期末份额。
+
+    Args:
+        ending_row: ``报告期末下属分级基金的份额总额`` 行。
+        class_labels: §2 份额类别顺序。
+
+    Returns:
+        类别到期末份额的映射；数量或解析失败时返回 ``None``。
+
+    Raises:
+        无显式抛出。
+    """
+
+    value_cells = ending_row[1 : 1 + len(class_labels)]
+    if len(value_cells) != len(class_labels):
+        return None
+    ending_values: dict[str, Decimal] = {}
+    for class_label, cell in zip(class_labels, value_cells, strict=True):
+        parsed = _parse_share_decimal(cell)
+        if parsed is None:
+            return None
+        ending_values[class_label] = parsed
+    return ending_values
+
+
+def _validate_share_class_ending_cross_check(
+    class_changes: tuple[_ShareClassChange, ...],
+    cross_check: _ShareClassEndingCrossCheck,
+) -> str | None:
+    """校验 §10 各类别期末份额与 §2 profile 期末份额一致。
+
+    Args:
+        class_changes: §10 份额变动计算结果。
+        cross_check: §2 profile 期末份额交叉校验。
+
+    Returns:
+        通过时返回 ``None``；不一致时返回失败原因。
+
+    Raises:
+        无显式抛出。
+    """
+
+    for item in class_changes:
+        expected_ending = cross_check.ending_by_class.get(item.class_label)
+        if expected_ending is None:
+            return "share_class_ending_cross_check_missing"
+        if not _decimal_close(item.ending, expected_ending):
+            return "share_class_ending_cross_check_mismatch"
+    return None
+
+
+def _find_share_change_rows(table: ParsedTable) -> _ShareChangeRows | None:
+    """定位 §10 份额变动表的必需行。
+
+    Args:
+        table: §10 份额变动表。
+
+    Returns:
+        必需行定位结果；缺少任一必需行时返回 ``None``。
+
+    Raises:
+        无显式抛出。
+    """
+
+    beginning = _find_share_change_row(table, required_keywords=("期初", "基金份额总额"))
+    subscription = _find_share_change_row(
+        table,
+        required_keywords=("申购",),
+        preferred_keyword_groups=_SHARE_SUBSCRIPTION_KEYWORD_GROUPS,
+        excluded_keywords=_SHARE_SUBSCRIPTION_EXCLUDED_KEYWORDS,
+    )
+    redemption = _find_share_change_row(
+        table,
+        required_keywords=("赎回",),
+        preferred_keyword_groups=_SHARE_REDEMPTION_KEYWORD_GROUPS,
+        excluded_keywords=_SHARE_REDEMPTION_EXCLUDED_KEYWORDS,
+    )
+    split = _find_share_change_row(table, required_keywords=("拆分",))
+    ending = _find_share_change_row(table, required_keywords=("期末", "基金份额总额"))
+    if beginning is None or subscription is None or redemption is None or ending is None:
+        return None
+    return _ShareChangeRows(
+        beginning=beginning,
+        subscription=subscription,
+        redemption=redemption,
+        split=split,
+        ending=ending,
+    )
+
+
+def _find_share_change_row(
+    table: ParsedTable,
+    *,
+    required_keywords: tuple[str, ...],
+    preferred_keyword_groups: tuple[tuple[str, ...], ...] = (),
+    excluded_keywords: tuple[str, ...] = (),
+) -> tuple[int, tuple[str, ...]] | None:
+    """按关键词定位 §10 份额变动表行。
+
+    Args:
+        table: §10 份额变动表。
+        required_keywords: 行文本必须包含的关键词。
+        preferred_keyword_groups: 优先命中的强语义关键词组。
+        excluded_keywords: 不能命中的干扰关键词。
+
+    Returns:
+        一基行号和行内容；未命中返回 ``None``。
+
+    Raises:
+        无显式抛出。
+    """
+
+    matches = []
+    for row_index, row in enumerate(table.rows, start=1):
+        row_text = _compact_text(" ".join(row))
+        if any(keyword in row_text for keyword in excluded_keywords):
+            continue
+        if all(keyword in row_text for keyword in required_keywords):
+            matches.append((row_index, row, row_text))
+    if preferred_keyword_groups:
+        for row_index, row, row_text in matches:
+            if any(all(keyword in row_text for keyword in keywords) for keywords in preferred_keyword_groups):
+                return row_index, row
+        return None
+    if matches:
+        row_index, row, _row_text = matches[0]
+        return row_index, row
+    return None
+
+
+def _calculate_share_class_changes(
+    rows: _ShareChangeRows,
+    mapping: _ShareClassMapping,
+    class_to_column: dict[str, int],
+) -> tuple[_ShareClassChange, ...] | str:
+    """计算 §10 各份额类别的份额变动并执行类别级对账。
+
+    Args:
+        rows: §10 份额变动行。
+        mapping: §2 份额类别映射。
+        class_to_column: 类别到列下标映射。
+
+    Returns:
+        成功时返回类别计算结果；失败时返回 ``na_reason`` 字符串。
+
+    Raises:
+        无显式抛出。
+    """
+
+    changes: list[_ShareClassChange] = []
+    for class_label, fund_code in zip(mapping.class_labels, mapping.fund_codes, strict=True):
+        column_index = class_to_column[class_label]
+        parsed_values = _parse_share_change_values(rows, column_index)
+        if isinstance(parsed_values, str):
+            return parsed_values
+        beginning, subscription, redemption, split, ending = parsed_values
+        net_change = subscription - redemption + split
+        if not _decimal_close(beginning + net_change, ending):
+            return "share_change_arithmetic_mismatch"
+        ratio = None if beginning == Decimal("0") else net_change / beginning
+        changes.append(
+            _ShareClassChange(
+                class_label=class_label,
+                fund_code=fund_code,
+                beginning=beginning,
+                subscription=subscription,
+                redemption=redemption,
+                split=split,
+                ending=ending,
+                net_change=net_change,
+                net_change_ratio=ratio,
+                note="class_beginning_zero" if beginning == Decimal("0") else None,
+            )
+        )
+    return tuple(changes)
+
+
+def _parse_share_change_values(
+    rows: _ShareChangeRows,
+    column_index: int,
+) -> tuple[Decimal, Decimal, Decimal, Decimal, Decimal] | str:
+    """解析单一类别的 §10 份额变动数值。
+
+    Args:
+        rows: §10 份额变动行。
+        column_index: 当前类别值列下标。
+
+    Returns:
+        期初、申购、赎回、拆分、期末五元组；失败时返回 ``na_reason`` 字符串。
+
+    Raises:
+        无显式抛出。
+    """
+
+    row_values = (
+        rows.beginning[1],
+        rows.subscription[1],
+        rows.redemption[1],
+        rows.split[1] if rows.split is not None else None,
+        rows.ending[1],
+    )
+    parsed: list[Decimal] = []
+    for row in row_values:
+        if row is None:
+            parsed.append(Decimal("0"))
+            continue
+        if column_index >= len(row):
+            return "share_class_column_count_mismatch"
+        value = _parse_share_decimal(row[column_index])
+        if value is None:
+            return "non_parseable_share_value"
+        parsed.append(value)
+    return parsed[0], parsed[1], parsed[2], parsed[3], parsed[4]
+
+
+def _share_change_row_anchor_drafts(
+    table: ParsedTable,
+    group_id: BondRiskEvidenceGroupId,
+    rows: _ShareChangeRows,
+) -> tuple[_AnchorDraft, ...]:
+    """构造 §10 份额变动必需行级锚点。
+
+    Args:
+        table: §10 份额变动表。
+        group_id: 风险组 ID。
+        rows: §10 份额变动行定位。
+
+    Returns:
+        期初、申购、赎回、期末和可选拆分行锚点。
+
+    Raises:
+        无显式抛出。
+    """
+
+    row_specs = (
+        ("share_beginning", rows.beginning),
+        ("subscription", rows.subscription),
+        ("redemption", rows.redemption),
+        ("split_or_change", rows.split),
+        ("share_ending", rows.ending),
+    )
+    drafts = []
+    for evidence_role, row_match in row_specs:
+        if row_match is None:
+            continue
+        row_index, row = row_match
+        row_label = _normalize_cell(row[0]) if row else f"row-{row_index}"
+        drafts.append(
+            _AnchorDraft(
+                group_id=group_id,
+                section_id=_SECTION_SHARE_CHANGE,
+                page_number=table.page_number,
+                table_id=_table_id(table),
+                row_locator=f"row:{row_index}:{row_label}",
+                evidence_role=evidence_role,
+                note=_format_row_note(row),
+            )
+        )
+    return tuple(drafts)
+
+
+def _format_share_change_metric(
+    *,
+    class_changes: tuple[_ShareClassChange, ...],
+    aggregate_beginning: Decimal,
+    aggregate_subscription: Decimal,
+    aggregate_redemption: Decimal,
+    aggregate_split: Decimal,
+    aggregate_ending: Decimal,
+    aggregate_net_change: Decimal,
+    aggregate_net_change_ratio: Decimal,
+    source_note: str,
+    alignment_note: str | None,
+) -> str:
+    """格式化 A/C/E/F 全份额类别份额变动摘要。
+
+    Args:
+        class_changes: 类别级计算结果。
+        aggregate_beginning: 全类别期初份额。
+        aggregate_subscription: 全类别申购份额。
+        aggregate_redemption: 全类别赎回份额。
+        aggregate_split: 全类别拆分变动份额。
+        aggregate_ending: 全类别期末份额。
+        aggregate_net_change: 全类别净变动。
+        aggregate_net_change_ratio: 全类别净变动比例。
+        source_note: §2 映射来源说明。
+        alignment_note: §10 列对齐方式说明。
+
+    Returns:
+        可写入 ``metric_value`` 的紧凑摘要。
+
+    Raises:
+        无显式抛出。
+    """
+
+    class_parts = []
+    for item in class_changes:
+        ratio = "None" if item.net_change_ratio is None else _format_decimal(item.net_change_ratio)
+        note = f", note={item.note}" if item.note else ""
+        class_parts.append(
+            f"{item.class_label}(code={item.fund_code}, beginning={_format_decimal(item.beginning)}, "
+            f"subscription={_format_decimal(item.subscription)}, redemption={_format_decimal(item.redemption)}, "
+            f"split={_format_decimal(item.split)}, ending={_format_decimal(item.ending)}, "
+            f"net_change={_format_decimal(item.net_change)}, net_change_ratio={ratio}{note})"
+        )
+
+    alignment_part = f"; column_alignment={alignment_note}" if alignment_note else ""
+    metric = (
+        "all_classes: "
+        f"beginning={_format_decimal(aggregate_beginning)}, "
+        f"subscription={_format_decimal(aggregate_subscription)}, "
+        f"redemption={_format_decimal(aggregate_redemption)}, "
+        f"split={_format_decimal(aggregate_split)}, "
+        f"ending={_format_decimal(aggregate_ending)}, "
+        f"net_change={_format_decimal(aggregate_net_change)}, "
+        f"net_change_ratio={_format_decimal(aggregate_net_change_ratio)}; "
+        f"{'; '.join(class_parts)}; mapping={source_note}"
+        f"{alignment_part}"
+    )
+    return metric
 
 
 def _next_profile_code_line(lines: list[str], start_index: int) -> str | None:
@@ -1106,28 +2258,6 @@ def _share_class_labels_from_profile_name_line(line: str) -> tuple[str, ...]:
     )
 
 
-def _section_two_contains_class_mapping(section_two: str, fund_code: str, class_label: str) -> bool:
-    """判断 §2 文本是否包含代码到份额类别的直接映射。
-
-    Args:
-        section_two: 已压缩的 §2 文本。
-        fund_code: 当前基金代码。
-        class_label: 候选份额类别。
-
-    Returns:
-        代码与类别距离足够近时返回 ``True``。
-
-    Raises:
-        无显式抛出。
-    """
-
-    code_index = section_two.find(fund_code)
-    class_index = section_two.upper().find(class_label.upper())
-    if code_index < 0 or class_index < 0:
-        return False
-    return abs(code_index - class_index) <= 80
-
-
 def _contains_share_class_label(text: str, class_label: str) -> bool:
     """判断表头是否包含明确份额类别。
 
@@ -1166,6 +2296,89 @@ def _is_total_share_header(text: str) -> bool:
 
     compact_text = _compact_text(text)
     return any(keyword in compact_text for keyword in ("合计", "总计", "总份额", "基金份额总额"))
+
+
+def _parse_share_decimal(value: str) -> Decimal | None:
+    """解析 §10 份额变动数值。
+
+    Args:
+        value: 原始份额数值。
+
+    Returns:
+        可解析时返回 ``Decimal``；不可解析时返回 ``None``。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return _parse_plain_decimal(value, dash_as_zero=True)
+
+
+def _parse_plain_decimal(value: str, *, dash_as_zero: bool = False) -> Decimal | None:
+    """解析不含百分号的普通十进制数值。
+
+    Args:
+        value: 原始文本。
+        dash_as_zero: 是否把横线变体解析为零。
+
+    Returns:
+        可解析时返回 ``Decimal``；不可解析时返回 ``None``。
+
+    Raises:
+        无显式抛出。
+    """
+
+    normalized = _compact_text(str(value)).replace(",", "")
+    for suffix in _DECIMAL_UNIT_SUFFIXES:
+        if normalized.endswith(suffix):
+            normalized = normalized[: -len(suffix)]
+            break
+    if not normalized:
+        return None
+    if normalized in _DASH_ZERO_VALUES:
+        return Decimal("0") if dash_as_zero else None
+    if "%" in normalized:
+        return None
+    try:
+        return Decimal(normalized)
+    except InvalidOperation:
+        return None
+
+
+def _decimal_close(left: Decimal, right: Decimal) -> bool:
+    """判断两个 Decimal 是否在份额对账容忍度内。
+
+    Args:
+        left: 左侧计算值。
+        right: 右侧披露值。
+
+    Returns:
+        绝对差不超过 ``0.01`` 时返回 ``True``。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return abs(left - right) <= _DECIMAL_TOLERANCE
+
+
+def _format_decimal(value: Decimal) -> str:
+    """格式化 Decimal，避免无意义的科学计数法和尾随零。
+
+    Args:
+        value: 待格式化数值。
+
+    Returns:
+        稳定文本表示。
+
+    Raises:
+        无显式抛出。
+    """
+
+    normalized = value.normalize()
+    if normalized == normalized.to_integral():
+        return str(normalized.quantize(Decimal("1")))
+    return format(normalized, "f")
 
 
 def _table_contains_all(table: ParsedTable, keywords: tuple[str, ...]) -> bool:

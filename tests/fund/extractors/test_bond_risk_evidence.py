@@ -16,6 +16,7 @@ from fund_agent.fund.extractors.models import (
     BondRiskEvidenceGroupId,
     BondRiskEvidenceGroupRecord,
     BondRiskEvidenceValue,
+    EvidenceAnchor,
     validate_bond_risk_evidence_value,
 )
 
@@ -212,8 +213,8 @@ def test_table_backed_credit_risk_is_accepted_with_row_level_anchor() -> None:
             ParsedTable(
                 page_number=53,
                 table_index=0,
-                headers=("信用评级", "占基金资产净值比例"),
-                rows=(("AAA 信用评级债券", "80.00%"),),
+                headers=("长期信用评级", "本期末公允价值", "占基金资产净值比例"),
+                rows=(("AAA 债券", "1,000,000.00", "80.00%"), ("合计", "1,000,000.00", "80.00%")),
             ),
         ),
     )
@@ -225,10 +226,237 @@ def test_table_backed_credit_risk_is_accepted_with_row_level_anchor() -> None:
     assert group.status == "accepted"
     assert group.strength == "quantitative_direct"
     assert group.measurement_kind == "actual_exposure"
-    assert group.source_anchor_ids == ("bond-risk:006597:2024:credit_risk:1",)
+    assert group.metric_name == "持仓评级分布"
+    assert group.source_anchor_ids == (
+        "bond-risk:006597:2024:credit_risk:1",
+        "bond-risk:006597:2024:credit_risk:2",
+    )
     anchor = _anchor_ref_by_id(field.value, group.source_anchor_ids[0])
     assert anchor.table_id == "page-53-table-0"
     assert anchor.row_locator.startswith("row:1:")
+
+
+def test_holding_rating_distribution_table_is_credit_risk_portfolio_exposure_not_fund_rating() -> None:
+    """持仓评级分布表应作为组合信用暴露证据，不能写成基金自身评级。"""
+
+    report = _build_report(
+        raw_text=_base_bond_raw_text(),
+        tables=(
+            _rating_distribution_table(
+                page_number=54,
+                table_index=0,
+                headers=("长期信用评级", "本期末公允价值", "上年度末公允价值"),
+                rows=(
+                    ("AAA", "10,000,000.00", "9,000,000.00"),
+                    ("AAA以下", "2,000,000.00", "1,000,000.00"),
+                    ("未评级", "500,000.00", "-"),
+                    ("合计", "12,500,000.00", "10,000,000.00"),
+                ),
+            ),
+        ),
+    )
+
+    field = extract_bond_risk_evidence(report, "bond_fund")
+    assert field.value is not None
+    group = _group_by_id(field.value, "credit_risk")
+    combined_text = " ".join(
+        text
+        for text in (group.summary, group.metric_name or "", group.metric_value or "")
+    )
+
+    assert group.status == "accepted"
+    assert group.strength == "quantitative_direct"
+    assert group.measurement_kind == "actual_exposure"
+    assert group.metric_name == "持仓评级分布"
+    assert "持有债券/证券" in group.summary
+    assert "holding_rating_distribution" in (group.metric_value or "")
+    assert "合计=12500000" in (group.metric_value or "")
+    assert "基金评级" not in combined_text
+    assert "本基金评级" not in combined_text
+    anchor = _anchor_ref_by_id(field.value, group.source_anchor_ids[0])
+    assert anchor.page_number == 54
+    assert anchor.table_id == "page-54-table-0"
+    assert anchor.row_locator.startswith("row:1:")
+
+
+def test_credit_risk_uses_current_period_column_when_prior_period_appears_first() -> None:
+    """评级分布表前期列在前时，metric_value 必须使用本期末金额列。"""
+
+    report = _build_report(
+        raw_text=_base_bond_raw_text(),
+        tables=(
+            _rating_distribution_table(
+                page_number=54,
+                table_index=0,
+                headers=("长期信用评级", "上年度末公允价值", "本期末公允价值"),
+                rows=(
+                    ("AAA", "9,000,000.00", "10,000,000.00"),
+                    ("合计", "9,000,000.00", "10,000,000.00"),
+                ),
+            ),
+        ),
+    )
+
+    field = extract_bond_risk_evidence(report, "bond_fund")
+    assert field.value is not None
+    group = _group_by_id(field.value, "credit_risk")
+    anchor = _extractor_anchor_by_locator(field, "row:1:AAA")
+
+    assert group.status == "accepted"
+    assert "AAA=10000000" in (group.metric_value or "")
+    assert "AAA=9000000" not in (group.metric_value or "")
+    assert anchor.note == "AAA=10,000,000.00"
+
+
+def test_fund_own_rating_table_is_rejected_for_credit_risk() -> None:
+    """本基金评级语义即使出现 AAA 行，也不能满足持仓信用风险组。"""
+
+    report = _build_report(
+        raw_text=_base_bond_raw_text(section_four_extra="本基金主要投资中高等级信用债。"),
+        tables=(
+            ParsedTable(
+                page_number=54,
+                table_index=0,
+                headers=("本基金评级", "评级机构", "评级结果"),
+                rows=(("基金评级信息", "示例机构", "AAA"), ("合计", "1", "AAA")),
+            ),
+        ),
+    )
+
+    field = extract_bond_risk_evidence(report, "bond_fund")
+    assert field.value is not None
+    group = _group_by_id(field.value, "credit_risk")
+
+    assert group.status == "weak"
+    assert group.na_reason == "credit_risk_table_not_found"
+    assert "credit_risk" not in field.value.satisfied_group_ids
+
+
+def test_fund_own_credit_rating_table_is_rejected_for_credit_risk() -> None:
+    """基金自身信用评级表即使含信用评级字样，也不能被当作持仓评级分布。"""
+
+    report = _build_report(
+        raw_text=_base_bond_raw_text(section_four_extra="本基金主要投资中高等级信用债。"),
+        tables=(
+            ParsedTable(
+                page_number=54,
+                table_index=0,
+                headers=("本基金信用评级", "本期末公允价值"),
+                rows=(("AAA", "1,000,000.00"), ("合计", "1,000,000.00")),
+            ),
+        ),
+    )
+
+    field = extract_bond_risk_evidence(report, "bond_fund")
+    assert field.value is not None
+    group = _group_by_id(field.value, "credit_risk")
+
+    assert group.status == "weak"
+    assert group.na_reason == "credit_risk_table_not_found"
+    assert "credit_risk" not in field.value.satisfied_group_ids
+
+
+def test_compound_rating_labels_are_matched_without_loose_substring_false_positive() -> None:
+    """复合持仓标签可识别，但不把 AAAA 这类非评级标签误识别为 AAA/A。"""
+
+    report = _build_report(
+        raw_text=_base_bond_raw_text(),
+        tables=(
+            _rating_distribution_table(
+                page_number=54,
+                table_index=0,
+                headers=("长期信用评级", "本期末公允价值"),
+                rows=(
+                    ("AAA 债券", "1,000.00"),
+                    ("AAAA 说明行", "9,999.00"),
+                    ("合计", "1,000.00"),
+                ),
+            ),
+        ),
+    )
+
+    field = extract_bond_risk_evidence(report, "bond_fund")
+    assert field.value is not None
+    group = _group_by_id(field.value, "credit_risk")
+
+    assert group.status == "accepted"
+    assert "AAA=1000" in (group.metric_value or "")
+    assert "9999" not in (group.metric_value or "")
+
+
+def test_multiple_holding_rating_distribution_tables_preserve_all_anchors() -> None:
+    """短期和长期持仓评级分布表都有效时，应保留所有表的行级锚点。"""
+
+    report = _build_report(
+        raw_text=_base_bond_raw_text(),
+        tables=(
+            _rating_distribution_table(
+                page_number=54,
+                table_index=0,
+                headers=("短期信用评级", "本期末公允价值"),
+                rows=(("A-1", "1,000.00"), ("合计", "1,000.00")),
+            ),
+            _rating_distribution_table(
+                page_number=55,
+                table_index=1,
+                headers=("长期信用评级", "本期末公允价值"),
+                rows=(("AAA", "2,000.00"), ("未评级", "300.00"), ("合计", "2,300.00")),
+            ),
+        ),
+    )
+
+    field = extract_bond_risk_evidence(report, "bond_fund")
+    assert field.value is not None
+    group = _group_by_id(field.value, "credit_risk")
+    anchors = tuple(_anchor_ref_by_id(field.value, anchor_id) for anchor_id in group.source_anchor_ids)
+
+    assert group.status == "accepted"
+    assert len(group.source_anchor_ids) == 5
+    assert {anchor.table_id for anchor in anchors} == {"page-54-table-0", "page-55-table-1"}
+    assert "A-1=1000" in (group.metric_value or "")
+    assert "合计=1000" in (group.metric_value or "")
+
+
+def test_credit_risk_qualitative_text_without_rating_distribution_remains_weak() -> None:
+    """只有信用策略文本时，信用风险仍为弱证据。"""
+
+    report = _build_report(
+        raw_text=_base_bond_raw_text(section_four_extra="本基金主要投资中高等级信用债，控制信用风险。"),
+        tables=(),
+    )
+
+    field = extract_bond_risk_evidence(report, "bond_fund")
+    assert field.value is not None
+    group = _group_by_id(field.value, "credit_risk")
+
+    assert group.status == "weak"
+    assert group.strength == "qualitative_direct"
+    assert group.na_reason == "credit_risk_table_not_found"
+    assert "credit_risk" not in field.value.satisfied_group_ids
+
+
+def test_credit_risk_percentage_only_table_not_accepted() -> None:
+    """评级表只有百分比列时不能形成 accepted 锚点。"""
+
+    report = _build_report(
+        raw_text=_base_bond_raw_text(section_four_extra="本基金控制信用风险。"),
+        tables=(
+            _rating_distribution_table(
+                page_number=54,
+                table_index=0,
+                headers=("长期信用评级", "占基金资产净值比例"),
+                rows=(("AAA", "80.00%"), ("合计", "80.00%")),
+            ),
+        ),
+    )
+
+    field = extract_bond_risk_evidence(report, "bond_fund")
+    assert field.value is not None
+    group = _group_by_id(field.value, "credit_risk")
+
+    assert group.status == "weak"
+    assert group.source_anchor_ids
+    assert "credit_risk" not in field.value.satisfied_group_ids
 
 
 def test_flexible_leverage_strategy_text_alone_is_weak() -> None:
@@ -297,15 +525,15 @@ def test_drawdown_control_text_alone_is_weak() -> None:
     assert "drawdown_stress" not in field.value.satisfied_group_ids
 
 
-def test_multi_share_class_share_change_selects_target_class_when_disambiguated() -> None:
-    """§2 代码/简称映射明确时，份额变动表只选择目标份额类别列。"""
+def test_share_class_evidence_from_section_two_table() -> None:
+    """§2 表格式代码/简称映射应支持 A/C/E/F 全类别聚合。"""
 
     report = _build_report(
-        raw_text=_base_bond_raw_text(
-            section_two_extra="下属分级基金的基金简称 易方达安悦 A 易方达安悦 C\n"
-            "下属分级基金的交易代码 006597 006598",
+        raw_text=_base_bond_raw_text(),
+        tables=(
+            _share_class_mapping_table(),
+            _share_change_table_ac_ef(),
         ),
-        tables=(_share_change_table(),),
     )
 
     field = extract_bond_risk_evidence(report, "bond_fund")
@@ -313,12 +541,40 @@ def test_multi_share_class_share_change_selects_target_class_when_disambiguated(
     group = _group_by_id(field.value, "redemption_share_pressure")
 
     assert group.status == "accepted"
-    assert group.strength == "quantitative_direct"
-    notes = tuple(anchor.note for anchor in field.anchors if anchor.section_id == "§10")
-    assert "期初基金份额总额=1,000,000.00" in notes
-    assert "本期基金总申购份额=200,000.00" in notes
-    assert "本期基金总赎回份额=300,000.00" in notes
-    assert "期末基金份额总额=900,000.00" in notes
+    assert "mapping=§2 下属分级基金简称/交易代码表" in (group.metric_value or "")
+    assert "A=006597" in (group.metric_value or "")
+    assert "C=006598" in (group.metric_value or "")
+    assert "E=014217" in (group.metric_value or "")
+    assert "F=022176" in (group.metric_value or "")
+    mapping_anchors = tuple(anchor for anchor in field.value.anchors if anchor.evidence_role == "share_class_mapping")
+    assert len(mapping_anchors) == 1
+
+
+def test_share_class_evidence_from_section_two_table_with_intervening_rows() -> None:
+    """§2 简称行和交易代码行之间有注释/空行时，仍应识别 A/C/E/F 映射。"""
+
+    report = _build_report(
+        raw_text=_base_bond_raw_text(),
+        tables=(
+            _share_class_mapping_table(
+                rows=(
+                    ("下属分级基金的基金简称", "易方达安悦 A", "易方达安悦 C", "易方达安悦 E", "易方达安悦 F"),
+                    ("注：本表披露各份额类别简称", "", "", "", ""),
+                    ("", "", "", "", ""),
+                    ("下属分级基金的交易代码", "006597", "006598", "014217", "022176"),
+                ),
+            ),
+            _share_change_table_ac_ef(),
+        ),
+    )
+
+    field = extract_bond_risk_evidence(report, "bond_fund")
+    assert field.value is not None
+    group = _group_by_id(field.value, "redemption_share_pressure")
+
+    assert group.status == "accepted"
+    assert "A=006597" in (group.metric_value or "")
+    assert "F=022176" in (group.metric_value or "")
 
 
 def test_ambiguous_multi_share_class_share_change_stays_ambiguous() -> None:
@@ -335,6 +591,566 @@ def test_ambiguous_multi_share_class_share_change_stays_ambiguous() -> None:
     assert group.na_reason == "ambiguous_share_class_selection"
     assert "redemption_share_pressure" in field.value.ambiguous_group_ids
     assert "redemption_share_pressure" not in field.value.satisfied_group_ids
+
+
+def test_redemption_share_pressure_aggregates_all_a_c_e_f_classes() -> None:
+    """赎回压力必须聚合 A/C/E/F 全类别，并保留类别 breakdown 与行锚点。"""
+
+    report = _build_report(
+        raw_text=_base_bond_raw_text(
+            section_two_extra="下属分级基金的基金简称 易方达安悦 A 易方达安悦 C 易方达安悦 E 易方达安悦 F\n"
+            "下属分级基金的交易代码 006597 006598 014217 022176",
+        ),
+        tables=(_share_change_table_ac_ef(),),
+    )
+
+    field = extract_bond_risk_evidence(report, "bond_fund")
+    assert field.value is not None
+    group = _group_by_id(field.value, "redemption_share_pressure")
+
+    assert group.status == "accepted"
+    assert group.strength == "quantitative_direct"
+    assert group.measurement_kind == "actual_exposure"
+    assert group.metric_name == "A/C/E/F 份额变动汇总"
+    assert "all_classes: beginning=3000000" in (group.metric_value or "")
+    assert "subscription=1200000" in (group.metric_value or "")
+    assert "redemption=1000000" in (group.metric_value or "")
+    assert "ending=3200000" in (group.metric_value or "")
+    assert "net_change=200000" in (group.metric_value or "")
+    assert "A(code=006597" in (group.metric_value or "")
+    assert "C(code=006598" in (group.metric_value or "")
+    assert "E(code=014217" in (group.metric_value or "")
+    assert "F(code=022176" in (group.metric_value or "")
+    assert "class_beginning_zero" in (group.metric_value or "")
+    assert "column_alignment=explicit_headers" in (group.metric_value or "")
+    assert "column_alignment=section2_order_unlabeled_headers" not in (group.metric_value or "")
+    row_anchors = tuple(anchor for anchor in field.value.anchors if anchor.section_id == "§10")
+    assert len(row_anchors) >= 4
+
+
+def test_redemption_share_pressure_aligns_real_unlabeled_section_ten_by_section_two_order() -> None:
+    """真实 §10 无类别表头可在 §2 同表期末份额校验后按 A/C/E/F 顺序对齐。"""
+
+    report = _build_report(
+        raw_text=_base_bond_raw_text(),
+        tables=(
+            _real_profile_cross_check_table(),
+            _real_unlabeled_share_change_table(),
+        ),
+    )
+
+    field = extract_bond_risk_evidence(report, "bond_fund")
+    assert field.value is not None
+    group = _group_by_id(field.value, "redemption_share_pressure")
+    metric = group.metric_value or ""
+    anchors = tuple(_anchor_ref_by_id(field.value, anchor_id) for anchor_id in group.source_anchor_ids)
+
+    assert group.status == "accepted"
+    assert group.na_reason is None
+    assert "redemption_share_pressure" in field.value.satisfied_group_ids
+    assert "A(code=006597" in metric
+    assert "C(code=006598" in metric
+    assert "E(code=014217" in metric
+    assert "F(code=022176" in metric
+    assert "beginning=12982005127.5" in metric
+    assert "subscription=41674250439.28" in metric
+    assert "redemption=44106675403.46" in metric
+    assert "ending=10549580163.32" in metric
+    assert "net_change=-2432424964.18" in metric
+    assert "net_change_ratio=-0.187368" in metric
+    assert "class_beginning_zero" in metric
+    assert "column_alignment=section2_order_unlabeled_headers" in metric
+    assert {anchor.evidence_role for anchor in anchors} >= {
+        "share_beginning",
+        "subscription",
+        "redemption",
+        "share_ending",
+        "share_class_mapping",
+        "share_class_ending_cross_check",
+    }
+    cross_check_anchor = next(anchor for anchor in anchors if anchor.evidence_role == "share_class_ending_cross_check")
+    assert cross_check_anchor.table_id == "page-5-table-0"
+    assert cross_check_anchor.row_locator == "rows:9,10,11:share_class_ending_cross_check"
+
+
+def test_redemption_share_pressure_aligns_real_profile_unit_suffix_newline_values() -> None:
+    """真实 §2 profile 期末份额带换行和“份”后缀时仍应通过交叉校验。"""
+
+    report = _build_report(
+        raw_text=_base_bond_raw_text(),
+        tables=(
+            _real_profile_cross_check_table(
+                ending_row=(
+                    "报告期末下属分级基金的份\n额总额",
+                    "5,711,224,267\n.09份",
+                    "4,760,029,01\n5.27份",
+                    "25,795,859.1\n2份",
+                    "52,531,021.8\n4份",
+                ),
+            ),
+            _real_unlabeled_share_change_table(),
+        ),
+    )
+
+    field = extract_bond_risk_evidence(report, "bond_fund")
+    assert field.value is not None
+    group = _group_by_id(field.value, "redemption_share_pressure")
+
+    assert group.status == "accepted"
+    assert group.na_reason is None
+    assert "redemption_share_pressure" in field.value.satisfied_group_ids
+
+
+def test_redemption_share_pressure_keeps_invalid_unit_suffix_value_fail_closed() -> None:
+    """“N/A份”这类非数值不得因单位后缀剥离被解析为合法 Decimal。"""
+
+    assert bond_risk_module._parse_share_decimal("N/A份") is None
+
+    report = _build_report(
+        raw_text=_base_bond_raw_text(),
+        tables=(
+            _real_profile_cross_check_table(
+                ending_row=(
+                    "报告期末下属分级基金的份额总额",
+                    "N/A份",
+                    "4,760,029,015.27份",
+                    "25,795,859.12份",
+                    "52,531,021.84份",
+                ),
+            ),
+            _real_unlabeled_share_change_table(),
+        ),
+    )
+
+    field = extract_bond_risk_evidence(report, "bond_fund")
+    assert field.value is not None
+    group = _group_by_id(field.value, "redemption_share_pressure")
+
+    assert group.status == "ambiguous"
+    assert group.na_reason == "share_class_ending_cross_check_missing"
+    assert "redemption_share_pressure" not in field.value.satisfied_group_ids
+
+
+def test_redemption_share_pressure_not_a_only() -> None:
+    """A 类单列数值不同于全类别合计时，metric 必须使用全类别汇总。"""
+
+    report = _build_report(
+        raw_text=_base_bond_raw_text(
+            section_two_extra="下属分级基金的基金简称 易方达安悦 A 易方达安悦 C 易方达安悦 E 易方达安悦 F\n"
+            "下属分级基金的交易代码 006597 006598 014217 022176",
+        ),
+        tables=(_share_change_table_ac_ef(),),
+    )
+
+    field = extract_bond_risk_evidence(report, "bond_fund")
+    assert field.value is not None
+    group = _group_by_id(field.value, "redemption_share_pressure")
+
+    assert group.status == "accepted"
+    assert "all_classes: beginning=3000000" in (group.metric_value or "")
+    assert "all_classes: beginning=1000000" not in (group.metric_value or "")
+
+
+def test_redemption_share_pressure_rejects_net_asset_statement_table() -> None:
+    """财务报表表格在真 §10 份额变动表之前出现时，不能被误选。"""
+
+    report = _build_report(
+        raw_text=_base_bond_raw_text(
+            section_two_extra="下属分级基金的基金简称 易方达安悦 A 易方达安悦 C 易方达安悦 E 易方达安悦 F\n"
+            "下属分级基金的交易代码 006597 006598 014217 022176",
+        ),
+        tables=(_net_asset_statement_like_table(), _share_change_table_ac_ef()),
+    )
+
+    field = extract_bond_risk_evidence(report, "bond_fund")
+    assert field.value is not None
+    group = _group_by_id(field.value, "redemption_share_pressure")
+
+    assert group.status == "accepted"
+    anchor = _anchor_ref_by_id(field.value, group.source_anchor_ids[0])
+    assert anchor.table_id == "page-65-table-0"
+
+
+def test_redemption_share_pressure_uses_total_subscription_and_redemption_rows() -> None:
+    """净申购/累计申购等干扰行在前时，仍应选择总申购/总赎回行。"""
+
+    report = _build_report(
+        raw_text=_base_bond_raw_text(
+            section_two_extra="下属分级基金的基金简称 易方达安悦 A 易方达安悦 C 易方达安悦 E 易方达安悦 F\n"
+            "下属分级基金的交易代码 006597 006598 014217 022176",
+        ),
+        tables=(
+            _share_change_table_ac_ef(
+                rows=(
+                    ("期初基金份额总额", "1,000,000.00", "2,000,000.00", "0.00", "-", "3,000,000.00"),
+                    ("净申购份额", "1.00", "1.00", "1.00", "1.00", "4.00"),
+                    ("累计申购份额", "2.00", "2.00", "2.00", "2.00", "8.00"),
+                    ("本期基金总申购份额", "200,000.00", "400,000.00", "500,000.00", "100,000.00", "1,200,000.00"),
+                    ("净赎回份额", "1.00", "1.00", "1.00", "1.00", "4.00"),
+                    ("累计赎回份额", "2.00", "2.00", "2.00", "2.00", "8.00"),
+                    ("本期基金总赎回份额", "300,000.00", "100,000.00", "500,000.00", "100,000.00", "1,000,000.00"),
+                    ("本期基金拆分变动份额", "-", "-", "-", "-", "-"),
+                    ("期末基金份额总额", "900,000.00", "2,300,000.00", "0.00", "-", "3,200,000.00"),
+                ),
+            ),
+        ),
+    )
+
+    field = extract_bond_risk_evidence(report, "bond_fund")
+    assert field.value is not None
+    group = _group_by_id(field.value, "redemption_share_pressure")
+    anchors = tuple(_anchor_ref_by_id(field.value, anchor_id) for anchor_id in group.source_anchor_ids)
+    subscription_anchor = next(anchor for anchor in anchors if anchor.evidence_role == "subscription")
+    redemption_anchor = next(anchor for anchor in anchors if anchor.evidence_role == "redemption")
+
+    assert group.status == "accepted"
+    assert "subscription=1200000" in (group.metric_value or "")
+    assert "redemption=1000000" in (group.metric_value or "")
+    assert subscription_anchor.row_locator.startswith("row:4:本期基金总申购份额")
+    assert redemption_anchor.row_locator.startswith("row:7:本期基金总赎回份额")
+
+
+def test_redemption_share_pressure_fails_closed_when_class_columns_do_not_align() -> None:
+    """§2 有 A/C/E/F 但 §10 列数不一致时必须失败关闭。"""
+
+    report = _build_report(
+        raw_text=_base_bond_raw_text(
+            section_two_extra="下属分级基金的基金简称 易方达安悦 A 易方达安悦 C 易方达安悦 E 易方达安悦 F\n"
+            "下属分级基金的交易代码 006597 006598 014217 022176",
+        ),
+        tables=(_share_change_table_ac_ef(headers=("项目", "易方达安悦 A", "易方达安悦 C", "易方达安悦 E", "合计")),),
+    )
+
+    field = extract_bond_risk_evidence(report, "bond_fund")
+    assert field.value is not None
+    group = _group_by_id(field.value, "redemption_share_pressure")
+
+    assert group.status == "ambiguous"
+    assert group.na_reason == "share_class_column_count_mismatch"
+    assert "redemption_share_pressure" not in field.value.satisfied_group_ids
+
+
+def test_redemption_share_pressure_fails_closed_on_mixed_header_signal() -> None:
+    """§10 部分列有类别信号、部分列无信号时不得混用显式和位置对齐。"""
+
+    report = _build_report(
+        raw_text=_base_bond_raw_text(section_four_extra="基金份额申购赎回期初期末数据见表。"),
+        tables=(
+            _real_profile_cross_check_table(),
+            _real_unlabeled_share_change_table(
+                headers=("项目", "易方达安悦 A", "46,593,432.66", "-", "-"),
+            ),
+        ),
+    )
+
+    field = extract_bond_risk_evidence(report, "bond_fund")
+    assert field.value is not None
+    group = _group_by_id(field.value, "redemption_share_pressure")
+
+    assert group.status == "ambiguous"
+    assert group.na_reason == "share_class_column_alignment_ambiguous"
+    assert "redemption_share_pressure" not in field.value.satisfied_group_ids
+
+
+def test_redemption_share_pressure_fails_closed_on_mixed_fund_code_header_signal() -> None:
+    """§10 只有部分表头出现基金代码时必须 ambiguous，不能退回位置猜测。"""
+
+    report = _build_report(
+        raw_text=_base_bond_raw_text(),
+        tables=(
+            _real_profile_cross_check_table(),
+            _real_unlabeled_share_change_table(
+                headers=("项目", "006597", "46,593,432.66", "-", "-"),
+            ),
+        ),
+    )
+
+    field = extract_bond_risk_evidence(report, "bond_fund")
+    assert field.value is not None
+    group = _group_by_id(field.value, "redemption_share_pressure")
+
+    assert group.status == "ambiguous"
+    assert group.na_reason == "share_class_column_alignment_ambiguous"
+
+
+def test_redemption_share_pressure_fails_closed_when_unlabeled_cross_check_missing() -> None:
+    """无标签 §10 缺少 §2 profile 期末份额三行校验时必须失败关闭。"""
+
+    report = _build_report(
+        raw_text=_base_bond_raw_text(),
+        tables=(
+            _share_class_mapping_table(),
+            _real_unlabeled_share_change_table(),
+        ),
+    )
+
+    field = extract_bond_risk_evidence(report, "bond_fund")
+    assert field.value is not None
+    group = _group_by_id(field.value, "redemption_share_pressure")
+
+    assert group.status == "ambiguous"
+    assert group.na_reason == "share_class_ending_cross_check_missing"
+
+
+def test_redemption_share_pressure_fails_closed_when_unlabeled_cross_check_mismatch() -> None:
+    """无标签 §10 与 §2 profile 期末份额不一致时必须失败关闭。"""
+
+    report = _build_report(
+        raw_text=_base_bond_raw_text(),
+        tables=(
+            _real_profile_cross_check_table(
+                ending_row=(
+                    "报告期末下属分级基金的份额总额",
+                    "5,711,224,268.10",
+                    "4,760,029,015.27",
+                    "25,795,859.12",
+                    "52,531,021.84",
+                ),
+            ),
+            _real_unlabeled_share_change_table(),
+        ),
+    )
+
+    field = extract_bond_risk_evidence(report, "bond_fund")
+    assert field.value is not None
+    group = _group_by_id(field.value, "redemption_share_pressure")
+
+    assert group.status == "ambiguous"
+    assert group.na_reason == "share_class_ending_cross_check_mismatch"
+
+
+def test_redemption_share_pressure_does_not_self_certify_cross_check_with_section_ten() -> None:
+    """§2 期末份额交叉校验不得用当前 §10 份额变动表自证。"""
+
+    report = _build_report(
+        raw_text=_base_bond_raw_text(),
+        tables=(
+            _real_profile_cross_check_table(page_number=65, table_index=0),
+            _real_unlabeled_share_change_table(),
+        ),
+    )
+
+    field = extract_bond_risk_evidence(report, "bond_fund")
+    assert field.value is not None
+    group = _group_by_id(field.value, "redemption_share_pressure")
+
+    assert group.status == "ambiguous"
+    assert group.na_reason == "share_class_ending_cross_check_missing"
+
+
+def test_redemption_share_pressure_unlabeled_path_fails_closed_on_arithmetic_mismatch() -> None:
+    """无标签列路径仍必须先通过 §10 类别与汇总算术对账。"""
+
+    report = _build_report(
+        raw_text=_base_bond_raw_text(),
+        tables=(
+            _real_profile_cross_check_table(),
+            _real_unlabeled_share_change_table(
+                rows=(
+                    ("本报告期期\n初基金份额\n总额", "7,699,969,800.13", "5,252,561,821.84", "29,473,505.53", "-"),
+                    ("本报告期基\n金总申购份\n额", "27,623,952,157.07", "13,075,203,360.10", "910,677,227.41", "64,417,694.70"),
+                    ("减：本报告期\n基金总赎回\n份额", "29,612,697,690.11", "13,567,736,166.67", "914,354,873.82", "11,886,672.86"),
+                    ("本报告期基\n金拆分变动\n份额", "-", "-", "-", "-"),
+                    ("本报告期期\n末基金份额\n总额", "5,711,224,268.10", "4,760,029,015.27", "25,795,859.12", "52,531,021.84"),
+                ),
+            ),
+        ),
+    )
+
+    field = extract_bond_risk_evidence(report, "bond_fund")
+    assert field.value is not None
+    group = _group_by_id(field.value, "redemption_share_pressure")
+
+    assert group.status == "ambiguous"
+    assert group.na_reason == "share_change_arithmetic_mismatch"
+
+
+def test_redemption_share_pressure_unlabeled_path_fails_closed_on_numeric_row_label_header() -> None:
+    """无标签列路径下 headers[0] 是普通数值时不得把首列当作行标签列。"""
+
+    report = _build_report(
+        raw_text=_base_bond_raw_text(),
+        tables=(
+            _real_profile_cross_check_table(),
+            _real_unlabeled_share_change_table(headers=("123,456.78", "191,879,496.71", "46,593,432.66", "-", "-")),
+        ),
+    )
+
+    field = extract_bond_risk_evidence(report, "bond_fund")
+    assert field.value is not None
+    group = _group_by_id(field.value, "redemption_share_pressure")
+
+    assert group.status == "ambiguous"
+    assert group.na_reason == "share_class_column_count_mismatch"
+
+
+def test_redemption_share_pressure_unlabeled_path_fails_closed_on_non_standard_body_shape() -> None:
+    """无标签列路径下 body 首列没有份额变动语义时必须失败关闭。"""
+
+    report = _build_report(
+        raw_text=_base_bond_raw_text(section_four_extra="基金份额申购赎回期初期末数据见表。"),
+        tables=(
+            _real_profile_cross_check_table(),
+            _real_unlabeled_share_change_table(
+                rows=(
+                    ("alpha", "期初基金份额总额", "5,252,561,821.84", "29,473,505.53", "-"),
+                    ("beta", "本期基金总申购份额", "13,075,203,360.10", "910,677,227.41", "64,417,694.70"),
+                    ("gamma", "本期基金总赎回份额", "13,567,736,166.67", "914,354,873.82", "11,886,672.86"),
+                    ("delta", "本期基金拆分变动份额", "-", "-", "-"),
+                    ("omega", "期末基金份额总额", "4,760,029,015.27", "25,795,859.12", "52,531,021.84"),
+                ),
+            ),
+        ),
+    )
+
+    field = extract_bond_risk_evidence(report, "bond_fund")
+    assert field.value is not None
+    group = _group_by_id(field.value, "redemption_share_pressure")
+
+    assert group.status == "ambiguous"
+    assert group.na_reason == "share_class_column_count_mismatch"
+
+
+def test_redemption_share_pressure_unlabeled_path_fails_closed_on_all_zero_aggregate_beginning() -> None:
+    """无标签列路径下全类别期初为零时不得 accepted。"""
+
+    zero_rows = (
+        ("本报告期期初基金份额总额", "-", "-", "-", "-"),
+        ("本报告期基金总申购份额", "-", "-", "-", "-"),
+        ("减：本报告期基金总赎回份额", "-", "-", "-", "-"),
+        ("本报告期基金拆分变动份额", "-", "-", "-", "-"),
+        ("本报告期期末基金份额总额", "-", "-", "-", "-"),
+    )
+    report = _build_report(
+        raw_text=_base_bond_raw_text(),
+        tables=(
+            _real_profile_cross_check_table(
+                ending_row=("报告期末下属分级基金的份额总额", "-", "-", "-", "-"),
+            ),
+            _real_unlabeled_share_change_table(rows=zero_rows),
+        ),
+    )
+
+    field = extract_bond_risk_evidence(report, "bond_fund")
+    assert field.value is not None
+    group = _group_by_id(field.value, "redemption_share_pressure")
+
+    assert group.status == "ambiguous"
+    assert group.na_reason == "aggregate_beginning_zero"
+
+
+def test_redemption_share_pressure_fails_closed_on_arithmetic_mismatch() -> None:
+    """类别或汇总份额变动对账不平时必须失败关闭。"""
+
+    report = _build_report(
+        raw_text=_base_bond_raw_text(
+            section_two_extra="下属分级基金的基金简称 易方达安悦 A 易方达安悦 C 易方达安悦 E 易方达安悦 F\n"
+            "下属分级基金的交易代码 006597 006598 014217 022176",
+        ),
+        tables=(
+            _share_change_table_ac_ef(
+                rows=(
+                    ("期初基金份额总额", "1,000,000.00", "2,000,000.00", "0.00", "-"),
+                    ("本期基金总申购份额", "200,000.00", "400,000.00", "500,000.00", "100,000.00"),
+                    ("本期基金总赎回份额", "300,000.00", "100,000.00", "500,000.00", "100,000.00"),
+                    ("本期基金拆分变动份额", "-", "-", "-", "-"),
+                    ("期末基金份额总额", "901,000.00", "2,300,000.00", "0.00", "-"),
+                ),
+            ),
+        ),
+    )
+
+    field = extract_bond_risk_evidence(report, "bond_fund")
+    assert field.value is not None
+    group = _group_by_id(field.value, "redemption_share_pressure")
+
+    assert group.status == "ambiguous"
+    assert group.na_reason == "share_change_arithmetic_mismatch"
+
+
+def test_redemption_share_pressure_fails_closed_on_non_parseable_share_value() -> None:
+    """份额数值无法 Decimal 解析时必须 ambiguous 且记录原因。"""
+
+    report = _build_report(
+        raw_text=_base_bond_raw_text(
+            section_two_extra="下属分级基金的基金简称 易方达安悦 A 易方达安悦 C 易方达安悦 E 易方达安悦 F\n"
+            "下属分级基金的交易代码 006597 006598 014217 022176",
+        ),
+        tables=(
+            _share_change_table_ac_ef(
+                rows=(
+                    ("期初基金份额总额", "1,000,000.00", "2,000,000.00", "0.00", "-"),
+                    ("本期基金总申购份额", "bad-value", "400,000.00", "500,000.00", "100,000.00"),
+                    ("本期基金总赎回份额", "300,000.00", "100,000.00", "500,000.00", "100,000.00"),
+                    ("本期基金拆分变动份额", "-", "-", "-", "-"),
+                    ("期末基金份额总额", "900,000.00", "2,300,000.00", "0.00", "-"),
+                ),
+            ),
+        ),
+    )
+
+    field = extract_bond_risk_evidence(report, "bond_fund")
+    assert field.value is not None
+    group = _group_by_id(field.value, "redemption_share_pressure")
+
+    assert group.status == "ambiguous"
+    assert group.na_reason == "non_parseable_share_value"
+
+
+def test_redemption_share_pressure_parses_full_width_dash_as_zero() -> None:
+    """全角横线应按零解析，并参与全类别聚合对账。"""
+
+    report = _build_report(
+        raw_text=_base_bond_raw_text(
+            section_two_extra="下属分级基金的基金简称 易方达安悦 A 易方达安悦 C 易方达安悦 E 易方达安悦 F\n"
+            "下属分级基金的交易代码 006597 006598 014217 022176",
+        ),
+        tables=(
+            _share_change_table_ac_ef(
+                rows=(
+                    ("期初基金份额总额", "1,000,000.00", "2,000,000.00", "0.00", "－"),
+                    ("本期基金总申购份额", "200,000.00", "400,000.00", "500,000.00", "100,000.00"),
+                    ("本期基金总赎回份额", "300,000.00", "100,000.00", "500,000.00", "100,000.00"),
+                    ("本期基金拆分变动份额", "－", "－", "－", "－"),
+                    ("期末基金份额总额", "900,000.00", "2,300,000.00", "0.00", "－"),
+                ),
+            ),
+        ),
+    )
+
+    field = extract_bond_risk_evidence(report, "bond_fund")
+    assert field.value is not None
+    group = _group_by_id(field.value, "redemption_share_pressure")
+
+    assert group.status == "accepted"
+    assert "F(code=022176, beginning=0" in (group.metric_value or "")
+
+
+def test_redemption_share_pressure_anchor_missing_not_accepted() -> None:
+    """缺少期末等必需行级锚点时不能 accepted。"""
+
+    report = _build_report(
+        raw_text=_base_bond_raw_text(
+            section_two_extra="下属分级基金的基金简称 易方达安悦 A 易方达安悦 C 易方达安悦 E 易方达安悦 F\n"
+            "下属分级基金的交易代码 006597 006598 014217 022176",
+        ),
+        tables=(
+            _share_change_table_ac_ef(
+                rows=(
+                    ("期初基金份额总额", "1,000,000.00", "2,000,000.00", "0.00", "-"),
+                    ("本期基金总申购份额", "200,000.00", "400,000.00", "500,000.00", "100,000.00"),
+                    ("本期基金总赎回份额", "300,000.00", "100,000.00", "500,000.00", "100,000.00"),
+                ),
+            ),
+        ),
+    )
+
+    field = extract_bond_risk_evidence(report, "bond_fund")
+    assert field.value is not None
+    group = _group_by_id(field.value, "redemption_share_pressure")
+
+    assert group.status == "ambiguous"
+    assert group.na_reason == "incomplete_share_change_rows"
 
 
 def test_convertible_and_equity_dash_rows_become_accepted_absence() -> None:
@@ -402,8 +1218,8 @@ def test_partial_extraction_with_mixed_groups_produces_estimated_mode() -> None:
             ParsedTable(
                 page_number=53,
                 table_index=0,
-                headers=("信用评级", "占基金资产净值比例"),
-                rows=(("AAA 信用评级债券", "80.00%"),),
+                headers=("长期信用评级", "本期末公允价值", "占基金资产净值比例"),
+                rows=(("AAA 债券", "1,000,000.00", "80.00%"), ("合计", "1,000,000.00", "80.00%")),
             ),
         ),
     )
@@ -630,6 +1446,20 @@ def _anchor_ref_by_id(value: BondRiskEvidenceValue, anchor_id: str) -> BondRiskE
     return next(anchor for anchor in value.anchors if anchor.anchor_id == anchor_id)
 
 
+def _extractor_anchor_by_locator(field: object, row_locator: str) -> EvidenceAnchor:
+    """按行定位读取 extractor 层锚点。
+
+    Args:
+        field: 抽取字段。
+        row_locator: 目标行定位。
+
+    Returns:
+        匹配的 extractor 层证据锚点。
+    """
+
+    return next(anchor for anchor in field.anchors if anchor.row_locator == row_locator)
+
+
 def _build_report(*, raw_text: str, tables: tuple[ParsedTable, ...]) -> ParsedAnnualReport:
     """构造模板第 6 章 extractor 测试用最小年报。
 
@@ -688,6 +1518,99 @@ def _base_bond_raw_text(section_two_extra: str = "", section_four_extra: str = "
     )
 
 
+def _rating_distribution_table(
+    *,
+    page_number: int,
+    table_index: int,
+    headers: tuple[str, ...],
+    rows: tuple[tuple[str, ...], ...],
+) -> ParsedTable:
+    """构造持仓评级分布表。
+
+    Args:
+        page_number: 表格页码。
+        table_index: 同页表格序号。
+        headers: 表头。
+        rows: 数据行。
+
+    Returns:
+        年报解析表格。
+    """
+
+    return ParsedTable(
+        page_number=page_number,
+        table_index=table_index,
+        headers=headers,
+        rows=rows,
+    )
+
+
+def _share_class_mapping_table(
+    rows: tuple[tuple[str, ...], ...] = (
+        ("下属分级基金的基金简称", "易方达安悦 A", "易方达安悦 C", "易方达安悦 E", "易方达安悦 F"),
+        ("下属分级基金的交易代码", "006597", "006598", "014217", "022176"),
+    ),
+) -> ParsedTable:
+    """构造 §2 A/C/E/F 份额类别映射表。
+
+    Args:
+        rows: 表格行。
+
+    Returns:
+        年报解析表格。
+    """
+
+    return ParsedTable(
+        page_number=8,
+        table_index=0,
+        headers=("项目", "A类", "C类", "E类", "F类"),
+        rows=rows,
+    )
+
+
+def _real_profile_cross_check_table(
+    *,
+    page_number: int = 5,
+    table_index: int = 0,
+    ending_row: tuple[str, ...] = (
+        "报告期末下属分级基金的份额总额",
+        "5,711,224,267.09",
+        "4,760,029,015.27",
+        "25,795,859.12",
+        "52,531,021.84",
+    ),
+) -> ParsedTable:
+    """构造真实 006597 §2 profile 三行交叉校验表形状。
+
+    Args:
+        page_number: 表格页码。
+        table_index: 同页表格序号。
+        ending_row: §2 报告期末下属分级基金份额总额行。
+
+    Returns:
+        年报解析表格。
+    """
+
+    return ParsedTable(
+        page_number=page_number,
+        table_index=table_index,
+        headers=("项目", "A类", "C类", "E类", "F类"),
+        rows=(
+            ("基金管理人", "示例", "", "", ""),
+            ("基金托管人", "示例", "", "", ""),
+            ("基金合同生效日", "2018年12月3日", "", "", ""),
+            ("基金类型", "债券型", "", "", ""),
+            ("运作方式", "契约型开放式", "", "", ""),
+            ("基金经理", "示例", "", "", ""),
+            ("投资目标", "示例", "", "", ""),
+            ("投资策略", "示例", "", "", ""),
+            ("下属分级基金的基金简称", "易方达安悦 A", "易方达安悦 C", "易方达安悦 E", "易方达安悦 F"),
+            ("下属分级基金的交易代码", "006597", "006598", "014217", "022176"),
+            ending_row,
+        ),
+    )
+
+
 def _share_change_table() -> ParsedTable:
     """构造多份额类别份额变动表。
 
@@ -706,6 +1629,93 @@ def _share_change_table() -> ParsedTable:
             ("期初基金份额总额", "1,000,000.00", "2,000,000.00", "3,000,000.00"),
             ("本期基金总申购份额", "200,000.00", "400,000.00", "600,000.00"),
             ("本期基金总赎回份额", "300,000.00", "100,000.00", "400,000.00"),
+            ("期末基金份额总额", "900,000.00", "2,300,000.00", "3,200,000.00"),
+        ),
+    )
+
+
+def _real_unlabeled_share_change_table(
+    *,
+    headers: tuple[str, ...] = (
+        "基金合同生\n效日（2018\n年12月3日）\n基金份额总\n额",
+        "191,879,496.71",
+        "46,593,432.66",
+        "-",
+        "-",
+    ),
+    rows: tuple[tuple[str, ...], ...] = (
+        ("本报告期期\n初基金份额\n总额", "7,699,969,800.13", "5,252,561,821.84", "29,473,505.53", "-"),
+        ("本报告期基\n金总申购份\n额", "27,623,952,157.07", "13,075,203,360.10", "910,677,227.41", "64,417,694.70"),
+        ("减：本报告期\n基金总赎回\n份额", "29,612,697,690.11", "13,567,736,166.67", "914,354,873.82", "11,886,672.86"),
+        ("本报告期基\n金拆分变动\n份额", "-", "-", "-", "-"),
+        ("本报告期期\n末基金份额\n总额", "5,711,224,267.09", "4,760,029,015.27", "25,795,859.12", "52,531,021.84"),
+    ),
+) -> ParsedTable:
+    """构造真实 006597 §10 无类别表头份额变动表形状。
+
+    Args:
+        headers: 表头。
+        rows: 数据行。
+
+    Returns:
+        年报解析表格。
+    """
+
+    return ParsedTable(
+        page_number=65,
+        table_index=0,
+        headers=headers,
+        rows=rows,
+    )
+
+
+def _share_change_table_ac_ef(
+    *,
+    headers: tuple[str, ...] = ("项目", "易方达安悦 A", "易方达安悦 C", "易方达安悦 E", "易方达安悦 F", "合计"),
+    rows: tuple[tuple[str, ...], ...] = (
+        ("期初基金份额总额", "1,000,000.00", "2,000,000.00", "0.00", "-", "3,000,000.00"),
+        ("本期基金总申购份额", "200,000.00", "400,000.00", "500,000.00", "100,000.00", "1,200,000.00"),
+        ("本期基金总赎回份额", "300,000.00", "100,000.00", "500,000.00", "100,000.00", "1,000,000.00"),
+        ("本期基金拆分变动份额", "-", "-", "-", "-", "-"),
+        ("期末基金份额总额", "900,000.00", "2,300,000.00", "0.00", "-", "3,200,000.00"),
+    ),
+) -> ParsedTable:
+    """构造 A/C/E/F 多份额类别份额变动表。
+
+    Args:
+        headers: 表头。
+        rows: 数据行。
+
+    Returns:
+        年报解析表格。
+    """
+
+    return ParsedTable(
+        page_number=65,
+        table_index=0,
+        headers=headers,
+        rows=rows,
+    )
+
+
+def _net_asset_statement_like_table() -> ParsedTable:
+    """构造包含申购/赎回字样但属于财务报表的干扰表。
+
+    Args:
+        无。
+
+    Returns:
+        年报解析表格。
+    """
+
+    return ParsedTable(
+        page_number=60,
+        table_index=0,
+        headers=("项目", "实收基金", "未分配利润", "净资产合计"),
+        rows=(
+            ("期初基金份额总额", "1,000,000.00", "2,000,000.00", "3,000,000.00"),
+            ("本期申购", "200,000.00", "400,000.00", "600,000.00"),
+            ("本期赎回", "300,000.00", "100,000.00", "400,000.00"),
             ("期末基金份额总额", "900,000.00", "2,300,000.00", "3,200,000.00"),
         ),
     )
