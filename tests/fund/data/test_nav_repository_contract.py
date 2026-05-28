@@ -23,7 +23,7 @@ from fund_agent.fund.data import (
     NavSourceMetadata,
     ShareClassMapping,
 )
-from fund_agent.fund.data.nav_data import _RawNavSourceResult
+from fund_agent.fund.data.nav_source_contract import _RawNavSourceResult
 
 
 class _FakeRawNavAdapter:
@@ -54,18 +54,24 @@ class _FakeRawNavAdapter:
 
         self.records = records or []
         self.error = error
-        self.calls: list[tuple[str, bool]] = []
+        self.calls: list[tuple[str, str | None, date | None, date | None, bool]] = []
 
     async def load_raw_nav_source(
         self,
         fund_code: str,
         *,
+        share_class: str | None = None,
+        start_date: date | None = None,
+        end_date: date | None = None,
         force_refresh: bool = False,
     ) -> _RawNavSourceResult:
         """返回 fake raw NAV source 结果。
 
         Args:
             fund_code: 基金代码。
+            share_class: 请求份额类别。
+            start_date: 请求日期窗口起点。
+            end_date: 请求日期窗口终点。
             force_refresh: 是否强制刷新缓存。
 
         Returns:
@@ -75,7 +81,7 @@ class _FakeRawNavAdapter:
             Exception: 当初始化传入 error 时抛出。
         """
 
-        self.calls.append((fund_code, force_refresh))
+        self.calls.append((fund_code, share_class, start_date, end_date, force_refresh))
         if self.error is not None:
             raise self.error
         return _RawNavSourceResult(
@@ -83,9 +89,89 @@ class _FakeRawNavAdapter:
             records=self.records,
             source="fixture_source",
             origin_source="akshare",
+            source_id=fund_code,
+            source_url=None,
+            source_query_params=(),
+            source_nav_type="unit_nav",
+            source_adjustment_basis="raw_unit_nav",
             cached=True,
             retrieved_at=None,
             cache_updated_at="2026-05-28T10:00:00+00:00",
+        )
+
+
+class _FakeCsrcAccumulatedAdapter:
+    """测试用 CSRC accumulated NAV source adapter。"""
+
+    def __init__(self, records: list[dict[str, object]]) -> None:
+        """初始化 fake CSRC adapter。
+
+        Args:
+            records: fake CSRC raw records。
+
+        Returns:
+            无返回值。
+
+        Raises:
+            无显式抛出。
+        """
+
+        self.records = records
+        self.calls: list[tuple[str, str | None, date | None, date | None, bool]] = []
+
+    async def load_raw_nav_source(
+        self,
+        fund_code: str,
+        *,
+        share_class: str | None = None,
+        start_date: date | None = None,
+        end_date: date | None = None,
+        force_refresh: bool = False,
+    ) -> _RawNavSourceResult:
+        """返回 fake CSRC accumulated raw NAV source 结果。
+
+        Args:
+            fund_code: 基金代码。
+            share_class: 请求份额类别。
+            start_date: 请求日期窗口起点。
+            end_date: 请求日期窗口终点。
+            force_refresh: 是否强制刷新。
+
+        Returns:
+            fake CSRC `_RawNavSourceResult`。
+
+        Raises:
+            无显式抛出。
+        """
+
+        self.calls.append((fund_code, share_class, start_date, end_date, force_refresh))
+        classification = {
+            "006597": "2030-1010",
+            "006598": "2030-1020",
+            "014217": "2030-1040",
+            "022176": "2030-1050",
+        }.get(fund_code, "2030-1010")
+        return _RawNavSourceResult(
+            fund_code=fund_code,
+            records=self.records,
+            source="csrc_eid",
+            origin_source="csrc_eid",
+            source_id=f"5755:{classification}",
+            source_url=(
+                "http://eid.csrc.gov.cn/fund/disclose/list_net_classification.do"
+                f"?fundCode=006597&classification={classification}&limit=20"
+            ),
+            source_query_params=(
+                ("fundCode", "006597"),
+                ("classification", classification),
+                ("limit", "20"),
+                ("start", "0"),
+            ),
+            source_nav_type="accumulated_nav",
+            source_adjustment_basis="accumulated_nav",
+            cached=False,
+            retrieved_at="2026-05-29T00:00:00+00:00",
+            cache_updated_at=None,
         )
 
 
@@ -123,6 +209,46 @@ def _raw_nav_row(
     if fund_name is not None:
         row["基金名称"] = fund_name
     return row
+
+
+def _csrc_nav_row(
+    *,
+    nav_date: str = "2024-01-02",
+    unit_nav: object = "1.1000",
+    accumulated_nav: object = "1.1200",
+    fund_code: str = "006597",
+    fund_name: str = "国泰利享中短债债券A",
+    share_class: str = "A",
+    classification: str = "2030-1010",
+) -> dict[str, object]:
+    """创建 CSRC EID accumulated NAV raw row。
+
+    Args:
+        nav_date: 估值日期。
+        unit_nav: 单位净值。
+        accumulated_nav: 累计净值。
+        fund_code: 份额代码。
+        fund_name: 份额名称。
+        share_class: 份额类别。
+        classification: EID 分类 ID。
+
+    Returns:
+        CSRC raw row。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return {
+        "估值日期": nav_date,
+        "单位净值": unit_nav,
+        "累计净值": accumulated_nav,
+        "基金代码": fund_code,
+        "产品基金代码": "006597",
+        "基金名称": fund_name,
+        "份额类别": share_class,
+        "classification": classification,
+    }
 
 
 async def _load_repository_series(
@@ -180,6 +306,7 @@ def _source_metadata(*, failure_category: str | None = None) -> NavSourceMetadat
         requested_fund_code="006597",
         returned_fund_code="006597",
         returned_fund_name="test fund",
+        source_query_params=(("fundCode", "006597"),),
         failure_category=failure_category,
     )
 
@@ -352,6 +479,40 @@ def test_nav_source_metadata_failure_category_defaults_to_none() -> None:
     metadata = _source_metadata()
 
     assert metadata.failure_category is None
+
+
+def test_nav_source_metadata_query_params_are_tuple() -> None:
+    """验证 source_query_params 被规范为不可变 tuple。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 query params 未规范化时抛出。
+    """
+
+    metadata = NavSourceMetadata(
+        source_name="csrc_eid",
+        origin_source="csrc_eid",
+        source_id="5755:2030-1010",
+        source_url="https://example.test",
+        cached=False,
+        retrieved_at=None,
+        cache_updated_at=None,
+        requested_fund_code="006597",
+        returned_fund_code="006597",
+        returned_fund_name="国泰利享中短债债券A",
+        source_query_params=(("fundCode", 6597), ("classification", "2030-1010")),
+    )
+
+    assert metadata.source_query_params == (
+        ("fundCode", "6597"),
+        ("classification", "2030-1010"),
+    )
+    assert isinstance(metadata.source_query_params, tuple)
 
 
 def test_requested_code_only_is_not_strong_drawdown_eligible() -> None:
@@ -679,6 +840,8 @@ async def test_repository_raw_fixture_normalizes_to_typed_series() -> None:
     assert series.identity_status == "requested_code_only"
     assert series.strong_drawdown_evidence_eligible is False
     assert series.source.origin_source == "akshare"
+    assert series.source.source_id == "006597"
+    assert series.source.source_query_params == ()
     assert series.source.failure_category is None
     assert series.share_class_mapping.mapping_status == "requested_code_default_a"
     assert series.share_class_mapping.identity_status == "requested_code_only"
@@ -687,6 +850,283 @@ async def test_repository_raw_fixture_normalizes_to_typed_series() -> None:
     assert series.records[0].nav_value == Decimal("1.2345")
     assert series.records[1].nav_value == Decimal("1.2400")
     assert series.records[0].raw_change_rate == Decimal("0.12")
+
+
+@pytest.mark.asyncio
+async def test_repository_passes_explicit_params_to_source_adapter() -> None:
+    """验证 repository 向 source adapter 显式传递份额、日期和刷新参数。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当参数未显式转发时抛出。
+    """
+
+    adapter = _FakeRawNavAdapter([_raw_nav_row()])
+    repository = FundNavRepository(source_adapter=adapter)
+
+    await repository.load_nav_series(
+        "006597",
+        share_class="A",
+        start_date=date(2024, 1, 2),
+        end_date=date(2024, 1, 2),
+        force_refresh=True,
+    )
+
+    assert adapter.calls == [
+        ("006597", "A", date(2024, 1, 2), date(2024, 1, 2), True),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_repository_csrc_accumulated_fixture_normalizes_to_typed_series() -> None:
+    """验证 CSRC EID accumulated raw rows 归一化为 typed series。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 accumulated contract 字段不符合预期时抛出。
+    """
+
+    records = [
+        _csrc_nav_row(nav_date="2024-01-03", unit_nav="1.1001", accumulated_nav="1.1201"),
+        _csrc_nav_row(nav_date="2024-01-02", unit_nav="1.1000", accumulated_nav="1.1200"),
+    ]
+    repository = FundNavRepository(source_adapter=_FakeCsrcAccumulatedAdapter(records))
+
+    series = await repository.load_nav_series("006597", share_class="A", minimum_records=2)
+
+    assert series.fund_code == "006597"
+    assert series.share_class == "A"
+    assert series.nav_type == "accumulated_nav"
+    assert series.adjusted_basis == "accumulated_nav"
+    assert series.dividend_adjustment_status == "not_applicable"
+    assert series.identity_status == "verified"
+    assert series.strong_drawdown_evidence_eligible is True
+    assert series.strong_drawdown_ineligibility_reason is None
+    assert series.source.source_name == "csrc_eid"
+    assert series.source.source_id == "5755:2030-1010"
+    assert series.source.source_query_params == (
+        ("fundCode", "006597"),
+        ("classification", "2030-1010"),
+        ("limit", "20"),
+        ("start", "0"),
+    )
+    assert series.share_class_mapping.mapping_status == "csrc_eid_classification_verified"
+    assert "5755:2030-1010" in series.share_class_mapping.mapping_evidence[0]
+    assert series.records[0].date == date(2024, 1, 2)
+    assert series.records[0].nav_value == Decimal("1.1200")
+    assert series.records[0].raw_payload["单位净值"] == "1.1000"
+    assert series.records[0].raw_change_rate is None
+
+
+@pytest.mark.asyncio
+async def test_repository_csrc_share_classes_remain_separated() -> None:
+    """验证 A/C/E/F 份额在 repository 输出中保持分离。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当份额代码、类别或 source_id 串线时抛出。
+    """
+
+    cases = (
+        ("006597", "A", "2030-1010", "1.1200"),
+        ("006598", "C", "2030-1020", "1.1100"),
+        ("014217", "E", "2030-1040", "1.1300"),
+        ("022176", "F", "2030-1050", "1.0100"),
+    )
+    for fund_code, share_class, classification, nav_value in cases:
+        repository = FundNavRepository(
+            source_adapter=_FakeCsrcAccumulatedAdapter(
+                [
+                    _csrc_nav_row(
+                        fund_code=fund_code,
+                        fund_name=f"国泰利享中短债债券{share_class}",
+                        share_class=share_class,
+                        classification=classification,
+                        accumulated_nav=nav_value,
+                    )
+                ]
+            )
+        )
+        series = await repository.load_nav_series(fund_code, share_class=share_class)
+
+        assert series.fund_code == fund_code
+        assert series.share_class == share_class
+        assert series.source.source_id == f"5755:{classification}"
+        assert series.records[0].nav_value == Decimal(nav_value)
+
+
+@pytest.mark.asyncio
+async def test_repository_csrc_identity_mismatch_raises() -> None:
+    """验证 CSRC returned fund code 与 requested code 冲突时 fail-closed。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当未触发 identity_mismatch 时抛出。
+    """
+
+    repository = FundNavRepository(
+        source_adapter=_FakeCsrcAccumulatedAdapter(
+            [_csrc_nav_row(fund_code="006598", share_class="C", classification="2030-1020")]
+        )
+    )
+
+    with pytest.raises(NavDataContractError) as exc_info:
+        await repository.load_nav_series("006597", share_class="A")
+
+    assert exc_info.value.category == "identity_mismatch"
+
+
+@pytest.mark.asyncio
+async def test_repository_csrc_blank_accumulated_before_window_is_dropped() -> None:
+    """验证请求窗口外的空累计净值行可丢弃并记录 evidence。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当空行未丢弃或 evidence 缺失时抛出。
+    """
+
+    repository = FundNavRepository(
+        source_adapter=_FakeCsrcAccumulatedAdapter(
+            [
+                _csrc_nav_row(nav_date="2018-12-07", accumulated_nav=""),
+                _csrc_nav_row(nav_date="2018-12-14", accumulated_nav=""),
+                _csrc_nav_row(nav_date="2018-12-21", accumulated_nav="1.0001"),
+            ]
+        )
+    )
+
+    series = await repository.load_nav_series(
+        "006597",
+        share_class="A",
+        start_date=date(2018, 12, 21),
+    )
+
+    assert series.record_count == 1
+    assert series.date_range_start == date(2018, 12, 21)
+    assert "2018-12-07" in series.share_class_mapping.mapping_evidence[-1]
+
+
+@pytest.mark.asyncio
+async def test_repository_csrc_blank_accumulated_inside_window_raises_missing_date_range() -> None:
+    """验证请求窗口内 A/C 空累计净值行触发 missing_date_range。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当未触发 missing_date_range 时抛出。
+    """
+
+    repository = FundNavRepository(
+        source_adapter=_FakeCsrcAccumulatedAdapter(
+            [
+                _csrc_nav_row(nav_date="2018-12-07", accumulated_nav=""),
+                _csrc_nav_row(nav_date="2018-12-14", accumulated_nav=""),
+                _csrc_nav_row(nav_date="2018-12-21", accumulated_nav="1.0001"),
+            ]
+        )
+    )
+
+    with pytest.raises(NavDataContractError) as exc_info:
+        await repository.load_nav_series(
+            "006597",
+            share_class="A",
+            start_date=date(2018, 12, 7),
+            end_date=date(2018, 12, 31),
+        )
+
+    assert exc_info.value.category == "missing_date_range"
+
+
+@pytest.mark.asyncio
+async def test_repository_csrc_all_blank_accumulated_raises_adjustment_basis_unknown() -> None:
+    """验证全部累计净值为空时不能构造 accumulated basis。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当未触发 adjustment_basis_unknown 时抛出。
+    """
+
+    repository = FundNavRepository(
+        source_adapter=_FakeCsrcAccumulatedAdapter(
+            [
+                _csrc_nav_row(nav_date="2018-12-07", accumulated_nav=""),
+                _csrc_nav_row(nav_date="2018-12-14", accumulated_nav=""),
+            ]
+        )
+    )
+
+    with pytest.raises(NavDataContractError) as exc_info:
+        await repository.load_nav_series("006597", share_class="A")
+
+    assert exc_info.value.category == "adjustment_basis_unknown"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("row", "category"),
+    (
+        (_csrc_nav_row(nav_date="not-a-date"), "schema_drift"),
+        (_csrc_nav_row(accumulated_nav="not-a-number"), "schema_drift"),
+        (_csrc_nav_row(accumulated_nav="0"), "integrity_error"),
+        (_csrc_nav_row(unit_nav=""), "schema_drift"),
+        (_csrc_nav_row(unit_nav="not-a-number"), "schema_drift"),
+        (_csrc_nav_row(unit_nav="-1"), "integrity_error"),
+    ),
+)
+async def test_repository_csrc_malformed_values_raise(row: dict[str, object], category: str) -> None:
+    """验证 CSRC 日期、累计净值和单位净值 diagnostics 的 fail-closed 分类。
+
+    Args:
+        row: CSRC raw row。
+        category: 期望失败分类。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当失败分类不符合预期时抛出。
+    """
+
+    repository = FundNavRepository(source_adapter=_FakeCsrcAccumulatedAdapter([row]))
+
+    with pytest.raises(NavDataContractError) as exc_info:
+        await repository.load_nav_series("006597", share_class="A")
+
+    assert exc_info.value.category == category
 
 
 @pytest.mark.asyncio

@@ -135,7 +135,27 @@ class NavSourceMetadata:
     requested_fund_code: str
     returned_fund_code: str | None
     returned_fund_name: str | None
+    source_query_params: tuple[tuple[str, str], ...] = ()
     failure_category: NavFailureCategory | None = None
+
+    def __post_init__(self) -> None:
+        """规范化 source query params。
+
+        Args:
+            无。
+
+        Returns:
+            无返回值。
+
+        Raises:
+            无显式抛出。
+        """
+
+        object.__setattr__(
+            self,
+            "source_query_params",
+            tuple((str(key), str(value)) for key, value in self.source_query_params),
+        )
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)

@@ -7,11 +7,12 @@ import json
 import sqlite3
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Final
 
 from fund_agent.config.paths import DEFAULT_NAV_CACHE_ROOT
+from fund_agent.fund.data.nav_source_contract import _RawNavSourceResult
 
 NAV_CACHE_ROOT: Final[Path] = DEFAULT_NAV_CACHE_ROOT
 NAV_SQLITE_FILENAME: Final[str] = "nav.sqlite3"
@@ -129,24 +130,6 @@ class _NavCacheEntry:
     records: NavPayload
     source: str
     updated_at: str
-
-
-@dataclass(frozen=True, slots=True)
-class _RawNavSourceResult:
-    """净值 source adapter 原始结果。
-
-    该私有 DTO 是 `FundNavDataAdapter` 与 `FundNavRepository` 之间的边界，
-    只承载原始 records 与来源/缓存元数据，不表达模板第 2 章 R=A+B-C 或
-    第 6 章核心风险所需的调整基础判断。
-    """
-
-    fund_code: str
-    records: NavPayload
-    source: str
-    origin_source: str
-    cached: bool
-    retrieved_at: str | None
-    cache_updated_at: str | None
 
 
 def unavailable_nav_data_result(
@@ -300,12 +283,18 @@ class FundNavDataAdapter:
         self,
         fund_code: str,
         *,
+        share_class: str | None = None,
+        start_date: date | None = None,
+        end_date: date | None = None,
         force_refresh: bool = False,
     ) -> _RawNavSourceResult:
         """读取原始 NAV source 结果及缓存元数据。
 
         Args:
             fund_code: 基金代码。
+            share_class: 份额类别；legacy raw-unit adapter 不使用，仅为 Protocol 兼容。
+            start_date: 日期窗口起点；legacy raw-unit adapter 不使用，仅为 Protocol 兼容。
+            end_date: 日期窗口终点；legacy raw-unit adapter 不使用，仅为 Protocol 兼容。
             force_refresh: 是否强制刷新缓存。
 
         Returns:
@@ -320,6 +309,7 @@ class FundNavDataAdapter:
         normalized_fund_code = fund_code.strip()
         if not normalized_fund_code:
             raise ValueError("fund_code 不能为空")
+        _ = (share_class, start_date, end_date)
 
         await self.initialize()
         if not force_refresh:
@@ -333,6 +323,11 @@ class FundNavDataAdapter:
                     records=cache_entry.records,
                     source="nav_cache",
                     origin_source=cache_entry.source,
+                    source_id=normalized_fund_code,
+                    source_url=None,
+                    source_query_params=(),
+                    source_nav_type="unit_nav",
+                    source_adjustment_basis="raw_unit_nav",
                     cached=True,
                     retrieved_at=None,
                     cache_updated_at=cache_entry.updated_at,
@@ -351,6 +346,11 @@ class FundNavDataAdapter:
             records=fetched_records,
             source="akshare",
             origin_source="akshare",
+            source_id=normalized_fund_code,
+            source_url=None,
+            source_query_params=(),
+            source_nav_type="unit_nav",
+            source_adjustment_basis="raw_unit_nav",
             cached=False,
             retrieved_at=retrieved_at,
             cache_updated_at=None,

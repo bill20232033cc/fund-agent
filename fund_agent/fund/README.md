@@ -88,7 +88,7 @@ chapter_lens = resolve_preferred_lens(chapter_id=2, fund_type="active_fund")
 
 `FundDataExtractor.extract()` 返回 `StructuredFundDataBundle`，当前聚合 P1 已接受的 14 项结构化数据，并附带净值数据读取结果。新增 `index_profile` 只承载指数画像上下文，新增 `tracking_error` 只承载年报直接披露或后续已接受计算路径形成的跟踪误差；开发覆盖不写入结构化数据包。它只做 orchestration，不直接读文件、不直接写缓存。年报仓库和 PDF 来源失败仍按来源策略向上抛出；仅 NAV provider / cache / akshare 等外部净值数据失败会降级为 `NavDataResult(unavailable=True, records=[])`，让年报字段抽取和 `analyze` / `checklist` 主路径继续运行。
 
-`FundNavRepository.load_nav_series()` 是 data 层当前 typed NAV series contract，返回 `FundNavSeries`，显式承载份额类别、NAV 类型、调整基础、分红调整状态、identity 状态、source/cache provenance、完整性约束和强回撤证据资格。旧 `FundNavDataAdapter.load_nav_data()` 继续作为 legacy/snapshot/analyze 兼容入口，返回 `NavDataResult` 并保持 `source="nav_cache" / "akshare"` 与 `cached` 语义。当前 Akshare `单位净值走势` 只会被 typed repository 标记为 `nav_type="unit_nav"`、`adjusted_basis="raw_unit_nav"`、`dividend_adjustment_status="not_adjusted"`、`identity_status="requested_code_only"`，因此 `strong_drawdown_evidence_eligible=False`；raw unit NAV 不能作为模板第 6 章强 drawdown evidence，也不解除当前 `drawdown_stress` blocker。
+`FundNavRepository.load_nav_series()` 是 data 层当前 typed NAV series contract，返回 `FundNavSeries`，显式承载份额类别、NAV 类型、调整基础、分红调整状态、identity 状态、source/cache/query provenance、完整性约束和强回撤证据资格。无参 `FundNavRepository()` 当前默认使用 CSRC EID accumulated NAV adapter：通过公开 search/detail/classification 页面验证 006597=A/2030-1010、006598=C/2030-1020、014217=E/2030-1040、022176=F/2030-1050，并按份额分别输出 `nav_type="accumulated_nav"`、`adjusted_basis="accumulated_nav"`、`dividend_adjustment_status="not_applicable"`、`identity_status="verified"`。该路径的 `strong_drawdown_evidence_eligible=True` 只表示 source-level eligibility；当前未实现 drawdown metric，也不解除 `drawdown_stress` blocker。旧 `FundNavDataAdapter.load_nav_data()` 继续作为 legacy/snapshot/analyze 兼容入口，返回 `NavDataResult` 并保持 `source="nav_cache" / "akshare"` 与 `cached` 语义；constructor-injected Akshare raw-unit adapter 兼容分支仍标记 `unit_nav/raw_unit_nav/requested_code_only` 且 `strong_drawdown_evidence_eligible=False`。
 
 `project_report_evidence_bundle()` 位于 `fund_agent/fund/report_evidence.py`，当前把已经创建的 `StructuredFundDataBundle` 投影为 typed `ReportEvidenceBundle`：
 
@@ -386,7 +386,7 @@ C2 当前只做确定性 marker / 元数据检查，不调用 LLM，不判断语
 ## 内部分层
 
 - `documents/`：公共契约与仓库实现。上层应通过这里读取基金文档。
-- `data/`：外部数据适配器与 typed repository。当前包含 `FundNavDataAdapter`、自身 `nav_cache` 和 `FundNavRepository` typed NAV series contract；`load_nav_data()` 保留 legacy 兼容，`load_nav_series()` 是后续路径型 NAV 指标的 typed 边界。
+- `data/`：外部数据适配器与 typed repository。当前包含 CSRC EID accumulated NAV source adapter、NAV source Protocol/DTO、`FundNavDataAdapter` legacy raw-unit/cache adapter 和 `FundNavRepository` typed NAV series contract；`load_nav_data()` 保留 legacy 兼容，`load_nav_series()` 是后续路径型 NAV 指标的 typed 边界。
 - `extractors/`：章节级结构化提取能力。当前已落地基础画像、`§3` 表现、管理人/持有人、持仓/份额 extractor。
 - `data_extractor.py`：P1 façade，聚合文档仓库、净值适配器和章节 extractor。
 - `report_evidence.py`：报告证据包 typed model / projection，只消费 `StructuredFundDataBundle` 与显式投影上下文，产出事实、锚点、缺口、preferred_lens 和派生 review status。
@@ -416,7 +416,7 @@ C2 当前只做确定性 marker / 元数据检查，不调用 LLM，不判断语
 - 当前持仓/份额 extractor 只覆盖 `holdings_snapshot` 与 `share_change` 两类输出；`share_change` 对多份额列表只显式选择单值列或表头精确基金代码列，无法可靠选择时返回 `missing`，不再按列顺序或 A 类 fallback 默认取值。
 - `data_extractor.py` façade 已接入当前 12 项结构化数据；`structured_data` 当前以 `StructuredFundDataBundle` dataclass 表达，不额外物化 SQLite 表。
 - `report_evidence.py` 当前只投影已有 `StructuredFundDataBundle`，不新增抽取路径、不调用文档仓库、不把 `nav_data` 作为事实，也不改变 renderer / FQ0-FQ6 行为。
-- `data/nav_repository.py` 当前只把 Akshare `单位净值走势` 归一化为 raw unit NAV typed series，并显式标记为非 strong drawdown evidence；不提供 adjusted、dividend-adjusted 或 total-return 证据。
+- `data/nav_repository.py` 当前默认把 CSRC EID 006597 家族 A/C/E/F 分类 `累计净值` 归一化为 accumulated NAV typed series，按份额 fail-closed 验证身份、分页、日期和数值；legacy raw-unit adapter 只能通过 constructor injection 进入兼容分支，并显式标记为非 strong drawdown evidence。当前不提供 dividend-adjusted 或 total-return 证据，不计算 drawdown metric。
 - `extraction_snapshot.py` 当前记录字段级抽取状态，并通过 `comparable_values` 暴露 correctness 可比子字段白名单；不为特定基金覆盖字段值。
 - `extraction_score.py` 当前计算字段级与单基金 coverage / traceability，对 strict golden answer 中 snapshot 可比字段执行 correctness 比对，并可显式消费 `errors.jsonl` 输出 `failed_funds`；旧 snapshot 仅保留 `classified_fund_type.fund_type` 兼容路径。
 - `golden_answer.py` 当前构建、读取和校验人工 golden answer strict JSON，不执行 correctness 比对。

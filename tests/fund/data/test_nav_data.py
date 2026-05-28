@@ -144,10 +144,17 @@ async def test_nav_data_adapter_raw_source_exposes_cache_origin_metadata(
     assert first_raw.cached is False
     assert first_raw.source == "akshare"
     assert first_raw.origin_source == "akshare"
+    assert first_raw.source_id == "006597"
+    assert first_raw.source_url is None
+    assert first_raw.source_query_params == ()
+    assert first_raw.source_nav_type == "unit_nav"
+    assert first_raw.source_adjustment_basis == "raw_unit_nav"
     assert first_raw.cache_updated_at is None
     assert second_raw.cached is True
     assert second_raw.source == "nav_cache"
     assert second_raw.origin_source == "akshare"
+    assert second_raw.source_nav_type == "unit_nav"
+    assert second_raw.source_adjustment_basis == "raw_unit_nav"
     assert second_raw.cache_updated_at is not None
     assert legacy_result.cached is True
     assert legacy_result.source == "nav_cache"

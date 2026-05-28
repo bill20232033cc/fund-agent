@@ -639,8 +639,9 @@ Evidence Store / Fact Store
 - `FundDataExtractor`：编排文档仓库 + 净值适配器 + 章节 extractor
 - `StructuredFundDataBundle`：聚合 profile、performance、manager、holdings、share change 和 nav 数据；当前包含 `index_profile` 与 `tracking_error` 结构化字段
 - `NavDataResult`：净值结果；成功时保留 `source="nav_cache" / "akshare"` 与 `cached`，NAV provider / cache / akshare 失败时由 `FundDataExtractor` 在单次 `load_nav_data()` 调用边界降级为 `unavailable=True`、`records=[]`、`source="nav_unavailable"`，并保留异常类型和消息。年报仓库/PDF/source fallback 的 fail-closed 语义不在该降级 catch 边界内，仍向上抛出。
-- `FundNavRepository.load_nav_series()`：当前 Fund data 层 typed NAV repository contract。它通过 `FundNavDataAdapter.load_raw_nav_source()` 读取 adapter DTO，并输出 `FundNavSeries`，显式包含 `share_class`、`nav_type`、`adjusted_basis`、`dividend_adjustment_status`、`identity_status`、source/cache provenance、完整性约束和 `strong_drawdown_evidence_eligible`。旧 `NavDataResult` 仅保留为 `analyze`、`checklist`、snapshot 和既有 P1 façade 兼容结果；后续路径型 drawdown metric 只能消费 `FundNavRepository.load_nav_series()` 的 typed 边界，不得直接读取 Akshare、SQLite cache、snapshot JSONL 或旧 raw payload。
-- 当前 Akshare / 天天基金 `单位净值走势` 路径只归一化为 `nav_type="unit_nav"`、`adjusted_basis="raw_unit_nav"`、`dividend_adjustment_status="not_adjusted"`、`identity_status="requested_code_only"`，并强制 `strong_drawdown_evidence_eligible=False`。该路径没有证明分红调整、累计净值或 total-return basis，也没有解除债券基金 `drawdown_stress` blocker。
+- `FundNavRepository.load_nav_series()`：当前 Fund data 层 typed NAV repository contract。无参 `FundNavRepository()` 默认通过 CSRC EID 公开 search/detail/classification 页面读取已验证的 006597 家族 A/C/E/F 份额分类累计净值，并输出 `FundNavSeries`，显式包含 `share_class`、`nav_type`、`adjusted_basis`、`dividend_adjustment_status`、`identity_status`、source/cache/query provenance、完整性约束和 `strong_drawdown_evidence_eligible`。旧 `NavDataResult` 仅保留为 `analyze`、`checklist`、snapshot 和既有 P1 façade 兼容结果；后续路径型 drawdown metric 只能消费 `FundNavRepository.load_nav_series()` 的 typed 边界，不得直接读取 CSRC EID、Akshare、SQLite cache、snapshot JSONL 或旧 raw payload。
+- 当前 CSRC EID accumulated path 对已验证 006597=A/2030-1010、006598=C/2030-1020、014217=E/2030-1040、022176=F/2030-1050 分份额输出 `nav_type="accumulated_nav"`、`adjusted_basis="accumulated_nav"`、`dividend_adjustment_status="not_applicable"`、`identity_status="verified"`。`strong_drawdown_evidence_eligible=True` 只表示 source identity 与 accumulated basis 具备路径型指标的 source-level eligibility；当前未实现 drawdown metric，未解除债券基金 `drawdown_stress` blocker。
+- legacy Akshare / 天天基金 `单位净值走势` 仍可通过 constructor-injected raw adapter 进入兼容分支，并只归一化为 `nav_type="unit_nav"`、`adjusted_basis="raw_unit_nav"`、`dividend_adjustment_status="not_adjusted"`、`identity_status="requested_code_only"`，强制 `strong_drawdown_evidence_eligible=False`。该路径没有证明分红调整、累计净值或 total-return basis，也不能作为模板第 6 章强 drawdown evidence。
 
 **抽取模式**（`ExtractionMode`）：
 - `direct`：直接从年报文本/表格提取
@@ -653,7 +654,7 @@ Evidence Store / Fact Store
 | 数据 | 来源 | 获取方式 | 代码位置 |
 |------|------|---------|---------|
 | 基金年报 PDF | EID/证监会资本市场统一信息披露平台主源 + Eastmoney fallback | httpx 下载 | `documents/sources.py` |
-| 基金净值序列 | 天天基金 / akshare | API | `data/nav_data.py`, `data/nav_repository.py` |
+| 基金净值序列 | CSRC EID 分类累计净值；legacy Akshare raw-unit 兼容分支 | httpx + HTML parser；legacy Akshare API | `data/csrc_eid_nav_source.py`, `data/nav_source_contract.py`, `data/nav_data.py`, `data/nav_repository.py` |
 | 温度计公开页适配器（过渡/对比） | 有知有行公开页面 | httpx + HTML 解析 | `data/thermometer.py` |
 | 自建温度计（当前生产方向） | akshare 指数估值接口；全 A 使用 `stock_a_ttm_lyr()` 的 `middlePETTM` 与 `stock_a_all_pb()` 的 `middlePB` | akshare API；经 Protocol 封装 | `data/thermometer_source.py`, `analysis/thermometer_calculator.py`, `data/thermometer_cache.py`, `data/thermometer_types.py` |
 | 精选基金池 | 手动维护 CSV | 文件读取 | `extraction_snapshot.py` |

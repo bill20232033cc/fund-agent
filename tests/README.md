@@ -23,8 +23,9 @@ CI 当前固定 Python 3.11，使用 `uv sync --extra dev --frozen` 安装锁定
 - `tests/fund/test_golden_answer.py`：人工审核后的 golden answer Markdown 转 JSON 与 strict JSON loader 测试，覆盖 strict 校验、跳过字段、转义竖线、report_year legacy 默认值、跨年份重复 identity 和机器可读 JSON 输出；不触发真实网络或 PDF
 - `tests/fund/test_quality_gate.py`：P4-S4/P5-S2/P5-S4/P6-S5/P9-S2 报告质量 gate 测试，覆盖字段级与单基金 P0 fail 阻断、P1 fail 警告、correctness 未接入 info、correctness coverage FQ0 metadata、report-year coverage gap、correctness mismatch 触发 FQ1、App 类别冲突 FQ1、缺失率 FQ4、模板契约适用性 FQ5、`rule_results`、失败基金 FQ6 和旧 score 兼容；只消费 score JSON，不触发真实网络或 PDF
 - `tests/fund/test_quality_gate_integration.py`：P5-S1/P9-S2 单基金 quality gate adapter 测试，覆盖从已抽取 `StructuredFundDataBundle` 生成 snapshot/score/gate 产物、精选池成员缺 golden coverage 或当前 report_year 缺 golden coverage 仍运行 gate，以及基金不在精选池时返回 not-run reason；不触发真实网络或 PDF
-- `tests/fund/data/test_nav_data.py`：净值数据适配器测试，覆盖 `nav_cache` 命中、强制刷新和 typed source DTO 的 cache origin metadata；不触发真实网络
-- `tests/fund/data/test_nav_repository_contract.py`：NAV repository typed contract 测试，覆盖 `FundNavSeries` model invariant、`FundNavRepository.load_nav_series()` raw 中文 row 归一化、显式参数签名、source/cache provenance、`raw_unit_nav` 非强回撤证据资格，以及 `schema_drift`、`identity_mismatch`、`integrity_error`、`missing_date_range`、`insufficient_records`、`unavailable` 等 fail-closed 分类；使用 fake adapter，不触发真实网络
+- `tests/fund/data/test_nav_data.py`：净值数据适配器测试，覆盖 `nav_cache` 命中、强制刷新和 typed source DTO 的 cache origin/source_nav_type/source_adjustment_basis metadata；不触发真实网络
+- `tests/fund/data/test_nav_repository_contract.py`：NAV repository typed contract 测试，覆盖 `FundNavSeries` model invariant、`FundNavRepository.load_nav_series()` raw 中文 row 与 CSRC EID accumulated row 归一化、显式参数签名、source/cache/query provenance、`raw_unit_nav` 非强回撤证据资格、CSRC source-level eligibility、A/C/E/F 分离、A/C 早期空累计净值、单位净值 diagnostics，以及 `schema_drift`、`identity_mismatch`、`integrity_error`、`missing_date_range`、`insufficient_records`、`unavailable` 等 fail-closed 分类；使用 fake adapter，不触发真实网络
+- `tests/fund/data/test_csrc_eid_nav_source.py`：CSRC EID accumulated NAV source adapter 测试，使用 `httpx.MockTransport` 覆盖 public search/detail/classification endpoint、A/C/E/F identity、F direct-search gap、pagination total/last-page edge、空累计净值 rows、stock-sdk runtime rejection 和 date-shift integrity_error；不触发真实网络
 - `tests/fund/data/test_thermometer.py`：有知有行温度计适配器测试，覆盖全市场/指数/宏观解析、24h 缓存复用、强制刷新、抓取失败 stale fallback、无缓存 unavailable 和 malformed HTML
 - `tests/fund/data/test_thermometer_source.py`：自建温度计 akshare 数据源测试，覆盖沪深300/中证500 PE/PB 表合并、指数与全 A PE/PB 顺序抓取、全 A `wind_all_a` PE/PB 共同日期合并、同日期重复修正行确定性折叠、不支持代码和 schema drift fail-closed
 - `tests/fund/data/test_thermometer_cache.py`：自建温度计 JSON 缓存测试，覆盖 index/market 命名空间隔离、fresh cache、stale policy 和损坏缓存降级
@@ -116,7 +117,7 @@ fund-analysis thermometer --index wind_all_a,000300,000905 --json
 fund-analysis thermometer --index wind_all_a,000300,000905 --force-refresh --json
 ```
 
-真实 006597 NAV repository smoke 也会触发本机缓存或真实 akshare/source 路径，不放入常规 pytest；它只作为 implementation evidence 验证 `FundNavRepository.load_nav_series("006597", minimum_records=30)` 的 typed raw-unit-only 路径可达。常规 deterministic tests 必须继续使用 fake adapter，不依赖真实网络；该 smoke 即使成功也只证明 `raw_unit_nav`、`unit_nav`、`not_adjusted` 和 `strong_drawdown_evidence_eligible=False`，不能证明 adjusted / total-return drawdown evidence。
+真实 006597 NAV repository smoke 会触发真实 CSRC EID source 路径，不放入常规 pytest；它只作为 implementation evidence 验证 `FundNavRepository().load_nav_series("006597", share_class="A", minimum_records=30, force_refresh=True)` 的 accumulated typed path 可达。常规 deterministic tests 必须继续使用 fake adapter 或 `httpx.MockTransport`，不依赖真实网络；该 smoke 即使成功也只证明 `accumulated_nav` source identity 与 basis 的 source-level eligibility，不能证明 dividend-adjusted / total-return basis，不能证明 drawdown metric evidence，也不解除 `drawdown_stress` blocker。
 
 如果只验证当前 extractor worktree，可运行：
 
