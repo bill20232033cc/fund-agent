@@ -6,7 +6,7 @@
 > **规则真源**: `AGENTS.md`
 > **历史快照**: `docs/archive/implementation-control-history-20260525.md`
 > **release-maintenance 长账本**: `docs/archive/implementation-control-release-maintenance-ledger-20260527.md`
-> **当前状态**: release maintenance；NAV source capability / adjusted basis evidence gate 已 blocked_pending_source_adapter；006597/2024 的 `credit_risk` 与 `redemption_share_pressure` false negative 已解除；bond blocker 仍因 `drawdown_stress` 仅有 weak qualitative evidence 保留；下一入口为 NAV repository/source adapter adjusted-basis contract gate
+> **当前状态**: release maintenance；NAV repository/source adapter adjusted-basis contract gate 已 accepted blocked-with-contract-gap；006597/2024 的 `credit_risk` 与 `redemption_share_pressure` false negative 已解除；bond blocker 仍因 `drawdown_stress` 仅有 weak qualitative evidence 保留；下一入口为 NAV repository/source adapter typed contract implementation gate
 
 ---
 
@@ -27,11 +27,11 @@
 |---|---|
 | Branch | `codex/local-reconciliation` |
 | Current phase | `release maintenance` |
-| Current gate | `NAV source capability / adjusted basis evidence gate blocked_pending_source_adapter` |
+| Current gate | `NAV repository/source adapter adjusted-basis contract gate accepted blocked-with-contract-gap` |
 | Current gate classification | `standard` |
-| Next entry point | `NAV repository/source adapter adjusted-basis contract gate` |
-| Next gate classification | `standard` |
-| Latest accepted gate checkpoint | `NAV source capability gate accepted blocked_pending_source_adapter: current public FundNavDataAdapter proves only raw unit NAV availability for 006597, not adjusted / cumulative / total-return basis` |
+| Next entry point | `NAV repository/source adapter typed contract implementation gate` |
+| Next gate classification | `heavy` |
+| Latest accepted gate checkpoint | `NAV source adapter contract gate accepted primer/contract, but current public FundNavDataAdapter proves only raw unit NAV availability for 006597 and lacks share_class, adjusted_basis, dividend_adjustment_status, identity, provenance, and failure taxonomy` |
 | Design truth | `docs/design.md` (v2.2) |
 | Control truth | `docs/implementation-control.md` |
 | Historical control snapshots | `docs/archive/implementation-control-history-20260525.md`; `docs/archive/implementation-control-release-maintenance-ledger-20260527.md` |
@@ -43,41 +43,39 @@
 
 | Purpose | Artifact |
 |---|---|
-| Truth preflight | `docs/reviews/release-maintenance-bond-positive-risk-truth-preflight-20260527.md` |
-| Evidence plan | `docs/reviews/release-maintenance-bond-positive-risk-evidence-plan-20260527.md` |
-| Plan review: DS | `docs/reviews/release-maintenance-bond-positive-risk-evidence-plan-review-ds-20260527.md` |
-| Plan review: MiMo | `docs/reviews/release-maintenance-bond-positive-risk-evidence-plan-review-mimo-20260527.md` |
-| Plan re-review: MiMo | `docs/reviews/release-maintenance-bond-positive-risk-evidence-plan-rereview-mimo-20260527.md` |
-| Plan controller judgment | `docs/reviews/release-maintenance-bond-positive-risk-evidence-plan-controller-judgment-20260527.md` |
-| Evidence artifact | `docs/reviews/release-maintenance-bond-positive-risk-evidence-20260527.md` |
-| Evidence review: DS | `docs/reviews/release-maintenance-bond-positive-risk-evidence-review-ds-20260527.md` |
-| Evidence review: MiMo | `docs/reviews/release-maintenance-bond-positive-risk-evidence-review-mimo-20260527.md` |
-| Controller judgment | `docs/reviews/release-maintenance-bond-positive-risk-evidence-controller-judgment-20260527.md` |
+| NAV primer | `docs/reviews/release-maintenance-nav-source-adapter-adjusted-basis-primer-20260528.md` |
+| Contract plan | `docs/reviews/release-maintenance-nav-source-adapter-adjusted-basis-contract-plan-20260528.md` |
+| Contract evidence | `docs/reviews/release-maintenance-nav-source-adapter-adjusted-basis-contract-evidence-20260528.md` |
+| Plan review: DS | `docs/reviews/release-maintenance-nav-source-adapter-adjusted-basis-contract-plan-review-ds-20260528.md` |
+| Plan review: GLM | `docs/reviews/release-maintenance-nav-source-adapter-adjusted-basis-contract-plan-review-glm-20260528.md` |
+| Controller judgment | `docs/reviews/release-maintenance-nav-source-adapter-adjusted-basis-contract-controller-judgment-20260528.md` |
 
 ### Current Decision Summary
 
-- Truth preflight found and closed a docs-only mismatch: `docs/implementation-control.md` referenced `AGENTS.md` Gate classification rules before `AGENTS.md` defined `fast_path` / `standard` / `heavy`; `AGENTS.md` now defines the rules.
-- Automatic QDII replacement probing is stopped. Do not run additional QDII candidates until a separate QDII diagnosis, taxonomy / asset-class fitness, or explicit coverage-blocked gate is accepted.
-- `096001`, `040046`, `019172`, and `021539` are all preserved as source-provenance eligible, quality `block`, terminal `quality_blocked_after_provenance`, and `not_promoted`.
-- QDII coverage is blocked for baseline/golden v1; no QDII row is replacement-ready, baseline-ready, scoring-ready, golden-ready, or source-safe for promotion.
-- Coverage disposition matrix remains: active `004393` and enhanced-index `004194` are carry-forward evaluated candidates; index `110020` is terminal `reviewed_coverage_candidate_input_accepted` but `not_promoted`; bond `006597` remains blocked by `bond_risk_evidence_missing.baseline_blocking=true`; FOF remains `data_gap` / `taxonomy_pending`.
-- `006597` / 2024 annual report contains same-fund/year candidate bond-risk evidence for all seven `bond_risk_evidence.v1` groups, but current public CLI/score cannot express positive `bond_risk_evidence` records or durable group-level anchors. Final state is `extractor/evidence anchor issue requiring future gate`, not data gap and not blocker解除.
-- Future bond risk extractor/anchor work must preserve evidence-strength distinctions: `drawdown_stress` currently has qualitative drawdown-control intent rather than a quantitative metric, and `leverage_liquidity` needs precise table/row anchors before consumption.
+- NAV primer and typed adapter contract are accepted, but runtime capability remains blocked-with-contract-gap.
+- Current public `FundNavDataAdapter.load_nav_data("006597")` returns raw unit NAV rows only: `净值日期`, `单位净值`, `日增长率`.
+- Current NAV adapter lacks share-class mapping, NAV type, adjusted basis, dividend adjustment status, source-returned identity, provenance, public cache-updated metadata, and failure taxonomy.
+- 006597 2025 annual report §3.1 E-class year-end fund share NAV is `1.1967`; the earlier handoff value `1.1744` is not accepted as this gate truth.
+- 006597 E class has a 2023 distribution under annual report §3.3; E-class raw unit NAV across that period cannot be strong drawdown evidence.
+- `drawdown_stress` remains weak qualitative. Latest 006597 score remains `bond_risk_evidence_missing.baseline_blocking=true`, with `missing_evidence_groups` only `drawdown_stress`.
+- No Python, schema, score, quality gate, golden fixture, PR, push, merge, release, or promotion change occurred in this gate.
 - Golden answer corpus v1 remains blocked until coverage, source, quality, fund-type, and fixture-promotion blockers are resolved or explicitly deferred.
 
 ## Next Entry Point
 
-`NAV repository/source adapter adjusted-basis contract gate`.
+`NAV repository/source adapter typed contract implementation gate`.
 
 This next gate must start with Startup Packet replay and `$init-agents` / tmux multi-agent flow if multi-agent panes are used. `credit_risk` and `redemption_share_pressure` false negatives are locally repaired and validated for `006597` / 2024. Real validation still keeps `bond_risk_evidence_missing.baseline_blocking=true` because `drawdown_stress` remains weak qualitative evidence under the current contract. The NAV source capability gate proved that the current public `FundNavDataAdapter` can load raw 006597 `单位净值走势` rows, but cannot prove adjusted / cumulative / total-return basis, source-returned identity, dividend adjustment status, or calculation-ready provenance.
 
 Allowed scope:
 
-- Plan/review before any implementation.
-- Define and implement a typed Fund-layer NAV source adapter contract only if a provider can expose adjusted / cumulative / total-return basis with sufficient provenance.
+- Implement the accepted typed Fund-layer NAV source adapter contract from `docs/reviews/release-maintenance-nav-source-adapter-adjusted-basis-contract-controller-judgment-20260528.md`.
+- Mark the current Akshare `单位净值走势` path as explicit `raw_unit_nav`, not eligible for strong drawdown evidence by default.
 - Repair cache-hit metadata exposure through public adapter results, not direct SQLite reads.
-- Explicitly decide whether `dividend_adjustment_status` is represented inside `adjustment_basis` or as an independent field.
-- Do not change `bond_risk_evidence` satisfaction, score acceptance, snapshot schema, quality gate semantics, or baseline status in this source-capability gate.
+- Represent `dividend_adjustment_status` explicitly, unless the next gate records a reviewed reason to merge it with `adjustment_basis`.
+- Establish share-class mapping and keep A/C/E/F NAV series separated; `006597` may default to A class only with explicit evidence-backed mapping.
+- Preserve fail-closed taxonomy for `schema_drift`, `identity_mismatch`, `integrity_error`, `adjustment_basis_unknown`, and insufficient history.
+- Do not change `bond_risk_evidence` satisfaction, score acceptance, snapshot schema, quality gate semantics, or baseline status in this implementation gate.
 - Keep qualitative drawdown-control text weak unless a reviewed contract explicitly changes the rule.
 - Preserve evidence-strength distinctions and do not treat weak or ambiguous groups as accepted.
 - Preserve existing FQ0-FQ6 semantics, renderer output, Service/CLI behavior, source strategy, and `FundDocumentRepository` boundaries.
@@ -104,7 +102,7 @@ Allowed scope:
 | `110020` reviewed coverage candidate | future golden/baseline preflight | Accepted only as reviewed coverage candidate input; remains `not_promoted`; methodology / constituents evidence remains insufficient. |
 | `017641` QDII data gap | disposition / taxonomy follow-up | Original QDII row is provenance-complete but quality `block` due to `manager_strategy_text`; accepted disposition is `replace`, not promotion. |
 | FOF coverage / taxonomy | future fund-type taxonomy gate | Find pure `fof_fund` repository-verified candidate, or open taxonomy gate before counting QDII-FOF attempts as FOF coverage. |
-| `006597` bond risk evidence blocker | `NAV repository/source adapter adjusted-basis contract gate`, then future derived drawdown contract schema gate if source adapter passes | `credit_risk` and `redemption_share_pressure` false negatives are repaired and validated locally. Latest `006597` score still has `bond_risk_evidence_missing.baseline_blocking=true`, with `missing_evidence_groups` only `drawdown_stress`. NAV capability gate found current public `FundNavDataAdapter` proves raw unit NAV availability only; adjusted / cumulative / total-return basis, source-returned identity, dividend adjustment status, and calculation-ready provenance remain absent. Do not claim blocker解除 without a proven adjusted NAV source and reviewed derived-evidence contract. |
+| `006597` bond risk evidence blocker | `NAV repository/source adapter typed contract implementation gate`, then future derived drawdown implementation gate if source adapter can provide accepted adjusted-basis NAV | `credit_risk` and `redemption_share_pressure` false negatives are repaired and validated locally. Latest `006597` score still has `bond_risk_evidence_missing.baseline_blocking=true`, with `missing_evidence_groups` only `drawdown_stress`. NAV contract gate accepted the primer/contract but confirmed current public `FundNavDataAdapter` exposes only raw unit NAV rows and lacks share-class, adjusted-basis, dividend-adjustment, identity, provenance, and failure taxonomy metadata. Do not claim blocker解除 without a typed adapter contract and accepted adjusted-basis NAV evidence. |
 | Source metadata strict bool parsing | future source provenance hardening gate | Plan/review strict bool parser for `AnnualReportSourceMetadata.from_dict()`; current known issue: string `"false"` coerces truthy. |
 | Stray untracked `--help` file | artifact disposition / user-authorized cleanup | Do not stage or promote; delete only with explicit authorization or accepted disposition. |
 | Untracked review/evidence artifacts | artifact disposition gate if needed | Decide whether to accept, archive, or leave untracked; do not silently stage unrelated artifacts. |
@@ -127,6 +125,7 @@ Allowed scope:
 | `section2 crosscheck unit suffix repair` | accepted locally | `docs/reviews/release-maintenance-section2-crosscheck-unit-suffix-repair-controller-judgment-20260528.md`; `docs/reviews/code-review-20260528-081225.md` | Added whitelist terminal `份` parsing for §2 ending-share cells; `006597` real snapshot now satisfies `redemption_share_pressure`; score missing groups now only `drawdown_stress`; full ruff / full pytest / real PDF smoke / snapshot / score / quality gate passed | drawdown evidence contract / NAV-derived risk metric design gate |
 | `drawdown_stress NAV-derived evidence contract` | blocked with decision | `docs/reviews/release-maintenance-drawdown-stress-nav-derived-contract-controller-judgment-20260528.md`; plan reviews `docs/reviews/release-maintenance-drawdown-stress-nav-derived-contract-plan-review-mimo-20260528.md`, `docs/reviews/release-maintenance-drawdown-stress-nav-derived-contract-plan-review-ds-20260528.md` | NAV-derived drawdown accepted only as future candidate. Current NAV provider/cache cannot prove total-return / adjusted basis; `bond_risk_evidence.v1` derived anchors and snapshot/score per-group provenance are unresolved. No implementation, no blocker解除. | NAV source capability / adjusted basis evidence gate |
 | `NAV source capability / adjusted basis evidence` | blocked pending source adapter | `docs/reviews/release-maintenance-nav-source-capability-adjusted-basis-controller-judgment-20260528.md`; DS/GLM review and re-review artifacts | Public `FundNavDataAdapter` smoke for `006597` succeeds but exposes only raw `净值日期` / `单位净值` / `日增长率`; direct SQLite inspection is diagnostic-only; current capability cannot prove adjusted / cumulative / total-return basis or dividend adjustment status. No production code, score, quality gate, schema, golden, PR, push, or promotion changes. | NAV repository/source adapter adjusted-basis contract gate |
+| `NAV repository/source adapter adjusted-basis contract` | accepted blocked-with-contract-gap | `docs/reviews/release-maintenance-nav-source-adapter-adjusted-basis-contract-controller-judgment-20260528.md`; primer / plan / evidence artifacts and DS/GLM reviews | Accepted fund NAV / share-class / adjusted-basis primer and typed adapter contract. Independent reviews confirmed 006597 2025 E-class year-end NAV is `1.1967` via `FundDocumentRepository`, and current `FundNavDataAdapter` remains raw-unit-only without share_class / adjusted_basis / provenance / identity / failure taxonomy. No production code, score, quality gate, schema, golden, PR, push, or promotion changes. | NAV repository/source adapter typed contract implementation gate |
 
 ## Historical Evidence Index
 
