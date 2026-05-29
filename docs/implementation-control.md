@@ -6,7 +6,7 @@
 > **规则真源**: `AGENTS.md`
 > **历史快照**: `docs/archive/implementation-control-history-20260525.md`
 > **release-maintenance 长账本**: `docs/archive/implementation-control-release-maintenance-ledger-20260527.md`
-> **当前状态**: release maintenance；overnight release maintenance roadmap execution phase 正在推进；Track 1 minimum v1 promotion-prep readiness 已 accepted blocked-with-reason：004393 partial coverage rejected，004194 index_profile-only diagnostic not full fixture，006597 strict correctness rerun configured but blocked by 11 same-fund unavailable rows including P0 `manager_strategy_text.strategy_summary` and `market_outlook`；三者均不是 promotion-prep candidate，均保持 `fixture_state=absent`、`promotion_allowed=false`；tracked residual disposition manifest 与 tracked fixture promotion state manifest 均存在但都不是 promotion manifest，且未被 runtime/preflight 消费；006597/2024 的 bond risk evidence blocker 保持 closed；当前 minimum golden v1 仍 blocked，下一入口为 006597 same-fund unavailable field review / extractor projection gate；fixture/golden promotion 未进入
+> **当前状态**: release maintenance；overnight release maintenance roadmap execution phase 本地收束：Track 1 minimum v1 promotion-prep readiness 已 accepted blocked-with-reason；Routes 2-5 已写入 conservative route status / disposition closeout。004393 partial coverage rejected，004194 index_profile-only diagnostic not full fixture，006597 strict correctness rerun configured but blocked by 11 same-fund unavailable rows including P0 `manager_strategy_text.strategy_summary` and `market_outlook`；三者均不是 promotion-prep candidate，均保持 `fixture_state=absent`、`promotion_allowed=false`。QDII/FOF/110020/017641 仍 deferred from minimum v1、block full v1、not ready；tracked manifests 不是 promotion manifest 且未被 runtime/preflight 消费；006597/2024 的 bond risk evidence blocker 保持 closed；当前 minimum golden v1 仍 blocked，下一入口为 006597 same-fund unavailable field review / extractor projection gate；fixture/golden promotion 未进入
 
 ---
 
@@ -27,11 +27,11 @@
 |---|---|
 | Branch | `codex/local-reconciliation` |
 | Current phase | `release maintenance` |
-| Current gate | `minimum v1 promotion-prep readiness accepted blocked-with-reason` |
+| Current gate | `overnight release maintenance roadmap execution closeout accepted locally` |
 | Current gate classification | `heavy` |
 | Next entry point | `006597 same-fund unavailable field review / extractor projection gate for P0 manager_strategy_text.strategy_summary and market_outlook, plus P1 unavailable ledger disposition; then minimum v1 promotion-prep readiness decision only after explicit controller acceptance` |
 | Next gate classification | `heavy` |
-| Latest accepted gate checkpoint | `Minimum v1 promotion-prep readiness decision accepted: overall_readiness=not_ready, decision=blocked_with_reason, minimum_v1_promotion_prep_ready=false, any_fund_can_enter_promotion_prep_now=false. 004393 partial coverage rejected; 004194 index_profile-only diagnostic not full fixture; 006597 strict correctness rerun configured but blocked by same-fund unavailable including P0 manager_strategy_text.strategy_summary and manager_strategy_text.market_outlook. All Track 1 funds remain fixture_state=absent, promotion_allowed=false, promotion_manifest=false. No score/quality/FQ0-FQ6/golden fixture/golden-answer/manifest/runtime changes; no PR, push, merge, release or promotion changes.` |
+| Latest accepted gate checkpoint | `Overnight route closeout accepted locally: Track 1 overall_readiness=not_ready / blocked_with_reason; no Track 1 fund can enter promotion-prep now. Routes 2-5 have conservative route status/disposition artifacts: QDII/FOF/110020/017641 remain deferred/not_ready; source/provenance, Host/Agent/dayu, and manifest/artifact lifecycle remain future gates only. All promotion_allowed=false; no score/quality/FQ0-FQ6/golden fixture/golden-answer/manifest/runtime changes; no PR, push, merge, release or promotion changes.` |
 | Design truth | `docs/design.md` (v2.2) |
 | Control truth | `docs/implementation-control.md` |
 | Historical control snapshots | `docs/archive/implementation-control-history-20260525.md`; `docs/archive/implementation-control-release-maintenance-ledger-20260527.md` |
@@ -65,6 +65,8 @@
 - Accepted minimum v1 promotion-prep readiness decision: `docs/reviews/release-maintenance-minimum-v1-promotion-prep-readiness-decision-20260529.md`
 - Accepted minimum v1 readiness reviews: `docs/reviews/release-maintenance-minimum-v1-promotion-prep-readiness-decision-review-mimo-20260529.md`; `docs/reviews/release-maintenance-minimum-v1-promotion-prep-readiness-decision-review-glm-20260529.md`
 - Minimum v1 readiness controller judgment: `docs/reviews/release-maintenance-minimum-v1-promotion-prep-readiness-controller-judgment-20260529.md`
+- Overnight route status / deferred coverage fallback: `docs/reviews/overnight-release-maintenance-route-status-20260529.md`
+- Overnight closeout: `docs/reviews/overnight-release-maintenance-closeout-20260529.md`
 
 ### Current Accepted Artifacts
 
