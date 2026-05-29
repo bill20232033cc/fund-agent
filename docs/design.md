@@ -1,9 +1,9 @@
 # 基金行为教练 Agent —— 设计真源文档
 
-> **版本**: v2.2
-> **日期**: 2026-05-23
-> **状态**: 已按 `AGENTS.md` 统一为 Dayu 四层边界 `UI -> Service -> Host -> Agent`；P19 全 A/指数温度计、独立 checklist、工程基线和 Dayu 手册吸收范围均与当前代码事实对齐
-> **变更摘要**: v2.2 当前修订确认 `AGENTS.md` 是 Agent 规则唯一权威入口；设计文档是代码设计真源但不得覆盖 `AGENTS.md`；目标架构统一为 `UI -> Service -> Host -> Agent`；当前确定性 CLI 主链路为 UI 直接调用 Service、Service 直接调用 `fund_agent/fund` Agent 层基金能力的过渡实现；未来 Host 层必须使用 `dayu.host`，Agent 执行内核必须使用 `dayu.engine`；P19-S3 后 `analyze` 只在 exact benchmark identity 命中 `000300` / `000905` 时自动映射 `valuation_state`；P19-S5 后 `fund-analysis thermometer` 默认使用项目内自建全 A `wind_all_a` PE/PB 温度计；`fund-analysis checklist` 作为独立 Service 用例复用 `analyze` 的确定性分析核心；吸收 `dayu-agent` `pyproject.toml` 的 Python 3.11、setuptools、元数据、可选依赖、pytest/ruff/black 与包资源声明纪律，并吸收 Dayu README / Host / Engine / Fins / Config / CONTRIBUTING 手册中的可迁移工程纪律。
+> **版本**: v2.3
+> **日期**: 2026-05-30
+> **状态**: 已按 `AGENTS.md` 统一为 Dayu 四层边界 `UI -> Service -> Host -> Agent`；当前确定性 `fund-analysis analyze/checklist` 与 Route C accepted future route 的状态边界已显式区分
+> **变更摘要**: v2.3 当前修订确认 `AGENTS.md` 是 Agent 规则唯一权威入口；设计文档是代码设计真源但不得覆盖 `AGENTS.md`；目标架构统一为 `UI -> Service -> Host -> Agent`；当前确定性 CLI 主链路为 UI 直接调用 Service、Service 直接调用 `fund_agent/fund` Agent 层基金能力的过渡实现；新增 `已接受的未来设计：MVP LLM report generation route`，将 Route C 标记为未来路由而非当前实现；未来 Host 层必须使用 `dayu.host`，Agent 执行内核必须使用 `dayu.engine`；P19-S3 后 `analyze` 只在 exact benchmark identity 命中 `000300` / `000905` 时自动映射 `valuation_state`；P19-S5 后 `fund-analysis thermometer` 默认使用项目内自建全 A `wind_all_a` PE/PB 温度计；`fund-analysis checklist` 作为独立 Service 用例复用 `analyze` 的确定性分析核心；吸收 `dayu-agent` `pyproject.toml` 的 Python 3.11、setuptools、元数据、可选依赖、pytest/ruff/black 与包资源声明纪律，并吸收 Dayu README / Host / Engine / Fins / Config / CONTRIBUTING 手册中的可迁移工程纪律。
 > **关联文档**: `docs/implementation-control.md`（实施总控）、`fund-agent-mvp-plan.md`（MVP 计划书）、`docs/fund-analysis-template-draft.md`（定性模板 v2）、`docs/audit-alignment.md`（审计机制对照研究）
 
 ⚠️ **重要声明**：本文档记录当前代码设计真源；若本文档、实施总控、README 或代码与用户提供的仓库执行规则冲突，必须先修正方案和实现，再回写本文档；不得长期保留“设计未来”口径冒充已实现状态。
@@ -483,7 +483,31 @@ Evidence Store / Fact Store
 
 后续评分、数据源迭代、写作脚本迭代和报告质量调参会产生大量本地 run 产物，应落在 `reports/scoring-runs/`、`reports/data-source-runs/`、`reports/writing-runs/` 或临时目录；只有人工复核后要作为长期基准的输入才进入 curated fixture。
 
-#### 5.4.1 报告质量评分维度
+#### 5.4.1 已接受的未来设计：MVP LLM report generation route
+
+Route C 是已接受的 MVP LLM report generation 未来路由，用来把 §5.4 的章节级写作审计闭环拆成可实施 gate。它不是当前代码事实：当前实现仍是确定性 `fund-analysis analyze/checklist`，当前确定性 renderer、程序审计、FQ0-FQ6 quality gate、CLI 默认入口和 Service 控制流都不因本设计记录而改变。
+
+**当前已实现状态**：
+
+- `fund-analysis analyze` 和 `fund-analysis checklist` 仍由 UI 调用 Service，Service 直接调用 `fund_agent/fund` 公开能力完成结构化抽取、确定性分析、模板渲染、程序审计和 quality gate。
+- 当前没有 LLM 章节写作、LLM 审计、write-audit-repair loop、chapter orchestrator、final LLM assembler、CLI `--use-llm`、Host scheduling、Agent runner/tool loop 或 dayu runtime。
+- 当前没有把 quality gate、LLM audit、Evidence Confirm、repair loop、Host、Agent runtime 或 dayu 集成声明为已实现。
+
+**Route C gate 序列**：
+
+| Gate | 已接受的未来 scope | 边界约束 |
+|---|---|---|
+| Gate 1 | `facet_recognizer` + `ChapterFactProvider` / `FundToolService` contract and implementation | 消费现有 8 章模板、CHAPTER_CONTRACT、preferred_lens、ITEM_RULE 和 facet catalog；基金类型 / facet 识别、fact/evidence 语义属于 Agent/Fund；Service 只负责用例编排和 typed invocation |
+| Gate 2 | `chapter_writer` + `chapter_auditor` | 写作和审计只能消费结构化 facts、derived calculations、显式 data gaps 和 EvidenceAnchor；不得直接读取 PDF、cache、source helper 或下载 helper |
+| Gate 3 | `chapter_orchestrator` | Service 拥有 write-audit-repair loop policy，并通过显式 contract 调用 Agent/Fund 能力；不得把业务参数藏入 `extra_payload` |
+| Gate 4 | `final_chapter_assembler`、第 0 章 assembly、CLI `--use-llm` | `--use-llm` 是 opt-in 未来路径；确定性 `analyze/checklist` 保持可用，除非后续 gate 明确改变 |
+| Gate 5 | 可选 `dayu.host` / `dayu.engine` integration | 只有该 gate 可以替换或委托 orchestrator concurrency layer；未来 Host 必须使用 `dayu.host`，未来 Agent engine/tool loop/runner/ToolRegistry/ToolTrace 必须使用 `dayu.engine` |
+
+Gate 1 组件名称 `facet_recognizer`、`ChapterFactProvider`、`FundToolService` 是 Route C Gate 1 的未来候选命名，不是当前代码类型，也不替代当前已实现的 `FundDataExtractor`、`StructuredFundDataBundle` 或既有 Service/Fund contract。只有后续 Gate 1 implementation 通过 plan/review/implementation gate 后，这些名称才能成为代码事实。
+
+Route C 不删除当前 deterministic rendering，也不降低 release-maintenance/golden residual 的严肃性；它只把 golden / strict correctness / QDII / FOF / `110020` / fixture promotion 从 MVP report generation 主线的启动阻塞改为残余产品质量工作。任何 fixture promotion、golden answer、score、snapshot、quality gate 语义或 final judgment 变更仍必须进入独立 gate。
+
+#### 5.4.2 报告质量评分维度
 
 未来报告质量 gate 应先作为观测工具引入，不直接替代当前 FQ0-FQ6 quality gate。建议评分维度如下：
 
@@ -499,7 +523,7 @@ Evidence Store / Fact Store
 
 评分产物必须保留输入版本、基金代码、报告年份、章节编号、字段名、证据锚点、失败类别和本地 run 路径。未人工核验的评分结果不得直接写入 golden answer 或长期 fixture。
 
-#### 5.4.2 Fact / Evidence 输入契约
+#### 5.4.3 Fact / Evidence 输入契约
 
 章节写作输入应被建模为可审计的 evidence bundle，而不是散落的 renderer 字符串：
 
@@ -513,7 +537,7 @@ Evidence Store / Fact Store
 
 任何 future implementation 若需要把这些输入交给 Host/Agent 调度，必须先通过独立 gate 设计 `dayu.host` / `dayu.engine` 接入、事件流、ToolTrace、重试、超时、取消和 replay 语义。
 
-#### 5.4.3 Morningstar × 有知有行 × 基金类型 × 章节合同覆盖矩阵
+#### 5.4.4 Morningstar × 有知有行 × 基金类型 × 章节合同覆盖矩阵
 
 基金分析模板不是普通报告格式，而是面向个人投资者的决策安全合同。设计目标是把专业尽调、行为保护、基金类型差异和 LLM 章节约束收敛到同一个可审计矩阵：
 
