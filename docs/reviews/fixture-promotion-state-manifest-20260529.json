@@ -1,0 +1,404 @@
+{
+  "schema_version": "fund-agent.fixture-promotion-state.v1",
+  "accepted_as_of": "2026-05-29",
+  "source_preflight_run_id": "golden-readiness-preflight-20260529",
+  "source_residual_disposition_manifest": "docs/reviews/golden-readiness-residual-disposition-manifest-20260529.json",
+  "promotion_manifest": false,
+  "promotion_allowed_default": false,
+  "source_artifacts": [
+    "docs/reviews/release-maintenance-fixture-promotion-state-manifest-plan-20260529.md",
+    "reports/golden-readiness-preflight/golden-readiness-preflight-20260529/golden_readiness_preflight.json",
+    "reports/golden-readiness-preflight/golden-readiness-preflight-20260529/golden_readiness_preflight.md",
+    "docs/reviews/golden-readiness-residual-disposition-manifest-20260529.json"
+  ],
+  "global_blockers": [
+    {
+      "scope": "GLOBAL",
+      "year": null,
+      "blocker": "fixture_promotion_absent",
+      "decision": "needs_fixture_promotion_gate",
+      "owner": "future fixture promotion gate",
+      "next_gate": "produce accepted fixture promotion state manifest",
+      "blocking_reason": "No accepted fixture promotion state manifest exists.",
+      "evidence_artifacts": [
+        "reports/golden-readiness-preflight/golden-readiness-preflight-20260529/golden_readiness_preflight.json",
+        "reports/golden-readiness-preflight/golden-readiness-preflight-20260529/golden_readiness_preflight.md",
+        "docs/reviews/release-maintenance-golden-readiness-preflight-controller-judgment-20260529.md"
+      ],
+      "blocks_v1": true,
+      "blocks_minimum_v1": true,
+      "promotion_allowed": false
+    },
+    {
+      "scope": "GLOBAL",
+      "year": null,
+      "blocker": "qdii_replacement_hard_stop",
+      "decision": "blocked_until_policy",
+      "owner": "future QDII diagnosis or taxonomy / asset-class fitness gate",
+      "next_gate": "QDII diagnosis or explicit QDII deferred-from-v1 disposition gate",
+      "blocking_reason": "Automatic QDII probing stopped after accepted hard stop.",
+      "evidence_artifacts": [
+        "docs/reviews/release-maintenance-consolidation-post-021539-disposition-controller-judgment-20260527.md",
+        "reports/golden-readiness-preflight/golden-readiness-preflight-20260529/golden_readiness_preflight.json"
+      ],
+      "blocks_v1": true,
+      "blocks_minimum_v1": false,
+      "promotion_allowed": false
+    }
+  ],
+  "entries": [
+    {
+      "fund_code": "004393",
+      "slot": null,
+      "year": 2024,
+      "fixture_state": "absent",
+      "promotion_allowed": false,
+      "promotion_blockers": [
+        "fixture_promotion_absent"
+      ],
+      "blocking_reason": "Immediate fixture promotion candidate, but fixture state and quality warn residual owner are not accepted. fixture_promotion_absent: 004393 未发现 accepted fixture promotion state。",
+      "decision": "needs_fixture_promotion_gate",
+      "owner": "future fixture promotion gate",
+      "next_gate": "fixture promotion / strict golden coverage gate",
+      "evidence_artifacts": [
+        "docs/reviews/release-maintenance-small-baseline-corpus-v1-run-controller-judgment-20260527.md",
+        "docs/reviews/release-maintenance-source-provenance-post-implementation-bounded-evidence-rerun-controller-judgment-20260527.md",
+        "reports/golden-readiness-preflight/golden-readiness-preflight-20260529/golden_readiness_preflight.json"
+      ],
+      "source_snapshot_path": "reports/extraction-snapshots/small-baseline-corpus-v1-004393-2024/snapshot.jsonl",
+      "source_score_path": "reports/extraction-snapshots/small-baseline-corpus-v1-004393-2024/score.json",
+      "source_quality_gate_path": "reports/extraction-snapshots/small-baseline-corpus-v1-004393-2024/quality_gate.json",
+      "source_score_golden_set_path": "reports/extraction-snapshots/small-baseline-corpus-v1-004393-2024/golden_set.json",
+      "quality_gate_status": "warn",
+      "strict_golden_coverage": "covered",
+      "preflight_readiness": "deferred_with_owner",
+      "preflight_disposition": "include_for_later_review",
+      "replacement_disposition": null,
+      "source_static_promotion_state": "not_promoted",
+      "preflight_fixture_promotion_state": "absent",
+      "blocks_v1": true,
+      "blocks_minimum_v1": true
+    },
+    {
+      "fund_code": "004194",
+      "slot": null,
+      "year": 2024,
+      "fixture_state": "absent",
+      "promotion_allowed": false,
+      "promotion_blockers": [
+        "fixture_promotion_absent"
+      ],
+      "blocking_reason": "Immediate fixture promotion candidate, but fixture state and quality warn residual owner are not accepted. fixture_promotion_absent: 004194 未发现 accepted fixture promotion state。",
+      "decision": "needs_fixture_promotion_gate",
+      "owner": "future fixture promotion gate",
+      "next_gate": "fixture promotion / strict golden coverage gate",
+      "evidence_artifacts": [
+        "docs/reviews/release-maintenance-small-baseline-corpus-v1-run-controller-judgment-20260527.md",
+        "docs/reviews/release-maintenance-source-provenance-post-implementation-bounded-evidence-rerun-controller-judgment-20260527.md",
+        "reports/golden-readiness-preflight/golden-readiness-preflight-20260529/golden_readiness_preflight.json"
+      ],
+      "source_snapshot_path": "reports/extraction-snapshots/small-baseline-corpus-v1-004194-2024/snapshot.jsonl",
+      "source_score_path": "reports/extraction-snapshots/small-baseline-corpus-v1-004194-2024/score.json",
+      "source_quality_gate_path": "reports/extraction-snapshots/small-baseline-corpus-v1-004194-2024/quality_gate.json",
+      "source_score_golden_set_path": "reports/extraction-snapshots/small-baseline-corpus-v1-004194-2024/golden_set.json",
+      "quality_gate_status": "warn",
+      "strict_golden_coverage": "covered",
+      "preflight_readiness": "deferred_with_owner",
+      "preflight_disposition": "include_for_later_review",
+      "replacement_disposition": null,
+      "source_static_promotion_state": "not_promoted",
+      "preflight_fixture_promotion_state": "absent",
+      "blocks_v1": true,
+      "blocks_minimum_v1": true
+    },
+    {
+      "fund_code": "006597",
+      "slot": null,
+      "year": 2024,
+      "fixture_state": "absent",
+      "promotion_allowed": false,
+      "promotion_blockers": [
+        "strict_golden_not_configured",
+        "fixture_promotion_absent"
+      ],
+      "blocking_reason": "Immediate fixture candidate only if bond blocker remains closed; strict golden score correctness remains unresolved. strict_golden_not_configured: 006597 score correctness 为 not_configured。 fixture_promotion_absent: 006597 未发现 accepted fixture promotion state。 bond_risk_evidence_missing is closed by accepted NAV-derived drawdown metric evidence, but fixture state remains absent and strict golden correctness remains unresolved.",
+      "decision": "needs_fixture_promotion_gate",
+      "owner": "future fixture promotion gate + future baseline/golden preflight owner",
+      "next_gate": "fixture promotion / strict golden coverage gate",
+      "evidence_artifacts": [
+        "docs/reviews/release-maintenance-drawdown-stress-nav-derived-metric-controller-judgment-20260529.md",
+        "docs/reviews/release-maintenance-golden-readiness-preflight-controller-judgment-20260529.md",
+        "reports/golden-readiness-preflight/golden-readiness-preflight-20260529/golden_readiness_preflight.json"
+      ],
+      "source_snapshot_path": "reports/extraction-snapshots/bond-risk-drawdown-nav-006597-2024-20260529/snapshot.jsonl",
+      "source_score_path": "reports/scoring-runs/bond-risk-drawdown-nav-006597-2024-20260529/score.json",
+      "source_quality_gate_path": "reports/quality-gate-runs/bond-risk-drawdown-nav-006597-2024-20260529/quality_gate.json",
+      "source_score_golden_set_path": null,
+      "quality_gate_status": "warn",
+      "strict_golden_coverage": "covered",
+      "preflight_readiness": "deferred_with_owner",
+      "preflight_disposition": "include_for_later_review",
+      "replacement_disposition": null,
+      "source_static_promotion_state": "not_promoted",
+      "preflight_fixture_promotion_state": "absent",
+      "resolved_context": [
+        {
+          "original_blocker_code": "bond_risk_evidence_missing",
+          "resolution": "closed_by_accepted_nav_derived_drawdown_metric_gate",
+          "evidence_artifact": "docs/reviews/release-maintenance-drawdown-stress-nav-derived-metric-controller-judgment-20260529.md"
+        }
+      ],
+      "blocks_v1": true,
+      "blocks_minimum_v1": true
+    },
+    {
+      "fund_code": "017641",
+      "slot": null,
+      "year": 2024,
+      "fixture_state": "deferred_from_v1",
+      "promotion_allowed": false,
+      "promotion_blockers": [
+        "strict_golden_not_configured",
+        "quality_gate_block",
+        "strict_golden_fund_not_covered",
+        "fixture_promotion_absent"
+      ],
+      "blocking_reason": "Prior controller judgment preserves replacement disposition; disclosure data gap is not baseline ready. strict_golden_not_configured: 017641 score correctness 为 not_configured。 quality_gate_block: 017641 quality gate status=block。 strict_golden_fund_not_covered: 017641 不在 strict golden answer v1 fund-level coverage 中。 fixture_promotion_absent: 017641 未发现 accepted fixture promotion state。 replacement_disposition=replace is preserved; the row remains not baseline/golden ready.",
+      "decision": "defer_from_v1",
+      "owner": "future QDII diagnosis / replacement owner",
+      "next_gate": "QDII diagnosis or explicit deferred-from-v1 gate",
+      "evidence_artifacts": [
+        "docs/reviews/release-maintenance-017641-manager-strategy-text-public-evidence-triage-controller-judgment-20260527.md",
+        "docs/reviews/release-maintenance-replacement-exclusion-candidate-selection-controller-judgment-20260527.md",
+        "docs/reviews/release-maintenance-source-provenance-post-implementation-bounded-evidence-rerun-controller-judgment-20260527.md",
+        "reports/golden-readiness-preflight/golden-readiness-preflight-20260529/golden_readiness_preflight.json"
+      ],
+      "source_snapshot_path": "reports/extraction-snapshots/source-provenance-rerun-017641-2024-20260527/snapshot.jsonl",
+      "source_score_path": "reports/extraction-snapshots/source-provenance-rerun-017641-2024-20260527/score.json",
+      "source_quality_gate_path": "reports/extraction-snapshots/source-provenance-rerun-017641-2024-20260527/quality_gate.json",
+      "source_score_golden_set_path": "reports/extraction-snapshots/source-provenance-rerun-017641-2024-20260527/golden_set.json",
+      "quality_gate_status": "block",
+      "strict_golden_coverage": "fund_not_covered",
+      "preflight_readiness": "blocked",
+      "preflight_disposition": "include_for_later_review",
+      "replacement_disposition": "replace",
+      "source_static_promotion_state": "not_promoted",
+      "preflight_fixture_promotion_state": "absent",
+      "blocks_v1": true,
+      "blocks_minimum_v1": false
+    },
+    {
+      "fund_code": "096001",
+      "slot": null,
+      "year": 2024,
+      "fixture_state": "deferred_from_v1",
+      "promotion_allowed": false,
+      "promotion_blockers": [
+        "strict_golden_not_configured",
+        "quality_gate_block",
+        "strict_golden_fund_not_covered",
+        "fixture_promotion_absent",
+        "qdii_coverage_blocked"
+      ],
+      "blocking_reason": "Candidate quality block and QDII coverage hard stop exclude it from minimum v1. strict_golden_not_configured: 096001 score correctness 为 not_configured。 quality_gate_block: 096001 quality gate status=block。 strict_golden_fund_not_covered: 096001 不在 strict golden answer v1 fund-level coverage 中。 fixture_promotion_absent: 096001 未发现 accepted fixture promotion state。 qdii_coverage_blocked: QDII replacement hard stop accepted; candidate quality block after eligible provenance. QDII hard-stop context is preserved without starting or implying new QDII probing.",
+      "decision": "defer_from_v1",
+      "owner": "future QDII diagnosis or taxonomy / asset-class fitness gate",
+      "next_gate": "QDII diagnosis or explicit QDII deferred-from-v1 disposition gate",
+      "evidence_artifacts": [
+        "docs/reviews/release-maintenance-qdii-replacement-candidate-evidence-controller-judgment-20260527.md",
+        "docs/reviews/release-maintenance-consolidation-post-021539-disposition-controller-judgment-20260527.md",
+        "reports/golden-readiness-preflight/golden-readiness-preflight-20260529/golden_readiness_preflight.json"
+      ],
+      "source_snapshot_path": "reports/extraction-snapshots/qdii-replacement-candidate-096001-2024-20260527/snapshot.jsonl",
+      "source_score_path": "reports/extraction-snapshots/qdii-replacement-candidate-096001-2024-20260527/score.json",
+      "source_quality_gate_path": "reports/extraction-snapshots/qdii-replacement-candidate-096001-2024-20260527/quality_gate.json",
+      "source_score_golden_set_path": "reports/extraction-snapshots/qdii-replacement-candidate-096001-2024-20260527/golden_set.json",
+      "quality_gate_status": "block",
+      "strict_golden_coverage": "fund_not_covered",
+      "preflight_readiness": "blocked",
+      "preflight_disposition": "blocked",
+      "replacement_disposition": null,
+      "source_static_promotion_state": "not_promoted",
+      "preflight_fixture_promotion_state": "absent",
+      "blocks_v1": true,
+      "blocks_minimum_v1": false
+    },
+    {
+      "fund_code": "040046",
+      "slot": null,
+      "year": 2024,
+      "fixture_state": "deferred_from_v1",
+      "promotion_allowed": false,
+      "promotion_blockers": [
+        "strict_golden_not_configured",
+        "quality_gate_block",
+        "strict_golden_fund_not_covered",
+        "fixture_promotion_absent",
+        "qdii_coverage_blocked"
+      ],
+      "blocking_reason": "Candidate quality block and QDII coverage hard stop exclude it from minimum v1. strict_golden_not_configured: 040046 score correctness 为 not_configured。 quality_gate_block: 040046 quality gate status=block。 strict_golden_fund_not_covered: 040046 不在 strict golden answer v1 fund-level coverage 中。 fixture_promotion_absent: 040046 未发现 accepted fixture promotion state。 qdii_coverage_blocked: QDII replacement hard stop accepted; candidate quality block after eligible provenance. QDII hard-stop context is preserved without starting or implying new QDII probing.",
+      "decision": "defer_from_v1",
+      "owner": "future QDII diagnosis or taxonomy / asset-class fitness gate",
+      "next_gate": "QDII diagnosis or explicit QDII deferred-from-v1 disposition gate",
+      "evidence_artifacts": [
+        "docs/reviews/release-maintenance-qdii-replacement-fallback-040046-evidence-controller-judgment-20260527.md",
+        "docs/reviews/release-maintenance-consolidation-post-021539-disposition-controller-judgment-20260527.md",
+        "reports/golden-readiness-preflight/golden-readiness-preflight-20260529/golden_readiness_preflight.json"
+      ],
+      "source_snapshot_path": "reports/extraction-snapshots/qdii-replacement-fallback-040046-2024-20260527/snapshot.jsonl",
+      "source_score_path": "reports/extraction-snapshots/qdii-replacement-fallback-040046-2024-20260527/score.json",
+      "source_quality_gate_path": "reports/extraction-snapshots/qdii-replacement-fallback-040046-2024-20260527/quality_gate.json",
+      "source_score_golden_set_path": "reports/extraction-snapshots/qdii-replacement-fallback-040046-2024-20260527/golden_set.json",
+      "quality_gate_status": "block",
+      "strict_golden_coverage": "fund_not_covered",
+      "preflight_readiness": "blocked",
+      "preflight_disposition": "blocked",
+      "replacement_disposition": null,
+      "source_static_promotion_state": "not_promoted",
+      "preflight_fixture_promotion_state": "absent",
+      "blocks_v1": true,
+      "blocks_minimum_v1": false
+    },
+    {
+      "fund_code": "019172",
+      "slot": null,
+      "year": 2024,
+      "fixture_state": "deferred_from_v1",
+      "promotion_allowed": false,
+      "promotion_blockers": [
+        "strict_golden_not_configured",
+        "quality_gate_block",
+        "strict_golden_fund_not_covered",
+        "fixture_promotion_absent",
+        "qdii_coverage_blocked"
+      ],
+      "blocking_reason": "Candidate quality block and QDII coverage hard stop exclude it from minimum v1. strict_golden_not_configured: 019172 score correctness 为 not_configured。 quality_gate_block: 019172 quality gate status=block。 strict_golden_fund_not_covered: 019172 不在 strict golden answer v1 fund-level coverage 中。 fixture_promotion_absent: 019172 未发现 accepted fixture promotion state。 qdii_coverage_blocked: QDII replacement hard stop accepted; candidate quality block after eligible provenance. QDII hard-stop context is preserved without starting or implying new QDII probing.",
+      "decision": "defer_from_v1",
+      "owner": "future QDII diagnosis or taxonomy / asset-class fitness gate",
+      "next_gate": "QDII diagnosis or explicit QDII deferred-from-v1 disposition gate",
+      "evidence_artifacts": [
+        "docs/reviews/release-maintenance-qdii-replacement-fallback-019172-evidence-controller-judgment-20260527.md",
+        "docs/reviews/release-maintenance-consolidation-post-021539-disposition-controller-judgment-20260527.md",
+        "reports/golden-readiness-preflight/golden-readiness-preflight-20260529/golden_readiness_preflight.json"
+      ],
+      "source_snapshot_path": "reports/extraction-snapshots/qdii-replacement-fallback-019172-2024-20260527/snapshot.jsonl",
+      "source_score_path": "reports/extraction-snapshots/qdii-replacement-fallback-019172-2024-20260527/score.json",
+      "source_quality_gate_path": "reports/extraction-snapshots/qdii-replacement-fallback-019172-2024-20260527/quality_gate.json",
+      "source_score_golden_set_path": "reports/extraction-snapshots/qdii-replacement-fallback-019172-2024-20260527/golden_set.json",
+      "quality_gate_status": "block",
+      "strict_golden_coverage": "fund_not_covered",
+      "preflight_readiness": "blocked",
+      "preflight_disposition": "blocked",
+      "replacement_disposition": null,
+      "source_static_promotion_state": "not_promoted",
+      "preflight_fixture_promotion_state": "absent",
+      "blocks_v1": true,
+      "blocks_minimum_v1": false
+    },
+    {
+      "fund_code": "021539",
+      "slot": null,
+      "year": 2024,
+      "fixture_state": "deferred_from_v1",
+      "promotion_allowed": false,
+      "promotion_blockers": [
+        "strict_golden_not_configured",
+        "quality_gate_block",
+        "strict_golden_fund_not_covered",
+        "fixture_promotion_absent",
+        "qdii_coverage_blocked"
+      ],
+      "blocking_reason": "Candidate quality block and QDII coverage hard stop exclude it from minimum v1. strict_golden_not_configured: 021539 score correctness 为 not_configured。 quality_gate_block: 021539 quality gate status=block。 strict_golden_fund_not_covered: 021539 不在 strict golden answer v1 fund-level coverage 中。 fixture_promotion_absent: 021539 未发现 accepted fixture promotion state。 qdii_coverage_blocked: QDII replacement hard stop accepted; candidate quality block after eligible provenance. QDII hard-stop context is preserved without starting or implying new QDII probing.",
+      "decision": "defer_from_v1",
+      "owner": "future QDII diagnosis or taxonomy / asset-class fitness gate",
+      "next_gate": "QDII diagnosis or explicit QDII deferred-from-v1 disposition gate",
+      "evidence_artifacts": [
+        "docs/reviews/release-maintenance-qdii-replacement-fallback-021539-evidence-controller-judgment-20260527.md",
+        "docs/reviews/release-maintenance-consolidation-post-021539-disposition-controller-judgment-20260527.md",
+        "reports/golden-readiness-preflight/golden-readiness-preflight-20260529/golden_readiness_preflight.json"
+      ],
+      "source_snapshot_path": "reports/extraction-snapshots/qdii-replacement-fallback-021539-2024-20260527/snapshot.jsonl",
+      "source_score_path": "reports/extraction-snapshots/qdii-replacement-fallback-021539-2024-20260527/score.json",
+      "source_quality_gate_path": "reports/extraction-snapshots/qdii-replacement-fallback-021539-2024-20260527/quality_gate.json",
+      "source_score_golden_set_path": "reports/extraction-snapshots/qdii-replacement-fallback-021539-2024-20260527/golden_set.json",
+      "quality_gate_status": "block",
+      "strict_golden_coverage": "fund_not_covered",
+      "preflight_readiness": "blocked",
+      "preflight_disposition": "blocked",
+      "replacement_disposition": null,
+      "source_static_promotion_state": "not_promoted",
+      "preflight_fixture_promotion_state": "absent",
+      "blocks_v1": true,
+      "blocks_minimum_v1": false
+    },
+    {
+      "fund_code": null,
+      "slot": "FOF_SLOT",
+      "year": 2024,
+      "fixture_state": "deferred_from_v1",
+      "promotion_allowed": false,
+      "promotion_blockers": [
+        "fof_taxonomy_pending",
+        "fof_data_gap"
+      ],
+      "blocking_reason": "No repository-verified pure FOF candidate; QDII-FOF cannot count as pure FOF. fof_taxonomy_pending: Pure FOF taxonomy pending；QDII-FOF 不可计为 pure FOF。 fof_data_gap: 缺少 repository-verified pure FOF candidate。",
+      "decision": "defer_from_v1",
+      "owner": "future FOF taxonomy / pure FOF candidate gate",
+      "next_gate": "pure FOF repository-verified candidate gate",
+      "evidence_artifacts": [
+        "docs/reviews/release-maintenance-replacement-exclusion-candidate-selection-controller-judgment-20260527.md",
+        "docs/reviews/release-maintenance-consolidation-post-021539-disposition-controller-judgment-20260527.md",
+        "reports/golden-readiness-preflight/golden-readiness-preflight-20260529/golden_readiness_preflight.json"
+      ],
+      "source_snapshot_path": null,
+      "source_score_path": null,
+      "source_quality_gate_path": null,
+      "source_score_golden_set_path": null,
+      "quality_gate_status": "not_evaluated",
+      "strict_golden_coverage": "not_applicable",
+      "preflight_readiness": "blocked",
+      "preflight_disposition": "needs_taxonomy_gate",
+      "replacement_disposition": null,
+      "source_static_promotion_state": "not_promoted",
+      "preflight_fixture_promotion_state": "not_applicable",
+      "blocks_v1": true,
+      "blocks_minimum_v1": false
+    },
+    {
+      "fund_code": "110020",
+      "slot": null,
+      "year": 2024,
+      "fixture_state": "deferred_from_v1",
+      "promotion_allowed": false,
+      "promotion_blockers": [
+        "strict_golden_not_configured",
+        "strict_golden_fund_not_covered",
+        "fixture_promotion_absent",
+        "reviewed_candidate_not_promoted",
+        "index_evidence_insufficient"
+      ],
+      "blocking_reason": "Reviewed coverage candidate input is not promoted and index evidence remains insufficient. strict_golden_not_configured: 110020 score correctness 为 not_configured。 strict_golden_fund_not_covered: 110020 不在 strict golden answer v1 fund-level coverage 中。 fixture_promotion_absent: 110020 未发现 accepted fixture promotion state。 reviewed_candidate_not_promoted: 110020 仅 accepted 为 reviewed coverage candidate input，尚未 promotion。 index_evidence_insufficient: 110020 methodology/constituents/reviewed fact freeze 证据仍不足。",
+      "decision": "defer_from_v1",
+      "owner": "future index evidence sufficiency gate",
+      "next_gate": "index reviewed fact freeze / methodology / constituents evidence gate",
+      "evidence_artifacts": [
+        "docs/reviews/release-maintenance-110020-reviewed-coverage-candidate-evidence-controller-judgment-20260527.md",
+        "docs/reviews/release-maintenance-source-provenance-post-implementation-bounded-evidence-rerun-controller-judgment-20260527.md",
+        "reports/golden-readiness-preflight/golden-readiness-preflight-20260529/golden_readiness_preflight.json"
+      ],
+      "source_snapshot_path": "reports/extraction-snapshots/110020-reviewed-coverage-candidate-2024-20260527/snapshot.jsonl",
+      "source_score_path": "reports/extraction-snapshots/110020-reviewed-coverage-candidate-2024-20260527/score.json",
+      "source_quality_gate_path": "reports/extraction-snapshots/110020-reviewed-coverage-candidate-2024-20260527/quality_gate.json",
+      "source_score_golden_set_path": "reports/extraction-snapshots/110020-reviewed-coverage-candidate-2024-20260527/golden_set.json",
+      "quality_gate_status": "warn",
+      "strict_golden_coverage": "fund_not_covered",
+      "preflight_readiness": "deferred_with_owner",
+      "preflight_disposition": "reviewed_coverage_candidate",
+      "replacement_disposition": null,
+      "source_static_promotion_state": "not_promoted",
+      "preflight_fixture_promotion_state": "absent",
+      "blocks_v1": true,
+      "blocks_minimum_v1": false
+    }
+  ]
+}
