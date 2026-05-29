@@ -6,7 +6,7 @@
 > **设计真源**: `docs/design.md`
 > **控制真源**: `docs/implementation-control.md`
 > **短启动入口**: `docs/current-startup-packet.md`
-> **当前状态**: MVP fund analysis report generation phase；当前 gate 为 `MVP truth pivot and context compaction gate`；下一入口为 `MVP Gate 1: facet_recognizer + ChapterFactProvider/FundToolService contract gate`。
+> **当前状态**: MVP fund analysis report generation phase；当前 gate 为 `MVP Gate 1: ChapterFactProvider typed projection`，已本地 accepted；下一入口为 `MVP Gate 2: chapter_writer + chapter_auditor plan gate`。
 
 ---
 
@@ -17,10 +17,13 @@
 ### Current Truth Guardrails
 
 - `AGENTS.md` 是最高优先级执行规则真源；若与本文档或 `docs/design.md` 冲突，先调整方案/实现，再回写文档。
-- 当前 phase 是 `MVP fund analysis report generation phase`；当前 gate 是 `MVP truth pivot and context compaction gate`，分类为 `heavy`。
-- 当前实现仍是确定性 `fund-analysis analyze/checklist`：结构化抽取、确定性分析、模板渲染、程序审计和 FQ0-FQ6 quality gate。
+- 当前 phase 是 `MVP fund analysis report generation phase`；当前 gate 是 `MVP Gate 1: ChapterFactProvider typed projection`，分类为 `heavy`，状态为本地 accepted。
+- 当前实现仍以确定性 `fund-analysis analyze/checklist` 为生产主链路：结构化抽取、确定性分析、模板渲染、程序审计和 FQ0-FQ6 quality gate。
+- Gate 1 已新增 Fund 层 typed projection：`project_chapter_facts()` / `ChapterFactProvider.project()` 将内存中的 `StructuredFundDataBundle` 投影为 `chapter_fact_projection.v1`。
+- Gate 1 typed projection 只消费现有 bundle、CHAPTER_CONTRACT、preferred_lens 和 ITEM_RULE truth APIs；不读取仓库、PDF/cache/source helper、parser、LLM、Service、Host 或 dayu。
+- facet 断言保持 fail-closed：无结构化精确证据时 `facets=()`；兼容标签只进入 `non_asserted_facets`，不得驱动 ITEM_RULE。
 - 当前生产路径仍是 UI -> Service -> `fund_agent/fund` 的过渡路径；尚未接入 Host/Agent 调度。
-- Route C 是已接受的未来设计，不是当前实现；不得把 LLM chapter writer、LLM audit、chapter orchestrator、repair loop、`--use-llm`、Host scheduling、Agent runner/tool loop 或 dayu runtime 写成已实现事实。
+- Route C 是已接受的未来设计；除 Gate 1 typed projection 外，不得把 LLM chapter writer、LLM audit、chapter orchestrator、repair loop、`--use-llm`、Host scheduling、Agent runner/tool loop 或 dayu runtime 写成已实现事实。
 - 目标架构保持 UI -> Service -> Host -> Agent。未来 Host 必须使用 `dayu.host`；未来 Agent engine/tool loop/runner/ToolRegistry/ToolTrace 必须使用 `dayu.engine`。
 - Service 可以组装业务用例、prompt/ExecutionContract 语义、报告生成策略和未来 write-audit-repair loop；Fund 作为 Agent 层基金领域能力包，拥有基金类型识别、CHAPTER_CONTRACT / preferred_lens / ITEM_RULE、事实抽取、审计规则和证据锚点语义。
 - 所有业务参数必须在 typed request / contract / config 中显式声明；禁止通过 `extra_payload` 传递显式参数。
@@ -32,20 +35,21 @@
 |---|---|
 | Branch baseline | `codex/local-reconciliation` |
 | Current phase | `MVP fund analysis report generation phase` |
-| Current gate | `MVP truth pivot and context compaction gate` |
+| Current gate | `MVP Gate 1: ChapterFactProvider typed projection` |
 | Current gate classification | `heavy` |
-| Next entry point | `MVP Gate 1: facet_recognizer + ChapterFactProvider/FundToolService contract gate` |
-| Next gate classification | `heavy` by default until controller reclassifies; Gate 1 defines Service <-> Agent/Fund contracts |
+| Current gate status | `accepted locally` |
+| Next entry point | `MVP Gate 2: chapter_writer + chapter_auditor plan gate` |
+| Next gate classification | `heavy` by default until controller reclassifies; Gate 2 introduces LLM writing/audit contracts |
 | Design truth | `docs/design.md` |
 | Control truth | `docs/implementation-control.md` |
 | Short startup entry | `docs/current-startup-packet.md` |
-| Accepted plan commit | `70184d3` |
+| Accepted plan commit | `bea10d7` |
 
 ## Current Gate
 
 ### Gate Objective
 
-Pivot the active repository truth surface away from release-maintenance / golden-promotion blockers and back to the MVP fund analysis report generation mainline, without changing code behavior or promotion state.
+Accept the Fund-layer `ChapterFactProvider` typed projection that turns an in-memory `StructuredFundDataBundle` into stable chapter-scoped facts, evidence anchors, missing semantics, preferred_lens and ITEM_RULE projections for later writer/auditor gates.
 
 ### Current Accepted Artifacts
 
@@ -54,6 +58,11 @@ Pivot the active repository truth surface away from release-maintenance / golden
 | Source-of-truth plan | `docs/reviews/mvp-truth-pivot-context-compaction-plan-20260530.md` |
 | Independent plan reviews | `docs/reviews/mvp-truth-pivot-context-compaction-plan-review-mimo-20260530.md`; `docs/reviews/mvp-truth-pivot-context-compaction-plan-review-glm-20260530.md` |
 | Implementation evidence | `docs/reviews/mvp-truth-pivot-context-compaction-implementation-evidence-20260530.md` |
+| Gate 1 plan | `docs/reviews/mvp-gate1-chapter-fact-provider-plan-20260530.md` |
+| Gate 1 plan reviews | `docs/reviews/mvp-gate1-chapter-fact-provider-plan-review-mimo-20260530.md`; `docs/reviews/mvp-gate1-chapter-fact-provider-plan-review-glm-20260530.md` |
+| Gate 1 implementation evidence | `docs/reviews/mvp-gate1-chapter-fact-provider-implementation-evidence-20260530.md` |
+| Gate 1 implementation reviews | `docs/reviews/mvp-gate1-chapter-fact-provider-implementation-review-mimo-20260530.md`; `docs/reviews/mvp-gate1-chapter-fact-provider-implementation-review-glm-20260530.md` |
+| Gate 1 controller judgment | `docs/reviews/mvp-gate1-chapter-fact-provider-controller-judgment-20260530.md` |
 | Prior release-maintenance roadmap summary | `docs/reviews/release-maintenance-phase-roadmap-consolidation-20260529.md` |
 | Prior overnight closeout summary | `docs/reviews/overnight-release-maintenance-closeout-20260529.md` |
 | Historical control snapshots | `docs/archive/implementation-control-history-20260525.md`; `docs/archive/implementation-control-release-maintenance-ledger-20260527.md` |
@@ -63,9 +72,10 @@ The Current Accepted Artifacts table is intentionally short. Older release-maint
 ### Current Decision Summary
 
 - Route C is the accepted future route for MVP LLM report generation.
-- Current deterministic `fund-analysis analyze/checklist` remains the only implemented report/checklist mainline.
-- Next implementation work is Gate 1: define and implement the `facet_recognizer` plus `ChapterFactProvider` / `FundToolService` contract surface.
-- Gate 1 component names are future Route C candidate names; they are not current code types unless Gate 1 later implements them.
+- Current deterministic `fund-analysis analyze/checklist` remains the only production report/checklist mainline.
+- Gate 1 `ChapterFactProvider` typed projection is implemented and accepted locally as Fund-layer code fact.
+- `facet_recognizer` and full `FundToolService` remain future candidates; Gate 1 did not implement them.
+- Next implementation work is Gate 2: plan `chapter_writer` + `chapter_auditor` against the Gate 1 typed projection contract.
 - Golden / strict correctness / QDII / FOF / `110020` / fixture promotion blockers are residual product-quality work, not blockers for starting MVP report generation Gate 1.
 - Host/Agent/dayu runtime integration is deferred to Route C Gate 5 and must not be preintroduced in Gates 1-4.
 
@@ -73,7 +83,7 @@ The Current Accepted Artifacts table is intentionally short. Older release-maint
 
 | Gate | Future scope | Boundary |
 |---|---|---|
-| MVP Gate 1 | `facet_recognizer` + `ChapterFactProvider` / `FundToolService` contract and implementation | Agent/Fund owns fund-type/facet/fact/evidence semantics; Service owns typed invocation |
+| MVP Gate 1 | `ChapterFactProvider` typed projection accepted locally; `facet_recognizer` / full `FundToolService` remain future candidates | Agent/Fund owns fund-type/facet/fact/evidence semantics; no Service/Host/dayu runtime introduced |
 | MVP Gate 2 | `chapter_writer` + `chapter_auditor` | LLM writing/audit consumes structured facts, derived calculations, explicit data gaps and evidence anchors only |
 | MVP Gate 3 | `chapter_orchestrator` | Service owns write-audit-repair policy; calls Agent/Fund capabilities through explicit contracts |
 | MVP Gate 4 | `final_chapter_assembler`, chapter 0 assembly, CLI `--use-llm` | Opt-in LLM path; deterministic `analyze/checklist` remains available unless a later gate changes it |
@@ -95,7 +105,8 @@ The Current Accepted Artifacts table is intentionally short. Older release-maint
 
 | Gate | Status | Summary | Next action |
 |---|---|---|---|
-| `MVP truth pivot and context compaction gate` | implemented docs-only / awaiting review | Control truth pivots to MVP report generation; Route C future route recorded; deterministic current implementation preserved; docs-only validation recorded | Stop after evidence and report; no push/PR/promotion; local gateflow checkpoint commit allowed after controller acceptance |
+| `MVP Gate 1: ChapterFactProvider typed projection` | accepted locally | Fund-layer `chapter_fact_projection.v1` implemented with tests, docs, two PASS reviews and controller judgment; no writer/auditor/orchestrator/CLI/dayu/promotion changes | Start `MVP Gate 2: chapter_writer + chapter_auditor plan gate` |
+| `MVP truth pivot and context compaction gate` | accepted locally | Control truth pivots to MVP report generation; Route C future route recorded; deterministic current implementation preserved; docs-only validation recorded | Historical current-phase evidence only |
 | `release-maintenance consolidation + overnight closeout` | accepted locally as historical evidence | All `promotion_allowed=false`; `004393` / `004194` / `006597` not promotion-prep-ready with `fixture_state=absent`; QDII / FOF / `110020` deferred; Host/Agent/dayu deferred; no score/quality/FQ0-FQ6/golden fixture/golden-answer/manifest/runtime promotion changes | Use Historical Evidence Index only; do not treat as current phase |
 
 ## Historical Evidence Index

@@ -16,14 +16,15 @@ Use `docs/reviews/` and `docs/archive/` only as evidence chain. They do not over
 | Field | State |
 |---|---|
 | Current phase | `MVP fund analysis report generation phase` |
-| Current gate | `MVP truth pivot and context compaction gate` |
+| Current gate | `MVP Gate 1: ChapterFactProvider typed projection` |
 | Current gate classification | `heavy` |
-| Next entry point | `MVP Gate 1: facet_recognizer + ChapterFactProvider/FundToolService contract gate` |
+| Current gate status | `accepted locally` |
+| Next entry point | `MVP Gate 2: chapter_writer + chapter_auditor plan gate` |
 | Control truth | `docs/implementation-control.md` |
 | Design truth | `docs/design.md` |
-| Accepted plan commit | `70184d3` |
+| Accepted plan commit | `bea10d7` |
 
-The next owner should start from Gate 1 contract work. Release-maintenance and golden-promotion blockers are residuals for later gates, not the active mainline.
+The next owner should start from Gate 2 writer/auditor planning. Release-maintenance and golden-promotion blockers are residuals for later gates, not the active mainline.
 
 ## 3. Current Implementation Facts
 
@@ -35,6 +36,9 @@ The next owner should start from Gate 1 contract work. Release-maintenance and g
 - Current report rendering uses the 8-chapter deterministic template.
 - Current audit is programmatic and deterministic.
 - Current FQ0-FQ6 quality gate remains unchanged.
+- Fund now has a Gate 1 typed projection capability: `project_chapter_facts()` / `ChapterFactProvider.project()` maps an in-memory `StructuredFundDataBundle` to `chapter_fact_projection.v1`.
+- Gate 1 typed projection is Fund-layer only: it consumes existing bundle data, CHAPTER_CONTRACT, preferred_lens and ITEM_RULE truth APIs; it does not read annual reports, repositories, PDF/cache/source helpers, parsers, LLM, Service, Host or dayu.
+- Facet assertion remains fail-closed: exact `facets` is empty unless structured evidence exists; compatible labels may appear only as `non_asserted_facets`.
 - There is no LLM chapter writing.
 - There is no LLM audit.
 - There is no write-audit-repair loop.
@@ -47,15 +51,15 @@ The next owner should start from Gate 1 contract work. Release-maintenance and g
 
 Route C is accepted future design for MVP LLM report generation. It is not current implementation.
 
-| Gate | Future scope |
+| Gate | Status / scope |
 |---|---|
-| Gate 1 | `facet_recognizer` + `ChapterFactProvider` / `FundToolService` contract and implementation |
-| Gate 2 | `chapter_writer` + `chapter_auditor` |
+| Gate 1 | `ChapterFactProvider` typed projection is accepted locally as Fund-layer code fact; `facet_recognizer` and full `FundToolService` remain future candidates |
+| Gate 2 | Next: `chapter_writer` + `chapter_auditor` |
 | Gate 3 | `chapter_orchestrator` with Service-owned write-audit-repair policy |
 | Gate 4 | `final_chapter_assembler`, chapter 0 assembly and opt-in CLI `--use-llm` |
 | Gate 5 | Optional `dayu.host` / `dayu.engine` integration |
 
-Gate 1 names are future candidate names. They are not current code types until a later accepted implementation gate creates them.
+Gate 1 only accepted typed projection. It did not implement writer, auditor, orchestrator, Service write-audit-repair policy, CLI `--use-llm`, Host/Agent/dayu integration or full FundToolService.
 
 ## 5. Boundary Guardrails
 
@@ -76,7 +80,7 @@ Gate 1 names are future candidate names. They are not current code types until a
 
 ## 6. Current Residuals
 
-- Golden / strict correctness / fixture promotion are residuals and do not block MVP report generation Gate 1.
+- Golden / strict correctness / fixture promotion are residuals and do not block the next MVP Gate 2 planning work.
 - `004393`, `004194` and `006597` are not promotion-prep-ready.
 - `004393`, `004194` and `006597` keep `fixture_state=absent`.
 - All promotion states remain `promotion_allowed=false`.
@@ -88,13 +92,13 @@ Gate 1 names are future candidate names. They are not current code types until a
 
 ## 7. Prohibited Actions
 
-- Do not modify runtime code in this docs-only gate.
+- Do not modify runtime code outside the active MVP gate scope.
 - Do not modify schema, score, snapshot, quality gate, final judgment, golden fixtures, golden answers, manifests or promotion state.
 - Do not modify `AGENTS.md`.
 - Do not modify `docs/fund-analysis-template-draft.md`.
 - Do not create `fund_agent/host` or `fund_agent/agent` before an explicit gate.
 - Do not add `dayu.host` or `dayu.engine` dependencies before Route C Gate 5 or another explicit architecture gate.
-- Do not run promotion, fixture promotion, strict correctness reruns, snapshot refreshes or release-readiness workflows for this pivot gate.
+- Do not run promotion, fixture promotion, strict correctness reruns, snapshot refreshes or release-readiness workflows for this MVP gate sequence.
 - Do not commit, push or create PR unless a later controller step explicitly authorizes it.
 - Do not delete or clean unrelated untracked files.
 
@@ -119,6 +123,13 @@ Gate 1 names are future candidate names. They are not current code types until a
 - Pivot plan review MiMo: `docs/reviews/mvp-truth-pivot-context-compaction-plan-review-mimo-20260530.md`
 - Pivot plan review GLM: `docs/reviews/mvp-truth-pivot-context-compaction-plan-review-glm-20260530.md`
 - Pivot implementation evidence: `docs/reviews/mvp-truth-pivot-context-compaction-implementation-evidence-20260530.md`
+- Gate 1 plan: `docs/reviews/mvp-gate1-chapter-fact-provider-plan-20260530.md`
+- Gate 1 plan review MiMo: `docs/reviews/mvp-gate1-chapter-fact-provider-plan-review-mimo-20260530.md`
+- Gate 1 plan review GLM: `docs/reviews/mvp-gate1-chapter-fact-provider-plan-review-glm-20260530.md`
+- Gate 1 implementation evidence: `docs/reviews/mvp-gate1-chapter-fact-provider-implementation-evidence-20260530.md`
+- Gate 1 implementation review MiMo: `docs/reviews/mvp-gate1-chapter-fact-provider-implementation-review-mimo-20260530.md`
+- Gate 1 implementation review GLM: `docs/reviews/mvp-gate1-chapter-fact-provider-implementation-review-glm-20260530.md`
+- Gate 1 controller judgment: `docs/reviews/mvp-gate1-chapter-fact-provider-controller-judgment-20260530.md`
 - Release-maintenance roadmap summary: `docs/reviews/release-maintenance-phase-roadmap-consolidation-20260529.md`
 - Overnight release-maintenance closeout: `docs/reviews/overnight-release-maintenance-closeout-20260529.md`
 - Historical control snapshot: `docs/archive/implementation-control-history-20260525.md`

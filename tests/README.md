@@ -17,6 +17,7 @@ CI 当前固定 Python 3.11，使用 `uv sync --extra dev --frozen` 安装锁定
 - `tests/fund/extractors/test_holdings_share_change.py`：`§8/§10` 持仓/份额 extractor 测试，覆盖前十大重仓、行业分布、净变动表、申购/赎回拆分表、多份额列选择、非 A 份额不默认 A 类、歧义多列表 missing、利润变动表误命中回归和表格型 anchor
 - `tests/fund/test_source_provenance.py`：公共来源 provenance 投影测试，覆盖主源 not-applicable、fallback 缺失分类 unknown、metadata-owned eligible/fail-closed 分类映射、metadata 优先级、kwarg 兼容路径和稳定字典输出；不读取文档仓库、PDF、cache 或来源 helper
 - `tests/fund/test_data_extractor.py`：P1 结构化数据 façade 测试，覆盖 `FundDataExtractor` 在年报仓库成功后对 NAV provider/cache/akshare 失败降级为 `NavDataResult(unavailable=True)`、从 `ParsedAnnualReport.metadata.source` 显式投影 `source_provenance` 与 metadata 主源失败分类、债券基金通过 fake typed NAV repository 只加载 A 类年度最大回撤且不混合 A/C/E/F，以及年报仓库/PDF 类异常不被 NAV 降级吞掉；使用 fake repository、fake nav provider 和 fake typed NAV repository，不触发真实网络、PDF 或 akshare
+- `tests/fund/test_chapter_facts.py`：Route C Gate 1 章节事实 typed projection 测试，覆盖 `StructuredFundDataBundle -> ChapterFactProjection`、`ChapterFactProvider` smoke、章节编号 fail-closed/happy path、基金类型 unknown、preferred_lens、ITEM_RULE、facet 不猜 subtype、锚点引用完整性、NAV 三态、债券风险组级 anchors 保留在 value 内和导入隔离；使用内存 fixture，不触发文档仓库、PDF、cache、来源 helper、LLM、Service、Host 或 dayu
 - `tests/fund/test_extraction_snapshot.py`：P4-S1/P5-S3/P13/P14-S1 精选基金池字段级抽取快照测试，覆盖 CSV 校验、snapshot schema、公共来源 provenance 字段、`comparable_values` 白名单子字段、`index_profile` / `tracking_error` dataclass 子字段序列化、derived-only `bond_risk_evidence` 锚点投影、summary 重复代码标红、Source Provenance 表、单基金失败继续和 `004393` known failure 捕获；使用 fake extractor，不触发真实网络或 PDF
 - `tests/fund/test_extraction_score.py`：P4-S2/P4-R10/P5-S2/P5-S3/P5-S4/P6-S5/P9-S2/P14-S1 字段级评分测试，覆盖 snapshot JSONL coverage / traceability / status / priority 映射、单基金质量汇总、指数质量字段按基金类型条件进入 P1 分母、`fund_quality` 模板契约适用性派生、`failed_funds` accounting、score 输出、additive 来源 provenance 不改变 score/FQ 输出、债券风险七组满足时不发 `bond_risk_evidence_missing`、只有 `drawdown_stress` 未满足时继续发 blocker、最小 golden set 选择、correctness perfect match、mismatch、白名单缺失、旧 snapshot 兼容、skipped 分母处理和 report-year scoped golden coverage scope；不触发真实网络或 PDF
 - `tests/fund/test_golden_prefill.py`：correctness golden answer 预填底稿测试，覆盖模板基金代码识别、dict/dataclass 字段预填、证据 source 和跳过字段保留；使用 fake extractor，不触发真实网络或 PDF
@@ -76,6 +77,7 @@ pytest tests/fund/extractors/test_manager_ownership.py -q
 pytest tests/fund/extractors/test_holdings_share_change.py -q
 pytest tests/fund/test_extraction_snapshot.py -q
 pytest tests/fund/test_data_extractor.py -q
+pytest tests/fund/test_chapter_facts.py -q
 pytest tests/fund/test_extraction_score.py -q
 pytest tests/fund/test_golden_readiness_preflight.py -q
 pytest tests/fund/data/test_nav_data.py -q

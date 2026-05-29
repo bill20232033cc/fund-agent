@@ -15,6 +15,7 @@ from fund_agent.fund.extractors import (
     extract_profile,
 )
 from fund_agent.fund.data_extractor import FundDataExtractor
+from fund_agent.fund.chapter_facts import ChapterFactProvider, project_chapter_facts
 from fund_agent.fund.analysis import (
     analyze_investor_experience,
     calculate_r_abc_from_bundle,
@@ -41,6 +42,8 @@ holdings_share_change = extract_holdings_share_change(report)
 
 data_extractor = FundDataExtractor()
 bundle = await data_extractor.extract("110011", 2024)
+chapter_projection = project_chapter_facts(bundle)
+chapter_projection_via_provider = ChapterFactProvider().project(bundle)
 rabc = calculate_r_abc_from_bundle(bundle, equity_position="80%")
 manifest = load_template_contract_manifest()
 chapter_lens = resolve_preferred_lens(chapter_id=2, fund_type="active_fund")
@@ -87,6 +90,15 @@ chapter_lens = resolve_preferred_lens(chapter_id=2, fund_type="active_fund")
 - `share_change`：`§10` 表格中的期初份额、期末份额、净变动；当前支持申购/赎回拆分表，并在缺少净变动行时用期末减期初计算
 
 `FundDataExtractor.extract()` 返回 `StructuredFundDataBundle`，当前聚合 P1 已接受的 14 项结构化数据，并附带净值数据读取结果。新增 `index_profile` 只承载指数画像上下文，新增 `tracking_error` 只承载年报直接披露或后续已接受计算路径形成的跟踪误差；开发覆盖不写入结构化数据包。它只做 orchestration，不直接读文件、不直接写缓存。年报仓库和 PDF 来源失败仍按来源策略向上抛出；仅 NAV provider / cache / akshare 等外部净值数据失败会降级为 `NavDataResult(unavailable=True, records=[])`，让年报字段抽取和 `analyze` / `checklist` 主路径继续运行。
+
+`project_chapter_facts()` 和 concrete `ChapterFactProvider.project()` 当前把已存在的 `StructuredFundDataBundle` 投影为 `chapter_fact_projection.v1`：
+
+- 只消费内存中的结构化数据包，以及现有 CHAPTER_CONTRACT、preferred_lens 和 ITEM_RULE API
+- 输出模板第 0-7 章的 `ChapterFactProjection`、章节 facts、证据锚点、缺失/不可用/不适用语义、分类依据、lens 与 ITEM_RULE 决策
+- `classified_fund_type` 缺失或非法时投影为 `unknown`，并跳过 preferred_lens 与 ITEM_RULE 的有效基金类型路径
+- facet 行为保持确定性：没有 exact structured evidence 时 `facets=()`，候选 catalog 标签只进入 `non_asserted_facets`，不会传给 ITEM_RULE
+- `bond_risk_evidence` 的组级 anchors 保留在 value 内部，不展开为普通章节 `ChapterEvidenceAnchor`
+- 该能力不读取文档仓库、PDF、cache、source helper、下载器或 parser，不调用 LLM、Service、Host 或 dayu；它不是 writer、auditor、orchestrator 或 `FundToolService`
 
 `FundNavRepository.load_nav_series()` 是 data 层当前 typed NAV series contract，返回 `FundNavSeries`，显式承载份额类别、NAV 类型、调整基础、分红调整状态、identity 状态、source/cache/query provenance、完整性约束和强回撤证据资格。无参 `FundNavRepository()` 当前默认使用 CSRC EID accumulated NAV adapter：通过公开 search/detail/classification 页面验证 006597=A/2030-1010、006598=C/2030-1020、014217=E/2030-1040、022176=F/2030-1050，并按份额分别输出 `nav_type="accumulated_nav"`、`adjusted_basis="accumulated_nav"`、`dividend_adjustment_status="not_applicable"`、`identity_status="verified"`。旧 `FundNavDataAdapter.load_nav_data()` 继续作为 legacy/snapshot/analyze 兼容入口，返回 `NavDataResult` 并保持 `source="nav_cache" / "akshare"` 与 `cached` 语义；constructor-injected Akshare raw-unit adapter 兼容分支仍标记 `unit_nav/raw_unit_nav/requested_code_only` 且 `strong_drawdown_evidence_eligible=False`。
 
