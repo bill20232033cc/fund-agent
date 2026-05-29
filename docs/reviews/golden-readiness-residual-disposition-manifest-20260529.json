@@ -1,0 +1,310 @@
+{
+  "schema_version": "fund-agent.golden-readiness-residual-disposition.v1",
+  "accepted_as_of": "2026-05-29",
+  "source_plan_checkpoint": {
+    "commit": "fc2582f",
+    "artifact": "docs/reviews/release-maintenance-golden-readiness-residual-disposition-plan-20260529.md",
+    "accepted_rereviews": [
+      "docs/reviews/release-maintenance-golden-readiness-residual-disposition-plan-rereview-mimo-20260529.md",
+      "docs/reviews/release-maintenance-golden-readiness-residual-disposition-plan-rereview-ds-20260529.md"
+    ]
+  },
+  "source_preflight_run_id": "golden-readiness-preflight-20260529",
+  "source_preflight_artifacts": [
+    "reports/golden-readiness-preflight/golden-readiness-preflight-20260529/golden_readiness_preflight.json",
+    "reports/golden-readiness-preflight/golden-readiness-preflight-20260529/golden_readiness_preflight.md"
+  ],
+  "promotion_manifest": false,
+  "promotion_allowed_default": false,
+  "entries": [
+    {
+      "fund_or_slot": "GLOBAL",
+      "report_year": null,
+      "current_blockers": [
+        "fixture_promotion_absent"
+      ],
+      "decision": "needs_fixture_promotion_gate",
+      "decision_reason": "No accepted fixture promotion state manifest exists.",
+      "policy_status": null,
+      "next_required_action": "produce accepted fixture promotion state manifest",
+      "replacement_disposition": null,
+      "owner": "future fixture promotion gate",
+      "next_gate": "produce accepted fixture promotion state manifest",
+      "evidence_artifacts": [
+        "reports/golden-readiness-preflight/golden-readiness-preflight-20260529/golden_readiness_preflight.json",
+        "reports/golden-readiness-preflight/golden-readiness-preflight-20260529/golden_readiness_preflight.md",
+        "docs/reviews/release-maintenance-golden-readiness-preflight-controller-judgment-20260529.md"
+      ],
+      "blocks_v1": true,
+      "blocks_minimum_v1": true,
+      "promotion_allowed": false
+    },
+    {
+      "fund_or_slot": "GLOBAL",
+      "report_year": null,
+      "current_blockers": [
+        "qdii_replacement_hard_stop"
+      ],
+      "decision": "blocked_until_policy",
+      "decision_reason": "Automatic QDII probing stopped after accepted hard stop.",
+      "policy_status": "blocked_until_qdii_policy_or_asset_class_fitness_gate",
+      "next_required_action": "explicit QDII deferred-from-v1 controller judgment or future QDII diagnosis",
+      "replacement_disposition": null,
+      "owner": "future QDII diagnosis or taxonomy / asset-class fitness gate",
+      "next_gate": "QDII diagnosis or explicit QDII deferred-from-v1 disposition gate",
+      "evidence_artifacts": [
+        "docs/reviews/release-maintenance-consolidation-post-021539-disposition-controller-judgment-20260527.md",
+        "reports/golden-readiness-preflight/golden-readiness-preflight-20260529/golden_readiness_preflight.json"
+      ],
+      "blocks_v1": true,
+      "blocks_minimum_v1": false,
+      "promotion_allowed": false
+    },
+    {
+      "fund_or_slot": "004393",
+      "report_year": 2024,
+      "current_blockers": [
+        "fixture_promotion_absent"
+      ],
+      "decision": "needs_fixture_promotion_gate",
+      "decision_reason": "Immediate fixture promotion candidate, but fixture state and quality warn residual owner are not accepted.",
+      "policy_status": null,
+      "next_required_action": "fixture promotion state manifest plus strict golden residual handling",
+      "replacement_disposition": null,
+      "owner": "future fixture promotion gate",
+      "next_gate": "fixture promotion / strict golden coverage gate",
+      "evidence_artifacts": [
+        "docs/reviews/release-maintenance-small-baseline-corpus-v1-run-controller-judgment-20260527.md",
+        "docs/reviews/release-maintenance-source-provenance-post-implementation-bounded-evidence-rerun-controller-judgment-20260527.md",
+        "reports/golden-readiness-preflight/golden-readiness-preflight-20260529/golden_readiness_preflight.json"
+      ],
+      "blocks_v1": true,
+      "blocks_minimum_v1": true,
+      "promotion_allowed": false
+    },
+    {
+      "fund_or_slot": "004194",
+      "report_year": 2024,
+      "current_blockers": [
+        "fixture_promotion_absent"
+      ],
+      "decision": "needs_fixture_promotion_gate",
+      "decision_reason": "Immediate fixture promotion candidate, but fixture state and quality warn residual owner are not accepted.",
+      "policy_status": null,
+      "next_required_action": "fixture promotion state manifest plus strict golden residual handling",
+      "replacement_disposition": null,
+      "owner": "future fixture promotion gate",
+      "next_gate": "fixture promotion / strict golden coverage gate",
+      "evidence_artifacts": [
+        "docs/reviews/release-maintenance-small-baseline-corpus-v1-run-controller-judgment-20260527.md",
+        "docs/reviews/release-maintenance-source-provenance-post-implementation-bounded-evidence-rerun-controller-judgment-20260527.md",
+        "reports/golden-readiness-preflight/golden-readiness-preflight-20260529/golden_readiness_preflight.json"
+      ],
+      "blocks_v1": true,
+      "blocks_minimum_v1": true,
+      "promotion_allowed": false
+    },
+    {
+      "fund_or_slot": "006597",
+      "report_year": 2024,
+      "current_blockers": [
+        "strict_golden_not_configured",
+        "fixture_promotion_absent"
+      ],
+      "decision": "needs_fixture_promotion_gate",
+      "decision_reason": "Immediate fixture candidate only if bond blocker remains closed; strict golden score correctness remains unresolved.",
+      "policy_status": null,
+      "next_required_action": "latest preflight/snapshot/score/quality validation before fixture candidacy",
+      "replacement_disposition": null,
+      "owner": "future fixture promotion gate + future baseline/golden preflight owner",
+      "next_gate": "fixture promotion / strict golden coverage gate",
+      "evidence_artifacts": [
+        "docs/reviews/release-maintenance-drawdown-stress-nav-derived-metric-controller-judgment-20260529.md",
+        "docs/reviews/release-maintenance-golden-readiness-preflight-controller-judgment-20260529.md",
+        "reports/golden-readiness-preflight/golden-readiness-preflight-20260529/golden_readiness_preflight.json"
+      ],
+      "blocks_v1": true,
+      "blocks_minimum_v1": true,
+      "promotion_allowed": false
+    },
+    {
+      "fund_or_slot": "017641",
+      "report_year": 2024,
+      "current_blockers": [
+        "strict_golden_not_configured",
+        "quality_gate_block",
+        "strict_golden_fund_not_covered",
+        "fixture_promotion_absent"
+      ],
+      "decision": "defer_from_v1",
+      "decision_reason": "Prior controller judgment preserves replacement disposition; disclosure data gap is not baseline ready.",
+      "policy_status": "blocked_until_qdii_policy_or_asset_class_fitness_gate",
+      "next_required_action": "future QDII diagnosis or explicit deferred-from-v1 controller judgment",
+      "replacement_disposition": "replace",
+      "owner": "future QDII diagnosis / replacement owner",
+      "next_gate": "QDII diagnosis or explicit deferred-from-v1 gate",
+      "evidence_artifacts": [
+        "docs/reviews/release-maintenance-017641-manager-strategy-text-public-evidence-triage-controller-judgment-20260527.md",
+        "docs/reviews/release-maintenance-replacement-exclusion-candidate-selection-controller-judgment-20260527.md",
+        "docs/reviews/release-maintenance-source-provenance-post-implementation-bounded-evidence-rerun-controller-judgment-20260527.md",
+        "reports/golden-readiness-preflight/golden-readiness-preflight-20260529/golden_readiness_preflight.json"
+      ],
+      "blocks_v1": true,
+      "blocks_minimum_v1": false,
+      "promotion_allowed": false
+    },
+    {
+      "fund_or_slot": "096001",
+      "report_year": 2024,
+      "current_blockers": [
+        "strict_golden_not_configured",
+        "quality_gate_block",
+        "strict_golden_fund_not_covered",
+        "fixture_promotion_absent",
+        "qdii_coverage_blocked"
+      ],
+      "decision": "defer_from_v1",
+      "decision_reason": "Candidate quality block and QDII coverage hard stop exclude it from minimum v1.",
+      "policy_status": "blocked_until_qdii_policy_or_asset_class_fitness_gate",
+      "next_required_action": "future QDII diagnosis or taxonomy / asset-class fitness gate",
+      "replacement_disposition": null,
+      "owner": "future QDII diagnosis or taxonomy / asset-class fitness gate",
+      "next_gate": "QDII diagnosis or explicit QDII deferred-from-v1 disposition gate",
+      "evidence_artifacts": [
+        "docs/reviews/release-maintenance-qdii-replacement-candidate-evidence-controller-judgment-20260527.md",
+        "docs/reviews/release-maintenance-consolidation-post-021539-disposition-controller-judgment-20260527.md",
+        "reports/golden-readiness-preflight/golden-readiness-preflight-20260529/golden_readiness_preflight.json"
+      ],
+      "blocks_v1": true,
+      "blocks_minimum_v1": false,
+      "promotion_allowed": false
+    },
+    {
+      "fund_or_slot": "040046",
+      "report_year": 2024,
+      "current_blockers": [
+        "strict_golden_not_configured",
+        "quality_gate_block",
+        "strict_golden_fund_not_covered",
+        "fixture_promotion_absent",
+        "qdii_coverage_blocked"
+      ],
+      "decision": "defer_from_v1",
+      "decision_reason": "Candidate quality block and QDII coverage hard stop exclude it from minimum v1.",
+      "policy_status": "blocked_until_qdii_policy_or_asset_class_fitness_gate",
+      "next_required_action": "future QDII diagnosis or taxonomy / asset-class fitness gate",
+      "replacement_disposition": null,
+      "owner": "future QDII diagnosis or taxonomy / asset-class fitness gate",
+      "next_gate": "QDII diagnosis or explicit QDII deferred-from-v1 disposition gate",
+      "evidence_artifacts": [
+        "docs/reviews/release-maintenance-qdii-replacement-fallback-040046-evidence-controller-judgment-20260527.md",
+        "docs/reviews/release-maintenance-consolidation-post-021539-disposition-controller-judgment-20260527.md",
+        "reports/golden-readiness-preflight/golden-readiness-preflight-20260529/golden_readiness_preflight.json"
+      ],
+      "blocks_v1": true,
+      "blocks_minimum_v1": false,
+      "promotion_allowed": false
+    },
+    {
+      "fund_or_slot": "019172",
+      "report_year": 2024,
+      "current_blockers": [
+        "strict_golden_not_configured",
+        "quality_gate_block",
+        "strict_golden_fund_not_covered",
+        "fixture_promotion_absent",
+        "qdii_coverage_blocked"
+      ],
+      "decision": "defer_from_v1",
+      "decision_reason": "Candidate quality block and QDII coverage hard stop exclude it from minimum v1.",
+      "policy_status": "blocked_until_qdii_policy_or_asset_class_fitness_gate",
+      "next_required_action": "future QDII diagnosis or taxonomy / asset-class fitness gate",
+      "replacement_disposition": null,
+      "owner": "future QDII diagnosis or taxonomy / asset-class fitness gate",
+      "next_gate": "QDII diagnosis or explicit QDII deferred-from-v1 disposition gate",
+      "evidence_artifacts": [
+        "docs/reviews/release-maintenance-qdii-replacement-fallback-019172-evidence-controller-judgment-20260527.md",
+        "docs/reviews/release-maintenance-consolidation-post-021539-disposition-controller-judgment-20260527.md",
+        "reports/golden-readiness-preflight/golden-readiness-preflight-20260529/golden_readiness_preflight.json"
+      ],
+      "blocks_v1": true,
+      "blocks_minimum_v1": false,
+      "promotion_allowed": false
+    },
+    {
+      "fund_or_slot": "021539",
+      "report_year": 2024,
+      "current_blockers": [
+        "strict_golden_not_configured",
+        "quality_gate_block",
+        "strict_golden_fund_not_covered",
+        "fixture_promotion_absent",
+        "qdii_coverage_blocked"
+      ],
+      "decision": "defer_from_v1",
+      "decision_reason": "Candidate quality block and QDII coverage hard stop exclude it from minimum v1.",
+      "policy_status": "blocked_until_qdii_policy_or_asset_class_fitness_gate",
+      "next_required_action": "future QDII diagnosis or taxonomy / asset-class fitness gate",
+      "replacement_disposition": null,
+      "owner": "future QDII diagnosis or taxonomy / asset-class fitness gate",
+      "next_gate": "QDII diagnosis or explicit QDII deferred-from-v1 disposition gate",
+      "evidence_artifacts": [
+        "docs/reviews/release-maintenance-qdii-replacement-fallback-021539-evidence-controller-judgment-20260527.md",
+        "docs/reviews/release-maintenance-consolidation-post-021539-disposition-controller-judgment-20260527.md",
+        "reports/golden-readiness-preflight/golden-readiness-preflight-20260529/golden_readiness_preflight.json"
+      ],
+      "blocks_v1": true,
+      "blocks_minimum_v1": false,
+      "promotion_allowed": false
+    },
+    {
+      "fund_or_slot": "FOF_SLOT",
+      "report_year": 2024,
+      "current_blockers": [
+        "fof_taxonomy_pending",
+        "fof_data_gap"
+      ],
+      "decision": "defer_from_v1",
+      "decision_reason": "No repository-verified pure FOF candidate; QDII-FOF cannot count as pure FOF.",
+      "policy_status": null,
+      "next_required_action": "future pure FOF candidate gate or FOF taxonomy gate",
+      "replacement_disposition": null,
+      "owner": "future FOF taxonomy / pure FOF candidate gate",
+      "next_gate": "pure FOF repository-verified candidate gate",
+      "evidence_artifacts": [
+        "docs/reviews/release-maintenance-replacement-exclusion-candidate-selection-controller-judgment-20260527.md",
+        "docs/reviews/release-maintenance-consolidation-post-021539-disposition-controller-judgment-20260527.md",
+        "reports/golden-readiness-preflight/golden-readiness-preflight-20260529/golden_readiness_preflight.json"
+      ],
+      "blocks_v1": true,
+      "blocks_minimum_v1": false,
+      "promotion_allowed": false
+    },
+    {
+      "fund_or_slot": "110020",
+      "report_year": 2024,
+      "current_blockers": [
+        "strict_golden_not_configured",
+        "strict_golden_fund_not_covered",
+        "fixture_promotion_absent",
+        "reviewed_candidate_not_promoted",
+        "index_evidence_insufficient"
+      ],
+      "decision": "defer_from_v1",
+      "decision_reason": "Reviewed coverage candidate input is not promoted and index evidence remains insufficient.",
+      "policy_status": null,
+      "next_required_action": "future index reviewed fact freeze / methodology / constituents evidence gate",
+      "replacement_disposition": null,
+      "owner": "future index evidence sufficiency gate",
+      "next_gate": "index reviewed fact freeze / methodology / constituents evidence gate",
+      "evidence_artifacts": [
+        "docs/reviews/release-maintenance-110020-reviewed-coverage-candidate-evidence-controller-judgment-20260527.md",
+        "docs/reviews/release-maintenance-source-provenance-post-implementation-bounded-evidence-rerun-controller-judgment-20260527.md",
+        "reports/golden-readiness-preflight/golden-readiness-preflight-20260529/golden_readiness_preflight.json"
+      ],
+      "blocks_v1": true,
+      "blocks_minimum_v1": false,
+      "promotion_allowed": false
+    }
+  ]
+}
