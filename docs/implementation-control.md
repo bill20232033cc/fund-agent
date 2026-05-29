@@ -6,7 +6,7 @@
 > **规则真源**: `AGENTS.md`
 > **历史快照**: `docs/archive/implementation-control-history-20260525.md`
 > **release-maintenance 长账本**: `docs/archive/implementation-control-release-maintenance-ledger-20260527.md`
-> **当前状态**: release maintenance；overnight release maintenance roadmap execution phase 正在推进；004393 partial coverage decision 与 004194 P0 coverage / index_profile-only fixture decision 均已 accepted local validation；004393 不进入 minimum v1 promotion-prep，`fixture_state=absent`、`promotion_allowed=false`；004194 只允许作为 `index_profile-only` bounded diagnostic / specialized candidate，不是 full fixture promotion-prep-ready，`fixture_state=absent`、`promotion_allowed=false`；tracked residual disposition manifest 与 tracked fixture promotion state manifest 均存在但都不是 promotion manifest，且未被 runtime/preflight 消费；006597/2024 的 bond risk evidence blocker 保持 closed；当前 minimum golden v1 仍 blocked，下一入口为 006597 same-fund unavailable field review 或 strict correctness rerun；fixture/golden promotion 未进入
+> **当前状态**: release maintenance；overnight release maintenance roadmap execution phase 正在推进；004393 partial coverage decision 与 004194 P0 coverage / index_profile-only fixture decision 均已 accepted local validation；006597 strict correctness rerun 已用 `reports/golden-answers/golden-answer.json` 配置执行并 accepted blocked-with-reason：9 个 same-fund P0 rows matched、0 mismatch、11 个 same-fund rows unavailable，其中 P0 `manager_strategy_text.strategy_summary` 与 `market_outlook` unavailable 继续 block minimum v1；004393 不进入 minimum v1 promotion-prep，004194 只允许作为 `index_profile-only` bounded diagnostic / specialized candidate，006597 不是 promotion-prep candidate；三者均保持 `fixture_state=absent`、`promotion_allowed=false`；tracked residual disposition manifest 与 tracked fixture promotion state manifest 均存在但都不是 promotion manifest，且未被 runtime/preflight 消费；006597/2024 的 bond risk evidence blocker 保持 closed；当前 minimum golden v1 仍 blocked，下一入口为 006597 same-fund unavailable field review / extractor projection gate；fixture/golden promotion 未进入
 
 ---
 
@@ -27,11 +27,11 @@
 |---|---|
 | Branch | `codex/local-reconciliation` |
 | Current phase | `release maintenance` |
-| Current gate | `004194 P0 coverage / index_profile-only fixture decision accepted local validation` |
+| Current gate | `006597 strict correctness rerun accepted blocked-with-reason` |
 | Current gate classification | `heavy` |
-| Next entry point | `006597 same-fund unavailable field review if existing untracked evidence is accepted, otherwise 006597 strict correctness rerun with reports/golden-answers/golden-answer.json; then minimum v1 promotion-prep readiness decision` |
+| Next entry point | `006597 same-fund unavailable field review / extractor projection gate for P0 manager_strategy_text.strategy_summary and market_outlook, plus P1 unavailable ledger disposition; then minimum v1 promotion-prep readiness decision only after explicit controller acceptance` |
 | Next gate classification | `heavy` |
-| Latest accepted gate checkpoint | `004194 P0 coverage / index_profile-only fixture decision accepted: same-fund strict correctness has exactly five matched comparable rows, all conditional P1 index_profile.* benchmark-context scalar rows; P0 strict correctness coverage is 0, so 004194 is not full fixture promotion-prep-ready. It may only be referenced as an index_profile-only bounded diagnostic / specialized candidate. fixture_state=absent, promotion_allowed=false, promotion_manifest=false, and tracking_error production golden rows remain blocked until reviewed direct observed disclosure evidence is accepted. No score/quality/FQ0-FQ6/golden fixture/golden-answer/manifest/runtime changes; no PR, push, merge, release or promotion changes.` |
+| Latest accepted gate checkpoint | `006597 strict correctness rerun accepted as configured evidence but blocked-with-reason: coverage_scope=partially_covered, total_records=150, comparable_records=9, matched_records=9, mismatched_records=0, unavailable_records=141; same-fund unavailable=11 and cross-fund unavailable=130. The 9 matched rows are currently comparable P0 rows; P0 manager_strategy_text.strategy_summary and manager_strategy_text.market_outlook remain unavailable and block minimum v1. fee_schedule is P0 but has no current 006597 golden row. clean_pass=false, promotion_prep_candidate=false, fixture_state=absent, promotion_allowed=false. No score/quality/FQ0-FQ6/golden fixture/golden-answer/manifest/runtime changes; no PR, push, merge, release or promotion changes.` |
 | Design truth | `docs/design.md` (v2.2) |
 | Control truth | `docs/implementation-control.md` |
 | Historical control snapshots | `docs/archive/implementation-control-history-20260525.md`; `docs/archive/implementation-control-release-maintenance-ledger-20260527.md` |
@@ -57,6 +57,11 @@
 - Accepted 004194 decision artifacts: `docs/reviews/release-maintenance-004194-p0-coverage-index-profile-decision-20260529.md`; `docs/reviews/release-maintenance-004194-p0-coverage-index-profile-decision-implementation-evidence-20260529.md`
 - Accepted 004194 implementation reviews: `docs/reviews/release-maintenance-004194-p0-coverage-index-profile-decision-implementation-review-mimo-20260529.md`; `docs/reviews/release-maintenance-004194-p0-coverage-index-profile-decision-implementation-review-glm-20260529.md`
 - 004194 controller judgment: `docs/reviews/release-maintenance-004194-p0-coverage-index-profile-decision-controller-judgment-20260529.md`
+- Accepted 006597 strict correctness rerun plan: `docs/reviews/release-maintenance-006597-strict-correctness-rerun-plan-20260529.md`
+- Accepted 006597 plan reviews: `docs/reviews/release-maintenance-006597-strict-correctness-rerun-plan-review-mimo-20260529.md`; `docs/reviews/release-maintenance-006597-strict-correctness-rerun-plan-review-glm-20260529.md`
+- Accepted 006597 rerun evidence: `docs/reviews/release-maintenance-006597-strict-correctness-rerun-evidence-20260529.md`
+- Accepted 006597 evidence reviews: `docs/reviews/release-maintenance-006597-strict-correctness-rerun-evidence-review-mimo-20260529.md`; `docs/reviews/release-maintenance-006597-strict-correctness-rerun-evidence-review-glm-20260529.md`
+- 006597 controller judgment: `docs/reviews/release-maintenance-006597-strict-correctness-rerun-controller-judgment-20260529.md`
 
 ### Current Accepted Artifacts
 
@@ -138,7 +143,7 @@
 
 ## Next Entry Point
 
-`006597 same-fund unavailable field review gate` if a controller accepts the existing untracked follow-up evidence, otherwise `006597 strict correctness rerun with reports/golden-answers/golden-answer.json`; then `minimum v1 promotion-prep readiness decision`.
+`006597 same-fund unavailable field review / extractor projection gate` for P0 `manager_strategy_text.strategy_summary` and `manager_strategy_text.market_outlook`, plus P1 unavailable ledger disposition; then `minimum v1 promotion-prep readiness decision` only after explicit controller acceptance that the 006597 blocker is resolved or scoped.
 
 This next route must start with Startup Packet replay and should consume `docs/reviews/release-maintenance-phase-roadmap-consolidation-20260529.md`, `docs/reviews/release-maintenance-strict-golden-correctness-fixture-promotion-controller-judgment-20260529.md`, `docs/reviews/golden-readiness-residual-disposition-manifest-20260529.json`, `docs/reviews/fixture-promotion-state-manifest-20260529.json`, and the preflight JSON/Markdown outputs. It must not enter promotion unless a separate promotion gate is explicitly authorized.
 
@@ -146,7 +151,7 @@ Allowed scope:
 
 - `004393`: decide partial coverage acceptance vs expansion.
 - `004194`: decide P0 strict correctness coverage requirement vs `index_profile`-only fixture scope.
-- `006597`: decide whether to accept existing untracked follow-up evidence for manual same-fund unavailable field review, or rerun strict correctness with golden answer first.
+- `006597`: use the accepted strict correctness rerun ledger. P0 `manager_strategy_text.strategy_summary` and `market_outlook` are same-fund unavailable and block minimum v1 until field review / extractor projection resolves them or a future controller explicitly scopes them.
 - Treat both residual disposition and fixture promotion state manifests as control-plane state only; do not modify golden answer fixtures and do not set `promotion_allowed=true` without a separate accepted promotion gate.
 - Preserve QDII / FOF / `110020` as deferred from minimum v1 and still blocking full v1 unless a future controller judgment changes their disposition.
 - Keep strict golden correctness unresolved until an accepted strict golden / fixture gate handles it.
@@ -176,7 +181,7 @@ Allowed scope:
 
 | Residual | Owner / next gate | Required handling |
 |---|---|---|
-| Route 1: minimum golden v1 readiness | `004393` partial coverage decision, `004194` P0 or `index_profile`-only decision, `006597` same-fund unavailable review or rerun, then fixture promotion-prep | Blocks minimum v1 and full v1. All entries remain fixture absent and `promotion_allowed=false`; 006597 bond blocker is closed but strict correctness/fixture candidacy is unresolved. |
+| Route 1: minimum golden v1 readiness | `006597` same-fund unavailable field review / extractor projection, then minimum v1 promotion-prep readiness decision only after accepted blocker resolution | Blocks minimum v1 and full v1. `004393` partial coverage is rejected for minimum v1 promotion-prep; `004194` is index_profile-only diagnostic, not full fixture-ready; `006597` strict correctness rerun is configured but blocked by 11 same-fund unavailable rows including P0 manager_strategy_text. All entries remain fixture absent and `promotion_allowed=false`; 006597 bond blocker is closed but strict correctness/fixture candidacy is unresolved. |
 | Route 2: deferred coverage | future QDII / FOF / index evidence policy owners | QDII candidates, `017641`, `FOF_SLOT`, and `110020` are deferred from minimum v1 but remain full-v1 blockers. Do not restart QDII probing, count QDII-FOF as pure FOF, or treat `110020` as fact-frozen without separate gates. |
 | Route 3: source/provenance hardening | future NAV/source/snapshot hardening gates | CSRC EID accumulated NAV is accepted for the 006597 family through `FundNavRepository()`; raw-unit NAV and stock-sdk remain ineligible for strong runtime evidence. Future residuals include source query/request split, source generalization, parser/schema drift, duplicate-date detection, endpoint caching/SLA, strict bool parsing, and multi-anchor projection. |
 | Route 4: future Host/Agent/dayu architecture | future architecture and Agent/Fund design gates | Current path remains UI -> Service -> `fund_agent/fund`. Future Host must use `dayu.host`; future Agent engine/tool loop must use `dayu.engine`. Future facet inference / ITEM_RULE routing design belongs to Agent/Fund and must be deterministic/evidence-based; no implementation in this gate. |
