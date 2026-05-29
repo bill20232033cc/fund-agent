@@ -6,7 +6,7 @@
 > **规则真源**: `AGENTS.md`
 > **历史快照**: `docs/archive/implementation-control-history-20260525.md`
 > **release-maintenance 长账本**: `docs/archive/implementation-control-release-maintenance-ledger-20260527.md`
-> **当前状态**: release maintenance；overnight release maintenance roadmap execution phase 正在推进；004393 partial coverage decision 与 004194 P0 coverage / index_profile-only fixture decision 均已 accepted local validation；006597 strict correctness rerun 已用 `reports/golden-answers/golden-answer.json` 配置执行并 accepted blocked-with-reason：9 个 same-fund P0 rows matched、0 mismatch、11 个 same-fund rows unavailable，其中 P0 `manager_strategy_text.strategy_summary` 与 `market_outlook` unavailable 继续 block minimum v1；004393 不进入 minimum v1 promotion-prep，004194 只允许作为 `index_profile-only` bounded diagnostic / specialized candidate，006597 不是 promotion-prep candidate；三者均保持 `fixture_state=absent`、`promotion_allowed=false`；tracked residual disposition manifest 与 tracked fixture promotion state manifest 均存在但都不是 promotion manifest，且未被 runtime/preflight 消费；006597/2024 的 bond risk evidence blocker 保持 closed；当前 minimum golden v1 仍 blocked，下一入口为 006597 same-fund unavailable field review / extractor projection gate；fixture/golden promotion 未进入
+> **当前状态**: release maintenance；overnight release maintenance roadmap execution phase 正在推进；Track 1 minimum v1 promotion-prep readiness 已 accepted blocked-with-reason：004393 partial coverage rejected，004194 index_profile-only diagnostic not full fixture，006597 strict correctness rerun configured but blocked by 11 same-fund unavailable rows including P0 `manager_strategy_text.strategy_summary` and `market_outlook`；三者均不是 promotion-prep candidate，均保持 `fixture_state=absent`、`promotion_allowed=false`；tracked residual disposition manifest 与 tracked fixture promotion state manifest 均存在但都不是 promotion manifest，且未被 runtime/preflight 消费；006597/2024 的 bond risk evidence blocker 保持 closed；当前 minimum golden v1 仍 blocked，下一入口为 006597 same-fund unavailable field review / extractor projection gate；fixture/golden promotion 未进入
 
 ---
 
@@ -27,11 +27,11 @@
 |---|---|
 | Branch | `codex/local-reconciliation` |
 | Current phase | `release maintenance` |
-| Current gate | `006597 strict correctness rerun accepted blocked-with-reason` |
+| Current gate | `minimum v1 promotion-prep readiness accepted blocked-with-reason` |
 | Current gate classification | `heavy` |
 | Next entry point | `006597 same-fund unavailable field review / extractor projection gate for P0 manager_strategy_text.strategy_summary and market_outlook, plus P1 unavailable ledger disposition; then minimum v1 promotion-prep readiness decision only after explicit controller acceptance` |
 | Next gate classification | `heavy` |
-| Latest accepted gate checkpoint | `006597 strict correctness rerun accepted as configured evidence but blocked-with-reason: coverage_scope=partially_covered, total_records=150, comparable_records=9, matched_records=9, mismatched_records=0, unavailable_records=141; same-fund unavailable=11 and cross-fund unavailable=130. The 9 matched rows are currently comparable P0 rows; P0 manager_strategy_text.strategy_summary and manager_strategy_text.market_outlook remain unavailable and block minimum v1. fee_schedule is P0 but has no current 006597 golden row. clean_pass=false, promotion_prep_candidate=false, fixture_state=absent, promotion_allowed=false. No score/quality/FQ0-FQ6/golden fixture/golden-answer/manifest/runtime changes; no PR, push, merge, release or promotion changes.` |
+| Latest accepted gate checkpoint | `Minimum v1 promotion-prep readiness decision accepted: overall_readiness=not_ready, decision=blocked_with_reason, minimum_v1_promotion_prep_ready=false, any_fund_can_enter_promotion_prep_now=false. 004393 partial coverage rejected; 004194 index_profile-only diagnostic not full fixture; 006597 strict correctness rerun configured but blocked by same-fund unavailable including P0 manager_strategy_text.strategy_summary and manager_strategy_text.market_outlook. All Track 1 funds remain fixture_state=absent, promotion_allowed=false, promotion_manifest=false. No score/quality/FQ0-FQ6/golden fixture/golden-answer/manifest/runtime changes; no PR, push, merge, release or promotion changes.` |
 | Design truth | `docs/design.md` (v2.2) |
 | Control truth | `docs/implementation-control.md` |
 | Historical control snapshots | `docs/archive/implementation-control-history-20260525.md`; `docs/archive/implementation-control-release-maintenance-ledger-20260527.md` |
@@ -62,6 +62,9 @@
 - Accepted 006597 rerun evidence: `docs/reviews/release-maintenance-006597-strict-correctness-rerun-evidence-20260529.md`
 - Accepted 006597 evidence reviews: `docs/reviews/release-maintenance-006597-strict-correctness-rerun-evidence-review-mimo-20260529.md`; `docs/reviews/release-maintenance-006597-strict-correctness-rerun-evidence-review-glm-20260529.md`
 - 006597 controller judgment: `docs/reviews/release-maintenance-006597-strict-correctness-rerun-controller-judgment-20260529.md`
+- Accepted minimum v1 promotion-prep readiness decision: `docs/reviews/release-maintenance-minimum-v1-promotion-prep-readiness-decision-20260529.md`
+- Accepted minimum v1 readiness reviews: `docs/reviews/release-maintenance-minimum-v1-promotion-prep-readiness-decision-review-mimo-20260529.md`; `docs/reviews/release-maintenance-minimum-v1-promotion-prep-readiness-decision-review-glm-20260529.md`
+- Minimum v1 readiness controller judgment: `docs/reviews/release-maintenance-minimum-v1-promotion-prep-readiness-controller-judgment-20260529.md`
 
 ### Current Accepted Artifacts
 
