@@ -6,7 +6,7 @@
 > **规则真源**: `AGENTS.md`
 > **历史快照**: `docs/archive/implementation-control-history-20260525.md`
 > **release-maintenance 长账本**: `docs/archive/implementation-control-release-maintenance-ledger-20260527.md`
-> **当前状态**: release maintenance；overnight release maintenance roadmap execution phase 正在推进；004393 partial coverage decision 已 accepted local validation，裁决为不进入 minimum v1 promotion-prep、`fixture_state=absent`、`promotion_allowed=false`；tracked residual disposition manifest 与 tracked fixture promotion state manifest 均存在但都不是 promotion manifest，且未被 runtime/preflight 消费；006597/2024 的 bond risk evidence blocker 保持 closed；当前 minimum golden v1 仍 blocked，下一入口为 004194 P0 coverage 或 index_profile-only fixture decision，其后是 006597 same-fund unavailable field review 或 strict correctness rerun；fixture/golden promotion 未进入
+> **当前状态**: release maintenance；overnight release maintenance roadmap execution phase 正在推进；004393 partial coverage decision 与 004194 P0 coverage / index_profile-only fixture decision 均已 accepted local validation；004393 不进入 minimum v1 promotion-prep，`fixture_state=absent`、`promotion_allowed=false`；004194 只允许作为 `index_profile-only` bounded diagnostic / specialized candidate，不是 full fixture promotion-prep-ready，`fixture_state=absent`、`promotion_allowed=false`；tracked residual disposition manifest 与 tracked fixture promotion state manifest 均存在但都不是 promotion manifest，且未被 runtime/preflight 消费；006597/2024 的 bond risk evidence blocker 保持 closed；当前 minimum golden v1 仍 blocked，下一入口为 006597 same-fund unavailable field review 或 strict correctness rerun；fixture/golden promotion 未进入
 
 ---
 
@@ -27,11 +27,11 @@
 |---|---|
 | Branch | `codex/local-reconciliation` |
 | Current phase | `release maintenance` |
-| Current gate | `004393 partial coverage decision accepted local validation` |
+| Current gate | `004194 P0 coverage / index_profile-only fixture decision accepted local validation` |
 | Current gate classification | `heavy` |
-| Next entry point | `004194 P0 coverage or index_profile-only fixture decision gate; then 006597 same-fund unavailable field review if existing untracked evidence is accepted, otherwise 006597 strict correctness rerun with golden answer; then minimum v1 promotion-prep readiness decision` |
+| Next entry point | `006597 same-fund unavailable field review if existing untracked evidence is accepted, otherwise 006597 strict correctness rerun with reports/golden-answers/golden-answer.json; then minimum v1 promotion-prep readiness decision` |
 | Next gate classification | `heavy` |
-| Latest accepted gate checkpoint | `004393 partial coverage decision accepted: current 9/150 score-wide comparable and same-fund P0 9/11, P1 0/10 are rejected for minimum v1 promotion-prep. P0 manager_strategy_text.strategy_summary and manager_strategy_text.market_outlook require a future extractor projection / strict correctness rerun gate; P1 rows are deferred from the current minimum-v1 decision and remain full-v1 / future coverage residuals. fixture_state=absent and promotion_allowed=false; no score/quality/FQ0-FQ6/golden fixture/manifest/runtime changes; no PR, push, merge, release or promotion changes.` |
+| Latest accepted gate checkpoint | `004194 P0 coverage / index_profile-only fixture decision accepted: same-fund strict correctness has exactly five matched comparable rows, all conditional P1 index_profile.* benchmark-context scalar rows; P0 strict correctness coverage is 0, so 004194 is not full fixture promotion-prep-ready. It may only be referenced as an index_profile-only bounded diagnostic / specialized candidate. fixture_state=absent, promotion_allowed=false, promotion_manifest=false, and tracking_error production golden rows remain blocked until reviewed direct observed disclosure evidence is accepted. No score/quality/FQ0-FQ6/golden fixture/golden-answer/manifest/runtime changes; no PR, push, merge, release or promotion changes.` |
 | Design truth | `docs/design.md` (v2.2) |
 | Control truth | `docs/implementation-control.md` |
 | Historical control snapshots | `docs/archive/implementation-control-history-20260525.md`; `docs/archive/implementation-control-release-maintenance-ledger-20260527.md` |
@@ -52,6 +52,11 @@
 - Accepted 004393 decision artifacts: `docs/reviews/release-maintenance-004393-partial-coverage-decision-20260529.md`; `docs/reviews/release-maintenance-004393-partial-coverage-decision-implementation-evidence-20260529.md`
 - Accepted 004393 implementation reviews: `docs/reviews/release-maintenance-004393-partial-coverage-decision-implementation-review-mimo-20260529.md`; `docs/reviews/release-maintenance-004393-partial-coverage-decision-implementation-review-glm-20260529.md`
 - 004393 controller judgment: `docs/reviews/release-maintenance-004393-partial-coverage-decision-controller-judgment-20260529.md`
+- Accepted 004194 P0 / index_profile decision plan: `docs/reviews/release-maintenance-004194-p0-coverage-index-profile-decision-plan-20260529.md`
+- Accepted 004194 plan reviews: `docs/reviews/release-maintenance-004194-p0-coverage-index-profile-decision-plan-review-mimo-20260529.md`; `docs/reviews/release-maintenance-004194-p0-coverage-index-profile-decision-plan-review-glm-20260529.md`
+- Accepted 004194 decision artifacts: `docs/reviews/release-maintenance-004194-p0-coverage-index-profile-decision-20260529.md`; `docs/reviews/release-maintenance-004194-p0-coverage-index-profile-decision-implementation-evidence-20260529.md`
+- Accepted 004194 implementation reviews: `docs/reviews/release-maintenance-004194-p0-coverage-index-profile-decision-implementation-review-mimo-20260529.md`; `docs/reviews/release-maintenance-004194-p0-coverage-index-profile-decision-implementation-review-glm-20260529.md`
+- 004194 controller judgment: `docs/reviews/release-maintenance-004194-p0-coverage-index-profile-decision-controller-judgment-20260529.md`
 
 ### Current Accepted Artifacts
 
@@ -133,7 +138,7 @@
 
 ## Next Entry Point
 
-`004393 partial coverage decision / expansion gate`; then `004194 P0 coverage or index_profile-only fixture decision gate`; then `006597 same-fund unavailable field review gate` if a controller accepts the existing untracked follow-up evidence, otherwise `006597 strict correctness rerun with reports/golden-answers/golden-answer.json`.
+`006597 same-fund unavailable field review gate` if a controller accepts the existing untracked follow-up evidence, otherwise `006597 strict correctness rerun with reports/golden-answers/golden-answer.json`; then `minimum v1 promotion-prep readiness decision`.
 
 This next route must start with Startup Packet replay and should consume `docs/reviews/release-maintenance-phase-roadmap-consolidation-20260529.md`, `docs/reviews/release-maintenance-strict-golden-correctness-fixture-promotion-controller-judgment-20260529.md`, `docs/reviews/golden-readiness-residual-disposition-manifest-20260529.json`, `docs/reviews/fixture-promotion-state-manifest-20260529.json`, and the preflight JSON/Markdown outputs. It must not enter promotion unless a separate promotion gate is explicitly authorized.
 
