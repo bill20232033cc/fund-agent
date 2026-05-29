@@ -185,6 +185,15 @@ chapter_lens = resolve_preferred_lens(chapter_id=2, fund_type="active_fund")
 - 不读取年报、不生成 snapshot、不执行 score 或 gate
 - 返回 `None` 表示可运行；返回 not-run reason 表示 block 策略下应阻断昂贵抽取
 
+`run_golden_readiness_preflight()` 返回 `GoldenReadinessPreflightResult`，当前用于 baseline/golden v1 promotion 前的只读 readiness 聚合：
+
+- 只消费显式传入的 `source_csv`、snapshot JSONL、score JSON、quality gate JSON、strict `golden-answer.json`、fixture promotion state manifest 和 accepted coverage disposition manifest
+- 没有 tracked coverage disposition manifest 时使用代码内 static current accepted disposition manifest，并在输出 JSON 原样写入 `schema_version`、`accepted_as_of`、`source_artifacts`、`entries` 和 lifecycle semantics
+- strict golden answer v1 只做 fund-level coverage 检查；`strict_golden_year_not_covered` 和 `strict_golden_partial_coverage` 保留为未来 schema/gate，不在当前 preflight 触发
+- fixture promotion state manifest 缺省时输出 `fixture_promotion_absent` blocker，而不是 IO failure；eligible fallback 只解除 source provenance blocker，不证明 ready
+- 006597 当前 bond `bond_risk_evidence_missing` 以 `blocker_resolved` / `original_blocker_code=bond_risk_evidence_missing` 输出为 resolved item，不列为 blocker
+- 输出 `golden_readiness_preflight.json` 与 `.md`，只表达 readiness/blocker/owner/next gate，不修改 score policy、quality gate severity、golden answer、golden fixture 或 promotion state
+
 `select_minimal_golden_set()` 从 `docs/code_20260519.csv` 选择最小 golden set：
 
 - 固定包含 `004393`

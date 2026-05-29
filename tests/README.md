@@ -21,6 +21,7 @@ CI 当前固定 Python 3.11，使用 `uv sync --extra dev --frozen` 安装锁定
 - `tests/fund/test_extraction_score.py`：P4-S2/P4-R10/P5-S2/P5-S3/P5-S4/P6-S5/P9-S2/P14-S1 字段级评分测试，覆盖 snapshot JSONL coverage / traceability / status / priority 映射、单基金质量汇总、指数质量字段按基金类型条件进入 P1 分母、`fund_quality` 模板契约适用性派生、`failed_funds` accounting、score 输出、additive 来源 provenance 不改变 score/FQ 输出、债券风险七组满足时不发 `bond_risk_evidence_missing`、只有 `drawdown_stress` 未满足时继续发 blocker、最小 golden set 选择、correctness perfect match、mismatch、白名单缺失、旧 snapshot 兼容、skipped 分母处理和 report-year scoped golden coverage scope；不触发真实网络或 PDF
 - `tests/fund/test_golden_prefill.py`：correctness golden answer 预填底稿测试，覆盖模板基金代码识别、dict/dataclass 字段预填、证据 source 和跳过字段保留；使用 fake extractor，不触发真实网络或 PDF
 - `tests/fund/test_golden_answer.py`：人工审核后的 golden answer Markdown 转 JSON 与 strict JSON loader 测试，覆盖 strict 校验、跳过字段、转义竖线、report_year legacy 默认值、跨年份重复 identity 和机器可读 JSON 输出；不触发真实网络或 PDF
+- `tests/fund/test_golden_readiness_preflight.py`：baseline/golden readiness preflight 聚合测试，覆盖缺失 artifact fail-closed、006597 bond blocker resolved、baseline_blocking score issue、quality block/warn、source provenance unknown/ineligible/eligible fallback、QDII hard stop、FOF taxonomy/data gap、110020 reviewed candidate disposition、strict golden fund-level coverage、fixture promotion absence、static disposition manifest metadata、preflight input unknown-field 拒绝和 JSON/Markdown 输出；使用临时 JSON/JSONL，不触发真实网络或 PDF
 - `tests/fund/test_quality_gate.py`：P4-S4/P5-S2/P5-S4/P6-S5/P9-S2 报告质量 gate 测试，覆盖字段级与单基金 P0 fail 阻断、P1 fail 警告、correctness 未接入 info、correctness coverage FQ0 metadata、report-year coverage gap、correctness mismatch 触发 FQ1、App 类别冲突 FQ1、缺失率 FQ4、模板契约适用性 FQ5、`rule_results`、失败基金 FQ6、`bond_risk_evidence_missing` 仅来自 score issue 的自然投影和旧 score 兼容；只消费 score JSON，不触发真实网络或 PDF
 - `tests/fund/test_quality_gate_integration.py`：P5-S1/P9-S2 单基金 quality gate adapter 测试，覆盖从已抽取 `StructuredFundDataBundle` 生成 snapshot/score/gate 产物、精选池成员缺 golden coverage 或当前 report_year 缺 golden coverage 仍运行 gate，以及基金不在精选池时返回 not-run reason；不触发真实网络或 PDF
 - `tests/fund/data/test_nav_data.py`：净值数据适配器测试，覆盖 `nav_cache` 命中、强制刷新和 typed source DTO 的 cache origin/source_nav_type/source_adjustment_basis metadata；不触发真实网络
@@ -76,6 +77,7 @@ pytest tests/fund/extractors/test_holdings_share_change.py -q
 pytest tests/fund/test_extraction_snapshot.py -q
 pytest tests/fund/test_data_extractor.py -q
 pytest tests/fund/test_extraction_score.py -q
+pytest tests/fund/test_golden_readiness_preflight.py -q
 pytest tests/fund/data/test_nav_data.py -q
 pytest tests/fund/data/test_nav_repository_contract.py -q
 pytest tests/fund/data/test_nav_metrics.py -q
@@ -172,6 +174,18 @@ fund-analysis extraction-score --snapshot-path reports/extraction-snapshots/p4-s
 ```
 
 pytest 中的 snapshot 和 score 测试必须继续使用 fake extractor 或临时 JSONL，禁止依赖真实 PDF、缓存或网络。
+
+Golden readiness preflight 是 baseline/golden promotion 前的只读聚合，不属于 promotion 动作。常规测试必须使用临时 JSON/JSONL 和 fake manifest；真实 smoke 可在已有 artifacts 上运行：
+
+```bash
+fund-analysis golden-readiness-preflight \
+  --run-id golden-readiness-preflight-20260529 \
+  --source-csv docs/code_20260519.csv \
+  --golden-answer-path reports/golden-answers/golden-answer.json \
+  --output-dir reports/golden-readiness-preflight/golden-readiness-preflight-20260529
+```
+
+该 smoke 输出 `overall_status=block` 仍应视为命令成功；它不修改 golden answer、fixture、score/quality gate 语义，也不执行 golden promotion。
 
 report-quality dev-only 汇总工具只消费调用方显式准备好的 JSONL 或 bundle JSON，不属于产品 CLI。当前真实用法：
 

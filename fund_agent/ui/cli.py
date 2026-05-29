@@ -31,10 +31,13 @@ from fund_agent.services import (
     FundAnalysisDeveloperOverrides,
     FundAnalysisRequest,
     FundAnalysisService,
+    FundArtifactInput,
     GoldenAnswerBuildRequest,
     GoldenAnswerService,
     GoldenPrefillRequest,
     GoldenPrefillService,
+    GoldenReadinessPreflightRequest,
+    GoldenReadinessPreflightService,
     MoneyHorizon,
     QualityGateBlockedError,
     QualityGateNotRunBlockedError,
@@ -53,6 +56,12 @@ DEFAULT_GOLDEN_ANSWER_OUTPUT = DEFAULT_GOLDEN_ANSWER_JSON
 # 独立 quality-gate helper 的历史 P4 score fixture 路径，不是仓库级默认输出根。
 DEFAULT_QUALITY_GATE_SCORE = Path(
     "reports/extraction-snapshots/p4-s3b-004393-controller-final-score/score.json"
+)
+DEFAULT_GOLDEN_READINESS_PREFLIGHT_RUN_ID = "golden-readiness-preflight-20260529"
+DEFAULT_GOLDEN_READINESS_PREFLIGHT_OUTPUT_DIR = (
+    DEFAULT_GOLDEN_ANSWER_JSON.parent.parent
+    / "golden-readiness-preflight"
+    / DEFAULT_GOLDEN_READINESS_PREFLIGHT_RUN_ID
 )
 
 
@@ -622,6 +631,106 @@ def quality_gate(
     typer.echo(f"issues: {len(result.issues)}")
 
 
+@app.command("golden-readiness-preflight")
+def golden_readiness_preflight(
+    run_id: Annotated[
+        str,
+        typer.Option("--run-id", help="preflight 运行 ID"),
+    ] = DEFAULT_GOLDEN_READINESS_PREFLIGHT_RUN_ID,
+    source_csv: Annotated[
+        Path,
+        typer.Option("--source-csv", help="精选基金池 CSV 路径"),
+    ] = DEFAULT_SELECTED_FUNDS_CSV,
+    golden_answer_path: Annotated[
+        Path | None,
+        typer.Option("--golden-answer-path", help="strict golden answer JSON 路径"),
+    ] = DEFAULT_GOLDEN_ANSWER_OUTPUT,
+    output_dir: Annotated[
+        Path,
+        typer.Option("--output-dir", help="preflight 输出目录"),
+    ] = DEFAULT_GOLDEN_READINESS_PREFLIGHT_OUTPUT_DIR,
+    preflight_input: Annotated[
+        Path | None,
+        typer.Option("--preflight-input", help="完整 preflight input JSON；production recommended"),
+    ] = None,
+    selected_pool_path: Annotated[
+        Path | None,
+        typer.Option("--selected-pool-path", help="selected pool JSON 路径"),
+    ] = None,
+    coverage_disposition_path: Annotated[
+        Path | None,
+        typer.Option("--coverage-disposition-path", help="coverage disposition manifest JSON 路径"),
+    ] = None,
+    fixture_promotion_state_path: Annotated[
+        Path | None,
+        typer.Option("--fixture-promotion-state-path", help="fixture promotion state JSON 路径"),
+    ] = None,
+    fund_artifact: Annotated[
+        list[str] | None,
+        typer.Option(
+            "--fund-artifact",
+            help="shortcut: fund_code::report_year::snapshot_path::score_path::quality_gate_path",
+        ),
+    ] = None,
+) -> None:
+    """生成只读 golden readiness preflight JSON / Markdown。
+
+    Args:
+        run_id: preflight 运行 ID。
+        source_csv: 精选基金池 CSV 路径。
+        golden_answer_path: strict golden answer JSON 路径。
+        output_dir: 输出目录。
+        preflight_input: 完整 preflight input JSON。
+        selected_pool_path: selected pool JSON 路径。
+        coverage_disposition_path: coverage disposition manifest JSON 路径。
+        fixture_promotion_state_path: fixture promotion state JSON 路径。
+        fund_artifact: shortcut artifact 输入。
+
+    Returns:
+        无返回值，产物路径写入 stdout。
+
+    Raises:
+        typer.Exit: 参数非法以 2 退出；IO/JSON/schema 失败以 1 退出。
+    """
+
+    try:
+        parsed_fund_artifacts = tuple(
+            _parse_preflight_fund_artifact(value) for value in (fund_artifact or [])
+        )
+        _validate_preflight_cli_conflicts(
+            preflight_input=preflight_input,
+            fund_artifacts=parsed_fund_artifacts,
+            selected_pool_path=selected_pool_path,
+            coverage_disposition_path=coverage_disposition_path,
+            fixture_promotion_state_path=fixture_promotion_state_path,
+        )
+        result = GoldenReadinessPreflightService().run(
+            GoldenReadinessPreflightRequest(
+                source_csv=source_csv,
+                output_dir=output_dir,
+                run_id=run_id,
+                fund_artifacts=parsed_fund_artifacts,
+                golden_answer_path=golden_answer_path,
+                fixture_promotion_state_path=fixture_promotion_state_path,
+                coverage_disposition_path=coverage_disposition_path,
+                preflight_input_path=preflight_input,
+                selected_pool_path=selected_pool_path,
+            )
+        )
+    except typer.BadParameter as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(code=2) from exc
+    except ValueError as exc:
+        typer.echo(f"golden readiness preflight 参数错误：{exc}", err=True)
+        raise typer.Exit(code=2) from exc
+    except Exception as exc:
+        typer.echo(f"golden readiness preflight 生成失败：{exc}", err=True)
+        raise typer.Exit(code=1) from exc
+    typer.echo(f"preflight_json: {result.json_path}")
+    typer.echo(f"preflight_md: {result.markdown_path}")
+    typer.echo(f"overall_status: {result.overall_status}")
+
+
 def _valuation_state(value: str | None) -> ValuationState | None:
     """校验估值状态选项。
 
@@ -641,6 +750,82 @@ def _valuation_state(value: str | None) -> ValuationState | None:
     if value not in allowed:
         raise typer.BadParameter(f"valuation_state 必须是 {', '.join(sorted(allowed))}")
     return value  # type: ignore[return-value]
+
+
+def _parse_preflight_fund_artifact(value: str) -> FundArtifactInput:
+    """解析 golden-readiness-preflight `--fund-artifact` shortcut。
+
+    Args:
+        value: `fund_code::report_year::snapshot_path::score_path::quality_gate_path` 字符串。
+
+    Returns:
+        fund artifact input。
+
+    Raises:
+        typer.BadParameter: 字段数、基金代码或年份非法时抛出。
+    """
+
+    parts = value.split("::")
+    if len(parts) != 5:
+        raise typer.BadParameter(
+            "--fund-artifact 格式必须是 "
+            "fund_code::report_year::snapshot_path::score_path::quality_gate_path"
+        )
+    fund_code, report_year_text, snapshot_path, score_path, quality_gate_path = parts
+    if len(fund_code) != 6 or not fund_code.isdigit():
+        raise typer.BadParameter("--fund-artifact fund_code 必须是 6 位数字")
+    try:
+        report_year = int(report_year_text)
+    except ValueError as exc:
+        raise typer.BadParameter("--fund-artifact report_year 必须是整数") from exc
+    return FundArtifactInput(
+        fund_code=fund_code,
+        report_year=report_year,
+        snapshot_path=Path(snapshot_path),
+        score_path=Path(score_path),
+        quality_gate_path=Path(quality_gate_path),
+    )
+
+
+def _validate_preflight_cli_conflicts(
+    *,
+    preflight_input: Path | None,
+    fund_artifacts: tuple[FundArtifactInput, ...],
+    selected_pool_path: Path | None,
+    coverage_disposition_path: Path | None,
+    fixture_promotion_state_path: Path | None,
+) -> None:
+    """校验 preflight CLI 互斥输入。
+
+    Args:
+        preflight_input: 完整 preflight input JSON。
+        fund_artifacts: shortcut artifact 输入。
+        selected_pool_path: selected pool JSON。
+        coverage_disposition_path: coverage disposition manifest JSON。
+        fixture_promotion_state_path: fixture promotion state JSON。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        ValueError: `--preflight-input` 与逐项输入同时出现时抛出。
+    """
+
+    if preflight_input is None:
+        return
+    conflicts: list[str] = []
+    if fund_artifacts:
+        conflicts.append("--fund-artifact")
+    if selected_pool_path is not None:
+        conflicts.append("--selected-pool-path")
+    if coverage_disposition_path is not None:
+        conflicts.append("--coverage-disposition-path")
+    if fixture_promotion_state_path is not None:
+        conflicts.append("--fixture-promotion-state-path")
+    if conflicts:
+        raise ValueError(
+            "--preflight-input 不能与逐项输入同时使用：" + ", ".join(sorted(conflicts))
+        )
 
 
 def _money_horizon(value: str | None) -> MoneyHorizon | None:

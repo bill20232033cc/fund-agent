@@ -487,6 +487,41 @@ class _FakeQualityGateService:
         )
 
 
+@dataclass(frozen=True, slots=True)
+class _FakeGoldenReadinessPreflightResult:
+    """CLI 测试用 golden readiness preflight 结果。"""
+
+    json_path: Path
+    markdown_path: Path
+    overall_status: str
+
+
+class _FakeGoldenReadinessPreflightService:
+    """CLI 测试用 golden readiness preflight Service。"""
+
+    last_request = None
+
+    def run(self, request):  # type: ignore[no-untyped-def]
+        """记录请求并返回固定 preflight 路径。
+
+        Args:
+            request: CLI 构造的 preflight 请求。
+
+        Returns:
+            fake preflight 结果。
+
+        Raises:
+            无显式抛出。
+        """
+
+        type(self).last_request = request
+        return _FakeGoldenReadinessPreflightResult(
+            json_path=Path("golden_readiness_preflight.json"),
+            markdown_path=Path("golden_readiness_preflight.md"),
+            overall_status="block",
+        )
+
+
 class _FakeThermometerService:
     """CLI 测试用温度计 Service。"""
 
@@ -1895,3 +1930,150 @@ def test_quality_gate_cli_is_thin_service_entry(monkeypatch, tmp_path) -> None: 
     assert _FakeQualityGateService.last_request is not None
     assert _FakeQualityGateService.last_request.score_path == score_path
     assert _FakeQualityGateService.last_request.output_dir == output_dir
+
+
+def test_golden_readiness_preflight_cli_outputs_paths_and_status(
+    monkeypatch,
+    tmp_path,
+) -> None:  # type: ignore[no-untyped-def]
+    """验证 golden-readiness-preflight CLI 转发显式参数并输出产物路径。
+
+    Args:
+        monkeypatch: pytest monkeypatch fixture。
+        tmp_path: pytest 临时目录 fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 CLI 输出或请求转发不符合契约时抛出。
+    """
+
+    _FakeGoldenReadinessPreflightService.last_request = None
+    monkeypatch.setattr(
+        cli, "GoldenReadinessPreflightService", _FakeGoldenReadinessPreflightService
+    )
+    runner = CliRunner()
+    output_dir = tmp_path / "preflight"
+
+    result = runner.invoke(
+        cli.app,
+        [
+            "golden-readiness-preflight",
+            "--run-id",
+            "unit",
+            "--source-csv",
+            "docs/code_20260519.csv",
+            "--golden-answer-path",
+            "reports/golden-answers/golden-answer.json",
+            "--output-dir",
+            str(output_dir),
+            "--fund-artifact",
+            "006597::2024::snapshot.jsonl::score.json::quality_gate.json",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert "preflight_json: golden_readiness_preflight.json" in result.output
+    assert "overall_status: block" in result.output
+    request = _FakeGoldenReadinessPreflightService.last_request
+    assert request is not None
+    assert request.output_dir == output_dir
+    assert len(request.fund_artifacts) == 1
+    artifact = request.fund_artifacts[0]
+    assert artifact.fund_code == "006597"
+    assert artifact.report_year == 2024
+    assert artifact.snapshot_path == Path("snapshot.jsonl")
+    assert artifact.score_path == Path("score.json")
+    assert artifact.quality_gate_path == Path("quality_gate.json")
+
+
+def test_golden_readiness_preflight_cli_rejects_preflight_input_conflicts(
+    monkeypatch,
+) -> None:  # type: ignore[no-untyped-def]
+    """验证 `--preflight-input` 与逐项输入互斥。
+
+    Args:
+        monkeypatch: pytest monkeypatch fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当互斥参数未返回 exit 2 时抛出。
+    """
+
+    monkeypatch.setattr(
+        cli, "GoldenReadinessPreflightService", _FakeGoldenReadinessPreflightService
+    )
+    runner = CliRunner()
+
+    result = runner.invoke(
+        cli.app,
+        [
+            "golden-readiness-preflight",
+            "--preflight-input",
+            "input.json",
+            "--fund-artifact",
+            "006597::2024::snapshot.jsonl::score.json::quality_gate.json",
+        ],
+    )
+
+    assert result.exit_code == 2
+    assert "--preflight-input 不能与逐项输入同时使用" in result.output
+
+
+def test_golden_readiness_preflight_cli_rejects_bad_fund_artifact_fields() -> None:
+    """验证 `--fund-artifact` 字段数必须精确为 5。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当错误字段数未返回 exit 2 时抛出。
+    """
+
+    runner = CliRunner()
+
+    result = runner.invoke(
+        cli.app,
+        [
+            "golden-readiness-preflight",
+            "--fund-artifact",
+            "006597::2024::snapshot.jsonl::score.json",
+        ],
+    )
+
+    assert result.exit_code == 2
+    assert "--fund-artifact 格式必须是" in result.output
+
+
+def test_golden_readiness_preflight_cli_rejects_bad_fund_code() -> None:
+    """验证 `--fund-artifact` fund_code 必须为 6 位数字。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当错误 fund_code 未返回 exit 2 时抛出。
+    """
+
+    runner = CliRunner()
+
+    result = runner.invoke(
+        cli.app,
+        [
+            "golden-readiness-preflight",
+            "--fund-artifact",
+            "6597::2024::snapshot.jsonl::score.json::quality_gate.json",
+        ],
+    )
+
+    assert result.exit_code == 2
+    assert "fund_code 必须是 6 位数字" in result.output

@@ -17,6 +17,11 @@ from fund_agent.services.golden_prefill_service import (
     GoldenPrefillRequest,
     GoldenPrefillService,
 )
+from fund_agent.fund.golden_readiness_preflight import FundArtifactInput
+from fund_agent.services.golden_readiness_preflight_service import (
+    GoldenReadinessPreflightRequest,
+    GoldenReadinessPreflightService,
+)
 from fund_agent.services.quality_gate_service import (
     QualityGateRequest,
     QualityGateService,
@@ -50,6 +55,9 @@ __all__ = [
     "GoldenAnswerService",
     "GoldenPrefillRequest",
     "GoldenPrefillService",
+    "FundArtifactInput",
+    "GoldenReadinessPreflightRequest",
+    "GoldenReadinessPreflightService",
     "QualityGateRequest",
     "QualityGateService",
     "ThermometerBatchResult",

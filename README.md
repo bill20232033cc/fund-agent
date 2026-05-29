@@ -63,6 +63,13 @@ fund-analysis golden-build \
 fund-analysis quality-gate \
   --score-path reports/extraction-snapshots/p4-s3b-004393-controller-final-score/score.json
 
+# 生成 baseline/golden promotion 只读 preflight 报告
+fund-analysis golden-readiness-preflight \
+  --run-id golden-readiness-preflight-20260529 \
+  --source-csv docs/code_20260519.csv \
+  --golden-answer-path reports/golden-answers/golden-answer.json \
+  --output-dir reports/golden-readiness-preflight/golden-readiness-preflight-20260529
+
 # 查询默认全 A 市场温度计
 fund-analysis thermometer
 
@@ -128,6 +135,7 @@ fund-analysis checklist 004393 --report-year 2024
 - Correctness golden answer 预填底稿：`fund-analysis golden-prefill`
 - Correctness golden answer JSON 构建与 strict 校验：`fund-analysis golden-build`
 - 报告质量 gate 骨架：`fund-analysis quality-gate`
+- Baseline/golden promotion 只读 preflight：`fund-analysis golden-readiness-preflight`
 - `fund-analysis analyze` 主链路质量保护：复用已抽取结构化数据生成 score/gate，默认 `block` 策略会阻断低质量精选基金报告输出，`warn` 策略只提示不阻断，`off` 明确跳过
 - 3 只样本基金 CLI 端到端矩阵，覆盖报告完整性、程序审计和证据锚点
 
@@ -238,6 +246,25 @@ fund-analysis quality-gate \
 默认输出到 `score.json` 所在目录，包含 `quality_gate.json` 和 `quality_gate.md`。当前 gate 消费 coverage / traceability / `fund_quality` / `failed_funds` / correctness：字段级或单基金 P0 fail 会阻断，单基金 issue 会保留 `fund_code`；P1 fail 会警告；App 类别与基金类型明确冲突或 strict golden answer mismatch 会触发 `FQ1/block`；字段缺失率达到阈值会触发 FQ4；基金类型无法解析 preferred_lens 会触发 FQ5；完全失败基金会触发 FQ6；strict golden answer 未配置、当前基金未覆盖或当前基金无可比字段时记录带 `reason` / `coverage_scope` / `fund_code` 的 `FQ0/info`，不等同于 gate 未运行。
 
 `fund-analysis analyze` 默认也会运行 quality gate，product mode 使用 `docs/code_20260519.csv` 作为精选池 membership source，并使用默认 strict golden answer 路径。若 gate 状态为 `block` 或 gate 未运行，默认策略会非零退出并在 stderr 输出结构化原因，不输出完整报告；精选池成员缺 strict golden 覆盖时仍会输出报告，并在 stderr 增加 `quality_gate_info: ...`。`--quality-gate-policy warn/off` 仅可在 `--dev-override` 模式下用于开发验证。
+
+生成 baseline/golden promotion 只读 preflight：
+
+```bash
+fund-analysis golden-readiness-preflight \
+  --preflight-input docs/reviews/golden-readiness-preflight-input-20260529.json
+```
+
+没有完整 input JSON 时可运行当前 accepted disposition 默认聚合：
+
+```bash
+fund-analysis golden-readiness-preflight \
+  --run-id golden-readiness-preflight-20260529 \
+  --source-csv docs/code_20260519.csv \
+  --golden-answer-path reports/golden-answers/golden-answer.json \
+  --output-dir reports/golden-readiness-preflight/golden-readiness-preflight-20260529
+```
+
+命令只读生成 `golden_readiness_preflight.json` 和 `.md`，stdout 只打印两个路径与 `overall_status`。`overall_status=block` 仍表示 preflight 成功生成，退出码为 0；该命令不修改 golden answer、fixture、score/quality gate 语义，也不执行 promotion。
 
 ## 真实精选基金池 Smoke
 
