@@ -1,12 +1,12 @@
 # 基金行为教练 Agent —— 实施总控文档
 
-> **版本**: v2.1
-> **日期**: 2026-05-27
+> **版本**: v2.2
+> **日期**: 2026-05-29
 > **设计真源**: `docs/design.md` (v2.2)
 > **规则真源**: `AGENTS.md`
 > **历史快照**: `docs/archive/implementation-control-history-20260525.md`
 > **release-maintenance 长账本**: `docs/archive/implementation-control-release-maintenance-ledger-20260527.md`
-> **当前状态**: release maintenance；strict golden correctness / fixture promotion gate 已 accepted local validation；tracked residual disposition manifest 与 tracked fixture promotion state manifest 均存在但都不是 promotion manifest，且未被 runtime/preflight 消费；006597/2024 的 bond risk evidence blocker 保持 closed；当前 golden v1 仍 blocked，下一最小入口为 004393 / 004194 / 006597 strict correctness follow-up gate；golden promotion 未进入
+> **当前状态**: release maintenance；phase roadmap consolidation gate 已 accepted local validation；tracked residual disposition manifest 与 tracked fixture promotion state manifest 均存在但都不是 promotion manifest，且未被 runtime/preflight 消费；006597/2024 的 bond risk evidence blocker 保持 closed；当前 minimum golden v1 仍 blocked，下一入口按 fund 拆分为 004393 partial coverage decision、004194 P0 coverage 或 index_profile-only fixture decision、006597 same-fund unavailable field review 或 strict correctness rerun；fixture/golden promotion 未进入
 
 ---
 
@@ -27,11 +27,11 @@
 |---|---|
 | Branch | `codex/local-reconciliation` |
 | Current phase | `release maintenance` |
-| Current gate | `strict golden correctness / fixture promotion gate accepted local validation` |
+| Current gate | `release maintenance phase roadmap consolidation accepted local validation` |
 | Current gate classification | `heavy` |
-| Next entry point | `004393 / 004194 / 006597 strict correctness follow-up gate` |
+| Next entry point | `004393 partial coverage decision / expansion gate; then 004194 P0 coverage or index_profile-only fixture decision gate; then 006597 same-fund unavailable field review if existing untracked evidence is accepted, otherwise 006597 strict correctness rerun with golden answer` |
 | Next gate classification | `heavy` |
-| Latest accepted gate checkpoint | `Strict golden correctness / fixture promotion decision accepted: 004393 is conditional_candidate_pending_partial_coverage_decision, 004194 is conditional_candidate_pending_p0_coverage_decision, 006597 is needs_future_gate pending score rerun with golden answer, and 017641/QDII/FOF/110020 remain deferred_from_minimum_v1. All entries keep promotion_allowed=false; fixture_state remains absent/deferred_from_v1; 006597 bond blocker remains closed as resolved context only. No score/quality/FQ0-FQ6/golden fixture/manifest/runtime changes; no PR, push, merge, release or promotion changes.` |
+| Latest accepted gate checkpoint | `Roadmap consolidation accepted: five release-maintenance routes are recorded as minimum golden v1 readiness, deferred coverage, source/provenance hardening, future Host/Agent/dayu architecture, and artifact/manifest lifecycle. 004393 needs partial coverage decision; 004194 needs P0 coverage or index_profile-only fixture decision; 006597 bond blocker remains closed but strict correctness/fixture candidacy is unresolved; 017641/QDII/FOF/110020 remain deferred from minimum v1 and block full v1. All promotion_allowed=false; no score/quality/FQ0-FQ6/golden fixture/manifest/runtime changes; no PR, push, merge, release or promotion changes.` |
 | Design truth | `docs/design.md` (v2.2) |
 | Control truth | `docs/implementation-control.md` |
 | Historical control snapshots | `docs/archive/implementation-control-history-20260525.md`; `docs/archive/implementation-control-release-maintenance-ledger-20260527.md` |
@@ -39,10 +39,19 @@
 
 ## Current Gate
 
+### Current Roadmap Pointer
+
+- Accepted roadmap artifact: `docs/reviews/release-maintenance-phase-roadmap-consolidation-20260529.md`
+- Accepted implementation evidence: `docs/reviews/release-maintenance-phase-roadmap-consolidation-implementation-evidence-20260529.md`
+- Controller judgment: `docs/reviews/release-maintenance-phase-roadmap-consolidation-controller-judgment-20260529.md`
+
 ### Current Accepted Artifacts
 
 | Purpose | Artifact |
 |---|---|
+| Release maintenance roadmap consolidation plan | `docs/reviews/release-maintenance-phase-roadmap-consolidation-plan-20260529.md` |
+| Release maintenance roadmap consolidation plan reviews | `docs/reviews/release-maintenance-phase-roadmap-consolidation-plan-review-mimo-20260529.md`; `docs/reviews/release-maintenance-phase-roadmap-consolidation-plan-review-ds-20260529.md` |
+| Release maintenance roadmap consolidation artifacts | `docs/reviews/release-maintenance-phase-roadmap-consolidation-20260529.md`; `docs/reviews/release-maintenance-phase-roadmap-consolidation-implementation-evidence-20260529.md`; `docs/reviews/release-maintenance-phase-roadmap-consolidation-implementation-review-mimo-20260529.md`; `docs/reviews/release-maintenance-phase-roadmap-consolidation-implementation-review-ds-20260529.md`; `docs/reviews/release-maintenance-phase-roadmap-consolidation-controller-judgment-20260529.md` |
 | Prior NAV primer / contract judgment | `docs/reviews/release-maintenance-nav-source-adapter-adjusted-basis-contract-controller-judgment-20260528.md` |
 | NAV source identity plan | `docs/reviews/release-maintenance-nav-adjusted-basis-source-identity-plan-20260528.md` |
 | NAV source identity evidence | `docs/reviews/release-maintenance-nav-adjusted-basis-source-identity-evidence-20260528.md` |
@@ -112,18 +121,20 @@
 - Fixture promotion state manifest now has tracked machine-readable manifest `docs/reviews/fixture-promotion-state-manifest-20260529.json`. It is control-plane state evidence only, not a promotion manifest and not runtime/preflight-consumed. All entries keep `promotion_allowed=false`.
 - Accepted minimum-v1 path excludes QDII / FOF / `110020` for now: those entries keep `blocks_v1=true`, `blocks_minimum_v1=false`, and `promotion_allowed=false`. They remain full-v1 blockers and are not ready.
 - `004393`, `004194`, and `006597` are fixture_state `absent` in the accepted manifest. They still require strict golden correctness / quality residual handling and a separate accepted promotion gate before any fixture promotion can occur. `006597` bond blocker remains closed as resolved context only.
+- Roadmap consolidation splits release maintenance residuals into five routes: minimum golden v1 readiness, deferred coverage, source/provenance hardening, future Host/Agent/dayu architecture, and artifact/manifest lifecycle. The existing untracked strict correctness follow-up artifacts show `006597` same-fund unavailable field review stop condition, but they remain unaccepted/untracked workspace evidence unless a controller later accepts them.
 
 ## Next Entry Point
 
-`strict golden correctness / fixture promotion gate`.
+`004393 partial coverage decision / expansion gate`; then `004194 P0 coverage or index_profile-only fixture decision gate`; then `006597 same-fund unavailable field review gate` if a controller accepts the existing untracked follow-up evidence, otherwise `006597 strict correctness rerun with reports/golden-answers/golden-answer.json`.
 
-This next gate must start with Startup Packet replay and `$init-agents` / tmux multi-agent flow if multi-agent panes are used. It should consume `docs/reviews/release-maintenance-strict-golden-correctness-fixture-promotion-controller-judgment-20260529.md`, the strict correctness decision/evidence artifacts, `docs/reviews/golden-readiness-residual-disposition-manifest-20260529.json`, `docs/reviews/fixture-promotion-state-manifest-20260529.json`, and the preflight JSON/Markdown outputs. It must not enter promotion unless a separate promotion gate is explicitly authorized.
+This next route must start with Startup Packet replay and should consume `docs/reviews/release-maintenance-phase-roadmap-consolidation-20260529.md`, `docs/reviews/release-maintenance-strict-golden-correctness-fixture-promotion-controller-judgment-20260529.md`, `docs/reviews/golden-readiness-residual-disposition-manifest-20260529.json`, `docs/reviews/fixture-promotion-state-manifest-20260529.json`, and the preflight JSON/Markdown outputs. It must not enter promotion unless a separate promotion gate is explicitly authorized.
 
 Allowed scope:
 
-- Decide strict golden correctness / fixture readiness requirements for controller-approved candidate inputs only: `004393`, `004194`, and `006597`.
+- `004393`: decide partial coverage acceptance vs expansion.
+- `004194`: decide P0 strict correctness coverage requirement vs `index_profile`-only fixture scope.
+- `006597`: decide whether to accept existing untracked follow-up evidence for manual same-fund unavailable field review, or rerun strict correctness with golden answer first.
 - Treat both residual disposition and fixture promotion state manifests as control-plane state only; do not modify golden answer fixtures and do not set `promotion_allowed=true` without a separate accepted promotion gate.
-- Revalidate `006597` latest preflight/snapshot/score/quality artifacts before any fixture candidacy; if `bond_risk_evidence_missing` regresses, reclassify as `fix_now` or `needs_evidence_gate`.
 - Preserve QDII / FOF / `110020` as deferred from minimum v1 and still blocking full v1 unless a future controller judgment changes their disposition.
 - Keep strict golden correctness unresolved until an accepted strict golden / fixture gate handles it.
 - Consume only `FundNavRepository.load_nav_series()` for any NAV-derived follow-up.
@@ -152,22 +163,11 @@ Allowed scope:
 
 | Residual | Owner / next gate | Required handling |
 |---|---|---|
-| QDII coverage blocked after hard stop | future QDII diagnosis or taxonomy / asset-class fitness gate | Automatic QDII probing is stopped; preserve `096001`, `040046`, `019172`, `021539` as provenance-eligible, quality `block`, `not_promoted`. No new QDII evidence before a separate accepted gate. |
-| Golden answer corpus v1 blocked | future fixture promotion / strict golden correctness gates | Current preflight output is `overall_status=block`. QDII / FOF / `110020` are deferred from minimum v1 but remain full-v1 blockers. Do not promote any sample until fixture state and strict correctness blockers are handled by accepted gates. |
-| `110020` reviewed coverage candidate | future golden/baseline preflight | Accepted only as reviewed coverage candidate input; remains `not_promoted`; methodology / constituents evidence remains insufficient. |
-| `017641` QDII data gap | disposition / taxonomy follow-up | Original QDII row is provenance-complete but quality `block` due to `manager_strategy_text`; accepted disposition is `replace`, not promotion. |
-| FOF coverage / taxonomy | future fund-type taxonomy gate | Find pure `fof_fund` repository-verified candidate, or open taxonomy gate before counting QDII-FOF attempts as FOF coverage. |
-| `006597` bond risk evidence blocker | closed by drawdown metric gate | `credit_risk`, `redemption_share_pressure`, and `drawdown_stress` are repaired and validated locally. Latest `006597` snapshot has all seven bond risk groups satisfied; score has `score_applicability_issues=[]`; quality gate has no `bond_risk_evidence_missing`. Keep this closed status unless a later regression appears. |
-| `006597` remaining quality warnings | future readiness / residual reconciliation gate | Latest quality gate remains `warn` for unrelated `turnover_rate`, `holder_structure`, `share_change`, fund-level P1 failures, FQ0 golden not configured, and FQ4 missing field rate. Do not treat these as bond-risk evidence residuals without a separate gate. |
-| Strict correctness / fixture promotion preconditions accepted but not promotion | 004393 / 004194 / 006597 strict correctness follow-up gate | `docs/reviews/release-maintenance-strict-golden-correctness-fixture-promotion-controller-judgment-20260529.md` records current decisions: `004393` is conditional pending partial coverage decision; `004194` is conditional pending P0 strict correctness coverage decision; `006597` needs score rerun with `reports/golden-answers/golden-answer.json`. All entries keep `promotion_allowed=false`; fixture states remain unchanged; no golden fixture promotion is authorized. |
-| Tracked residual disposition manifest not runtime-consumed | future manifest runtime consumption gate, only if needed | `docs/reviews/golden-readiness-residual-disposition-manifest-20260529.json` is accepted control-plane evidence, but preflight still has static in-code disposition. Runtime/preflight consumption requires a separate implementation gate with full ruff, full pytest, and preflight rerun. |
-| Snapshot multi-anchor projection | future snapshot evidence display hardening gate | Current snapshot field-level projection exposes one traceable anchor. Derived provenance is present in extractor evidence; if consumers need simultaneous annual-report and derived anchors in snapshot rows, open a narrow projection gate. |
-| CSRC EID NAV provenance cleanup | future NAV provenance hardening gate | `source_query_params` currently mixes HTTP query params and request context such as `force_refresh`; accepted as low risk. Consider splitting HTTP params from request context if a consumer needs replayable provenance. |
-| CSRC EID source generalization | future NAV source generalization gate | Current adapter is scoped to verified 006597 family constants and a hardcoded F direct-search gap. Extend only with reviewed identity evidence for additional fund families or share-class search gaps. |
-| CSRC EID parser/source resilience | future schema-drift / caching strategy gate | Detail-page text parsing and public endpoint availability are accepted low residuals. Existing behavior fail-closes on schema/identity/integrity issues; caching strategy should wait for accepted metric consumer requirements. |
-| Source metadata strict bool parsing | future source provenance hardening gate | Plan/review strict bool parser for `AnnualReportSourceMetadata.from_dict()`; current known issue: string `"false"` coerces truthy. |
-| Stray untracked `--help` file | artifact disposition / user-authorized cleanup | Do not stage or promote; delete only with explicit authorization or accepted disposition. |
-| Untracked review/evidence artifacts | artifact disposition gate if needed | Decide whether to accept, archive, or leave untracked; do not silently stage unrelated artifacts. |
+| Route 1: minimum golden v1 readiness | `004393` partial coverage decision, `004194` P0 or `index_profile`-only decision, `006597` same-fund unavailable review or rerun, then fixture promotion-prep | Blocks minimum v1 and full v1. All entries remain fixture absent and `promotion_allowed=false`; 006597 bond blocker is closed but strict correctness/fixture candidacy is unresolved. |
+| Route 2: deferred coverage | future QDII / FOF / index evidence policy owners | QDII candidates, `017641`, `FOF_SLOT`, and `110020` are deferred from minimum v1 but remain full-v1 blockers. Do not restart QDII probing, count QDII-FOF as pure FOF, or treat `110020` as fact-frozen without separate gates. |
+| Route 3: source/provenance hardening | future NAV/source/snapshot hardening gates | CSRC EID accumulated NAV is accepted for the 006597 family through `FundNavRepository()`; raw-unit NAV and stock-sdk remain ineligible for strong runtime evidence. Future residuals include source query/request split, source generalization, parser/schema drift, duplicate-date detection, endpoint caching/SLA, strict bool parsing, and multi-anchor projection. |
+| Route 4: future Host/Agent/dayu architecture | future architecture and Agent/Fund design gates | Current path remains UI -> Service -> `fund_agent/fund`. Future Host must use `dayu.host`; future Agent engine/tool loop must use `dayu.engine`. Future facet inference / ITEM_RULE routing design belongs to Agent/Fund and must be deterministic/evidence-based; no implementation in this gate. |
+| Route 5: artifact/manifest lifecycle | future manifest lifecycle / artifact disposition gates | Residual and fixture manifests are control-plane evidence only, not promotion manifests and not runtime/preflight-consumed. Existing untracked follow-up artifacts and stray `--help` remain untracked unless separately accepted or explicitly cleaned. |
 
 ## Recent Active Gate Ledger
 
