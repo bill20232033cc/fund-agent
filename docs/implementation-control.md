@@ -6,7 +6,7 @@
 > **规则真源**: `AGENTS.md`
 > **历史快照**: `docs/archive/implementation-control-history-20260525.md`
 > **release-maintenance 长账本**: `docs/archive/implementation-control-release-maintenance-ledger-20260527.md`
-> **当前状态**: release maintenance；golden readiness residual disposition gate 已 accepted local validation；tracked residual disposition manifest 已存在但不是 promotion manifest，且未被 runtime/preflight 消费；006597/2024 的 bond risk evidence blocker 保持 closed；当前 golden v1 仍 blocked，下一最小入口为 fixture promotion state manifest gate；golden promotion 未进入
+> **当前状态**: release maintenance；fixture promotion state manifest gate 已 accepted local validation；tracked residual disposition manifest 与 tracked fixture promotion state manifest 均存在但都不是 promotion manifest，且未被 runtime/preflight 消费；006597/2024 的 bond risk evidence blocker 保持 closed；当前 golden v1 仍 blocked，下一最小入口为 strict golden correctness / fixture promotion gate；golden promotion 未进入
 
 ---
 
@@ -27,11 +27,11 @@
 |---|---|
 | Branch | `codex/local-reconciliation` |
 | Current phase | `release maintenance` |
-| Current gate | `golden readiness residual disposition gate accepted local validation` |
+| Current gate | `fixture promotion state manifest gate accepted local validation` |
 | Current gate classification | `heavy` |
-| Next entry point | `fixture promotion state manifest gate` |
+| Next entry point | `strict golden correctness / fixture promotion gate` |
 | Next gate classification | `heavy` |
-| Latest accepted gate checkpoint | `Golden readiness residual disposition accepted: tracked JSON disposition manifest records all current preflight blockers with decision / owner / next_gate / blocks_v1 / blocks_minimum_v1 / promotion_allowed=false; QDII/FOF/110020 are deferred from minimum v1 but still block full v1; 004393/004194/006597 are only future fixture-state candidates; 006597 bond blocker remains closed; score/quality/FQ0-FQ6/golden fixtures/runtime unchanged; no PR, push, merge, release or promotion changes.` |
+| Latest accepted gate checkpoint | `Fixture promotion state manifest accepted: tracked JSON fixture state manifest records 2 global blockers and 10 fund/slot entries with fixture_state / promotion_allowed=false / blockers / owner / next_gate / evidence paths; 004393/004194/006597 are fixture_state=absent, QDII/FOF/110020 and 017641 are deferred_from_v1, 006597 bond blocker remains closed as resolved context only; score/quality/FQ0-FQ6/golden fixtures/runtime unchanged; no PR, push, merge, release or promotion changes.` |
 | Design truth | `docs/design.md` (v2.2) |
 | Control truth | `docs/implementation-control.md` |
 | Historical control snapshots | `docs/archive/implementation-control-history-20260525.md`; `docs/archive/implementation-control-release-maintenance-ledger-20260527.md` |
@@ -75,6 +75,11 @@
 | Golden readiness residual disposition evidence reviews | `docs/reviews/release-maintenance-golden-readiness-residual-disposition-evidence-review-mimo-20260529.md`; `docs/reviews/release-maintenance-golden-readiness-residual-disposition-evidence-review-ds-20260529.md`; `docs/reviews/release-maintenance-golden-readiness-residual-disposition-evidence-rereview-mimo-20260529.md` |
 | Golden readiness residual disposition aggregate deepreviews | `docs/reviews/release-maintenance-golden-readiness-residual-disposition-aggregate-deepreview-mimo-20260529.md`; `docs/reviews/release-maintenance-golden-readiness-residual-disposition-aggregate-deepreview-ds-20260529.md` |
 | Golden readiness residual disposition controller judgment | `docs/reviews/release-maintenance-golden-readiness-residual-disposition-controller-judgment-20260529.md` |
+| Fixture promotion state manifest plan / reviews | `docs/reviews/release-maintenance-fixture-promotion-state-manifest-plan-20260529.md`; `docs/reviews/release-maintenance-fixture-promotion-state-manifest-plan-review-mimo-20260529.md`; `docs/reviews/release-maintenance-fixture-promotion-state-manifest-plan-review-ds-20260529.md`; `docs/reviews/release-maintenance-fixture-promotion-state-manifest-plan-rereview-mimo-20260529.md`; `docs/reviews/release-maintenance-fixture-promotion-state-manifest-plan-rereview-ds-20260529.md` |
+| Fixture promotion state manifest / evidence | `docs/reviews/fixture-promotion-state-manifest-20260529.json`; `docs/reviews/release-maintenance-fixture-promotion-state-manifest-implementation-evidence-20260529.md` |
+| Fixture promotion state manifest implementation reviews | `docs/reviews/release-maintenance-fixture-promotion-state-manifest-implementation-review-mimo-20260529.md`; `docs/reviews/release-maintenance-fixture-promotion-state-manifest-implementation-review-ds-20260529.md` |
+| Fixture promotion state manifest aggregate deepreviews | `docs/reviews/release-maintenance-fixture-promotion-state-manifest-aggregate-deepreview-mimo-20260529.md`; `docs/reviews/release-maintenance-fixture-promotion-state-manifest-aggregate-deepreview-ds-20260529.md` |
+| Fixture promotion state manifest controller judgment | `docs/reviews/release-maintenance-fixture-promotion-state-manifest-controller-judgment-20260529.md` |
 | Typed implementation plan | `docs/reviews/release-maintenance-nav-source-adapter-typed-contract-implementation-plan-20260528.md` |
 | Typed implementation evidence | `docs/reviews/release-maintenance-nav-source-adapter-typed-contract-implementation-evidence-20260528.md` |
 | Aggregate deepreview: DS | `docs/reviews/release-maintenance-nav-source-adapter-typed-contract-aggregate-deepreview-ds-20260528.md` |
@@ -104,20 +109,21 @@
 - Golden readiness preflight now produces repeatable machine-readable and Markdown readiness reports. Current output is `overall_status=block`; `006597` bond risk is not a blocker, and remaining blockers are non-bond readiness residuals.
 - Golden answer corpus v1 remains blocked until QDII / FOF / `110020` / strict golden correctness / fixture-promotion blockers are resolved or explicitly deferred.
 - Golden readiness residual disposition now has tracked machine-readable manifest `docs/reviews/golden-readiness-residual-disposition-manifest-20260529.json`. It is control-plane disposition evidence only, not a promotion manifest and not runtime/preflight-consumed.
+- Fixture promotion state manifest now has tracked machine-readable manifest `docs/reviews/fixture-promotion-state-manifest-20260529.json`. It is control-plane state evidence only, not a promotion manifest and not runtime/preflight-consumed. All entries keep `promotion_allowed=false`.
 - Accepted minimum-v1 path excludes QDII / FOF / `110020` for now: those entries keep `blocks_v1=true`, `blocks_minimum_v1=false`, and `promotion_allowed=false`. They remain full-v1 blockers and are not ready.
-- `004393`, `004194`, and `006597` are only future fixture promotion state candidates. They still require accepted fixture state, strict golden correctness / quality residual handling, and for `006597` a latest preflight/snapshot/score/quality revalidation that bond risk remains closed.
+- `004393`, `004194`, and `006597` are fixture_state `absent` in the accepted manifest. They still require strict golden correctness / quality residual handling and a separate accepted promotion gate before any fixture promotion can occur. `006597` bond blocker remains closed as resolved context only.
 
 ## Next Entry Point
 
-`fixture promotion state manifest gate`.
+`strict golden correctness / fixture promotion gate`.
 
-This next gate must start with Startup Packet replay and `$init-agents` / tmux multi-agent flow if multi-agent panes are used. It should consume `docs/reviews/golden-readiness-residual-disposition-manifest-20260529.json`, the preflight JSON/Markdown outputs, and the residual disposition controller judgment. It must not enter promotion.
+This next gate must start with Startup Packet replay and `$init-agents` / tmux multi-agent flow if multi-agent panes are used. It should consume `docs/reviews/golden-readiness-residual-disposition-manifest-20260529.json`, `docs/reviews/fixture-promotion-state-manifest-20260529.json`, the preflight JSON/Markdown outputs, and the fixture promotion state manifest controller judgment. It must not enter promotion unless a separate promotion gate is explicitly authorized.
 
 Allowed scope:
 
-- Produce accepted fixture promotion state manifest for controller-approved candidate inputs only: `004393`, `004194`, and `006597`.
-- Treat fixture promotion state manifest as control-plane state only; do not modify golden answer fixtures and do not set `promotion_allowed=true`.
-- Revalidate `006597` latest preflight/snapshot/score/quality artifacts before fixture candidacy; if `bond_risk_evidence_missing` regresses, reclassify as `fix_now` or `needs_evidence_gate`.
+- Decide strict golden correctness / fixture readiness requirements for controller-approved candidate inputs only: `004393`, `004194`, and `006597`.
+- Treat both residual disposition and fixture promotion state manifests as control-plane state only; do not modify golden answer fixtures and do not set `promotion_allowed=true` without a separate accepted promotion gate.
+- Revalidate `006597` latest preflight/snapshot/score/quality artifacts before any fixture candidacy; if `bond_risk_evidence_missing` regresses, reclassify as `fix_now` or `needs_evidence_gate`.
 - Preserve QDII / FOF / `110020` as deferred from minimum v1 and still blocking full v1 unless a future controller judgment changes their disposition.
 - Keep strict golden correctness unresolved until an accepted strict golden / fixture gate handles it.
 - Consume only `FundNavRepository.load_nav_series()` for any NAV-derived follow-up.
@@ -153,7 +159,7 @@ Allowed scope:
 | FOF coverage / taxonomy | future fund-type taxonomy gate | Find pure `fof_fund` repository-verified candidate, or open taxonomy gate before counting QDII-FOF attempts as FOF coverage. |
 | `006597` bond risk evidence blocker | closed by drawdown metric gate | `credit_risk`, `redemption_share_pressure`, and `drawdown_stress` are repaired and validated locally. Latest `006597` snapshot has all seven bond risk groups satisfied; score has `score_applicability_issues=[]`; quality gate has no `bond_risk_evidence_missing`. Keep this closed status unless a later regression appears. |
 | `006597` remaining quality warnings | future readiness / residual reconciliation gate | Latest quality gate remains `warn` for unrelated `turnover_rate`, `holder_structure`, `share_change`, fund-level P1 failures, FQ0 golden not configured, and FQ4 missing field rate. Do not treat these as bond-risk evidence residuals without a separate gate. |
-| Fixture promotion state manifest absent | future fixture promotion state manifest gate | Current preflight reports global and per-fund `fixture_promotion_absent`; this is a blocker, not an IO failure, and cannot be treated as ready. Candidate inputs are limited to `004393`, `004194`, and `006597`, all with `promotion_allowed=false` until a later accepted promotion gate. |
+| Fixture promotion state manifest accepted but not promotion | future strict golden correctness / fixture promotion gate | `docs/reviews/fixture-promotion-state-manifest-20260529.json` records current fixture states and keeps all `promotion_allowed=false`. This closes the manifest-absent control-plane residual but does not authorize promotion or modify golden fixtures. Candidate inputs remain limited to `004393`, `004194`, and `006597` until a later accepted gate changes scope. |
 | Tracked residual disposition manifest not runtime-consumed | future manifest runtime consumption gate, only if needed | `docs/reviews/golden-readiness-residual-disposition-manifest-20260529.json` is accepted control-plane evidence, but preflight still has static in-code disposition. Runtime/preflight consumption requires a separate implementation gate with full ruff, full pytest, and preflight rerun. |
 | Snapshot multi-anchor projection | future snapshot evidence display hardening gate | Current snapshot field-level projection exposes one traceable anchor. Derived provenance is present in extractor evidence; if consumers need simultaneous annual-report and derived anchors in snapshot rows, open a narrow projection gate. |
 | CSRC EID NAV provenance cleanup | future NAV provenance hardening gate | `source_query_params` currently mixes HTTP query params and request context such as `force_refresh`; accepted as low risk. Consider splitting HTTP params from request context if a consumer needs replayable provenance. |
@@ -189,6 +195,7 @@ Allowed scope:
 | `drawdown_stress NAV-derived metric implementation` | accepted local validation | `docs/reviews/release-maintenance-drawdown-stress-nav-derived-metric-controller-judgment-20260529.md`; implementation evidence and MiMo/GLM aggregate deepreviews | Implemented reviewed max drawdown evidence for `006597/A` 2024 through `FundNavRepository()` and CSRC EID accumulated NAV. Latest snapshot satisfies all seven bond risk groups, score has no `bond_risk_evidence_missing`, quality gate has no bond-risk blocker. Full ruff and full pytest passed. No golden, PR, push, release or promotion changes. | bond risk evidence local readiness reconciliation gate |
 | `golden-readiness preflight` | accepted local validation | `docs/reviews/release-maintenance-golden-readiness-preflight-controller-judgment-20260529.md`; implementation evidence and MiMo/DS aggregate deepreviews | Implemented read-only golden readiness preflight JSON/Markdown. Current output is `overall_status=block`; 006597 bond blocker is resolved item only; QDII/FOF/110020/strict-golden/fixture blockers have owner/next_gate/evidence. Full ruff and full pytest passed. No golden, PR, push, release or promotion changes. | golden readiness residual disposition gate |
 | `golden readiness residual disposition` | accepted local validation | `docs/reviews/release-maintenance-golden-readiness-residual-disposition-controller-judgment-20260529.md`; `docs/reviews/golden-readiness-residual-disposition-manifest-20260529.json`; MiMo/DS aggregate deepreviews | Accepted tracked residual disposition matrix. All current blockers have decision / owner / next_gate; QDII/FOF/110020 are deferred from minimum v1 but not ready; 006597 bond blocker remains closed; manifest is not a promotion manifest and not runtime-consumed. No code/runtime/score/quality/FQ/golden fixture changes. | fixture promotion state manifest gate |
+| `fixture promotion state manifest` | accepted local validation | `docs/reviews/release-maintenance-fixture-promotion-state-manifest-controller-judgment-20260529.md`; `docs/reviews/fixture-promotion-state-manifest-20260529.json`; MiMo/DS aggregate deepreviews | Accepted tracked fixture promotion state manifest. It records 2 global blockers and 10 fund/slot entries with all `promotion_allowed=false`; 004393/004194/006597 are `absent`; QDII/FOF/110020 and 017641 are `deferred_from_v1`; 006597 bond blocker remains closed as resolved context only. No code/runtime/score/quality/FQ/golden fixture changes. | strict golden correctness / fixture promotion gate |
 
 ## Historical Evidence Index
 
