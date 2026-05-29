@@ -6,7 +6,7 @@
 > **规则真源**: `AGENTS.md`
 > **历史快照**: `docs/archive/implementation-control-history-20260525.md`
 > **release-maintenance 长账本**: `docs/archive/implementation-control-release-maintenance-ledger-20260527.md`
-> **当前状态**: release maintenance；fixture promotion state manifest gate 已 accepted local validation；tracked residual disposition manifest 与 tracked fixture promotion state manifest 均存在但都不是 promotion manifest，且未被 runtime/preflight 消费；006597/2024 的 bond risk evidence blocker 保持 closed；当前 golden v1 仍 blocked，下一最小入口为 strict golden correctness / fixture promotion gate；golden promotion 未进入
+> **当前状态**: release maintenance；strict golden correctness / fixture promotion gate 已 accepted local validation；tracked residual disposition manifest 与 tracked fixture promotion state manifest 均存在但都不是 promotion manifest，且未被 runtime/preflight 消费；006597/2024 的 bond risk evidence blocker 保持 closed；当前 golden v1 仍 blocked，下一最小入口为 004393 / 004194 / 006597 strict correctness follow-up gate；golden promotion 未进入
 
 ---
 
@@ -27,11 +27,11 @@
 |---|---|
 | Branch | `codex/local-reconciliation` |
 | Current phase | `release maintenance` |
-| Current gate | `fixture promotion state manifest gate accepted local validation` |
+| Current gate | `strict golden correctness / fixture promotion gate accepted local validation` |
 | Current gate classification | `heavy` |
-| Next entry point | `strict golden correctness / fixture promotion gate` |
+| Next entry point | `004393 / 004194 / 006597 strict correctness follow-up gate` |
 | Next gate classification | `heavy` |
-| Latest accepted gate checkpoint | `Fixture promotion state manifest accepted: tracked JSON fixture state manifest records 2 global blockers and 10 fund/slot entries with fixture_state / promotion_allowed=false / blockers / owner / next_gate / evidence paths; 004393/004194/006597 are fixture_state=absent, QDII/FOF/110020 and 017641 are deferred_from_v1, 006597 bond blocker remains closed as resolved context only; score/quality/FQ0-FQ6/golden fixtures/runtime unchanged; no PR, push, merge, release or promotion changes.` |
+| Latest accepted gate checkpoint | `Strict golden correctness / fixture promotion decision accepted: 004393 is conditional_candidate_pending_partial_coverage_decision, 004194 is conditional_candidate_pending_p0_coverage_decision, 006597 is needs_future_gate pending score rerun with golden answer, and 017641/QDII/FOF/110020 remain deferred_from_minimum_v1. All entries keep promotion_allowed=false; fixture_state remains absent/deferred_from_v1; 006597 bond blocker remains closed as resolved context only. No score/quality/FQ0-FQ6/golden fixture/manifest/runtime changes; no PR, push, merge, release or promotion changes.` |
 | Design truth | `docs/design.md` (v2.2) |
 | Control truth | `docs/implementation-control.md` |
 | Historical control snapshots | `docs/archive/implementation-control-history-20260525.md`; `docs/archive/implementation-control-release-maintenance-ledger-20260527.md` |
@@ -117,7 +117,7 @@
 
 `strict golden correctness / fixture promotion gate`.
 
-This next gate must start with Startup Packet replay and `$init-agents` / tmux multi-agent flow if multi-agent panes are used. It should consume `docs/reviews/golden-readiness-residual-disposition-manifest-20260529.json`, `docs/reviews/fixture-promotion-state-manifest-20260529.json`, the preflight JSON/Markdown outputs, and the fixture promotion state manifest controller judgment. It must not enter promotion unless a separate promotion gate is explicitly authorized.
+This next gate must start with Startup Packet replay and `$init-agents` / tmux multi-agent flow if multi-agent panes are used. It should consume `docs/reviews/release-maintenance-strict-golden-correctness-fixture-promotion-controller-judgment-20260529.md`, the strict correctness decision/evidence artifacts, `docs/reviews/golden-readiness-residual-disposition-manifest-20260529.json`, `docs/reviews/fixture-promotion-state-manifest-20260529.json`, and the preflight JSON/Markdown outputs. It must not enter promotion unless a separate promotion gate is explicitly authorized.
 
 Allowed scope:
 
@@ -159,7 +159,7 @@ Allowed scope:
 | FOF coverage / taxonomy | future fund-type taxonomy gate | Find pure `fof_fund` repository-verified candidate, or open taxonomy gate before counting QDII-FOF attempts as FOF coverage. |
 | `006597` bond risk evidence blocker | closed by drawdown metric gate | `credit_risk`, `redemption_share_pressure`, and `drawdown_stress` are repaired and validated locally. Latest `006597` snapshot has all seven bond risk groups satisfied; score has `score_applicability_issues=[]`; quality gate has no `bond_risk_evidence_missing`. Keep this closed status unless a later regression appears. |
 | `006597` remaining quality warnings | future readiness / residual reconciliation gate | Latest quality gate remains `warn` for unrelated `turnover_rate`, `holder_structure`, `share_change`, fund-level P1 failures, FQ0 golden not configured, and FQ4 missing field rate. Do not treat these as bond-risk evidence residuals without a separate gate. |
-| Fixture promotion state manifest accepted but not promotion | future strict golden correctness / fixture promotion gate | `docs/reviews/fixture-promotion-state-manifest-20260529.json` records current fixture states and keeps all `promotion_allowed=false`. This closes the manifest-absent control-plane residual but does not authorize promotion or modify golden fixtures. Candidate inputs remain limited to `004393`, `004194`, and `006597` until a later accepted gate changes scope. |
+| Strict correctness / fixture promotion preconditions accepted but not promotion | 004393 / 004194 / 006597 strict correctness follow-up gate | `docs/reviews/release-maintenance-strict-golden-correctness-fixture-promotion-controller-judgment-20260529.md` records current decisions: `004393` is conditional pending partial coverage decision; `004194` is conditional pending P0 strict correctness coverage decision; `006597` needs score rerun with `reports/golden-answers/golden-answer.json`. All entries keep `promotion_allowed=false`; fixture states remain unchanged; no golden fixture promotion is authorized. |
 | Tracked residual disposition manifest not runtime-consumed | future manifest runtime consumption gate, only if needed | `docs/reviews/golden-readiness-residual-disposition-manifest-20260529.json` is accepted control-plane evidence, but preflight still has static in-code disposition. Runtime/preflight consumption requires a separate implementation gate with full ruff, full pytest, and preflight rerun. |
 | Snapshot multi-anchor projection | future snapshot evidence display hardening gate | Current snapshot field-level projection exposes one traceable anchor. Derived provenance is present in extractor evidence; if consumers need simultaneous annual-report and derived anchors in snapshot rows, open a narrow projection gate. |
 | CSRC EID NAV provenance cleanup | future NAV provenance hardening gate | `source_query_params` currently mixes HTTP query params and request context such as `force_refresh`; accepted as low risk. Consider splitting HTTP params from request context if a consumer needs replayable provenance. |
@@ -196,6 +196,7 @@ Allowed scope:
 | `golden-readiness preflight` | accepted local validation | `docs/reviews/release-maintenance-golden-readiness-preflight-controller-judgment-20260529.md`; implementation evidence and MiMo/DS aggregate deepreviews | Implemented read-only golden readiness preflight JSON/Markdown. Current output is `overall_status=block`; 006597 bond blocker is resolved item only; QDII/FOF/110020/strict-golden/fixture blockers have owner/next_gate/evidence. Full ruff and full pytest passed. No golden, PR, push, release or promotion changes. | golden readiness residual disposition gate |
 | `golden readiness residual disposition` | accepted local validation | `docs/reviews/release-maintenance-golden-readiness-residual-disposition-controller-judgment-20260529.md`; `docs/reviews/golden-readiness-residual-disposition-manifest-20260529.json`; MiMo/DS aggregate deepreviews | Accepted tracked residual disposition matrix. All current blockers have decision / owner / next_gate; QDII/FOF/110020 are deferred from minimum v1 but not ready; 006597 bond blocker remains closed; manifest is not a promotion manifest and not runtime-consumed. No code/runtime/score/quality/FQ/golden fixture changes. | fixture promotion state manifest gate |
 | `fixture promotion state manifest` | accepted local validation | `docs/reviews/release-maintenance-fixture-promotion-state-manifest-controller-judgment-20260529.md`; `docs/reviews/fixture-promotion-state-manifest-20260529.json`; MiMo/DS aggregate deepreviews | Accepted tracked fixture promotion state manifest. It records 2 global blockers and 10 fund/slot entries with all `promotion_allowed=false`; 004393/004194/006597 are `absent`; QDII/FOF/110020 and 017641 are `deferred_from_v1`; 006597 bond blocker remains closed as resolved context only. No code/runtime/score/quality/FQ/golden fixture changes. | strict golden correctness / fixture promotion gate |
+| `strict golden correctness / fixture promotion` | accepted local validation | `docs/reviews/release-maintenance-strict-golden-correctness-fixture-promotion-controller-judgment-20260529.md`; decision/evidence artifacts; DS/GLM aggregate deepreviews | Accepted docs-only decision matrix. `004393` is conditional pending partial coverage; `004194` is conditional pending P0 strict correctness coverage; `006597` requires score rerun with golden answer; 017641/QDII/FOF/110020 remain deferred. All `promotion_allowed=false`; fixture states unchanged; no code/runtime/score/quality/FQ/golden fixture/manifest changes. | 004393 / 004194 / 006597 strict correctness follow-up gate |
 
 ## Historical Evidence Index
 
