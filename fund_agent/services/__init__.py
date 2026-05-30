@@ -23,6 +23,7 @@ from fund_agent.services.golden_readiness_preflight_service import (
     GoldenReadinessPreflightService,
 )
 from fund_agent.services.chapter_orchestrator import (
+    AcceptedChapterConclusion,
     ChapterOrchestrationInput,
     ChapterOrchestrationPolicy,
     ChapterOrchestrationResult,
@@ -30,6 +31,15 @@ from fund_agent.services.chapter_orchestrator import (
     ChapterOrchestratorLLMClients,
     build_chapter_orchestration_input,
     orchestrate_chapters,
+)
+from fund_agent.services.final_chapter_assembler import (
+    FinalAssemblyIssue,
+    FinalAssemblyPolicy,
+    FinalChapter7Summary,
+    FinalChapterAssembler,
+    FinalChapterAssemblyInput,
+    FinalChapterAssemblyResult,
+    assemble_final_chapters,
 )
 from fund_agent.services.quality_gate_service import (
     QualityGateRequest,
@@ -67,6 +77,7 @@ __all__ = [
     "FundArtifactInput",
     "GoldenReadinessPreflightRequest",
     "GoldenReadinessPreflightService",
+    "AcceptedChapterConclusion",
     "ChapterOrchestrationInput",
     "ChapterOrchestrationPolicy",
     "ChapterOrchestrationResult",
@@ -74,6 +85,13 @@ __all__ = [
     "ChapterOrchestratorLLMClients",
     "build_chapter_orchestration_input",
     "orchestrate_chapters",
+    "FinalAssemblyIssue",
+    "FinalAssemblyPolicy",
+    "FinalChapter7Summary",
+    "FinalChapterAssembler",
+    "FinalChapterAssemblyInput",
+    "FinalChapterAssemblyResult",
+    "assemble_final_chapters",
     "QualityGateRequest",
     "QualityGateService",
     "ThermometerBatchResult",

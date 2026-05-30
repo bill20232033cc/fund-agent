@@ -16,15 +16,15 @@ Use `docs/reviews/` and `docs/archive/` only as evidence chain. They do not over
 | Field | State |
 |---|---|
 | Current phase | `MVP fund analysis report generation phase` |
-| Current gate | `MVP Gate 3: chapter_orchestrator` |
+| Current gate | `MVP Gate 4 Slice 4A: final_chapter_assembler` |
 | Current gate classification | `heavy` |
 | Current gate status | `accepted locally` |
-| Next entry point | `MVP Gate 4: final_chapter_assembler + chapter 0 + CLI --use-llm plan gate` |
+| Next entry point | `MVP Gate 4 Slice 4B: Service analyze_with_llm implementation gate` |
 | Control truth | `docs/implementation-control.md` |
 | Design truth | `docs/design.md` |
 | Accepted plan commit | `beb6891` |
 
-The next owner should start from Gate 4 planning. Release-maintenance and golden-promotion blockers are residuals for later gates, not the active mainline.
+The next owner should start from Gate 4 Slice 4B implementation. Release-maintenance and golden-promotion blockers are residuals for later gates, not the active mainline.
 
 ## 3. Current Implementation Facts
 
@@ -45,7 +45,9 @@ The next owner should start from Gate 4 planning. Release-maintenance and golden
 - Service now has Gate 3 `ChapterOrchestrator` / `orchestrate_chapters()` as `chapter_orchestrator.v1`.
 - Gate 3 consumes only explicit `StructuredFundDataBundle` or `ChapterFactProjection`, explicit writer/auditor LLM Protocol clients and optional `ChapterFactProvider`; it runs write-audit-repair policy for template chapters 1-6 and outputs accepted chapter conclusions for Gate 4.
 - Gate 3 does not generate chapters 0 or 7, does not construct production LLM providers, does not read repositories/PDF/cache/source helpers/parsers, and does not integrate Host/Agent/dayu.
-- There is no final LLM assembler.
+- Service now has Gate 4 Slice 4A `FinalChapterAssembler` / `assemble_final_chapters()` as `final_chapter_assembler.v1`.
+- Slice 4A deterministic assembly generates chapter 7 from existing `FinalJudgmentDecision`, then chapter 0 from accepted conclusions plus a Gate 4-local typed chapter 7 summary; render order is `0 -> 1-6 -> 7`.
+- Slice 4A does not implement Service `analyze_with_llm()`, CLI `--use-llm`, production LLM provider construction, chapter 0/7 LLM polish/audit, or Evidence Confirm.
 - There is no CLI `--use-llm`.
 - There is no Host/Agent/dayu runtime in the production path.
 
@@ -58,10 +60,10 @@ Route C is the accepted MVP LLM report generation route. Gates 1-3 are accepted 
 | Gate 1 | `ChapterFactProvider` typed projection is accepted locally as Fund-layer code fact; `facet_recognizer` and full `FundToolService` remain future candidates |
 | Gate 2 | `chapter_writer` + `chapter_auditor` accepted locally as Fund-layer single-chapter primitives |
 | Gate 3 | `chapter_orchestrator` accepted locally as Service-owned write-audit-repair façade for chapters 1-6 |
-| Gate 4 | Next: `final_chapter_assembler`, chapter 0 assembly and opt-in CLI `--use-llm` |
+| Gate 4 | Slice 4A `final_chapter_assembler` accepted locally; next Slice 4B Service `analyze_with_llm`; later Slice 4C CLI `--use-llm`; Slice 4D provider remains separate |
 | Gate 5 | Optional `dayu.host` / `dayu.engine` integration |
 
-Gate 3 only accepted the Service write-audit-repair façade for chapters 1-6. It did not implement final assembler, chapter 0 assembly, chapter 7 final judgment assembly, CLI `--use-llm`, production LLM provider construction, Host/Agent/dayu integration or full FundToolService.
+Gate 4 Slice 4A only accepted deterministic final assembly. It did not implement Service LLM analyze use case, CLI `--use-llm`, production LLM provider construction, Host/Agent/dayu integration or full FundToolService.
 
 ## 5. Boundary Guardrails
 
@@ -82,7 +84,7 @@ Gate 3 only accepted the Service write-audit-repair façade for chapters 1-6. It
 
 ## 6. Current Residuals
 
-- Golden / strict correctness / fixture promotion are residuals and do not block the next MVP Gate 4 planning work.
+- Golden / strict correctness / fixture promotion are residuals and do not block the next MVP Gate 4 Slice 4B work.
 - `004393`, `004194` and `006597` are not promotion-prep-ready.
 - `004393`, `004194` and `006597` keep `fixture_state=absent`.
 - All promotion states remain `promotion_allowed=false`.
@@ -147,6 +149,13 @@ Gate 3 only accepted the Service write-audit-repair façade for chapters 1-6. It
 - Gate 3 review fix evidence: `docs/reviews/mvp-gate3-chapter-orchestrator-review-fix-evidence-20260530.md`
 - Gate 3 review fix re-reviews: `docs/reviews/mvp-gate3-chapter-orchestrator-review-fix-rereview-mimo-20260530.md`; `docs/reviews/mvp-gate3-chapter-orchestrator-review-fix-rereview-ds-20260530.md`
 - Gate 3 controller judgment: `docs/reviews/mvp-gate3-chapter-orchestrator-controller-judgment-20260530.md`
+- Gate 4 plan: `docs/reviews/mvp-gate4-final-assembler-cli-plan-20260530.md`
+- Gate 4 plan decision: `docs/reviews/mvp-gate4-final-assembler-cli-plan-decision-20260530.md`
+- Gate 4 Slice 4A implementation evidence: `docs/reviews/mvp-gate4-final-assembler-slice4a-implementation-evidence-20260530.md`
+- Gate 4 Slice 4A implementation reviews: `docs/reviews/mvp-gate4-final-assembler-slice4a-implementation-review-mimo-20260530.md`; `docs/reviews/mvp-gate4-final-assembler-slice4a-implementation-review-ds-20260530.md`
+- Gate 4 Slice 4A review fix evidence: `docs/reviews/mvp-gate4-final-assembler-slice4a-review-fix-evidence-20260530.md`
+- Gate 4 Slice 4A review fix re-reviews: `docs/reviews/mvp-gate4-final-assembler-slice4a-review-fix-rereview-mimo-20260530.md`; `docs/reviews/mvp-gate4-final-assembler-slice4a-review-fix-rereview-ds-20260530.md`
+- Gate 4 Slice 4A controller judgment: `docs/reviews/mvp-gate4-final-assembler-slice4a-controller-judgment-20260530.md`
 - Release-maintenance roadmap summary: `docs/reviews/release-maintenance-phase-roadmap-consolidation-20260529.md`
 - Overnight release-maintenance closeout: `docs/reviews/overnight-release-maintenance-closeout-20260529.md`
 - Historical control snapshot: `docs/archive/implementation-control-history-20260525.md`
