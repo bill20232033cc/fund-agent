@@ -16,15 +16,15 @@ Use `docs/reviews/` and `docs/archive/` only as evidence chain. They do not over
 | Field | State |
 |---|---|
 | Current phase | `MVP fund analysis report generation phase` |
-| Current gate | `MVP Gate 1: ChapterFactProvider typed projection` |
+| Current gate | `MVP Gate 2: chapter_writer + chapter_auditor` |
 | Current gate classification | `heavy` |
 | Current gate status | `accepted locally` |
-| Next entry point | `MVP Gate 2: chapter_writer + chapter_auditor plan gate` |
+| Next entry point | `MVP Gate 3: chapter_orchestrator plan gate` |
 | Control truth | `docs/implementation-control.md` |
 | Design truth | `docs/design.md` |
-| Accepted plan commit | `bea10d7` |
+| Accepted plan commit | `b46a80a` |
 
-The next owner should start from Gate 2 writer/auditor planning. Release-maintenance and golden-promotion blockers are residuals for later gates, not the active mainline.
+The next owner should start from Gate 3 orchestrator planning. Release-maintenance and golden-promotion blockers are residuals for later gates, not the active mainline.
 
 ## 3. Current Implementation Facts
 
@@ -39,8 +39,9 @@ The next owner should start from Gate 2 writer/auditor planning. Release-mainten
 - Fund now has a Gate 1 typed projection capability: `project_chapter_facts()` / `ChapterFactProvider.project()` maps an in-memory `StructuredFundDataBundle` to `chapter_fact_projection.v1`.
 - Gate 1 typed projection is Fund-layer only: it consumes existing bundle data, CHAPTER_CONTRACT, preferred_lens and ITEM_RULE truth APIs; it does not read annual reports, repositories, PDF/cache/source helpers, parsers, LLM, Service, Host or dayu.
 - Facet assertion remains fail-closed: exact `facets` is empty unless structured evidence exists; compatible labels may appear only as `non_asserted_facets`.
-- There is no LLM chapter writing.
-- There is no LLM audit.
+- Fund now has Gate 2 single-chapter writer/auditor primitives: `chapter_writer.py` and `chapter_auditor.py`.
+- Gate 2 writer/auditor only consume Gate 1 chapter facts and explicit fake/test or injected LLM clients; production code has no provider SDK, env/config loading, repository/PDF/source access, Service orchestration, Host, dayu or CLI integration.
+- Gate 2 freezes fail-closed contracts for anchor/missing markers, LLM audit line parsing, `prompt_only`, `llm_unavailable`, `must_not_cover`, L1 numerical closure, `non_asserted_facets`, chapter 5 cross-period gaps, E2 deferral and `repair_hint` aggregation.
 - There is no write-audit-repair loop.
 - There is no chapter orchestrator.
 - There is no final LLM assembler.
@@ -54,12 +55,12 @@ Route C is accepted future design for MVP LLM report generation. It is not curre
 | Gate | Status / scope |
 |---|---|
 | Gate 1 | `ChapterFactProvider` typed projection is accepted locally as Fund-layer code fact; `facet_recognizer` and full `FundToolService` remain future candidates |
-| Gate 2 | Next: `chapter_writer` + `chapter_auditor` |
-| Gate 3 | `chapter_orchestrator` with Service-owned write-audit-repair policy |
+| Gate 2 | `chapter_writer` + `chapter_auditor` accepted locally as Fund-layer single-chapter primitives |
+| Gate 3 | Next: `chapter_orchestrator` with Service-owned write-audit-repair policy |
 | Gate 4 | `final_chapter_assembler`, chapter 0 assembly and opt-in CLI `--use-llm` |
 | Gate 5 | Optional `dayu.host` / `dayu.engine` integration |
 
-Gate 1 only accepted typed projection. It did not implement writer, auditor, orchestrator, Service write-audit-repair policy, CLI `--use-llm`, Host/Agent/dayu integration or full FundToolService.
+Gate 2 only accepted single-chapter writer/auditor primitives. It did not implement orchestrator, Service write-audit-repair policy, final assembler, chapter 0 assembly, CLI `--use-llm`, Host/Agent/dayu integration or full FundToolService.
 
 ## 5. Boundary Guardrails
 
@@ -80,7 +81,7 @@ Gate 1 only accepted typed projection. It did not implement writer, auditor, orc
 
 ## 6. Current Residuals
 
-- Golden / strict correctness / fixture promotion are residuals and do not block the next MVP Gate 2 planning work.
+- Golden / strict correctness / fixture promotion are residuals and do not block the next MVP Gate 3 planning work.
 - `004393`, `004194` and `006597` are not promotion-prep-ready.
 - `004393`, `004194` and `006597` keep `fixture_state=absent`.
 - All promotion states remain `promotion_allowed=false`.
@@ -130,6 +131,14 @@ Gate 1 only accepted typed projection. It did not implement writer, auditor, orc
 - Gate 1 implementation review MiMo: `docs/reviews/mvp-gate1-chapter-fact-provider-implementation-review-mimo-20260530.md`
 - Gate 1 implementation review GLM: `docs/reviews/mvp-gate1-chapter-fact-provider-implementation-review-glm-20260530.md`
 - Gate 1 controller judgment: `docs/reviews/mvp-gate1-chapter-fact-provider-controller-judgment-20260530.md`
+- Gate 2 plan: `docs/reviews/mvp-gate2-chapter-writer-auditor-plan-20260530.md`
+- Gate 2 plan decision: `docs/reviews/mvp-gate2-chapter-writer-auditor-plan-decision-20260530.md`
+- Gate 2 implementation evidence: `docs/reviews/mvp-gate2-chapter-writer-auditor-implementation-evidence-20260530.md`
+- Gate 2 implementation review MiMo: `docs/reviews/mvp-gate2-chapter-writer-auditor-implementation-review-mimo-20260530.md`
+- Gate 2 implementation review DS: `docs/reviews/mvp-gate2-chapter-writer-auditor-implementation-review-ds-20260530.md`
+- Gate 2 implementation re-review MiMo: `docs/reviews/mvp-gate2-chapter-writer-auditor-implementation-rereview-mimo-20260530.md`
+- Gate 2 implementation re-review DS: `docs/reviews/mvp-gate2-chapter-writer-auditor-implementation-rereview-ds-20260530.md`
+- Gate 2 controller judgment: `docs/reviews/mvp-gate2-chapter-writer-auditor-controller-judgment-20260530.md`
 - Release-maintenance roadmap summary: `docs/reviews/release-maintenance-phase-roadmap-consolidation-20260529.md`
 - Overnight release-maintenance closeout: `docs/reviews/overnight-release-maintenance-closeout-20260529.md`
 - Historical control snapshot: `docs/archive/implementation-control-history-20260525.md`

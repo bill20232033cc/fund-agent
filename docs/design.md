@@ -491,7 +491,8 @@ Route C 是已接受的 MVP LLM report generation 未来路由，用来把 §5.4
 
 - `fund-analysis analyze` 和 `fund-analysis checklist` 仍由 UI 调用 Service，Service 直接调用 `fund_agent/fund` 公开能力完成结构化抽取、确定性分析、模板渲染、程序审计和 quality gate。
 - Route C Gate 1 的 Fund 层 `ChapterFactProvider` / `project_chapter_facts()` typed projection 已实现为 `chapter_fact_projection.v1`：它只消费 `StructuredFundDataBundle` 与现有 CHAPTER_CONTRACT、preferred_lens、ITEM_RULE API，输出模板第 0-7 章的 facts、证据锚点、缺失/不可用/不适用语义、分类依据、lens 和 ITEM_RULE 决策；它不读取文档仓库、PDF、cache、source helper、下载器或 parser，不调用 LLM、Service、Host 或 dayu。
-- 当前没有 LLM 章节写作、LLM 审计、write-audit-repair loop、chapter orchestrator、final LLM assembler、CLI `--use-llm`、Host scheduling、Agent runner/tool loop 或 dayu runtime。
+- Route C Gate 2 的 Fund 层 `chapter_writer` / `chapter_auditor` 单章 primitives 已实现：它们只消费 Gate 1 `ChapterFactProjection` / `ChapterFactInput`、显式注入的 LLM Protocol client 和 writer draft；生产代码不读取文档仓库、PDF、cache、source helper、下载器或 parser，不导入真实 provider SDK，不读取 env/config，不调用 Service、Host 或 dayu。
+- 当前没有 write-audit-repair loop、chapter orchestrator、final LLM assembler、CLI `--use-llm`、Host scheduling、Agent runner/tool loop 或 dayu runtime。
 - 当前没有把 quality gate、LLM audit、Evidence Confirm、repair loop、Host、Agent runtime 或 dayu 集成声明为已实现。
 
 **Route C gate 序列**：
@@ -499,12 +500,12 @@ Route C 是已接受的 MVP LLM report generation 未来路由，用来把 §5.4
 | Gate | 已接受的未来 scope | 边界约束 |
 |---|---|---|
 | Gate 1 | `facet_recognizer` + `ChapterFactProvider` / `FundToolService` contract and implementation | 消费现有 8 章模板、CHAPTER_CONTRACT、preferred_lens、ITEM_RULE 和 facet catalog；基金类型 / facet 识别、fact/evidence 语义属于 Agent/Fund；Service 只负责用例编排和 typed invocation |
-| Gate 2 | `chapter_writer` + `chapter_auditor` | 写作和审计只能消费结构化 facts、derived calculations、显式 data gaps 和 EvidenceAnchor；不得直接读取 PDF、cache、source helper 或下载 helper |
+| Gate 2 | `chapter_writer` + `chapter_auditor` | 已实现 Fund 层单章 primitives；写作和审计只能消费结构化 facts、derived calculations、显式 data gaps 和 EvidenceAnchor；不得直接读取 PDF、cache、source helper 或下载 helper |
 | Gate 3 | `chapter_orchestrator` | Service 拥有 write-audit-repair loop policy，并通过显式 contract 调用 Agent/Fund 能力；不得把业务参数藏入 `extra_payload` |
 | Gate 4 | `final_chapter_assembler`、第 0 章 assembly、CLI `--use-llm` | `--use-llm` 是 opt-in 未来路径；确定性 `analyze/checklist` 保持可用，除非后续 gate 明确改变 |
 | Gate 5 | 可选 `dayu.host` / `dayu.engine` integration | 只有该 gate 可以替换或委托 orchestrator concurrency layer；未来 Host 必须使用 `dayu.host`，未来 Agent engine/tool loop/runner/ToolRegistry/ToolTrace 必须使用 `dayu.engine` |
 
-Gate 1 中 `ChapterFactProvider` 已是 Fund 层代码事实，但只代表 typed projection façade，不是 writer、auditor、orchestrator 或 `FundToolService`。`facet_recognizer` 与 `FundToolService` 仍是 Route C Gate 1 的未来候选命名，不是当前代码类型，也不替代当前已实现的 `FundDataExtractor`、`StructuredFundDataBundle` 或既有 Service/Fund contract。
+Gate 1 中 `ChapterFactProvider` 已是 Fund 层代码事实，但只代表 typed projection façade，不是 orchestrator 或 `FundToolService`。Gate 2 中 `chapter_writer` / `chapter_auditor` 已是 Fund 层代码事实，但只代表单章 writer/auditor primitives：writer 使用精确 `<!-- anchor:<anchor_id> -->` / `<!-- missing:<reason> -->` marker、fail-closed LLM client injection 和 `prompt_only` 合约；auditor 执行程序审计、解析 `SEVERITY|LOCATION|MESSAGE` LLM audit 行协议，并显式把 E2 源文核验 deferred 到 Evidence Confirm gate。`facet_recognizer` 与 `FundToolService` 仍是 Route C 的未来候选命名，不是当前代码类型，也不替代当前已实现的 `FundDataExtractor`、`StructuredFundDataBundle` 或既有 Service/Fund contract。
 
 Route C 不删除当前 deterministic rendering，也不降低 release-maintenance/golden residual 的严肃性；它只把 golden / strict correctness / QDII / FOF / `110020` / fixture promotion 从 MVP report generation 主线的启动阻塞改为残余产品质量工作。任何 fixture promotion、golden answer、score、snapshot、quality gate 语义或 final judgment 变更仍必须进入独立 gate。
 

@@ -16,6 +16,8 @@ from fund_agent.fund.extractors import (
 )
 from fund_agent.fund.data_extractor import FundDataExtractor
 from fund_agent.fund.chapter_facts import ChapterFactProvider, project_chapter_facts
+from fund_agent.fund.chapter_writer import build_chapter_writer_input, write_chapter
+from fund_agent.fund.chapter_auditor import ChapterAuditInput, audit_chapter
 from fund_agent.fund.analysis import (
     analyze_investor_experience,
     calculate_r_abc_from_bundle,
@@ -44,6 +46,13 @@ data_extractor = FundDataExtractor()
 bundle = await data_extractor.extract("110011", 2024)
 chapter_projection = project_chapter_facts(bundle)
 chapter_projection_via_provider = ChapterFactProvider().project(bundle)
+writer_input = build_chapter_writer_input(chapter_projection, chapter_id=1, mode="prompt_only")
+write_result = write_chapter(writer_input, llm_client=None)
+if write_result.draft is not None:
+    audit_result = audit_chapter(
+        ChapterAuditInput(writer_input=writer_input, draft=write_result.draft),
+        llm_client=None,
+    )
 rabc = calculate_r_abc_from_bundle(bundle, equity_position="80%")
 manifest = load_template_contract_manifest()
 chapter_lens = resolve_preferred_lens(chapter_id=2, fund_type="active_fund")
@@ -99,6 +108,17 @@ chapter_lens = resolve_preferred_lens(chapter_id=2, fund_type="active_fund")
 - facet 行为保持确定性：没有 exact structured evidence 时 `facets=()`，候选 catalog 标签只进入 `non_asserted_facets`，不会传给 ITEM_RULE
 - `bond_risk_evidence` 的组级 anchors 保留在 value 内部，不展开为普通章节 `ChapterEvidenceAnchor`
 - 该能力不读取文档仓库、PDF、cache、source helper、下载器或 parser，不调用 LLM、Service、Host 或 dayu；它不是 writer、auditor、orchestrator 或 `FundToolService`
+
+`fund_agent/fund/chapter_writer.py` 和 `fund_agent/fund/chapter_auditor.py` 当前提供 Gate 2 单章 writer / auditor primitives：
+
+- `build_chapter_writer_input()` 从 `ChapterFactProjection` 中选择单个 `ChapterFactInput`，不读取任何文档或外部来源
+- `build_chapter_prompt()` 只消费 CHAPTER_CONTRACT、preferred_lens、ITEM_RULE、facts、missing reasons 和 evidence anchors
+- `write_chapter()` 通过调用方显式注入的 `ChapterLLMClient` 生成单章草稿；`mode="prompt_only"` 只返回 prompt 和 blocked result，不伪造草稿
+- writer 只接受精确 marker：`<!-- anchor:<anchor_id> -->` 和 `<!-- missing:<reason> -->`；超出 `max_output_chars` 会 fail-closed，不截断
+- `audit_chapter_programmatic()` 执行确定性章节审计，覆盖结构、占位符、锚点、ITEM_RULE 删除段落、禁用交易建议、`non_asserted_facets` 误断言和第 5 章跨期缺口措辞
+- `audit_chapter_llm()` 只通过调用方显式注入的 `ChapterAuditLLMClient` 审计，并要求 `SEVERITY|LOCATION|MESSAGE` 行协议；解析失败或缺少 client 都 fail-closed
+- E2 证据与断言源文匹配复核不在 Gate 2 实现范围，后续 Evidence Confirm gate 处理
+- 这些 primitives 不实现 chapter orchestrator、repair loop、final assembler、第 0 章 assembly、CLI `--use-llm`、Service 编排或 Host/Agent/dayu runtime
 
 `FundNavRepository.load_nav_series()` 是 data 层当前 typed NAV series contract，返回 `FundNavSeries`，显式承载份额类别、NAV 类型、调整基础、分红调整状态、identity 状态、source/cache/query provenance、完整性约束和强回撤证据资格。无参 `FundNavRepository()` 当前默认使用 CSRC EID accumulated NAV adapter：通过公开 search/detail/classification 页面验证 006597=A/2030-1010、006598=C/2030-1020、014217=E/2030-1040、022176=F/2030-1050，并按份额分别输出 `nav_type="accumulated_nav"`、`adjusted_basis="accumulated_nav"`、`dividend_adjustment_status="not_applicable"`、`identity_status="verified"`。旧 `FundNavDataAdapter.load_nav_data()` 继续作为 legacy/snapshot/analyze 兼容入口，返回 `NavDataResult` 并保持 `source="nav_cache" / "akshare"` 与 `cached` 语义；constructor-injected Akshare raw-unit adapter 兼容分支仍标记 `unit_nav/raw_unit_nav/requested_code_only` 且 `strong_drawdown_evidence_eligible=False`。
 
