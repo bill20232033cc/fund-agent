@@ -755,6 +755,7 @@ async def test_orchestrator_falls_back_to_eastmoney_after_eid_not_found(tmp_path
 
     assert result.metadata.source == "eastmoney"
     assert result.metadata.fallback_used is True
+    assert result.metadata.primary_failure_category == "not_found"
 
 
 @pytest.mark.asyncio
@@ -974,6 +975,7 @@ async def test_orchestrator_falls_back_after_unavailable_error(tmp_path: Path) -
 
     assert result.metadata.source == "eastmoney"
     assert result.metadata.fallback_used is True
+    assert result.metadata.primary_failure_category == "unavailable"
     assert primary.calls == [("004393", 2024, False)]
     assert fallback.calls == [("004393", 2024, False)]
 
@@ -1003,6 +1005,7 @@ async def test_orchestrator_falls_back_after_not_found_error(tmp_path: Path) -> 
 
     assert result.metadata.source == "eastmoney"
     assert result.metadata.fallback_used is True
+    assert result.metadata.primary_failure_category == "not_found"
 
 
 @pytest.mark.asyncio

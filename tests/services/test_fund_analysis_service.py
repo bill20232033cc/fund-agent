@@ -54,6 +54,7 @@ def _developer_request(
     quality_gate_output_dir: Path | None = None,
     quality_gate_run_id: str | None = None,
     quality_gate_golden_answer_path: Path | None = None,
+    command_source: str = "analyze",
 ) -> FundAnalysisRequest:
     """构造 developer override 模式 Service 请求。
 
@@ -78,6 +79,7 @@ def _developer_request(
         quality_gate_output_dir: quality gate 输出目录。
         quality_gate_run_id: quality gate 运行 ID。
         quality_gate_golden_answer_path: strict golden answer JSON 路径。
+        command_source: quality gate 默认运行 ID 的命令来源。
 
     Returns:
         developer override 模式请求。
@@ -110,6 +112,7 @@ def _developer_request(
             quality_gate_run_id=quality_gate_run_id,
             quality_gate_golden_answer_path=quality_gate_golden_answer_path,
         ),
+        command_source=command_source,  # type: ignore[arg-type]
     )
 
 
@@ -1200,6 +1203,162 @@ async def test_fund_analysis_service_default_gate_run_id_does_not_overwrite(tmp_
     assert first.quality_gate_result is not None
     assert second.quality_gate_result is not None
     assert first.quality_gate_result.output_dir != second.quality_gate_result.output_dir
+    assert first.quality_gate_result.output_dir.name.startswith("analyze-004393-2024-")
+    assert second.quality_gate_result.output_dir.name.startswith("analyze-004393-2024-")
+
+
+@pytest.mark.asyncio
+async def test_fund_analysis_service_checklist_default_gate_run_id_uses_checklist_prefix(
+    tmp_path: Path,
+) -> None:
+    """验证 checklist 默认 quality gate run_id 使用 checklist 前缀。
+
+    Args:
+        tmp_path: pytest 临时目录 fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 checklist 默认产物目录仍使用 analyze 前缀时抛出。
+    """
+
+    service = FundAnalysisService(extractor=_FakeExtractor(_bundle()))
+
+    result = await service.checklist(
+        _developer_request(
+            fund_code="004393",
+            quality_gate_policy="warn",
+            quality_gate_source_csv=Path("docs/code_20260519.csv"),
+            quality_gate_output_dir=None,
+            quality_gate_golden_answer_path=None,
+            command_source="analyze",
+        )
+    )
+
+    assert result.quality_gate_result is not None
+    assert result.quality_gate_result.output_dir.name.startswith("checklist-004393-2024-")
+
+
+@pytest.mark.asyncio
+async def test_fund_analysis_service_analyze_normalizes_command_source(
+    tmp_path: Path,
+) -> None:
+    """验证 analyze 方法对 command_source 具有权威覆盖权。
+
+    Args:
+        tmp_path: pytest 临时目录 fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当直接调用者传入 checklist 仍影响 analyze run_id 时抛出。
+    """
+
+    service = FundAnalysisService(extractor=_FakeExtractor(_bundle()))
+
+    result = await service.analyze(
+        _developer_request(
+            fund_code="004393",
+            quality_gate_policy="warn",
+            quality_gate_source_csv=Path("docs/code_20260519.csv"),
+            quality_gate_output_dir=None,
+            quality_gate_golden_answer_path=None,
+            command_source="checklist",
+        )
+    )
+
+    assert result.quality_gate_result is not None
+    assert result.quality_gate_result.output_dir.name.startswith("analyze-004393-2024-")
+
+
+@pytest.mark.asyncio
+async def test_fund_analysis_service_explicit_gate_run_id_remains_authoritative(
+    tmp_path: Path,
+) -> None:
+    """验证显式 quality_gate_run_id 不被 command_source 改写。
+
+    Args:
+        tmp_path: pytest 临时目录 fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当显式 run_id 被默认前缀覆盖时抛出。
+    """
+
+    service = FundAnalysisService(extractor=_FakeExtractor(_bundle()))
+
+    result = await service.checklist(
+        _developer_request(
+            fund_code="004393",
+            quality_gate_policy="warn",
+            quality_gate_source_csv=Path("docs/code_20260519.csv"),
+            quality_gate_output_dir=None,
+            quality_gate_run_id="fixture-run",
+            quality_gate_golden_answer_path=None,
+        )
+    )
+
+    assert result.quality_gate_result is not None
+    assert result.quality_gate_result.output_dir.name == "fixture-run"
+
+
+@pytest.mark.asyncio
+async def test_fund_analysis_service_pre_2026_missing_turnover_is_warn_not_standalone_block(
+    tmp_path: Path,
+) -> None:
+    """验证 2026 前缺失换手率是数据不足 warning，不是独立 hard blocker。
+
+    Args:
+        tmp_path: pytest 临时目录 fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当缺失换手率单独阻断或触发 FQ4 时抛出。
+    """
+
+    bundle = _bundle()
+    missing_turnover = ExtractedField(
+        value=None,
+        anchors=(),
+        extraction_mode="missing",
+        note="§8 未披露可规则化抽取的换手率",
+    )
+    service = FundAnalysisService(extractor=_FakeExtractor(replace(bundle, turnover_rate=missing_turnover)))
+
+    result = await service.analyze(
+        _developer_request(
+            fund_code="110011",
+            quality_gate_policy="warn",
+            quality_gate_source_csv=_source_csv(tmp_path, "110011"),
+            quality_gate_output_dir=tmp_path / "gate",
+            quality_gate_golden_answer_path=None,
+        )
+    )
+
+    assert result.rabc_attribution.status == "missing"
+    assert result.rabc_attribution.note is not None
+    assert "缺少 §8 换手率" in result.rabc_attribution.note
+    assert result.quality_gate_result is not None
+    assert result.quality_gate_result.status == "warn"
+    assert any(
+        issue.rule_code == "FQ2"
+        and issue.severity == "warn"
+        and issue.field_name == "turnover_rate"
+        for issue in result.quality_gate_result.issues
+    )
+    assert any(
+        issue.rule_code == "FQ2F"
+        and issue.severity == "warn"
+        and issue.priority == "P1"
+        for issue in result.quality_gate_result.issues
+    )
+    assert not any(issue.rule_code == "FQ4" for issue in result.quality_gate_result.issues)
 
 
 def _source_csv(tmp_path: Path, fund_code: str) -> Path:

@@ -12,6 +12,13 @@ from typing import Any, Final, Literal
 # P1-S1 当前只支持年报文档类型，避免在多个模块散落同一个魔法字符串。
 ANNUAL_REPORT_DOCUMENT_KIND: Final[Literal["annual_report"]] = "annual_report"
 AnnualReportSourceName = Literal["eid", "eastmoney"]
+AnnualReportSourceFailureCategory = Literal[
+    "not_found",
+    "unavailable",
+    "schema_drift",
+    "identity_mismatch",
+    "integrity_error",
+]
 
 
 @dataclass(frozen=True, slots=True)
@@ -34,6 +41,7 @@ class AnnualReportSourceMetadata:
         operation_upload_type: 来源上传操作类型。
         corrections_num: 来源更正次数。
         fallback_used: 是否为 fallback 来源命中。
+        primary_failure_category: 主来源失败后允许 fallback 的失败类别。
     """
 
     source: AnnualReportSourceName | None = None
@@ -51,6 +59,7 @@ class AnnualReportSourceMetadata:
     operation_upload_type: str | None = None
     corrections_num: int | None = None
     fallback_used: bool = False
+    primary_failure_category: AnnualReportSourceFailureCategory | None = None
 
     def to_dict(self) -> dict[str, object]:
         """把来源元数据序列化为 JSON 兼容字典。
@@ -81,6 +90,7 @@ class AnnualReportSourceMetadata:
             "operation_upload_type": self.operation_upload_type,
             "corrections_num": self.corrections_num,
             "fallback_used": self.fallback_used,
+            "primary_failure_category": self.primary_failure_category,
         }
 
     @classmethod
@@ -98,6 +108,7 @@ class AnnualReportSourceMetadata:
         """
 
         source_value = _optional_string(payload.get("source"))
+        failure_category_value = _optional_string(payload.get("primary_failure_category"))
         return cls(
             source=_normalize_source_name(source_value),
             source_url=_optional_string(payload.get("source_url")),
@@ -114,6 +125,7 @@ class AnnualReportSourceMetadata:
             operation_upload_type=_optional_string(payload.get("operation_upload_type")),
             corrections_num=_optional_int(payload.get("corrections_num")),
             fallback_used=bool(payload.get("fallback_used", False)),
+            primary_failure_category=_normalize_failure_category(failure_category_value),
         )
 
 
@@ -309,6 +321,32 @@ def _normalize_source_name(source: str | None) -> AnnualReportSourceName | None:
     if source not in ("eid", "eastmoney"):
         raise ValueError(f"未知年报来源: {source}")
     return source
+
+
+def _normalize_failure_category(
+    category: str | None,
+) -> AnnualReportSourceFailureCategory | None:
+    """校验并规范化年报来源失败类别。
+
+    Args:
+        category: 原始失败类别。
+
+    Returns:
+        合法失败类别；空值或未知类别返回 ``None``，以兼容旧缓存和损坏字段。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if category in (
+        "not_found",
+        "unavailable",
+        "schema_drift",
+        "identity_mismatch",
+        "integrity_error",
+    ):
+        return category
+    return None
 
 
 @dataclass(frozen=True, slots=True)

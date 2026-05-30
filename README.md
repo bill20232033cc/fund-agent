@@ -39,6 +39,9 @@ fund-analysis analyze --help
 # 强制刷新底层数据
 fund-analysis analyze 004393 --report-year 2024 --force-refresh
 
+# 显式启用 Route C LLM 分章写作路径
+fund-analysis analyze 004393 --report-year 2024 --use-llm
+
 # 生成精选基金池字段级抽取快照
 fund-analysis extraction-snapshot \
   --run-id p4-s1-004393 \
@@ -63,6 +66,13 @@ fund-analysis golden-build \
 fund-analysis quality-gate \
   --score-path reports/extraction-snapshots/p4-s3b-004393-controller-final-score/score.json
 
+# 生成 baseline/golden promotion 只读 preflight 报告
+fund-analysis golden-readiness-preflight \
+  --run-id golden-readiness-preflight-20260529 \
+  --source-csv docs/code_20260519.csv \
+  --golden-answer-path reports/golden-answers/golden-answer.json \
+  --output-dir reports/golden-readiness-preflight/golden-readiness-preflight-20260529
+
 # 查询默认全 A 市场温度计
 fund-analysis thermometer
 
@@ -86,8 +96,25 @@ fund-analysis checklist 004393 --report-year 2024
 | `--thermometer-cache-dir` | `analyze` 自动估值使用的自建温度计缓存目录 |
 | `--user-money-horizon-years` | 用户资金不用年限 |
 | `--force-refresh` | 强制刷新底层数据 |
+| `--use-llm` | 仅 `analyze` 支持；显式启用 Route C LLM 分章写作路径。该路径必须先配置 LLM provider 环境变量；缺失、非法或运行不完整都会失败关闭，不回退默认确定性报告 |
 
 `analyze` 默认是 product mode：最终判断由 Agent 层基金能力根据检查清单、否决项、压力测试和 quality gate 派生；R=A+B-C 股票仓位、言行一致性实际风格、经理任期、同类费率、跟踪误差、当前阶段、最终判断覆盖和 quality gate `warn/off` 等夹具参数仅供开发验证使用，必须显式传 `--dev-override`。
+
+`fund-analysis analyze --use-llm` 是显式 opt-in 路径；不传该参数时，`analyze` 默认仍走确定性结构化抽取、确定性分析、模板渲染、程序审计和 quality gate。LLM 路径当前使用 `openai_compatible` HTTP chat-completions provider，基于现有 `httpx` 调用 Service 的 `analyze_with_llm()`；Fund writer/auditor 只接收 Protocol client，不读取 env、HTTP 或 provider 细节。
+
+启用 `--use-llm` 前需要设置：
+
+| 环境变量 | 必填 | 说明 |
+|------|------|------|
+| `FUND_AGENT_LLM_PROVIDER` | 是 | 当前仅支持 `openai_compatible` |
+| `FUND_AGENT_LLM_MODEL` | 是 | 部署方显式选择的模型名；代码不提供默认模型 |
+| `FUND_AGENT_LLM_BASE_URL` | 是 | OpenAI-compatible endpoint base URL；必须是无 query/fragment 的 `http://` 或 `https://` URL |
+| `FUND_AGENT_LLM_API_KEY_ENV_VAR` | 否 | API key 所在环境变量名；默认 `FUND_AGENT_LLM_API_KEY` |
+| `FUND_AGENT_LLM_API_KEY` | 条件必填 | 默认 API key 变量；如果设置了 `FUND_AGENT_LLM_API_KEY_ENV_VAR`，则读取其指向的变量 |
+| `FUND_AGENT_LLM_TIMEOUT_SECONDS` | 否 | 单次 HTTP 请求 timeout，默认 `60`，范围 `(0, 300]` |
+| `FUND_AGENT_LLM_MAX_OUTPUT_CHARS` | 否 | 本地章节输出字符上限，默认 `12000`，范围 `(0, 50000]` |
+
+缺少或非法配置会在调用 Service 前失败关闭，退出码为 `1`，stdout 为空；provider 构造失败同样退出 `1`。进入 LLM 编排后，provider runtime error、章节写作/审计 blocked、partial result 或 final assembly incomplete 都会失败关闭，且不会静默回退到默认 deterministic `analyze` 报告。`fund-analysis checklist` 不支持 `--use-llm`。
 
 `fund-analysis analyze FUND_CODE` 不传 `--valuation-state` 时，会先识别基金类型，再仅对 `index_fund` / `enhanced_index` 且业绩基准可精确映射到沪深300 `000300` 或中证500 `000905` 的基金调用项目内自建温度计。主动、债券、QDII、FOF、缺少基准、复合基准不确定、派生/策略/行业指数或未支持指数都会保持 `unavailable` 灰灯且不调用温度计。显式传 `--valuation-state unavailable` 会恢复旧的手动灰灯路径，并且不调用温度计；显式传 `low/fair/high` 也同样优先于自动估值。
 
@@ -113,6 +140,7 @@ fund-analysis checklist 004393 --report-year 2024
 已实现：
 
 - `fund-analysis analyze FUND_CODE` CLI 分析入口
+- `fund-analysis analyze FUND_CODE --use-llm` 显式 LLM opt-in 入口；配置完整时通过 Service `analyze_with_llm()` 运行 provider-backed 分章写作/审计路径，缺失配置或不完整结果失败关闭，退出码为 `1`
 - `fund-analysis checklist FUND_CODE` 独立买入前检查清单入口
 - 统一年报仓库入口：`FundDocumentRepository.load_annual_report(...)`
 - P1 结构化抽取：基金类型、产品画像、表现、经理/持有人、持仓和份额变化
@@ -128,6 +156,7 @@ fund-analysis checklist 004393 --report-year 2024
 - Correctness golden answer 预填底稿：`fund-analysis golden-prefill`
 - Correctness golden answer JSON 构建与 strict 校验：`fund-analysis golden-build`
 - 报告质量 gate 骨架：`fund-analysis quality-gate`
+- Baseline/golden promotion 只读 preflight：`fund-analysis golden-readiness-preflight`
 - `fund-analysis analyze` 主链路质量保护：复用已抽取结构化数据生成 score/gate，默认 `block` 策略会阻断低质量精选基金报告输出，`warn` 策略只提示不阻断，`off` 明确跳过
 - 3 只样本基金 CLI 端到端矩阵，覆盖报告完整性、程序审计和证据锚点
 
@@ -238,6 +267,25 @@ fund-analysis quality-gate \
 默认输出到 `score.json` 所在目录，包含 `quality_gate.json` 和 `quality_gate.md`。当前 gate 消费 coverage / traceability / `fund_quality` / `failed_funds` / correctness：字段级或单基金 P0 fail 会阻断，单基金 issue 会保留 `fund_code`；P1 fail 会警告；App 类别与基金类型明确冲突或 strict golden answer mismatch 会触发 `FQ1/block`；字段缺失率达到阈值会触发 FQ4；基金类型无法解析 preferred_lens 会触发 FQ5；完全失败基金会触发 FQ6；strict golden answer 未配置、当前基金未覆盖或当前基金无可比字段时记录带 `reason` / `coverage_scope` / `fund_code` 的 `FQ0/info`，不等同于 gate 未运行。
 
 `fund-analysis analyze` 默认也会运行 quality gate，product mode 使用 `docs/code_20260519.csv` 作为精选池 membership source，并使用默认 strict golden answer 路径。若 gate 状态为 `block` 或 gate 未运行，默认策略会非零退出并在 stderr 输出结构化原因，不输出完整报告；精选池成员缺 strict golden 覆盖时仍会输出报告，并在 stderr 增加 `quality_gate_info: ...`。`--quality-gate-policy warn/off` 仅可在 `--dev-override` 模式下用于开发验证。
+
+生成 baseline/golden promotion 只读 preflight：
+
+```bash
+fund-analysis golden-readiness-preflight \
+  --preflight-input docs/reviews/golden-readiness-preflight-input-20260529.json
+```
+
+没有完整 input JSON 时可运行当前 accepted disposition 默认聚合：
+
+```bash
+fund-analysis golden-readiness-preflight \
+  --run-id golden-readiness-preflight-20260529 \
+  --source-csv docs/code_20260519.csv \
+  --golden-answer-path reports/golden-answers/golden-answer.json \
+  --output-dir reports/golden-readiness-preflight/golden-readiness-preflight-20260529
+```
+
+命令只读生成 `golden_readiness_preflight.json` 和 `.md`，stdout 只打印两个路径与 `overall_status`。`overall_status=block` 仍表示 preflight 成功生成，退出码为 0；该命令不修改 golden answer、fixture、score/quality gate 语义，也不执行 promotion。
 
 ## 真实精选基金池 Smoke
 

@@ -7,7 +7,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from decimal import Decimal
 from datetime import datetime, timezone
 from pathlib import Path
@@ -52,12 +52,26 @@ from fund_agent.fund.fund_type import FundType
 from fund_agent.fund.quality_gate import GATE_STATUS_BLOCK, QualityGateResult
 from fund_agent.fund.quality_gate_integration import check_quality_gate_fund_membership, run_quality_gate_for_bundle
 from fund_agent.fund.template import TemplateRenderInput, TemplateRenderResult, render_template_report
+from fund_agent.services.chapter_orchestrator import (
+    ChapterOrchestrationPolicy,
+    ChapterOrchestrationResult,
+    ChapterOrchestratorLLMClients,
+    build_chapter_orchestration_input,
+    orchestrate_chapters,
+)
+from fund_agent.services.final_chapter_assembler import (
+    FinalAssemblyPolicy,
+    FinalChapterAssemblyInput,
+    FinalChapterAssemblyResult,
+    assemble_final_chapters,
+)
 from fund_agent.services.thermometer_service import ThermometerRequest, ThermometerService as IndexThermometerService
 
 ValuationState = Literal["low", "fair", "high", "unavailable"]
 MoneyHorizon = Literal["long_enough", "uncertain", "too_short"]
 QualityGatePolicy = Literal["off", "warn", "block"]
 AnalyzeMode = Literal["product", "developer_override"]
+AnalyzeCommandSource = Literal["analyze", "checklist"]
 DEFAULT_GOLDEN_ANSWER_PATH = DEFAULT_GOLDEN_ANSWER_JSON
 
 
@@ -167,6 +181,7 @@ class FundAnalysisRequest:
         force_refresh: 是否强制刷新底层数据。
         mode: analyze 契约模式，默认 product。
         developer_overrides: 开发覆盖参数；product mode 下必须为空。
+        command_source: 触发分析核心的命令来源，用于默认 quality gate run_id 命名。
     """
 
     fund_code: str
@@ -179,6 +194,7 @@ class FundAnalysisRequest:
     force_refresh: bool = False
     mode: AnalyzeMode = "product"
     developer_overrides: FundAnalysisDeveloperOverrides | None = None
+    command_source: AnalyzeCommandSource = "analyze"
 
 
 @dataclass(frozen=True, slots=True)
@@ -269,6 +285,54 @@ class FundAnalysisResult:
         """
 
         return self.render_result.report_markdown
+
+
+@dataclass(frozen=True, slots=True)
+class FundLLMAnalysisResult:
+    """Service LLM 分析用例结果，见模板第 0-7 章。
+
+    Attributes:
+        structured_data: P1 结构化基金数据包。
+        final_judgment_decision: Agent/Fund 层确定性最终判断契约。
+        llm_orchestration_result: Gate 3 第 1-6 章 LLM 编排结果。
+        final_assembly_result: Gate 4 第 0/7 章与完整报告总装结果。
+        quality_gate_result: quality gate 结果；未运行时为空。
+        quality_gate_not_run_reason: quality gate 未运行原因。
+    """
+
+    structured_data: StructuredFundDataBundle
+    final_judgment_decision: FinalJudgmentDecision
+    llm_orchestration_result: ChapterOrchestrationResult
+    final_assembly_result: FinalChapterAssemblyResult
+    quality_gate_result: QualityGateResult | None = None
+    quality_gate_not_run_reason: str | None = None
+
+    @property
+    def report_markdown(self) -> str:
+        """返回 LLM 路径总装后的完整 Markdown 报告。
+
+        Args:
+            无。
+
+        Returns:
+            完整 Markdown 报告文本。
+
+        Raises:
+            ValueError: 当 Gate 3/4 未 accepted，或总装未产出完整报告时抛出。
+        """
+
+        report_markdown = self.final_assembly_result.report_markdown
+        if report_markdown is not None:
+            return report_markdown
+        issue_reasons = ", ".join(
+            issue.reason for issue in self.final_assembly_result.issues
+        ) or "no final assembly issue recorded"
+        raise ValueError(
+            "LLM 分析报告尚未完成，不能读取 report_markdown："
+            f"orchestration_status={self.llm_orchestration_result.status}, "
+            f"final_assembly_status={self.final_assembly_result.status}, "
+            f"issues={issue_reasons}"
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -447,7 +511,9 @@ class FundAnalysisService:
             Exception: 允许底层抽取器或 Agent 层基金能力传播异常。
         """
 
-        core_result = await self._run_analysis_core(request)
+        core_result = await self._run_analysis_core(
+            replace(request, command_source="analyze")
+        )
         render_result = render_template_report(
             TemplateRenderInput(
                 structured_data=core_result.structured_data,
@@ -499,7 +565,9 @@ class FundAnalysisService:
             Exception: 允许底层抽取器或 Agent 层基金能力传播异常。
         """
 
-        core_result = await self._run_analysis_core(request)
+        core_result = await self._run_analysis_core(
+            replace(request, command_source="checklist")
+        )
         return FundChecklistResult(
             structured_data=core_result.structured_data,
             rabc_attribution=core_result.rabc_attribution,
@@ -510,6 +578,69 @@ class FundAnalysisService:
             checklist_result=core_result.checklist_result,
             valuation_state_resolution=core_result.valuation_state_resolution,
             final_judgment_decision=core_result.final_judgment_decision,
+            quality_gate_result=core_result.quality_gate_result,
+            quality_gate_not_run_reason=core_result.quality_gate_not_run_reason,
+        )
+
+    async def analyze_with_llm(
+        self,
+        request: FundAnalysisRequest,
+        *,
+        llm_clients: ChapterOrchestratorLLMClients,
+        chapter_policy: ChapterOrchestrationPolicy | None = None,
+        assembly_policy: FinalAssemblyPolicy | None = None,
+    ) -> FundLLMAnalysisResult:
+        """执行显式 LLM 章节写作分析用例。
+
+        该方法属于 Route C Gate 4 Slice 4B：先复用 `_run_analysis_core()` 得到
+        结构化事实、quality gate 状态和最终判断，再编排模板第 1-6 章 LLM
+        write-audit-repair，最后总装模板第 0 章与第 7 章。它不构造生产 LLM
+        provider，不回退到确定性 renderer，不改变 `analyze()` / `checklist()`
+        行为，也不把显式参数塞入 `extra_payload`。
+
+        Args:
+            request: 显式分析参数。
+            llm_clients: Gate 3 writer/auditor LLM Protocol clients，必须显式注入。
+            chapter_policy: 可选章节编排策略；默认生成模板第 1-6 章。
+            assembly_policy: 可选最终总装策略；默认要求完整第 1-6 章 accepted。
+
+        Returns:
+            LLM 分析结果，包含 Gate 3 编排结果和 Gate 4 总装结果。
+
+        Raises:
+            ValueError: 当请求契约、章节编排输入或总装输入非法时抛出。
+            QualityGateBlockedError: 当 quality gate 在 block 策略下阻断报告时抛出。
+            QualityGateNotRunBlockedError: 当 quality gate 在 block 策略下未运行时抛出。
+            Exception: 允许底层抽取器或 Agent 层基金能力传播异常。
+        """
+
+        core_result = await self._run_analysis_core(
+            replace(request, command_source="analyze")
+        )
+        orchestration_input = build_chapter_orchestration_input(
+            fund_code=core_result.structured_data.fund_code,
+            report_year=core_result.structured_data.report_year,
+            structured_data=core_result.structured_data,
+            policy=chapter_policy or ChapterOrchestrationPolicy(),
+        )
+        orchestration_result = orchestrate_chapters(
+            orchestration_input,
+            llm_clients=llm_clients,
+        )
+        final_assembly_result = assemble_final_chapters(
+            FinalChapterAssemblyInput(
+                fund_code=core_result.structured_data.fund_code,
+                report_year=core_result.structured_data.report_year,
+                orchestration_result=orchestration_result,
+                final_judgment_decision=core_result.final_judgment_decision,
+                policy=assembly_policy or FinalAssemblyPolicy(),
+            )
+        )
+        return FundLLMAnalysisResult(
+            structured_data=core_result.structured_data,
+            final_judgment_decision=core_result.final_judgment_decision,
+            llm_orchestration_result=orchestration_result,
+            final_assembly_result=final_assembly_result,
             quality_gate_result=core_result.quality_gate_result,
             quality_gate_not_run_reason=core_result.quality_gate_not_run_reason,
         )
@@ -613,6 +744,7 @@ class FundAnalysisService:
         quality_gate_result, quality_gate_not_run_reason = _run_quality_gate_if_enabled(
             structured_data=structured_data,
             resolved_contract=resolved_contract,
+            command_source=request.command_source,
         )
         if resolved_contract.quality_gate_policy == "block":
             if quality_gate_result is None:
@@ -794,6 +926,8 @@ def _validate_request(
         raise ValueError("fund_code 必须是 6 位数字")
     if request.report_year <= 0:
         raise ValueError("report_year 必须为正整数")
+    if request.command_source not in {"analyze", "checklist"}:
+        raise ValueError("command_source 必须是 analyze / checklist")
     if resolved_contract.quality_gate_policy not in {"off", "warn", "block"}:
         raise ValueError("quality_gate_policy 必须是 off / warn / block")
     if (
@@ -847,12 +981,14 @@ def _run_quality_gate_if_enabled(
     *,
     structured_data: StructuredFundDataBundle,
     resolved_contract: ResolvedAnalyzeContract,
+    command_source: AnalyzeCommandSource,
 ) -> tuple[QualityGateResult | None, str | None]:
     """按请求策略运行输入质量 gate。
 
     Args:
         structured_data: 已抽取的结构化基金数据包，避免重复读取年报。
         resolved_contract: 解析后的 analyze 契约。
+        command_source: 触发 quality gate 的命令来源。
 
     Returns:
         `(quality_gate_result, not_run_reason)`。
@@ -870,7 +1006,11 @@ def _run_quality_gate_if_enabled(
         bundle=structured_data,
         source_csv=resolved_contract.quality_gate_source_csv,
         output_dir=resolved_contract.quality_gate_output_dir,
-        run_id=resolved_contract.quality_gate_run_id or _default_quality_gate_run_id(structured_data),
+        run_id=resolved_contract.quality_gate_run_id
+        or _default_quality_gate_run_id(
+            structured_data,
+            command_source=command_source,
+        ),
         golden_answer_path=golden_answer_path,
     )
     return integration_result.quality_gate_result, integration_result.not_run_reason
@@ -925,11 +1065,16 @@ def _resolve_golden_answer_path(path: Path | None) -> Path | None:
     return None
 
 
-def _default_quality_gate_run_id(structured_data: StructuredFundDataBundle) -> str:
+def _default_quality_gate_run_id(
+    structured_data: StructuredFundDataBundle,
+    *,
+    command_source: AnalyzeCommandSource,
+) -> str:
     """生成默认 quality gate 运行 ID。
 
     Args:
         structured_data: 已抽取的结构化基金数据包。
+        command_source: 触发 quality gate 的命令来源。
 
     Returns:
         包含基金代码、年报年份和 UTC 时间戳的运行 ID。
@@ -939,7 +1084,7 @@ def _default_quality_gate_run_id(structured_data: StructuredFundDataBundle) -> s
     """
 
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
-    return f"analyze-{structured_data.fund_code}-{structured_data.report_year}-{timestamp}"
+    return f"{command_source}-{structured_data.fund_code}-{structured_data.report_year}-{timestamp}"
 
 
 def _extract_fund_type(structured_data: StructuredFundDataBundle) -> FundType:

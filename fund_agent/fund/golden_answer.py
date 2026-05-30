@@ -20,6 +20,7 @@ from fund_agent.config.paths import (
 )
 
 GOLDEN_ANSWER_SCHEMA_VERSION: Final[str] = "fund-agent.golden-answer.v1"
+LEGACY_GOLDEN_ANSWER_REPORT_YEAR: Final[int] = 2024
 _FUND_HEADING_PATTERN: Final[re.Pattern[str]] = re.compile(
     r"^##\s+(?P<code>\d{6})\s+(?P<title>.+?)\s*$"
 )
@@ -33,6 +34,7 @@ class GoldenAnswerRecord:
 
     Attributes:
         fund_code: 基金代码。
+        report_year: golden answer 对应的年报年份。
         field_name: snapshot / extractor 字段名。
         sub_field: 字段内部子键。
         expected_value: 人工审核后的期望值。
@@ -41,6 +43,7 @@ class GoldenAnswerRecord:
     """
 
     fund_code: str
+    report_year: int
     field_name: str
     sub_field: str
     expected_value: str
@@ -54,12 +57,14 @@ class GoldenAnswerFund:
 
     Attributes:
         fund_code: 基金代码。
+        report_year: golden answer 对应的年报年份。
         title: Markdown 二级标题中的基金名称与类别文本。
         records: 该基金的有效真值记录。
         skipped_fields: 模板中明确跳过的字段标识。
     """
 
     fund_code: str
+    report_year: int
     title: str
     records: tuple[GoldenAnswerRecord, ...]
     skipped_fields: tuple[str, ...]
@@ -113,6 +118,7 @@ class _ParsedFund:
     """Markdown 中解析出的单只基金中间结构。"""
 
     fund_code: str
+    report_year: int
     title: str
     records: tuple[GoldenAnswerRecord, ...]
     skipped_fields: tuple[str, ...]
@@ -183,7 +189,7 @@ def load_golden_answer_json(golden_answer_path: Path) -> tuple[GoldenAnswerFund,
         raw_funds = []
 
     funds: list[GoldenAnswerFund] = []
-    seen_keys: set[tuple[str, str, str]] = set()
+    seen_keys: set[tuple[str, int, str, str]] = set()
     for fund_index, raw_fund in enumerate(raw_funds):
         if not isinstance(raw_fund, dict):
             errors.append(f"funds[{fund_index}] 必须是 JSON object")
@@ -219,7 +225,7 @@ def parse_golden_answer_markdown(markdown_text: str) -> tuple[GoldenAnswerFund, 
     current_records: list[GoldenAnswerRecord] = []
     current_skipped: list[str] = []
     current_errors: list[str] = []
-    seen_keys: set[tuple[str, str, str]] = set()
+    seen_keys: set[tuple[str, int, str, str]] = set()
 
     for line_number, line in enumerate(markdown_text.splitlines(), start=1):
         heading_match = _FUND_HEADING_PATTERN.match(line)
@@ -255,7 +261,7 @@ def parse_golden_answer_markdown(markdown_text: str) -> tuple[GoldenAnswerFund, 
         if _is_skipped_row(sub_field, expected_value):
             current_skipped.append(_skipped_field_label(field, sub_field))
             continue
-        key = (current_code, field, sub_field)
+        key = (current_code, LEGACY_GOLDEN_ANSWER_REPORT_YEAR, field, sub_field)
         row_context = f"line {line_number} fund {current_code} {field}.{sub_field}"
         if key in seen_keys:
             current_errors.append(f"{row_context}: 重复 golden answer 行")
@@ -270,6 +276,7 @@ def parse_golden_answer_markdown(markdown_text: str) -> tuple[GoldenAnswerFund, 
         current_records.append(
             GoldenAnswerRecord(
                 fund_code=current_code,
+                report_year=LEGACY_GOLDEN_ANSWER_REPORT_YEAR,
                 field_name=field,
                 sub_field=sub_field,
                 expected_value=_unescape_markdown_cell(expected_value),
@@ -298,6 +305,7 @@ def parse_golden_answer_markdown(markdown_text: str) -> tuple[GoldenAnswerFund, 
         funds.append(
             GoldenAnswerFund(
                 fund_code=parsed_fund.fund_code,
+                report_year=parsed_fund.report_year,
                 title=parsed_fund.title,
                 records=parsed_fund.records,
                 skipped_fields=parsed_fund.skipped_fields,
@@ -311,14 +319,14 @@ def parse_golden_answer_markdown(markdown_text: str) -> tuple[GoldenAnswerFund, 
 def _parse_golden_answer_json_fund(
     raw_fund: dict[str, object],
     fund_index: int,
-    seen_keys: set[tuple[str, str, str]],
+    seen_keys: set[tuple[str, int, str, str]],
 ) -> tuple[GoldenAnswerFund | None, tuple[str, ...]]:
     """解析 strict JSON 中的单只基金。
 
     Args:
         raw_fund: JSON 中的基金对象。
         fund_index: 基金数组下标。
-        seen_keys: 全局已见 `(fund_code, field_name, sub_field)` 集合。
+        seen_keys: 全局已见 `(fund_code, report_year, field_name, sub_field)` 集合。
 
     Returns:
         解析后的基金对象；如果阻断字段非法则返回 `None` 和错误列表。
@@ -329,6 +337,7 @@ def _parse_golden_answer_json_fund(
 
     errors: list[str] = []
     fund_code = _json_required_text(raw_fund, "fund_code", f"funds[{fund_index}]", errors)
+    report_year = _json_optional_report_year(raw_fund, f"funds[{fund_index}]", errors)
     title = _json_required_text(raw_fund, "title", f"funds[{fund_index}]", errors)
     raw_records = raw_fund.get("records")
     if not isinstance(raw_records, list):
@@ -347,7 +356,7 @@ def _parse_golden_answer_json_fund(
                 errors.append(f"{context} 必须是 JSON object")
                 continue
             parsed_record, record_errors = _parse_golden_answer_json_record(
-                raw_record, context, fund_code, seen_keys
+                raw_record, context, fund_code, report_year, seen_keys
             )
             errors.extend(record_errors)
             if parsed_record is not None:
@@ -359,6 +368,7 @@ def _parse_golden_answer_json_fund(
     return (
         GoldenAnswerFund(
             fund_code=fund_code,
+            report_year=report_year,
             title=title,
             records=tuple(records),
             skipped_fields=tuple(str(item) for item in raw_skipped),
@@ -371,7 +381,8 @@ def _parse_golden_answer_json_record(
     raw_record: dict[str, object],
     context: str,
     fund_code: str,
-    seen_keys: set[tuple[str, str, str]],
+    fund_report_year: int,
+    seen_keys: set[tuple[str, int, str, str]],
 ) -> tuple[GoldenAnswerRecord | None, tuple[str, ...]]:
     """解析 strict JSON 中的单条 golden answer 记录。
 
@@ -379,6 +390,7 @@ def _parse_golden_answer_json_record(
         raw_record: JSON 中的记录对象。
         context: 错误上下文。
         fund_code: 所属基金代码。
+        fund_report_year: 所属基金的年报年份。
         seen_keys: 全局已见键集合。
 
     Returns:
@@ -390,6 +402,7 @@ def _parse_golden_answer_json_record(
 
     errors: list[str] = []
     record_fund_code = _json_required_text(raw_record, "fund_code", context, errors)
+    record_report_year = _json_optional_report_year(raw_record, context, errors)
     field_name = _json_required_text(raw_record, "field_name", context, errors)
     sub_field = _json_required_text(raw_record, "sub_field", context, errors)
     expected_value = _json_required_text(raw_record, "expected_value", context, errors)
@@ -397,13 +410,18 @@ def _parse_golden_answer_json_record(
     source = _json_required_text(raw_record, "source", context, errors)
     if record_fund_code and record_fund_code != fund_code:
         errors.append(f"{context}.fund_code 必须等于所属基金 {fund_code}")
+    if record_report_year != fund_report_year:
+        errors.append(f"{context}.report_year 必须等于所属基金 {fund_report_year}")
     if confidence and confidence not in _ALLOWED_CONFIDENCE:
         errors.append(f"{context}.confidence 必须是 high / medium / low")
     if source in {_SKIPPED_CELL, "manual_required"}:
         errors.append(f"{context}.source 必须填写可复核来源，不能是 manual_required")
-    key = (fund_code, field_name, sub_field)
+    key = (fund_code, fund_report_year, field_name, sub_field)
     if all(key) and key in seen_keys:
-        errors.append(f"{context}: 重复 golden answer 行 {fund_code} {field_name}.{sub_field}")
+        errors.append(
+            f"{context}: 重复 golden answer 行 "
+            f"{fund_code} {fund_report_year} {field_name}.{sub_field}"
+        )
     elif all(key):
         seen_keys.add(key)
     if errors:
@@ -411,6 +429,7 @@ def _parse_golden_answer_json_record(
     return (
         GoldenAnswerRecord(
             fund_code=fund_code,
+            report_year=fund_report_year,
             field_name=field_name,
             sub_field=sub_field,
             expected_value=expected_value,
@@ -449,6 +468,39 @@ def _json_required_text(
     return value.strip()
 
 
+def _json_optional_report_year(
+    raw_object: dict[str, object],
+    context: str,
+    errors: list[str],
+) -> int:
+    """读取 strict JSON object 中的可选年报年份。
+
+    Args:
+        raw_object: JSON object。
+        context: 错误上下文。
+        errors: 错误列表，会被原地追加。
+
+    Returns:
+        年报年份；legacy JSON 缺失时返回 2024。
+
+    Raises:
+        无显式抛出。
+    """
+
+    value = raw_object.get("report_year")
+    if value is None:
+        return LEGACY_GOLDEN_ANSWER_REPORT_YEAR
+    if isinstance(value, bool):
+        errors.append(f"{context}.report_year 必须是整数")
+        return LEGACY_GOLDEN_ANSWER_REPORT_YEAR
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str) and value.strip().isdigit():
+        return int(value.strip())
+    errors.append(f"{context}.report_year 必须是整数")
+    return LEGACY_GOLDEN_ANSWER_REPORT_YEAR
+
+
 def _append_current_fund(
     parsed_funds: list[_ParsedFund],
     fund_code: str | None,
@@ -479,6 +531,7 @@ def _append_current_fund(
     parsed_funds.append(
         _ParsedFund(
             fund_code=fund_code,
+            report_year=LEGACY_GOLDEN_ANSWER_REPORT_YEAR,
             title=title,
             records=tuple(records),
             skipped_fields=tuple(skipped_fields),
@@ -654,6 +707,7 @@ def _json_payload(input_path: Path, funds: tuple[GoldenAnswerFund, ...]) -> dict
         "funds": [
             {
                 "fund_code": fund.fund_code,
+                "report_year": fund.report_year,
                 "title": fund.title,
                 "records": [asdict(record) for record in fund.records],
                 "skipped_fields": list(fund.skipped_fields),

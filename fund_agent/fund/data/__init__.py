@@ -7,6 +7,26 @@
 from pathlib import Path
 
 from fund_agent.fund.data.nav_data import FundNavDataAdapter, NavDataResult
+from fund_agent.fund.data.nav_models import (
+    AdjustmentBasis,
+    DividendAdjustmentStatus,
+    FundNavRecord,
+    FundNavSeries,
+    NavCompletenessStatus,
+    NavContractError,
+    NavDataContractError,
+    NavFailureCategory,
+    NavIdentityStatus,
+    NavSourceMetadata,
+    NavType,
+    ShareClassMapping,
+)
+from fund_agent.fund.data.nav_metrics import (
+    NavMaxDrawdownMetric,
+    calculate_max_drawdown_from_nav_series,
+    format_max_drawdown_percent,
+)
+from fund_agent.fund.data.nav_repository import FundNavRepository
 from fund_agent.fund.data.thermometer import (
     FundThermometerAdapter,
     IndexTemperature,
@@ -67,14 +87,28 @@ def create_default_thermometer_source() -> AkshareThermometerSource:
 
 __all__ = [
     "ALL_A_MARKET_CODE",
+    "AdjustmentBasis",
+    "DividendAdjustmentStatus",
     "FundNavDataAdapter",
+    "FundNavRecord",
+    "FundNavRepository",
+    "FundNavSeries",
     "FundThermometerAdapter",
     "IndexTemperature",
     "MacroTemperature",
     "MarketTemperature",
+    "NavCompletenessStatus",
+    "NavContractError",
     "NavDataResult",
+    "NavMaxDrawdownMetric",
+    "NavDataContractError",
+    "NavFailureCategory",
+    "NavIdentityStatus",
+    "NavSourceMetadata",
+    "NavType",
     "PePbHistory",
     "PePbPoint",
+    "ShareClassMapping",
     "ThermometerBatchResult",
     "ThermometerReading",
     "ThermometerSnapshot",
@@ -83,6 +117,8 @@ __all__ = [
     "classify_thermometer_code",
     "create_default_thermometer_history_cache",
     "create_default_thermometer_source",
+    "calculate_max_drawdown_from_nav_series",
+    "format_max_drawdown_percent",
     "parse_thermometer_pages",
     "thermometer_display_name",
 ]

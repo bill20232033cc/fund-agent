@@ -15,6 +15,7 @@ from fund_agent.fund.data.thermometer_cache import ThermometerHistoryCache
 from fund_agent.fund.data.thermometer_types import PePbHistory, PePbPoint
 from fund_agent.fund.quality_gate import QualityGateIssue, QualityGateResult
 from fund_agent.services import (
+    ChapterOrchestrationPolicy,
     QualityGateBlockedError,
     QualityGateNotRunBlockedError,
     ThermometerBatchResult,
@@ -32,10 +33,58 @@ class _FakeResult:
     quality_gate_not_run_reason: str | None = None
 
 
+@dataclass(frozen=True, slots=True)
+class _FakeLLMFinalAssemblyResult:
+    """CLI LLM 测试用 final assembly 结果。"""
+
+    status: str
+    report_markdown: str | None
+    issues: tuple[object, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class _FakeLLMOrchestrationResult:
+    """CLI LLM 测试用 orchestration 结果。"""
+
+    status: str
+
+
+@dataclass(frozen=True, slots=True)
+class _FakeLLMResult:
+    """CLI LLM 测试用 Service 返回值。"""
+
+    final_assembly_result: _FakeLLMFinalAssemblyResult
+    llm_orchestration_result: _FakeLLMOrchestrationResult
+    quality_gate_result: object | None = None
+    quality_gate_not_run_reason: str | None = None
+
+    @property
+    def report_markdown(self) -> str:
+        """返回 fake LLM 报告。
+
+        Args:
+            无。
+
+        Returns:
+            fake LLM Markdown。
+
+        Raises:
+            ValueError: 当 fake final assembly 未产出报告时抛出。
+        """
+
+        if self.final_assembly_result.report_markdown is None:
+            raise ValueError("fake LLM report incomplete")
+        return self.final_assembly_result.report_markdown
+
+
 class _FakeService:
     """CLI 测试用成功 Service。"""
 
     last_request = None
+    analyze_called = False
+    analyze_with_llm_called = False
+    last_llm_clients = None
+    last_chapter_policy = None
 
     async def analyze(self, request):  # type: ignore[no-untyped-def]
         """记录请求并返回固定 Markdown。
@@ -50,8 +99,42 @@ class _FakeService:
             无显式抛出。
         """
 
+        type(self).analyze_called = True
         type(self).last_request = request
         return _FakeResult(report_markdown="# 0. 投资要点概览\n\n# 7. 是否值得持有——最终判断\n")
+
+    async def analyze_with_llm(  # type: ignore[no-untyped-def]
+        self,
+        request,
+        *,
+        llm_clients,
+        chapter_policy,
+    ):
+        """记录 LLM 分析调用，测试 fail-closed 时不得触发。
+
+        Args:
+            request: CLI 构造的 Service 请求。
+            llm_clients: 显式注入的 LLM 客户端。
+            chapter_policy: 显式注入的章节编排策略。
+
+        Returns:
+            fake Service 返回值。
+
+        Raises:
+            无显式抛出。
+        """
+
+        type(self).analyze_with_llm_called = True
+        type(self).last_request = request
+        type(self).last_llm_clients = llm_clients
+        type(self).last_chapter_policy = chapter_policy
+        return _FakeLLMResult(
+            final_assembly_result=_FakeLLMFinalAssemblyResult(
+                status="accepted",
+                report_markdown="# LLM report\n",
+            ),
+            llm_orchestration_result=_FakeLLMOrchestrationResult(status="accepted"),
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -119,6 +202,7 @@ class _FakeChecklistService:
     """CLI 测试用独立 checklist Service。"""
 
     last_request = None
+    checklist_called = False
 
     async def checklist(self, request):  # type: ignore[no-untyped-def]
         """记录请求并返回固定检查清单。
@@ -133,6 +217,7 @@ class _FakeChecklistService:
             无显式抛出。
         """
 
+        type(self).checklist_called = True
         type(self).last_request = request
         item = _FakeChecklistItem(
             code="valuation",
@@ -258,6 +343,128 @@ class _FakeNotRunBlockedAnalysisService:
         """
 
         raise QualityGateNotRunBlockedError("fund_code `110011` not found")
+
+
+class _FakeLLMBlockedAnalysisService:
+    """CLI LLM 测试用 quality gate 阻断 Service。"""
+
+    async def analyze(self, request):  # type: ignore[no-untyped-def]
+        """默认确定性 analyze 不应被 LLM path 调用。
+
+        Args:
+            request: CLI 构造的 Service 请求。
+
+        Returns:
+            无返回值。
+
+        Raises:
+            AssertionError: 始终抛出。
+        """
+
+        raise AssertionError("deterministic analyze must not be called")
+
+    async def analyze_with_llm(  # type: ignore[no-untyped-def]
+        self,
+        request,
+        *,
+        llm_clients,
+        chapter_policy,
+    ):
+        """抛出结构化 quality gate 阻断异常。
+
+        Args:
+            request: CLI 构造的 Service 请求。
+            llm_clients: 显式注入的 LLM 客户端。
+            chapter_policy: 显式注入的章节编排策略。
+
+        Returns:
+            无返回值。
+
+        Raises:
+            QualityGateBlockedError: 始终抛出。
+        """
+
+        raise QualityGateBlockedError(_fake_quality_gate_result(status="block"))
+
+
+class _FakeLLMNotRunBlockedAnalysisService:
+    """CLI LLM 测试用 quality gate 未运行阻断 Service。"""
+
+    async def analyze(self, request):  # type: ignore[no-untyped-def]
+        """默认确定性 analyze 不应被 LLM path 调用。
+
+        Args:
+            request: CLI 构造的 Service 请求。
+
+        Returns:
+            无返回值。
+
+        Raises:
+            AssertionError: 始终抛出。
+        """
+
+        raise AssertionError("deterministic analyze must not be called")
+
+    async def analyze_with_llm(  # type: ignore[no-untyped-def]
+        self,
+        request,
+        *,
+        llm_clients,
+        chapter_policy,
+    ):
+        """抛出 quality gate 未运行阻断异常。
+
+        Args:
+            request: CLI 构造的 Service 请求。
+            llm_clients: 显式注入的 LLM 客户端。
+            chapter_policy: 显式注入的章节编排策略。
+
+        Returns:
+            无返回值。
+
+        Raises:
+            QualityGateNotRunBlockedError: 始终抛出。
+        """
+
+        raise QualityGateNotRunBlockedError("fund_code `110011` not found")
+
+
+class _IncompleteLLMService(_FakeService):
+    """返回 incomplete LLM 结果的 fake Service。"""
+
+    async def analyze_with_llm(  # type: ignore[no-untyped-def]
+        self,
+        request,
+        *,
+        llm_clients,
+        chapter_policy,
+    ):
+        """记录调用并返回 incomplete final assembly。
+
+        Args:
+            request: CLI 构造的 Service 请求。
+            llm_clients: 显式注入的 LLM 客户端。
+            chapter_policy: 显式注入的章节编排策略。
+
+        Returns:
+            incomplete fake LLM result。
+
+        Raises:
+            无显式抛出。
+        """
+
+        type(self).analyze_with_llm_called = True
+        type(self).last_request = request
+        type(self).last_llm_clients = llm_clients
+        type(self).last_chapter_policy = chapter_policy
+        return _FakeLLMResult(
+            final_assembly_result=_FakeLLMFinalAssemblyResult(
+                status="blocked",
+                report_markdown=None,
+                issues=("chapter_missing",),
+            ),
+            llm_orchestration_result=_FakeLLMOrchestrationResult(status="partial"),
+        )
 
 
 class _FailingService:
@@ -487,6 +694,41 @@ class _FakeQualityGateService:
         )
 
 
+@dataclass(frozen=True, slots=True)
+class _FakeGoldenReadinessPreflightResult:
+    """CLI 测试用 golden readiness preflight 结果。"""
+
+    json_path: Path
+    markdown_path: Path
+    overall_status: str
+
+
+class _FakeGoldenReadinessPreflightService:
+    """CLI 测试用 golden readiness preflight Service。"""
+
+    last_request = None
+
+    def run(self, request):  # type: ignore[no-untyped-def]
+        """记录请求并返回固定 preflight 路径。
+
+        Args:
+            request: CLI 构造的 preflight 请求。
+
+        Returns:
+            fake preflight 结果。
+
+        Raises:
+            无显式抛出。
+        """
+
+        type(self).last_request = request
+        return _FakeGoldenReadinessPreflightResult(
+            json_path=Path("golden_readiness_preflight.json"),
+            markdown_path=Path("golden_readiness_preflight.md"),
+            overall_status="block",
+        )
+
+
 class _FakeThermometerService:
     """CLI 测试用温度计 Service。"""
 
@@ -527,6 +769,97 @@ class _FailingThermometerService:
         """
 
         raise RuntimeError("thermometer fixture failure")
+
+
+class _FakeLLMConfig:
+    """CLI 测试用 typed LLM config。"""
+
+    max_output_chars = 3456
+
+
+class _FakeLLMClients:
+    """CLI 测试用 LLM clients 标记对象。"""
+
+
+def _fake_load_llm_config() -> _FakeLLMConfig:
+    """返回 fake typed LLM config。
+
+    Args:
+        无。
+
+    Returns:
+        fake LLM config。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return _FakeLLMConfig()
+
+
+def _fake_build_llm_clients(config):  # type: ignore[no-untyped-def]
+    """返回 fake LLM clients，并记录传入 config。
+
+    Args:
+        config: CLI helper 读取到的 fake config。
+
+    Returns:
+        fake LLM clients。
+
+    Raises:
+        AssertionError: 当 config 不是测试配置时抛出。
+    """
+
+    assert isinstance(config, _FakeLLMConfig)
+    return _FakeLLMClients()
+
+
+def _raise_llm_construction_error(config):  # type: ignore[no-untyped-def]
+    """模拟 provider clients 构造失败。
+
+    Args:
+        config: CLI helper 读取到的 fake config。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        LLMProviderConstructionError: 始终抛出。
+    """
+
+    raise cli.LLMProviderConstructionError("fixture construction failure")
+
+
+def _forbid_llm_config():  # type: ignore[no-untyped-def]
+    """默认 analyze path 不应读取 LLM 配置。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 始终抛出。
+    """
+
+    raise AssertionError("default analyze must not read LLM config")
+
+
+def _forbid_llm_clients(config):  # type: ignore[no-untyped-def]
+    """默认 analyze path 不应构造 LLM provider。
+
+    Args:
+        config: 未使用。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 始终抛出。
+    """
+
+    raise AssertionError("default analyze must not construct LLM clients")
 
 
 def _available_thermometer_reading() -> ThermometerReading:
@@ -772,6 +1105,10 @@ def test_analyze_cli_calls_service_and_prints_report(monkeypatch) -> None:  # ty
     """
 
     _FakeService.last_request = None
+    _FakeService.analyze_called = False
+    _FakeService.analyze_with_llm_called = False
+    _FakeService.last_llm_clients = None
+    _FakeService.last_chapter_policy = None
     monkeypatch.setattr(cli, "FundAnalysisService", _FakeService)
     runner = CliRunner()
 
@@ -823,6 +1160,8 @@ def test_analyze_cli_calls_service_and_prints_report(monkeypatch) -> None:  # ty
 
     assert result.exit_code == 0
     assert result.output == "# 0. 投资要点概览\n\n# 7. 是否值得持有——最终判断\n"
+    assert _FakeService.analyze_called is True
+    assert _FakeService.analyze_with_llm_called is False
     assert _FakeService.last_request is not None
     assert _FakeService.last_request.fund_code == "110011"
     assert _FakeService.last_request.report_year == 2024
@@ -833,6 +1172,7 @@ def test_analyze_cli_calls_service_and_prints_report(monkeypatch) -> None:  # ty
     assert _FakeService.last_request.valuation_state == "low"
     assert _FakeService.last_request.thermometer_cache_dir == Path("cache/thermometer-fixture")
     assert _FakeService.last_request.force_refresh is True
+    assert _FakeService.last_request.command_source == "analyze"
     assert _FakeService.last_request.developer_overrides.quality_gate_policy == "warn"
     assert _FakeService.last_request.developer_overrides.quality_gate_source_csv == Path(
         "docs/code_20260519.csv"
@@ -844,6 +1184,145 @@ def test_analyze_cli_calls_service_and_prints_report(monkeypatch) -> None:  # ty
     assert _FakeService.last_request.developer_overrides.quality_gate_golden_answer_path == Path(
         "reports/golden-answers/golden-answer.json"
     )
+
+
+def test_analyze_cli_use_llm_missing_config_fails_before_service(
+    monkeypatch,
+) -> None:  # type: ignore[no-untyped-def]
+    """验证 `analyze --use-llm` 缺失配置时失败且不调用 Service。
+
+    Args:
+        monkeypatch: pytest monkeypatch fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 CLI 调用 Service 或输出 deterministic 报告时抛出。
+    """
+
+    _FakeService.last_request = None
+    _FakeService.analyze_called = False
+    _FakeService.analyze_with_llm_called = False
+    _FakeService.last_llm_clients = None
+    _FakeService.last_chapter_policy = None
+    monkeypatch.setattr(cli, "FundAnalysisService", _FakeService)
+    runner = CliRunner()
+
+    result = runner.invoke(cli.app, ["analyze", "110011", "--use-llm"])
+
+    assert result.exit_code == 1
+    assert result.stdout == ""
+    assert "LLM provider 配置错误：missing FUND_AGENT_LLM_PROVIDER" in result.stderr
+    assert "# 0. 投资要点概览" not in result.output
+    assert _FakeService.last_request is None
+    assert _FakeService.analyze_called is False
+    assert _FakeService.analyze_with_llm_called is False
+
+
+def test_analyze_cli_use_llm_configured_calls_llm_service_and_prints_report(
+    monkeypatch,
+) -> None:  # type: ignore[no-untyped-def]
+    """验证配置完整时 CLI 调用 LLM Service 且输出 LLM 报告。
+
+    Args:
+        monkeypatch: pytest monkeypatch fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 CLI 调用 deterministic analyze 或未传递 typed policy 时抛出。
+    """
+
+    _FakeService.last_request = None
+    _FakeService.analyze_called = False
+    _FakeService.analyze_with_llm_called = False
+    _FakeService.last_llm_clients = None
+    _FakeService.last_chapter_policy = None
+    monkeypatch.setattr(cli, "FundAnalysisService", _FakeService)
+    monkeypatch.setattr(cli, "load_llm_provider_config_from_env", _fake_load_llm_config)
+    monkeypatch.setattr(cli, "build_chapter_llm_clients", _fake_build_llm_clients)
+    runner = CliRunner()
+
+    result = runner.invoke(cli.app, ["analyze", "110011", "--use-llm"])
+
+    assert result.exit_code == 0
+    assert result.stdout == "# LLM report\n"
+    assert _FakeService.analyze_called is False
+    assert _FakeService.analyze_with_llm_called is True
+    assert _FakeService.last_request is not None
+    assert _FakeService.last_request.fund_code == "110011"
+    assert isinstance(_FakeService.last_llm_clients, _FakeLLMClients)
+    assert isinstance(_FakeService.last_chapter_policy, ChapterOrchestrationPolicy)
+    assert _FakeService.last_chapter_policy.max_output_chars == _FakeLLMConfig.max_output_chars
+
+
+def test_analyze_cli_use_llm_construction_error_fails_before_service(
+    monkeypatch,
+) -> None:  # type: ignore[no-untyped-def]
+    """验证 provider 构造失败时失败且不调用 Service。
+
+    Args:
+        monkeypatch: pytest monkeypatch fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当构造失败后仍调用 Service 或 stdout 非空时抛出。
+    """
+
+    _FakeService.last_request = None
+    _FakeService.analyze_called = False
+    _FakeService.analyze_with_llm_called = False
+    monkeypatch.setattr(cli, "FundAnalysisService", _FakeService)
+    monkeypatch.setattr(cli, "load_llm_provider_config_from_env", _fake_load_llm_config)
+    monkeypatch.setattr(cli, "build_chapter_llm_clients", _raise_llm_construction_error)
+    runner = CliRunner()
+
+    result = runner.invoke(cli.app, ["analyze", "110011", "--use-llm"])
+
+    assert result.exit_code == 1
+    assert result.stdout == ""
+    assert "LLM provider 构造失败：fixture construction failure" in result.stderr
+    assert _FakeService.last_request is None
+    assert _FakeService.analyze_called is False
+    assert _FakeService.analyze_with_llm_called is False
+
+
+def test_analyze_cli_use_llm_incomplete_result_exits_without_fallback(
+    monkeypatch,
+) -> None:  # type: ignore[no-untyped-def]
+    """验证 LLM 总装未完成时退出 1 且不输出 deterministic 报告。
+
+    Args:
+        monkeypatch: pytest monkeypatch fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 CLI 回退 deterministic 报告或 stdout 非空时抛出。
+    """
+
+    _IncompleteLLMService.last_request = None
+    _IncompleteLLMService.analyze_called = False
+    _IncompleteLLMService.analyze_with_llm_called = False
+    monkeypatch.setattr(cli, "FundAnalysisService", _IncompleteLLMService)
+    monkeypatch.setattr(cli, "load_llm_provider_config_from_env", _fake_load_llm_config)
+    monkeypatch.setattr(cli, "build_chapter_llm_clients", _fake_build_llm_clients)
+    runner = CliRunner()
+
+    result = runner.invoke(cli.app, ["analyze", "110011", "--use-llm"])
+
+    assert result.exit_code == 1
+    assert result.stdout == ""
+    assert "LLM 分析未完成：" in result.stderr
+    assert "orchestration_status=partial" in result.stderr
+    assert "# 0. 投资要点概览" not in result.output
+    assert _IncompleteLLMService.analyze_called is False
+    assert _IncompleteLLMService.analyze_with_llm_called is True
 
 
 def test_cli_module_imports_service_but_not_agent_internals() -> None:
@@ -866,6 +1345,36 @@ def test_cli_module_imports_service_but_not_agent_internals() -> None:
     assert "fund_agent.services" in cli_source
     assert forbidden_agent_import not in cli_source
     assert forbidden_application_import not in cli_source
+
+
+def test_cli_module_llm_boundary_has_no_forbidden_runtime_imports() -> None:
+    """验证 CLI `--use-llm` 入口未引入 provider SDK、dayu 或间接业务参数。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 CLI 越过当前 Slice 4C 边界时抛出。
+    """
+
+    cli_source = Path(cli.__file__).read_text(encoding="utf-8")
+    forbidden_terms = (
+        "dayu",
+        "extra_payload",
+        "openai",
+        "anthropic",
+        "httpx",
+        "provider_sdk",
+        "pdf_cache",
+        "download_annual_report",
+        "annual_report_source",
+    )
+
+    for term in forbidden_terms:
+        assert term not in cli_source
 
 
 def test_analyze_cli_prints_quality_gate_summary_to_stderr(monkeypatch) -> None:  # type: ignore[no-untyped-def]
@@ -938,12 +1447,19 @@ def test_analyze_cli_default_product_request(monkeypatch) -> None:  # type: igno
     """
 
     _FakeService.last_request = None
+    _FakeService.analyze_called = False
+    _FakeService.analyze_with_llm_called = False
     monkeypatch.setattr(cli, "FundAnalysisService", _FakeService)
+
+    monkeypatch.setattr(cli, "load_llm_provider_config_from_env", _forbid_llm_config)
+    monkeypatch.setattr(cli, "build_chapter_llm_clients", _forbid_llm_clients)
     runner = CliRunner()
 
     result = runner.invoke(cli.app, ["analyze", "110011"])
 
     assert result.exit_code == 0
+    assert _FakeService.analyze_called is True
+    assert _FakeService.analyze_with_llm_called is False
     assert _FakeService.last_request is not None
     assert _FakeService.last_request.mode == "product"
     assert _FakeService.last_request.developer_overrides is None
@@ -1026,6 +1542,35 @@ def test_analyze_cli_structured_quality_gate_block(monkeypatch) -> None:  # type
     assert "quality_gate_json: quality-output/quality_gate.json" in result.output
 
 
+def test_analyze_cli_use_llm_structured_quality_gate_block(
+    monkeypatch,
+) -> None:  # type: ignore[no-untyped-def]
+    """验证 LLM path 的 quality gate 阻断仍返回退出码 2。
+
+    Args:
+        monkeypatch: pytest monkeypatch fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 LLM path 未保持 quality gate 阻断语义时抛出。
+    """
+
+    monkeypatch.setattr(cli, "FundAnalysisService", _FakeLLMBlockedAnalysisService)
+    monkeypatch.setattr(cli, "load_llm_provider_config_from_env", _fake_load_llm_config)
+    monkeypatch.setattr(cli, "build_chapter_llm_clients", _fake_build_llm_clients)
+    runner = CliRunner()
+
+    result = runner.invoke(cli.app, ["analyze", "110011", "--use-llm"])
+
+    assert result.exit_code == 2
+    assert result.stdout == ""
+    assert "质量 gate 阻断报告输出" in result.stderr
+    assert "quality_gate_status: block" in result.stderr
+    assert "quality_gate_issues: 2" in result.stderr
+
+
 def test_analyze_cli_structured_quality_gate_not_run_block(
     monkeypatch,
 ) -> None:  # type: ignore[no-untyped-def]
@@ -1051,6 +1596,35 @@ def test_analyze_cli_structured_quality_gate_not_run_block(
     assert "质量 gate 阻断报告输出" in result.output
     assert "quality_gate_status: not_run" in result.output
     assert "quality_gate_not_run_reason: fund_code `110011` not found" in result.output
+
+
+def test_analyze_cli_use_llm_structured_quality_gate_not_run_block(
+    monkeypatch,
+) -> None:  # type: ignore[no-untyped-def]
+    """验证 LLM path 的 quality gate 未运行阻断仍返回退出码 2。
+
+    Args:
+        monkeypatch: pytest monkeypatch fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 LLM path 未保持 not-run 阻断语义时抛出。
+    """
+
+    monkeypatch.setattr(cli, "FundAnalysisService", _FakeLLMNotRunBlockedAnalysisService)
+    monkeypatch.setattr(cli, "load_llm_provider_config_from_env", _fake_load_llm_config)
+    monkeypatch.setattr(cli, "build_chapter_llm_clients", _fake_build_llm_clients)
+    runner = CliRunner()
+
+    result = runner.invoke(cli.app, ["analyze", "110011", "--use-llm"])
+
+    assert result.exit_code == 2
+    assert result.stdout == ""
+    assert "质量 gate 阻断报告输出" in result.stderr
+    assert "quality_gate_status: not_run" in result.stderr
+    assert "quality_gate_not_run_reason: fund_code `110011` not found" in result.stderr
 
 
 def test_analyze_cli_exits_nonzero_with_clear_message(monkeypatch) -> None:  # type: ignore[no-untyped-def]
@@ -1128,6 +1702,7 @@ def test_analyze_cli_help_documents_auto_valuation_and_opt_out() -> None:
         for option_name in getattr(parameter, "opts", ())
     }
     assert "--thermometer-cache-dir" in option_names
+    assert "--use-llm" in option_names
 
 
 def test_thermometer_cli_help_documents_all_a_and_self_owned_history() -> None:
@@ -1192,6 +1767,7 @@ def test_checklist_cli_calls_service_and_prints_summary(monkeypatch) -> None:  #
     """
 
     _FakeChecklistService.last_request = None
+    _FakeChecklistService.checklist_called = False
     monkeypatch.setattr(cli, "FundAnalysisService", _FakeChecklistService)
     runner = CliRunner()
 
@@ -1208,14 +1784,49 @@ def test_checklist_cli_calls_service_and_prints_summary(monkeypatch) -> None:  #
     )
 
     assert result.exit_code == 0
+    assert _FakeChecklistService.checklist_called is True
     assert _FakeChecklistService.last_request is not None
     assert _FakeChecklistService.last_request.fund_code == "110011"
     assert _FakeChecklistService.last_request.valuation_state == "low"
     assert _FakeChecklistService.last_request.user_money_horizon_years == "4"
+    assert _FakeChecklistService.last_request.command_source == "checklist"
     assert "overall_signal: green" in result.output
     assert "valuation_state: low" in result.output
     assert "final_judgment: worth_holding" in result.output
     assert "- valuation: green/pass" in result.output
+
+
+def test_checklist_cli_rejects_use_llm_option(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    """验证 checklist 不接受 `--use-llm`，且不会调用 Service。
+
+    Args:
+        monkeypatch: pytest monkeypatch fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 checklist 接受 LLM 选项或调用 Service 时抛出。
+    """
+
+    _FakeChecklistService.last_request = None
+    _FakeChecklistService.checklist_called = False
+    monkeypatch.setattr(cli, "FundAnalysisService", _FakeChecklistService)
+    runner = CliRunner()
+
+    result = runner.invoke(cli.app, ["checklist", "110011", "--use-llm"])
+
+    assert result.exit_code != 0
+    assert _FakeChecklistService.last_request is None
+    assert _FakeChecklistService.checklist_called is False
+
+    checklist_command = get_command(cli.app).commands["checklist"]
+    option_names = {
+        option_name
+        for parameter in checklist_command.params
+        for option_name in getattr(parameter, "opts", ())
+    }
+    assert "--use-llm" not in option_names
 
 
 def test_thermometer_cli_prints_plain_summary(monkeypatch, tmp_path) -> None:  # type: ignore[no-untyped-def]
@@ -1893,3 +2504,150 @@ def test_quality_gate_cli_is_thin_service_entry(monkeypatch, tmp_path) -> None: 
     assert _FakeQualityGateService.last_request is not None
     assert _FakeQualityGateService.last_request.score_path == score_path
     assert _FakeQualityGateService.last_request.output_dir == output_dir
+
+
+def test_golden_readiness_preflight_cli_outputs_paths_and_status(
+    monkeypatch,
+    tmp_path,
+) -> None:  # type: ignore[no-untyped-def]
+    """验证 golden-readiness-preflight CLI 转发显式参数并输出产物路径。
+
+    Args:
+        monkeypatch: pytest monkeypatch fixture。
+        tmp_path: pytest 临时目录 fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 CLI 输出或请求转发不符合契约时抛出。
+    """
+
+    _FakeGoldenReadinessPreflightService.last_request = None
+    monkeypatch.setattr(
+        cli, "GoldenReadinessPreflightService", _FakeGoldenReadinessPreflightService
+    )
+    runner = CliRunner()
+    output_dir = tmp_path / "preflight"
+
+    result = runner.invoke(
+        cli.app,
+        [
+            "golden-readiness-preflight",
+            "--run-id",
+            "unit",
+            "--source-csv",
+            "docs/code_20260519.csv",
+            "--golden-answer-path",
+            "reports/golden-answers/golden-answer.json",
+            "--output-dir",
+            str(output_dir),
+            "--fund-artifact",
+            "006597::2024::snapshot.jsonl::score.json::quality_gate.json",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert "preflight_json: golden_readiness_preflight.json" in result.output
+    assert "overall_status: block" in result.output
+    request = _FakeGoldenReadinessPreflightService.last_request
+    assert request is not None
+    assert request.output_dir == output_dir
+    assert len(request.fund_artifacts) == 1
+    artifact = request.fund_artifacts[0]
+    assert artifact.fund_code == "006597"
+    assert artifact.report_year == 2024
+    assert artifact.snapshot_path == Path("snapshot.jsonl")
+    assert artifact.score_path == Path("score.json")
+    assert artifact.quality_gate_path == Path("quality_gate.json")
+
+
+def test_golden_readiness_preflight_cli_rejects_preflight_input_conflicts(
+    monkeypatch,
+) -> None:  # type: ignore[no-untyped-def]
+    """验证 `--preflight-input` 与逐项输入互斥。
+
+    Args:
+        monkeypatch: pytest monkeypatch fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当互斥参数未返回 exit 2 时抛出。
+    """
+
+    monkeypatch.setattr(
+        cli, "GoldenReadinessPreflightService", _FakeGoldenReadinessPreflightService
+    )
+    runner = CliRunner()
+
+    result = runner.invoke(
+        cli.app,
+        [
+            "golden-readiness-preflight",
+            "--preflight-input",
+            "input.json",
+            "--fund-artifact",
+            "006597::2024::snapshot.jsonl::score.json::quality_gate.json",
+        ],
+    )
+
+    assert result.exit_code == 2
+    assert "--preflight-input 不能与逐项输入同时使用" in result.output
+
+
+def test_golden_readiness_preflight_cli_rejects_bad_fund_artifact_fields() -> None:
+    """验证 `--fund-artifact` 字段数必须精确为 5。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当错误字段数未返回 exit 2 时抛出。
+    """
+
+    runner = CliRunner()
+
+    result = runner.invoke(
+        cli.app,
+        [
+            "golden-readiness-preflight",
+            "--fund-artifact",
+            "006597::2024::snapshot.jsonl::score.json",
+        ],
+    )
+
+    assert result.exit_code == 2
+    assert "--fund-artifact 格式必须是" in result.output
+
+
+def test_golden_readiness_preflight_cli_rejects_bad_fund_code() -> None:
+    """验证 `--fund-artifact` fund_code 必须为 6 位数字。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当错误 fund_code 未返回 exit 2 时抛出。
+    """
+
+    runner = CliRunner()
+
+    result = runner.invoke(
+        cli.app,
+        [
+            "golden-readiness-preflight",
+            "--fund-artifact",
+            "6597::2024::snapshot.jsonl::score.json::quality_gate.json",
+        ],
+    )
+
+    assert result.exit_code == 2
+    assert "fund_code 必须是 6 位数字" in result.output
