@@ -41,6 +41,15 @@ from fund_agent.services.final_chapter_assembler import (
     FinalChapterAssemblyResult,
     assemble_final_chapters,
 )
+from fund_agent.services.llm_provider import (
+    LLMProviderConstructionError,
+    LLMProviderMalformedResponseError,
+    LLMProviderRateLimitError,
+    LLMProviderResponse,
+    LLMProviderRuntimeError,
+    OpenAICompatibleChapterLLMClient,
+    build_chapter_llm_clients,
+)
 from fund_agent.services.quality_gate_service import (
     QualityGateRequest,
     QualityGateService,
@@ -93,6 +102,13 @@ __all__ = [
     "FinalChapterAssemblyInput",
     "FinalChapterAssemblyResult",
     "assemble_final_chapters",
+    "LLMProviderConstructionError",
+    "LLMProviderMalformedResponseError",
+    "LLMProviderRateLimitError",
+    "LLMProviderResponse",
+    "LLMProviderRuntimeError",
+    "OpenAICompatibleChapterLLMClient",
+    "build_chapter_llm_clients",
     "QualityGateRequest",
     "QualityGateService",
     "ThermometerBatchResult",

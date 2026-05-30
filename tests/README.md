@@ -54,6 +54,8 @@ CI 当前固定 Python 3.11，使用 `uv sync --extra dev --frozen` 安装锁定
 - `tests/services/test_fund_analysis_service.py`：Service 编排测试，使用 fake extractor 避免网络/PDF 下载，覆盖 product mode 最小请求、developer override nested 契约、结构化抽取到渲染和程序审计的完整调用路径、自动估值显式短路、沪深300/中证500 exact identity 调用、不支持基金类型/不支持 exact code/复合支持指数歧义不调用、温度计不可用/计算错误灰灯/provider contract error fail-closed、fund_code 入口校验和规范化、quality gate `off / warn / block / not-run` 路径、结构化阻断异常、默认 gate run id 不覆盖，并验证不含 PDF 下载的单只基金分析低于 30 秒
 - `tests/services/test_fund_analysis_service_llm.py`：Route C Gate 4 Slice 4B Service LLM 分析用例测试，覆盖 `analyze_with_llm()` 显式 `llm_clients` 注入、复用确定性 core 后串接 Gate 3/4、accepted final assembly、partial/blocked fail-closed 且不回退确定性报告、原 `analyze/checklist` 不调用 LLM、quality gate block/not-run 异常传播和导入边界；使用 fake extractor、fake writer/auditor，不触发真实 provider、文档仓库、PDF、cache、source helper、CLI、Host/Agent 或 dayu
 - `tests/services/test_chapter_orchestrator.py`：Route C Gate 3 Service 章节编排器测试，覆盖显式 bundle/projection 输入、fact provider 注入、policy 校验、第 1-6 章范围、writer stop reason 映射、auditor unavailable early stop、repair retry/budget、`max_repair_attempts=0`、fail_fast、unknown fund type、LLM exception、accepted conclusion 500 字上限和导入隔离；fake LLM client 只在测试内定义，不触发真实 provider、文档仓库、PDF、cache、source helper、Host/Agent 或 dayu
+- `tests/config/test_llm_config.py`：Route C Gate 4 Slice 4D1 typed LLM env config 测试，覆盖 provider/model/base_url/key 必填、unsupported provider、base_url scheme/query/fragment、timeout/max_output_chars 边界、API key 空白缺失和 `repr` 不泄漏 secret；使用 fake env mapping，不读取真实环境或网络
+- `tests/services/test_llm_provider.py`：Route C Gate 4 Slice 4D1 Service-owned OpenAI-compatible provider adapter 测试，覆盖 `httpx.MockTransport` 请求 header/body、writer/auditor Protocol 映射、audit user_prompt 透传、429/5xx/network/timeout/malformed typed errors 和错误文本不泄漏 key/prompt/body；不触发真实 provider/API 网络
 - `tests/services/test_final_chapter_assembler.py`：Route C Gate 4 Slice 4A Service 最终章节总装器测试，覆盖 `final_chapter_assembler.v1` typed contract、Gate 3 partial fail-closed、第 7 章只消费 `FinalJudgmentDecision` 与第 1-6 章 accepted conclusions、第 0 章只消费 accepted conclusions、稀疏/截断来源不编造事实、0 -> 1-6 -> 7 渲染顺序和导入导出契约；不触发真实 provider、文档仓库、PDF、cache、source helper、CLI、Host/Agent 或 dayu
 - `tests/services/test_extraction_score_service.py`：P4-S2/P5-S4 评分 Service 测试，覆盖显式参数转发、`errors_path` 转发、非法 snapshot 路径和非法 errors 路径拒绝
 - `tests/services/test_thermometer_service.py`：温度计 Service 测试，覆盖注入 fake adapter、默认全 A `wind_all_a` 路由、显式 cache_dir/force_refresh 转发、非法缓存路径拒绝、自建 `--index 000300` / `--index wind_all_a` 路由、批量代码规范化、preserve-order 去重、partial unavailable、stale cache fallback 和 unavailable；不触发真实网络
@@ -85,6 +87,7 @@ pytest tests/fund/test_data_extractor.py -q
 pytest tests/fund/test_chapter_facts.py -q
 pytest tests/fund/test_chapter_writer.py tests/fund/test_chapter_auditor.py -q
 pytest tests/services/test_chapter_orchestrator.py -q
+pytest tests/config/test_llm_config.py tests/services/test_llm_provider.py -q
 pytest tests/services/test_final_chapter_assembler.py -q
 pytest tests/services/test_fund_analysis_service_llm.py -q
 pytest tests/fund/test_extraction_score.py -q
