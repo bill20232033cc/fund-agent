@@ -6,7 +6,7 @@
 > **设计真源**: `docs/design.md`
 > **控制真源**: `docs/implementation-control.md`
 > **短启动入口**: `docs/current-startup-packet.md`
-> **当前状态**: MVP fund analysis report generation phase；当前 gate 为 `MVP Gate 4 Slice 4C: CLI --use-llm opt-in fail-closed`，已本地 accepted；下一入口为 `MVP Gate 4 Slice 4D: production LLM provider construction plan gate`。
+> **当前状态**: MVP fund analysis report generation phase；当前 gate 为 `MVP Gate 4 Slice 4D provider construction plan`，已本地 accepted；下一入口为 `MVP Gate 4 Slice 4D1: typed LLM config and provider factory implementation gate`。
 
 ---
 
@@ -17,7 +17,7 @@
 ### Current Truth Guardrails
 
 - `AGENTS.md` 是最高优先级执行规则真源；若与本文档或 `docs/design.md` 冲突，先调整方案/实现，再回写文档。
-- 当前 phase 是 `MVP fund analysis report generation phase`；当前 gate 是 `MVP Gate 4 Slice 4C: CLI --use-llm opt-in fail-closed`，分类为 `heavy`，状态为本地 accepted。
+- 当前 phase 是 `MVP fund analysis report generation phase`；当前 gate 是 `MVP Gate 4 Slice 4D provider construction plan`，分类为 `heavy`，状态为 plan accepted locally。
 - 当前实现仍以确定性 `fund-analysis analyze/checklist` 为生产主链路：结构化抽取、确定性分析、模板渲染、程序审计和 FQ0-FQ6 quality gate。
 - Gate 1 已新增 Fund 层 typed projection：`project_chapter_facts()` / `ChapterFactProvider.project()` 将内存中的 `StructuredFundDataBundle` 投影为 `chapter_fact_projection.v1`。
 - Gate 1 typed projection 只消费现有 bundle、CHAPTER_CONTRACT、preferred_lens 和 ITEM_RULE truth APIs；不读取仓库、PDF/cache/source helper、parser、LLM、Service、Host 或 dayu。
@@ -44,11 +44,11 @@
 |---|---|
 | Branch baseline | `codex/local-reconciliation` |
 | Current phase | `MVP fund analysis report generation phase` |
-| Current gate | `MVP Gate 4 Slice 4C: CLI --use-llm opt-in fail-closed` |
+| Current gate | `MVP Gate 4 Slice 4D provider construction plan` |
 | Current gate classification | `heavy` |
-| Current gate status | `accepted locally` |
-| Next entry point | `MVP Gate 4 Slice 4D: production LLM provider construction plan gate` |
-| Next gate classification | `heavy`; provider construction must start with plan/review, not direct implementation |
+| Current gate status | `plan accepted locally` |
+| Next entry point | `MVP Gate 4 Slice 4D1: typed LLM config and provider factory implementation gate` |
+| Next gate classification | `heavy`; provider construction touches config, Service provider clients and production CLI route |
 | Design truth | `docs/design.md` |
 | Control truth | `docs/implementation-control.md` |
 | Short startup entry | `docs/current-startup-packet.md` |
@@ -58,7 +58,7 @@
 
 ### Gate Objective
 
-Accept the CLI `--use-llm` opt-in surface as fail-closed until production provider construction is explicitly accepted: no fake clients, no deterministic fallback, no Service LLM call before provider availability, and no `checklist --use-llm`.
+Accept the provider-specific plan for production LLM construction using an explicit `openai_compatible` HTTP chat-completions protocol over existing `httpx`, typed env config, Service-owned provider factory, and no live network in pytest.
 
 ### Current Accepted Artifacts
 
@@ -98,6 +98,9 @@ Accept the CLI `--use-llm` opt-in surface as fail-closed until production provid
 | Gate 4 Slice 4C implementation evidence | `docs/reviews/mvp-gate4-cli-use-llm-implementation-evidence-20260530.md` |
 | Gate 4 Slice 4C implementation reviews | `docs/reviews/mvp-gate4-cli-use-llm-implementation-review-mimo-20260530.md`; `docs/reviews/mvp-gate4-cli-use-llm-implementation-review-glm-20260530.md` |
 | Gate 4 Slice 4C controller judgment | `docs/reviews/mvp-gate4-cli-use-llm-controller-judgment-20260530.md` |
+| Gate 4 Slice 4D provider plan | `docs/reviews/mvp-gate4-provider-construction-plan-20260530.md` |
+| Gate 4 Slice 4D provider plan reviews | `docs/reviews/mvp-gate4-provider-construction-plan-review-mimo-20260530.md`; `docs/reviews/mvp-gate4-provider-construction-plan-review-glm-20260530.md` |
+| Gate 4 Slice 4D provider plan decision | `docs/reviews/mvp-gate4-provider-construction-plan-decision-20260530.md` |
 | Prior release-maintenance roadmap summary | `docs/reviews/release-maintenance-phase-roadmap-consolidation-20260529.md` |
 | Prior overnight closeout summary | `docs/reviews/overnight-release-maintenance-closeout-20260529.md` |
 | Historical control snapshots | `docs/archive/implementation-control-history-20260525.md`; `docs/archive/implementation-control-release-maintenance-ledger-20260527.md` |
@@ -115,7 +118,7 @@ The Current Accepted Artifacts table is intentionally short. Older release-maint
 - Gate 4 Slice 4B `FundAnalysisService.analyze_with_llm()` is implemented and accepted locally as Service-layer LLM analyze use case over deterministic core, Gate 3 and Slice 4A.
 - Gate 4 Slice 4C `fund-analysis analyze --use-llm` is implemented and accepted locally as fail-closed CLI opt-in until production provider construction is accepted.
 - `facet_recognizer` and full `FundToolService` remain future candidates; Gate 1 did not implement them.
-- Next work is Gate 4 Slice 4D: production LLM provider construction plan gate.
+- Gate 4 Slice 4D provider construction plan is accepted locally with controller amendments; next work is Slice 4D1 typed config and provider factory.
 - Golden / strict correctness / QDII / FOF / `110020` / fixture promotion blockers are residual product-quality work, not blockers for starting MVP report generation Gate 1.
 - Host/Agent/dayu runtime integration is deferred to Route C Gate 5 and must not be preintroduced in Gates 1-4.
 
@@ -145,6 +148,7 @@ The Current Accepted Artifacts table is intentionally short. Older release-maint
 
 | Gate | Status | Summary | Next action |
 |---|---|---|---|
+| `MVP Gate 4 Slice 4D: production LLM provider construction plan` | plan accepted locally | Plan accepts `openai_compatible` HTTP chat-completions over existing `httpx`, typed env config, Service-owned provider factory, no provider SDK, no live pytest network, no deterministic fallback and controller amendments for audit prompt passthrough, API key handling and CLI temporary error removal | Start `MVP Gate 4 Slice 4D1: typed LLM config and provider factory implementation gate` |
 | `MVP Gate 4 Slice 4C: CLI --use-llm opt-in fail-closed` | accepted locally | CLI `analyze --use-llm` added as explicit opt-in but fail-closes before Service LLM call because provider construction is absent; `checklist` rejects the flag; 46 CLI tests, Service regressions, full validation and two PASS reviews; no provider, Service internals, Fund, final judgment, quality, golden, score, snapshot, dayu changes | Start `MVP Gate 4 Slice 4D: production LLM provider construction plan gate` |
 | `MVP Gate 4 Slice 4B: Service analyze_with_llm` | accepted locally | Service-layer `FundAnalysisService.analyze_with_llm()` implemented with explicit `llm_clients`, deterministic core reuse, Gate 3 orchestration, Slice 4A final assembly, 7 targeted tests, full validation and two PASS reviews; no CLI, provider construction, source access, final judgment semantic change, dayu, golden or quality changes | Start `MVP Gate 4 Slice 4C: CLI --use-llm opt-in fail-closed integration gate` |
 | `MVP Gate 4 Slice 4A: final_chapter_assembler` | accepted locally | Service-layer deterministic final assembler implemented with typed contract, chapter 7 from existing final judgment, chapter 0 from accepted conclusions, 14 targeted tests, full validation, two PASS reviews and two PASS fix re-reviews; no Service LLM analyze use case, CLI, provider construction, source access, final judgment semantic change, dayu, golden or quality changes | Start `MVP Gate 4 Slice 4B: Service analyze_with_llm implementation gate` |

@@ -16,15 +16,15 @@ Use `docs/reviews/` and `docs/archive/` only as evidence chain. They do not over
 | Field | State |
 |---|---|
 | Current phase | `MVP fund analysis report generation phase` |
-| Current gate | `MVP Gate 4 Slice 4C: CLI --use-llm opt-in fail-closed` |
+| Current gate | `MVP Gate 4 Slice 4D provider construction plan` |
 | Current gate classification | `heavy` |
-| Current gate status | `accepted locally` |
-| Next entry point | `MVP Gate 4 Slice 4D: production LLM provider construction plan gate` |
+| Current gate status | `plan accepted locally` |
+| Next entry point | `MVP Gate 4 Slice 4D1: typed LLM config and provider factory implementation gate` |
 | Control truth | `docs/implementation-control.md` |
 | Design truth | `docs/design.md` |
 | Accepted plan commit | `beb6891` |
 
-The next owner should start from Gate 4 Slice 4D provider-specific planning, not implementation. Release-maintenance and golden-promotion blockers are residuals for later gates, not the active mainline.
+The next owner should start from Gate 4 Slice 4D1 implementation under the accepted provider plan. Release-maintenance and golden-promotion blockers are residuals for later gates, not the active mainline.
 
 ## 3. Current Implementation Facts
 
@@ -163,6 +163,9 @@ Gate 4 Slice 4C only accepted CLI opt-in fail-closed behavior. It did not implem
 - Gate 4 Slice 4C implementation evidence: `docs/reviews/mvp-gate4-cli-use-llm-implementation-evidence-20260530.md`
 - Gate 4 Slice 4C implementation reviews: `docs/reviews/mvp-gate4-cli-use-llm-implementation-review-mimo-20260530.md`; `docs/reviews/mvp-gate4-cli-use-llm-implementation-review-glm-20260530.md`
 - Gate 4 Slice 4C controller judgment: `docs/reviews/mvp-gate4-cli-use-llm-controller-judgment-20260530.md`
+- Gate 4 Slice 4D provider plan: `docs/reviews/mvp-gate4-provider-construction-plan-20260530.md`
+- Gate 4 Slice 4D provider plan reviews: `docs/reviews/mvp-gate4-provider-construction-plan-review-mimo-20260530.md`; `docs/reviews/mvp-gate4-provider-construction-plan-review-glm-20260530.md`
+- Gate 4 Slice 4D provider plan decision: `docs/reviews/mvp-gate4-provider-construction-plan-decision-20260530.md`
 - Release-maintenance roadmap summary: `docs/reviews/release-maintenance-phase-roadmap-consolidation-20260529.md`
 - Overnight release-maintenance closeout: `docs/reviews/overnight-release-maintenance-closeout-20260529.md`
 - Historical control snapshot: `docs/archive/implementation-control-history-20260525.md`
