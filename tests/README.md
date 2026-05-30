@@ -52,6 +52,7 @@ CI 当前固定 Python 3.11，使用 `uv sync --extra dev --frozen` 安装锁定
 - `tests/fund/template/test_renderer.py`：模板渲染器测试，覆盖 8 章完整性、CHAPTER_CONTRACT 标题来源、渲染章节块、splitter fail-closed、正文与附录证据锚点格式、缺证章节显式输出、页码保留、非年报来源标注、preferred_lens 第 0/1 章确定性应用、第 0 章 veto/watch/压力测试最大风险与 checklist/stress/all-green 阈值、ITEM_RULE 六类基金渲染/删除矩阵、主动基金第 3 章缺 reviewed turnover/style evidence 降级措辞、非主动基金第 3 章文本回归、test-only 写作审计验证、跟踪误差 structured_data 替换、benchmark-only 编制方法/成分股不足边界、ITEM_RULE 多锚点证据边界、温度计免责声明和 external_api 锚点、程序审计输入兼容、缺失数据显式渲染、最终判断边界、禁用交易措辞和 README 同步
 - `tests/fund/test_report_writing_audit.py`：dev-only 报告写作审计测试，覆盖主动基金第 3 章缺少换手率 / 风格变化证据时禁止稳定性正向判断、`data_gap` 降级措辞、证据锚点完整性、records fail-closed、must_not_cover 和 valid minimal case
 - `tests/services/test_fund_analysis_service.py`：Service 编排测试，使用 fake extractor 避免网络/PDF 下载，覆盖 product mode 最小请求、developer override nested 契约、结构化抽取到渲染和程序审计的完整调用路径、自动估值显式短路、沪深300/中证500 exact identity 调用、不支持基金类型/不支持 exact code/复合支持指数歧义不调用、温度计不可用/计算错误灰灯/provider contract error fail-closed、fund_code 入口校验和规范化、quality gate `off / warn / block / not-run` 路径、结构化阻断异常、默认 gate run id 不覆盖，并验证不含 PDF 下载的单只基金分析低于 30 秒
+- `tests/services/test_chapter_orchestrator.py`：Route C Gate 3 Service 章节编排器测试，覆盖显式 bundle/projection 输入、fact provider 注入、policy 校验、第 1-6 章范围、writer stop reason 映射、auditor unavailable early stop、repair retry/budget、`max_repair_attempts=0`、fail_fast、unknown fund type、LLM exception、accepted conclusion 500 字上限和导入隔离；fake LLM client 只在测试内定义，不触发真实 provider、文档仓库、PDF、cache、source helper、Host/Agent 或 dayu
 - `tests/services/test_extraction_score_service.py`：P4-S2/P5-S4 评分 Service 测试，覆盖显式参数转发、`errors_path` 转发、非法 snapshot 路径和非法 errors 路径拒绝
 - `tests/services/test_thermometer_service.py`：温度计 Service 测试，覆盖注入 fake adapter、默认全 A `wind_all_a` 路由、显式 cache_dir/force_refresh 转发、非法缓存路径拒绝、自建 `--index 000300` / `--index wind_all_a` 路由、批量代码规范化、preserve-order 去重、partial unavailable、stale cache fallback 和 unavailable；不触发真实网络
 - `tests/ui/test_cli.py`：Typer CLI 测试，覆盖 `analyze` product mode 最小请求、缺省 `valuation_state=None` 自动估值契约、显式 `--valuation-state unavailable` 手动灰灯 opt-out、developer override 参数门禁、nested override 构造、gate summary/blocked/info 信息输出、失败非零退出、`checklist` 通过 Service 输出摘要、`thermometer` 默认全 A plain/JSON 输出、help 文案、自建 `--index wind_all_a` 和 `--index 000300` plain/JSON 输出、批量 `--index wind_all_a,000300` / `--index 000300,000905` 输出、malformed index exit 2
@@ -81,6 +82,7 @@ pytest tests/fund/test_extraction_snapshot.py -q
 pytest tests/fund/test_data_extractor.py -q
 pytest tests/fund/test_chapter_facts.py -q
 pytest tests/fund/test_chapter_writer.py tests/fund/test_chapter_auditor.py -q
+pytest tests/services/test_chapter_orchestrator.py -q
 pytest tests/fund/test_extraction_score.py -q
 pytest tests/fund/test_golden_readiness_preflight.py -q
 pytest tests/fund/data/test_nav_data.py -q

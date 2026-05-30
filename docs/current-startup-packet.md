@@ -16,15 +16,15 @@ Use `docs/reviews/` and `docs/archive/` only as evidence chain. They do not over
 | Field | State |
 |---|---|
 | Current phase | `MVP fund analysis report generation phase` |
-| Current gate | `MVP Gate 2: chapter_writer + chapter_auditor` |
+| Current gate | `MVP Gate 3: chapter_orchestrator` |
 | Current gate classification | `heavy` |
 | Current gate status | `accepted locally` |
-| Next entry point | `MVP Gate 3: chapter_orchestrator plan gate` |
+| Next entry point | `MVP Gate 4: final_chapter_assembler + chapter 0 + CLI --use-llm plan gate` |
 | Control truth | `docs/implementation-control.md` |
 | Design truth | `docs/design.md` |
-| Accepted plan commit | `b46a80a` |
+| Accepted plan commit | `beb6891` |
 
-The next owner should start from Gate 3 orchestrator planning. Release-maintenance and golden-promotion blockers are residuals for later gates, not the active mainline.
+The next owner should start from Gate 4 planning. Release-maintenance and golden-promotion blockers are residuals for later gates, not the active mainline.
 
 ## 3. Current Implementation Facts
 
@@ -42,31 +42,32 @@ The next owner should start from Gate 3 orchestrator planning. Release-maintenan
 - Fund now has Gate 2 single-chapter writer/auditor primitives: `chapter_writer.py` and `chapter_auditor.py`.
 - Gate 2 writer/auditor only consume Gate 1 chapter facts and explicit fake/test or injected LLM clients; production code has no provider SDK, env/config loading, repository/PDF/source access, Service orchestration, Host, dayu or CLI integration.
 - Gate 2 freezes fail-closed contracts for anchor/missing markers, LLM audit line parsing, `prompt_only`, `llm_unavailable`, `must_not_cover`, L1 numerical closure, `non_asserted_facets`, chapter 5 cross-period gaps, E2 deferral and `repair_hint` aggregation.
-- There is no write-audit-repair loop.
-- There is no chapter orchestrator.
+- Service now has Gate 3 `ChapterOrchestrator` / `orchestrate_chapters()` as `chapter_orchestrator.v1`.
+- Gate 3 consumes only explicit `StructuredFundDataBundle` or `ChapterFactProjection`, explicit writer/auditor LLM Protocol clients and optional `ChapterFactProvider`; it runs write-audit-repair policy for template chapters 1-6 and outputs accepted chapter conclusions for Gate 4.
+- Gate 3 does not generate chapters 0 or 7, does not construct production LLM providers, does not read repositories/PDF/cache/source helpers/parsers, and does not integrate Host/Agent/dayu.
 - There is no final LLM assembler.
 - There is no CLI `--use-llm`.
 - There is no Host/Agent/dayu runtime in the production path.
 
 ## 4. Route C Accepted Future Route
 
-Route C is accepted future design for MVP LLM report generation. It is not current implementation.
+Route C is the accepted MVP LLM report generation route. Gates 1-3 are accepted local code facts; Gates 4-5 remain future design.
 
 | Gate | Status / scope |
 |---|---|
 | Gate 1 | `ChapterFactProvider` typed projection is accepted locally as Fund-layer code fact; `facet_recognizer` and full `FundToolService` remain future candidates |
 | Gate 2 | `chapter_writer` + `chapter_auditor` accepted locally as Fund-layer single-chapter primitives |
-| Gate 3 | Next: `chapter_orchestrator` with Service-owned write-audit-repair policy |
-| Gate 4 | `final_chapter_assembler`, chapter 0 assembly and opt-in CLI `--use-llm` |
+| Gate 3 | `chapter_orchestrator` accepted locally as Service-owned write-audit-repair façade for chapters 1-6 |
+| Gate 4 | Next: `final_chapter_assembler`, chapter 0 assembly and opt-in CLI `--use-llm` |
 | Gate 5 | Optional `dayu.host` / `dayu.engine` integration |
 
-Gate 2 only accepted single-chapter writer/auditor primitives. It did not implement orchestrator, Service write-audit-repair policy, final assembler, chapter 0 assembly, CLI `--use-llm`, Host/Agent/dayu integration or full FundToolService.
+Gate 3 only accepted the Service write-audit-repair façade for chapters 1-6. It did not implement final assembler, chapter 0 assembly, chapter 7 final judgment assembly, CLI `--use-llm`, production LLM provider construction, Host/Agent/dayu integration or full FundToolService.
 
 ## 5. Boundary Guardrails
 
 - Target architecture remains UI -> Service -> Host -> Agent.
 - UI handles interaction, rendering and display only.
-- Service handles use-case orchestration, scene/prompt/ExecutionContract semantics, report strategy and future write-audit-repair policy.
+- Service handles use-case orchestration, scene/prompt/ExecutionContract semantics, report strategy and the current Gate 3 write-audit-repair facade.
 - Host handles session/run lifecycle, concurrency, timeout, cancel, resume, memory, reply outbox and event delivery.
 - Future Host must use `dayu.host`.
 - Agent handles execution, tool loop, runner, ToolRegistry, ToolTrace, context budget, tool execution and Fund domain capabilities.
@@ -81,7 +82,7 @@ Gate 2 only accepted single-chapter writer/auditor primitives. It did not implem
 
 ## 6. Current Residuals
 
-- Golden / strict correctness / fixture promotion are residuals and do not block the next MVP Gate 3 planning work.
+- Golden / strict correctness / fixture promotion are residuals and do not block the next MVP Gate 4 planning work.
 - `004393`, `004194` and `006597` are not promotion-prep-ready.
 - `004393`, `004194` and `006597` keep `fixture_state=absent`.
 - All promotion states remain `promotion_allowed=false`.
@@ -139,6 +140,13 @@ Gate 2 only accepted single-chapter writer/auditor primitives. It did not implem
 - Gate 2 implementation re-review MiMo: `docs/reviews/mvp-gate2-chapter-writer-auditor-implementation-rereview-mimo-20260530.md`
 - Gate 2 implementation re-review DS: `docs/reviews/mvp-gate2-chapter-writer-auditor-implementation-rereview-ds-20260530.md`
 - Gate 2 controller judgment: `docs/reviews/mvp-gate2-chapter-writer-auditor-controller-judgment-20260530.md`
+- Gate 3 plan: `docs/reviews/mvp-gate3-chapter-orchestrator-plan-20260530.md`
+- Gate 3 plan decision: `docs/reviews/mvp-gate3-chapter-orchestrator-plan-decision-20260530.md`
+- Gate 3 implementation evidence: `docs/reviews/mvp-gate3-chapter-orchestrator-implementation-evidence-20260530.md`
+- Gate 3 implementation reviews: `docs/reviews/mvp-gate3-chapter-orchestrator-implementation-review-mimo-20260530.md`; `docs/reviews/mvp-gate3-chapter-orchestrator-implementation-review-ds-20260530.md`
+- Gate 3 review fix evidence: `docs/reviews/mvp-gate3-chapter-orchestrator-review-fix-evidence-20260530.md`
+- Gate 3 review fix re-reviews: `docs/reviews/mvp-gate3-chapter-orchestrator-review-fix-rereview-mimo-20260530.md`; `docs/reviews/mvp-gate3-chapter-orchestrator-review-fix-rereview-ds-20260530.md`
+- Gate 3 controller judgment: `docs/reviews/mvp-gate3-chapter-orchestrator-controller-judgment-20260530.md`
 - Release-maintenance roadmap summary: `docs/reviews/release-maintenance-phase-roadmap-consolidation-20260529.md`
 - Overnight release-maintenance closeout: `docs/reviews/overnight-release-maintenance-closeout-20260529.md`
 - Historical control snapshot: `docs/archive/implementation-control-history-20260525.md`

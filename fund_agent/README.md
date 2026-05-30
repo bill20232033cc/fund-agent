@@ -30,6 +30,7 @@ UI -> Service -> Host -> Agent
 
 - UI 只调用 Service，不直接读取年报、PDF、cache，也不直接导入 Agent 内部 helper。
 - Service 可编排 `fund_agent/fund` 的公开函数和数据对象，不承载基金领域规则；`analyze` 只在 Service 层解析 product mode / developer override mode、归一化 quality gate 状态、处理 block/not-run 阻断，并在 Agent 层给出安全指数目标后调用自建温度计。
+- Service 当前新增 `chapter_orchestrator` 作为 Route C Gate 3 的显式编排入口：只消费调用方提供的 `StructuredFundDataBundle` 或 `ChapterFactProjection`，调用 Fund 层 `ChapterFactProvider`、`chapter_writer` 和 `chapter_auditor`，按第 1-6 章执行 write-audit-repair policy，并输出 accepted chapter conclusions 供后续 Gate 4 使用。它不生成第 0/7 章正文，不构造真实 LLM provider，不读取仓库/PDF/cache/source helper，也不接入 Host/Agent/dayu。
 - `fund_agent/fund` 拥有基金类型判断、CHAPTER_CONTRACT、preferred_lens、ITEM_RULE、估值状态解析规则、证据锚点、最终判断派生和审计规则。
 - `FundAnalysisRequest.valuation_state=None` 表示允许自动估值；显式 `low/fair/high/unavailable` 都由 Service 短路为用户输入，不调用温度计。自动估值的结构化真源是 `ValuationStateResolution`，同一个对象进入 `FundAnalysisResult`、`TemplateRenderInput` 和 `ProgrammaticAuditInput`。
 - 文档读取只通过 `FundDocumentRepository.load_annual_report(...)` 进入生产路径。
@@ -39,9 +40,10 @@ UI -> Service -> Host -> Agent
 
 1. `fund_agent/ui/cli.py`
 2. `fund_agent/services/fund_analysis_service.py`
-3. `fund_agent/fund/data_extractor.py`
-4. `fund_agent/fund/documents/repository.py`
-5. `fund_agent/fund/template/renderer.py`
-6. `fund_agent/fund/audit/audit_programmatic.py`
+3. `fund_agent/services/chapter_orchestrator.py`
+4. `fund_agent/fund/data_extractor.py`
+5. `fund_agent/fund/documents/repository.py`
+6. `fund_agent/fund/template/renderer.py`
+7. `fund_agent/fund/audit/audit_programmatic.py`
 
 更细的 Fund 机制见 `fund_agent/fund/README.md`。
