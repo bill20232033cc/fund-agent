@@ -52,6 +52,19 @@ from fund_agent.fund.fund_type import FundType
 from fund_agent.fund.quality_gate import GATE_STATUS_BLOCK, QualityGateResult
 from fund_agent.fund.quality_gate_integration import check_quality_gate_fund_membership, run_quality_gate_for_bundle
 from fund_agent.fund.template import TemplateRenderInput, TemplateRenderResult, render_template_report
+from fund_agent.services.chapter_orchestrator import (
+    ChapterOrchestrationPolicy,
+    ChapterOrchestrationResult,
+    ChapterOrchestratorLLMClients,
+    build_chapter_orchestration_input,
+    orchestrate_chapters,
+)
+from fund_agent.services.final_chapter_assembler import (
+    FinalAssemblyPolicy,
+    FinalChapterAssemblyInput,
+    FinalChapterAssemblyResult,
+    assemble_final_chapters,
+)
 from fund_agent.services.thermometer_service import ThermometerRequest, ThermometerService as IndexThermometerService
 
 ValuationState = Literal["low", "fair", "high", "unavailable"]
@@ -272,6 +285,54 @@ class FundAnalysisResult:
         """
 
         return self.render_result.report_markdown
+
+
+@dataclass(frozen=True, slots=True)
+class FundLLMAnalysisResult:
+    """Service LLM 分析用例结果，见模板第 0-7 章。
+
+    Attributes:
+        structured_data: P1 结构化基金数据包。
+        final_judgment_decision: Agent/Fund 层确定性最终判断契约。
+        llm_orchestration_result: Gate 3 第 1-6 章 LLM 编排结果。
+        final_assembly_result: Gate 4 第 0/7 章与完整报告总装结果。
+        quality_gate_result: quality gate 结果；未运行时为空。
+        quality_gate_not_run_reason: quality gate 未运行原因。
+    """
+
+    structured_data: StructuredFundDataBundle
+    final_judgment_decision: FinalJudgmentDecision
+    llm_orchestration_result: ChapterOrchestrationResult
+    final_assembly_result: FinalChapterAssemblyResult
+    quality_gate_result: QualityGateResult | None = None
+    quality_gate_not_run_reason: str | None = None
+
+    @property
+    def report_markdown(self) -> str:
+        """返回 LLM 路径总装后的完整 Markdown 报告。
+
+        Args:
+            无。
+
+        Returns:
+            完整 Markdown 报告文本。
+
+        Raises:
+            ValueError: 当 Gate 3/4 未 accepted，或总装未产出完整报告时抛出。
+        """
+
+        report_markdown = self.final_assembly_result.report_markdown
+        if report_markdown is not None:
+            return report_markdown
+        issue_reasons = ", ".join(
+            issue.reason for issue in self.final_assembly_result.issues
+        ) or "no final assembly issue recorded"
+        raise ValueError(
+            "LLM 分析报告尚未完成，不能读取 report_markdown："
+            f"orchestration_status={self.llm_orchestration_result.status}, "
+            f"final_assembly_status={self.final_assembly_result.status}, "
+            f"issues={issue_reasons}"
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -517,6 +578,69 @@ class FundAnalysisService:
             checklist_result=core_result.checklist_result,
             valuation_state_resolution=core_result.valuation_state_resolution,
             final_judgment_decision=core_result.final_judgment_decision,
+            quality_gate_result=core_result.quality_gate_result,
+            quality_gate_not_run_reason=core_result.quality_gate_not_run_reason,
+        )
+
+    async def analyze_with_llm(
+        self,
+        request: FundAnalysisRequest,
+        *,
+        llm_clients: ChapterOrchestratorLLMClients,
+        chapter_policy: ChapterOrchestrationPolicy | None = None,
+        assembly_policy: FinalAssemblyPolicy | None = None,
+    ) -> FundLLMAnalysisResult:
+        """执行显式 LLM 章节写作分析用例。
+
+        该方法属于 Route C Gate 4 Slice 4B：先复用 `_run_analysis_core()` 得到
+        结构化事实、quality gate 状态和最终判断，再编排模板第 1-6 章 LLM
+        write-audit-repair，最后总装模板第 0 章与第 7 章。它不构造生产 LLM
+        provider，不回退到确定性 renderer，不改变 `analyze()` / `checklist()`
+        行为，也不把显式参数塞入 `extra_payload`。
+
+        Args:
+            request: 显式分析参数。
+            llm_clients: Gate 3 writer/auditor LLM Protocol clients，必须显式注入。
+            chapter_policy: 可选章节编排策略；默认生成模板第 1-6 章。
+            assembly_policy: 可选最终总装策略；默认要求完整第 1-6 章 accepted。
+
+        Returns:
+            LLM 分析结果，包含 Gate 3 编排结果和 Gate 4 总装结果。
+
+        Raises:
+            ValueError: 当请求契约、章节编排输入或总装输入非法时抛出。
+            QualityGateBlockedError: 当 quality gate 在 block 策略下阻断报告时抛出。
+            QualityGateNotRunBlockedError: 当 quality gate 在 block 策略下未运行时抛出。
+            Exception: 允许底层抽取器或 Agent 层基金能力传播异常。
+        """
+
+        core_result = await self._run_analysis_core(
+            replace(request, command_source="analyze")
+        )
+        orchestration_input = build_chapter_orchestration_input(
+            fund_code=core_result.structured_data.fund_code,
+            report_year=core_result.structured_data.report_year,
+            structured_data=core_result.structured_data,
+            policy=chapter_policy or ChapterOrchestrationPolicy(),
+        )
+        orchestration_result = orchestrate_chapters(
+            orchestration_input,
+            llm_clients=llm_clients,
+        )
+        final_assembly_result = assemble_final_chapters(
+            FinalChapterAssemblyInput(
+                fund_code=core_result.structured_data.fund_code,
+                report_year=core_result.structured_data.report_year,
+                orchestration_result=orchestration_result,
+                final_judgment_decision=core_result.final_judgment_decision,
+                policy=assembly_policy or FinalAssemblyPolicy(),
+            )
+        )
+        return FundLLMAnalysisResult(
+            structured_data=core_result.structured_data,
+            final_judgment_decision=core_result.final_judgment_decision,
+            llm_orchestration_result=orchestration_result,
+            final_assembly_result=final_assembly_result,
             quality_gate_result=core_result.quality_gate_result,
             quality_gate_not_run_reason=core_result.quality_gate_not_run_reason,
         )
