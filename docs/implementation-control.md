@@ -6,7 +6,7 @@
 > **设计真源**: `docs/design.md`
 > **控制真源**: `docs/implementation-control.md`
 > **短启动入口**: `docs/current-startup-packet.md`
-> **当前状态**: MVP fund analysis report generation phase；当前 gate 为 `MVP Gate 4 Slice 4D provider-backed CLI path`，4D1/4D2 已本地 accepted，4D3 docs/control sync 进行中；下一入口为 `MVP Gate 4 Slice 4D aggregate review gate`。
+> **当前状态**: MVP fund analysis report generation phase；当前 gate 为 `MVP Gate 4 provider-backed CLI path closeout`，4D1/4D2/4D3 与 aggregate review 已本地 accepted；下一入口为 `MVP Gate 4 closeout / ready-to-open-draft-PR readiness reconciliation gate`。
 
 ---
 
@@ -17,7 +17,7 @@
 ### Current Truth Guardrails
 
 - `AGENTS.md` 是最高优先级执行规则真源；若与本文档或 `docs/design.md` 冲突，先调整方案/实现，再回写文档。
-- 当前 phase 是 `MVP fund analysis report generation phase`；当前 gate 是 `MVP Gate 4 Slice 4D provider-backed CLI path`，分类为 `heavy`，状态为 4D1/4D2 accepted locally，4D3 docs/control sync in progress。
+- 当前 phase 是 `MVP fund analysis report generation phase`；当前 gate 是 `MVP Gate 4 provider-backed CLI path closeout`，分类为 `heavy`，状态为 4D1/4D2/4D3 and aggregate review accepted locally。
 - 当前默认实现仍以确定性 `fund-analysis analyze/checklist` 为生产主链路：结构化抽取、确定性分析、模板渲染、程序审计和 FQ0-FQ6 quality gate。
 - Gate 1 已新增 Fund 层 typed projection：`project_chapter_facts()` / `ChapterFactProvider.project()` 将内存中的 `StructuredFundDataBundle` 投影为 `chapter_fact_projection.v1`。
 - Gate 1 typed projection 只消费现有 bundle、CHAPTER_CONTRACT、preferred_lens 和 ITEM_RULE truth APIs；不读取仓库、PDF/cache/source helper、parser、LLM、Service、Host 或 dayu。
@@ -45,23 +45,25 @@
 |---|---|
 | Branch baseline | `codex/local-reconciliation` |
 | Current phase | `MVP fund analysis report generation phase` |
-| Current gate | `MVP Gate 4 Slice 4D provider-backed CLI path` |
+| Current gate | `MVP Gate 4 provider-backed CLI path closeout` |
 | Current gate classification | `heavy` |
-| Current gate status | `4D1/4D2 accepted locally; 4D3 docs/control sync in progress` |
-| Next entry point | `MVP Gate 4 Slice 4D aggregate review gate` |
-| Next gate classification | `heavy`; aggregate review covers config, Service provider clients, production CLI route and docs/control sync |
+| Current gate status | `4D1/4D2/4D3 and aggregate review accepted locally` |
+| Next entry point | `MVP Gate 4 closeout / ready-to-open-draft-PR readiness reconciliation gate` |
+| Next gate classification | `heavy`; closeout reconciles Gate 4A/4B/4C/4D accepted artifacts, validation and residuals before any PR authorization point |
 | Design truth | `docs/design.md` |
 | Control truth | `docs/implementation-control.md` |
 | Short startup entry | `docs/current-startup-packet.md` |
 | Accepted plan commit | `beb6891` |
 | Accepted provider factory commit | `26203d3` |
 | Accepted CLI provider wiring commit | `ab0590a` |
+| Accepted docs/control sync commit | `4d0c19f` |
+| Accepted aggregate review commit | `7a3dab9` |
 
 ## Current Gate
 
 ### Gate Objective
 
-Complete docs/control sync for the accepted provider-backed CLI path and prepare Slice 4D for aggregate review. Current accepted implementation uses explicit `openai_compatible` HTTP chat-completions over existing `httpx`, typed env config, Service-owned provider factory, and no live network in pytest.
+Reconcile Gate 4A/4B/4C/4D accepted artifacts, validations and residuals for closeout / ready-to-open-draft-PR readiness. Current accepted implementation uses explicit `openai_compatible` HTTP chat-completions over existing `httpx`, typed env config, Service-owned provider factory, and no live network in pytest.
 
 ### Current Accepted Artifacts
 
@@ -110,6 +112,9 @@ Complete docs/control sync for the accepted provider-backed CLI path and prepare
 | Gate 4 Slice 4D2 CLI provider wiring implementation evidence | `docs/reviews/mvp-gate4-provider-construction-4d2-implementation-evidence-20260530.md` |
 | Gate 4 Slice 4D2 CLI provider wiring reviews | `docs/reviews/mvp-gate4-provider-construction-4d2-implementation-review-mimo-20260530.md`; `docs/reviews/mvp-gate4-provider-construction-4d2-implementation-review-glm-20260530.md` |
 | Gate 4 Slice 4D2 CLI provider wiring controller judgment | `docs/reviews/mvp-gate4-provider-construction-4d2-controller-judgment-20260530.md` |
+| Gate 4 Slice 4D3 docs/control sync controller judgment | `docs/reviews/mvp-gate4-provider-construction-4d3-controller-judgment-20260530.md` |
+| Gate 4 Slice 4D aggregate reviews | `docs/reviews/mvp-gate4-provider-construction-aggregate-review-mimo-20260530.md`; `docs/reviews/mvp-gate4-provider-construction-aggregate-review-glm-20260530.md` |
+| Gate 4 Slice 4D aggregate controller judgment | `docs/reviews/mvp-gate4-provider-construction-aggregate-controller-judgment-20260530.md` |
 | Prior release-maintenance roadmap summary | `docs/reviews/release-maintenance-phase-roadmap-consolidation-20260529.md` |
 | Prior overnight closeout summary | `docs/reviews/overnight-release-maintenance-closeout-20260529.md` |
 | Historical control snapshots | `docs/archive/implementation-control-history-20260525.md`; `docs/archive/implementation-control-release-maintenance-ledger-20260527.md` |
@@ -127,7 +132,7 @@ The Current Accepted Artifacts table is intentionally short. Older release-maint
 - Gate 4 Slice 4B `FundAnalysisService.analyze_with_llm()` is implemented and accepted locally as Service-layer LLM analyze use case over deterministic core, Gate 3 and Slice 4A.
 - Gate 4 Slice 4C/4D `fund-analysis analyze --use-llm` is implemented and accepted locally as explicit provider-backed CLI opt-in: complete typed env config constructs Service-owned `openai_compatible` writer/auditor clients and calls `analyze_with_llm()`; missing config, construction failure and incomplete LLM result fail closed without deterministic fallback.
 - `facet_recognizer` and full `FundToolService` remain future candidates; Gate 1 did not implement them.
-- Gate 4 Slice 4D1 provider factory was accepted in commit `26203d3`; Gate 4 Slice 4D2 CLI provider wiring was accepted in commit `ab0590a`; next work is 4D3 docs/control sync followed by aggregate review.
+- Gate 4 Slice 4D1 provider factory was accepted in commit `26203d3`; Gate 4 Slice 4D2 CLI provider wiring was accepted in commit `ab0590a`; 4D3 docs/control sync was accepted in commit `4d0c19f`; 4D aggregate review was accepted in commit `7a3dab9`.
 - Golden / strict correctness / QDII / FOF / `110020` / fixture promotion blockers are residual product-quality work, not blockers for starting MVP report generation Gate 1.
 - Host/Agent/dayu runtime integration is deferred to Route C Gate 5 and must not be preintroduced in Gates 1-4.
 
@@ -158,7 +163,8 @@ The Current Accepted Artifacts table is intentionally short. Older release-maint
 
 | Gate | Status | Summary | Next action |
 |---|---|---|---|
-| `MVP Gate 4 Slice 4D3: docs, design/control sync, and full regression` | in progress | Sync docs/design/control after 4D1 commit `26203d3` and 4D2 commit `ab0590a`; no runtime, Host/Agent/dayu, golden, score, snapshot, quality or live smoke changes | Run full regression and then start `MVP Gate 4 Slice 4D aggregate review gate` |
+| `MVP Gate 4 Slice 4D aggregate review` | accepted locally | MiMo and GLM aggregate reviews passed with no blocking findings; controller judgment accepted provider construction as a local checkpoint in commit `7a3dab9` | Start `MVP Gate 4 closeout / ready-to-open-draft-PR readiness reconciliation gate` |
+| `MVP Gate 4 Slice 4D3: docs, design/control sync, and full regression` | accepted locally | Synced README, design and control docs after 4D1/4D2; fixed `only` vs `default` control-doc blocker; full regression `1106 passed`, coverage `91.76%`; accepted commit `4d0c19f` | Completed by accepted aggregate review commit `7a3dab9` |
 | `MVP Gate 4 Slice 4D2: CLI --use-llm provider construction wiring` | accepted locally | CLI `analyze --use-llm` now reads typed LLM env config, constructs Service-owned provider clients, calls `analyze_with_llm()`, keeps default `analyze` deterministic, and fail-closes missing config/construction/incomplete LLM result without deterministic fallback; accepted commit `ab0590a` | Start `MVP Gate 4 Slice 4D3: docs, design/control sync, and full regression gate` |
 | `MVP Gate 4 Slice 4D1: typed LLM config and provider factory` | accepted locally | Added typed env config and Service-owned `openai_compatible` HTTP chat-completions provider factory over existing `httpx`; tests use fake env and `httpx.MockTransport`; accepted commit `26203d3` | Start `MVP Gate 4 Slice 4D2: CLI --use-llm provider construction wiring gate` |
 | `MVP Gate 4 Slice 4D: production LLM provider construction plan` | plan accepted locally | Plan accepts `openai_compatible` HTTP chat-completions over existing `httpx`, typed env config, Service-owned provider factory, no provider SDK, no live pytest network, no deterministic fallback and controller amendments for audit prompt passthrough, API key handling and CLI temporary error removal | Start `MVP Gate 4 Slice 4D1: typed LLM config and provider factory implementation gate` |

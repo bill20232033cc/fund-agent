@@ -16,17 +16,19 @@ Use `docs/reviews/` and `docs/archive/` only as evidence chain. They do not over
 | Field | State |
 |---|---|
 | Current phase | `MVP fund analysis report generation phase` |
-| Current gate | `MVP Gate 4 Slice 4D provider-backed CLI path` |
+| Current gate | `MVP Gate 4 provider-backed CLI path closeout` |
 | Current gate classification | `heavy` |
-| Current gate status | `4D1/4D2 accepted locally; 4D3 docs/control sync in progress` |
-| Next entry point | `MVP Gate 4 Slice 4D aggregate review gate` |
+| Current gate status | `4D1/4D2/4D3 and aggregate review accepted locally` |
+| Next entry point | `MVP Gate 4 closeout / ready-to-open-draft-PR readiness reconciliation gate` |
 | Control truth | `docs/implementation-control.md` |
 | Design truth | `docs/design.md` |
 | Accepted plan commit | `beb6891` |
 | Accepted provider factory commit | `26203d3` |
 | Accepted CLI provider wiring commit | `ab0590a` |
+| Accepted docs/control sync commit | `4d0c19f` |
+| Accepted aggregate review commit | `7a3dab9` |
 
-The next owner should start from Gate 4 Slice 4D aggregate review after 4D3 docs/control sync. Release-maintenance and golden-promotion blockers are residuals for later gates, not the active mainline.
+The next owner should start from Gate 4 closeout / ready-to-open-draft-PR readiness reconciliation. Release-maintenance and golden-promotion blockers are residuals for later gates, not the active mainline.
 
 ## 3. Current Implementation Facts
 
@@ -65,7 +67,7 @@ Route C is the accepted MVP LLM report generation route. Gates 1-3 and Gate 4 Sl
 | Gate 1 | `ChapterFactProvider` typed projection is accepted locally as Fund-layer code fact; `facet_recognizer` and full `FundToolService` remain future candidates |
 | Gate 2 | `chapter_writer` + `chapter_auditor` accepted locally as Fund-layer single-chapter primitives |
 | Gate 3 | `chapter_orchestrator` accepted locally as Service-owned write-audit-repair façade for chapters 1-6 |
-| Gate 4 | Slice 4A `final_chapter_assembler`, Slice 4B Service `analyze_with_llm`, Slice 4C CLI `--use-llm` and Slice 4D provider construction accepted locally; next is aggregate review |
+| Gate 4 | Slice 4A `final_chapter_assembler`, Slice 4B Service `analyze_with_llm`, Slice 4C CLI `--use-llm` and Slice 4D provider construction accepted locally; aggregate review accepted |
 | Gate 5 | Optional `dayu.host` / `dayu.engine` integration |
 
 Gate 4 Slice 4D accepted only typed env config, Service-owned `openai_compatible` provider construction and CLI wiring into `analyze_with_llm()`. It did not implement Host/Agent/dayu integration, full FundToolService, retry/backoff, live provider smoke, multi-model writer/auditor split, chapter 0/7 LLM polish or Evidence Confirm.
