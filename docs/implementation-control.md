@@ -6,7 +6,7 @@
 > **设计真源**: `docs/design.md`
 > **控制真源**: `docs/implementation-control.md`
 > **短启动入口**: `docs/current-startup-packet.md`
-> **当前状态**: MVP fund analysis report generation phase；当前 gate 为 `MVP Gate 4 closeout / ready-to-open-draft-PR readiness`，local closeout 已 accepted；下一入口为 `ready-to-open-draft-PR authorization gate for MVP report generation phase`，需要用户显式授权后才能 push / create draft PR。
+> **当前状态**: MVP fund analysis report generation phase；当前 gate 为 `MVP Gate 4 draft PR gate`，用户已授权外部 draft PR 操作；PR #21 已更新为 draft，当前分支正在完成 `origin/main` merge-conflict reconciliation 和本地验证后再推送修复。
 
 ---
 
@@ -17,7 +17,7 @@
 ### Current Truth Guardrails
 
 - `AGENTS.md` 是最高优先级执行规则真源；若与本文档或 `docs/design.md` 冲突，先调整方案/实现，再回写文档。
-- 当前 phase 是 `MVP fund analysis report generation phase`；当前 gate 是 `MVP Gate 4 closeout / ready-to-open-draft-PR readiness`，分类为 `heavy`，状态为 local closeout accepted；draft PR gate requires explicit user authorization。
+- 当前 phase 是 `MVP fund analysis report generation phase`；当前 gate 是 `MVP Gate 4 draft PR gate`，分类为 `heavy`，状态为 user-authorized draft PR gate in progress。
 - 当前默认实现仍以确定性 `fund-analysis analyze/checklist` 为生产主链路：结构化抽取、确定性分析、模板渲染、程序审计和 FQ0-FQ6 quality gate。
 - Gate 1 已新增 Fund 层 typed projection：`project_chapter_facts()` / `ChapterFactProvider.project()` 将内存中的 `StructuredFundDataBundle` 投影为 `chapter_fact_projection.v1`。
 - Gate 1 typed projection 只消费现有 bundle、CHAPTER_CONTRACT、preferred_lens 和 ITEM_RULE truth APIs；不读取仓库、PDF/cache/source helper、parser、LLM、Service、Host 或 dayu。
@@ -45,11 +45,11 @@
 |---|---|
 | Branch baseline | `codex/local-reconciliation` |
 | Current phase | `MVP fund analysis report generation phase` |
-| Current gate | `MVP Gate 4 closeout / ready-to-open-draft-PR readiness` |
+| Current gate | `MVP Gate 4 draft PR gate` |
 | Current gate classification | `heavy` |
-| Current gate status | `local closeout accepted; awaiting explicit user authorization for draft PR gate` |
-| Next entry point | `ready-to-open-draft-PR authorization gate for MVP report generation phase` |
-| Next gate classification | `external-state authorization`; push and draft PR creation require explicit user approval |
+| Current gate status | `draft PR #21 updated; resolving origin/main merge conflicts locally before final validation/push` |
+| Next entry point | `MVP Gate 4 draft PR merge-conflict reconciliation validation` |
+| Next gate classification | `heavy`; runtime/tests/docs validation required after merge reconciliation |
 | Design truth | `docs/design.md` |
 | Control truth | `docs/implementation-control.md` |
 | Short startup entry | `docs/current-startup-packet.md` |
@@ -64,7 +64,7 @@
 
 ### Gate Objective
 
-The local Gate 4 closeout is accepted. The next step is the external authorization boundary for opening a draft PR. Current accepted implementation uses explicit `openai_compatible` HTTP chat-completions over existing `httpx`, typed env config, Service-owned provider factory, and no live network in pytest.
+The local Gate 4 closeout is accepted and the user authorized the draft PR gate. PR #21 is open as a draft and was updated to the MVP Route C / Gate 4 scope. GitHub reported `mergeable=false` / `mergeable_state=dirty` against `origin/main` (`35a6765`, PR #20), so the active task is local merge-conflict reconciliation plus full validation before pushing the reconciliation commit.
 
 ### Current Accepted Artifacts
 
