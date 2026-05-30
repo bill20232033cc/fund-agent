@@ -39,7 +39,7 @@ fund-analysis analyze --help
 # 强制刷新底层数据
 fund-analysis analyze 004393 --report-year 2024 --force-refresh
 
-# 显式尝试 Route C LLM 分章写作路径
+# 显式启用 Route C LLM 分章写作路径
 fund-analysis analyze 004393 --report-year 2024 --use-llm
 
 # 生成精选基金池字段级抽取快照
@@ -96,11 +96,25 @@ fund-analysis checklist 004393 --report-year 2024
 | `--thermometer-cache-dir` | `analyze` 自动估值使用的自建温度计缓存目录 |
 | `--user-money-horizon-years` | 用户资金不用年限 |
 | `--force-refresh` | 强制刷新底层数据 |
-| `--use-llm` | 仅 `analyze` 支持；显式尝试 Route C LLM 分章写作路径。当前生产 provider 尚未接入，会失败关闭并以退出码 `1` 提示 `LLM provider 未配置/未实现` |
+| `--use-llm` | 仅 `analyze` 支持；显式启用 Route C LLM 分章写作路径。该路径必须先配置 LLM provider 环境变量；缺失、非法或运行不完整都会失败关闭，不回退默认确定性报告 |
 
 `analyze` 默认是 product mode：最终判断由 Agent 层基金能力根据检查清单、否决项、压力测试和 quality gate 派生；R=A+B-C 股票仓位、言行一致性实际风格、经理任期、同类费率、跟踪误差、当前阶段、最终判断覆盖和 quality gate `warn/off` 等夹具参数仅供开发验证使用，必须显式传 `--dev-override`。
 
-`fund-analysis analyze --use-llm` 是显式 opt-in 路径。由于真实 LLM provider 构造尚未接入，当前 CLI 会在调用 LLM Service 用例前失败关闭，不输出确定性 Markdown，也不会静默回退到默认 `analyze` 报告。`fund-analysis checklist` 不支持 `--use-llm`。
+`fund-analysis analyze --use-llm` 是显式 opt-in 路径；不传该参数时，`analyze` 默认仍走确定性结构化抽取、确定性分析、模板渲染、程序审计和 quality gate。LLM 路径当前使用 `openai_compatible` HTTP chat-completions provider，基于现有 `httpx` 调用 Service 的 `analyze_with_llm()`；Fund writer/auditor 只接收 Protocol client，不读取 env、HTTP 或 provider 细节。
+
+启用 `--use-llm` 前需要设置：
+
+| 环境变量 | 必填 | 说明 |
+|------|------|------|
+| `FUND_AGENT_LLM_PROVIDER` | 是 | 当前仅支持 `openai_compatible` |
+| `FUND_AGENT_LLM_MODEL` | 是 | 部署方显式选择的模型名；代码不提供默认模型 |
+| `FUND_AGENT_LLM_BASE_URL` | 是 | OpenAI-compatible endpoint base URL；必须是无 query/fragment 的 `http://` 或 `https://` URL |
+| `FUND_AGENT_LLM_API_KEY_ENV_VAR` | 否 | API key 所在环境变量名；默认 `FUND_AGENT_LLM_API_KEY` |
+| `FUND_AGENT_LLM_API_KEY` | 条件必填 | 默认 API key 变量；如果设置了 `FUND_AGENT_LLM_API_KEY_ENV_VAR`，则读取其指向的变量 |
+| `FUND_AGENT_LLM_TIMEOUT_SECONDS` | 否 | 单次 HTTP 请求 timeout，默认 `60`，范围 `(0, 300]` |
+| `FUND_AGENT_LLM_MAX_OUTPUT_CHARS` | 否 | 本地章节输出字符上限，默认 `12000`，范围 `(0, 50000]` |
+
+缺少或非法配置会在调用 Service 前失败关闭，退出码为 `1`，stdout 为空；provider 构造失败同样退出 `1`。进入 LLM 编排后，provider runtime error、章节写作/审计 blocked、partial result 或 final assembly incomplete 都会失败关闭，且不会静默回退到默认 deterministic `analyze` 报告。`fund-analysis checklist` 不支持 `--use-llm`。
 
 `fund-analysis analyze FUND_CODE` 不传 `--valuation-state` 时，会先识别基金类型，再仅对 `index_fund` / `enhanced_index` 且业绩基准可精确映射到沪深300 `000300` 或中证500 `000905` 的基金调用项目内自建温度计。主动、债券、QDII、FOF、缺少基准、复合基准不确定、派生/策略/行业指数或未支持指数都会保持 `unavailable` 灰灯且不调用温度计。显式传 `--valuation-state unavailable` 会恢复旧的手动灰灯路径，并且不调用温度计；显式传 `low/fair/high` 也同样优先于自动估值。
 
@@ -126,7 +140,7 @@ fund-analysis checklist 004393 --report-year 2024
 已实现：
 
 - `fund-analysis analyze FUND_CODE` CLI 分析入口
-- `fund-analysis analyze FUND_CODE --use-llm` 显式 LLM opt-in 入口；当前 provider 未配置/未实现时失败关闭，退出码为 `1`
+- `fund-analysis analyze FUND_CODE --use-llm` 显式 LLM opt-in 入口；配置完整时通过 Service `analyze_with_llm()` 运行 provider-backed 分章写作/审计路径，缺失配置或不完整结果失败关闭，退出码为 `1`
 - `fund-analysis checklist FUND_CODE` 独立买入前检查清单入口
 - 统一年报仓库入口：`FundDocumentRepository.load_annual_report(...)`
 - P1 结构化抽取：基金类型、产品画像、表现、经理/持有人、持仓和份额变化

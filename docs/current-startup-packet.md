@@ -16,19 +16,21 @@ Use `docs/reviews/` and `docs/archive/` only as evidence chain. They do not over
 | Field | State |
 |---|---|
 | Current phase | `MVP fund analysis report generation phase` |
-| Current gate | `MVP Gate 4 Slice 4D provider construction plan` |
+| Current gate | `MVP Gate 4 Slice 4D provider-backed CLI path` |
 | Current gate classification | `heavy` |
-| Current gate status | `plan accepted locally` |
-| Next entry point | `MVP Gate 4 Slice 4D1: typed LLM config and provider factory implementation gate` |
+| Current gate status | `4D1/4D2 accepted locally; 4D3 docs/control sync in progress` |
+| Next entry point | `MVP Gate 4 Slice 4D aggregate review gate` |
 | Control truth | `docs/implementation-control.md` |
 | Design truth | `docs/design.md` |
 | Accepted plan commit | `beb6891` |
+| Accepted provider factory commit | `26203d3` |
+| Accepted CLI provider wiring commit | `ab0590a` |
 
-The next owner should start from Gate 4 Slice 4D1 implementation under the accepted provider plan. Release-maintenance and golden-promotion blockers are residuals for later gates, not the active mainline.
+The next owner should start from Gate 4 Slice 4D aggregate review after 4D3 docs/control sync. Release-maintenance and golden-promotion blockers are residuals for later gates, not the active mainline.
 
 ## 3. Current Implementation Facts
 
-- Current report generation is deterministic `fund-analysis analyze`.
+- Default report generation is deterministic `fund-analysis analyze`.
 - Current checklist generation is deterministic `fund-analysis checklist`.
 - Current path is UI -> Service -> `fund_agent/fund`.
 - Service orchestrates the current use case and calls Fund public capabilities directly as a transition path.
@@ -49,22 +51,24 @@ The next owner should start from Gate 4 Slice 4D1 implementation under the accep
 - Slice 4A deterministic assembly generates chapter 7 from existing `FinalJudgmentDecision`, then chapter 0 from accepted conclusions plus a Gate 4-local typed chapter 7 summary; render order is `0 -> 1-6 -> 7`.
 - Service now has Gate 4 Slice 4B `FundAnalysisService.analyze_with_llm()` and `FundLLMAnalysisResult`: it reuses `_run_analysis_core()`, calls Gate 3 with explicit injected LLM clients, always calls Slice 4A final assembly, and does not fall back to deterministic markdown.
 - Slice 4B does not implement CLI `--use-llm`, production LLM provider construction, chapter 0/7 LLM polish/audit, or Evidence Confirm.
-- CLI now exposes `fund-analysis analyze --use-llm`, but because production provider construction is not accepted, it fail-closes before Service LLM execution with `LLM provider 未配置/未实现`, exit code `1`, and empty stdout.
+- CLI now exposes `fund-analysis analyze --use-llm` as an explicit opt-in provider-backed path. With complete typed env config, CLI builds Service-owned `openai_compatible` HTTP chat-completions writer/auditor clients over existing `httpx` and calls `FundAnalysisService.analyze_with_llm()`.
+- Missing/invalid LLM config and provider construction fail before Service execution with exit code `1` and empty stdout. Provider runtime failures, writer/auditor blocked status, partial orchestration and incomplete final assembly also fail closed with exit code `1`; there is no deterministic fallback.
+- Pytest coverage for the provider path uses fake env mappings, `httpx.MockTransport` and monkeypatch/test doubles; no live provider smoke or real API key is required.
 - There is no Host/Agent/dayu runtime in the production path.
 
 ## 4. Route C Accepted Future Route
 
-Route C is the accepted MVP LLM report generation route. Gates 1-3 and Gate 4 Slices 4A/4B/4C are accepted local code facts; remaining Gate 4 provider construction and Gate 5 remain future design.
+Route C is the accepted MVP LLM report generation route. Gates 1-3 and Gate 4 Slices 4A/4B/4C/4D are accepted local code facts; Gate 5 remains future design.
 
 | Gate | Status / scope |
 |---|---|
 | Gate 1 | `ChapterFactProvider` typed projection is accepted locally as Fund-layer code fact; `facet_recognizer` and full `FundToolService` remain future candidates |
 | Gate 2 | `chapter_writer` + `chapter_auditor` accepted locally as Fund-layer single-chapter primitives |
 | Gate 3 | `chapter_orchestrator` accepted locally as Service-owned write-audit-repair façade for chapters 1-6 |
-| Gate 4 | Slice 4A `final_chapter_assembler`, Slice 4B Service `analyze_with_llm` and Slice 4C CLI fail-closed `--use-llm` accepted locally; next Slice 4D provider plan remains separate |
+| Gate 4 | Slice 4A `final_chapter_assembler`, Slice 4B Service `analyze_with_llm`, Slice 4C CLI `--use-llm` and Slice 4D provider construction accepted locally; next is aggregate review |
 | Gate 5 | Optional `dayu.host` / `dayu.engine` integration |
 
-Gate 4 Slice 4C only accepted CLI opt-in fail-closed behavior. It did not implement production LLM provider construction, Host/Agent/dayu integration or full FundToolService.
+Gate 4 Slice 4D accepted only typed env config, Service-owned `openai_compatible` provider construction and CLI wiring into `analyze_with_llm()`. It did not implement Host/Agent/dayu integration, full FundToolService, retry/backoff, live provider smoke, multi-model writer/auditor split, chapter 0/7 LLM polish or Evidence Confirm.
 
 ## 5. Boundary Guardrails
 
@@ -92,7 +96,8 @@ Gate 4 Slice 4C only accepted CLI opt-in fail-closed behavior. It did not implem
 - QDII, FOF, `110020` and `017641` remain deferred from minimum v1 and not ready for full v1.
 - Release-maintenance long ledger is preserved by links only.
 - Host/Agent/dayu integration is deferred to Route C Gate 5.
-- Current deterministic renderer quality remains production behavior until a provider-backed LLM report path is explicitly accepted.
+- Deterministic renderer remains the default production behavior; provider-backed LLM report generation is explicit `--use-llm` opt-in only.
+- Retry/backoff, live provider smoke, multi-model writer/auditor split, chapter 0/7 LLM polish and Evidence Confirm remain future residuals.
 - Unrelated untracked workspace files are not accepted evidence unless a later controller gate accepts them.
 
 ## 7. Prohibited Actions
