@@ -40,6 +40,29 @@ Because the reconciliation touches runtime and tests, docs-only validation is in
 - `uv run pytest --cov=fund_agent --cov-report=term-missing --cov-fail-under=50 -q`
 - PR status after push: `gh pr view 21 --json number,title,url,isDraft,state,headRefName,baseRefName,statusCheckRollup,mergeStateStatus`
 
+## Validation Results
+
+Local reconciliation validation after resolving `origin/main` conflicts:
+
+- `uv run ruff check .` passed.
+- `git diff --check` passed.
+- `uv run pytest --cov=fund_agent --cov-report=term-missing --cov-fail-under=50 -q` passed: `1106 passed`, total coverage `91.76%`.
+
+After pushing reconciliation commit `fc685d9`, GitHub PR #21 became mergeable but CI failed in Ubuntu on two CLI tests whose assertions depended on Rich/Typer rendered help text containing `--use-llm`. The underlying Typer command metadata and behavior were correct; local tests passed because local terminal rendering differed from GitHub Actions rendering.
+
+Controller fix:
+
+- Keep behavior assertions: `analyze` exposes `--use-llm` in Typer command metadata; `checklist` does not expose `--use-llm`; `checklist --use-llm` exits non-zero and does not call Service.
+- Remove brittle assertions that require Rich/Typer rendered output to include `--use-llm` under all terminal widths/environments.
+
+Post-fix validation:
+
+- `uv run pytest tests/ui/test_cli.py::test_analyze_cli_help_documents_auto_valuation_and_opt_out tests/ui/test_cli.py::test_checklist_cli_rejects_use_llm_option -q` passed: `2 passed`.
+- `uv run pytest tests/ui/test_cli.py -q` passed: `51 passed`.
+- `uv run ruff check .` passed.
+- `git diff --check` passed.
+- `uv run pytest --cov=fund_agent --cov-report=term-missing --cov-fail-under=50 -q` passed: `1106 passed`, total coverage `91.76%`.
+
 ## Guardrails
 
 - No merge / mark-ready / reviewer request / release.

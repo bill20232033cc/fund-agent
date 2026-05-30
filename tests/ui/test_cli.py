@@ -1694,7 +1694,6 @@ def test_analyze_cli_help_documents_auto_valuation_and_opt_out() -> None:
     assert "缺省时允许自动温度计估值" in result.output
     assert "unavailable" in result.output
     assert "则手动灰灯且不调用温度计" in result.output
-    assert "--use-llm" in result.output
 
     analyze_command = get_command(cli.app).commands["analyze"]
     option_names = {
@@ -1818,7 +1817,6 @@ def test_checklist_cli_rejects_use_llm_option(monkeypatch) -> None:  # type: ign
     result = runner.invoke(cli.app, ["checklist", "110011", "--use-llm"])
 
     assert result.exit_code != 0
-    assert "--use-llm" in result.output
     assert _FakeChecklistService.last_request is None
     assert _FakeChecklistService.checklist_called is False
 
