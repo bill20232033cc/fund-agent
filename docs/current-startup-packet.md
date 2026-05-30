@@ -16,10 +16,10 @@ Use `docs/reviews/` and `docs/archive/` only as evidence chain. They do not over
 | Field | State |
 |---|---|
 | Current phase | `MVP fund analysis report generation phase` |
-| Current gate | `MVP Gate 4 provider-backed CLI path closeout` |
+| Current gate | `MVP Gate 4 closeout / ready-to-open-draft-PR readiness` |
 | Current gate classification | `heavy` |
-| Current gate status | `4D1/4D2/4D3 and aggregate review accepted locally` |
-| Next entry point | `MVP Gate 4 closeout / ready-to-open-draft-PR readiness reconciliation gate` |
+| Current gate status | `local closeout accepted; awaiting explicit user authorization for draft PR gate` |
+| Next entry point | `ready-to-open-draft-PR authorization gate for MVP report generation phase` |
 | Control truth | `docs/implementation-control.md` |
 | Design truth | `docs/design.md` |
 | Accepted plan commit | `beb6891` |
@@ -27,8 +27,9 @@ Use `docs/reviews/` and `docs/archive/` only as evidence chain. They do not over
 | Accepted CLI provider wiring commit | `ab0590a` |
 | Accepted docs/control sync commit | `4d0c19f` |
 | Accepted aggregate review commit | `7a3dab9` |
+| Accepted closeout entrypoint commit | `b0e68e0` |
 
-The next owner should start from Gate 4 closeout / ready-to-open-draft-PR readiness reconciliation. Release-maintenance and golden-promotion blockers are residuals for later gates, not the active mainline.
+The next owner should stop at the draft PR authorization boundary unless the user explicitly authorizes push and PR creation. Release-maintenance and golden-promotion blockers are residuals for later gates, not the active mainline.
 
 ## 3. Current Implementation Facts
 

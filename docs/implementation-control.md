@@ -6,7 +6,7 @@
 > **设计真源**: `docs/design.md`
 > **控制真源**: `docs/implementation-control.md`
 > **短启动入口**: `docs/current-startup-packet.md`
-> **当前状态**: MVP fund analysis report generation phase；当前 gate 为 `MVP Gate 4 provider-backed CLI path closeout`，4D1/4D2/4D3 与 aggregate review 已本地 accepted；下一入口为 `MVP Gate 4 closeout / ready-to-open-draft-PR readiness reconciliation gate`。
+> **当前状态**: MVP fund analysis report generation phase；当前 gate 为 `MVP Gate 4 closeout / ready-to-open-draft-PR readiness`，local closeout 已 accepted；下一入口为 `ready-to-open-draft-PR authorization gate for MVP report generation phase`，需要用户显式授权后才能 push / create draft PR。
 
 ---
 
@@ -17,7 +17,7 @@
 ### Current Truth Guardrails
 
 - `AGENTS.md` 是最高优先级执行规则真源；若与本文档或 `docs/design.md` 冲突，先调整方案/实现，再回写文档。
-- 当前 phase 是 `MVP fund analysis report generation phase`；当前 gate 是 `MVP Gate 4 provider-backed CLI path closeout`，分类为 `heavy`，状态为 4D1/4D2/4D3 and aggregate review accepted locally。
+- 当前 phase 是 `MVP fund analysis report generation phase`；当前 gate 是 `MVP Gate 4 closeout / ready-to-open-draft-PR readiness`，分类为 `heavy`，状态为 local closeout accepted；draft PR gate requires explicit user authorization。
 - 当前默认实现仍以确定性 `fund-analysis analyze/checklist` 为生产主链路：结构化抽取、确定性分析、模板渲染、程序审计和 FQ0-FQ6 quality gate。
 - Gate 1 已新增 Fund 层 typed projection：`project_chapter_facts()` / `ChapterFactProvider.project()` 将内存中的 `StructuredFundDataBundle` 投影为 `chapter_fact_projection.v1`。
 - Gate 1 typed projection 只消费现有 bundle、CHAPTER_CONTRACT、preferred_lens 和 ITEM_RULE truth APIs；不读取仓库、PDF/cache/source helper、parser、LLM、Service、Host 或 dayu。
@@ -45,11 +45,11 @@
 |---|---|
 | Branch baseline | `codex/local-reconciliation` |
 | Current phase | `MVP fund analysis report generation phase` |
-| Current gate | `MVP Gate 4 provider-backed CLI path closeout` |
+| Current gate | `MVP Gate 4 closeout / ready-to-open-draft-PR readiness` |
 | Current gate classification | `heavy` |
-| Current gate status | `4D1/4D2/4D3 and aggregate review accepted locally` |
-| Next entry point | `MVP Gate 4 closeout / ready-to-open-draft-PR readiness reconciliation gate` |
-| Next gate classification | `heavy`; closeout reconciles Gate 4A/4B/4C/4D accepted artifacts, validation and residuals before any PR authorization point |
+| Current gate status | `local closeout accepted; awaiting explicit user authorization for draft PR gate` |
+| Next entry point | `ready-to-open-draft-PR authorization gate for MVP report generation phase` |
+| Next gate classification | `external-state authorization`; push and draft PR creation require explicit user approval |
 | Design truth | `docs/design.md` |
 | Control truth | `docs/implementation-control.md` |
 | Short startup entry | `docs/current-startup-packet.md` |
@@ -58,12 +58,13 @@
 | Accepted CLI provider wiring commit | `ab0590a` |
 | Accepted docs/control sync commit | `4d0c19f` |
 | Accepted aggregate review commit | `7a3dab9` |
+| Accepted closeout entrypoint commit | `b0e68e0` |
 
 ## Current Gate
 
 ### Gate Objective
 
-Reconcile Gate 4A/4B/4C/4D accepted artifacts, validations and residuals for closeout / ready-to-open-draft-PR readiness. Current accepted implementation uses explicit `openai_compatible` HTTP chat-completions over existing `httpx`, typed env config, Service-owned provider factory, and no live network in pytest.
+The local Gate 4 closeout is accepted. The next step is the external authorization boundary for opening a draft PR. Current accepted implementation uses explicit `openai_compatible` HTTP chat-completions over existing `httpx`, typed env config, Service-owned provider factory, and no live network in pytest.
 
 ### Current Accepted Artifacts
 
@@ -115,6 +116,7 @@ Reconcile Gate 4A/4B/4C/4D accepted artifacts, validations and residuals for clo
 | Gate 4 Slice 4D3 docs/control sync controller judgment | `docs/reviews/mvp-gate4-provider-construction-4d3-controller-judgment-20260530.md` |
 | Gate 4 Slice 4D aggregate reviews | `docs/reviews/mvp-gate4-provider-construction-aggregate-review-mimo-20260530.md`; `docs/reviews/mvp-gate4-provider-construction-aggregate-review-glm-20260530.md` |
 | Gate 4 Slice 4D aggregate controller judgment | `docs/reviews/mvp-gate4-provider-construction-aggregate-controller-judgment-20260530.md` |
+| Gate 4 closeout readiness reconciliation | `docs/reviews/mvp-gate4-closeout-readiness-reconciliation-20260530.md` |
 | Prior release-maintenance roadmap summary | `docs/reviews/release-maintenance-phase-roadmap-consolidation-20260529.md` |
 | Prior overnight closeout summary | `docs/reviews/overnight-release-maintenance-closeout-20260529.md` |
 | Historical control snapshots | `docs/archive/implementation-control-history-20260525.md`; `docs/archive/implementation-control-release-maintenance-ledger-20260527.md` |
@@ -163,6 +165,7 @@ The Current Accepted Artifacts table is intentionally short. Older release-maint
 
 | Gate | Status | Summary | Next action |
 |---|---|---|---|
+| `MVP Gate 4 closeout / ready-to-open-draft-PR readiness reconciliation` | accepted locally | Local closeout accepted after ruff, `git diff --check`, CLI `--use-llm` fail-closed smoke and full pytest `1106 passed`, coverage `91.76%`; no runtime changes beyond accepted Gate 4 work | Await explicit user authorization for draft PR gate |
 | `MVP Gate 4 Slice 4D aggregate review` | accepted locally | MiMo and GLM aggregate reviews passed with no blocking findings; controller judgment accepted provider construction as a local checkpoint in commit `7a3dab9` | Start `MVP Gate 4 closeout / ready-to-open-draft-PR readiness reconciliation gate` |
 | `MVP Gate 4 Slice 4D3: docs, design/control sync, and full regression` | accepted locally | Synced README, design and control docs after 4D1/4D2; fixed `only` vs `default` control-doc blocker; full regression `1106 passed`, coverage `91.76%`; accepted commit `4d0c19f` | Completed by accepted aggregate review commit `7a3dab9` |
 | `MVP Gate 4 Slice 4D2: CLI --use-llm provider construction wiring` | accepted locally | CLI `analyze --use-llm` now reads typed LLM env config, constructs Service-owned provider clients, calls `analyze_with_llm()`, keeps default `analyze` deterministic, and fail-closes missing config/construction/incomplete LLM result without deterministic fallback; accepted commit `ab0590a` | Start `MVP Gate 4 Slice 4D3: docs, design/control sync, and full regression gate` |
