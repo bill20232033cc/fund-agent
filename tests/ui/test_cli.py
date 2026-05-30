@@ -36,6 +36,8 @@ class _FakeService:
     """CLI 测试用成功 Service。"""
 
     last_request = None
+    analyze_called = False
+    analyze_with_llm_called = False
 
     async def analyze(self, request):  # type: ignore[no-untyped-def]
         """记录请求并返回固定 Markdown。
@@ -50,8 +52,27 @@ class _FakeService:
             无显式抛出。
         """
 
+        type(self).analyze_called = True
         type(self).last_request = request
         return _FakeResult(report_markdown="# 0. 投资要点概览\n\n# 7. 是否值得持有——最终判断\n")
+
+    async def analyze_with_llm(self, request, *, llm_clients):  # type: ignore[no-untyped-def]
+        """记录 LLM 分析调用，测试 fail-closed 时不得触发。
+
+        Args:
+            request: CLI 构造的 Service 请求。
+            llm_clients: 显式注入的 LLM 客户端。
+
+        Returns:
+            fake Service 返回值。
+
+        Raises:
+            无显式抛出。
+        """
+
+        type(self).analyze_with_llm_called = True
+        type(self).last_request = request
+        return _FakeResult(report_markdown="# LLM report\n")
 
 
 @dataclass(frozen=True, slots=True)
@@ -119,6 +140,7 @@ class _FakeChecklistService:
     """CLI 测试用独立 checklist Service。"""
 
     last_request = None
+    checklist_called = False
 
     async def checklist(self, request):  # type: ignore[no-untyped-def]
         """记录请求并返回固定检查清单。
@@ -133,6 +155,7 @@ class _FakeChecklistService:
             无显式抛出。
         """
 
+        type(self).checklist_called = True
         type(self).last_request = request
         item = _FakeChecklistItem(
             code="valuation",
@@ -807,6 +830,8 @@ def test_analyze_cli_calls_service_and_prints_report(monkeypatch) -> None:  # ty
     """
 
     _FakeService.last_request = None
+    _FakeService.analyze_called = False
+    _FakeService.analyze_with_llm_called = False
     monkeypatch.setattr(cli, "FundAnalysisService", _FakeService)
     runner = CliRunner()
 
@@ -858,6 +883,8 @@ def test_analyze_cli_calls_service_and_prints_report(monkeypatch) -> None:  # ty
 
     assert result.exit_code == 0
     assert result.output == "# 0. 投资要点概览\n\n# 7. 是否值得持有——最终判断\n"
+    assert _FakeService.analyze_called is True
+    assert _FakeService.analyze_with_llm_called is False
     assert _FakeService.last_request is not None
     assert _FakeService.last_request.fund_code == "110011"
     assert _FakeService.last_request.report_year == 2024
@@ -882,6 +909,36 @@ def test_analyze_cli_calls_service_and_prints_report(monkeypatch) -> None:  # ty
     )
 
 
+def test_analyze_cli_use_llm_fails_closed_before_service(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    """验证 `analyze --use-llm` 在 provider 未实现时失败关闭。
+
+    Args:
+        monkeypatch: pytest monkeypatch fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 CLI 调用 Service 或输出 deterministic 报告时抛出。
+    """
+
+    _FakeService.last_request = None
+    _FakeService.analyze_called = False
+    _FakeService.analyze_with_llm_called = False
+    monkeypatch.setattr(cli, "FundAnalysisService", _FakeService)
+    runner = CliRunner()
+
+    result = runner.invoke(cli.app, ["analyze", "110011", "--use-llm"])
+
+    assert result.exit_code == 1
+    assert result.stdout == ""
+    assert "LLM provider 未配置/未实现" in result.stderr
+    assert "# 0. 投资要点概览" not in result.output
+    assert _FakeService.last_request is None
+    assert _FakeService.analyze_called is False
+    assert _FakeService.analyze_with_llm_called is False
+
+
 def test_cli_module_imports_service_but_not_agent_internals() -> None:
     """验证 UI 只依赖 Service，不直接导入 Agent 内部模块。
 
@@ -902,6 +959,36 @@ def test_cli_module_imports_service_but_not_agent_internals() -> None:
     assert "fund_agent.services" in cli_source
     assert forbidden_agent_import not in cli_source
     assert forbidden_application_import not in cli_source
+
+
+def test_cli_module_llm_boundary_has_no_forbidden_runtime_imports() -> None:
+    """验证 CLI `--use-llm` 入口未引入 provider SDK、dayu 或间接业务参数。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 CLI 越过当前 Slice 4C 边界时抛出。
+    """
+
+    cli_source = Path(cli.__file__).read_text(encoding="utf-8")
+    forbidden_terms = (
+        "dayu",
+        "extra_payload",
+        "openai",
+        "anthropic",
+        "httpx",
+        "provider_sdk",
+        "pdf_cache",
+        "download_annual_report",
+        "annual_report_source",
+    )
+
+    for term in forbidden_terms:
+        assert term not in cli_source
 
 
 def test_analyze_cli_prints_quality_gate_summary_to_stderr(monkeypatch) -> None:  # type: ignore[no-untyped-def]
@@ -1156,6 +1243,7 @@ def test_analyze_cli_help_documents_auto_valuation_and_opt_out() -> None:
     assert "缺省时允许自动温度计估值" in result.output
     assert "unavailable" in result.output
     assert "则手动灰灯且不调用温度计" in result.output
+    assert "--use-llm" in result.output
 
     analyze_command = get_command(cli.app).commands["analyze"]
     option_names = {
@@ -1164,6 +1252,7 @@ def test_analyze_cli_help_documents_auto_valuation_and_opt_out() -> None:
         for option_name in getattr(parameter, "opts", ())
     }
     assert "--thermometer-cache-dir" in option_names
+    assert "--use-llm" in option_names
 
 
 def test_thermometer_cli_help_documents_all_a_and_self_owned_history() -> None:
@@ -1228,6 +1317,7 @@ def test_checklist_cli_calls_service_and_prints_summary(monkeypatch) -> None:  #
     """
 
     _FakeChecklistService.last_request = None
+    _FakeChecklistService.checklist_called = False
     monkeypatch.setattr(cli, "FundAnalysisService", _FakeChecklistService)
     runner = CliRunner()
 
@@ -1244,6 +1334,7 @@ def test_checklist_cli_calls_service_and_prints_summary(monkeypatch) -> None:  #
     )
 
     assert result.exit_code == 0
+    assert _FakeChecklistService.checklist_called is True
     assert _FakeChecklistService.last_request is not None
     assert _FakeChecklistService.last_request.fund_code == "110011"
     assert _FakeChecklistService.last_request.valuation_state == "low"
@@ -1253,6 +1344,40 @@ def test_checklist_cli_calls_service_and_prints_summary(monkeypatch) -> None:  #
     assert "valuation_state: low" in result.output
     assert "final_judgment: worth_holding" in result.output
     assert "- valuation: green/pass" in result.output
+
+
+def test_checklist_cli_rejects_use_llm_option(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    """验证 checklist 不接受 `--use-llm`，且不会调用 Service。
+
+    Args:
+        monkeypatch: pytest monkeypatch fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 checklist 接受 LLM 选项或调用 Service 时抛出。
+    """
+
+    _FakeChecklistService.last_request = None
+    _FakeChecklistService.checklist_called = False
+    monkeypatch.setattr(cli, "FundAnalysisService", _FakeChecklistService)
+    runner = CliRunner()
+
+    result = runner.invoke(cli.app, ["checklist", "110011", "--use-llm"])
+
+    assert result.exit_code != 0
+    assert "--use-llm" in result.output
+    assert _FakeChecklistService.last_request is None
+    assert _FakeChecklistService.checklist_called is False
+
+    checklist_command = get_command(cli.app).commands["checklist"]
+    option_names = {
+        option_name
+        for parameter in checklist_command.params
+        for option_name in getattr(parameter, "opts", ())
+    }
+    assert "--use-llm" not in option_names
 
 
 def test_thermometer_cli_prints_plain_summary(monkeypatch, tmp_path) -> None:  # type: ignore[no-untyped-def]

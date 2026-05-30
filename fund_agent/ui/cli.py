@@ -10,7 +10,7 @@ from __future__ import annotations
 import asyncio
 import json
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, NoReturn
 
 import typer
 
@@ -63,6 +63,15 @@ DEFAULT_GOLDEN_READINESS_PREFLIGHT_OUTPUT_DIR = (
     / "golden-readiness-preflight"
     / DEFAULT_GOLDEN_READINESS_PREFLIGHT_RUN_ID
 )
+LLM_PROVIDER_UNAVAILABLE_MESSAGE = "LLM provider 未配置/未实现"
+
+
+class LLMProviderUnavailableError(RuntimeError):
+    """CLI 生产 LLM 客户端不可用错误。
+
+    当前 Slice 4C 只暴露显式 `--use-llm` opt-in 入口；真实 LLM 客户端构造仍属于后续
+    Slice 4D，因此生产 CLI 必须在调用 Service LLM 用例前失败关闭。
+    """
 
 
 @app.command()
@@ -160,6 +169,10 @@ def analyze(
             "--quality-gate-golden-answer-path", help="开发覆盖：strict golden answer JSON 路径"
         ),
     ] = None,
+    use_llm: Annotated[
+        bool,
+        typer.Option("--use-llm", help="显式启用 Route C LLM 分章写作路径"),
+    ] = False,
 ) -> None:
     """对指定基金执行完整分析，输出 8 章 Markdown 体检报告。
 
@@ -187,6 +200,7 @@ def analyze(
         quality_gate_output_dir: 质量 gate 输出目录。
         quality_gate_run_id: 质量 gate 运行 ID。
         quality_gate_golden_answer_path: strict golden answer JSON 路径。
+        use_llm: 是否显式启用 Route C LLM 分章写作路径。
 
     Returns:
         无返回值，报告写入 stdout。
@@ -230,7 +244,12 @@ def analyze(
         command_source="analyze",
     )
     try:
+        if use_llm:
+            _build_llm_clients_or_fail()
         result = asyncio.run(FundAnalysisService().analyze(request))
+    except LLMProviderUnavailableError as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(code=1) from exc
     except QualityGateNotRunBlockedError as exc:
         _echo_quality_gate_not_run_blocked(exc)
         raise typer.Exit(code=2) from exc
@@ -750,6 +769,22 @@ def _valuation_state(value: str | None) -> ValuationState | None:
     if value not in allowed:
         raise typer.BadParameter(f"valuation_state 必须是 {', '.join(sorted(allowed))}")
     return value  # type: ignore[return-value]
+
+
+def _build_llm_clients_or_fail() -> NoReturn:
+    """构造生产 LLM 客户端，当前阶段始终失败关闭。
+
+    Args:
+        无。
+
+    Returns:
+        不返回；Slice 4D 接受前生产 provider construction 尚不存在。
+
+    Raises:
+        LLMProviderUnavailableError: 始终抛出，避免 CLI 注入 fake client 或回退确定性报告。
+    """
+
+    raise LLMProviderUnavailableError(LLM_PROVIDER_UNAVAILABLE_MESSAGE)
 
 
 def _parse_preflight_fund_artifact(value: str) -> FundArtifactInput:

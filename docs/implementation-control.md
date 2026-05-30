@@ -6,7 +6,7 @@
 > **设计真源**: `docs/design.md`
 > **控制真源**: `docs/implementation-control.md`
 > **短启动入口**: `docs/current-startup-packet.md`
-> **当前状态**: MVP fund analysis report generation phase；当前 gate 为 `MVP Gate 4 Slice 4B: Service analyze_with_llm`，已本地 accepted；下一入口为 `MVP Gate 4 Slice 4C: CLI --use-llm opt-in fail-closed integration gate`。
+> **当前状态**: MVP fund analysis report generation phase；当前 gate 为 `MVP Gate 4 Slice 4C: CLI --use-llm opt-in fail-closed`，已本地 accepted；下一入口为 `MVP Gate 4 Slice 4D: production LLM provider construction plan gate`。
 
 ---
 
@@ -17,7 +17,7 @@
 ### Current Truth Guardrails
 
 - `AGENTS.md` 是最高优先级执行规则真源；若与本文档或 `docs/design.md` 冲突，先调整方案/实现，再回写文档。
-- 当前 phase 是 `MVP fund analysis report generation phase`；当前 gate 是 `MVP Gate 4 Slice 4B: Service analyze_with_llm`，分类为 `heavy`，状态为本地 accepted。
+- 当前 phase 是 `MVP fund analysis report generation phase`；当前 gate 是 `MVP Gate 4 Slice 4C: CLI --use-llm opt-in fail-closed`，分类为 `heavy`，状态为本地 accepted。
 - 当前实现仍以确定性 `fund-analysis analyze/checklist` 为生产主链路：结构化抽取、确定性分析、模板渲染、程序审计和 FQ0-FQ6 quality gate。
 - Gate 1 已新增 Fund 层 typed projection：`project_chapter_facts()` / `ChapterFactProvider.project()` 将内存中的 `StructuredFundDataBundle` 投影为 `chapter_fact_projection.v1`。
 - Gate 1 typed projection 只消费现有 bundle、CHAPTER_CONTRACT、preferred_lens 和 ITEM_RULE truth APIs；不读取仓库、PDF/cache/source helper、parser、LLM、Service、Host 或 dayu。
@@ -29,9 +29,10 @@
 - Gate 3 不生成第 0/7 章，不构造生产 LLM provider，不读取仓库、PDF/cache/source helper、parser，不接入 Host/Agent/dayu。
 - Gate 4 Slice 4A 已新增 Service 层 `FinalChapterAssembler` / `assemble_final_chapters()`，作为 `final_chapter_assembler.v1` deterministic final assembly：用现有 `FinalJudgmentDecision` 生成第 7 章，再用 accepted conclusions 与 Gate 4-local typed chapter 7 summary 生成第 0 章，最终渲染顺序为 `0 -> 1-6 -> 7`。
 - Gate 4 Slice 4B 已新增 Service 层 `FundAnalysisService.analyze_with_llm()` / `FundLLMAnalysisResult`：复用 `_run_analysis_core()`，通过显式注入的 `ChapterOrchestratorLLMClients` 调用 Gate 3，始终调用 Slice 4A final assembly，partial/blocked 不回退确定性报告。
-- Gate 4 Slice 4B 不实现 CLI `--use-llm`、生产 LLM provider、chapter 0/7 LLM polish/audit、Evidence Confirm、Host/Agent/dayu。
+- Gate 4 Slice 4C 已为 `fund-analysis analyze` 增加显式 `--use-llm` opt-in；在 production provider construction 未接受前，该入口 fail-closes：stderr 输出 `LLM provider 未配置/未实现`、exit code `1`、stdout 为空，且不调用 Service LLM 用例、不回退确定性报告。`checklist` 不支持 `--use-llm`。
+- Gate 4 Slice 4C 不实现生产 LLM provider、chapter 0/7 LLM polish/audit、Evidence Confirm、Host/Agent/dayu。
 - 当前生产路径仍是 UI -> Service -> `fund_agent/fund` 的过渡路径；尚未接入 Host/Agent 调度。
-- Route C 是已接受的 MVP LLM report generation route；Gate 1-3 与 Gate 4 Slices 4A/4B 已作为当前代码事实 accepted locally。不得把 CLI `--use-llm`、production provider、Host scheduling、Agent runner/tool loop 或 dayu runtime 写成已实现事实。
+- Route C 是已接受的 MVP LLM report generation route；Gate 1-3 与 Gate 4 Slices 4A/4B/4C 已作为当前代码事实 accepted locally。不得把 production provider、Host scheduling、Agent runner/tool loop 或 dayu runtime 写成已实现事实。
 - 目标架构保持 UI -> Service -> Host -> Agent。未来 Host 必须使用 `dayu.host`；未来 Agent engine/tool loop/runner/ToolRegistry/ToolTrace 必须使用 `dayu.engine`。
 - Service 可以组装业务用例、prompt/ExecutionContract 语义、报告生成策略和未来 write-audit-repair loop；Fund 作为 Agent 层基金领域能力包，拥有基金类型识别、CHAPTER_CONTRACT / preferred_lens / ITEM_RULE、事实抽取、审计规则和证据锚点语义。
 - 所有业务参数必须在 typed request / contract / config 中显式声明；禁止通过 `extra_payload` 传递显式参数。
@@ -43,11 +44,11 @@
 |---|---|
 | Branch baseline | `codex/local-reconciliation` |
 | Current phase | `MVP fund analysis report generation phase` |
-| Current gate | `MVP Gate 4 Slice 4B: Service analyze_with_llm` |
+| Current gate | `MVP Gate 4 Slice 4C: CLI --use-llm opt-in fail-closed` |
 | Current gate classification | `heavy` |
 | Current gate status | `accepted locally` |
-| Next entry point | `MVP Gate 4 Slice 4C: CLI --use-llm opt-in fail-closed integration gate` |
-| Next gate classification | `heavy` by default until controller reclassifies; Slice 4C touches CLI user behavior and must fail closed until provider construction is accepted |
+| Next entry point | `MVP Gate 4 Slice 4D: production LLM provider construction plan gate` |
+| Next gate classification | `heavy`; provider construction must start with plan/review, not direct implementation |
 | Design truth | `docs/design.md` |
 | Control truth | `docs/implementation-control.md` |
 | Short startup entry | `docs/current-startup-packet.md` |
@@ -57,7 +58,7 @@
 
 ### Gate Objective
 
-Accept the Service-layer `analyze_with_llm()` use case that reuses deterministic core analysis, invokes Gate 3 chapter orchestration with explicit injected LLM clients, invokes Slice 4A final assembly, and returns fail-closed typed `FundLLMAnalysisResult` without CLI/provider/Host/dayu integration.
+Accept the CLI `--use-llm` opt-in surface as fail-closed until production provider construction is explicitly accepted: no fake clients, no deterministic fallback, no Service LLM call before provider availability, and no `checklist --use-llm`.
 
 ### Current Accepted Artifacts
 
@@ -94,6 +95,9 @@ Accept the Service-layer `analyze_with_llm()` use case that reuses deterministic
 | Gate 4 Slice 4B implementation evidence | `docs/reviews/mvp-gate4-llm-service-implementation-evidence-20260530.md` |
 | Gate 4 Slice 4B implementation reviews | `docs/reviews/mvp-gate4-llm-service-implementation-review-mimo-20260530.md`; `docs/reviews/mvp-gate4-llm-service-implementation-review-glm-20260530.md` |
 | Gate 4 Slice 4B controller judgment | `docs/reviews/mvp-gate4-llm-service-controller-judgment-20260530.md` |
+| Gate 4 Slice 4C implementation evidence | `docs/reviews/mvp-gate4-cli-use-llm-implementation-evidence-20260530.md` |
+| Gate 4 Slice 4C implementation reviews | `docs/reviews/mvp-gate4-cli-use-llm-implementation-review-mimo-20260530.md`; `docs/reviews/mvp-gate4-cli-use-llm-implementation-review-glm-20260530.md` |
+| Gate 4 Slice 4C controller judgment | `docs/reviews/mvp-gate4-cli-use-llm-controller-judgment-20260530.md` |
 | Prior release-maintenance roadmap summary | `docs/reviews/release-maintenance-phase-roadmap-consolidation-20260529.md` |
 | Prior overnight closeout summary | `docs/reviews/overnight-release-maintenance-closeout-20260529.md` |
 | Historical control snapshots | `docs/archive/implementation-control-history-20260525.md`; `docs/archive/implementation-control-release-maintenance-ledger-20260527.md` |
@@ -102,15 +106,16 @@ The Current Accepted Artifacts table is intentionally short. Older release-maint
 
 ### Current Decision Summary
 
-- Route C is the accepted MVP LLM report generation route; Gates 1-3 and Gate 4 Slices 4A/4B are accepted local code facts; remaining Gate 4 slices and Gate 5 remain future design.
+- Route C is the accepted MVP LLM report generation route; Gates 1-3 and Gate 4 Slices 4A/4B/4C are accepted local code facts; remaining provider construction and Gate 5 remain future design.
 - Current deterministic `fund-analysis analyze/checklist` remains the only production report/checklist mainline.
 - Gate 1 `ChapterFactProvider` typed projection is implemented and accepted locally as Fund-layer code fact.
 - Gate 2 `chapter_writer` / `chapter_auditor` single-chapter primitives are implemented and accepted locally as Fund-layer code facts.
 - Gate 3 `chapter_orchestrator` is implemented and accepted locally as Service-layer write-audit-repair façade for chapters 1-6.
 - Gate 4 Slice 4A `final_chapter_assembler` is implemented and accepted locally as Service-layer deterministic final assembly for chapters 0 and 7 plus accepted body chapters.
 - Gate 4 Slice 4B `FundAnalysisService.analyze_with_llm()` is implemented and accepted locally as Service-layer LLM analyze use case over deterministic core, Gate 3 and Slice 4A.
+- Gate 4 Slice 4C `fund-analysis analyze --use-llm` is implemented and accepted locally as fail-closed CLI opt-in until production provider construction is accepted.
 - `facet_recognizer` and full `FundToolService` remain future candidates; Gate 1 did not implement them.
-- Next implementation work is Gate 4 Slice 4C: CLI `--use-llm` opt-in fail-closed integration.
+- Next work is Gate 4 Slice 4D: production LLM provider construction plan gate.
 - Golden / strict correctness / QDII / FOF / `110020` / fixture promotion blockers are residual product-quality work, not blockers for starting MVP report generation Gate 1.
 - Host/Agent/dayu runtime integration is deferred to Route C Gate 5 and must not be preintroduced in Gates 1-4.
 
@@ -121,7 +126,7 @@ The Current Accepted Artifacts table is intentionally short. Older release-maint
 | MVP Gate 1 | `ChapterFactProvider` typed projection accepted locally; `facet_recognizer` / full `FundToolService` remain future candidates | Agent/Fund owns fund-type/facet/fact/evidence semantics; no Service/Host/dayu runtime introduced |
 | MVP Gate 2 | `chapter_writer` + `chapter_auditor` accepted locally as Fund-layer single-chapter primitives | LLM writing/audit consumes structured facts, derived calculations, explicit data gaps and evidence anchors only; no Service/Host/dayu/CLI integration introduced |
 | MVP Gate 3 | `chapter_orchestrator` accepted locally | Service owns write-audit-repair policy for chapters 1-6; calls Agent/Fund capabilities through explicit contracts |
-| MVP Gate 4 | Slice 4A `final_chapter_assembler` and Slice 4B Service `analyze_with_llm` accepted locally; Slice 4C/4D remain | Next: CLI `--use-llm` fail-closed integration; deterministic `analyze/checklist` remains available unless a later gate changes it |
+| MVP Gate 4 | Slices 4A `final_chapter_assembler`, 4B Service `analyze_with_llm` and 4C CLI fail-closed `--use-llm` accepted locally; Slice 4D remains | Next: provider construction plan; deterministic `analyze/checklist` remains available unless a later gate changes it |
 | MVP Gate 5 | Optional dayu Host/Agent integration | Future Host uses `dayu.host`; future Agent engine/tool loop uses `dayu.engine` |
 
 ## Open Residuals
@@ -133,13 +138,14 @@ The Current Accepted Artifacts table is intentionally short. Older release-maint
 | QDII / FOF / `110020` / `017641` coverage | Deferred from minimum v1 and not ready for full v1; not blockers for MVP Route C Gate 1 | Future QDII / FOF / index evidence policy gates |
 | Release-maintenance long ledger | Preserved by archive and review links only; not active startup surface | Historical Evidence Index |
 | Host/Agent/dayu runtime integration | Deferred to Route C Gate 5; no Host/Agent packages or dependencies before explicit gate | Future architecture gate |
-| Current deterministic renderer quality | Remains current production behavior until `--use-llm` is explicitly implemented | Route C Gates 2-4 |
+| Current deterministic renderer quality | Remains current production behavior until a provider-backed LLM report path is explicitly accepted | Route C Gate 4D or later |
 | Untracked unrelated workspace files | Not part of accepted evidence unless a later controller gate explicitly accepts them | Controller scope audit |
 
 ## Recent Active Gate Ledger
 
 | Gate | Status | Summary | Next action |
 |---|---|---|---|
+| `MVP Gate 4 Slice 4C: CLI --use-llm opt-in fail-closed` | accepted locally | CLI `analyze --use-llm` added as explicit opt-in but fail-closes before Service LLM call because provider construction is absent; `checklist` rejects the flag; 46 CLI tests, Service regressions, full validation and two PASS reviews; no provider, Service internals, Fund, final judgment, quality, golden, score, snapshot, dayu changes | Start `MVP Gate 4 Slice 4D: production LLM provider construction plan gate` |
 | `MVP Gate 4 Slice 4B: Service analyze_with_llm` | accepted locally | Service-layer `FundAnalysisService.analyze_with_llm()` implemented with explicit `llm_clients`, deterministic core reuse, Gate 3 orchestration, Slice 4A final assembly, 7 targeted tests, full validation and two PASS reviews; no CLI, provider construction, source access, final judgment semantic change, dayu, golden or quality changes | Start `MVP Gate 4 Slice 4C: CLI --use-llm opt-in fail-closed integration gate` |
 | `MVP Gate 4 Slice 4A: final_chapter_assembler` | accepted locally | Service-layer deterministic final assembler implemented with typed contract, chapter 7 from existing final judgment, chapter 0 from accepted conclusions, 14 targeted tests, full validation, two PASS reviews and two PASS fix re-reviews; no Service LLM analyze use case, CLI, provider construction, source access, final judgment semantic change, dayu, golden or quality changes | Start `MVP Gate 4 Slice 4B: Service analyze_with_llm implementation gate` |
 | `MVP Gate 3: chapter_orchestrator` | accepted locally | Service-layer chapter orchestrator implemented with explicit bundle/projection input, injected writer/auditor clients, fail-closed repair policy, 30 targeted tests, full validation, two PASS reviews and two PASS fix re-reviews; no chapter 0/7 assembly, CLI, provider construction, source access, dayu, golden or quality changes | Start `MVP Gate 4: final_chapter_assembler + chapter 0 + CLI --use-llm plan gate` |
