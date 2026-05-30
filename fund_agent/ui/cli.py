@@ -10,10 +10,11 @@ from __future__ import annotations
 import asyncio
 import json
 from pathlib import Path
-from typing import Annotated, NoReturn
+from typing import Annotated
 
 import typer
 
+from fund_agent.config.llm import LLMProviderConfigError, load_llm_provider_config_from_env
 from fund_agent.config.paths import (
     DEFAULT_GOLDEN_ANSWER_JSON,
     DEFAULT_GOLDEN_PREFILL_OUTPUT,
@@ -39,6 +40,9 @@ from fund_agent.services import (
     GoldenReadinessPreflightRequest,
     GoldenReadinessPreflightService,
     MoneyHorizon,
+    ChapterOrchestrationPolicy,
+    ChapterOrchestratorLLMClients,
+    LLMProviderConstructionError,
     QualityGateBlockedError,
     QualityGateNotRunBlockedError,
     QualityGateRequest,
@@ -48,6 +52,7 @@ from fund_agent.services import (
     ThermometerRequest,
     ThermometerService,
     ValuationState,
+    build_chapter_llm_clients,
 )
 
 app = typer.Typer(help="基金行为教练 Agent — 买入前专业级基金体检报告")
@@ -63,15 +68,6 @@ DEFAULT_GOLDEN_READINESS_PREFLIGHT_OUTPUT_DIR = (
     / "golden-readiness-preflight"
     / DEFAULT_GOLDEN_READINESS_PREFLIGHT_RUN_ID
 )
-LLM_PROVIDER_UNAVAILABLE_MESSAGE = "LLM provider 未配置/未实现"
-
-
-class LLMProviderUnavailableError(RuntimeError):
-    """CLI 生产 LLM 客户端不可用错误。
-
-    当前 Slice 4C 只暴露显式 `--use-llm` opt-in 入口；真实 LLM 客户端构造仍属于后续
-    Slice 4D，因此生产 CLI 必须在调用 Service LLM 用例前失败关闭。
-    """
 
 
 @app.command()
@@ -245,10 +241,21 @@ def analyze(
     )
     try:
         if use_llm:
-            _build_llm_clients_or_fail()
-        result = asyncio.run(FundAnalysisService().analyze(request))
-    except LLMProviderUnavailableError as exc:
-        typer.echo(str(exc), err=True)
+            llm_clients, chapter_policy = _build_llm_clients_or_fail()
+            result = asyncio.run(
+                FundAnalysisService().analyze_with_llm(
+                    request,
+                    llm_clients=llm_clients,
+                    chapter_policy=chapter_policy,
+                )
+            )
+        else:
+            result = asyncio.run(FundAnalysisService().analyze(request))
+    except LLMProviderConfigError as exc:
+        typer.echo(f"LLM provider 配置错误：{exc}", err=True)
+        raise typer.Exit(code=1) from exc
+    except LLMProviderConstructionError as exc:
+        typer.echo(f"LLM provider 构造失败：{exc}", err=True)
         raise typer.Exit(code=1) from exc
     except QualityGateNotRunBlockedError as exc:
         _echo_quality_gate_not_run_blocked(exc)
@@ -259,6 +266,9 @@ def analyze(
     except Exception as exc:
         typer.echo(f"分析失败：{exc}", err=True)
         raise typer.Exit(code=1) from exc
+    if use_llm and result.final_assembly_result.report_markdown is None:
+        typer.echo(_llm_incomplete_message(result), err=True)
+        raise typer.Exit(code=1)
     _echo_quality_gate_summary(result)
     typer.echo(result.report_markdown, nl=False)
 
@@ -771,20 +781,53 @@ def _valuation_state(value: str | None) -> ValuationState | None:
     return value  # type: ignore[return-value]
 
 
-def _build_llm_clients_or_fail() -> NoReturn:
-    """构造生产 LLM 客户端，当前阶段始终失败关闭。
+def _build_llm_clients_or_fail() -> tuple[
+    ChapterOrchestratorLLMClients,
+    ChapterOrchestrationPolicy,
+]:
+    """从生产配置构造 LLM clients 和章节策略。
 
     Args:
         无。
 
     Returns:
-        不返回；Slice 4D 接受前生产 provider construction 尚不存在。
+        LLM clients 与章节编排策略。
 
     Raises:
-        LLMProviderUnavailableError: 始终抛出，避免 CLI 注入 fake client 或回退确定性报告。
+        LLMProviderConfigError: 当环境变量配置缺失或非法时抛出。
+        LLMProviderConstructionError: 当 provider clients 构造失败时抛出。
     """
 
-    raise LLMProviderUnavailableError(LLM_PROVIDER_UNAVAILABLE_MESSAGE)
+    config = load_llm_provider_config_from_env()
+    llm_clients = build_chapter_llm_clients(config)
+    chapter_policy = ChapterOrchestrationPolicy(max_output_chars=config.max_output_chars)
+    return llm_clients, chapter_policy
+
+
+def _llm_incomplete_message(result) -> str:  # type: ignore[no-untyped-def]
+    """生成 LLM 分析未完成错误消息。
+
+    Args:
+        result: `FundLLMAnalysisResult` 或具备同名属性的测试替身。
+
+    Returns:
+        以 `LLM 分析未完成：` 开头的错误消息。
+
+    Raises:
+        无显式抛出。
+    """
+
+    final_assembly_result = result.final_assembly_result
+    issues = getattr(final_assembly_result, "issues", ())
+    issue_reasons = ", ".join(getattr(issue, "reason", str(issue)) for issue in issues)
+    if not issue_reasons:
+        issue_reasons = "no final assembly issue recorded"
+    return (
+        "LLM 分析未完成："
+        f"orchestration_status={result.llm_orchestration_result.status}, "
+        f"final_assembly_status={final_assembly_result.status}, "
+        f"issues={issue_reasons}"
+    )
 
 
 def _parse_preflight_fund_artifact(value: str) -> FundArtifactInput:
