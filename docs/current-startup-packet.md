@@ -16,10 +16,10 @@ Use `docs/reviews/` and `docs/archive/` only as evidence chain. They do not over
 | Field | State |
 |---|---|
 | Current phase | `MVP real-provider stabilization and score-loop phase` |
-| Current gate | `MVP provider runtime budget and prompt-cost root-cause calibration gate` |
+| Current gate | `MVP dayu.host runtime governance truth-source alignment gate` |
 | Current gate classification | `heavy` |
-| Current gate status | `blocked with root cause narrowed`; Gate A writer/auditor contract hardening accepted locally, provider runtime timeout hardening accepted locally, prompt-contract calibration accepted locally, writer prompt contract diagnostic narrowing accepted locally, writer marker syntax repair accepted locally, programmatic audit L1 calibration accepted locally, provider runtime timeout follow-up accepted as diagnostic/code hardening, independent body chapter execution accepted locally, real provider independent body matrix rerun diagnostic complete, prompt-cost/root-cause calibration accepted locally; real provider smoke still blocked by `provider_runtime_timeout_small_prompt`; Gate C score-loop design accepted |
-| Next entry point | `MVP provider endpoint small-prompt runtime budget calibration gate` |
+| Current gate status | docs-only truth-source alignment; provider runtime/prompt-cost checkpoint accepted in `b3a769b`; real provider smoke still blocked by `provider_runtime_timeout_small_prompt`; Gate C score-loop design accepted |
+| Next entry point | `MVP dayu.host runtime governance adapter plan gate` |
 | Control truth | `docs/implementation-control.md` |
 | Design truth | `docs/design.md` |
 | Accepted plan commit | `beb6891` |
@@ -29,13 +29,13 @@ Use `docs/reviews/` and `docs/archive/` only as evidence chain. They do not over
 | Accepted aggregate review commit | `7a3dab9` |
 | Accepted closeout entrypoint commit | `b0e68e0` |
 
-The user authorized the draft PR gate earlier, but this phase made no external PR changes. PR #21 remains draft/open. Provider auth/config verification passes for the current MiMo-compatible configuration, Gate A hardened writer/auditor protocol, provider runtime timeout hardening is accepted locally, and L1 calibration is accepted locally. Gate B remains blocked because real provider smoke still exits `1` without a complete 0-7 report. Independent body chapter execution is accepted locally and the latest real provider reruns prove chapters 1-6 now produce independent rows (`generated_chapter_ids=[1,2,3,4,5,6]`, `skipped_chapter_ids=[]`) instead of synthetic `dependency_missing`. Prompt-cost calibration proves explicit CLI `--use-llm` compact mode reduces chapter 2/6 writer prompts from approx `26086` / `29078` tokens to approx `1590` / `2110` tokens. The current unique blocker is `provider_runtime_timeout_small_prompt`: chapters 1-6 writer calls are all below `3000` approximate prompt tokens yet time out under the bounded `60s x2` writer budget. This is not provider config/auth, large prompt cost, prompt contract, audit parse, fact gap or deterministic fallback. Gate C score-loop design is accepted as design-only and must not be treated as readiness/golden/quality-gate pass. Release-maintenance and golden-promotion blockers remain residuals for later gates, not the active mainline.
+The user authorized the draft PR gate earlier, but this phase made no external PR changes. PR #21 remains draft/open. Provider auth/config verification passes for the current MiMo-compatible configuration, Gate A hardened writer/auditor protocol, provider runtime timeout hardening is accepted locally, and L1 calibration is accepted locally. Gate B remains blocked because real provider smoke still exits `1` without a complete 0-7 report. Independent body chapter execution is accepted locally and the latest real provider reruns prove chapters 1-6 now produce independent rows (`generated_chapter_ids=[1,2,3,4,5,6]`, `skipped_chapter_ids=[]`) instead of synthetic `dependency_missing`. Prompt-cost calibration proves explicit CLI `--use-llm` compact mode reduces chapter 2/6 writer prompts from approx `26086` / `29078` tokens to approx `1590` / `2110` tokens. The current provider blocker is `provider_runtime_timeout_small_prompt`: chapters 1-6 writer calls are all below `3000` approximate prompt tokens yet time out under the bounded `60s x2` writer budget. This is not provider config/auth, large prompt cost, prompt contract, audit parse, fact gap or deterministic fallback. Current implementation remains `CLI -> Service -> fund_agent/fund -> provider HTTP call`; current runtime budget / prompt-cost / dayu-compatible shim is only transitional. User-facing MVP readiness now requires a `dayu.host` runtime governance adapter for global deadline, cancel, terminal run state, safe diagnostics and run lifecycle. `dayu.engine` migration remains a later Agent/tool-loop gate. Gate C score-loop design is accepted as design-only and must not be treated as readiness/golden/quality-gate pass. Release-maintenance and golden-promotion blockers remain residuals for later gates, not the active mainline.
 
 ## 3. Current Implementation Facts
 
 - Default report generation is deterministic `fund-analysis analyze`.
 - Current checklist generation is deterministic `fund-analysis checklist`.
-- Current path is UI -> Service -> `fund_agent/fund`.
+- Current path is `CLI -> Service -> fund_agent/fund -> provider HTTP call`.
 - Service orchestrates the current use case and calls Fund public capabilities directly as a transition path.
 - Fund owns the Agent-layer domain rules: fund-type recognition, annual-report facts, CHAPTER_CONTRACT, preferred_lens, ITEM_RULE, audit rules and evidence anchors.
 - Current report rendering uses the 8-chapter deterministic template.
@@ -68,10 +68,11 @@ The user authorized the draft PR gate earlier, but this phase made no external P
 - Latest prompt-cost/root-cause calibration rerun for `006597 / 2024 --use-llm`: CLI exit `1`, stdout empty, no deterministic fallback, `orchestration_status=partial`, `final_assembly_status=incomplete`; same-source Service diagnostic with `prompt_payload_mode=compact` has `generated_chapter_ids=[1,2,3,4,5,6]`, `skipped_chapter_ids=[]`, `accepted_chapter_ids=[]`, `report_markdown_present=false`. Primary blocker is `provider_runtime_timeout_small_prompt`: chapters 1-6 all fail writer timeout with approximate prompt tokens `2109`, `1590`, `2575`, `1274`, `2518`, `2110` under `60s x2` bounded writer budget. Chapter 2/6 former large prompt cost is reduced from approx `26086` / `29078` to `1590` / `2110`.
 - Gate C score-loop design is accepted as design-only: it distinguishes `extraction_score`, `chapter_fact_score` and `chapter_generation_score`, routes provider runtime timeout as `not_scored` / `blocked_provider_runtime`, and remains separate from existing golden / fixtures / score / quality gate / readiness semantics.
 - There is no Host/Agent/dayu runtime in the production path.
+- Current runtime budget / prompt-cost / dayu-compatible shim only provides transitional timeout and diagnostic framing; it does not provide global deadline, cancel, terminal run state or full run lifecycle.
 
 ## 4. Route C Accepted Future Route
 
-Route C is the accepted MVP LLM report generation route. Gates 1-3 and Gate 4 Slices 4A/4B/4C/4D are accepted local code facts; Gate 5 remains future design.
+Route C is the accepted MVP LLM report generation route. Gates 1-3 and Gate 4 Slices 4A/4B/4C/4D are accepted local code facts. Gate 5A `dayu.host runtime governance adapter` is a user-facing MVP readiness prerequisite; Gate 5B `dayu.engine` Agent/tool-loop migration remains future design.
 
 | Gate | Status / scope |
 |---|---|
@@ -79,7 +80,8 @@ Route C is the accepted MVP LLM report generation route. Gates 1-3 and Gate 4 Sl
 | Gate 2 | `chapter_writer` + `chapter_auditor` accepted locally as Fund-layer single-chapter primitives |
 | Gate 3 | `chapter_orchestrator` accepted locally as Service-owned write-audit-repair façade for chapters 1-6 |
 | Gate 4 | Slice 4A `final_chapter_assembler`, Slice 4B Service `analyze_with_llm`, Slice 4C CLI `--use-llm` and Slice 4D provider construction accepted locally; aggregate review accepted |
-| Gate 5 | Optional `dayu.host` / `dayu.engine` integration |
+| Gate 5A | `dayu.host` runtime governance adapter: required before user-facing MVP readiness; covers global deadline, cancel, terminal run state, safe diagnostics and run lifecycle |
+| Gate 5B | `dayu.engine` Agent/tool-loop migration: future Agent runner/tool-loop/ToolRegistry/ToolTrace work; not the minimal fix for current provider timeout |
 
 Gate 4 Slice 4D accepted typed env config, Service-owned `openai_compatible` provider construction and CLI wiring into `analyze_with_llm()`. Provider runtime timeout hardening later added timeout-only bounded retry/backoff and safe diagnostics. The route still does not implement Host/Agent/dayu integration, full FundToolService, live provider smoke acceptance, multi-model writer/auditor split, chapter 0/7 LLM polish or Evidence Confirm.
 
@@ -89,9 +91,9 @@ Gate 4 Slice 4D accepted typed env config, Service-owned `openai_compatible` pro
 - UI handles interaction, rendering and display only.
 - Service handles use-case orchestration, scene/prompt/ExecutionContract semantics, report strategy and the current Gate 3 write-audit-repair facade.
 - Host handles session/run lifecycle, concurrency, timeout, cancel, resume, memory, reply outbox and event delivery.
-- Future Host must use `dayu.host`.
+- The next Host runtime governance adapter must use `dayu.host`.
 - Agent handles execution, tool loop, runner, ToolRegistry, ToolTrace, context budget, tool execution and Fund domain capabilities.
-- Future Agent engine/tool loop/runner/ToolRegistry/ToolTrace must use `dayu.engine`.
+- Future Agent engine/tool loop/runner/ToolRegistry/ToolTrace migration must use `dayu.engine`.
 - `fund_agent/fund` is the current Agent-layer Fund domain package.
 - Production annual report access must go through `FundDocumentRepository`.
 - Service, UI, Host, renderer and quality gate must not call PDF cache, download helpers or concrete annual-report sources directly.
@@ -108,7 +110,8 @@ Gate 4 Slice 4D accepted typed env config, Service-owned `openai_compatible` pro
 - All promotion states remain `promotion_allowed=false`.
 - QDII, FOF, `110020` and `017641` remain deferred from minimum v1 and not ready for full v1.
 - Release-maintenance long ledger is preserved by links only.
-- Host/Agent/dayu integration is deferred to Route C Gate 5.
+- `dayu.host` runtime governance adapter is required before user-facing MVP readiness.
+- `dayu.engine` Agent/tool-loop migration is deferred.
 - Deterministic renderer remains the default production behavior; provider-backed LLM report generation is explicit `--use-llm` opt-in only.
 - Live provider smoke acceptance, multi-model writer/auditor split, chapter 0/7 LLM polish and Evidence Confirm remain future residuals.
 - Local real provider smoke for PR #21 remains blocked: current MiMo provider auth passes; provider timeout hardening, prompt-contract calibration, diagnostic narrowing, marker syntax repair, L1 calibration, provider runtime timeout follow-up, independent body execution and prompt-cost/root-cause calibration are accepted locally. Latest compact-mode rerun fails closed before complete chapters 0-7 with primary blocker `provider_runtime_timeout_small_prompt`; no deterministic fallback and no partial accepted report.
@@ -122,7 +125,8 @@ Gate 4 Slice 4D accepted typed env config, Service-owned `openai_compatible` pro
 - Do not modify `AGENTS.md`.
 - Do not modify `docs/fund-analysis-template-draft.md`.
 - Do not create `fund_agent/host` or `fund_agent/agent` before an explicit gate.
-- Do not add `dayu.host` or `dayu.engine` dependencies before Route C Gate 5 or another explicit architecture gate.
+- Do not add `dayu.host` before the `dayu.host runtime governance adapter` gate.
+- Do not add `dayu.engine` before a later Agent/tool-loop migration gate.
 - Do not run promotion, fixture promotion, strict correctness reruns, snapshot refreshes or release-readiness workflows for this MVP gate sequence.
 - Do not commit, push or create PR unless a later controller step explicitly authorizes it.
 - Do not delete or clean unrelated untracked files.
@@ -138,7 +142,7 @@ Gate 4 Slice 4D accepted typed env config, Service-owned `openai_compatible` pro
 7. Classify the next gate per `AGENTS.md`; choose the heavier classification when uncertain.
 8. Check that Route C text stays future-only.
 9. Check that current deterministic `analyze/checklist` remains current implementation.
-10. Check that Host/Agent/dayu stays deferred unless the active gate explicitly covers it.
+10. Check that `dayu.host` runtime governance is treated as the next MVP readiness prerequisite and `dayu.engine` remains deferred unless the active gate explicitly covers it.
 11. Check that golden / strict correctness / QDII / FOF / `110020` / fixture promotion stay residuals unless the active gate explicitly covers them.
 12. Record validation commands and results in the relevant evidence artifact.
 
