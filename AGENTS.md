@@ -78,7 +78,7 @@
 
 - **年报来源 fallback 必须显式按失败分类决策**：`not_found`、`unavailable` 才允许 fallback；`schema_drift`、`identity_mismatch`、`integrity_error` 必须 fail-closed，禁止被 Eastmoney fallback 静默掩盖。
 
-- **Dayu 是四层架构参考与 Host/Agent 执行底座来源**。本项目目标架构统一为 `UI -> Service -> Host -> Agent`。当前确定性 CLI 主链路尚未接入 Host/Agent 调度，但后续一旦引入 Host 层，必须使用 `dayu.host`；一旦引入 Agent 执行内核 / tool loop / runner / ToolRegistry / ToolTrace，必须使用 `dayu.engine`。禁止通过零散外部 Dayu API 绕过本项目四层边界。
+- **Dayu 是四层架构参考与 Host/Agent 能力来源，不是当前生产 runtime 直接依赖**。本项目目标架构统一为 `UI -> Service -> Host -> Agent`。当前确定性 CLI 主链路尚未接入 Host/Agent 调度；后续 Host 层必须在本项目内内化 Dayu Host 的稳定能力（run lifecycle、global deadline、cancel、terminal state、safe diagnostics、event/outbox 等），后续 Agent 执行内核必须在本项目内内化 Dayu Engine 的稳定能力（runner、tool loop、ToolRegistry、ToolTrace、context budget、tool execution contract 等）。禁止把 `dayu-agent` 作为生产 runtime 直接依赖；禁止通过零散外部 Dayu API 绕过本项目四层边界。上游 Dayu 代码只能作为研究输入；复制或改写代码必须先经过独立 license/compliance gate。
 
 - **禁止把显式参数放在 extra_payload 里传递**，所有参数必须显式声明。
 
@@ -110,13 +110,13 @@ UI -> Service -> Host -> Agent
 
 - **负责**：Agent session/run 生命周期、并发、超时、取消、恢复、memory、reply outbox、事件投递、ExecutionDeliveryContext
 - **不负责**：基金领域知识、工具具体实现、prompt 业务语义、报告判断
-- **依赖约束**：Host 层实现必须使用 `dayu.host`；Host 调用 Agent 层执行，不直接实现工具或基金分析
+- **依赖约束**：Host 层必须内化 Dayu Host 稳定能力并在本项目内实现；不得把 `dayu-agent` / `dayu.host` 作为生产 runtime 直接依赖。Host 调用 Agent 层执行，不直接实现工具或基金分析
 
 ### Agent 层
 
 - **负责**：Agent 执行、tool loop、runner、ToolRegistry、ToolTrace、context budget、工具调用、基金领域能力、年报解析规则、有知有行方法论实现、审计规则
 - **不负责**：UI 渲染、Service 业务用例选择、Host 生命周期治理
-- **依赖约束**：Agent 执行内核必须使用 `dayu.engine`；`fund_agent/fund` 是当前 Agent 层基金领域能力包，理解基金类型、财报章节、投资规则、E大策略、CHAPTER_CONTRACT、preferred_lens、ITEM_RULE 和证据审计
+- **依赖约束**：Agent 执行内核必须内化 Dayu Engine 稳定能力并在本项目内实现；不得把 `dayu-agent` / `dayu.engine` 作为生产 runtime 直接依赖。`fund_agent/fund` 是当前 Agent 层基金领域能力包，理解基金类型、财报章节、投资规则、E大策略、CHAPTER_CONTRACT、preferred_lens、ITEM_RULE 和证据审计
 
 ### 边界执行规则
 
@@ -132,8 +132,8 @@ UI -> Service -> Host -> Agent
   - 任何"读取 prompt manifests / scene 定义"的代码，默认放在 `Service`
   - 任何"渲染最终 `system_prompt` / ExecutionContract / AgentInput"的代码，默认放在 `Service`
   - 任何"决定某个 scene 需要哪些工具语义"的代码，默认放在 `Service`
-  - 任何"管理 session / run / 并发 / timeout / cancel / resume / memory / reply outbox / ExecutionDeliveryContext"的代码，默认放在 `Host`，并使用 `dayu.host`
-  - 任何"管理 tool loop / runner / trace / facts / ToolRegistry / context budget / tool execution"的代码，默认放在 `Agent`，并使用 `dayu.engine`
+  - 任何"管理 session / run / 并发 / timeout / cancel / resume / memory / reply outbox / ExecutionDeliveryContext"的代码，默认放在 `Host`，并内化 Dayu Host 能力，不直接依赖外部 `dayu.host` runtime
+  - 任何"管理 tool loop / runner / trace / facts / ToolRegistry / context budget / tool execution"的代码，默认放在 `Agent`，并内化 Dayu Engine 能力，不直接依赖外部 `dayu.engine` runtime
   - 任何"理解基金类型、财报章节、投资规则、有知有行方法论"的代码，默认放在 `Agent` 层的 `fund_agent/fund`
   - 任何"CHAPTER_CONTRACT 解析 / preferred_lens 应用"的代码，默认放在 `Agent` 层的 `fund_agent/fund`
   - 任何"审计规则执行 / 证据锚点验证"的代码，默认放在 `Agent` 层的 `fund_agent/fund`
@@ -192,8 +192,8 @@ UI -> Service -> Host -> Agent
 - **各 README 的固定定位**：
   - 项目根目录 `README.md`：**用户手册**。目标是"用户一看就会用"。只写用户成功路径：安装、配置、5 分钟跑通、常用工作流、CLI 常用命令、报告渲染入口、文档导航；不展开 Host/Agent/Fund 内部机制。
   - `fund_agent/README.md`：**开发手册 - 总览**。目标是"开发者一看就能理解整体架构并开始扩展"。只写总架构、设计意图、稳定边界、机制示意图、扩展入口、代码阅读顺序；不下沉到 Host/Agent/Fund 包内部实现细节。
-  - `fund_agent/host/README.md`：**开发手册 - Host 包**。只写 Host 的架构、`dayu.host` 接入、公共同步/异步契约、session/run 生命周期、并发、取消、恢复、memory、reply outbox、事件流和扩展点。
-  - `fund_agent/agent/README.md`：**开发手册 - Agent 包**。只写 Agent 的架构、`dayu.engine` 接入、Runner/Agent 事件流、状态机、ToolTrace schema、ToolRegistry、context budget、工具执行契约和模块导读。
+  - `fund_agent/host/README.md`：**开发手册 - Host 包**。只写 Host 的架构、本项目内化的 Dayu Host 能力、公共同步/异步契约、session/run 生命周期、并发、取消、恢复、memory、reply outbox、事件流和扩展点。
+  - `fund_agent/agent/README.md`：**开发手册 - Agent 包**。只写 Agent 的架构、本项目内化的 Dayu Engine 能力、Runner/Agent 事件流、状态机、ToolTrace schema、ToolRegistry、context budget、工具执行契约和模块导读。
   - `fund_agent/fund/README.md`：**开发手册 - Fund 包**。只写 Fund 作为 Agent 层基金领域能力包的定位、分析框架（8章模板）、CHAPTER_CONTRACT 机制、审计规则、对外接口、内部分层与机制；不要把 Fund 写成系统基础设施。
   - `fund_agent/config/README.md`：**配置说明手册**。只写默认配置、`workspace/config` 覆盖关系、常改项、最小示例、prompts 目录职责；不重复运行时内部实现。
   - `tests/README.md`：**测试手册**。只写测试分层、运行方式、约定和新增测试时的维护规则。

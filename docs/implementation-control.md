@@ -6,7 +6,7 @@
 > **设计真源**: `docs/design.md`
 > **控制真源**: `docs/implementation-control.md`
 > **短启动入口**: `docs/current-startup-packet.md`
-> **当前状态**: MVP real-provider stabilization and score-loop phase 已完成本地闭环；PR #21 保持 draft/open 且未由本 phase 修改外部状态。Gate A writer/auditor contract hardening 已本地接受；provider runtime timeout hardening 已本地接受；prompt-contract calibration 已本地接受；writer prompt contract diagnostic narrowing 已本地接受为诊断 gate；writer marker syntax repair 已本地接受；programmatic audit L1 calibration 已本地接受；provider runtime timeout follow-up 已作为诊断/code hardening 本地接受；independent body chapter execution 已本地接受；real provider independent body matrix rerun 诊断完成；provider runtime budget and prompt-cost root-cause calibration 已本地接受为诊断/runtime-cost hardening。Gate B real provider smoke acceptance 仍 blocked：真实 provider `006597 / 2024 --use-llm` 现在能观察章节 1-6 独立矩阵，`generated_chapter_ids=[1,2,3,4,5,6]`、`skipped_chapter_ids=[]`，但未生成完整 0-7 报告；compact mode 已把 chapter 2/6 writer prompt 从 approx `26086` / `29078` tokens 降到 approx `1590` / `2110` tokens；当前唯一主 blocker 为 `provider_runtime_timeout_small_prompt`。Gate C chapter generation score-loop design accepted as design-only。当前实现仍是 `CLI -> Service -> fund_agent/fund -> provider HTTP call`；当前 runtime budget / prompt-cost / dayu-compatible shim 只是过渡机制。下一入口调整为 `MVP dayu.host runtime governance adapter plan gate`，它是 user-facing MVP readiness 前置条件；`dayu.engine` migration 保留为后续 Agent/tool-loop gate。
+> **当前状态**: MVP real-provider stabilization and score-loop phase 已完成本地闭环；PR #21 保持 draft/open 且未由本 phase 修改外部状态。Gate A writer/auditor contract hardening 已本地接受；provider runtime timeout hardening 已本地接受；prompt-contract calibration 已本地接受；writer prompt contract diagnostic narrowing 已本地接受为诊断 gate；writer marker syntax repair 已本地接受；programmatic audit L1 calibration 已本地接受；provider runtime timeout follow-up 已作为诊断/code hardening 本地接受；independent body chapter execution 已本地接受；real provider independent body matrix rerun 诊断完成；provider runtime budget and prompt-cost root-cause calibration 已本地接受为诊断/runtime-cost hardening。Gate B real provider smoke acceptance 仍 blocked：真实 provider `006597 / 2024 --use-llm` 现在能观察章节 1-6 独立矩阵，`generated_chapter_ids=[1,2,3,4,5,6]`、`skipped_chapter_ids=[]`，但未生成完整 0-7 报告；compact mode 已把 chapter 2/6 writer prompt 从 approx `26086` / `29078` tokens 降到 approx `1590` / `2110` tokens；当前唯一主 blocker 为 `provider_runtime_timeout_small_prompt`。Gate C chapter generation score-loop design accepted as design-only。当前实现仍是 `CLI -> Service -> fund_agent/fund -> provider HTTP call`；当前 runtime budget / prompt-cost / dayu-compatible shim 只是过渡机制。下一入口调整为 `MVP internalized Host runtime governance adapter plan gate`，它是 user-facing MVP readiness 前置条件；internalized Agent engine/tool-loop migration 保留为后续 Agent/tool-loop gate。Dayu 是架构参考与能力来源，不是生产 runtime 直接依赖；不得把 `dayu-agent` / `dayu.host` / `dayu.engine` 作为生产 runtime 直接依赖。
 
 ---
 
@@ -17,7 +17,7 @@
 ### Current Truth Guardrails
 
 - `AGENTS.md` 是最高优先级执行规则真源；若与本文档或 `docs/design.md` 冲突，先调整方案/实现，再回写文档。
-- 当前 phase 是 `MVP real-provider stabilization and score-loop phase`；当前 gate 是 `MVP dayu.host runtime governance truth-source alignment gate`，分类为 `heavy`，状态为 docs-only truth-source alignment。Provider runtime budget and prompt-cost root-cause calibration 已本地接受为诊断/runtime-cost hardening；当前唯一 provider blocker 是 `provider_runtime_timeout_small_prompt`，但 user-facing MVP readiness 还缺 global deadline、cancel、terminal run state、safe diagnostics 和 run lifecycle。
+- 当前 phase 是 `MVP real-provider stabilization and score-loop phase`；当前 gate 是 `MVP Dayu capability internalization truth-source alignment gate`，分类为 `heavy`，状态为 docs-only truth-source alignment。Provider runtime budget and prompt-cost root-cause calibration 已本地接受为诊断/runtime-cost hardening；当前唯一 provider blocker 是 `provider_runtime_timeout_small_prompt`，但 user-facing MVP readiness 还缺 global deadline、cancel、terminal run state、safe diagnostics 和 run lifecycle。
 - 当前默认实现仍以确定性 `fund-analysis analyze/checklist` 为生产主链路：结构化抽取、确定性分析、模板渲染、程序审计和 FQ0-FQ6 quality gate。
 - Gate 1 已新增 Fund 层 typed projection：`project_chapter_facts()` / `ChapterFactProvider.project()` 将内存中的 `StructuredFundDataBundle` 投影为 `chapter_fact_projection.v1`。
 - Gate 1 typed projection 只消费现有 bundle、CHAPTER_CONTRACT、preferred_lens 和 ITEM_RULE truth APIs；不读取仓库、PDF/cache/source helper、parser、LLM、Service、Host 或 dayu。
@@ -43,24 +43,24 @@
 - Gate C score-loop design 已接受为 design-only：未来必须区分 `extraction_score`、`chapter_fact_score`、`chapter_generation_score`，并把 provider runtime timeout 作为 `not_scored` / `blocked_provider_runtime`，不得接入现有 golden / fixtures / score / quality gate / readiness。
 - 当前生产路径仍是 `CLI -> Service -> fund_agent/fund -> provider HTTP call` 的过渡路径；尚未接入 Host/Agent 调度。
 - 当前 runtime budget / prompt-cost / dayu-compatible shim 继续作为过渡机制，用于 provider timeout 归因和安全诊断；不得把它写成完整 Host governance。
-- `dayu.host runtime governance adapter gate` 是 user-facing MVP readiness 前置条件，负责 global deadline、cancel、terminal run state、safe diagnostics 和 run lifecycle。
-- `dayu.engine` migration 是后续 Agent/tool-loop gate，不是当前 small-prompt provider timeout blocker 的最小解。
+- `internalized Host runtime governance adapter gate` 是 user-facing MVP readiness 前置条件，负责 global deadline、cancel、terminal run state、safe diagnostics 和 run lifecycle。
+- internalized Agent engine/tool-loop migration 是后续 Agent/tool-loop gate，不是当前 small-prompt provider timeout blocker 的最小解。
 - Route C 是已接受的 MVP LLM report generation route；Gate 1-3 与 Gate 4 Slices 4A/4B/4C/4D 已作为当前代码事实 accepted locally。不得把 Host scheduling、Agent runner/tool loop 或 dayu runtime 写成已实现事实。
-- 目标架构保持 UI -> Service -> Host -> Agent。未来 Host 必须使用 `dayu.host`；未来 Agent engine/tool loop/runner/ToolRegistry/ToolTrace 必须使用 `dayu.engine`。
+- 目标架构保持 UI -> Service -> Host -> Agent。未来 Host 必须内化 Dayu Host 能力且不得直接依赖 `dayu-agent` / `dayu.host`；未来 Agent engine/tool loop/runner/ToolRegistry/ToolTrace 必须内化 Dayu Engine 能力且不得直接依赖 `dayu-agent` / `dayu.engine`。
 - Service 可以组装业务用例、prompt/ExecutionContract 语义、报告生成策略和未来 write-audit-repair loop；Fund 作为 Agent 层基金领域能力包，拥有基金类型识别、CHAPTER_CONTRACT / preferred_lens / ITEM_RULE、事实抽取、审计规则和证据锚点语义。
 - 所有业务参数必须在 typed request / contract / config 中显式声明；禁止通过 `extra_payload` 传递显式参数。
 - 生产年报访问必须通过 `FundDocumentRepository`；Service、UI、Host、renderer、quality gate 不得直接调用具体来源、PDF cache 或下载 helper。
 - 年报来源 fallback 继续按 `not_found` / `unavailable` eligible，`schema_drift` / `identity_mismatch` / `integrity_error` fail-closed。
-- 本 gate 不改变 runtime、schema、score、snapshot、quality gate、golden fixture、golden answer、manifest、promotion state、模板或 `AGENTS.md`。
+- 本 gate 不改变 runtime、schema、score、snapshot、quality gate、golden fixture、golden answer、manifest、promotion state 或模板；本 gate 只为新裁决同步 `AGENTS.md` / design / control / startup 真源。
 
 | Field | State |
 |---|---|
 | Branch baseline | `codex/local-reconciliation` |
 | Current phase | `MVP real-provider stabilization and score-loop phase` |
-| Current gate | `MVP dayu.host runtime governance truth-source alignment gate` |
+| Current gate | `MVP Dayu capability internalization truth-source alignment gate` |
 | Current gate classification | `heavy` |
 | Current gate status | docs-only truth-source alignment; provider runtime/prompt-cost checkpoint accepted in `b3a769b`; Gate B still blocked by `provider_runtime_timeout_small_prompt`; Gate C design accepted |
-| Next entry point | `MVP dayu.host runtime governance adapter plan gate` |
+| Next entry point | `MVP internalized Host runtime governance adapter plan gate` |
 | Next gate classification | `heavy`; Host/runtime governance affects user-facing MVP readiness and must start with plan/review |
 | Design truth | `docs/design.md` |
 | Control truth | `docs/implementation-control.md` |
@@ -176,7 +176,7 @@ The Current Accepted Artifacts table is intentionally short. Older release-maint
 
 ### Current Decision Summary
 
-- Route C is the accepted MVP LLM report generation route; Gates 1-3 and Gate 4 Slices 4A/4B/4C/4D are accepted local code facts; Gate 5A `dayu.host runtime governance adapter` is a user-facing MVP readiness prerequisite; Gate 5B `dayu.engine` Agent/tool-loop migration remains future design.
+- Route C is the accepted MVP LLM report generation route; Gates 1-3 and Gate 4 Slices 4A/4B/4C/4D are accepted local code facts; Gate 5A internalized Host runtime governance adapter is a user-facing MVP readiness prerequisite; Gate 5B internalized Agent engine/tool-loop migration remains future design.
 - Current deterministic `fund-analysis analyze/checklist` remains the default production report/checklist mainline; `fund-analysis analyze --use-llm` is the explicit provider-backed opt-in path.
 - Local PR #21 acceptance is no longer blocked by the old HTTP `401` provider_config issue for the current MiMo configuration. Provider timeout hardening, prompt-contract calibration, diagnostic narrowing, marker syntax repair, L1 calibration, provider runtime timeout follow-up and independent body execution are accepted locally. The current blocker is still real provider smoke acceptance: latest independent-body real provider rerun fails closed before complete chapters 0-7 with primary blocker `provider_runtime_timeout`; final assembly is incomplete, stdout empty and no deterministic fallback.
 - Gate 1 `ChapterFactProvider` typed projection is implemented and accepted locally as Fund-layer code fact.
@@ -188,7 +188,7 @@ The Current Accepted Artifacts table is intentionally short. Older release-maint
 - `facet_recognizer` and full `FundToolService` remain future candidates; Gate 1 did not implement them.
 - Gate 4 Slice 4D1 provider factory was accepted in commit `26203d3`; Gate 4 Slice 4D2 CLI provider wiring was accepted in commit `ab0590a`; 4D3 docs/control sync was accepted in commit `4d0c19f`; 4D aggregate review was accepted in commit `7a3dab9`.
 - Golden / strict correctness / QDII / FOF / `110020` / fixture promotion blockers are residual product-quality work, not blockers for starting MVP report generation Gate 1.
-- Host/Agent/dayu runtime is not currently implemented. Do not preintroduce runtime in docs-only gates. The next runtime gate is specifically `dayu.host` governance; `dayu.engine` remains deferred.
+- Host/Agent/dayu runtime is not currently implemented. Do not preintroduce runtime in docs-only gates. The next runtime gate is specifically internalized Host governance; internalized Agent engine/tool-loop remains deferred.
 
 ## Route C Future Route
 
@@ -198,8 +198,8 @@ The Current Accepted Artifacts table is intentionally short. Older release-maint
 | MVP Gate 2 | `chapter_writer` + `chapter_auditor` accepted locally as Fund-layer single-chapter primitives | LLM writing/audit consumes structured facts, derived calculations, explicit data gaps and evidence anchors only; no Service/Host/dayu/CLI integration introduced |
 | MVP Gate 3 | `chapter_orchestrator` accepted locally | Service owns write-audit-repair policy for chapters 1-6; calls Agent/Fund capabilities through explicit contracts |
 | MVP Gate 4 | Slices 4A `final_chapter_assembler`, 4B Service `analyze_with_llm`, 4C CLI `--use-llm` and 4D provider construction accepted locally | `--use-llm` is explicit opt-in; deterministic `analyze/checklist` remains default unless a later gate changes it |
-| MVP Gate 5A | `dayu.host` runtime governance adapter | User-facing MVP readiness prerequisite; future Host adapter uses `dayu.host` for global deadline, cancel, terminal run state, safe diagnostics and run lifecycle |
-| MVP Gate 5B | `dayu.engine` Agent/tool-loop migration | Future Agent engine/tool loop uses `dayu.engine`; not required to classify or resolve the current small-prompt provider timeout |
+| MVP Gate 5A | internalized Host runtime governance adapter | User-facing MVP readiness prerequisite; future Host adapter internalizes Dayu Host capabilities for global deadline, cancel, terminal run state, safe diagnostics and run lifecycle |
+| MVP Gate 5B | internalized Agent engine/tool-loop migration | Future Agent engine/tool loop internalizes Dayu Engine capabilities; not required to classify or resolve the current small-prompt provider timeout |
 
 ## Open Residuals
 
@@ -209,11 +209,11 @@ The Current Accepted Artifacts table is intentionally short. Older release-maint
 | `004393` / `004194` / `006597` promotion readiness | `004393`, `004194`, `006597` are not promotion-prep-ready; `fixture_state=absent`; `promotion_allowed=false` | Future promotion-prep readiness owner |
 | QDII / FOF / `110020` / `017641` coverage | Deferred from minimum v1 and not ready for full v1; not blockers for MVP Route C Gate 1 | Future QDII / FOF / index evidence policy gates |
 | Release-maintenance long ledger | Preserved by archive and review links only; not active startup surface | Historical Evidence Index |
-| `dayu.host` runtime governance adapter | Required before user-facing MVP readiness; no runtime package/dependency change until explicit adapter gate | `MVP dayu.host runtime governance adapter plan gate` |
-| `dayu.engine` Agent/tool-loop migration | Deferred; not the minimal fix for current provider timeout blocker | Future Agent/tool-loop migration gate |
+| internalized Host runtime governance adapter | Required before user-facing MVP readiness; no runtime package/dependency change until explicit adapter gate | `MVP internalized Host runtime governance adapter plan gate` |
+| internalized Agent engine/tool-loop migration | Deferred; not the minimal fix for current provider timeout blocker | Future Agent/tool-loop migration gate |
 | Deterministic renderer default | Remains current default production behavior; provider-backed LLM report path is explicit `--use-llm` opt-in only | Current behavior |
 | Provider reliability / polish | Timeout-only retry/backoff accepted locally; live provider smoke acceptance, multi-model writer/auditor split, provider fallback, chapter 0/7 LLM polish and Evidence Confirm are not implemented | Future provider reliability / LLM polish gates |
-| PR #21 real provider smoke | Provider auth now passes for current MiMo config; timeout hardening, prompt-contract calibration, diagnostic narrowing, marker syntax repair, L1 calibration, runtime-cost diagnostic, independent body execution and prompt-cost/root-cause calibration accepted; latest compact-mode rerun proves chapters 1-6 independent (`generated=[1..6]`, `skipped=[]`) and ch2/ch6 prompt cost reduced below large-prompt threshold, but still fails closed before complete 0-7 report with primary blocker `provider_runtime_timeout_small_prompt` | Provider endpoint calibration remains a later diagnostic gate; user-facing readiness first needs `dayu.host` runtime governance adapter |
+| PR #21 real provider smoke | Provider auth now passes for current MiMo config; timeout hardening, prompt-contract calibration, diagnostic narrowing, marker syntax repair, L1 calibration, runtime-cost diagnostic, independent body execution and prompt-cost/root-cause calibration accepted; latest compact-mode rerun proves chapters 1-6 independent (`generated=[1..6]`, `skipped=[]`) and ch2/ch6 prompt cost reduced below large-prompt threshold, but still fails closed before complete 0-7 report with primary blocker `provider_runtime_timeout_small_prompt` | Provider endpoint calibration remains a later diagnostic gate; user-facing readiness first needs internalized Host runtime governance adapter |
 | Programmatic audit C2 | Supplemental service diagnostic after a timeout-free run accepts chapters 1-2, then fails chapter 3 `programmatic_audit` with issue prefix `programmatic:C2` and subcategory `code_bug_other`; no complete 0-7 report | Future `MVP programmatic audit C2 calibration gate` after timeout is no longer first blocker |
 | Score-loop implementation | Gate C design accepted only; not implemented and not connected to readiness/golden/quality gate | Future score-loop implementation gate after Gate B timeout is handled |
 | Untracked unrelated workspace files | Not part of accepted evidence unless a later controller gate explicitly accepts them | Controller scope audit |
@@ -222,8 +222,8 @@ The Current Accepted Artifacts table is intentionally short. Older release-maint
 
 | Gate | Status | Summary | Next action |
 |---|---|---|---|
-| `MVP dayu.host runtime governance truth-source alignment gate` | docs-only alignment | Reclassifies `dayu.host` runtime governance from optional future Gate 5 to user-facing MVP readiness prerequisite; current implementation remains `CLI -> Service -> fund_agent/fund -> provider HTTP call`; `dayu.engine` remains future Agent/tool-loop migration | Start `MVP dayu.host runtime governance adapter plan gate`; do not implement runtime from this docs-only gate |
-| `MVP provider runtime budget and prompt-cost root-cause calibration gate` | accepted locally as diagnostic/runtime-cost hardening; smoke still blocked | Compact writer payload and safe prompt-cost/runtime diagnostics accepted; ruff/full pytest/deterministic smoke/missing-config fail-closed PASS; real provider compact-mode CLI exit `1`, stdout empty, no fallback; Service diagnostic generated `[1..6]`, `skipped=[]`, `accepted=[]`; ch2/ch6 reduced from approx `26086`/`29078` tokens to `1590`/`2110`; all chapters writer timeout below `3000` tokens | Start `MVP provider endpoint small-prompt runtime budget calibration gate`; do not revisit provider config/auth or large-prompt slimming |
+| `MVP Dayu capability internalization truth-source alignment gate` | docs-only alignment | Reclassifies Dayu from direct production runtime dependency to architecture reference and capability source; current implementation remains `CLI -> Service -> fund_agent/fund -> provider HTTP call`; internalized Agent engine/tool-loop remains future migration | Start `MVP internalized Host runtime governance adapter plan gate`; do not implement runtime from this docs-only gate |
+| `MVP provider runtime budget and prompt-cost root-cause calibration gate` | accepted locally as diagnostic/runtime-cost hardening; smoke still blocked | Compact writer payload and safe prompt-cost/runtime diagnostics accepted; ruff/full pytest/deterministic smoke/missing-config fail-closed PASS; real provider compact-mode CLI exit `1`, stdout empty, no fallback; Service diagnostic generated `[1..6]`, `skipped=[]`, `accepted=[]`; ch2/ch6 reduced from approx `26086`/`29078` tokens to `1590`/`2110`; all chapters writer timeout below `3000` tokens | Start `MVP internalized Host runtime governance adapter plan gate`; do not revisit provider config/auth or large-prompt slimming |
 | `MVP real provider smoke acceptance rerun with independent body chapter matrix` | diagnostic complete; smoke blocked | Real provider CLI exit `1`, stdout empty, no deterministic fallback; service diagnostic generated full body matrix with `generated=[1..6]`, `skipped=[]`, `accepted=[4]`; final assembly incomplete; MiMo/GLM evidence reviews PASS; unique blocker `provider_runtime_timeout`, with chapter 2/6 writer prompts approx `26086`/`29078` tokens | Start `MVP provider runtime budget and prompt-cost calibration gate`; do not revisit provider config/auth |
 | `MVP independent body chapter execution gate` | accepted locally | Removed body chapter fail-fast semantics: chapters 1-6 now each run independent write/audit/repair attempts from the same projection; `dependency_missing` is reserved for true writer dependency; CLI incomplete output includes safe all-chapter matrix; final assembly remains fail-closed; ruff, targeted/full pytest, deterministic smoke, missing-config fail-closed and artifact secret scan pass | Rerun real provider smoke to observe independent body matrix before selecting the next calibration gate |
 | `MVP provider runtime timeout follow-up gate` | accepted diagnostic/code hardening; smoke still blocked | Added safe provider-bound prompt/runtime cost diagnostics, runtime serializer and CLI runtime summary; reviews PASS; earlier default provider budget proved chapter 1 auditor timeout, and later independent-body rerun localized current blocker to provider runtime timeout across writer/auditor rows | Historical evidence; current next entry is provider runtime budget and prompt-cost calibration |
