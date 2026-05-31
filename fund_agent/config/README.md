@@ -37,4 +37,4 @@ API key 字段在 `LLMProviderConfig` 的 `repr` 中隐藏；配置错误、prov
 
 `fund_agent/config/prompts/{base,scenes,tasks}` 如果在本地存在，只是惰性占位目录，不代表生产主链路已经接入 prompt、scene 或 task manifest。Fund 作为 Agent 层基金能力包，其 CHAPTER_CONTRACT、preferred_lens 和 ITEM_RULE 仍在 `fund_agent/fund/template` 的 typed manifest 中维护。
 
-常用用户入口见项目根目录 `README.md`。后续如果引入 workspace override、prompt manifest、provider fallback、非 timeout retry 或 live smoke，必须先经过设计裁决，并同步更新 `docs/design.md`、本文件和相关测试。后续如配置 Host/Agent runtime，Host 必须使用 `dayu.host`，Agent 执行内核必须使用 `dayu.engine`。
+常用用户入口见项目根目录 `README.md`。后续如果引入 workspace override、prompt manifest、provider fallback、非 timeout retry 或 live smoke，必须先经过设计裁决，并同步更新 `docs/design.md`、本文件和相关测试。后续如配置 durable Host 或 Agent runtime，必须在本项目内内化 Dayu Host / Engine 的稳定能力，不直接依赖外部 `dayu.host` / `dayu.engine` runtime。

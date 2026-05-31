@@ -1,6 +1,6 @@
 # Fund Agent 能力包
 
-`fund_agent/fund` 是 Agent 层基金领域能力包，负责承载基金领域知识、年报解析规则和模板取证输入，不负责 UI、Service 或 Host 生命周期治理。未来通用 Agent 执行内核落地时必须使用 `dayu.engine`，但 `fund_agent/fund` 当前仍保持确定性 Python 能力包形态。
+`fund_agent/fund` 是 Agent 层基金领域能力包，负责承载基金领域知识、年报解析规则和模板取证输入，不负责 UI、Service 或 Host 生命周期治理。未来通用 Agent 执行内核落地时必须在本项目内内化 Dayu Engine 稳定能力，不直接依赖外部 `dayu.engine` runtime；`fund_agent/fund` 当前仍保持确定性 Python 能力包形态。
 
 ## 当前实现
 

@@ -119,6 +119,7 @@ class _FakeService:
     analyze_with_llm_called = False
     last_llm_clients = None
     last_chapter_policy = None
+    last_host_context = None
 
     async def analyze(self, request):  # type: ignore[no-untyped-def]
         """记录请求并返回固定 Markdown。
@@ -143,6 +144,7 @@ class _FakeService:
         *,
         llm_clients,
         chapter_policy,
+        host_context=None,
     ):
         """记录 LLM 分析调用，测试 fail-closed 时不得触发。
 
@@ -162,6 +164,7 @@ class _FakeService:
         type(self).last_request = request
         type(self).last_llm_clients = llm_clients
         type(self).last_chapter_policy = chapter_policy
+        type(self).last_host_context = host_context
         return _FakeLLMResult(
             final_assembly_result=_FakeLLMFinalAssemblyResult(
                 status="accepted",
@@ -403,6 +406,7 @@ class _FakeLLMBlockedAnalysisService:
         *,
         llm_clients,
         chapter_policy,
+        host_context=None,
     ):
         """抛出结构化 quality gate 阻断异常。
 
@@ -445,6 +449,7 @@ class _FakeLLMNotRunBlockedAnalysisService:
         *,
         llm_clients,
         chapter_policy,
+        host_context=None,
     ):
         """抛出 quality gate 未运行阻断异常。
 
@@ -472,6 +477,7 @@ class _IncompleteLLMService(_FakeService):
         *,
         llm_clients,
         chapter_policy,
+        host_context=None,
     ):
         """记录调用并返回 incomplete final assembly。
 
@@ -510,6 +516,7 @@ class _L1IncompleteLLMService(_FakeService):
         *,
         llm_clients,
         chapter_policy,
+        host_context=None,
     ):
         """记录调用并返回 L1 数字闭环阻断结果。
 
@@ -559,6 +566,7 @@ class _TimeoutLLMService(_FakeService):
         *,
         llm_clients,
         chapter_policy,
+        host_context=None,
     ):
         """记录调用并返回 llm_timeout 阻断结果。
 
@@ -646,6 +654,7 @@ class _MatrixIncompleteLLMService(_FakeService):
         *,
         llm_clients,
         chapter_policy,
+        host_context=None,
     ):
         """记录调用并返回含 accepted/failed 行的 all-chapter matrix。
 
@@ -731,6 +740,22 @@ class _FailingService:
         """
 
         raise RuntimeError("fixture failure")
+
+
+class _FailingLLMService(_FakeService):
+    """CLI 测试用 Host 托管 LLM 失败 Service。"""
+
+    async def analyze_with_llm(  # type: ignore[no-untyped-def]
+        self,
+        request,
+        *,
+        llm_clients,
+        chapter_policy,
+        host_context=None,
+    ):
+        """抛出固定 LLM 异常，验证 Host fail-closed 输出不被二次包装。"""
+
+        raise RuntimeError("llm fixture failure")
 
 
 def _fake_quality_gate_result(
@@ -1356,6 +1381,7 @@ def test_analyze_cli_calls_service_and_prints_report(monkeypatch) -> None:  # ty
     _FakeService.analyze_with_llm_called = False
     _FakeService.last_llm_clients = None
     _FakeService.last_chapter_policy = None
+    _FakeService.last_host_context = None
     monkeypatch.setattr(cli, "FundAnalysisService", _FakeService)
     runner = CliRunner()
 
@@ -1511,6 +1537,9 @@ def test_analyze_cli_use_llm_configured_calls_llm_service_and_prints_report(
     assert isinstance(_FakeService.last_chapter_policy, ChapterOrchestrationPolicy)
     assert _FakeService.last_chapter_policy.max_output_chars == _FakeLLMConfig.max_output_chars
     assert _FakeService.last_chapter_policy.prompt_payload_mode == "compact"
+    assert _FakeService.last_host_context is not None
+    assert _FakeService.last_host_context.run_id.startswith("host_run_")
+    assert _FakeService.last_host_context.timeout_seconds is not None
 
 
 def test_analyze_cli_use_llm_construction_error_fails_before_service(
@@ -1574,6 +1603,9 @@ def test_analyze_cli_use_llm_incomplete_result_exits_without_fallback(
     assert result.exit_code == 1
     assert result.stdout == ""
     assert "LLM 分析未完成：" in result.stderr
+    assert "LLM Host run 未完成：" in result.stderr
+    assert "status=failed" in result.stderr
+    assert "error_type=_LLMIncompleteHostRunError" in result.stderr
     assert "orchestration_status=partial" in result.stderr
     assert "# 0. 投资要点概览" not in result.output
     assert _IncompleteLLMService.analyze_called is False
@@ -1597,6 +1629,7 @@ def test_analyze_cli_use_llm_incomplete_prints_safe_all_chapter_matrix(
 
     assert result.exit_code == 1
     assert result.stdout == ""
+    assert "LLM Host run 未完成：" in result.stderr
     assert "first_failed_chapter_id=1" in result.stderr
     assert "first_failed_status=failed" in result.stderr
     assert "first_failed_stop_reason=llm_timeout" in result.stderr
@@ -1656,6 +1689,7 @@ def test_analyze_cli_use_llm_l1_subcategory_matches_service_summary(
 
     assert result.exit_code == 1
     assert result.stdout == ""
+    assert "LLM Host run 未完成：" in result.stderr
     assert "first_failed_chapter_id=2" in result.stderr
     assert "first_failed_status=failed" in result.stderr
     assert "first_failed_stop_reason=repair_budget_exhausted" in result.stderr
@@ -1697,6 +1731,7 @@ def test_analyze_cli_use_llm_timeout_fail_closed_without_fallback(
     assert result.exit_code == 1
     assert result.stdout == ""
     assert "LLM 分析未完成：" in result.stderr
+    assert "LLM Host run 未完成：" in result.stderr
     assert "llm_timeout" in result.stderr
     assert "first_failed_chapter_id=2" in result.stderr
     assert "first_failed_status=failed" in result.stderr
@@ -1733,6 +1768,27 @@ def test_analyze_cli_use_llm_timeout_fail_closed_without_fallback(
     assert "# 0. 投资要点概览" not in result.output
     assert _TimeoutLLMService.analyze_called is False
     assert _TimeoutLLMService.analyze_with_llm_called is True
+
+
+def test_analyze_cli_use_llm_host_failure_is_not_double_wrapped(
+    monkeypatch,
+) -> None:  # type: ignore[no-untyped-def]
+    """验证 Host run 失败摘要不会再被通用分析失败分支包一层。"""
+
+    monkeypatch.setattr(cli, "FundAnalysisService", _FailingLLMService)
+    monkeypatch.setattr(cli, "load_llm_provider_config_from_env", _fake_load_llm_config)
+    monkeypatch.setattr(cli, "build_chapter_llm_clients", _fake_build_llm_clients)
+    runner = CliRunner()
+
+    result = runner.invoke(cli.app, ["analyze", "110011", "--use-llm"])
+
+    assert result.exit_code == 1
+    assert result.stdout == ""
+    assert "LLM Host run 未完成：" in result.stderr
+    assert "status=failed" in result.stderr
+    assert "error_type=RuntimeError" in result.stderr
+    assert "分析失败：" not in result.stderr
+    assert "llm fixture failure" not in result.stderr
 
 
 def test_cli_module_imports_service_but_not_agent_internals() -> None:
@@ -1979,6 +2035,8 @@ def test_analyze_cli_use_llm_structured_quality_gate_block(
     assert "质量 gate 阻断报告输出" in result.stderr
     assert "quality_gate_status: block" in result.stderr
     assert "quality_gate_issues: 2" in result.stderr
+    assert "LLM Host run 未完成" not in result.stderr
+    assert "status=succeeded" not in result.stderr
 
 
 def test_analyze_cli_structured_quality_gate_not_run_block(
@@ -2035,6 +2093,8 @@ def test_analyze_cli_use_llm_structured_quality_gate_not_run_block(
     assert "质量 gate 阻断报告输出" in result.stderr
     assert "quality_gate_status: not_run" in result.stderr
     assert "quality_gate_not_run_reason: fund_code `110011` not found" in result.stderr
+    assert "LLM Host run 未完成" not in result.stderr
+    assert "status=succeeded" not in result.stderr
 
 
 def test_analyze_cli_exits_nonzero_with_clear_message(monkeypatch) -> None:  # type: ignore[no-untyped-def]

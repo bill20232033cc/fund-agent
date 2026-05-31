@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass, replace
 from decimal import Decimal
 from datetime import datetime, timezone
@@ -51,6 +52,7 @@ from fund_agent.config.paths import DEFAULT_SELECTED_FUNDS_CSV
 from fund_agent.fund.fund_type import FundType
 from fund_agent.fund.quality_gate import GATE_STATUS_BLOCK, QualityGateResult
 from fund_agent.fund.quality_gate_integration import check_quality_gate_fund_membership, run_quality_gate_for_bundle
+from fund_agent.host import HostRunContext
 from fund_agent.fund.template import TemplateRenderInput, TemplateRenderResult, render_template_report
 from fund_agent.services.chapter_orchestrator import (
     ChapterOrchestrationPolicy,
@@ -589,6 +591,7 @@ class FundAnalysisService:
         llm_clients: ChapterOrchestratorLLMClients,
         chapter_policy: ChapterOrchestrationPolicy | None = None,
         assembly_policy: FinalAssemblyPolicy | None = None,
+        host_context: HostRunContext | None = None,
     ) -> FundLLMAnalysisResult:
         """执行显式 LLM 章节写作分析用例。
 
@@ -603,6 +606,7 @@ class FundAnalysisService:
             llm_clients: Gate 3 writer/auditor LLM Protocol clients，必须显式注入。
             chapter_policy: 可选章节编排策略；默认生成模板第 1-6 章。
             assembly_policy: 可选最终总装策略；默认要求完整第 1-6 章 accepted。
+            host_context: 可选 Host run 上下文；Service 只用它检查 run lifecycle。
 
         Returns:
             LLM 分析结果，包含 Gate 3 编排结果和 Gate 4 总装结果。
@@ -617,6 +621,7 @@ class FundAnalysisService:
         core_result = await self._run_analysis_core(
             replace(request, command_source="analyze")
         )
+        _raise_if_host_cancelled(host_context)
         orchestration_input = build_chapter_orchestration_input(
             fund_code=core_result.structured_data.fund_code,
             report_year=core_result.structured_data.report_year,
@@ -626,7 +631,11 @@ class FundAnalysisService:
         orchestration_result = orchestrate_chapters(
             orchestration_input,
             llm_clients=llm_clients,
+            host_context=host_context,
         )
+        _raise_if_host_cancelled(host_context)
+        _record_host_phase_started(host_context, phase="final_assembly")
+        phase_started = time.monotonic()
         final_assembly_result = assemble_final_chapters(
             FinalChapterAssemblyInput(
                 fund_code=core_result.structured_data.fund_code,
@@ -635,6 +644,11 @@ class FundAnalysisService:
                 final_judgment_decision=core_result.final_judgment_decision,
                 policy=assembly_policy or FinalAssemblyPolicy(),
             )
+        )
+        _record_host_phase_completed(
+            host_context,
+            phase="final_assembly",
+            phase_started=phase_started,
         )
         return FundLLMAnalysisResult(
             structured_data=core_result.structured_data,
@@ -1085,6 +1099,52 @@ def _default_quality_gate_run_id(
 
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
     return f"{command_source}-{structured_data.fund_code}-{structured_data.report_year}-{timestamp}"
+
+
+def _raise_if_host_cancelled(host_context: HostRunContext | None) -> None:
+    """在 Service phase 边界传播 Host deadline/cancel。
+
+    Args:
+        host_context: 可选 Host run 上下文。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        HostRuntimeError: 当 Host run 已取消或超过 deadline 时抛出。
+    """
+
+    if host_context is None:
+        return
+    host_context.raise_if_cancelled_or_deadline_exceeded()
+
+
+def _record_host_phase_started(
+    host_context: HostRunContext | None,
+    *,
+    phase: str,
+) -> None:
+    """记录 Service 级 phase_started 安全事件。"""
+
+    if host_context is None:
+        return
+    host_context.record_phase_started(phase=phase)
+
+
+def _record_host_phase_completed(
+    host_context: HostRunContext | None,
+    *,
+    phase: str,
+    phase_started: float,
+) -> None:
+    """记录 Service 级 phase_completed 安全事件。"""
+
+    if host_context is None:
+        return
+    host_context.record_phase_completed(
+        phase=phase,
+        elapsed_ms=max(0, int((time.monotonic() - phase_started) * 1000)),
+    )
 
 
 def _extract_fund_type(structured_data: StructuredFundDataBundle) -> FundType:

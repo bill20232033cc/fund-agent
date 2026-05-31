@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ast
+import asyncio
 from pathlib import Path
 
 import pytest
@@ -22,6 +23,8 @@ from fund_agent.services import (
     QualityGateBlockedError,
     QualityGateNotRunBlockedError,
 )
+from fund_agent.host import HostRuntimeRunner
+from fund_agent.host.runtime import HostRunEventType
 from fund_agent.services.fund_analysis_service import FundAnalysisService
 from tests.services.test_fund_analysis_service import (
     _FakeExtractor,
@@ -157,6 +160,51 @@ async def test_analyze_with_llm_returns_accepted_final_assembly_and_report_markd
     assert "## 第 7 章：是否值得持有--最终判断" in result.report_markdown
     assert result.quality_gate_result is None
     assert result.quality_gate_not_run_reason == "policy=off"
+
+
+def test_host_runner_records_llm_service_phase_events() -> None:
+    """验证 Host 托管 Service LLM 路径时记录章节 phase 和 final assembly。"""
+
+    extractor = _FakeExtractor(_bundle())
+    writer = _FakeChapterLLMClient()
+    auditor = _FakeAuditLLMClient()
+    service = FundAnalysisService(extractor=extractor)
+
+    def operation(host_context):  # type: ignore[no-untyped-def]
+        return asyncio.run(
+            service.analyze_with_llm(
+                _developer_request(force_refresh=True),
+                llm_clients=_clients(writer=writer, auditor=auditor),
+                chapter_policy=ChapterOrchestrationPolicy(
+                    run_programmatic_audit=False,
+                    target_chapter_ids=(1,),
+                ),
+                host_context=host_context,
+            )
+        )
+
+    host_result = HostRuntimeRunner().run_sync(
+        operation_name="fund_analysis_llm_report",
+        operation=operation,
+        timeout_seconds=30,
+    )
+
+    phase_events = [
+        event
+        for event in host_result.events
+        if event.event_type
+        in {HostRunEventType.PHASE_STARTED, HostRunEventType.PHASE_COMPLETED}
+    ]
+    assert host_result.status == "succeeded"
+    assert [(event.event_type, event.diagnostics["phase"]) for event in phase_events] == [
+        (HostRunEventType.PHASE_STARTED, "writer"),
+        (HostRunEventType.PHASE_COMPLETED, "writer"),
+        (HostRunEventType.PHASE_STARTED, "auditor"),
+        (HostRunEventType.PHASE_COMPLETED, "auditor"),
+        (HostRunEventType.PHASE_STARTED, "final_assembly"),
+        (HostRunEventType.PHASE_COMPLETED, "final_assembly"),
+    ]
+    assert phase_events[0].diagnostics["chapter_id"] == 1
 
 
 @pytest.mark.asyncio
@@ -324,7 +372,7 @@ async def test_analyze_with_llm_propagates_quality_gate_not_run_before_extractio
 
 
 def test_fund_analysis_service_imports_keep_llm_path_above_forbidden_boundaries() -> None:
-    """验证 LLM Service 路径不新增 repository/PDF/source/Host/dayu 直连导入。
+    """验证 LLM Service 路径只依赖 Host contract，不直连底层来源或 dayu。
 
     Args:
         无。
@@ -345,7 +393,6 @@ def test_fund_analysis_service_imports_keep_llm_path_above_forbidden_boundaries(
         "source",
         "downloader",
         "parser",
-        "host",
         "dayu",
         "openai",
         "httpx",
@@ -353,6 +400,7 @@ def test_fund_analysis_service_imports_keep_llm_path_above_forbidden_boundaries(
 
     assert all(not any(fragment in module for fragment in forbidden_fragments) for module in imports)
     assert "fund_agent.fund.data_extractor" in imports
+    assert "fund_agent.host" in imports
 
 
 def _clients(
