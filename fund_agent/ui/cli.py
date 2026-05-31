@@ -800,7 +800,10 @@ def _build_llm_clients_or_fail() -> tuple[
 
     config = load_llm_provider_config_from_env()
     llm_clients = build_chapter_llm_clients(config)
-    chapter_policy = ChapterOrchestrationPolicy(max_output_chars=config.max_output_chars)
+    chapter_policy = ChapterOrchestrationPolicy(
+        max_output_chars=config.max_output_chars,
+        prompt_payload_mode="compact",
+    )
     return llm_clients, chapter_policy
 
 
@@ -822,12 +825,308 @@ def _llm_incomplete_message(result) -> str:  # type: ignore[no-untyped-def]
     issue_reasons = ", ".join(getattr(issue, "reason", str(issue)) for issue in issues)
     if not issue_reasons:
         issue_reasons = "no final assembly issue recorded"
+    first_failed = _first_failed_chapter_summary(result.llm_orchestration_result)
     return (
         "LLM 分析未完成："
         f"orchestration_status={result.llm_orchestration_result.status}, "
         f"final_assembly_status={final_assembly_result.status}, "
-        f"issues={issue_reasons}"
+        f"issues={issue_reasons}, "
+        f"{first_failed}, "
+        f"{_chapter_matrix_summary(result.llm_orchestration_result)}"
     )
+
+
+def _first_failed_chapter_summary(orchestration_result) -> str:  # type: ignore[no-untyped-def]
+    """提取首个未 accepted 章节的安全摘要。
+
+    Args:
+        orchestration_result: `ChapterOrchestrationResult` 或同名测试替身。
+
+    Returns:
+        `first_failed_*` 摘要；没有章节结果时返回 `first_failed_chapter=none`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    chapter_results = getattr(orchestration_result, "chapter_results", ())
+    for chapter_result in chapter_results:
+        status = getattr(chapter_result, "status", None)
+        if status == "accepted":
+            continue
+        chapter_id = getattr(chapter_result, "chapter_id", "unknown")
+        stop_reason = getattr(chapter_result, "stop_reason", "unknown")
+        failure_category = getattr(chapter_result, "failure_category", None)
+        if failure_category is None:
+            failure_category = "unknown"
+        failure_subcategory = getattr(chapter_result, "failure_subcategory", None)
+        if failure_subcategory is None:
+            failure_subcategory = "unknown"
+        runtime_summary = _first_failed_runtime_summary(chapter_result)
+        return (
+            f"first_failed_chapter_id={chapter_id}, "
+            f"first_failed_status={status}, "
+            f"first_failed_stop_reason={stop_reason}, "
+            f"first_failed_category={failure_category}, "
+            f"first_failed_subcategory={failure_subcategory}, "
+            f"{runtime_summary}"
+        )
+    return "first_failed_chapter=none"
+
+
+def _chapter_matrix_summary(orchestration_result) -> str:  # type: ignore[no-untyped-def]
+    """提取全部章节的安全矩阵摘要。
+
+    Args:
+        orchestration_result: `ChapterOrchestrationResult` 或同名测试替身。
+
+    Returns:
+        仅含 chapter_id/status/stop_reason/failure_category/failure_subcategory 的摘要。
+
+    Raises:
+        无显式抛出。
+    """
+
+    rows: list[str] = []
+    for chapter_result in getattr(orchestration_result, "chapter_results", ()):
+        chapter_id = getattr(chapter_result, "chapter_id", "unknown")
+        status = getattr(chapter_result, "status", "unknown")
+        stop_reason = getattr(chapter_result, "stop_reason", "unknown")
+        failure_category = getattr(chapter_result, "failure_category", None) or "unknown"
+        failure_subcategory = getattr(chapter_result, "failure_subcategory", None) or "unknown"
+        rows.append(
+            f"{chapter_id}:{status}/{stop_reason}/{failure_category}/{failure_subcategory}"
+        )
+    if not rows:
+        return "chapter_matrix=none"
+    return f"chapter_matrix={';'.join(rows)}"
+
+
+def _first_failed_runtime_summary(chapter_result) -> str:  # type: ignore[no-untyped-def]
+    """提取首个失败章节 runtime 安全摘要。
+
+    Args:
+        chapter_result: `ChapterRunResult` 或同名测试替身。
+
+    Returns:
+        只含 allowlisted scalar 的 `first_failed_runtime_*` 摘要。
+
+    Raises:
+        无显式抛出。
+    """
+
+    diagnostics = _chapter_runtime_diagnostics(chapter_result)
+    operation = _runtime_operation(diagnostics)
+    observed_attempts = _runtime_provider_attempt_count(diagnostics)
+    max_attempts = _runtime_provider_max_attempts(diagnostics)
+    runtime_category = _runtime_provider_category(diagnostics)
+    elapsed_ms_max = _runtime_elapsed_ms_max(diagnostics)
+    prompt_chars = _runtime_prompt_chars(diagnostics)
+    approx_prompt_tokens = _runtime_scalar_max(diagnostics, "approx_prompt_tokens")
+    timeout_root_cause_hint = _runtime_first_scalar(diagnostics, "timeout_root_cause_hint")
+    max_output_chars = _runtime_scalar_max(diagnostics, "max_output_chars")
+    return (
+        f"first_failed_runtime_operation={operation}, "
+        f"first_failed_provider_attempts={observed_attempts}/{max_attempts}, "
+        f"first_failed_provider_runtime_category={runtime_category}, "
+        f"first_failed_elapsed_ms_max={elapsed_ms_max}, "
+        f"first_failed_prompt_chars={prompt_chars}, "
+        f"first_failed_approx_prompt_tokens={approx_prompt_tokens}, "
+        f"first_failed_timeout_root_cause_hint={timeout_root_cause_hint}, "
+        f"first_failed_max_output_chars={max_output_chars}"
+    )
+
+
+def _chapter_runtime_diagnostics(chapter_result) -> tuple[object, ...]:  # type: ignore[no-untyped-def]
+    """收集章节级和 attempt 级 runtime diagnostic。
+
+    Args:
+        chapter_result: `ChapterRunResult` 或同名测试替身。
+
+    Returns:
+        runtime diagnostic tuple。
+
+    Raises:
+        无显式抛出。
+    """
+
+    diagnostics = list(getattr(chapter_result, "runtime_diagnostics", ()))
+    for attempt in getattr(chapter_result, "attempts", ()):
+        diagnostics.extend(getattr(attempt, "runtime_diagnostics", ()))
+    return tuple(diagnostics)
+
+
+def _runtime_operation(diagnostics: tuple[object, ...]) -> object:
+    """读取首条 runtime operation。
+
+    Args:
+        diagnostics: runtime diagnostic tuple。
+
+    Returns:
+        operation 或 `unknown`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if not diagnostics:
+        return "unknown"
+    return getattr(diagnostics[0], "operation", None) or "unknown"
+
+
+def _runtime_provider_attempt_count(diagnostics: tuple[object, ...]) -> int:
+    """统计 observed provider attempts。
+
+    Args:
+        diagnostics: runtime diagnostic tuple。
+
+    Returns:
+        带 provider_attempt_index 的诊断数量。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return sum(
+        1
+        for diagnostic in diagnostics
+        if getattr(diagnostic, "provider_attempt_index", None) is not None
+    )
+
+
+def _runtime_provider_max_attempts(diagnostics: tuple[object, ...]) -> object:
+    """读取 provider max attempts。
+
+    Args:
+        diagnostics: runtime diagnostic tuple。
+
+    Returns:
+        最大 attempts 或 `unknown`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    values = tuple(
+        getattr(diagnostic, "provider_max_attempts", None)
+        for diagnostic in diagnostics
+        if getattr(diagnostic, "provider_max_attempts", None) is not None
+    )
+    if not values:
+        return "unknown"
+    return max(values)
+
+
+def _runtime_provider_category(diagnostics: tuple[object, ...]) -> object:
+    """读取首个 provider runtime category。
+
+    Args:
+        diagnostics: runtime diagnostic tuple。
+
+    Returns:
+        runtime category 或 `unknown`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    for diagnostic in diagnostics:
+        category = getattr(diagnostic, "provider_runtime_category", None)
+        if category is not None:
+            return category
+    return "unknown"
+
+
+def _runtime_elapsed_ms_max(diagnostics: tuple[object, ...]) -> object:
+    """读取 runtime diagnostic 最大 elapsed_ms。
+
+    Args:
+        diagnostics: runtime diagnostic tuple。
+
+    Returns:
+        最大 elapsed_ms 或 `unknown`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    values = tuple(
+        getattr(diagnostic, "elapsed_ms", None)
+        for diagnostic in diagnostics
+        if getattr(diagnostic, "elapsed_ms", None) is not None
+    )
+    if not values:
+        return "unknown"
+    return max(values)
+
+
+def _runtime_prompt_chars(diagnostics: tuple[object, ...]) -> object:
+    """读取 runtime diagnostic 的最大 prompt 字符总数。
+
+    Args:
+        diagnostics: runtime diagnostic tuple。
+
+    Returns:
+        system+user prompt chars 或 `unknown`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    values: list[int] = []
+    for diagnostic in diagnostics:
+        system_prompt_chars = getattr(diagnostic, "system_prompt_chars", None)
+        user_prompt_chars = getattr(diagnostic, "user_prompt_chars", None)
+        if isinstance(system_prompt_chars, int) and isinstance(user_prompt_chars, int):
+            values.append(system_prompt_chars + user_prompt_chars)
+    if not values:
+        return "unknown"
+    return max(values)
+
+
+def _runtime_scalar_max(diagnostics: tuple[object, ...], field_name: str) -> object:
+    """读取 runtime diagnostic 某个整型标量最大值。
+
+    Args:
+        diagnostics: runtime diagnostic tuple。
+        field_name: 字段名。
+
+    Returns:
+        最大整型值或 `unknown`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    values = tuple(
+        getattr(diagnostic, field_name, None)
+        for diagnostic in diagnostics
+        if isinstance(getattr(diagnostic, field_name, None), int)
+    )
+    if not values:
+        return "unknown"
+    return max(values)
+
+
+def _runtime_first_scalar(diagnostics: tuple[object, ...], field_name: str) -> object:
+    """读取 runtime diagnostic 首个非空标量。
+
+    Args:
+        diagnostics: runtime diagnostic tuple。
+        field_name: 字段名。
+
+    Returns:
+        首个非空值或 `unknown`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    for diagnostic in diagnostics:
+        value = getattr(diagnostic, field_name, None)
+        if value is not None:
+            return value
+    return "unknown"
 
 
 def _parse_preflight_fund_artifact(value: str) -> FundArtifactInput:

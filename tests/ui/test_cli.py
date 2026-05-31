@@ -43,10 +43,44 @@ class _FakeLLMFinalAssemblyResult:
 
 
 @dataclass(frozen=True, slots=True)
+class _FakeRuntimeDiagnostic:
+    """CLI LLM 测试用 runtime diagnostic。"""
+
+    operation: str
+    provider_attempt_index: int | None = None
+    provider_max_attempts: int | None = None
+    provider_runtime_category: str | None = None
+    elapsed_ms: int | None = None
+    system_prompt_chars: int | None = None
+    user_prompt_chars: int | None = None
+    approx_prompt_tokens: int | None = None
+    allowed_fact_count: int | None = None
+    allowed_anchor_count: int | None = None
+    max_output_chars: int | None = None
+    timeout_root_cause_hint: str | None = None
+    message: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class _FakeChapterRunResult:
+    """CLI LLM 测试用章节结果。"""
+
+    chapter_id: int
+    status: str
+    stop_reason: str
+    failure_category: str | None = None
+    failure_subcategory: str | None = None
+    attempts: tuple[object, ...] = ()
+    runtime_diagnostics: tuple[object, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
 class _FakeLLMOrchestrationResult:
     """CLI LLM 测试用 orchestration 结果。"""
 
     status: str
+    blocked_reasons: tuple[str, ...] = ()
+    chapter_results: tuple[_FakeChapterRunResult, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -464,6 +498,219 @@ class _IncompleteLLMService(_FakeService):
                 issues=("chapter_missing",),
             ),
             llm_orchestration_result=_FakeLLMOrchestrationResult(status="partial"),
+        )
+
+
+class _L1IncompleteLLMService(_FakeService):
+    """返回 L1 programmatic audit 分类 incomplete LLM 结果的 fake Service。"""
+
+    async def analyze_with_llm(  # type: ignore[no-untyped-def]
+        self,
+        request,
+        *,
+        llm_clients,
+        chapter_policy,
+    ):
+        """记录调用并返回 L1 数字闭环阻断结果。
+
+        Args:
+            request: CLI 构造的 Service 请求。
+            llm_clients: 显式注入的 LLM 客户端。
+            chapter_policy: 显式注入的章节编排策略。
+
+        Returns:
+            incomplete fake LLM result。
+
+        Raises:
+            无显式抛出。
+        """
+
+        type(self).analyze_with_llm_called = True
+        type(self).last_request = request
+        type(self).last_llm_clients = llm_clients
+        type(self).last_chapter_policy = chapter_policy
+        return _FakeLLMResult(
+            final_assembly_result=_FakeLLMFinalAssemblyResult(
+                status="blocked",
+                report_markdown=None,
+                issues=("chapter_missing",),
+            ),
+            llm_orchestration_result=_FakeLLMOrchestrationResult(
+                status="partial",
+                chapter_results=(
+                    _FakeChapterRunResult(
+                        chapter_id=2,
+                        status="failed",
+                        stop_reason="repair_budget_exhausted",
+                        failure_category="prompt_contract",
+                        failure_subcategory="l1_numerical_closure",
+                    ),
+                ),
+            ),
+        )
+
+
+class _TimeoutLLMService(_FakeService):
+    """返回 timeout 分类 incomplete LLM 结果的 fake Service。"""
+
+    async def analyze_with_llm(  # type: ignore[no-untyped-def]
+        self,
+        request,
+        *,
+        llm_clients,
+        chapter_policy,
+    ):
+        """记录调用并返回 llm_timeout 阻断结果。
+
+        Args:
+            request: CLI 构造的 Service 请求。
+            llm_clients: 显式注入的 LLM 客户端。
+            chapter_policy: 显式注入的章节编排策略。
+
+        Returns:
+            incomplete fake LLM result。
+
+        Raises:
+            无显式抛出。
+        """
+
+        type(self).analyze_with_llm_called = True
+        type(self).last_request = request
+        type(self).last_llm_clients = llm_clients
+        type(self).last_chapter_policy = chapter_policy
+        return _FakeLLMResult(
+            final_assembly_result=_FakeLLMFinalAssemblyResult(
+                status="blocked",
+                report_markdown=None,
+                issues=("llm_timeout",),
+            ),
+            llm_orchestration_result=_FakeLLMOrchestrationResult(
+                status="blocked",
+                blocked_reasons=("llm_timeout",),
+                chapter_results=(
+                    _FakeChapterRunResult(
+                        chapter_id=2,
+                        status="failed",
+                        stop_reason="llm_timeout",
+                        failure_category="llm_timeout",
+                        failure_subcategory=None,
+                        runtime_diagnostics=(
+                            _FakeRuntimeDiagnostic(
+                                operation="writer",
+                                provider_attempt_index=1,
+                                provider_max_attempts=2,
+                                provider_runtime_category="timeout",
+                                elapsed_ms=120000,
+                                system_prompt_chars=40,
+                                user_prompt_chars=360,
+                                approx_prompt_tokens=100,
+                                allowed_fact_count=None,
+                                allowed_anchor_count=3,
+                                max_output_chars=12000,
+                                timeout_root_cause_hint="small_prompt_provider_timeout",
+                                message=(
+                                    "message writer auditor programmatic raw audit "
+                                    "system_prompt user_prompt draft_markdown "
+                                    "provider_response provider body Authorization "
+                                    "Bearer sk-secret header key"
+                                ),
+                            ),
+                            _FakeRuntimeDiagnostic(
+                                operation="writer",
+                                provider_attempt_index=2,
+                                provider_max_attempts=2,
+                                provider_runtime_category="timeout",
+                                elapsed_ms=121000,
+                                system_prompt_chars=40,
+                                user_prompt_chars=360,
+                                approx_prompt_tokens=100,
+                                allowed_fact_count=None,
+                                allowed_anchor_count=3,
+                                max_output_chars=12000,
+                                timeout_root_cause_hint="small_prompt_provider_timeout",
+                                message="second message should not render",
+                            ),
+                        ),
+                    ),
+                ),
+            ),
+        )
+
+
+class _MatrixIncompleteLLMService(_FakeService):
+    """返回多章节 mixed matrix 的 incomplete LLM 结果。"""
+
+    async def analyze_with_llm(  # type: ignore[no-untyped-def]
+        self,
+        request,
+        *,
+        llm_clients,
+        chapter_policy,
+    ):
+        """记录调用并返回含 accepted/failed 行的 all-chapter matrix。
+
+        Args:
+            request: CLI 构造的 Service 请求。
+            llm_clients: 显式注入的 LLM 客户端。
+            chapter_policy: 显式注入的章节编排策略。
+
+        Returns:
+            incomplete fake LLM result。
+
+        Raises:
+            无显式抛出。
+        """
+
+        type(self).analyze_with_llm_called = True
+        type(self).last_request = request
+        type(self).last_llm_clients = llm_clients
+        type(self).last_chapter_policy = chapter_policy
+        return _FakeLLMResult(
+            final_assembly_result=_FakeLLMFinalAssemblyResult(
+                status="incomplete",
+                report_markdown=None,
+                issues=("chapter_missing",),
+            ),
+            llm_orchestration_result=_FakeLLMOrchestrationResult(
+                status="partial",
+                chapter_results=(
+                    _FakeChapterRunResult(
+                        chapter_id=1,
+                        status="failed",
+                        stop_reason="llm_timeout",
+                        failure_category="llm_timeout",
+                    ),
+                    _FakeChapterRunResult(
+                        chapter_id=2,
+                        status="accepted",
+                        stop_reason="none",
+                    ),
+                    _FakeChapterRunResult(
+                        chapter_id=3,
+                        status="blocked",
+                        stop_reason="missing_required_output_marker",
+                        failure_category="prompt_contract",
+                        failure_subcategory="missing_required_marker",
+                        runtime_diagnostics=(
+                            _FakeRuntimeDiagnostic(
+                                operation="writer",
+                                provider_attempt_index=1,
+                                provider_max_attempts=1,
+                                provider_runtime_category="malformed",
+                                elapsed_ms=9,
+                                system_prompt_chars=10,
+                                user_prompt_chars=20,
+                                approx_prompt_tokens=8,
+                                message=(
+                                    "message Authorization Bearer sk-secret api_key "
+                                    "system_prompt user_prompt draft_markdown raw_response "
+                                    "raw audit provider_response provider body model_name header key"
+                                ),
+                            ),
+                        ),
+                    ),
+                ),
+            ),
         )
 
 
@@ -1207,6 +1454,13 @@ def test_analyze_cli_use_llm_missing_config_fails_before_service(
     _FakeService.last_llm_clients = None
     _FakeService.last_chapter_policy = None
     monkeypatch.setattr(cli, "FundAnalysisService", _FakeService)
+    for env_name in (
+        "FUND_AGENT_LLM_PROVIDER",
+        "FUND_AGENT_LLM_BASE_URL",
+        "FUND_AGENT_LLM_API_KEY",
+        "FUND_AGENT_LLM_MODEL",
+    ):
+        monkeypatch.delenv(env_name, raising=False)
     runner = CliRunner()
 
     result = runner.invoke(cli.app, ["analyze", "110011", "--use-llm"])
@@ -1256,6 +1510,7 @@ def test_analyze_cli_use_llm_configured_calls_llm_service_and_prints_report(
     assert isinstance(_FakeService.last_llm_clients, _FakeLLMClients)
     assert isinstance(_FakeService.last_chapter_policy, ChapterOrchestrationPolicy)
     assert _FakeService.last_chapter_policy.max_output_chars == _FakeLLMConfig.max_output_chars
+    assert _FakeService.last_chapter_policy.prompt_payload_mode == "compact"
 
 
 def test_analyze_cli_use_llm_construction_error_fails_before_service(
@@ -1323,6 +1578,161 @@ def test_analyze_cli_use_llm_incomplete_result_exits_without_fallback(
     assert "# 0. 投资要点概览" not in result.output
     assert _IncompleteLLMService.analyze_called is False
     assert _IncompleteLLMService.analyze_with_llm_called is True
+
+
+def test_analyze_cli_use_llm_incomplete_prints_safe_all_chapter_matrix(
+    monkeypatch,
+) -> None:  # type: ignore[no-untyped-def]
+    """验证 incomplete stderr 同时包含 first_failed 和安全全章节矩阵。"""
+
+    _MatrixIncompleteLLMService.last_request = None
+    _MatrixIncompleteLLMService.analyze_called = False
+    _MatrixIncompleteLLMService.analyze_with_llm_called = False
+    monkeypatch.setattr(cli, "FundAnalysisService", _MatrixIncompleteLLMService)
+    monkeypatch.setattr(cli, "load_llm_provider_config_from_env", _fake_load_llm_config)
+    monkeypatch.setattr(cli, "build_chapter_llm_clients", _fake_build_llm_clients)
+    runner = CliRunner()
+
+    result = runner.invoke(cli.app, ["analyze", "110011", "--use-llm"])
+
+    assert result.exit_code == 1
+    assert result.stdout == ""
+    assert "first_failed_chapter_id=1" in result.stderr
+    assert "first_failed_status=failed" in result.stderr
+    assert "first_failed_stop_reason=llm_timeout" in result.stderr
+    assert "chapter_matrix=" in result.stderr
+    assert "1:failed/llm_timeout/llm_timeout/unknown" in result.stderr
+    assert "2:accepted/none/unknown/unknown" in result.stderr
+    assert "3:blocked/missing_required_output_marker/prompt_contract/missing_required_marker" in result.stderr
+    assert "2:skipped/dependency_missing" not in result.stderr
+    assert "3:skipped/dependency_missing" not in result.stderr
+    for forbidden in (
+        "message",
+        "Authorization",
+        "Bearer",
+        "sk-",
+        "api_key",
+        "system_prompt",
+        "user_prompt",
+        "draft_markdown",
+        "raw_response",
+        "raw audit",
+        "provider_response",
+        "provider body",
+        "model_name",
+        "header",
+        "key",
+    ):
+        assert forbidden not in result.stderr
+    assert "# 0. 投资要点概览" not in result.output
+    assert _MatrixIncompleteLLMService.analyze_called is False
+    assert _MatrixIncompleteLLMService.analyze_with_llm_called is True
+
+
+def test_analyze_cli_use_llm_l1_subcategory_matches_service_summary(
+    monkeypatch,
+) -> None:  # type: ignore[no-untyped-def]
+    """验证 CLI 直接透出 Service L1 子类且不回退 deterministic。
+
+    Args:
+        monkeypatch: pytest monkeypatch fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 CLI 丢失 L1 子类或输出报告时抛出。
+    """
+
+    _L1IncompleteLLMService.last_request = None
+    _L1IncompleteLLMService.analyze_called = False
+    _L1IncompleteLLMService.analyze_with_llm_called = False
+    monkeypatch.setattr(cli, "FundAnalysisService", _L1IncompleteLLMService)
+    monkeypatch.setattr(cli, "load_llm_provider_config_from_env", _fake_load_llm_config)
+    monkeypatch.setattr(cli, "build_chapter_llm_clients", _fake_build_llm_clients)
+    runner = CliRunner()
+
+    result = runner.invoke(cli.app, ["analyze", "110011", "--use-llm"])
+
+    assert result.exit_code == 1
+    assert result.stdout == ""
+    assert "first_failed_chapter_id=2" in result.stderr
+    assert "first_failed_status=failed" in result.stderr
+    assert "first_failed_stop_reason=repair_budget_exhausted" in result.stderr
+    assert "first_failed_category=prompt_contract" in result.stderr
+    assert "first_failed_subcategory=l1_numerical_closure" in result.stderr
+    assert "chapter_matrix=2:failed/repair_budget_exhausted/prompt_contract/l1_numerical_closure" in result.stderr
+    assert "first_failed_subcategory=unknown" not in result.stderr
+    assert "first_failed_category=audit_rule_too_strict" not in result.stderr
+    assert "# 0. 投资要点概览" not in result.output
+    assert _L1IncompleteLLMService.analyze_called is False
+    assert _L1IncompleteLLMService.analyze_with_llm_called is True
+
+
+def test_analyze_cli_use_llm_timeout_fail_closed_without_fallback(
+    monkeypatch,
+) -> None:  # type: ignore[no-untyped-def]
+    """验证 `--use-llm` timeout 分类 fail-closed 且不回退 deterministic。
+
+    Args:
+        monkeypatch: pytest monkeypatch fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 timeout 被吞掉或输出 deterministic 报告时抛出。
+    """
+
+    _TimeoutLLMService.last_request = None
+    _TimeoutLLMService.analyze_called = False
+    _TimeoutLLMService.analyze_with_llm_called = False
+    monkeypatch.setattr(cli, "FundAnalysisService", _TimeoutLLMService)
+    monkeypatch.setattr(cli, "load_llm_provider_config_from_env", _fake_load_llm_config)
+    monkeypatch.setattr(cli, "build_chapter_llm_clients", _fake_build_llm_clients)
+    runner = CliRunner()
+
+    result = runner.invoke(cli.app, ["analyze", "110011", "--use-llm"])
+
+    assert result.exit_code == 1
+    assert result.stdout == ""
+    assert "LLM 分析未完成：" in result.stderr
+    assert "llm_timeout" in result.stderr
+    assert "first_failed_chapter_id=2" in result.stderr
+    assert "first_failed_status=failed" in result.stderr
+    assert "first_failed_stop_reason=llm_timeout" in result.stderr
+    assert "first_failed_category=llm_timeout" in result.stderr
+    assert "first_failed_subcategory=unknown" in result.stderr
+    assert "first_failed_runtime_operation=writer" in result.stderr
+    assert "first_failed_provider_attempts=2/2" in result.stderr
+    assert "first_failed_provider_runtime_category=timeout" in result.stderr
+    assert "first_failed_elapsed_ms_max=121000" in result.stderr
+    assert "first_failed_prompt_chars=400" in result.stderr
+    assert "first_failed_approx_prompt_tokens=100" in result.stderr
+    assert "first_failed_timeout_root_cause_hint=small_prompt_provider_timeout" in result.stderr
+    assert "first_failed_max_output_chars=12000" in result.stderr
+    assert "chapter_matrix=2:failed/llm_timeout/llm_timeout/unknown" in result.stderr
+    assert "message" not in result.stderr
+    assert "writer" in result.stderr
+    assert "Authorization" not in result.stderr
+    assert "Bearer" not in result.stderr
+    assert "sk-" not in result.stderr
+    assert "api_key" not in result.stderr
+    assert "header" not in result.stderr
+    assert "key" not in result.stderr
+    assert "auditor" not in result.stderr
+    assert "programmatic" not in result.stderr
+    assert "raw audit" not in result.stderr
+    assert "system_prompt" not in result.stderr
+    assert "user_prompt" not in result.stderr
+    assert "draft_markdown" not in result.stderr
+    assert "raw_response" not in result.stderr
+    assert "provider_response" not in result.stderr
+    assert "provider body" not in result.stderr
+    assert "model_name" not in result.stderr
+    assert "# 0. 投资要点概览" not in result.output
+    assert _TimeoutLLMService.analyze_called is False
+    assert _TimeoutLLMService.analyze_with_llm_called is True
 
 
 def test_cli_module_imports_service_but_not_agent_internals() -> None:

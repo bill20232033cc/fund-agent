@@ -16,6 +16,7 @@ from typing import Final, Literal, Protocol
 from fund_agent.fund.chapter_writer import (
     ChapterDraft,
     ChapterWriterInput,
+    REQUIRED_OUTPUT_MARKER_PREFIX,
 )
 
 ChapterAuditSchemaVersion = Literal["chapter_audit.v1"]
@@ -130,6 +131,7 @@ _NUMERICAL_CLOSURE_RE: Final[re.Pattern[str]] = re.compile(
 )
 _NUMERIC_TEXT_RE: Final[re.Pattern[str]] = re.compile(r"\d+(?:\.\d+)?\s*%")
 _ANCHOR_MARKER_TEXT: Final[str] = "<!-- anchor:"
+_ASSERTED_FACET_RE_TEMPLATE: Final[str] = r"(?:本基金|这只基金|该基金|基金)?\s*(?:是|为|属于|定位为|可判定为)\s*{facet}"
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -548,7 +550,7 @@ def _audit_contract_markers(input_data: ChapterAuditInput) -> tuple[ChapterAudit
     return tuple(
         _program_issue("C2", f"缺少 required output item marker：{item}", item, repair_hint="patch")
         for item in input_data.writer_input.chapter.contract.required_output_items
-        if item and item not in markdown
+        if item and _required_output_marker(item) not in markdown
     )
 
 
@@ -631,25 +633,16 @@ def _audit_non_asserted_facets(input_data: ChapterAuditInput) -> tuple[ChapterAu
     if input_data.writer_input.chapter.facet_resolution.facets:
         return ()
     for facet in input_data.writer_input.chapter.facet_resolution.non_asserted_facets:
-        start = 0
-        while True:
-            index = markdown.find(facet, start)
-            if index < 0:
-                break
-            window = markdown[max(0, index - 12) : index + len(facet) + 12]
-            prefix = markdown[max(0, index - 4) : index]
-            if not any(qualifier in window for qualifier in _NON_ASSERTED_QUALIFIERS) or any(
-                verb in prefix for verb in ("属于", "是", "为", "定位为")
-            ):
-                issues.append(
-                    _program_issue(
-                        "C2",
-                        f"候选 facet 被写成已断言事实：{facet}",
-                        facet,
-                        repair_hint="patch",
-                    )
-                )
-            start = index + len(facet)
+        if not _facet_asserted(markdown, facet):
+            continue
+        issues.append(
+            _program_issue(
+                "C2",
+                f"候选 facet 被写成已断言事实：{facet}",
+                facet,
+                repair_hint="patch",
+            )
+        )
     return tuple(issues)
 
 
@@ -768,6 +761,40 @@ def _must_not_cover_phrases(clause: str) -> tuple[str, ...]:
     return tuple(phrases)
 
 
+def _required_output_marker(item: str) -> str:
+    """构造 required output exact marker。
+
+    Args:
+        item: required output item 原文。
+
+    Returns:
+        exact marker 文本。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return f"{REQUIRED_OUTPUT_MARKER_PREFIX}{item} -->"
+
+
+def _facet_asserted(markdown: str, facet: str) -> bool:
+    """判断候选 facet 是否被写成断言事实。
+
+    Args:
+        markdown: 章节 Markdown。
+        facet: 候选 facet 文案。
+
+    Returns:
+        命中断言谓词时返回 `True`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    pattern = re.compile(_ASSERTED_FACET_RE_TEMPLATE.format(facet=re.escape(facet)))
+    return pattern.search(markdown) is not None
+
+
 def _clean_must_not_cover_fragment(fragment: str) -> str:
     """清理 must_not_cover 片段中的泛化词。
 
@@ -805,10 +832,20 @@ def _llm_request(input_data: ChapterAuditInput) -> ChapterAuditLLMRequest:
         chapter_id=chapter.chapter_id,
         fund_code=input_data.writer_input.fund_code,
         report_year=input_data.writer_input.report_year,
-        system_prompt="你是基金分析章节审计器，只按固定行协议返回审计结果。",
+        system_prompt=(
+            "你是基金分析章节审计器。只能返回固定行协议，禁止 Markdown、JSON、编号列表、解释性前缀或总结句。"
+        ),
         user_prompt=(
-            "按 SEVERITY|LOCATION|MESSAGE 返回。检查 evidence_support、must_not_cover_boundary、"
-            "missing_semantics、readability 和 non_asserted_facet_boundary。"
+            "唯一 pass 响应必须精确为：PASS|chapter|no issues\n"
+            "非 pass 行只允许：BLOCKING|<location>|<message>、REVIEWABLE|<location>|<message>、"
+            "INFO|<location>|<message>\n"
+            "location 和 message 不得为空；location 优先使用 required output item、heading、anchor id 或 line:N。\n"
+            "message 必须说明为什么不通过和最小修复动作，不能要求补外部来源。\n"
+            "禁止输出空行以外的额外文本、Markdown、编号列表、解释性前后缀或 JSON。\n"
+            "示例 pass：PASS|chapter|no issues\n"
+            "示例 blocking：BLOCKING|证据与出处|证据锚点缺失，请补 allowed anchor marker。\n"
+            "检查 evidence_support、must_not_cover_boundary、missing_semantics、readability 和 "
+            "non_asserted_facet_boundary。"
         ),
         draft_markdown=input_data.draft.markdown,
         allowed_fact_ids=tuple(fact.fact_id for fact in chapter.facts),
@@ -844,7 +881,7 @@ def _parse_llm_audit_response(response: ChapterAuditLLMResponse) -> ChapterLLMAu
         )
     issues: list[ChapterAuditIssue] = []
     for index, line in enumerate(lines):
-        parts = line.split("|", 2)
+        parts = line.split("|")
         if len(parts) != 3:
             return _llm_parse_failure(raw_text, response.model_name, response.finish_reason)
         severity_text, location, message = parts
@@ -889,7 +926,8 @@ def _llm_parse_failure(
         "llm",
         "C1",
         "blocking",
-        "LLM audit response parse failure，禁止 silent pass。",
+        "LLM audit response parse failure，禁止 silent pass；auditor 必须返回 PASS|chapter|no issues "
+        "或 SEVERITY|LOCATION|MESSAGE 行协议。",
         "raw_response",
         repair_hint="regenerate",
     )

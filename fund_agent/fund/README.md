@@ -113,10 +113,15 @@ chapter_lens = resolve_preferred_lens(chapter_id=2, fund_type="active_fund")
 
 - `build_chapter_writer_input()` 从 `ChapterFactProjection` 中选择单个 `ChapterFactInput`，不读取任何文档或外部来源
 - `build_chapter_prompt()` 只消费 CHAPTER_CONTRACT、preferred_lens、ITEM_RULE、facts、missing reasons 和 evidence anchors
+- writer 支持 `prompt_payload_mode="compact"`，当前由显式 `--use-llm` Service 路径使用；compact 只压缩大 `value` 的表达，保留 `fact_id`、`source_field_id`、`status`、`missing_reason`、`evidence_anchor_ids`、anchor id 和 source location metadata，并明确禁止 LLM 引用或推断被省略的 raw detail
+- writer prompt-cost diagnostic 只记录 component 字符数、fact/anchor 成本行和 prompt char/token 标量，不保存完整 prompt、fact 原文、anchor note、draft、provider request 或 provider response
 - `write_chapter()` 通过调用方显式注入的 `ChapterLLMClient` 生成单章草稿；`mode="prompt_only"` 只返回 prompt 和 blocked result，不伪造草稿
-- writer 只接受精确 marker：`<!-- anchor:<anchor_id> -->` 和 `<!-- missing:<reason> -->`；超出 `max_output_chars` 会 fail-closed，不截断
+- writer 要求第 1-6 章输出固定顶层段落 `### 结论要点`、`### 详细情况`、`### 证据与出处`；每个 `required_output_items` 必须先输出 exact marker `<!-- required_output:<item> -->`
+- writer 只接受精确 marker：`<!-- required_output:<item> -->`、`<!-- anchor:<anchor_id> -->` 和 `<!-- missing:<reason> -->`；未知 anchor、缺固定段落、缺 required output marker、超出 `max_output_chars`、`finish_reason=length/max_tokens/content_filter` 都会 fail-closed 到稳定 stop reason，不截断或部分接受
+- `ChapterRepairContext` 是当前 regenerate 的显式 typed 输入，携带上一轮 issue ids、脱敏 messages 和 required corrections；禁止通过 extra payload 传递这些参数
 - `audit_chapter_programmatic()` 执行确定性章节审计，覆盖结构、占位符、锚点、ITEM_RULE 删除段落、禁用交易建议、`non_asserted_facets` 误断言和第 5 章跨期缺口措辞
-- `audit_chapter_llm()` 只通过调用方显式注入的 `ChapterAuditLLMClient` 审计，并要求 `SEVERITY|LOCATION|MESSAGE` 行协议；解析失败或缺少 client 都 fail-closed
+- `audit_chapter_programmatic()` 对 required output 只以 exact marker 作为通过条件，正文裸 item 文案不能替代 marker；候选 facet 的“候选/未断言信息”说明允许通过，但任一断言式写法仍阻断
+- `audit_chapter_llm()` 只通过调用方显式注入的 `ChapterAuditLLMClient` 审计；唯一 pass 行为 `PASS|chapter|no issues`，问题行只能是 `BLOCKING|LOCATION|MESSAGE`、`REVIEWABLE|LOCATION|MESSAGE` 或 `INFO|LOCATION|MESSAGE`；解析失败或缺少 client 都 fail-closed
 - E2 证据与断言源文匹配复核不在 Gate 2 实现范围，后续 Evidence Confirm gate 处理
 - 这些 primitives 不实现 chapter orchestrator、repair loop、final assembler、第 0 章 assembly、CLI `--use-llm`、Service 编排或 Host/Agent/dayu runtime
 

@@ -36,20 +36,39 @@ ChapterWriteStopReason = Literal[
     "llm_unavailable",
     "llm_empty_response",
     "llm_contract_violation",
+    "missing_required_structure",
+    "missing_required_output_marker",
+    "unknown_anchor",
+    "response_too_long",
+    "response_incomplete",
 ]
 ChapterWriterMode = Literal["llm", "prompt_only"]
 ChapterCitationStyle = Literal["body_quote"]
+ChapterPromptPayloadMode = Literal["full", "compact"]
 
 CHAPTER_WRITER_SCHEMA_VERSION: ChapterWriterSchemaVersion = "chapter_writer.v1"
 CHAPTER_LLM_REQUEST_SCHEMA_VERSION: Final[str] = "chapter_llm_request.v1"
 CHAPTER_LLM_RESPONSE_SCHEMA_VERSION: Final[str] = "chapter_llm_response.v1"
 CHAPTER_WRITER_PROMPT_SCHEMA_VERSION: Final[str] = "chapter_writer_prompt.v1"
 CHAPTER_DRAFT_SCHEMA_VERSION: Final[str] = "chapter_draft.v1"
+CHAPTER_PROMPT_COST_DIAGNOSTIC_SCHEMA_VERSION: Final[str] = (
+    "chapter_prompt_cost_diagnostic_payload.v1"
+)
+_COMPACT_VALUE_CHAR_THRESHOLD: Final[int] = 1200
 _ANCHOR_MARKER_RE: Final[re.Pattern[str]] = re.compile(r"<!-- anchor:([^<>\s]+) -->")
 _MISSING_MARKER_RE: Final[re.Pattern[str]] = re.compile(r"<!-- missing:([a-z_]+) -->")
 _COMMENT_RE: Final[re.Pattern[str]] = re.compile(r"<!--\s*([^>]*)-->")
 _EVIDENCE_LINE_RE: Final[re.Pattern[str]] = re.compile(r"(?m)^>\s*📎\s*证据：")
 _SUPPORTED_MISSING_REASONS: Final[frozenset[str]] = frozenset(get_args(ChapterFactMissingReason))
+REQUIRED_BODY_SECTION_HEADINGS: Final[tuple[str, ...]] = (
+    "### 结论要点",
+    "### 详细情况",
+    "### 证据与出处",
+)
+REQUIRED_OUTPUT_MARKER_PREFIX: Final[str] = "<!-- required_output:"
+INCOMPLETE_FINISH_REASONS: Final[frozenset[str]] = frozenset(
+    ("length", "max_tokens", "content_filter")
+)
 _CRITICAL_SOURCE_FIELD_IDS: Final[frozenset[str]] = frozenset(
     (
         "structured.nav_benchmark_performance",
@@ -95,6 +114,8 @@ class ChapterLLMRequest:
         required_anchor_ids: 允许引用的证据锚点 ID。
         forbidden_phrases: 禁用措辞。
         max_output_chars: 输出字符硬上限。
+        repair_context: 可选重写上下文。
+        prompt_cost_diagnostic: writer prompt-cost 安全诊断；不含 prompt 文本。
     """
 
     schema_version: Literal["chapter_llm_request.v1"] = "chapter_llm_request.v1"
@@ -106,6 +127,144 @@ class ChapterLLMRequest:
     required_anchor_ids: tuple[str, ...]
     forbidden_phrases: tuple[str, ...]
     max_output_chars: int
+    repair_context: ChapterRepairContext | None = None
+    prompt_cost_diagnostic: ChapterPromptCostDiagnostic | None = None
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class ChapterRepairContext:
+    """章节重写上下文，见模板第 1-6 章 write-audit-repair。
+
+    Attributes:
+        attempt_index: 本次重写 attempt 序号。
+        previous_issue_ids: 上一轮审计 issue id。
+        previous_messages: 上一轮审计 issue 脱敏消息。
+        required_corrections: 本轮必须完成的确定性修正项。
+    """
+
+    attempt_index: int
+    previous_issue_ids: tuple[str, ...]
+    previous_messages: tuple[str, ...]
+    required_corrections: tuple[str, ...]
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class ChapterPromptComponentCosts:
+    """writer prompt 组件字符成本，见模板第 1-6 章写作路径。
+
+    Attributes:
+        protocol_chars: 输出协议与安全边界字符数。
+        contract_chars: 章节身份、fund type、lens、facet 与 ITEM_RULE 字符数。
+        must_answer_chars: CHAPTER_CONTRACT.must_answer 字符数。
+        must_not_cover_chars: CHAPTER_CONTRACT.must_not_cover 字符数。
+        required_output_chars: required_output_items 字符数。
+        facts_chars: facts payload 字符数。
+        anchors_chars: anchors payload 字符数。
+        repair_context_chars: repair context 字符数。
+    """
+
+    protocol_chars: int
+    contract_chars: int
+    must_answer_chars: int
+    must_not_cover_chars: int
+    required_output_chars: int
+    facts_chars: int
+    anchors_chars: int
+    repair_context_chars: int
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class ChapterPromptFactCostRow:
+    """writer prompt fact 成本行，见模板 CHAPTER_CONTRACT 输入。
+
+    Attributes:
+        fact_id: fact id。
+        source_field_id: 稳定来源字段 ID。
+        status: fact 状态。
+        missing_reason: 缺失原因；可为 `None`。
+        value_chars: 原始 value 的安全序列化字符数。
+        serialized_fact_chars: 实际 prompt fact 行字符数。
+        evidence_anchor_count: fact 引用的证据锚点数量。
+        required_by_count: fact 支撑的 contract / ITEM_RULE 数量。
+    """
+
+    fact_id: str
+    source_field_id: str
+    status: str
+    missing_reason: str | None
+    value_chars: int
+    serialized_fact_chars: int
+    evidence_anchor_count: int
+    required_by_count: int
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class ChapterPromptAnchorCostRow:
+    """writer prompt anchor 成本行，见模板证据锚点约束。
+
+    Attributes:
+        anchor_id: anchor id。
+        source_kind: 证据来源类型。
+        document_year: 文档年份。
+        section_id: 年报章节或派生来源。
+        table_id: 表格编号。
+        row_locator_present: 是否存在行级定位。
+        serialized_anchor_chars: 实际 prompt anchor 行字符数。
+    """
+
+    anchor_id: str
+    source_kind: str
+    document_year: int | None
+    section_id: str | None
+    table_id: str | None
+    row_locator_present: bool
+    serialized_anchor_chars: int
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class ChapterPromptCostDiagnostic:
+    """writer prompt-cost 安全诊断，见模板第 1-6 章。
+
+    该结构只保存 component 字符数、fact/anchor id 和标量成本，不保存完整 prompt、
+    fact 原文、anchor note、draft、provider request 或 response。
+    """
+
+    schema_version: str = CHAPTER_PROMPT_COST_DIAGNOSTIC_SCHEMA_VERSION
+    chapter_id: int
+    operation: Literal["writer"] = "writer"
+    system_prompt_chars: int
+    user_prompt_chars: int
+    approx_prompt_tokens: int
+    max_output_chars: int
+    repair_attempt_index: int
+    component_costs: ChapterPromptComponentCosts
+    fact_cost_rows: tuple[ChapterPromptFactCostRow, ...]
+    anchor_cost_rows: tuple[ChapterPromptAnchorCostRow, ...]
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class ChapterPromptFragments:
+    """writer prompt 渲染片段，见模板第 1-6 章。
+
+    Attributes:
+        protocol: 输出协议与安全边界片段。
+        contract: 章节身份、lens、facet 与 ITEM_RULE 片段。
+        must_answer: must_answer 片段。
+        must_not_cover: must_not_cover 片段。
+        required_output: required_output_items 片段。
+        facts: facts payload 片段。
+        anchors: anchors payload 片段。
+        repair_context: repair context 片段。
+    """
+
+    protocol: str
+    contract: str
+    must_answer: str
+    must_not_cover: str
+    required_output: str
+    facts: str
+    anchors: str
+    repair_context: str
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -158,6 +317,8 @@ class ChapterWriterInput:
         mode: 写作模式；`prompt_only` 不生成草稿。
         citation_style: 证据引用样式。
         max_output_chars: LLM 输出硬上限。
+        repair_context: 可选重写上下文。
+        prompt_payload_mode: writer prompt payload 模式；compact 只压缩表达，不放松事实边界。
     """
 
     schema_version: ChapterWriterSchemaVersion = CHAPTER_WRITER_SCHEMA_VERSION
@@ -168,6 +329,8 @@ class ChapterWriterInput:
     mode: ChapterWriterMode = "llm"
     citation_style: ChapterCitationStyle = "body_quote"
     max_output_chars: int = 12000
+    repair_context: ChapterRepairContext | None = None
+    prompt_payload_mode: ChapterPromptPayloadMode = "full"
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -187,6 +350,7 @@ class ChapterWriterPrompt:
         allowed_anchor_ids: 允许引用的 anchor id。
         deleted_item_rule_ids: 必须删除的 ITEM_RULE id。
         required_gap_phrases: 建议缺口措辞。
+        prompt_cost_diagnostic: writer prompt-cost 安全诊断。
     """
 
     schema_version: Literal["chapter_writer_prompt.v1"] = "chapter_writer_prompt.v1"
@@ -201,6 +365,7 @@ class ChapterWriterPrompt:
     allowed_anchor_ids: tuple[str, ...]
     deleted_item_rule_ids: tuple[str, ...]
     required_gap_phrases: tuple[str, ...]
+    prompt_cost_diagnostic: ChapterPromptCostDiagnostic | None = None
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -266,6 +431,9 @@ class ChapterWriteResult:
         prompt: 本次写作 prompt contract。
         draft: 章节草稿；未生成时为 `None`。
         issues: 写作问题列表。
+        response_chars: LLM 响应字符数；未调用 LLM 时为 `None`。
+        finish_reason: LLM 响应结束原因；未调用 LLM 或未知时为 `None`。
+        max_output_chars: 本次 writer 输出硬上限。
     """
 
     schema_version: ChapterWriterSchemaVersion = CHAPTER_WRITER_SCHEMA_VERSION
@@ -274,6 +442,9 @@ class ChapterWriteResult:
     prompt: ChapterWriterPrompt
     draft: ChapterDraft | None
     issues: tuple[ChapterWriteIssue, ...]
+    response_chars: int | None = None
+    finish_reason: str | None = None
+    max_output_chars: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -312,6 +483,8 @@ def build_chapter_writer_input(
     mode: ChapterWriterMode = "llm",
     citation_style: ChapterCitationStyle = "body_quote",
     max_output_chars: int = 12000,
+    repair_context: ChapterRepairContext | None = None,
+    prompt_payload_mode: ChapterPromptPayloadMode = "full",
 ) -> ChapterWriterInput:
     """从 Gate 1 投影构造单章写作输入，见模板第 0-7 章。
 
@@ -321,6 +494,8 @@ def build_chapter_writer_input(
         mode: 写作模式。
         citation_style: 证据引用样式。
         max_output_chars: LLM 输出硬上限。
+        repair_context: 可选重写上下文。
+        prompt_payload_mode: writer prompt payload 模式。
 
     Returns:
         单章写作输入。
@@ -335,6 +510,8 @@ def build_chapter_writer_input(
         raise ValueError(f"未知证据引用样式：{citation_style}")
     if max_output_chars <= 0:
         raise ValueError("max_output_chars 必须为正数")
+    if prompt_payload_mode not in get_args(ChapterPromptPayloadMode):
+        raise ValueError(f"未知 prompt payload 模式：{prompt_payload_mode}")
     return ChapterWriterInput(
         projection_schema_version=projection.schema_version,
         fund_code=projection.fund_code,
@@ -343,6 +520,8 @@ def build_chapter_writer_input(
         mode=mode,
         citation_style=citation_style,
         max_output_chars=max_output_chars,
+        repair_context=repair_context,
+        prompt_payload_mode=prompt_payload_mode,
     )
 
 
@@ -367,24 +546,20 @@ def build_chapter_prompt(input_data: ChapterWriterInput) -> ChapterWriterPrompt:
         "你是基金分析章节写作器。只能使用输入 facts、missing reasons 和 evidence anchors；"
         "不得读取外部资料，不得输出买入/卖出/仓位/收益预测。"
     )
+    fragments = _chapter_prompt_fragments(
+        input_data,
+        deleted_item_rule_ids=deleted_item_rule_ids,
+    )
     user_prompt = "\n".join(
         (
-            f"章节：{chapter.chapter_id} {chapter.title}",
-            f"基金：{input_data.fund_code} / 年报年份：{input_data.report_year}",
-            f"基金类型：{chapter.fund_type}",
-            f"分类依据：{'; '.join(chapter.classification_basis) or '未披露'}",
-            f"preferred_lens：{'; '.join(chapter.lens_resolution.statements) or 'unknown'}",
-            "候选 facet 只能写成未断言，不得作为事实："
-            + (", ".join(chapter.facet_resolution.non_asserted_facets) or "无"),
-            "必须回答：" + _json_text(contract.must_answer),
-            "禁止覆盖：" + _json_text(contract.must_not_cover),
-            "必须输出项：" + _json_text(contract.required_output_items),
-            "允许 facts：" + _json_text(_prompt_fact_payload(chapter.facts)),
-            "允许 anchors：" + _json_text(_prompt_anchor_payload(chapter.evidence_anchors)),
-            "删除的 ITEM_RULE：" + _json_text(deleted_item_rule_ids),
-            "写作要求：每条证据行前后必须包含对应 HTML marker；格式为 "
-            "`<!-- anchor:<anchor_id> -->`。声明缺口必须使用 `<!-- missing:<reason> -->`。",
-            "可用缺口原因：" + _json_text(chapter.missing_reasons),
+            fragments.protocol,
+            fragments.contract,
+            fragments.must_answer,
+            fragments.must_not_cover,
+            fragments.required_output,
+            fragments.facts,
+            fragments.anchors,
+            fragments.repair_context,
         )
     )
     return ChapterWriterPrompt(
@@ -399,6 +574,85 @@ def build_chapter_prompt(input_data: ChapterWriterInput) -> ChapterWriterPrompt:
         allowed_anchor_ids=allowed_anchor_ids,
         deleted_item_rule_ids=deleted_item_rule_ids,
         required_gap_phrases=("未披露", "数据不足", "下一步最小验证问题"),
+        prompt_cost_diagnostic=_prompt_cost_diagnostic(
+            input_data,
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            fragments=fragments,
+        ),
+    )
+
+
+def _chapter_prompt_fragments(
+    input_data: ChapterWriterInput,
+    *,
+    deleted_item_rule_ids: tuple[str, ...],
+) -> ChapterPromptFragments:
+    """构造 writer prompt 命名片段，见模板第 1-6 章。
+
+    Args:
+        input_data: 章节写作输入。
+        deleted_item_rule_ids: 已裁定删除的 ITEM_RULE id。
+
+    Returns:
+        可独立计费的 prompt 片段。
+
+    Raises:
+        无显式抛出。
+    """
+
+    chapter = input_data.chapter
+    contract = chapter.contract
+    protocol = "\n".join(
+        (
+            "先遵守输出协议，后写内容：",
+            "1. 只输出章节 Markdown 正文。",
+            "2. 顶层结构只能使用：### 结论要点 / ### 详细情况 / ### 证据与出处。",
+            "3. 对每个 required_output_items 先复制 exact marker，再写 1-3 句。",
+            "4. 有同源事实时在事实句附近放 allowed anchor marker；无事实时用 allowed missing marker 写缺口。",
+            "5. 宁可简短覆盖全部 required markers，不要扩写长段落；不得输出附录、JSON 或分析过程。",
+            _compact_payload_protocol(input_data.prompt_payload_mode),
+            "输出协议：只输出章节 Markdown 正文，不得输出 JSON、解释性前后缀或“以下是章节”。",
+            "第 1-6 章必须包含且只用这些顶层结构段落："
+            + " / ".join(REQUIRED_BODY_SECTION_HEADINGS),
+            "每个 required_output_items 必须先输出 exact marker："
+            "`<!-- required_output:<exact required output item> -->`，marker 后再写同源证据内容或明确缺口。",
+            "证据断言只能使用 allowed anchor set 中的 marker：`<!-- anchor:<anchor_id> -->`；"
+            "required_anchor_ids 是允许集合，不要求全量使用。",
+            "第2章 R=A+B-C 数字闭环：若写公式/百分比闭合断言，必须让 allowed anchor marker 与该断言同句或上下2行；"
+            "缺同源事实时写未披露/数据不足/下一步最小验证问题，不得编造 R、A、B、C 或 A-C 数值。",
+            _missing_marker_contract_prompt(chapter.missing_reasons),
+            "缺少同源事实时写“未披露 / 数据不足 / 下一步最小验证问题”，不得编造。",
+            f"输出长度硬上限：{input_data.max_output_chars} 字符；每个 required item 后写 1-3 句，"
+            "优先覆盖 marker，不输出附录、JSON 或分析过程。",
+        )
+    )
+    contract_fragment = "\n".join(
+        (
+            f"章节：{chapter.chapter_id} {chapter.title}",
+            f"基金：{input_data.fund_code} / 年报年份：{input_data.report_year}",
+            f"基金类型：{chapter.fund_type}",
+            f"分类依据：{'; '.join(chapter.classification_basis) or '未披露'}",
+            f"preferred_lens：{'; '.join(chapter.lens_resolution.statements) or 'unknown'}",
+            "候选 facet 只能写成未断言，不得作为事实："
+            + (", ".join(chapter.facet_resolution.non_asserted_facets) or "无"),
+            "候选 facet 固定写法：候选/未断言信息：<facet> 仅为候选标签，"
+            "当前结构化证据不足，不能写成本基金属于/是/定位为该 facet。",
+            "候选 facet 禁止断言形式：是<facet>、为<facet>、属于<facet>、定位为<facet>、可判定为<facet>。",
+            "删除的 ITEM_RULE：" + _json_text(deleted_item_rule_ids),
+        )
+    )
+    return ChapterPromptFragments(
+        protocol=protocol,
+        contract=contract_fragment,
+        must_answer="必须回答：" + _json_text(contract.must_answer),
+        must_not_cover="禁止覆盖：" + _json_text(contract.must_not_cover),
+        required_output="必须输出项："
+        + _json_text(_prompt_required_output_payload(contract.required_output_items)),
+        facts="允许 facts：" + _json_text(_prompt_fact_payload(chapter.facts, mode=input_data.prompt_payload_mode)),
+        anchors="允许 anchors："
+        + _json_text(_prompt_anchor_payload(chapter.evidence_anchors, mode=input_data.prompt_payload_mode)),
+        repair_context=_repair_context_prompt(input_data.repair_context),
     )
 
 
@@ -437,15 +691,38 @@ def write_chapter(
     response = llm_client.generate_chapter(_llm_request_from_prompt(input_data, prompt))
     draft, issues = _draft_from_llm_response(input_data, prompt, response)
     if issues:
-        return _blocked_result(prompt, _stop_reason(issues), issues)
+        return _blocked_result(
+            prompt,
+            _stop_reason(issues),
+            issues,
+            response_chars=len(response.text),
+            finish_reason=response.finish_reason,
+            max_output_chars=input_data.max_output_chars,
+        )
     if draft is None:
         issue = _issue(
             "writer:llm_contract_violation",
             "llm_contract_violation",
             "LLM 响应未能生成可接受章节草稿。",
         )
-        return _blocked_result(prompt, "llm_contract_violation", (issue,))
-    return ChapterWriteResult(status="drafted", stop_reason="none", prompt=prompt, draft=draft, issues=())
+        return _blocked_result(
+            prompt,
+            "llm_contract_violation",
+            (issue,),
+            response_chars=len(response.text),
+            finish_reason=response.finish_reason,
+            max_output_chars=input_data.max_output_chars,
+        )
+    return ChapterWriteResult(
+        status="drafted",
+        stop_reason="none",
+        prompt=prompt,
+        draft=draft,
+        issues=(),
+        response_chars=len(response.text),
+        finish_reason=response.finish_reason,
+        max_output_chars=input_data.max_output_chars,
+    )
 
 
 def _chapter_by_id(projection: ChapterFactProjection, chapter_id: int) -> ChapterFactInput:
@@ -685,7 +962,183 @@ def _llm_request_from_prompt(
         required_anchor_ids=prompt.allowed_anchor_ids,
         forbidden_phrases=_forbidden_phrases(),
         max_output_chars=input_data.max_output_chars,
+        repair_context=input_data.repair_context,
+        prompt_cost_diagnostic=prompt.prompt_cost_diagnostic,
     )
+
+
+def _prompt_cost_diagnostic(
+    input_data: ChapterWriterInput,
+    *,
+    system_prompt: str,
+    user_prompt: str,
+    fragments: ChapterPromptFragments,
+) -> ChapterPromptCostDiagnostic:
+    """构造 writer prompt-cost 安全诊断，见模板第 1-6 章。
+
+    Args:
+        input_data: 章节写作输入。
+        system_prompt: 实际 system prompt。
+        user_prompt: 实际 user prompt。
+        fragments: 实际 user prompt 片段。
+
+    Returns:
+        不含 prompt 文本的成本诊断。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return ChapterPromptCostDiagnostic(
+        chapter_id=input_data.chapter.chapter_id,
+        system_prompt_chars=len(system_prompt),
+        user_prompt_chars=len(user_prompt),
+        approx_prompt_tokens=_approx_prompt_tokens(len(system_prompt), len(user_prompt)),
+        max_output_chars=input_data.max_output_chars,
+        repair_attempt_index=input_data.repair_context.attempt_index
+        if input_data.repair_context is not None
+        else 0,
+        component_costs=ChapterPromptComponentCosts(
+            protocol_chars=len(fragments.protocol),
+            contract_chars=len(fragments.contract),
+            must_answer_chars=len(fragments.must_answer),
+            must_not_cover_chars=len(fragments.must_not_cover),
+            required_output_chars=len(fragments.required_output),
+            facts_chars=len(fragments.facts),
+            anchors_chars=len(fragments.anchors),
+            repair_context_chars=len(fragments.repair_context),
+        ),
+        fact_cost_rows=_prompt_fact_cost_rows(
+            input_data.chapter.facts,
+            mode=input_data.prompt_payload_mode,
+        ),
+        anchor_cost_rows=_prompt_anchor_cost_rows(
+            input_data.chapter.evidence_anchors,
+            mode=input_data.prompt_payload_mode,
+        ),
+    )
+
+
+def _approx_prompt_tokens(system_prompt_chars: int, user_prompt_chars: int) -> int:
+    """按固定 heuristic 估算 prompt token 数。
+
+    Args:
+        system_prompt_chars: system prompt 字符数。
+        user_prompt_chars: user prompt 字符数。
+
+    Returns:
+        `ceil((system + user) / 4)` 的近似 token 数。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return (system_prompt_chars + user_prompt_chars + 3) // 4
+
+
+def _compact_payload_protocol(mode: ChapterPromptPayloadMode) -> str:
+    """渲染 compact payload 安全说明。
+
+    Args:
+        mode: prompt payload 模式。
+
+    Returns:
+        writer 必须遵守的 compact 安全约束。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if mode != "compact":
+        return "FACT_PAYLOAD_MODE: full；可使用 provided fact value 和 anchors，但不得超出输入事实。"
+    return (
+        "FACT_PAYLOAD_MODE: compact；若 fact 标记 value_available_but_detail_compacted=true，"
+        "只能使用 value_kind/value_chars/value_summary 与 provided anchors，不得引用、复述或推断被省略的 raw detail。"
+    )
+
+
+def _repair_context_prompt(repair_context: ChapterRepairContext | None) -> str:
+    """把重写上下文渲染为 prompt 片段，见模板第 1-6 章。
+
+    Args:
+        repair_context: 可选重写上下文。
+
+    Returns:
+        prompt 片段；无上下文时返回初始 attempt 说明。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if repair_context is None:
+        return "重写上下文：初始 attempt，无上一轮失败原因。"
+    return "\n".join(
+        (
+            f"重写上下文：attempt_index={repair_context.attempt_index}",
+            "上一轮 issue ids：" + _json_text(repair_context.previous_issue_ids),
+            "上一轮 issue messages：" + _json_text(repair_context.previous_messages),
+            "本轮必须修复项：" + _json_text(repair_context.required_corrections),
+            "不得重复上一轮 issue；不得用自由文本绕过 required_output、anchor 或 missing markers。",
+        )
+    )
+
+
+def _missing_marker_contract_prompt(
+    missing_reasons: tuple[ChapterFactMissingReason, ...],
+) -> str:
+    """渲染 missing marker exact contract，见模板第 1-6 章数据缺口语义。
+
+    Args:
+        missing_reasons: 当前章节允许声明的数据缺口原因。
+
+    Returns:
+        prompt contract 片段。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if not missing_reasons:
+        return "\n".join(
+            (
+                "MISSING_MARKER_CONTRACT:",
+                "ALLOWED_MISSING_REASONS: none",
+                "MISSING_MARKER_RULES:",
+                "- Do not output any missing marker in this chapter.",
+                "- You may still write 未披露 / 数据不足 / 下一步最小验证问题 when facts are insufficient.",
+            )
+        )
+    return "\n".join(
+        (
+            "MISSING_MARKER_CONTRACT:",
+            "ALLOWED_MISSING_REASONS: " + ", ".join(missing_reasons),
+            "MISSING_MARKER_EXACT_FORM:",
+            "<!-- missing:{reason} -->",
+            "MISSING_MARKER_RULES:",
+            "- Replace {reason} with exactly one token from ALLOWED_MISSING_REASONS.",
+            "- Do not output {reason}, <reason>, or any placeholder.",
+            "- Do not add spaces around the colon.",
+            "- Do not change case, translate missing, or use a fullwidth colon.",
+            "- Do not wrap the marker in backticks or code fences.",
+            "- Do not add Chinese explanation, JSON, Markdown bullet text, or extra labels inside the marker.",
+        )
+    )
+
+
+def _prompt_required_output_payload(required_output_items: tuple[str, ...]) -> tuple[str, ...]:
+    """把 required output items 转为带 exact marker 的 prompt payload。
+
+    Args:
+        required_output_items: CHAPTER_CONTRACT 必须输出项目。
+
+    Returns:
+        每项以 exact marker 开头的 prompt 文本。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return tuple(f"{_required_output_marker(item)}\n{item}" for item in required_output_items)
 
 
 def _draft_from_llm_response(
@@ -713,15 +1166,25 @@ def _draft_from_llm_response(
         return None, (
             _issue("writer:llm_empty_response", "llm_empty_response", "LLM 返回空章节文本。"),
         )
+    if response.finish_reason in INCOMPLETE_FINISH_REASONS:
+        return None, (
+            _issue(
+                f"writer:response_incomplete:{response.finish_reason}",
+                "response_incomplete",
+                f"LLM finish_reason={response.finish_reason} 表示输出不完整或内容被过滤，禁止部分接受。",
+            ),
+        )
     if len(text) > input_data.max_output_chars:
         return None, (
             _issue(
                 "writer:llm_response_too_long",
-                "llm_contract_violation",
+                "response_too_long",
                 "LLM 输出超过 max_output_chars，禁止截断或部分接受。",
             ),
         )
     issues.extend(_invalid_marker_issues(text))
+    issues.extend(_required_structure_issues(text, input_data.chapter))
+    issues.extend(_required_output_marker_issues(text, prompt))
     used_anchor_ids, anchor_issues = _parse_anchor_markers(text, prompt, input_data.chapter)
     used_missing_reasons, missing_issues = _parse_missing_markers(text, input_data.chapter)
     issues.extend(anchor_issues)
@@ -777,6 +1240,80 @@ def _invalid_marker_issues(text: str) -> tuple[ChapterWriteIssue, ...]:
                 )
             )
     return tuple(issues)
+
+
+def _required_structure_issues(
+    text: str,
+    chapter: ChapterFactInput,
+) -> tuple[ChapterWriteIssue, ...]:
+    """检查第 1-6 章固定结构段落。
+
+    Args:
+        text: LLM 输出文本。
+        chapter: 单章事实输入。
+
+    Returns:
+        缺失结构段落 issue。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if chapter.chapter_id not in range(1, 7):
+        return ()
+    return tuple(
+        _issue(
+            f"writer:missing_required_structure:{heading}",
+            "missing_required_structure",
+            f"第 1-6 章缺少固定结构段落：{heading}",
+        )
+        for heading in REQUIRED_BODY_SECTION_HEADINGS
+        if heading not in text
+    )
+
+
+def _required_output_marker_issues(
+    text: str,
+    prompt: ChapterWriterPrompt,
+) -> tuple[ChapterWriteIssue, ...]:
+    """检查 required output exact marker。
+
+    Args:
+        text: LLM 输出文本。
+        prompt: 章节写作 prompt。
+
+    Returns:
+        缺失 required output marker issue。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return tuple(
+        _issue(
+            f"writer:missing_required_output_marker:{index}",
+            "missing_required_output_marker",
+            f"缺少 required output item marker：{item}",
+        )
+        for index, item in enumerate(prompt.required_output_items)
+        if item and _required_output_marker(item) not in text
+    )
+
+
+def _required_output_marker(item: str) -> str:
+    """构造 required output exact marker。
+
+    Args:
+        item: required output item 原文。
+
+    Returns:
+        exact marker 文本。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return f"{REQUIRED_OUTPUT_MARKER_PREFIX}{item} -->"
 
 
 def _parse_anchor_markers(
@@ -913,7 +1450,7 @@ def _unknown_anchor_issue(anchor_id: str, chapter: ChapterFactInput) -> ChapterW
         message = "bond_risk_evidence 组级锚点未展开为 ChapterEvidenceAnchor，需后续 conversion helper 后才能引用"
     return _issue(
         f"writer:unknown_anchor:{anchor_id}",
-        "llm_contract_violation",
+        "unknown_anchor",
         message,
         anchor_ids=(anchor_id,),
     )
@@ -972,6 +1509,10 @@ def _blocked_result(
     prompt: ChapterWriterPrompt,
     stop_reason: ChapterWriteStopReason,
     issues: tuple[ChapterWriteIssue, ...],
+    *,
+    response_chars: int | None = None,
+    finish_reason: str | None = None,
+    max_output_chars: int | None = None,
 ) -> ChapterWriteResult:
     """构造 blocked 写作结果。
 
@@ -979,6 +1520,9 @@ def _blocked_result(
         prompt: 章节 prompt。
         stop_reason: 停止原因。
         issues: 问题列表。
+        response_chars: LLM 响应字符数。
+        finish_reason: LLM 响应结束原因。
+        max_output_chars: 本次 writer 输出硬上限。
 
     Returns:
         blocked 写作结果。
@@ -987,7 +1531,16 @@ def _blocked_result(
         无显式抛出。
     """
 
-    return ChapterWriteResult(status="blocked", stop_reason=stop_reason, prompt=prompt, draft=None, issues=issues)
+    return ChapterWriteResult(
+        status="blocked",
+        stop_reason=stop_reason,
+        prompt=prompt,
+        draft=None,
+        issues=issues,
+        response_chars=response_chars,
+        finish_reason=finish_reason,
+        max_output_chars=max_output_chars,
+    )
 
 
 def _stop_reason(issues: tuple[ChapterWriteIssue, ...]) -> ChapterWriteStopReason:
@@ -1043,11 +1596,16 @@ def _issue(
     )
 
 
-def _prompt_fact_payload(facts: tuple[ChapterFactEntry, ...]) -> tuple[dict[str, object], ...]:
+def _prompt_fact_payload(
+    facts: tuple[ChapterFactEntry, ...],
+    *,
+    mode: ChapterPromptPayloadMode = "full",
+) -> tuple[dict[str, object], ...]:
     """把 facts 转为 prompt 负载。
 
     Args:
         facts: 章节 facts。
+        mode: prompt payload 模式。
 
     Returns:
         可 JSON 序列化的 prompt fact 列表。
@@ -1057,25 +1615,55 @@ def _prompt_fact_payload(facts: tuple[ChapterFactEntry, ...]) -> tuple[dict[str,
     """
 
     return tuple(
-        {
-            "fact_id": fact.fact_id,
-            "source_field_id": fact.source_field_id,
-            "source_field_name": fact.source_field_name,
-            "status": fact.status,
-            "value": _jsonable_value(fact.value),
-            "evidence_anchor_ids": fact.evidence_anchor_ids,
-            "missing_reason": fact.missing_reason,
-            "required_by": fact.required_by,
-        }
+        _prompt_fact_row(fact, mode=mode)
         for fact in facts
     )
 
 
-def _prompt_anchor_payload(anchors: tuple[ChapterEvidenceAnchor, ...]) -> tuple[dict[str, object], ...]:
+def _prompt_fact_row(
+    fact: ChapterFactEntry,
+    *,
+    mode: ChapterPromptPayloadMode,
+) -> dict[str, object]:
+    """把单个 fact 转为 prompt 行。
+
+    Args:
+        fact: 章节 fact。
+        mode: prompt payload 模式。
+
+    Returns:
+        可 JSON 序列化的 fact prompt 行。
+
+    Raises:
+        无显式抛出。
+    """
+
+    row: dict[str, object] = {
+            "fact_id": fact.fact_id,
+            "source_field_id": fact.source_field_id,
+            "source_field_name": fact.source_field_name,
+            "status": fact.status,
+            "evidence_anchor_ids": fact.evidence_anchor_ids,
+            "missing_reason": fact.missing_reason,
+            "required_by": fact.required_by,
+        }
+    if mode == "compact" and _should_compact_value(fact.value):
+        row.update(_compact_value_payload(fact.value))
+        return row
+    row["value"] = _jsonable_value(fact.value)
+    return row
+
+
+def _prompt_anchor_payload(
+    anchors: tuple[ChapterEvidenceAnchor, ...],
+    *,
+    mode: ChapterPromptPayloadMode = "full",
+) -> tuple[dict[str, object], ...]:
     """把 anchors 转为 prompt 负载。
 
     Args:
         anchors: 章节证据锚点。
+        mode: prompt payload 模式。
 
     Returns:
         可 JSON 序列化的锚点列表。
@@ -1085,17 +1673,230 @@ def _prompt_anchor_payload(anchors: tuple[ChapterEvidenceAnchor, ...]) -> tuple[
     """
 
     return tuple(
-        {
+        _prompt_anchor_row(anchor, mode=mode)
+        for anchor in anchors
+    )
+
+
+def _prompt_anchor_row(
+    anchor: ChapterEvidenceAnchor,
+    *,
+    mode: ChapterPromptPayloadMode,
+) -> dict[str, object]:
+    """把单个 anchor 转为 prompt 行。
+
+    Args:
+        anchor: 章节证据锚点。
+        mode: prompt payload 模式。
+
+    Returns:
+        可 JSON 序列化的 anchor prompt 行。
+
+    Raises:
+        无显式抛出。
+    """
+
+    row: dict[str, object] = {
             "anchor_id": anchor.anchor_id,
             "source_kind": anchor.source_kind,
             "document_year": anchor.document_year,
             "section_id": anchor.section_id,
             "table_id": anchor.table_id,
             "row_locator": anchor.row_locator,
-            "note": anchor.note,
         }
+    if mode == "full":
+        row["note"] = anchor.note
+    return row
+
+
+def _prompt_fact_cost_rows(
+    facts: tuple[ChapterFactEntry, ...],
+    *,
+    mode: ChapterPromptPayloadMode,
+) -> tuple[ChapterPromptFactCostRow, ...]:
+    """构造 fact prompt-cost 行。
+
+    Args:
+        facts: 章节 facts。
+        mode: prompt payload 模式。
+
+    Returns:
+        不含 fact value 文本的成本行。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return tuple(
+        ChapterPromptFactCostRow(
+            fact_id=fact.fact_id,
+            source_field_id=fact.source_field_id,
+            status=fact.status,
+            missing_reason=fact.missing_reason,
+            value_chars=len(_json_text(_jsonable_value(fact.value))),
+            serialized_fact_chars=len(_json_text(_prompt_fact_row(fact, mode=mode))),
+            evidence_anchor_count=len(fact.evidence_anchor_ids),
+            required_by_count=len(fact.required_by),
+        )
+        for fact in facts
+    )
+
+
+def _prompt_anchor_cost_rows(
+    anchors: tuple[ChapterEvidenceAnchor, ...],
+    *,
+    mode: ChapterPromptPayloadMode,
+) -> tuple[ChapterPromptAnchorCostRow, ...]:
+    """构造 anchor prompt-cost 行。
+
+    Args:
+        anchors: 章节证据锚点。
+        mode: prompt payload 模式。
+
+    Returns:
+        不含 anchor note 文本的成本行。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return tuple(
+        ChapterPromptAnchorCostRow(
+            anchor_id=anchor.anchor_id,
+            source_kind=anchor.source_kind,
+            document_year=anchor.document_year,
+            section_id=anchor.section_id,
+            table_id=anchor.table_id,
+            row_locator_present=bool(anchor.row_locator),
+            serialized_anchor_chars=len(_json_text(_prompt_anchor_row(anchor, mode=mode))),
+        )
         for anchor in anchors
     )
+
+
+def _should_compact_value(value: object) -> bool:
+    """判断 fact value 是否需要 compact 表达。
+
+    Args:
+        value: fact value。
+
+    Returns:
+        超过 compact 阈值时返回 `True`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return len(_json_text(_jsonable_value(value))) > _COMPACT_VALUE_CHAR_THRESHOLD
+
+
+def _compact_value_payload(value: object) -> dict[str, object]:
+    """把大 value 转为确定性 compact payload。
+
+    Args:
+        value: 原始结构化 value。
+
+    Returns:
+        只含结构化摘要和成本标量的 compact payload。
+
+    Raises:
+        无显式抛出。
+    """
+
+    jsonable = _jsonable_value(value)
+    return {
+        "value_kind": _value_kind(jsonable),
+        "value_chars": len(_json_text(jsonable)),
+        "value_summary": _value_summary(jsonable),
+        "value_available_but_detail_compacted": True,
+        "compact_reason": "prompt_budget_compaction",
+    }
+
+
+def _value_kind(value: object) -> str:
+    """读取 value 的稳定类型标签。
+
+    Args:
+        value: JSON 可消费值。
+
+    Returns:
+        稳定类型标签。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if value is None:
+        return "null"
+    if isinstance(value, bool):
+        return "bool"
+    if isinstance(value, (int, float, Decimal)):
+        return "number"
+    if isinstance(value, str):
+        return "string"
+    if isinstance(value, dict):
+        return "dict"
+    if isinstance(value, (list, tuple)):
+        return "list"
+    return type(value).__name__
+
+
+def _value_summary(value: object) -> dict[str, object]:
+    """生成确定性 value 摘要，不做自然语言推断。
+
+    仅提取顶层标量字段名和值、列表长度、嵌套 dict key 名。该摘要只服务
+    prompt-budget compaction，不能被当作源文完整事实。
+
+    Args:
+        value: JSON 可消费值。
+
+    Returns:
+        确定性结构摘要。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if isinstance(value, dict):
+        scalar_fields: dict[str, object] = {}
+        list_lengths: dict[str, int] = {}
+        nested_dict_keys: dict[str, tuple[str, ...]] = {}
+        for key in sorted(value):
+            item = value[key]
+            key_text = str(key)
+            if _is_summary_scalar(item):
+                scalar_fields[key_text] = item
+            elif isinstance(item, (list, tuple)):
+                list_lengths[key_text] = len(item)
+            elif isinstance(item, dict):
+                nested_dict_keys[key_text] = tuple(str(nested_key) for nested_key in sorted(item))
+        return {
+            "top_level_keys": tuple(str(key) for key in sorted(value)),
+            "top_level_scalar_fields": scalar_fields,
+            "top_level_list_lengths": list_lengths,
+            "top_level_nested_dict_keys": nested_dict_keys,
+        }
+    if isinstance(value, (list, tuple)):
+        return {"list_length": len(value)}
+    if _is_summary_scalar(value):
+        return {"scalar_value": value}
+    return {"summary_available": False}
+
+
+def _is_summary_scalar(value: object) -> bool:
+    """判断 value 是否可作为顶层标量摘要。
+
+    Args:
+        value: 任意 value。
+
+    Returns:
+        是 JSON 标量时返回 `True`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return value is None or isinstance(value, (str, bool, int, float, Decimal))
 
 
 def _jsonable_value(value: object) -> object:

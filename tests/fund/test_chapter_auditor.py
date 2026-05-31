@@ -214,6 +214,95 @@ def test_programmatic_audit_blocks_non_asserted_facet_as_asserted_fact() -> None
     assert any("候选 facet" in issue.message for issue in result.issues)
 
 
+def test_non_asserted_facet_candidate_disclaimer_passes() -> None:
+    """验证候选/未断言 facet 说明不会被误杀。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 disclaimer 被错误阻断时抛出。
+    """
+
+    input_data = _audit_input(
+        markdown_suffix="\n候选/未断言信息：主动权益基金（价值风格）仅为候选标签，"
+        "当前结构化证据不足，不能写成本基金属于该 facet。",
+    )
+
+    result = audit_chapter_programmatic(input_data)
+
+    assert not any("候选 facet" in issue.message for issue in result.issues)
+
+
+def test_non_asserted_facet_reports_first_blocking_occurrence_per_unique_facet() -> None:
+    """验证同一候选 facet 多次断言只报告第一条但仍阻断。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当去重或阻断语义错误时抛出。
+    """
+
+    input_data = _audit_input(
+        markdown_suffix="\n这只基金是主动权益基金（价值风格）。\n本基金属于主动权益基金（价值风格）。",
+    )
+
+    result = audit_chapter_programmatic(input_data)
+    facet_issues = tuple(issue for issue in result.issues if "候选 facet" in issue.message)
+
+    assert result.status == "fail"
+    assert len(facet_issues) == 1
+
+
+def test_programmatic_audit_requires_required_output_marker_not_bare_item_text() -> None:
+    """验证裸 required output 文案不能替代 exact marker。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当裸文案错误通过 C2 时抛出。
+    """
+
+    input_data = _audit_input()
+    item = input_data.writer_input.chapter.contract.required_output_items[0]
+    markdown = input_data.draft.markdown.replace(f"<!-- required_output:{item} -->\n", "")
+    input_data = _audit_input(markdown_override=markdown)
+
+    result = audit_chapter_programmatic(input_data)
+
+    assert result.status == "fail"
+    assert any("required output item marker" in issue.message for issue in result.issues)
+
+
+def test_programmatic_audit_passes_required_output_marker_protocol() -> None:
+    """验证 exact required output marker 存在时不触发 marker C2。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当合法 marker 被误阻断时抛出。
+    """
+
+    result = audit_chapter_programmatic(_audit_input())
+
+    assert not any("required output item marker" in issue.message for issue in result.issues)
+
+
 def test_programmatic_audit_fails_l1_formula_without_nearby_anchor_marker() -> None:
     """验证 R=A+B-C 数字闭环断言缺邻近 marker 时触发 L1。
 
@@ -249,6 +338,68 @@ def test_programmatic_audit_allows_l1_formula_with_nearby_anchor_marker() -> Non
     """
 
     input_data = _audit_input(markdown_suffix="\n<!-- anchor:annual:110011:2024:basic_identity:1 -->\nA=R-B，因此 Alpha 为 2.10%。")
+
+    result = audit_chapter_programmatic(input_data)
+
+    assert not any(issue.rule_code == "L1" for issue in result.issues)
+
+
+def test_programmatic_audit_blocks_l1_a_minus_c_without_nearby_anchor_marker() -> None:
+    """验证 A-C 百分比闭环缺邻近 marker 时仍触发 L1，见模板第 2 章 R=A+B-C。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 A-C 未锚定百分比断言被错误放行时抛出。
+    """
+
+    input_data = _audit_input(markdown_suffix="\nA-C 后的净超额为 1.20%。")
+
+    result = audit_chapter_programmatic(input_data)
+
+    assert result.status == "fail"
+    assert any(issue.rule_code == "L1" for issue in result.issues)
+
+
+def test_programmatic_audit_blocks_l1_missing_wording_with_concrete_unanchored_percentage() -> None:
+    """验证缺口措辞不能包装具体无锚点闭环百分比，见模板第 2 章 R=A+B-C。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当“数据不足”包裹的具体百分比被错误放行时抛出。
+    """
+
+    input_data = _audit_input(markdown_suffix="\n数据不足，但 A=R-B 因此 Alpha 为 2.10%。")
+
+    result = audit_chapter_programmatic(input_data)
+
+    assert result.status == "fail"
+    assert any(issue.rule_code == "L1" for issue in result.issues)
+
+
+def test_programmatic_audit_allows_l1_formula_framework_without_concrete_percentage() -> None:
+    """验证仅解释公式框架且不含具体百分比时不触发 L1，见模板第 2 章 R=A+B-C。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当非数值闭环说明被误判为 L1 时抛出。
+    """
+
+    input_data = _audit_input(markdown_suffix="\n这里只说明 R=A+B-C 是归因框架，不填写具体百分比。")
 
     result = audit_chapter_programmatic(input_data)
 
@@ -396,6 +547,75 @@ def test_llm_audit_parse_failure_is_blocked() -> None:
     assert result.status == "blocked"
     assert result.accepted is False
     assert result.llm.issues[0].rule_code == "C1"
+    assert "PASS|chapter|no issues" in result.llm.issues[0].message
+
+
+def test_llm_audit_line_with_extra_separator_is_parse_failure() -> None:
+    """验证 LLM audit 行协议必须恰好三段，message 内不能夹带额外分隔符。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当额外分隔符被错误接受时抛出。
+    """
+
+    result = audit_chapter(
+        _audit_input(),
+        llm_client=_FakeAuditLLMClient("BLOCKING|chapter|reason|extra"),
+    )
+
+    assert result.status == "blocked"
+    assert result.llm.issues[0].issue_id == "llm:parse_failure"
+
+
+def test_llm_audit_prompt_spells_exact_pass_and_issue_line_protocol() -> None:
+    """验证 LLM 审计 prompt 明确 pass 与 issue 行协议。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 prompt 协议不完整时抛出。
+    """
+
+    client = _FakeAuditLLMClient("PASS|chapter|no issues")
+
+    result = audit_chapter_llm(_audit_input(), llm_client=client)
+
+    assert result.status == "pass"
+    request = client.requests[0]
+    assert "PASS|chapter|no issues" in request.user_prompt
+    assert "BLOCKING|<location>|<message>" in request.user_prompt
+    assert "禁止输出空行以外的额外文本" in request.user_prompt
+
+
+def test_llm_audit_blocks_markdown_or_explanatory_prefix() -> None:
+    """验证解释性前缀或 Markdown 行协议解析失败并 blocked。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当自由文本被错误接受时抛出。
+    """
+
+    result = audit_chapter_llm(
+        _audit_input(),
+        llm_client=_FakeAuditLLMClient("审计结果：\nPASS|chapter|no issues"),
+    )
+
+    assert result.status == "blocked"
+    assert result.issues[0].issue_id == "llm:parse_failure"
 
 
 def test_llm_audit_fake_issue_prevents_acceptance() -> None:
@@ -478,6 +698,7 @@ def _audit_input(
     chapter_id: int = 1,
     markdown_suffix: str = "",
     used_anchor_ids: tuple[str, ...] | None = None,
+    markdown_override: str | None = None,
 ) -> ChapterAuditInput:
     """构造章节审计输入。
 
@@ -485,6 +706,7 @@ def _audit_input(
         chapter_id: 模板章节编号。
         markdown_suffix: 附加 Markdown。
         used_anchor_ids: 显式草稿 anchor ids。
+        markdown_override: 显式覆盖 Markdown。
 
     Returns:
         测试用 `ChapterAuditInput`。
@@ -500,7 +722,7 @@ def _audit_input(
     anchor_ids = used_anchor_ids
     if anchor_ids is None:
         anchor_ids = (writer_input.chapter.evidence_anchors[0].anchor_id,)
-    markdown = _valid_markdown(writer_input, anchor_ids[0] if anchor_ids else "") + markdown_suffix
+    markdown = markdown_override or (_valid_markdown(writer_input, anchor_ids[0] if anchor_ids else "") + markdown_suffix)
     draft = ChapterDraft(
         chapter_id=writer_input.chapter.chapter_id,
         title=writer_input.chapter.title,
@@ -534,7 +756,10 @@ def _valid_markdown(writer_input: object, anchor_id: str) -> str:
     """
 
     chapter = writer_input.chapter
-    required_lines = "\n".join(f"- {item}: 已根据结构化事实说明。" for item in chapter.contract.required_output_items)
+    required_lines = "\n".join(
+        f"<!-- required_output:{item} -->\n- {item}: 已根据结构化事实说明。"
+        for item in chapter.contract.required_output_items
+    )
     evidence = ""
     if anchor_id:
         evidence = (

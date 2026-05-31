@@ -116,6 +116,97 @@ def test_incomplete_when_required_chapter_lacks_accepted_conclusion() -> None:
     assert result.report_markdown is None
 
 
+def test_partial_orchestration_with_all_rows_excludes_blocked_required_chapter() -> None:
+    """验证 partial 全章节矩阵只把 accepted 正文章节作为诊断来源。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 blocked 必需章节进入 accepted report/source 时抛出。
+    """
+
+    orchestration = _orchestration_result()
+    blocked_chapter = replace(
+        orchestration.chapter_results[2],
+        status="blocked",
+        stop_reason="missing_required_facts",
+        accepted_draft=None,
+        accepted_conclusion=None,
+        issues=("第 3 章缺少事实。",),
+        failure_category="fact_gap",
+    )
+    chapter_results = (
+        orchestration.chapter_results[0],
+        orchestration.chapter_results[1],
+        blocked_chapter,
+        *orchestration.chapter_results[3:],
+    )
+    orchestration = replace(
+        orchestration,
+        status="partial",
+        chapter_results=chapter_results,
+        accepted_conclusions=tuple(
+            run.accepted_conclusion for run in chapter_results if run.accepted_conclusion is not None
+        ),
+    )
+
+    result = assemble_final_chapters(_assembly_input(orchestration_result=orchestration))
+
+    assert result.status == "incomplete"
+    assert result.report_markdown is None
+    assert result.chapter0_markdown is None
+    assert result.chapter7_markdown is None
+    assert result.source_accepted_chapter_ids == (1, 2, 4, 5, 6)
+    assert 3 not in result.source_accepted_chapter_ids
+    reasons = {issue.reason for issue in result.issues}
+    assert "orchestration_not_accepted" in reasons
+    assert "chapter_not_accepted" in reasons
+    assert "missing_accepted_draft" in reasons
+    assert "missing_accepted_conclusion" in reasons
+
+
+def test_blocked_orchestration_with_all_rows_has_no_report_and_only_accepted_sources() -> None:
+    """验证 blocked 全章节矩阵 fail-closed，且 source 只保留 accepted 章节。"""
+
+    orchestration = _orchestration_result()
+    blocked_rows = tuple(
+        replace(
+            run,
+            status="blocked",
+            stop_reason="llm_timeout",
+            accepted_draft=None,
+            accepted_conclusion=None,
+            issues=(f"第 {run.chapter_id} 章 timeout。",),
+            failure_category="llm_timeout",
+        )
+        for run in orchestration.chapter_results
+    )
+    orchestration = replace(
+        orchestration,
+        status="blocked",
+        chapter_results=blocked_rows,
+        accepted_conclusions=(),
+        blocked_reasons=tuple(issue for run in blocked_rows for issue in run.issues),
+    )
+
+    result = assemble_final_chapters(_assembly_input(orchestration_result=orchestration))
+
+    assert result.status == "incomplete"
+    assert result.report_markdown is None
+    assert result.source_accepted_chapter_ids == ()
+    assert set(result.assembled_chapter_ids) == set()
+    assert {issue.reason for issue in result.issues} >= {
+        "orchestration_not_accepted",
+        "chapter_not_accepted",
+        "missing_accepted_draft",
+        "missing_accepted_conclusion",
+    }
+
+
 def test_incomplete_when_orchestration_has_duplicate_chapter() -> None:
     """验证 Gate 3 重复章节会 fail-closed。
 

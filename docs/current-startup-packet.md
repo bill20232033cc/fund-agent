@@ -15,11 +15,11 @@ Use `docs/reviews/` and `docs/archive/` only as evidence chain. They do not over
 
 | Field | State |
 |---|---|
-| Current phase | `MVP fund analysis report generation phase` |
-| Current gate | `MVP Gate 4 draft PR gate` |
+| Current phase | `MVP real-provider stabilization and score-loop phase` |
+| Current gate | `MVP provider runtime budget and prompt-cost root-cause calibration gate` |
 | Current gate classification | `heavy` |
-| Current gate status | `draft PR #21 updated; resolving origin/main merge conflicts locally before final validation/push` |
-| Next entry point | `MVP Gate 4 draft PR merge-conflict reconciliation validation` |
+| Current gate status | `blocked with root cause narrowed`; Gate A writer/auditor contract hardening accepted locally, provider runtime timeout hardening accepted locally, prompt-contract calibration accepted locally, writer prompt contract diagnostic narrowing accepted locally, writer marker syntax repair accepted locally, programmatic audit L1 calibration accepted locally, provider runtime timeout follow-up accepted as diagnostic/code hardening, independent body chapter execution accepted locally, real provider independent body matrix rerun diagnostic complete, prompt-cost/root-cause calibration accepted locally; real provider smoke still blocked by `provider_runtime_timeout_small_prompt`; Gate C score-loop design accepted |
+| Next entry point | `MVP provider endpoint small-prompt runtime budget calibration gate` |
 | Control truth | `docs/implementation-control.md` |
 | Design truth | `docs/design.md` |
 | Accepted plan commit | `beb6891` |
@@ -29,7 +29,7 @@ Use `docs/reviews/` and `docs/archive/` only as evidence chain. They do not over
 | Accepted aggregate review commit | `7a3dab9` |
 | Accepted closeout entrypoint commit | `b0e68e0` |
 
-The user authorized the draft PR gate. PR #21 is open as a draft and has been updated to the MVP Route C / Gate 4 scope. The current owner must finish the local `origin/main` merge-conflict reconciliation, run full validation, push the reconciliation commit, and then re-check PR mergeability. Release-maintenance and golden-promotion blockers are residuals for later gates, not the active mainline.
+The user authorized the draft PR gate earlier, but this phase made no external PR changes. PR #21 remains draft/open. Provider auth/config verification passes for the current MiMo-compatible configuration, Gate A hardened writer/auditor protocol, provider runtime timeout hardening is accepted locally, and L1 calibration is accepted locally. Gate B remains blocked because real provider smoke still exits `1` without a complete 0-7 report. Independent body chapter execution is accepted locally and the latest real provider reruns prove chapters 1-6 now produce independent rows (`generated_chapter_ids=[1,2,3,4,5,6]`, `skipped_chapter_ids=[]`) instead of synthetic `dependency_missing`. Prompt-cost calibration proves explicit CLI `--use-llm` compact mode reduces chapter 2/6 writer prompts from approx `26086` / `29078` tokens to approx `1590` / `2110` tokens. The current unique blocker is `provider_runtime_timeout_small_prompt`: chapters 1-6 writer calls are all below `3000` approximate prompt tokens yet time out under the bounded `60s x2` writer budget. This is not provider config/auth, large prompt cost, prompt contract, audit parse, fact gap or deterministic fallback. Gate C score-loop design is accepted as design-only and must not be treated as readiness/golden/quality-gate pass. Release-maintenance and golden-promotion blockers remain residuals for later gates, not the active mainline.
 
 ## 3. Current Implementation Facts
 
@@ -57,6 +57,16 @@ The user authorized the draft PR gate. PR #21 is open as a draft and has been up
 - CLI now exposes `fund-analysis analyze --use-llm` as an explicit opt-in provider-backed path. With complete typed env config, CLI builds Service-owned `openai_compatible` HTTP chat-completions writer/auditor clients over existing `httpx` and calls `FundAnalysisService.analyze_with_llm()`.
 - Missing/invalid LLM config and provider construction fail before Service execution with exit code `1` and empty stdout. Provider runtime failures, writer/auditor blocked status, partial orchestration and incomplete final assembly also fail closed with exit code `1`; there is no deterministic fallback.
 - Pytest coverage for the provider path uses fake env mappings, `httpx.MockTransport` and monkeypatch/test doubles; no live provider smoke or real API key is required.
+- Gate A hardened the LLM writer/auditor path for real providers: writer requires fixed body sections and exact `required_output` markers, parser preserves `missing_required_structure`, `missing_required_output_marker`, `unknown_anchor`, `response_too_long` and `response_incomplete`, auditor parse failure remains blocked, regenerate receives typed `ChapterRepairContext`, and provider runtime exceptions classify to `llm_timeout`, `llm_rate_limited`, `llm_malformed_response` or `llm_network_error`.
+- Provider runtime timeout hardening added typed `FUND_AGENT_LLM_TIMEOUT_MAX_ATTEMPTS` and `FUND_AGENT_LLM_TIMEOUT_BACKOFF_SECONDS`, timeout-only bounded retry, provider-safe diagnostics enriched by Service with chapter identity, and CLI incomplete-result first failed chapter summary.
+- Prompt-contract calibration added code-level failure categories `llm_timeout` and `audit_rule_too_strict`, `ChapterRunResult.failure_category`, CLI `first_failed_category`, stricter auditor line protocol parsing, and shorter writer output-contract guidance while preserving fail-closed safety boundaries.
+- Writer prompt contract diagnostic narrowing added safe `failure_subcategory`, `ChapterPromptContractDiagnostic` typed counters, CLI `first_failed_subcategory`, and `serialize_chapter_prompt_contract_diagnostics()` without storing prompt, draft, raw provider response, raw audit response, API key or Authorization header.
+- Writer marker syntax repair replaced the missing-marker prompt guidance with an explicit contract block and kept parser / allowed missing reasons strict.
+- Programmatic audit L1 calibration added safe `l1_numerical_closure` taxonomy and L1 repair guidance without relaxing `_audit_numerical_closure()` or anchor proximity; L1 unsafe cases remain fail-closed and candidate facet / forbidden phrase precedence stays higher.
+- Provider runtime timeout follow-up added `serialize_chapter_runtime_diagnostics()`, provider-bound prompt/runtime cost scalar diagnostics, and CLI safe runtime summaries. It omits `message`, `model_name`, prompt, draft, raw provider response, raw audit response, API key and Authorization header from serialized evidence.
+- Independent body chapter execution accepted locally: template chapters 1-6 now each run their own writer/auditor/repair attempts from the same `ChapterFactProjection`; prior body chapter failure no longer skips later body chapters; `dependency_missing` is reserved for a true writer dependency stop reason. CLI incomplete output now includes a safe all-chapter matrix; final assembly remains fail-closed and cannot turn a partial matrix into an accepted report.
+- Latest prompt-cost/root-cause calibration rerun for `006597 / 2024 --use-llm`: CLI exit `1`, stdout empty, no deterministic fallback, `orchestration_status=partial`, `final_assembly_status=incomplete`; same-source Service diagnostic with `prompt_payload_mode=compact` has `generated_chapter_ids=[1,2,3,4,5,6]`, `skipped_chapter_ids=[]`, `accepted_chapter_ids=[]`, `report_markdown_present=false`. Primary blocker is `provider_runtime_timeout_small_prompt`: chapters 1-6 all fail writer timeout with approximate prompt tokens `2109`, `1590`, `2575`, `1274`, `2518`, `2110` under `60s x2` bounded writer budget. Chapter 2/6 former large prompt cost is reduced from approx `26086` / `29078` to `1590` / `2110`.
+- Gate C score-loop design is accepted as design-only: it distinguishes `extraction_score`, `chapter_fact_score` and `chapter_generation_score`, routes provider runtime timeout as `not_scored` / `blocked_provider_runtime`, and remains separate from existing golden / fixtures / score / quality gate / readiness semantics.
 - There is no Host/Agent/dayu runtime in the production path.
 
 ## 4. Route C Accepted Future Route
@@ -71,7 +81,7 @@ Route C is the accepted MVP LLM report generation route. Gates 1-3 and Gate 4 Sl
 | Gate 4 | Slice 4A `final_chapter_assembler`, Slice 4B Service `analyze_with_llm`, Slice 4C CLI `--use-llm` and Slice 4D provider construction accepted locally; aggregate review accepted |
 | Gate 5 | Optional `dayu.host` / `dayu.engine` integration |
 
-Gate 4 Slice 4D accepted only typed env config, Service-owned `openai_compatible` provider construction and CLI wiring into `analyze_with_llm()`. It did not implement Host/Agent/dayu integration, full FundToolService, retry/backoff, live provider smoke, multi-model writer/auditor split, chapter 0/7 LLM polish or Evidence Confirm.
+Gate 4 Slice 4D accepted typed env config, Service-owned `openai_compatible` provider construction and CLI wiring into `analyze_with_llm()`. Provider runtime timeout hardening later added timeout-only bounded retry/backoff and safe diagnostics. The route still does not implement Host/Agent/dayu integration, full FundToolService, live provider smoke acceptance, multi-model writer/auditor split, chapter 0/7 LLM polish or Evidence Confirm.
 
 ## 5. Boundary Guardrails
 
@@ -100,7 +110,9 @@ Gate 4 Slice 4D accepted only typed env config, Service-owned `openai_compatible
 - Release-maintenance long ledger is preserved by links only.
 - Host/Agent/dayu integration is deferred to Route C Gate 5.
 - Deterministic renderer remains the default production behavior; provider-backed LLM report generation is explicit `--use-llm` opt-in only.
-- Retry/backoff, live provider smoke, multi-model writer/auditor split, chapter 0/7 LLM polish and Evidence Confirm remain future residuals.
+- Live provider smoke acceptance, multi-model writer/auditor split, chapter 0/7 LLM polish and Evidence Confirm remain future residuals.
+- Local real provider smoke for PR #21 remains blocked: current MiMo provider auth passes; provider timeout hardening, prompt-contract calibration, diagnostic narrowing, marker syntax repair, L1 calibration, provider runtime timeout follow-up, independent body execution and prompt-cost/root-cause calibration are accepted locally. Latest compact-mode rerun fails closed before complete chapters 0-7 with primary blocker `provider_runtime_timeout_small_prompt`; no deterministic fallback and no partial accepted report.
+- Future score-loop implementation must first clarify `ChapterFactProjection` naming, its relationship to existing `extraction_score.py` / `extraction_score_service.py`, weights/value semantics, `not_scored_reason` enum, score CLI exit code, and candidate facet L2 source. It must not start before Gate B timeout is rerun or handled.
 - Unrelated untracked workspace files are not accepted evidence unless a later controller gate accepts them.
 
 ## 7. Prohibited Actions
@@ -174,6 +186,39 @@ Gate 4 Slice 4D accepted only typed env config, Service-owned `openai_compatible
 - Gate 4 Slice 4D provider plan: `docs/reviews/mvp-gate4-provider-construction-plan-20260530.md`
 - Gate 4 Slice 4D provider plan reviews: `docs/reviews/mvp-gate4-provider-construction-plan-review-mimo-20260530.md`; `docs/reviews/mvp-gate4-provider-construction-plan-review-glm-20260530.md`
 - Gate 4 Slice 4D provider plan decision: `docs/reviews/mvp-gate4-provider-construction-plan-decision-20260530.md`
+- MVP local acceptance / real provider smoke plan: `docs/reviews/mvp-local-acceptance-real-provider-smoke-plan-20260530.md`
+- MVP local acceptance / real provider smoke evidence: `docs/reviews/mvp-local-acceptance-real-provider-smoke-evidence-20260530.md`
+- MVP local acceptance / real provider smoke review: `docs/reviews/mvp-local-acceptance-real-provider-smoke-review-zeno-20260530.md`
+- MVP local acceptance / real provider smoke controller judgment: `docs/reviews/mvp-local-acceptance-real-provider-smoke-controller-judgment-20260530.md`
+- MVP local acceptance / real provider smoke rerun evidence: `docs/reviews/mvp-local-acceptance-real-provider-smoke-rerun-evidence-20260530.md`
+- MVP local acceptance / real provider smoke rerun review: `docs/reviews/mvp-local-acceptance-real-provider-smoke-rerun-review-lovelace-20260530.md`
+- MVP local acceptance / real provider smoke rerun controller judgment: `docs/reviews/mvp-local-acceptance-real-provider-smoke-rerun-controller-judgment-20260530.md`
+- MVP real provider audit-block diagnostic: `docs/reviews/mvp-real-provider-audit-block-diagnostic-20260530.md`
+- MVP real provider audit-block diagnostic controller judgment: `docs/reviews/mvp-real-provider-audit-block-diagnostic-controller-judgment-20260530.md`
+- MVP provider auth/config verification: `docs/reviews/mvp-provider-auth-config-verification-20260531.md`
+- MVP provider auth/config verification controller judgment: `docs/reviews/mvp-provider-auth-config-verification-controller-judgment-20260531.md`
+- MVP writer/auditor contract hardening controller judgment: `docs/reviews/mvp-llm-writer-auditor-contract-hardening-controller-judgment-20260531.md`
+- MVP real provider smoke acceptance controller judgment: `docs/reviews/mvp-real-provider-smoke-acceptance-controller-judgment-20260531.md`
+- MVP real provider independent body matrix evidence: `docs/reviews/mvp-real-provider-smoke-independent-body-matrix-evidence-20260531.md`
+- MVP real provider independent body matrix reviews: `docs/reviews/mvp-real-provider-smoke-independent-body-matrix-review-mimo-20260531.md`; `docs/reviews/mvp-real-provider-smoke-independent-body-matrix-review-glm-20260531.md`
+- MVP real provider independent body matrix controller judgment: `docs/reviews/mvp-real-provider-smoke-independent-body-matrix-controller-judgment-20260531.md`
+- MVP chapter generation score-loop design controller judgment: `docs/reviews/mvp-chapter-generation-score-loop-design-controller-judgment-20260531.md`
+- MVP real-provider stabilization and score-loop phase judgment: `docs/reviews/mvp-real-provider-stabilization-score-loop-phase-controller-judgment-20260531.md`
+- MVP provider runtime timeout hardening plan: `docs/reviews/mvp-provider-runtime-timeout-hardening-plan-20260531.md`
+- MVP provider runtime timeout hardening implementation evidence: `docs/reviews/mvp-provider-runtime-timeout-hardening-implementation-evidence-20260531.md`
+- MVP provider runtime timeout hardening code reviews: `docs/reviews/mvp-provider-runtime-timeout-hardening-code-review-glm-20260531.md`; `docs/reviews/mvp-provider-runtime-timeout-hardening-code-rereview-mimo-20260531.md`
+- MVP provider runtime timeout hardening controller judgment: `docs/reviews/mvp-provider-runtime-timeout-hardening-controller-judgment-20260531.md`
+- MVP prompt-contract calibration plan: `docs/reviews/mvp-real-provider-smoke-prompt-contract-calibration-plan-20260531.md`
+- MVP prompt-contract calibration implementation evidence: `docs/reviews/mvp-real-provider-smoke-prompt-contract-calibration-implementation-evidence-20260531.md`
+- MVP prompt-contract calibration code reviews: `docs/reviews/mvp-real-provider-smoke-prompt-contract-calibration-code-review-mimo-20260531.md`; `docs/reviews/mvp-real-provider-smoke-prompt-contract-calibration-code-review-glm-20260531.md`
+- MVP prompt-contract calibration controller judgment: `docs/reviews/mvp-real-provider-smoke-prompt-contract-calibration-controller-judgment-20260531.md`
+- MVP provider runtime budget and prompt-cost root-cause calibration plan: `docs/reviews/mvp-provider-runtime-budget-prompt-cost-root-cause-calibration-plan-20260531.md`
+- MVP provider runtime budget and prompt-cost root-cause calibration plan reviews: `docs/reviews/mvp-provider-runtime-budget-prompt-cost-root-cause-calibration-plan-review-mimo-20260531.md`; `docs/reviews/mvp-provider-runtime-budget-prompt-cost-root-cause-calibration-plan-review-ds-20260531.md`
+- MVP provider runtime budget and prompt-cost root-cause calibration implementation evidence: `docs/reviews/mvp-provider-runtime-budget-prompt-cost-root-cause-calibration-implementation-evidence-20260531.md`
+- MVP provider runtime budget and prompt-cost root-cause calibration code reviews: `docs/reviews/mvp-provider-runtime-budget-prompt-cost-root-cause-calibration-code-review-mimo-20260531.md`; `docs/reviews/mvp-provider-runtime-budget-prompt-cost-root-cause-calibration-code-review-ds-20260531.md`
+- MVP provider runtime budget and prompt-cost root-cause calibration validation evidence: `docs/reviews/mvp-provider-runtime-budget-prompt-cost-root-cause-calibration-validation-evidence-20260531.md`
+- MVP provider runtime budget and prompt-cost root-cause calibration deep review: `docs/reviews/mvp-provider-runtime-budget-prompt-cost-root-cause-calibration-deepreview-20260531.md`
+- MVP provider runtime budget and prompt-cost root-cause calibration controller judgment: `docs/reviews/mvp-provider-runtime-budget-prompt-cost-root-cause-calibration-controller-judgment-20260531.md`
 - Release-maintenance roadmap summary: `docs/reviews/release-maintenance-phase-roadmap-consolidation-20260529.md`
 - Overnight release-maintenance closeout: `docs/reviews/overnight-release-maintenance-closeout-20260529.md`
 - Historical control snapshot: `docs/archive/implementation-control-history-20260525.md`
