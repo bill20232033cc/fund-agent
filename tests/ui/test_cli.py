@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from decimal import Decimal
 from pathlib import Path
 
@@ -16,10 +17,20 @@ from fund_agent.fund.data.thermometer_types import PePbHistory, PePbPoint
 from fund_agent.fund.quality_gate import QualityGateIssue, QualityGateResult
 from fund_agent.services import (
     ChapterOrchestrationPolicy,
+    FinalAssemblyPolicy,
+    FundLLMExecutionContract,
+    FundLLMExecutionRequest,
+    FundLLMRuntimePlan,
+    ProviderRuntimeBudget,
     QualityGateBlockedError,
     QualityGateNotRunBlockedError,
+    QualityFailClosedPolicy,
+    QualityPolicyDeclaration,
+    SafeDiagnosticPolicy,
     ThermometerBatchResult,
     ThermometerReading,
+    derive_host_timeout_seconds,
+    normalize_fund_llm_analysis_input,
 )
 from fund_agent.ui import cli
 
@@ -115,10 +126,9 @@ class _FakeService:
     """CLI 测试用成功 Service。"""
 
     last_request = None
+    last_execution_request = None
     analyze_called = False
-    analyze_with_llm_called = False
-    last_llm_clients = None
-    last_chapter_policy = None
+    analyze_with_llm_execution_called = False
     last_host_context = None
 
     async def analyze(self, request):  # type: ignore[no-untyped-def]
@@ -138,20 +148,16 @@ class _FakeService:
         type(self).last_request = request
         return _FakeResult(report_markdown="# 0. 投资要点概览\n\n# 7. 是否值得持有——最终判断\n")
 
-    async def analyze_with_llm(  # type: ignore[no-untyped-def]
+    async def analyze_with_llm_execution(  # type: ignore[no-untyped-def]
         self,
-        request,
-        *,
-        llm_clients,
-        chapter_policy,
+        execution_request,
         host_context=None,
     ):
         """记录 LLM 分析调用，测试 fail-closed 时不得触发。
 
         Args:
-            request: CLI 构造的 Service 请求。
-            llm_clients: 显式注入的 LLM 客户端。
-            chapter_policy: 显式注入的章节编排策略。
+            execution_request: Service-owned typed LLM 执行请求。
+            host_context: Host 注入的运行上下文。
 
         Returns:
             fake Service 返回值。
@@ -160,10 +166,8 @@ class _FakeService:
             无显式抛出。
         """
 
-        type(self).analyze_with_llm_called = True
-        type(self).last_request = request
-        type(self).last_llm_clients = llm_clients
-        type(self).last_chapter_policy = chapter_policy
+        type(self).analyze_with_llm_execution_called = True
+        type(self).last_execution_request = execution_request
         type(self).last_host_context = host_context
         return _FakeLLMResult(
             final_assembly_result=_FakeLLMFinalAssemblyResult(
@@ -400,20 +404,16 @@ class _FakeLLMBlockedAnalysisService:
 
         raise AssertionError("deterministic analyze must not be called")
 
-    async def analyze_with_llm(  # type: ignore[no-untyped-def]
+    async def analyze_with_llm_execution(  # type: ignore[no-untyped-def]
         self,
-        request,
-        *,
-        llm_clients,
-        chapter_policy,
+        execution_request,
         host_context=None,
     ):
         """抛出结构化 quality gate 阻断异常。
 
         Args:
-            request: CLI 构造的 Service 请求。
-            llm_clients: 显式注入的 LLM 客户端。
-            chapter_policy: 显式注入的章节编排策略。
+            execution_request: Service-owned typed LLM 执行请求。
+            host_context: Host 注入的运行上下文。
 
         Returns:
             无返回值。
@@ -443,20 +443,16 @@ class _FakeLLMNotRunBlockedAnalysisService:
 
         raise AssertionError("deterministic analyze must not be called")
 
-    async def analyze_with_llm(  # type: ignore[no-untyped-def]
+    async def analyze_with_llm_execution(  # type: ignore[no-untyped-def]
         self,
-        request,
-        *,
-        llm_clients,
-        chapter_policy,
+        execution_request,
         host_context=None,
     ):
         """抛出 quality gate 未运行阻断异常。
 
         Args:
-            request: CLI 构造的 Service 请求。
-            llm_clients: 显式注入的 LLM 客户端。
-            chapter_policy: 显式注入的章节编排策略。
+            execution_request: Service-owned typed LLM 执行请求。
+            host_context: Host 注入的运行上下文。
 
         Returns:
             无返回值。
@@ -471,20 +467,16 @@ class _FakeLLMNotRunBlockedAnalysisService:
 class _IncompleteLLMService(_FakeService):
     """返回 incomplete LLM 结果的 fake Service。"""
 
-    async def analyze_with_llm(  # type: ignore[no-untyped-def]
+    async def analyze_with_llm_execution(  # type: ignore[no-untyped-def]
         self,
-        request,
-        *,
-        llm_clients,
-        chapter_policy,
+        execution_request,
         host_context=None,
     ):
         """记录调用并返回 incomplete final assembly。
 
         Args:
-            request: CLI 构造的 Service 请求。
-            llm_clients: 显式注入的 LLM 客户端。
-            chapter_policy: 显式注入的章节编排策略。
+            execution_request: Service-owned typed LLM 执行请求。
+            host_context: Host 注入的运行上下文。
 
         Returns:
             incomplete fake LLM result。
@@ -493,10 +485,9 @@ class _IncompleteLLMService(_FakeService):
             无显式抛出。
         """
 
-        type(self).analyze_with_llm_called = True
-        type(self).last_request = request
-        type(self).last_llm_clients = llm_clients
-        type(self).last_chapter_policy = chapter_policy
+        type(self).analyze_with_llm_execution_called = True
+        type(self).last_execution_request = execution_request
+        type(self).last_host_context = host_context
         return _FakeLLMResult(
             final_assembly_result=_FakeLLMFinalAssemblyResult(
                 status="blocked",
@@ -510,20 +501,16 @@ class _IncompleteLLMService(_FakeService):
 class _L1IncompleteLLMService(_FakeService):
     """返回 L1 programmatic audit 分类 incomplete LLM 结果的 fake Service。"""
 
-    async def analyze_with_llm(  # type: ignore[no-untyped-def]
+    async def analyze_with_llm_execution(  # type: ignore[no-untyped-def]
         self,
-        request,
-        *,
-        llm_clients,
-        chapter_policy,
+        execution_request,
         host_context=None,
     ):
         """记录调用并返回 L1 数字闭环阻断结果。
 
         Args:
-            request: CLI 构造的 Service 请求。
-            llm_clients: 显式注入的 LLM 客户端。
-            chapter_policy: 显式注入的章节编排策略。
+            execution_request: Service-owned typed LLM 执行请求。
+            host_context: Host 注入的运行上下文。
 
         Returns:
             incomplete fake LLM result。
@@ -532,10 +519,9 @@ class _L1IncompleteLLMService(_FakeService):
             无显式抛出。
         """
 
-        type(self).analyze_with_llm_called = True
-        type(self).last_request = request
-        type(self).last_llm_clients = llm_clients
-        type(self).last_chapter_policy = chapter_policy
+        type(self).analyze_with_llm_execution_called = True
+        type(self).last_execution_request = execution_request
+        type(self).last_host_context = host_context
         return _FakeLLMResult(
             final_assembly_result=_FakeLLMFinalAssemblyResult(
                 status="blocked",
@@ -560,20 +546,16 @@ class _L1IncompleteLLMService(_FakeService):
 class _TimeoutLLMService(_FakeService):
     """返回 timeout 分类 incomplete LLM 结果的 fake Service。"""
 
-    async def analyze_with_llm(  # type: ignore[no-untyped-def]
+    async def analyze_with_llm_execution(  # type: ignore[no-untyped-def]
         self,
-        request,
-        *,
-        llm_clients,
-        chapter_policy,
+        execution_request,
         host_context=None,
     ):
         """记录调用并返回 llm_timeout 阻断结果。
 
         Args:
-            request: CLI 构造的 Service 请求。
-            llm_clients: 显式注入的 LLM 客户端。
-            chapter_policy: 显式注入的章节编排策略。
+            execution_request: Service-owned typed LLM 执行请求。
+            host_context: Host 注入的运行上下文。
 
         Returns:
             incomplete fake LLM result。
@@ -582,10 +564,9 @@ class _TimeoutLLMService(_FakeService):
             无显式抛出。
         """
 
-        type(self).analyze_with_llm_called = True
-        type(self).last_request = request
-        type(self).last_llm_clients = llm_clients
-        type(self).last_chapter_policy = chapter_policy
+        type(self).analyze_with_llm_execution_called = True
+        type(self).last_execution_request = execution_request
+        type(self).last_host_context = host_context
         return _FakeLLMResult(
             final_assembly_result=_FakeLLMFinalAssemblyResult(
                 status="blocked",
@@ -648,20 +629,16 @@ class _TimeoutLLMService(_FakeService):
 class _MatrixIncompleteLLMService(_FakeService):
     """返回多章节 mixed matrix 的 incomplete LLM 结果。"""
 
-    async def analyze_with_llm(  # type: ignore[no-untyped-def]
+    async def analyze_with_llm_execution(  # type: ignore[no-untyped-def]
         self,
-        request,
-        *,
-        llm_clients,
-        chapter_policy,
+        execution_request,
         host_context=None,
     ):
         """记录调用并返回含 accepted/failed 行的 all-chapter matrix。
 
         Args:
-            request: CLI 构造的 Service 请求。
-            llm_clients: 显式注入的 LLM 客户端。
-            chapter_policy: 显式注入的章节编排策略。
+            execution_request: Service-owned typed LLM 执行请求。
+            host_context: Host 注入的运行上下文。
 
         Returns:
             incomplete fake LLM result。
@@ -670,10 +647,9 @@ class _MatrixIncompleteLLMService(_FakeService):
             无显式抛出。
         """
 
-        type(self).analyze_with_llm_called = True
-        type(self).last_request = request
-        type(self).last_llm_clients = llm_clients
-        type(self).last_chapter_policy = chapter_policy
+        type(self).analyze_with_llm_execution_called = True
+        type(self).last_execution_request = execution_request
+        type(self).last_host_context = host_context
         return _FakeLLMResult(
             final_assembly_result=_FakeLLMFinalAssemblyResult(
                 status="incomplete",
@@ -745,12 +721,9 @@ class _FailingService:
 class _FailingLLMService(_FakeService):
     """CLI 测试用 Host 托管 LLM 失败 Service。"""
 
-    async def analyze_with_llm(  # type: ignore[no-untyped-def]
+    async def analyze_with_llm_execution(  # type: ignore[no-untyped-def]
         self,
-        request,
-        *,
-        llm_clients,
-        chapter_policy,
+        execution_request,
         host_context=None,
     ):
         """抛出固定 LLM 异常，验证 Host fail-closed 输出不被二次包装。"""
@@ -1053,44 +1026,119 @@ class _FakeLLMClients:
     """CLI 测试用 LLM clients 标记对象。"""
 
 
-def _fake_load_llm_config() -> _FakeLLMConfig:
-    """返回 fake typed LLM config。
+def _fake_llm_execution_request(
+    request,
+) -> FundLLMExecutionRequest:
+    """构造 CLI 测试用 typed LLM execution request。
 
     Args:
-        无。
+        request: CLI 构造的分析请求。
 
     Returns:
-        fake LLM config。
+        Service-owned typed LLM execution request。
 
     Raises:
-        无显式抛出。
+        ValueError: 当输入无法构造执行契约时抛出。
     """
 
-    return _FakeLLMConfig()
+    analysis_input = normalize_fund_llm_analysis_input(request)
+    quality_policy = QualityPolicyDeclaration(
+        quality_gate_policy="block",
+        deterministic_fallback_allowed=False,
+    )
+    contract = FundLLMExecutionContract(
+        fund_code=analysis_input.fund_code,
+        report_year=analysis_input.report_year,
+        analysis_input=analysis_input,
+        quality_policy=quality_policy,
+        llm_opt_in_mode="explicit_cli_flag",
+    )
+    provider_runtime_budget = ProviderRuntimeBudget(
+        writer_timeout_seconds=7.0,
+        auditor_timeout_seconds=11.0,
+        repair_timeout_seconds=13.0,
+        timeout_max_attempts=2,
+        timeout_backoff_seconds=3.0,
+        max_output_chars=_FakeLLMConfig.max_output_chars,
+        prompt_payload_mode="compact",
+    )
+    runtime_plan = FundLLMRuntimePlan(
+        chapter_policy=ChapterOrchestrationPolicy(
+            max_output_chars=_FakeLLMConfig.max_output_chars,
+            prompt_payload_mode="compact",
+        ),
+        assembly_policy=FinalAssemblyPolicy(),
+        provider_runtime_budget=provider_runtime_budget,
+        quality_fail_closed_policy=QualityFailClosedPolicy(
+            quality_gate_policy="block",
+            deterministic_fallback_allowed=False,
+        ),
+        safe_diagnostic_policy=SafeDiagnosticPolicy(),
+        host_timeout_seconds=derive_host_timeout_seconds(
+            provider_runtime_budget,
+            chapter_count=6,
+        ),
+    )
+    return FundLLMExecutionRequest(
+        contract=contract,
+        runtime_plan=runtime_plan,
+        llm_clients=_FakeLLMClients(),  # type: ignore[arg-type]
+    )
 
 
-def _fake_build_llm_clients(config):  # type: ignore[no-untyped-def]
-    """返回 fake LLM clients，并记录传入 config。
+def _fake_build_fund_llm_execution_request(
+    request,
+    *,
+    opt_in_mode="explicit_cli_flag",
+):  # type: ignore[no-untyped-def]
+    """记录 opt-in 模式并返回 fake typed execution request。
 
     Args:
-        config: CLI helper 读取到的 fake config。
+        request: CLI 构造的分析请求。
+        opt_in_mode: CLI 显式启用 LLM 的 opt-in 模式。
 
     Returns:
-        fake LLM clients。
+        fake typed execution request。
 
     Raises:
-        AssertionError: 当 config 不是测试配置时抛出。
+        AssertionError: 当 CLI 未传显式 opt-in 模式时抛出。
     """
 
-    assert isinstance(config, _FakeLLMConfig)
-    return _FakeLLMClients()
+    assert opt_in_mode == "explicit_cli_flag"
+    return _fake_llm_execution_request(request)
 
 
-def _raise_llm_construction_error(config):  # type: ignore[no-untyped-def]
-    """模拟 provider clients 构造失败。
+def _raise_llm_config_error(
+    request,
+    *,
+    opt_in_mode="explicit_cli_flag",
+):  # type: ignore[no-untyped-def]
+    """模拟 Service helper 在进入 Host 前发现 LLM 配置缺失。
 
     Args:
-        config: CLI helper 读取到的 fake config。
+        request: 未使用。
+        opt_in_mode: 未使用。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        LLMProviderConfigError: 始终抛出。
+    """
+
+    raise cli.LLMProviderConfigError("missing FUND_AGENT_LLM_PROVIDER")
+
+
+def _raise_llm_construction_error(
+    request,
+    *,
+    opt_in_mode="explicit_cli_flag",
+):  # type: ignore[no-untyped-def]
+    """模拟 Service helper 在进入 Host 前构造 provider 失败。
+
+    Args:
+        request: 未使用。
+        opt_in_mode: 未使用。
 
     Returns:
         无返回值。
@@ -1102,8 +1150,134 @@ def _raise_llm_construction_error(config):  # type: ignore[no-untyped-def]
     raise cli.LLMProviderConstructionError("fixture construction failure")
 
 
-def _forbid_llm_config():  # type: ignore[no-untyped-def]
-    """默认 analyze path 不应读取 LLM 配置。
+def _forbid_llm_execution_request_builder(
+    request,
+    *,
+    opt_in_mode="explicit_cli_flag",
+):  # type: ignore[no-untyped-def]
+    """默认或 unsupported path 不应构造 LLM execution request。
+
+    Args:
+        request: 未使用。
+        opt_in_mode: 未使用。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 始终抛出。
+    """
+
+    raise AssertionError("LLM execution request builder must not be called")
+
+
+class _FakeHostRuntimeRunner:
+    """记录 CLI 传给 Host 的生命周期参数并同步执行 operation。"""
+
+    run_called = False
+    last_operation_name = None
+    last_operation = None
+    last_timeout_seconds = None
+    last_session_id = None
+    forbidden_business_args: dict[str, object] = {}
+
+    def run_sync(  # type: ignore[no-untyped-def]
+        self,
+        *,
+        operation_name,
+        operation,
+        timeout_seconds=None,
+        session_id=None,
+        **kwargs,
+    ):
+        """执行 fake Host run 并记录 CLI 传入的 generic 参数。
+
+        Args:
+            operation_name: Host 操作名。
+            operation: Host 托管闭包。
+            timeout_seconds: Host run timeout。
+            session_id: Host session id。
+            kwargs: 不允许出现的额外业务字段。
+
+        Returns:
+            fake HostRunResult。
+
+        Raises:
+            AssertionError: 当 CLI 向 Host 传入业务字段时抛出。
+        """
+
+        assert kwargs == {}
+        type(self).run_called = True
+        type(self).last_operation_name = operation_name
+        type(self).last_operation = operation
+        type(self).last_timeout_seconds = timeout_seconds
+        type(self).last_session_id = session_id
+        type(self).forbidden_business_args = kwargs
+        host_context = _FakeHostContext(
+            run_id="host_run_fake",
+            timeout_seconds=timeout_seconds,
+        )
+        operation_result = operation(host_context)
+        now = datetime.now(timezone.utc)
+        return cli.HostRunResult(
+            run_id=host_context.run_id,
+            status=cli.HostRunStatus.SUCCEEDED,
+            started_at=now,
+            deadline_at=None,
+            completed_at=now,
+            elapsed_ms=0,
+            operation_result=operation_result,
+            timeout_classification=None,
+            safe_diagnostics={},
+            events=(),
+        )
+
+
+class _RaisingHostRuntimeRunner:
+    """默认或 unsupported path 不应启动 Host。"""
+
+    run_called = False
+
+    def run_sync(self, **kwargs):  # type: ignore[no-untyped-def]
+        """记录调用并抛出断言错误。
+
+        Args:
+            kwargs: Host run 参数。
+
+        Returns:
+            无返回值。
+
+        Raises:
+            AssertionError: 始终抛出。
+        """
+
+        type(self).run_called = True
+        raise AssertionError("HostRuntimeRunner.run_sync must not be called")
+
+
+@dataclass(slots=True)
+class _FakeHostContext:
+    """CLI LLM 测试用 Host context。"""
+
+    run_id: str
+    timeout_seconds: int | None
+
+    def record_diagnostic(self, **diagnostics):  # type: ignore[no-untyped-def]
+        """记录 fake Host 诊断。
+
+        Args:
+            diagnostics: 安全诊断字段。
+
+        Returns:
+            无返回值。
+
+        Raises:
+            无显式抛出。
+        """
+
+
+def _reset_fake_host_runner() -> None:
+    """重置 fake Host runner 记录。
 
     Args:
         无。
@@ -1112,26 +1286,16 @@ def _forbid_llm_config():  # type: ignore[no-untyped-def]
         无返回值。
 
     Raises:
-        AssertionError: 始终抛出。
+        无显式抛出。
     """
 
-    raise AssertionError("default analyze must not read LLM config")
-
-
-def _forbid_llm_clients(config):  # type: ignore[no-untyped-def]
-    """默认 analyze path 不应构造 LLM provider。
-
-    Args:
-        config: 未使用。
-
-    Returns:
-        无返回值。
-
-    Raises:
-        AssertionError: 始终抛出。
-    """
-
-    raise AssertionError("default analyze must not construct LLM clients")
+    _FakeHostRuntimeRunner.run_called = False
+    _FakeHostRuntimeRunner.last_operation_name = None
+    _FakeHostRuntimeRunner.last_operation = None
+    _FakeHostRuntimeRunner.last_timeout_seconds = None
+    _FakeHostRuntimeRunner.last_session_id = None
+    _FakeHostRuntimeRunner.forbidden_business_args = {}
+    _RaisingHostRuntimeRunner.run_called = False
 
 
 def _available_thermometer_reading() -> ThermometerReading:
@@ -1377,10 +1541,9 @@ def test_analyze_cli_calls_service_and_prints_report(monkeypatch) -> None:  # ty
     """
 
     _FakeService.last_request = None
+    _FakeService.last_execution_request = None
     _FakeService.analyze_called = False
-    _FakeService.analyze_with_llm_called = False
-    _FakeService.last_llm_clients = None
-    _FakeService.last_chapter_policy = None
+    _FakeService.analyze_with_llm_execution_called = False
     _FakeService.last_host_context = None
     monkeypatch.setattr(cli, "FundAnalysisService", _FakeService)
     runner = CliRunner()
@@ -1434,7 +1597,7 @@ def test_analyze_cli_calls_service_and_prints_report(monkeypatch) -> None:  # ty
     assert result.exit_code == 0
     assert result.output == "# 0. 投资要点概览\n\n# 7. 是否值得持有——最终判断\n"
     assert _FakeService.analyze_called is True
-    assert _FakeService.analyze_with_llm_called is False
+    assert _FakeService.analyze_with_llm_execution_called is False
     assert _FakeService.last_request is not None
     assert _FakeService.last_request.fund_code == "110011"
     assert _FakeService.last_request.report_year == 2024
@@ -1475,11 +1638,13 @@ def test_analyze_cli_use_llm_missing_config_fails_before_service(
     """
 
     _FakeService.last_request = None
+    _FakeService.last_execution_request = None
     _FakeService.analyze_called = False
-    _FakeService.analyze_with_llm_called = False
-    _FakeService.last_llm_clients = None
-    _FakeService.last_chapter_policy = None
+    _FakeService.analyze_with_llm_execution_called = False
     monkeypatch.setattr(cli, "FundAnalysisService", _FakeService)
+    monkeypatch.setattr(cli, "build_fund_llm_execution_request", _raise_llm_config_error)
+    monkeypatch.setattr(cli, "HostRuntimeRunner", _RaisingHostRuntimeRunner)
+    _reset_fake_host_runner()
     for env_name in (
         "FUND_AGENT_LLM_PROVIDER",
         "FUND_AGENT_LLM_BASE_URL",
@@ -1496,8 +1661,10 @@ def test_analyze_cli_use_llm_missing_config_fails_before_service(
     assert "LLM provider 配置错误：missing FUND_AGENT_LLM_PROVIDER" in result.stderr
     assert "# 0. 投资要点概览" not in result.output
     assert _FakeService.last_request is None
+    assert _FakeService.last_execution_request is None
     assert _FakeService.analyze_called is False
-    assert _FakeService.analyze_with_llm_called is False
+    assert _FakeService.analyze_with_llm_execution_called is False
+    assert _RaisingHostRuntimeRunner.run_called is False
 
 
 def test_analyze_cli_use_llm_configured_calls_llm_service_and_prints_report(
@@ -1516,13 +1683,18 @@ def test_analyze_cli_use_llm_configured_calls_llm_service_and_prints_report(
     """
 
     _FakeService.last_request = None
+    _FakeService.last_execution_request = None
     _FakeService.analyze_called = False
-    _FakeService.analyze_with_llm_called = False
-    _FakeService.last_llm_clients = None
-    _FakeService.last_chapter_policy = None
+    _FakeService.analyze_with_llm_execution_called = False
+    _FakeService.last_host_context = None
     monkeypatch.setattr(cli, "FundAnalysisService", _FakeService)
-    monkeypatch.setattr(cli, "load_llm_provider_config_from_env", _fake_load_llm_config)
-    monkeypatch.setattr(cli, "build_chapter_llm_clients", _fake_build_llm_clients)
+    monkeypatch.setattr(
+        cli,
+        "build_fund_llm_execution_request",
+        _fake_build_fund_llm_execution_request,
+    )
+    monkeypatch.setattr(cli, "HostRuntimeRunner", _FakeHostRuntimeRunner)
+    _reset_fake_host_runner()
     runner = CliRunner()
 
     result = runner.invoke(cli.app, ["analyze", "110011", "--use-llm"])
@@ -1530,16 +1702,29 @@ def test_analyze_cli_use_llm_configured_calls_llm_service_and_prints_report(
     assert result.exit_code == 0
     assert result.stdout == "# LLM report\n"
     assert _FakeService.analyze_called is False
-    assert _FakeService.analyze_with_llm_called is True
-    assert _FakeService.last_request is not None
-    assert _FakeService.last_request.fund_code == "110011"
-    assert isinstance(_FakeService.last_llm_clients, _FakeLLMClients)
-    assert isinstance(_FakeService.last_chapter_policy, ChapterOrchestrationPolicy)
-    assert _FakeService.last_chapter_policy.max_output_chars == _FakeLLMConfig.max_output_chars
-    assert _FakeService.last_chapter_policy.prompt_payload_mode == "compact"
+    assert _FakeService.analyze_with_llm_execution_called is True
+    assert _FakeService.last_request is None
+    assert isinstance(_FakeService.last_execution_request, FundLLMExecutionRequest)
+    execution_request = _FakeService.last_execution_request
+    assert execution_request.contract.fund_code == "110011"
+    assert execution_request.contract.report_year == 2024
+    assert execution_request.contract.llm_opt_in_mode == "explicit_cli_flag"
+    assert execution_request.runtime_plan.host_timeout_seconds > 0
     assert _FakeService.last_host_context is not None
     assert _FakeService.last_host_context.run_id.startswith("host_run_")
-    assert _FakeService.last_host_context.timeout_seconds is not None
+    assert (
+        _FakeService.last_host_context.timeout_seconds
+        == execution_request.runtime_plan.host_timeout_seconds
+    )
+    assert _FakeHostRuntimeRunner.run_called is True
+    assert _FakeHostRuntimeRunner.last_operation_name == "fund_analysis_llm_report"
+    assert _FakeHostRuntimeRunner.last_operation is not None
+    assert (
+        _FakeHostRuntimeRunner.last_timeout_seconds
+        == execution_request.runtime_plan.host_timeout_seconds
+    )
+    assert _FakeHostRuntimeRunner.last_session_id is None
+    assert _FakeHostRuntimeRunner.forbidden_business_args == {}
 
 
 def test_analyze_cli_use_llm_construction_error_fails_before_service(
@@ -1558,11 +1743,17 @@ def test_analyze_cli_use_llm_construction_error_fails_before_service(
     """
 
     _FakeService.last_request = None
+    _FakeService.last_execution_request = None
     _FakeService.analyze_called = False
-    _FakeService.analyze_with_llm_called = False
+    _FakeService.analyze_with_llm_execution_called = False
     monkeypatch.setattr(cli, "FundAnalysisService", _FakeService)
-    monkeypatch.setattr(cli, "load_llm_provider_config_from_env", _fake_load_llm_config)
-    monkeypatch.setattr(cli, "build_chapter_llm_clients", _raise_llm_construction_error)
+    monkeypatch.setattr(
+        cli,
+        "build_fund_llm_execution_request",
+        _raise_llm_construction_error,
+    )
+    monkeypatch.setattr(cli, "HostRuntimeRunner", _RaisingHostRuntimeRunner)
+    _reset_fake_host_runner()
     runner = CliRunner()
 
     result = runner.invoke(cli.app, ["analyze", "110011", "--use-llm"])
@@ -1571,8 +1762,10 @@ def test_analyze_cli_use_llm_construction_error_fails_before_service(
     assert result.stdout == ""
     assert "LLM provider 构造失败：fixture construction failure" in result.stderr
     assert _FakeService.last_request is None
+    assert _FakeService.last_execution_request is None
     assert _FakeService.analyze_called is False
-    assert _FakeService.analyze_with_llm_called is False
+    assert _FakeService.analyze_with_llm_execution_called is False
+    assert _RaisingHostRuntimeRunner.run_called is False
 
 
 def test_analyze_cli_use_llm_incomplete_result_exits_without_fallback(
@@ -1592,10 +1785,13 @@ def test_analyze_cli_use_llm_incomplete_result_exits_without_fallback(
 
     _IncompleteLLMService.last_request = None
     _IncompleteLLMService.analyze_called = False
-    _IncompleteLLMService.analyze_with_llm_called = False
+    _IncompleteLLMService.analyze_with_llm_execution_called = False
     monkeypatch.setattr(cli, "FundAnalysisService", _IncompleteLLMService)
-    monkeypatch.setattr(cli, "load_llm_provider_config_from_env", _fake_load_llm_config)
-    monkeypatch.setattr(cli, "build_chapter_llm_clients", _fake_build_llm_clients)
+    monkeypatch.setattr(
+        cli,
+        "build_fund_llm_execution_request",
+        _fake_build_fund_llm_execution_request,
+    )
     runner = CliRunner()
 
     result = runner.invoke(cli.app, ["analyze", "110011", "--use-llm"])
@@ -1609,7 +1805,7 @@ def test_analyze_cli_use_llm_incomplete_result_exits_without_fallback(
     assert "orchestration_status=partial" in result.stderr
     assert "# 0. 投资要点概览" not in result.output
     assert _IncompleteLLMService.analyze_called is False
-    assert _IncompleteLLMService.analyze_with_llm_called is True
+    assert _IncompleteLLMService.analyze_with_llm_execution_called is True
 
 
 def test_analyze_cli_use_llm_incomplete_prints_safe_all_chapter_matrix(
@@ -1619,10 +1815,13 @@ def test_analyze_cli_use_llm_incomplete_prints_safe_all_chapter_matrix(
 
     _MatrixIncompleteLLMService.last_request = None
     _MatrixIncompleteLLMService.analyze_called = False
-    _MatrixIncompleteLLMService.analyze_with_llm_called = False
+    _MatrixIncompleteLLMService.analyze_with_llm_execution_called = False
     monkeypatch.setattr(cli, "FundAnalysisService", _MatrixIncompleteLLMService)
-    monkeypatch.setattr(cli, "load_llm_provider_config_from_env", _fake_load_llm_config)
-    monkeypatch.setattr(cli, "build_chapter_llm_clients", _fake_build_llm_clients)
+    monkeypatch.setattr(
+        cli,
+        "build_fund_llm_execution_request",
+        _fake_build_fund_llm_execution_request,
+    )
     runner = CliRunner()
 
     result = runner.invoke(cli.app, ["analyze", "110011", "--use-llm"])
@@ -1659,7 +1858,7 @@ def test_analyze_cli_use_llm_incomplete_prints_safe_all_chapter_matrix(
         assert forbidden not in result.stderr
     assert "# 0. 投资要点概览" not in result.output
     assert _MatrixIncompleteLLMService.analyze_called is False
-    assert _MatrixIncompleteLLMService.analyze_with_llm_called is True
+    assert _MatrixIncompleteLLMService.analyze_with_llm_execution_called is True
 
 
 def test_analyze_cli_use_llm_l1_subcategory_matches_service_summary(
@@ -1679,10 +1878,13 @@ def test_analyze_cli_use_llm_l1_subcategory_matches_service_summary(
 
     _L1IncompleteLLMService.last_request = None
     _L1IncompleteLLMService.analyze_called = False
-    _L1IncompleteLLMService.analyze_with_llm_called = False
+    _L1IncompleteLLMService.analyze_with_llm_execution_called = False
     monkeypatch.setattr(cli, "FundAnalysisService", _L1IncompleteLLMService)
-    monkeypatch.setattr(cli, "load_llm_provider_config_from_env", _fake_load_llm_config)
-    monkeypatch.setattr(cli, "build_chapter_llm_clients", _fake_build_llm_clients)
+    monkeypatch.setattr(
+        cli,
+        "build_fund_llm_execution_request",
+        _fake_build_fund_llm_execution_request,
+    )
     runner = CliRunner()
 
     result = runner.invoke(cli.app, ["analyze", "110011", "--use-llm"])
@@ -1700,7 +1902,7 @@ def test_analyze_cli_use_llm_l1_subcategory_matches_service_summary(
     assert "first_failed_category=audit_rule_too_strict" not in result.stderr
     assert "# 0. 投资要点概览" not in result.output
     assert _L1IncompleteLLMService.analyze_called is False
-    assert _L1IncompleteLLMService.analyze_with_llm_called is True
+    assert _L1IncompleteLLMService.analyze_with_llm_execution_called is True
 
 
 def test_analyze_cli_use_llm_timeout_fail_closed_without_fallback(
@@ -1720,10 +1922,13 @@ def test_analyze_cli_use_llm_timeout_fail_closed_without_fallback(
 
     _TimeoutLLMService.last_request = None
     _TimeoutLLMService.analyze_called = False
-    _TimeoutLLMService.analyze_with_llm_called = False
+    _TimeoutLLMService.analyze_with_llm_execution_called = False
     monkeypatch.setattr(cli, "FundAnalysisService", _TimeoutLLMService)
-    monkeypatch.setattr(cli, "load_llm_provider_config_from_env", _fake_load_llm_config)
-    monkeypatch.setattr(cli, "build_chapter_llm_clients", _fake_build_llm_clients)
+    monkeypatch.setattr(
+        cli,
+        "build_fund_llm_execution_request",
+        _fake_build_fund_llm_execution_request,
+    )
     runner = CliRunner()
 
     result = runner.invoke(cli.app, ["analyze", "110011", "--use-llm"])
@@ -1767,7 +1972,7 @@ def test_analyze_cli_use_llm_timeout_fail_closed_without_fallback(
     assert "model_name" not in result.stderr
     assert "# 0. 投资要点概览" not in result.output
     assert _TimeoutLLMService.analyze_called is False
-    assert _TimeoutLLMService.analyze_with_llm_called is True
+    assert _TimeoutLLMService.analyze_with_llm_execution_called is True
 
 
 def test_analyze_cli_use_llm_host_failure_is_not_double_wrapped(
@@ -1776,8 +1981,11 @@ def test_analyze_cli_use_llm_host_failure_is_not_double_wrapped(
     """验证 Host run 失败摘要不会再被通用分析失败分支包一层。"""
 
     monkeypatch.setattr(cli, "FundAnalysisService", _FailingLLMService)
-    monkeypatch.setattr(cli, "load_llm_provider_config_from_env", _fake_load_llm_config)
-    monkeypatch.setattr(cli, "build_chapter_llm_clients", _fake_build_llm_clients)
+    monkeypatch.setattr(
+        cli,
+        "build_fund_llm_execution_request",
+        _fake_build_fund_llm_execution_request,
+    )
     runner = CliRunner()
 
     result = runner.invoke(cli.app, ["analyze", "110011", "--use-llm"])
@@ -1914,22 +2122,27 @@ def test_analyze_cli_default_product_request(monkeypatch) -> None:  # type: igno
 
     _FakeService.last_request = None
     _FakeService.analyze_called = False
-    _FakeService.analyze_with_llm_called = False
+    _FakeService.analyze_with_llm_execution_called = False
     monkeypatch.setattr(cli, "FundAnalysisService", _FakeService)
-
-    monkeypatch.setattr(cli, "load_llm_provider_config_from_env", _forbid_llm_config)
-    monkeypatch.setattr(cli, "build_chapter_llm_clients", _forbid_llm_clients)
+    monkeypatch.setattr(
+        cli,
+        "build_fund_llm_execution_request",
+        _forbid_llm_execution_request_builder,
+    )
+    monkeypatch.setattr(cli, "HostRuntimeRunner", _RaisingHostRuntimeRunner)
+    _reset_fake_host_runner()
     runner = CliRunner()
 
     result = runner.invoke(cli.app, ["analyze", "110011"])
 
     assert result.exit_code == 0
     assert _FakeService.analyze_called is True
-    assert _FakeService.analyze_with_llm_called is False
+    assert _FakeService.analyze_with_llm_execution_called is False
     assert _FakeService.last_request is not None
     assert _FakeService.last_request.mode == "product"
     assert _FakeService.last_request.developer_overrides is None
     assert _FakeService.last_request.valuation_state is None
+    assert _RaisingHostRuntimeRunner.run_called is False
 
 
 def test_analyze_cli_rejects_dev_options_without_dev_override(monkeypatch) -> None:  # type: ignore[no-untyped-def]
@@ -2024,8 +2237,11 @@ def test_analyze_cli_use_llm_structured_quality_gate_block(
     """
 
     monkeypatch.setattr(cli, "FundAnalysisService", _FakeLLMBlockedAnalysisService)
-    monkeypatch.setattr(cli, "load_llm_provider_config_from_env", _fake_load_llm_config)
-    monkeypatch.setattr(cli, "build_chapter_llm_clients", _fake_build_llm_clients)
+    monkeypatch.setattr(
+        cli,
+        "build_fund_llm_execution_request",
+        _fake_build_fund_llm_execution_request,
+    )
     runner = CliRunner()
 
     result = runner.invoke(cli.app, ["analyze", "110011", "--use-llm"])
@@ -2082,8 +2298,11 @@ def test_analyze_cli_use_llm_structured_quality_gate_not_run_block(
     """
 
     monkeypatch.setattr(cli, "FundAnalysisService", _FakeLLMNotRunBlockedAnalysisService)
-    monkeypatch.setattr(cli, "load_llm_provider_config_from_env", _fake_load_llm_config)
-    monkeypatch.setattr(cli, "build_chapter_llm_clients", _fake_build_llm_clients)
+    monkeypatch.setattr(
+        cli,
+        "build_fund_llm_execution_request",
+        _fake_build_fund_llm_execution_request,
+    )
     runner = CliRunner()
 
     result = runner.invoke(cli.app, ["analyze", "110011", "--use-llm"])
@@ -2239,6 +2458,13 @@ def test_checklist_cli_calls_service_and_prints_summary(monkeypatch) -> None:  #
     _FakeChecklistService.last_request = None
     _FakeChecklistService.checklist_called = False
     monkeypatch.setattr(cli, "FundAnalysisService", _FakeChecklistService)
+    monkeypatch.setattr(
+        cli,
+        "build_fund_llm_execution_request",
+        _forbid_llm_execution_request_builder,
+    )
+    monkeypatch.setattr(cli, "HostRuntimeRunner", _RaisingHostRuntimeRunner)
+    _reset_fake_host_runner()
     runner = CliRunner()
 
     result = runner.invoke(
@@ -2264,6 +2490,7 @@ def test_checklist_cli_calls_service_and_prints_summary(monkeypatch) -> None:  #
     assert "valuation_state: low" in result.output
     assert "final_judgment: worth_holding" in result.output
     assert "- valuation: green/pass" in result.output
+    assert _RaisingHostRuntimeRunner.run_called is False
 
 
 def test_checklist_cli_rejects_use_llm_option(monkeypatch) -> None:  # type: ignore[no-untyped-def]
@@ -2282,6 +2509,13 @@ def test_checklist_cli_rejects_use_llm_option(monkeypatch) -> None:  # type: ign
     _FakeChecklistService.last_request = None
     _FakeChecklistService.checklist_called = False
     monkeypatch.setattr(cli, "FundAnalysisService", _FakeChecklistService)
+    monkeypatch.setattr(
+        cli,
+        "build_fund_llm_execution_request",
+        _forbid_llm_execution_request_builder,
+    )
+    monkeypatch.setattr(cli, "HostRuntimeRunner", _RaisingHostRuntimeRunner)
+    _reset_fake_host_runner()
     runner = CliRunner()
 
     result = runner.invoke(cli.app, ["checklist", "110011", "--use-llm"])
@@ -2289,6 +2523,7 @@ def test_checklist_cli_rejects_use_llm_option(monkeypatch) -> None:  # type: ign
     assert result.exit_code != 0
     assert _FakeChecklistService.last_request is None
     assert _FakeChecklistService.checklist_called is False
+    assert _RaisingHostRuntimeRunner.run_called is False
 
     checklist_command = get_command(cli.app).commands["checklist"]
     option_names = {

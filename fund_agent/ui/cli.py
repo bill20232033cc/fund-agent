@@ -15,7 +15,7 @@ from typing import Annotated
 
 import typer
 
-from fund_agent.config.llm import LLMProviderConfigError, load_llm_provider_config_from_env
+from fund_agent.config.llm import LLMProviderConfigError
 from fund_agent.config.paths import (
     DEFAULT_GOLDEN_ANSWER_JSON,
     DEFAULT_GOLDEN_PREFILL_OUTPUT,
@@ -42,8 +42,6 @@ from fund_agent.services import (
     GoldenReadinessPreflightRequest,
     GoldenReadinessPreflightService,
     MoneyHorizon,
-    ChapterOrchestrationPolicy,
-    ChapterOrchestratorLLMClients,
     LLMProviderConstructionError,
     QualityGateBlockedError,
     QualityGateNotRunBlockedError,
@@ -54,7 +52,8 @@ from fund_agent.services import (
     ThermometerRequest,
     ThermometerService,
     ValuationState,
-    build_chapter_llm_clients,
+    FundLLMExecutionRequest,
+    build_fund_llm_execution_request,
 )
 
 app = typer.Typer(help="基金行为教练 Agent — 买入前专业级基金体检报告")
@@ -243,13 +242,8 @@ def analyze(
     )
     try:
         if use_llm:
-            llm_clients, chapter_policy, host_timeout_seconds = _build_llm_clients_or_fail()
-            host_result = _run_llm_analysis_in_host(
-                request,
-                llm_clients=llm_clients,
-                chapter_policy=chapter_policy,
-                timeout_seconds=host_timeout_seconds,
-            )
+            execution_request = _build_llm_execution_request_or_fail(request)
+            host_result = _run_llm_analysis_in_host(execution_request)
             if host_result.status != HostRunStatus.SUCCEEDED or host_result.operation_result is None:
                 if host_result.operation_result is not None:
                     typer.echo(
@@ -794,55 +788,27 @@ def _valuation_state(value: str | None) -> ValuationState | None:
     return value  # type: ignore[return-value]
 
 
-def _build_llm_clients_or_fail() -> tuple[
-    ChapterOrchestratorLLMClients,
-    ChapterOrchestrationPolicy,
-    int,
-]:
-    """从生产配置构造 LLM clients、章节策略和 Host run deadline。
+def _build_llm_execution_request_or_fail(
+    request: FundAnalysisRequest,
+) -> FundLLMExecutionRequest:
+    """委托 Service 构造 LLM typed execution request，见模板第 0-7 章。
 
     Args:
-        无。
+        request: CLI 构造的显式分析请求。
 
     Returns:
-        LLM clients、章节编排策略与 Host run timeout 秒数。
+        Service-owned LLM 执行请求。
 
     Raises:
         LLMProviderConfigError: 当环境变量配置缺失或非法时抛出。
         LLMProviderConstructionError: 当 provider clients 构造失败时抛出。
+        ValueError: 当 Service 执行契约字段非法时抛出。
     """
 
-    config = load_llm_provider_config_from_env()
-    llm_clients = build_chapter_llm_clients(config)
-    chapter_policy = ChapterOrchestrationPolicy(
-        max_output_chars=config.max_output_chars,
-        prompt_payload_mode="compact",
+    return build_fund_llm_execution_request(
+        request,
+        opt_in_mode="explicit_cli_flag",
     )
-    host_timeout_seconds = _host_timeout_seconds_from_provider_config(config)
-    return llm_clients, chapter_policy, host_timeout_seconds
-
-
-def _host_timeout_seconds_from_provider_config(config: object) -> int:
-    """从 provider 配置推导 Host 全局 deadline。
-
-    Args:
-        config: typed LLM provider config 或测试替身。
-
-    Returns:
-        Host run timeout 秒数。
-
-    Raises:
-        ValueError: 当配置 timeout 非法时抛出。
-    """
-
-    writer_timeout = float(getattr(config, "writer_timeout_seconds", 60.0))
-    auditor_timeout = float(getattr(config, "auditor_timeout_seconds", 60.0))
-    repair_timeout = float(getattr(config, "repair_timeout_seconds", writer_timeout))
-    max_attempts = int(getattr(config, "timeout_max_attempts", 2))
-    chapter_count = len(ChapterOrchestrationPolicy().target_chapter_ids)
-    phase_budget = writer_timeout + auditor_timeout + repair_timeout
-    timeout_seconds = int(max(1.0, phase_budget * max_attempts * chapter_count))
-    return timeout_seconds
 
 
 class _LLMIncompleteHostRunError(RuntimeError):
@@ -850,19 +816,12 @@ class _LLMIncompleteHostRunError(RuntimeError):
 
 
 def _run_llm_analysis_in_host(
-    request: FundAnalysisRequest,
-    *,
-    llm_clients: ChapterOrchestratorLLMClients,
-    chapter_policy: ChapterOrchestrationPolicy,
-    timeout_seconds: int,
+    execution_request: FundLLMExecutionRequest,
 ) -> HostRunResult:
     """通过本地 Host runtime governance 托管 LLM 分析。
 
     Args:
-        request: CLI 构造的显式分析请求。
-        llm_clients: 已构造的 provider clients。
-        chapter_policy: 章节编排策略。
-        timeout_seconds: Host 全局 deadline 秒数。
+        execution_request: Service-owned typed LLM 执行请求。
 
     Returns:
         Host run 终态结果。
@@ -874,6 +833,7 @@ def _run_llm_analysis_in_host(
     service = FundAnalysisService()
     quality_gate_exception: QualityGateBlockedError | QualityGateNotRunBlockedError | None = None
     incomplete_result = None
+    timeout_seconds = execution_request.runtime_plan.host_timeout_seconds
 
     def operation(host_context):  # type: ignore[no-untyped-def]
         """CLI-owned async bridge，Host runner 不管理 event loop。"""
@@ -881,10 +841,8 @@ def _run_llm_analysis_in_host(
         nonlocal incomplete_result, quality_gate_exception
         try:
             result = asyncio.run(
-                service.analyze_with_llm(
-                    request,
-                    llm_clients=llm_clients,
-                    chapter_policy=chapter_policy,
+                service.analyze_with_llm_execution(
+                    execution_request,
                     host_context=host_context,
                 )
             )
