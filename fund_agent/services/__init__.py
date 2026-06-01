@@ -85,6 +85,7 @@ from fund_agent.services.fund_analysis_service import (
     QualityGateNotRunBlockedError,
     QualityGatePolicy,
     ValuationState,
+    build_fund_llm_execution_request,
 )
 
 __all__ = [
@@ -150,4 +151,5 @@ __all__ = [
     "QualityGateNotRunBlockedError",
     "QualityGatePolicy",
     "ValuationState",
+    "build_fund_llm_execution_request",
 ]

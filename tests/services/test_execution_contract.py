@@ -21,6 +21,7 @@ from fund_agent.services import (
     QualityFailClosedPolicy,
     QualityPolicyDeclaration,
     SafeDiagnosticPolicy,
+    build_fund_llm_execution_request,
     derive_host_timeout_seconds,
     normalize_fund_llm_analysis_input,
 )
@@ -359,6 +360,7 @@ def test_new_dataclasses_and_public_signatures_exclude_open_business_bags() -> N
         FundLLMRuntimePlan,
         FundLLMExecutionContract,
         FundLLMExecutionRequest,
+        build_fund_llm_execution_request,
         normalize_fund_llm_analysis_input,
         derive_host_timeout_seconds,
     )

@@ -67,6 +67,20 @@ from fund_agent.services.final_chapter_assembler import (
     FinalChapterAssemblyResult,
     assemble_final_chapters,
 )
+from fund_agent.config.llm import load_llm_provider_config_from_env
+from fund_agent.services.execution_contract import (
+    FundLLMAnalysisInput,
+    FundLLMExecutionContract,
+    FundLLMExecutionRequest,
+    FundLLMRuntimePlan,
+    ProviderRuntimeBudget,
+    QualityFailClosedPolicy,
+    QualityPolicyDeclaration,
+    SafeDiagnosticPolicy,
+    derive_host_timeout_seconds,
+    normalize_fund_llm_analysis_input,
+)
+from fund_agent.services.llm_provider import build_chapter_llm_clients
 from fund_agent.services.thermometer_service import ThermometerRequest, ThermometerService as IndexThermometerService
 
 ValuationState = Literal["low", "fair", "high", "unavailable"]
@@ -75,6 +89,7 @@ QualityGatePolicy = Literal["off", "warn", "block"]
 AnalyzeMode = Literal["product", "developer_override"]
 AnalyzeCommandSource = Literal["analyze", "checklist"]
 DEFAULT_GOLDEN_ANSWER_PATH = DEFAULT_GOLDEN_ANSWER_JSON
+LLM_REPORT_HOST_TIMEOUT_CHAPTER_COUNT = 6
 
 
 class _FundDataExtractor(Protocol):
@@ -659,6 +674,44 @@ class FundAnalysisService:
             quality_gate_not_run_reason=core_result.quality_gate_not_run_reason,
         )
 
+    async def analyze_with_llm_execution(
+        self,
+        execution_request: FundLLMExecutionRequest,
+        *,
+        host_context: HostRunContext | None = None,
+    ) -> FundLLMAnalysisResult:
+        """执行 Service-owned typed LLM execution request。
+
+        该方法只消费 `build_fund_llm_execution_request()` 已准备好的 Service
+        runtime plan 和 provider clients，不读取环境变量、不重新构造 provider，
+        并继续沿用 `analyze_with_llm()` 的 quality gate 异常传播和不完整总装
+        fail-closed 语义。
+
+        Args:
+            execution_request: Service 内部 LLM 执行请求，包含业务契约、runtime plan
+                和 provider clients。
+            host_context: 可选 Host run 上下文；Service 只用它检查 run lifecycle。
+
+        Returns:
+            LLM 分析结果，包含 Gate 3 编排结果和 Gate 4 总装结果。
+
+        Raises:
+            ValueError: 当请求契约、章节编排输入或总装输入非法时抛出。
+            QualityGateBlockedError: 当 quality gate 在 block 策略下阻断报告时抛出。
+            QualityGateNotRunBlockedError: 当 quality gate 在 block 策略下未运行时抛出。
+            Exception: 允许底层抽取器或 Agent 层基金能力传播异常。
+        """
+
+        return await self.analyze_with_llm(
+            _fund_analysis_request_from_llm_input(
+                execution_request.contract.analysis_input
+            ),
+            llm_clients=execution_request.llm_clients,
+            chapter_policy=execution_request.runtime_plan.chapter_policy,
+            assembly_policy=execution_request.runtime_plan.assembly_policy,
+            host_context=host_context,
+        )
+
     async def _resolve_valuation_state(
         self,
         *,
@@ -851,6 +904,110 @@ class FundAnalysisService:
             quality_gate_result=quality_gate_result,
             quality_gate_not_run_reason=quality_gate_not_run_reason,
         )
+
+
+def build_fund_llm_execution_request(
+    request: FundAnalysisRequest,
+    *,
+    opt_in_mode: Literal["explicit_cli_flag"] = "explicit_cli_flag",
+) -> FundLLMExecutionRequest:
+    """构造 Service-owned LLM 执行请求，见模板第 0-7 章。
+
+    Args:
+        request: 显式基金分析请求；会被归一化为 LLM report `analyze` 输入。
+        opt_in_mode: LLM 显式启用模式，本 gate 仅允许 `explicit_cli_flag`。
+
+    Returns:
+        包含业务契约、Service runtime plan 和 provider clients 的 typed request。
+
+    Raises:
+        LLMProviderConfigError: 当环境中的 provider 配置缺失或非法时抛出。
+        LLMProviderConstructionError: 当 provider clients 构造失败时抛出。
+        ValueError: 当业务请求或契约字段非法时抛出。
+    """
+
+    config = load_llm_provider_config_from_env()
+    llm_clients = build_chapter_llm_clients(config)
+    resolved_contract = _resolve_analyze_contract(request)
+    analysis_input = normalize_fund_llm_analysis_input(request)
+    quality_policy = QualityPolicyDeclaration(
+        quality_gate_policy=resolved_contract.quality_gate_policy,
+        deterministic_fallback_allowed=False,
+    )
+    chapter_policy = ChapterOrchestrationPolicy(
+        max_output_chars=config.max_output_chars,
+        prompt_payload_mode="compact",
+    )
+    provider_runtime_budget = ProviderRuntimeBudget(
+        writer_timeout_seconds=config.writer_timeout_seconds,
+        auditor_timeout_seconds=config.auditor_timeout_seconds,
+        repair_timeout_seconds=config.repair_timeout_seconds,
+        timeout_max_attempts=config.timeout_max_attempts,
+        timeout_backoff_seconds=config.timeout_backoff_seconds,
+        max_output_chars=config.max_output_chars,
+        prompt_payload_mode="compact",
+    )
+    quality_fail_closed_policy = QualityFailClosedPolicy(
+        quality_gate_policy=resolved_contract.quality_gate_policy,
+        fail_on_quality_gate_block=True,
+        fail_on_quality_gate_not_run=True,
+        fail_on_partial_orchestration=True,
+        fail_on_incomplete_final_assembly=True,
+        deterministic_fallback_allowed=False,
+    )
+    runtime_plan = FundLLMRuntimePlan(
+        chapter_policy=chapter_policy,
+        assembly_policy=FinalAssemblyPolicy(),
+        provider_runtime_budget=provider_runtime_budget,
+        quality_fail_closed_policy=quality_fail_closed_policy,
+        safe_diagnostic_policy=SafeDiagnosticPolicy(),
+        host_timeout_seconds=derive_host_timeout_seconds(
+            provider_runtime_budget,
+            chapter_count=LLM_REPORT_HOST_TIMEOUT_CHAPTER_COUNT,
+        ),
+    )
+    contract = FundLLMExecutionContract(
+        fund_code=analysis_input.fund_code,
+        report_year=analysis_input.report_year,
+        analysis_input=analysis_input,
+        quality_policy=quality_policy,
+        llm_opt_in_mode=opt_in_mode,
+    )
+    return FundLLMExecutionRequest(
+        contract=contract,
+        runtime_plan=runtime_plan,
+        llm_clients=llm_clients,
+    )
+
+
+def _fund_analysis_request_from_llm_input(
+    analysis_input: FundLLMAnalysisInput,
+) -> FundAnalysisRequest:
+    """把规范化 LLM 业务输入还原为现有 `analyze_with_llm()` 请求。
+
+    Args:
+        analysis_input: `FundLLMAnalysisInput` 实例。
+
+    Returns:
+        可传给既有 LLM 分析路径的 `FundAnalysisRequest`。
+
+    Raises:
+        AttributeError: 当传入对象不是规范化 LLM 输入时由属性访问自然抛出。
+    """
+
+    return FundAnalysisRequest(
+        fund_code=analysis_input.fund_code,
+        report_year=analysis_input.report_year,
+        investment_amount=analysis_input.investment_amount,
+        max_tolerable_loss_rate=analysis_input.max_tolerable_loss_rate,
+        valuation_state=analysis_input.valuation_state,
+        thermometer_cache_dir=analysis_input.thermometer_cache_dir,
+        user_money_horizon_years=analysis_input.user_money_horizon_years,
+        force_refresh=analysis_input.force_refresh,
+        mode=analysis_input.mode,
+        developer_overrides=analysis_input.developer_overrides,
+        command_source="analyze",
+    )
 
 
 def _resolve_analyze_contract(request: FundAnalysisRequest) -> ResolvedAnalyzeContract:

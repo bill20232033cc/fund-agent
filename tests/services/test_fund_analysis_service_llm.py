@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 
+from fund_agent.config.llm import LLMProviderConfig, LLMProviderConfigError
 from fund_agent.fund.chapter_auditor import (
     ChapterAuditLLMRequest,
     ChapterAuditLLMResponse,
@@ -19,12 +20,25 @@ from fund_agent.fund.chapter_writer import (
 from fund_agent.services import (
     ChapterOrchestrationPolicy,
     ChapterOrchestratorLLMClients,
+    FinalAssemblyPolicy,
+    FundLLMExecutionContract,
+    FundLLMExecutionRequest,
+    FundLLMRuntimePlan,
     FundLLMAnalysisResult,
+    LLMProviderConstructionError,
+    ProviderRuntimeBudget,
+    QualityFailClosedPolicy,
     QualityGateBlockedError,
     QualityGateNotRunBlockedError,
+    QualityPolicyDeclaration,
+    SafeDiagnosticPolicy,
+    build_fund_llm_execution_request,
+    derive_host_timeout_seconds,
+    normalize_fund_llm_analysis_input,
 )
 from fund_agent.host import HostRuntimeRunner
 from fund_agent.host.runtime import HostRunEventType
+import fund_agent.services.fund_analysis_service as fund_analysis_service_module
 from fund_agent.services.fund_analysis_service import FundAnalysisService
 from tests.services.test_fund_analysis_service import (
     _FakeExtractor,
@@ -160,6 +174,165 @@ async def test_analyze_with_llm_returns_accepted_final_assembly_and_report_markd
     assert "## 第 7 章：是否值得持有--最终判断" in result.report_markdown
     assert result.quality_gate_result is None
     assert result.quality_gate_not_run_reason == "policy=off"
+
+
+def test_build_fund_llm_execution_request_prepares_contract_and_runtime_plan(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """验证 Service helper 构造 typed request、契约和 runtime plan。
+
+    Args:
+        monkeypatch: pytest monkeypatch fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 helper 未按 Slice 2 准备 typed request 时抛出。
+    """
+
+    writer = _FakeChapterLLMClient()
+    auditor = _FakeAuditLLMClient()
+    clients = _clients(writer=writer, auditor=auditor)
+    monkeypatch.setattr(
+        fund_analysis_service_module,
+        "load_llm_provider_config_from_env",
+        lambda: _provider_config(),
+    )
+    monkeypatch.setattr(
+        fund_analysis_service_module,
+        "build_chapter_llm_clients",
+        lambda config: clients,
+    )
+
+    execution_request = build_fund_llm_execution_request(
+        _developer_request(force_refresh=True, quality_gate_policy="warn")
+    )
+
+    assert isinstance(execution_request, FundLLMExecutionRequest)
+    assert execution_request.llm_clients is clients
+    assert execution_request.contract.fund_code == "110011"
+    assert execution_request.contract.report_year == 2024
+    assert execution_request.contract.report_mode == "llm_report"
+    assert execution_request.contract.llm_opt_in_mode == "explicit_cli_flag"
+    assert execution_request.contract.analysis_input.command_source == "analyze"
+    assert execution_request.contract.analysis_input.force_refresh is True
+    assert execution_request.contract.quality_policy.quality_gate_policy == "warn"
+    assert execution_request.contract.quality_policy.deterministic_fallback_allowed is False
+    assert execution_request.runtime_plan.host_timeout_seconds > 0
+    assert execution_request.runtime_plan.chapter_policy.prompt_payload_mode == "compact"
+    assert execution_request.runtime_plan.chapter_policy.max_output_chars == 34567
+    assert execution_request.runtime_plan.provider_runtime_budget.writer_timeout_seconds == 7.0
+    assert execution_request.runtime_plan.provider_runtime_budget.auditor_timeout_seconds == 11.0
+    assert execution_request.runtime_plan.provider_runtime_budget.repair_timeout_seconds == 13.0
+    assert execution_request.runtime_plan.provider_runtime_budget.timeout_max_attempts == 2
+    assert execution_request.runtime_plan.provider_runtime_budget.timeout_backoff_seconds == 3.0
+    assert execution_request.runtime_plan.provider_runtime_budget.max_output_chars == 34567
+    assert execution_request.runtime_plan.provider_runtime_budget.prompt_payload_mode == "compact"
+    assert (
+        execution_request.runtime_plan.quality_fail_closed_policy.deterministic_fallback_allowed
+        is False
+    )
+    assert execution_request.runtime_plan.host_timeout_seconds == (7 + 11 + 13) * 2 * 6
+
+
+def test_build_fund_llm_execution_request_raises_config_error_before_host_run(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """验证缺配置时 helper 在 Host run 前失败。
+
+    Args:
+        monkeypatch: pytest monkeypatch fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当配置错误未原样传播时抛出。
+    """
+
+    monkeypatch.setattr(
+        fund_analysis_service_module,
+        "load_llm_provider_config_from_env",
+        _raise_config_error,
+    )
+
+    with pytest.raises(LLMProviderConfigError, match="missing fixture config"):
+        build_fund_llm_execution_request(_developer_request())
+
+
+def test_build_fund_llm_execution_request_raises_construction_error_before_host_run(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """验证 provider 构造错误在 helper 阶段失败。
+
+    Args:
+        monkeypatch: pytest monkeypatch fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 provider 构造错误未原样传播时抛出。
+    """
+
+    monkeypatch.setattr(
+        fund_analysis_service_module,
+        "load_llm_provider_config_from_env",
+        lambda: _provider_config(model="fixture-model"),
+    )
+    monkeypatch.setattr(
+        fund_analysis_service_module,
+        "build_chapter_llm_clients",
+        _raise_construction_error,
+    )
+
+    with pytest.raises(LLMProviderConstructionError, match="fixture-model"):
+        build_fund_llm_execution_request(_developer_request())
+
+
+@pytest.mark.asyncio
+async def test_analyze_with_llm_execution_matches_existing_llm_path() -> None:
+    """验证 hardened typed request 路径产出与现有 LLM 路径一致。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 typed request 路径未复用既有 LLM 语义时抛出。
+    """
+
+    request = _developer_request(force_refresh=True)
+    direct_writer = _FakeChapterLLMClient()
+    direct_auditor = _FakeAuditLLMClient()
+    hardened_writer = _FakeChapterLLMClient()
+    hardened_auditor = _FakeAuditLLMClient()
+    direct_service = FundAnalysisService(extractor=_FakeExtractor(_bundle()))
+    hardened_service = FundAnalysisService(extractor=_FakeExtractor(_bundle()))
+    chapter_policy = ChapterOrchestrationPolicy(run_programmatic_audit=False)
+
+    direct_result = await direct_service.analyze_with_llm(
+        request,
+        llm_clients=_clients(writer=direct_writer, auditor=direct_auditor),
+        chapter_policy=chapter_policy,
+    )
+    execution_request = _execution_request(
+        request,
+        writer=hardened_writer,
+        auditor=hardened_auditor,
+        chapter_policy=chapter_policy,
+    )
+    hardened_result = await hardened_service.analyze_with_llm_execution(execution_request)
+
+    assert isinstance(execution_request, FundLLMExecutionRequest)
+    assert hardened_result.report_markdown == direct_result.report_markdown
+    assert hardened_result.llm_orchestration_result.status == "accepted"
+    assert hardened_result.final_assembly_result.status == "accepted"
+    assert len(hardened_writer.requests) == 6
+    assert len(hardened_auditor.requests) == 6
 
 
 def test_host_runner_records_llm_service_phase_events() -> None:
@@ -333,6 +506,48 @@ async def test_analyze_with_llm_propagates_quality_gate_block_before_orchestrati
 
 
 @pytest.mark.asyncio
+async def test_analyze_with_llm_execution_propagates_quality_gate_block_before_orchestration(
+    tmp_path: Path,
+) -> None:
+    """验证 typed execution 路径传播 quality gate block 异常。
+
+    Args:
+        tmp_path: pytest 临时目录 fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 block 异常被吞掉或 LLM 被调用时抛出。
+    """
+
+    extractor = _FakeExtractor(_low_quality_bundle())
+    writer = _FakeChapterLLMClient()
+    auditor = _FakeAuditLLMClient()
+    service = FundAnalysisService(extractor=extractor)
+
+    with pytest.raises(QualityGateBlockedError) as exc_info:
+        await service.analyze_with_llm_execution(
+            _execution_request(
+                _developer_request(
+                    fund_code="004393",
+                    quality_gate_policy="block",
+                    quality_gate_source_csv=Path("docs/code_20260519.csv"),
+                    quality_gate_output_dir=tmp_path / "gate",
+                    quality_gate_run_id="fixture-run",
+                    quality_gate_golden_answer_path=None,
+                ),
+                writer=writer,
+                auditor=auditor,
+            )
+        )
+
+    assert exc_info.value.quality_gate_result.status == "block"
+    assert writer.requests == []
+    assert auditor.requests == []
+
+
+@pytest.mark.asyncio
 async def test_analyze_with_llm_propagates_quality_gate_not_run_before_extraction(
     tmp_path: Path,
 ) -> None:
@@ -363,6 +578,48 @@ async def test_analyze_with_llm_propagates_quality_gate_not_run_before_extractio
                 quality_gate_golden_answer_path=None,
             ),
             llm_clients=_clients(writer=writer, auditor=auditor),
+        )
+
+    assert exc_info.value.reason == "fund_code `110011` not found in quality gate source csv"
+    assert extractor.calls == []
+    assert writer.requests == []
+    assert auditor.requests == []
+
+
+@pytest.mark.asyncio
+async def test_analyze_with_llm_execution_propagates_quality_gate_not_run_before_extraction(
+    tmp_path: Path,
+) -> None:
+    """验证 typed execution 路径传播 quality gate not-run 异常。
+
+    Args:
+        tmp_path: pytest 临时目录 fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 not-run 异常未早停或 LLM 被调用时抛出。
+    """
+
+    extractor = _FakeExtractor(_bundle())
+    writer = _FakeChapterLLMClient()
+    auditor = _FakeAuditLLMClient()
+    service = FundAnalysisService(extractor=extractor)
+
+    with pytest.raises(QualityGateNotRunBlockedError) as exc_info:
+        await service.analyze_with_llm_execution(
+            _execution_request(
+                _developer_request(
+                    fund_code="110011",
+                    quality_gate_policy="block",
+                    quality_gate_source_csv=_source_csv(tmp_path, "004393"),
+                    quality_gate_run_id="fixture-run",
+                    quality_gate_golden_answer_path=None,
+                ),
+                writer=writer,
+                auditor=auditor,
+            )
         )
 
     assert exc_info.value.reason == "fund_code `110011` not found in quality gate source csv"
@@ -425,6 +682,173 @@ def _clients(
         writer=writer if writer is not None else _FakeChapterLLMClient(),
         auditor=auditor if auditor is not None else _FakeAuditLLMClient(),
     )
+
+
+def _execution_request(
+    request,
+    *,
+    writer: _FakeChapterLLMClient | None = None,
+    auditor: _FakeAuditLLMClient | None = None,
+    chapter_policy: ChapterOrchestrationPolicy | None = None,
+) -> FundLLMExecutionRequest:
+    """构造测试用 hardened LLM execution request。
+
+    Args:
+        request: 基金分析请求。
+        writer: fake writer。
+        auditor: fake auditor。
+        chapter_policy: 可选章节策略。
+
+    Returns:
+        Service-owned typed execution request。
+
+    Raises:
+        ValueError: 当 request 无法构造契约时抛出。
+    """
+
+    analysis_input = normalize_fund_llm_analysis_input(request)
+    quality_policy = _quality_policy_from_request(request)
+    contract = FundLLMExecutionContract(
+        fund_code=analysis_input.fund_code,
+        report_year=analysis_input.report_year,
+        analysis_input=analysis_input,
+        quality_policy=quality_policy,
+    )
+    provider_runtime_budget = _provider_runtime_budget()
+    runtime_plan = FundLLMRuntimePlan(
+        chapter_policy=ChapterOrchestrationPolicy(prompt_payload_mode="compact"),
+        assembly_policy=FinalAssemblyPolicy(),
+        provider_runtime_budget=provider_runtime_budget,
+        quality_fail_closed_policy=QualityFailClosedPolicy(
+            quality_gate_policy=quality_policy.quality_gate_policy
+        ),
+        safe_diagnostic_policy=SafeDiagnosticPolicy(),
+        host_timeout_seconds=derive_host_timeout_seconds(
+            provider_runtime_budget,
+            chapter_count=6,
+        ),
+    )
+    if chapter_policy is not None:
+        runtime_plan = type(runtime_plan)(
+            chapter_policy=chapter_policy,
+            assembly_policy=runtime_plan.assembly_policy,
+            provider_runtime_budget=runtime_plan.provider_runtime_budget,
+            quality_fail_closed_policy=runtime_plan.quality_fail_closed_policy,
+            safe_diagnostic_policy=runtime_plan.safe_diagnostic_policy,
+            host_timeout_seconds=runtime_plan.host_timeout_seconds,
+        )
+    return FundLLMExecutionRequest(
+        contract=contract,
+        runtime_plan=runtime_plan,
+        llm_clients=_clients(writer=writer, auditor=auditor),
+    )
+
+
+def _quality_policy_from_request(request) -> QualityPolicyDeclaration:
+    """从测试请求提取 quality gate 策略。
+
+    Args:
+        request: 基金分析请求。
+
+    Returns:
+        测试用 quality policy declaration。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if request.developer_overrides is None:
+        quality_gate_policy = "block"
+    else:
+        quality_gate_policy = request.developer_overrides.quality_gate_policy or "block"
+    return QualityPolicyDeclaration(quality_gate_policy=quality_gate_policy)
+
+
+def _provider_runtime_budget() -> ProviderRuntimeBudget:
+    """构造测试用 provider runtime budget。
+
+    Args:
+        无。
+
+    Returns:
+        provider runtime budget。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return ProviderRuntimeBudget(
+        writer_timeout_seconds=7.0,
+        auditor_timeout_seconds=11.0,
+        repair_timeout_seconds=13.0,
+        timeout_max_attempts=2,
+        timeout_backoff_seconds=3.0,
+        max_output_chars=34567,
+        prompt_payload_mode="compact",
+    )
+
+
+def _provider_config(*, model: str = "fixture-model") -> LLMProviderConfig:
+    """构造测试用 provider config，不依赖真实凭据。
+
+    Args:
+        model: 测试模型名。
+
+    Returns:
+        typed provider config。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return LLMProviderConfig(
+        provider_name="openai_compatible",
+        model=model,
+        base_url="https://llm.invalid/v1",
+        api_key_env_var="FUND_AGENT_LLM_API_KEY",
+        api_key="fixture-key",
+        timeout_seconds=5.0,
+        writer_timeout_seconds=7.0,
+        auditor_timeout_seconds=11.0,
+        repair_timeout_seconds=13.0,
+        timeout_max_attempts=2,
+        timeout_backoff_seconds=3.0,
+        max_output_chars=34567,
+    )
+
+
+def _raise_config_error() -> LLMProviderConfig:
+    """抛出测试用配置错误。
+
+    Args:
+        无。
+
+    Returns:
+        不返回。
+
+    Raises:
+        LLMProviderConfigError: 始终抛出。
+    """
+
+    raise LLMProviderConfigError("missing fixture config")
+
+
+def _raise_construction_error(
+    config: LLMProviderConfig,
+) -> ChapterOrchestratorLLMClients:
+    """抛出测试用 provider 构造错误。
+
+    Args:
+        config: 测试 provider config。
+
+    Returns:
+        不返回。
+
+    Raises:
+        LLMProviderConstructionError: 始终抛出。
+    """
+
+    raise LLMProviderConstructionError(f"fixture construction failure: {config.model}")
 
 
 def _valid_markdown_from_request(request: ChapterLLMRequest) -> str:
