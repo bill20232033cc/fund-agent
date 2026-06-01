@@ -18,8 +18,8 @@ Use `docs/reviews/` and `docs/archive/` only as evidence chain. They do not over
 | Current phase | `MVP real-provider stabilization and score-loop phase` |
 | Current gate | `MVP Service ExecutionContract boundary hardening gate` |
 | Current gate classification | `heavy` |
-| Current gate status | Slice 1-4 accepted locally; checkpoints `4691da5`, `854d4b8`, `19b08cf`, `this Slice 4 checkpoint commit` |
-| Next entry point | Controller-owned aggregate deepreview decision for the completed `MVP Service ExecutionContract boundary hardening gate` |
+| Current gate status | Slice 1-4 and aggregate deepreview accepted locally; slice checkpoints `4691da5`, `854d4b8`, `19b08cf`, `72c3a33` |
+| Next entry point | `ready-to-open-draft-PR` authorization point for the completed `MVP Service ExecutionContract boundary hardening gate`; do not push/create PR/mark ready without explicit user authorization |
 | Control truth | `docs/implementation-control.md` |
 | Design truth | `docs/design.md` |
 | Accepted plan commit | `beb6891` |
@@ -69,6 +69,7 @@ The user authorized the draft PR gate earlier, but this phase made no external P
 - Gate C score-loop design is accepted as design-only: it distinguishes `extraction_score`, `chapter_fact_score` and `chapter_generation_score`, routes provider runtime timeout as `not_scored` / `blocked_provider_runtime`, and remains separate from existing golden / fixtures / score / quality gate / readiness semantics.
 - `--use-llm` now runs through local `HostRuntimeRunner` for run lifecycle, global deadline, cancel token, terminal run state, safe diagnostics and phase events; Host does not import Service/Fund and does not inspect fund code/year/type/chapter policy/ExecutionContract business fields; default deterministic analyze/checklist still bypass Host; no Agent tool-loop or dayu runtime is present.
 - Provider runtime budget and prompt-cost diagnostics remain transitional provider-calibration evidence; Host run state now provides the MVP process-local lifecycle boundary but does not solve provider endpoint small-prompt timeouts.
+- `MVP Service ExecutionContract boundary hardening gate` aggregate deepreview is accepted locally. Its accepted fixes enforce `QualityFailClosedPolicy` at the typed LLM execution boundary and keep `QualityGatePolicy` sourced from `execution_contract.py`; aggregate re-review found no blocking findings.
 
 ## 4. Route C Accepted Future Route
 

@@ -335,6 +335,56 @@ async def test_analyze_with_llm_execution_matches_existing_llm_path() -> None:
     assert len(hardened_auditor.requests) == 6
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("policy_field", "value"),
+    [
+        ("fail_on_quality_gate_block", False),
+        ("fail_on_quality_gate_not_run", False),
+        ("fail_on_partial_orchestration", False),
+        ("fail_on_incomplete_final_assembly", False),
+        ("deterministic_fallback_allowed", True),
+    ],
+)
+async def test_analyze_with_llm_execution_rejects_weakened_fail_closed_policy(
+    policy_field: str,
+    value: bool,
+) -> None:
+    """验证 typed execution 路径执行前拒绝放松 fail-closed 的 runtime plan。
+
+    Args:
+        policy_field: 要放松的策略字段。
+        value: 非 fail-closed 取值。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 weak policy 被静默忽略或触发抽取/LLM 时抛出。
+    """
+
+    extractor = _FakeExtractor(_bundle())
+    writer = _FakeChapterLLMClient()
+    auditor = _FakeAuditLLMClient()
+    service = FundAnalysisService(extractor=extractor)
+    quality_fail_closed_policy = _unchecked_quality_fail_closed_policy(
+        **{policy_field: value}
+    )
+    execution_request = _execution_request(
+        _developer_request(),
+        writer=writer,
+        auditor=auditor,
+        quality_fail_closed_policy=quality_fail_closed_policy,
+    )
+
+    with pytest.raises(ValueError, match=policy_field):
+        await service.analyze_with_llm_execution(execution_request)
+
+    assert extractor.calls == []
+    assert writer.requests == []
+    assert auditor.requests == []
+
+
 def test_host_runner_records_llm_service_phase_events() -> None:
     """验证 Host 托管 Service LLM 路径时记录章节 phase 和 final assembly。"""
 
@@ -690,6 +740,7 @@ def _execution_request(
     writer: _FakeChapterLLMClient | None = None,
     auditor: _FakeAuditLLMClient | None = None,
     chapter_policy: ChapterOrchestrationPolicy | None = None,
+    quality_fail_closed_policy: QualityFailClosedPolicy | None = None,
 ) -> FundLLMExecutionRequest:
     """构造测试用 hardened LLM execution request。
 
@@ -698,6 +749,7 @@ def _execution_request(
         writer: fake writer。
         auditor: fake auditor。
         chapter_policy: 可选章节策略。
+        quality_fail_closed_policy: 可选 fail-closed 策略。
 
     Returns:
         Service-owned typed execution request。
@@ -719,9 +771,8 @@ def _execution_request(
         chapter_policy=ChapterOrchestrationPolicy(prompt_payload_mode="compact"),
         assembly_policy=FinalAssemblyPolicy(),
         provider_runtime_budget=provider_runtime_budget,
-        quality_fail_closed_policy=QualityFailClosedPolicy(
-            quality_gate_policy=quality_policy.quality_gate_policy
-        ),
+        quality_fail_closed_policy=quality_fail_closed_policy
+        or QualityFailClosedPolicy(quality_gate_policy=quality_policy.quality_gate_policy),
         safe_diagnostic_policy=SafeDiagnosticPolicy(),
         host_timeout_seconds=derive_host_timeout_seconds(
             provider_runtime_budget,
@@ -762,6 +813,36 @@ def _quality_policy_from_request(request) -> QualityPolicyDeclaration:
     else:
         quality_gate_policy = request.developer_overrides.quality_gate_policy or "block"
     return QualityPolicyDeclaration(quality_gate_policy=quality_gate_policy)
+
+
+def _unchecked_quality_fail_closed_policy(
+    **overrides: object,
+) -> QualityFailClosedPolicy:
+    """构造绕过 dataclass 校验的 fail-closed policy，用于执行入口防御测试。
+
+    Args:
+        overrides: 需要覆盖的策略字段。
+
+    Returns:
+        可携带 weak policy 字段的 `QualityFailClosedPolicy`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    policy = object.__new__(QualityFailClosedPolicy)
+    values = {
+        "quality_gate_policy": "block",
+        "fail_on_quality_gate_block": True,
+        "fail_on_quality_gate_not_run": True,
+        "fail_on_partial_orchestration": True,
+        "fail_on_incomplete_final_assembly": True,
+        "deterministic_fallback_allowed": False,
+    }
+    values.update(overrides)
+    for field_name, value in values.items():
+        object.__setattr__(policy, field_name, value)
+    return policy
 
 
 def _provider_runtime_budget() -> ProviderRuntimeBudget:

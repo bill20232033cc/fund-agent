@@ -3,12 +3,16 @@
 from __future__ import annotations
 
 import inspect
+import ast
 from collections.abc import Mapping as CollectionsMapping
 from dataclasses import fields, is_dataclass
+from pathlib import Path
 from typing import Any, Mapping, get_args, get_origin
 
 import pytest
 
+import fund_agent.services.execution_contract as execution_contract_module
+import fund_agent.services.fund_analysis_service as fund_analysis_service_module
 from fund_agent.services import (
     ChapterOrchestrationPolicy,
     FinalAssemblyPolicy,
@@ -405,6 +409,33 @@ def test_open_business_bag_guard_detects_future_annotation_strings(
     assert _is_open_business_bag(annotation)
 
 
+def test_quality_gate_policy_has_single_service_type_source() -> None:
+    """验证 QualityGatePolicy 只以 execution_contract 作为 Service 类型真源。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 fund_analysis_service 重新定义 QualityGatePolicy 时抛出。
+    """
+
+    source_path = Path("fund_agent/services/fund_analysis_service.py")
+    tree = ast.parse(source_path.read_text(encoding="utf-8"))
+
+    assert fund_analysis_service_module.QualityGatePolicy is (
+        execution_contract_module.QualityGatePolicy
+    )
+    assert not _has_module_level_assignment(tree, "QualityGatePolicy")
+    assert _imports_name_from_module(
+        tree,
+        module_name="fund_agent.services.execution_contract",
+        imported_name="QualityGatePolicy",
+    )
+
+
 def _provider_runtime_budget() -> ProviderRuntimeBudget:
     """构造测试用 provider runtime 预算。
 
@@ -553,3 +584,56 @@ def _is_open_business_bag_annotation_text(annotation: str) -> bool:
         "Mapping[str,Any]",
         "typing.Mapping[str,Any]",
     }
+
+
+def _has_module_level_assignment(tree: ast.Module, name: str) -> bool:
+    """判断模块顶层是否直接赋值指定名称。
+
+    Args:
+        tree: Python 模块 AST。
+        name: 需要检查的顶层名称。
+
+    Returns:
+        若存在顶层赋值则返回 True。
+
+    Raises:
+        无显式抛出。
+    """
+
+    for node in tree.body:
+        if isinstance(node, ast.Assign):
+            for target in node.targets:
+                if isinstance(target, ast.Name) and target.id == name:
+                    return True
+        if isinstance(node, ast.AnnAssign):
+            target = node.target
+            if isinstance(target, ast.Name) and target.id == name:
+                return True
+    return False
+
+
+def _imports_name_from_module(
+    tree: ast.Module,
+    *,
+    module_name: str,
+    imported_name: str,
+) -> bool:
+    """判断模块是否从指定模块导入指定名称。
+
+    Args:
+        tree: Python 模块 AST。
+        module_name: 期望的导入来源模块。
+        imported_name: 期望导入的名称。
+
+    Returns:
+        若存在匹配的 from import 则返回 True。
+
+    Raises:
+        无显式抛出。
+    """
+
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and node.module == module_name:
+            if any(alias.name == imported_name for alias in node.names):
+                return True
+    return False

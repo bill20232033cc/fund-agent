@@ -75,6 +75,7 @@ from fund_agent.services.execution_contract import (
     FundLLMRuntimePlan,
     ProviderRuntimeBudget,
     QualityFailClosedPolicy,
+    QualityGatePolicy,
     QualityPolicyDeclaration,
     SafeDiagnosticPolicy,
     derive_host_timeout_seconds,
@@ -85,7 +86,6 @@ from fund_agent.services.thermometer_service import ThermometerRequest, Thermome
 
 ValuationState = Literal["low", "fair", "high", "unavailable"]
 MoneyHorizon = Literal["long_enough", "uncertain", "too_short"]
-QualityGatePolicy = Literal["off", "warn", "block"]
 AnalyzeMode = Literal["product", "developer_override"]
 AnalyzeCommandSource = Literal["analyze", "checklist"]
 DEFAULT_GOLDEN_ANSWER_PATH = DEFAULT_GOLDEN_ANSWER_JSON
@@ -702,6 +702,9 @@ class FundAnalysisService:
             Exception: 允许底层抽取器或 Agent 层基金能力传播异常。
         """
 
+        _validate_llm_execution_fail_closed_policy(
+            execution_request.runtime_plan.quality_fail_closed_policy
+        )
         return await self.analyze_with_llm(
             _fund_analysis_request_from_llm_input(
                 execution_request.contract.analysis_input
@@ -1008,6 +1011,40 @@ def _fund_analysis_request_from_llm_input(
         developer_overrides=analysis_input.developer_overrides,
         command_source="analyze",
     )
+
+
+def _validate_llm_execution_fail_closed_policy(
+    policy: QualityFailClosedPolicy,
+) -> None:
+    """验证 typed LLM 执行路径仍保持 fail-closed，见模板第 0-7 章。
+
+    Args:
+        policy: Service runtime plan 中的 fail-closed 策略。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        ValueError: 当策略字段会放松当前 LLM fail-closed 语义时抛出。
+    """
+
+    weakening_fields = {
+        "fail_on_quality_gate_block": policy.fail_on_quality_gate_block is not True,
+        "fail_on_quality_gate_not_run": policy.fail_on_quality_gate_not_run is not True,
+        "fail_on_partial_orchestration": policy.fail_on_partial_orchestration is not True,
+        "fail_on_incomplete_final_assembly": (
+            policy.fail_on_incomplete_final_assembly is not True
+        ),
+        "deterministic_fallback_allowed": policy.deterministic_fallback_allowed is not False,
+    }
+    invalid_fields = tuple(
+        field_name
+        for field_name, weakens_fail_closed in weakening_fields.items()
+        if weakens_fail_closed
+    )
+    if invalid_fields:
+        joined_fields = ", ".join(invalid_fields)
+        raise ValueError(f"LLM execution fail-closed policy 不允许放松字段：{joined_fields}")
 
 
 def _resolve_analyze_contract(request: FundAnalysisRequest) -> ResolvedAnalyzeContract:

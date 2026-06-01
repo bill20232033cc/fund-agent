@@ -6,7 +6,7 @@
 > **设计真源**: `docs/design.md`
 > **控制真源**: `docs/implementation-control.md`
 > **短启动入口**: `docs/current-startup-packet.md`
-> **当前状态**: MVP real-provider stabilization and score-loop phase 已完成本地闭环；PR #21 保持 draft/open 且未由本 phase 修改外部状态。Gate A writer/auditor contract hardening、provider runtime timeout hardening、prompt-contract calibration、writer prompt contract diagnostic narrowing、writer marker syntax repair、programmatic audit L1 calibration、provider runtime timeout follow-up、independent body chapter execution、provider runtime budget and prompt-cost root-cause calibration 均已本地接受。Gate B real provider smoke acceptance 仍 blocked：真实 provider `006597 / 2024 --use-llm` 能观察章节 1-6 独立矩阵，但未生成完整 0-7 报告；当前唯一主 blocker 为 `provider_runtime_timeout_small_prompt`。Gate C chapter generation score-loop design accepted as design-only。当前 gate 是 `MVP Service ExecutionContract boundary hardening gate`；Slice 1-4 均已本地接受，checkpoints 为 `4691da5`、`854d4b8`、`19b08cf`、`this Slice 4 checkpoint commit`。当前 `--use-llm` 代码事实为 `CLI -> Service prepares FundLLMExecutionRequest / ExecutionContract -> Host runner -> Service -> fund_agent/fund -> provider HTTP call`；Host runner 提供进程内 run lifecycle、global deadline、cancel token、terminal run state、安全诊断和 phase events，但不理解基金业务、不读取 ExecutionContract 业务字段。async Host runner、durable session/resume/memory/outbox、Agent engine/tool-loop migration 保留为后续 gate。Dayu 是架构参考与能力来源，不是生产 runtime 直接依赖；不得把 `dayu-agent` / `dayu.host` / `dayu.engine` 作为生产 runtime 直接依赖。
+> **当前状态**: MVP real-provider stabilization and score-loop phase 已完成本地闭环；PR #21 保持 draft/open 且未由本 phase 修改外部状态。Gate A writer/auditor contract hardening、provider runtime timeout hardening、prompt-contract calibration、writer prompt contract diagnostic narrowing、writer marker syntax repair、programmatic audit L1 calibration、provider runtime timeout follow-up、independent body chapter execution、provider runtime budget and prompt-cost root-cause calibration 均已本地接受。Gate B real provider smoke acceptance 仍 blocked：真实 provider `006597 / 2024 --use-llm` 能观察章节 1-6 独立矩阵，但未生成完整 0-7 报告；当前唯一主 blocker 为 `provider_runtime_timeout_small_prompt`。Gate C chapter generation score-loop design accepted as design-only。当前 gate 是 `MVP Service ExecutionContract boundary hardening gate`；Slice 1-4 和 aggregate deepreview 均已本地接受，slice checkpoints 为 `4691da5`、`854d4b8`、`19b08cf`、`72c3a33`。当前 `--use-llm` 代码事实为 `CLI -> Service prepares FundLLMExecutionRequest / ExecutionContract -> Host runner -> Service -> fund_agent/fund -> provider HTTP call`；Host runner 提供进程内 run lifecycle、global deadline、cancel token、terminal run state、安全诊断和 phase events，但不理解基金业务、不读取 ExecutionContract 业务字段。async Host runner、durable session/resume/memory/outbox、Agent engine/tool-loop migration 保留为后续 gate。Dayu 是架构参考与能力来源，不是生产 runtime 直接依赖；不得把 `dayu-agent` / `dayu.host` / `dayu.engine` 作为生产 runtime 直接依赖。
 
 ---
 
@@ -17,7 +17,7 @@
 ### Current Truth Guardrails
 
 - `AGENTS.md` 是最高优先级执行规则真源；若与本文档或 `docs/design.md` 冲突，先调整方案/实现，再回写文档。
-- 当前 phase 是 `MVP real-provider stabilization and score-loop phase`；当前 gate 是 `MVP Service ExecutionContract boundary hardening gate`，分类为 `heavy`。Slice 1-4 已在本地 checkpoint 接受（`4691da5`、`854d4b8`、`19b08cf`、`this Slice 4 checkpoint commit`）；Slice 4 已完成 Host boundary regression 与 docs/control sync。Provider runtime budget and prompt-cost root-cause calibration 已本地接受为诊断/runtime-cost hardening；当前唯一 provider blocker 仍是 `provider_runtime_timeout_small_prompt`。
+- 当前 phase 是 `MVP real-provider stabilization and score-loop phase`；当前 gate 是 `MVP Service ExecutionContract boundary hardening gate`，分类为 `heavy`。Slice 1-4 已在本地 checkpoint 接受（`4691da5`、`854d4b8`、`19b08cf`、`72c3a33`）；aggregate deepreview 已完成并接受，无 remaining blocking findings。Provider runtime budget and prompt-cost root-cause calibration 已本地接受为诊断/runtime-cost hardening；当前唯一 provider blocker 仍是 `provider_runtime_timeout_small_prompt`。
 - 当前默认实现仍以确定性 `fund-analysis analyze/checklist` 为生产主链路：结构化抽取、确定性分析、模板渲染、程序审计和 FQ0-FQ6 quality gate。
 - Gate 1 已新增 Fund 层 typed projection：`project_chapter_facts()` / `ChapterFactProvider.project()` 将内存中的 `StructuredFundDataBundle` 投影为 `chapter_fact_projection.v1`。
 - Gate 1 typed projection 只消费现有 bundle、CHAPTER_CONTRACT、preferred_lens 和 ITEM_RULE truth APIs；不读取仓库、PDF/cache/source helper、parser、LLM、Service、Host 或 dayu。
@@ -61,8 +61,8 @@
 | Current phase | `MVP real-provider stabilization and score-loop phase` |
 | Current gate | `MVP Service ExecutionContract boundary hardening gate` |
 | Current gate classification | `heavy` |
-| Current gate status | Slice 1-4 accepted locally; checkpoints `4691da5`, `854d4b8`, `19b08cf`, `this Slice 4 checkpoint commit`; Gate B still blocked by `provider_runtime_timeout_small_prompt`; Gate C design accepted |
-| Next entry point | Controller-owned aggregate deepreview decision for the completed `MVP Service ExecutionContract boundary hardening gate` |
+| Current gate status | Slice 1-4 and aggregate deepreview accepted locally; slice checkpoints `4691da5`, `854d4b8`, `19b08cf`, `72c3a33`; Gate B still blocked by `provider_runtime_timeout_small_prompt`; Gate C design accepted |
+| Next entry point | `ready-to-open-draft-PR` authorization point for the completed `MVP Service ExecutionContract boundary hardening gate`; do not push/create PR/mark ready without explicit user authorization |
 | Next gate classification | `standard/heavy`; Service/Host boundary contract hardening affects public execution contract and explicit parameter discipline |
 | Design truth | `docs/design.md` |
 | Control truth | `docs/implementation-control.md` |
@@ -173,6 +173,9 @@ The local Gate 4 closeout is accepted and the user previously authorized the dra
 | MVP internalized Host runtime governance adapter implementation evidence | `docs/reviews/mvp-internalized-host-runtime-governance-adapter-implementation-evidence-20260601.md` |
 | MVP internalized Host runtime governance adapter code review / re-review | `docs/reviews/mvp-internalized-host-runtime-governance-adapter-code-review-20260601.md`; `docs/reviews/mvp-internalized-host-runtime-governance-adapter-code-rereview-20260601.md` |
 | MVP internalized Host runtime governance adapter controller judgment | `docs/reviews/mvp-internalized-host-runtime-governance-adapter-controller-judgment-20260601.md` |
+| MVP Service ExecutionContract boundary hardening aggregate deepreview | `docs/reviews/mvp-service-executioncontract-boundary-hardening-aggregate-deepreview-20260601.md` |
+| MVP Service ExecutionContract boundary hardening aggregate fix / re-review | `docs/reviews/mvp-service-executioncontract-boundary-hardening-aggregate-fix-evidence-20260601.md`; `docs/reviews/mvp-service-executioncontract-boundary-hardening-aggregate-rereview-20260601.md` |
+| MVP Service ExecutionContract boundary hardening aggregate controller judgment | `docs/reviews/mvp-service-executioncontract-boundary-hardening-aggregate-controller-judgment-20260601.md` |
 | Prior release-maintenance roadmap summary | `docs/reviews/release-maintenance-phase-roadmap-consolidation-20260529.md` |
 | Prior overnight closeout summary | `docs/reviews/overnight-release-maintenance-closeout-20260529.md` |
 | Historical control snapshots | `docs/archive/implementation-control-history-20260525.md`; `docs/archive/implementation-control-release-maintenance-ledger-20260527.md` |
@@ -194,6 +197,7 @@ The Current Accepted Artifacts table is intentionally short. Older release-maint
 - Gate 4 Slice 4D1 provider factory was accepted in commit `26203d3`; Gate 4 Slice 4D2 CLI provider wiring was accepted in commit `ab0590a`; 4D3 docs/control sync was accepted in commit `4d0c19f`; 4D aggregate review was accepted in commit `7a3dab9`.
 - Golden / strict correctness / QDII / FOF / `110020` / fixture promotion blockers are residual product-quality work, not blockers for starting MVP report generation Gate 1.
 - Local Host runtime governance is implemented for `--use-llm`; Host remains business-agnostic and does not import Service/Fund or inspect ExecutionContract business fields. Agent/dayu runtime is not implemented. Internalized Agent engine/tool-loop remains deferred.
+- `MVP Service ExecutionContract boundary hardening gate` aggregate deepreview accepted two non-blocking findings and fixed both: runtime now validates `QualityFailClosedPolicy` before LLM execution, and `QualityGatePolicy` has a single Service contract type source in `execution_contract.py`; aggregate re-review passed with no blocking findings.
 
 ## Route C Future Route
 
@@ -229,6 +233,7 @@ The Current Accepted Artifacts table is intentionally short. Older release-maint
 
 | Gate | Status | Summary | Next action |
 |---|---|---|---|
+| `MVP Service ExecutionContract boundary hardening gate aggregate deepreview` | accepted locally | Aggregate review accepted two non-blocking findings; fixes enforce `QualityFailClosedPolicy` at the typed LLM execution boundary and unify `QualityGatePolicy` to `execution_contract.py`; re-review PASS; targeted/full validation PASS | Stop at `ready-to-open-draft-PR` authorization point; do not push/create PR/mark ready without explicit user authorization |
 | `MVP Service ExecutionContract boundary hardening gate Slice 4` | accepted locally | Adds Host boundary regression and docs/control sync for accepted internalized Host runner plus Service-owned `FundLLMExecutionRequest` / `FundLLMExecutionContract` boundary; no Agent/tool-loop, provider runtime implementation, score, quality gate, golden, release or PR state changes; code review PASS with no blocking findings | Start aggregate deepreview for this completed gate |
 | `MVP Service ExecutionContract boundary hardening gate Slices 1-3` | accepted locally | Accepted checkpoints `4691da5`, `854d4b8`, `19b08cf`; Service contract/types, Service-owned provider preparation, and CLI -> Host typed execution request path are accepted; O1 deferred to future async CLI/Host async-runner gate and O2 assigned to Slice 4 | Complete Slice 4 only |
 | `MVP internalized Host runtime governance adapter implementation gate` | accepted locally | Adds `fund_agent/host` process-local Host runtime runner, safe run events, deadline/cancel, terminal state and `--use-llm` CLI integration without `dayu-agent`; full validation and code review/re-review passed; live provider smoke in current shell was blocked by absent provider env and does not change prior `provider_runtime_timeout_small_prompt` residual | Next entry remains `MVP Service ExecutionContract boundary hardening gate`; do not enter it until explicitly continuing that gate |

@@ -39,6 +39,7 @@ from fund_agent.services.execution_contract import (
     FundLLMRuntimePlan,
     ProviderRuntimeBudget,
     QualityFailClosedPolicy,
+    QualityGatePolicy,
     QualityPolicyDeclaration,
     SafeDiagnosticPolicy,
     derive_host_timeout_seconds,
@@ -83,7 +84,6 @@ from fund_agent.services.fund_analysis_service import (
     MoneyHorizon,
     QualityGateBlockedError,
     QualityGateNotRunBlockedError,
-    QualityGatePolicy,
     ValuationState,
     build_fund_llm_execution_request,
 )
