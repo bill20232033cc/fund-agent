@@ -9,6 +9,79 @@ from typing import Generic, Literal, TypeVar
 ExtractedValueT = TypeVar("ExtractedValueT")
 ExtractionMode = Literal["direct", "derived", "estimated", "missing"]
 EvidenceSourceKind = Literal["annual_report", "external_api", "derived"]
+BondRiskEvidenceStatus = Literal["accepted", "accepted_absence", "weak", "ambiguous", "missing"]
+BondRiskEvidenceStrength = Literal[
+    "quantitative_direct",
+    "quantitative_derived",
+    "quantitative_absence",
+    "qualitative_direct",
+    "qualitative_control_intent",
+    "ambiguous",
+    "missing",
+]
+BondRiskEvidenceGroupId = Literal[
+    "duration_rate_risk",
+    "credit_risk",
+    "leverage_liquidity",
+    "asset_allocation_holdings_mix",
+    "drawdown_stress",
+    "redemption_share_pressure",
+    "convertible_bond_equity_exposure",
+]
+BondRiskEvidenceMeasurementKind = Literal[
+    "actual_metric",
+    "derived_metric",
+    "actual_exposure",
+    "explicit_absence",
+    "risk_disclosure",
+    "strategy_text",
+    "control_intent",
+    "not_found",
+]
+BondRiskEvidenceContractStatus = Literal["satisfied", "partial", "missing"]
+BondRiskEvidenceSchemaVersion = Literal["bond_risk_evidence.v1"]
+
+BOND_RISK_EVIDENCE_CONTRACT_ID: BondRiskEvidenceSchemaVersion = "bond_risk_evidence.v1"
+BOND_RISK_EVIDENCE_GROUP_IDS: tuple[BondRiskEvidenceGroupId, ...] = (
+    "duration_rate_risk",
+    "credit_risk",
+    "leverage_liquidity",
+    "asset_allocation_holdings_mix",
+    "drawdown_stress",
+    "redemption_share_pressure",
+    "convertible_bond_equity_exposure",
+)
+
+_BOND_RISK_EVIDENCE_STATUSES = frozenset(
+    ("accepted", "accepted_absence", "weak", "ambiguous", "missing")
+)
+_BOND_RISK_EVIDENCE_STRENGTHS = frozenset(
+    (
+        "quantitative_direct",
+        "quantitative_derived",
+        "quantitative_absence",
+        "qualitative_direct",
+        "qualitative_control_intent",
+        "ambiguous",
+        "missing",
+    )
+)
+_BOND_RISK_EVIDENCE_MEASUREMENT_KINDS = frozenset(
+    (
+        "actual_metric",
+        "derived_metric",
+        "actual_exposure",
+        "explicit_absence",
+        "risk_disclosure",
+        "strategy_text",
+        "control_intent",
+        "not_found",
+    )
+)
+_BOND_RISK_ACCEPTED_STRENGTHS = frozenset(
+    ("quantitative_direct", "quantitative_derived", "qualitative_direct")
+)
+_BOND_RISK_ACCEPTED_ANCHORED_STATUSES = frozenset(("accepted", "accepted_absence", "weak"))
 
 
 @dataclass(frozen=True, slots=True)
@@ -32,6 +105,391 @@ class EvidenceAnchor:
     table_id: str | None
     row_locator: str | None
     note: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class BondRiskEvidenceAnchorRef:
+    """债券风险证据组级锚点引用，见模板第 6 章“核心风险”。
+
+    Attributes:
+        anchor_id: 稳定锚点 ID，格式为 `bond-risk:<fund_code>:<report_year>:<group_id>:<ordinal>`。
+        section_id: 年报章节编号。
+        page_number: 年报页码；文本来源无法确定时可为 `None`。
+        table_id: 表格标识；非表格文本证据可为 `None`。
+        row_locator: 行级或段落级定位说明。
+        evidence_role: 证据在风险组内承担的角色。
+    """
+
+    anchor_id: str
+    section_id: str
+    page_number: int | None
+    table_id: str | None
+    row_locator: str
+    evidence_role: str
+
+
+@dataclass(frozen=True, slots=True)
+class BondRiskEvidenceGroupRecord:
+    """债券基金模板第 6 章“核心风险”的单个风险组证据记录。
+
+    Attributes:
+        group_id: 七个债券风险证据组之一。
+        status: 该组证据状态；只有 `accepted` 与 `accepted_absence` 可满足组要求。
+        strength: 证据强度，区分定量、定性、控制意图、歧义和缺失。
+        summary: 证据摘要，禁止替代锚点本身。
+        measurement_kind: 度量或披露类型。
+        metric_name: 指标名称；非指标证据可为 `None`。
+        metric_value: 指标值原文；非指标证据可为 `None`。
+        metric_unit: 指标单位；非指标证据可为 `None`。
+        period_label: 指标或披露对应期间。
+        source_anchor_ids: 关联的组级锚点 ID。
+        na_reason: 缺失、不适用或未满足原因。
+        reviewer_note: 人工复核说明。
+    """
+
+    group_id: BondRiskEvidenceGroupId
+    status: BondRiskEvidenceStatus
+    strength: BondRiskEvidenceStrength
+    summary: str
+    measurement_kind: BondRiskEvidenceMeasurementKind
+    metric_name: str | None
+    metric_value: str | None
+    metric_unit: str | None
+    period_label: str | None
+    source_anchor_ids: tuple[str, ...]
+    na_reason: str | None
+    reviewer_note: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class BondRiskEvidenceValue:
+    """债券风险证据契约值，见模板第 6 章“核心风险”。
+
+    该结构只表达年报中可追溯的债券风险证据状态，不降低 FQ0-FQ6
+    门槛，也不把弱证据或歧义证据静默提升为通过。
+
+    Attributes:
+        schema_version: 当前固定为 `bond_risk_evidence.v1`。
+        contract_id: 当前固定为 `bond_risk_evidence.v1`。
+        fund_code: 6 位基金代码。
+        report_year: 年报年份。
+        groups: 七个债券风险证据组记录。
+        anchors: 可被组记录引用的稳定组级锚点。
+        satisfied_group_ids: 已满足组 ID，必须由 `accepted` / `accepted_absence` 状态派生。
+        missing_group_ids: 缺失组 ID，必须由 `missing` 状态派生。
+        weak_group_ids: 弱证据组 ID，必须由 `weak` 状态派生。
+        ambiguous_group_ids: 歧义组 ID，必须由 `ambiguous` 状态派生。
+        contract_status: 整体契约状态。
+    """
+
+    schema_version: BondRiskEvidenceSchemaVersion
+    contract_id: BondRiskEvidenceSchemaVersion
+    fund_code: str
+    report_year: int
+    groups: tuple[BondRiskEvidenceGroupRecord, ...]
+    anchors: tuple[BondRiskEvidenceAnchorRef, ...]
+    satisfied_group_ids: tuple[BondRiskEvidenceGroupId, ...]
+    missing_group_ids: tuple[BondRiskEvidenceGroupId, ...]
+    weak_group_ids: tuple[BondRiskEvidenceGroupId, ...]
+    ambiguous_group_ids: tuple[BondRiskEvidenceGroupId, ...]
+    contract_status: BondRiskEvidenceContractStatus
+
+
+def validate_bond_risk_evidence_value(value: BondRiskEvidenceValue) -> None:
+    """校验债券风险证据契约值，见模板第 6 章“核心风险”。
+
+    Args:
+        value: 待校验的 `bond_risk_evidence.v1` 结构化值。
+
+    Returns:
+        校验通过时返回 `None`。
+
+    Raises:
+        ValueError: 当 schema、七组完整性、锚点引用、派生组 ID 或整体状态不一致时抛出。
+    """
+
+    if value.schema_version != BOND_RISK_EVIDENCE_CONTRACT_ID:
+        raise ValueError("bond_risk_evidence schema_version 必须是 bond_risk_evidence.v1")
+    if value.contract_id != BOND_RISK_EVIDENCE_CONTRACT_ID:
+        raise ValueError("bond_risk_evidence contract_id 必须是 bond_risk_evidence.v1")
+    if not value.fund_code:
+        raise ValueError("bond_risk_evidence fund_code 不能为空")
+    if value.report_year <= 0:
+        raise ValueError("bond_risk_evidence report_year 必须为正整数")
+
+    _validate_bond_risk_group_records(value.groups)
+    anchor_ids = _validate_bond_risk_anchor_refs(value)
+
+    for group in value.groups:
+        _validate_bond_risk_group_anchor_refs(group, anchor_ids, value.fund_code, value.report_year)
+
+    satisfied_ids, missing_ids, weak_ids, ambiguous_ids = _derive_bond_risk_group_id_sets(value.groups)
+    _require_same_group_ids("satisfied_group_ids", value.satisfied_group_ids, satisfied_ids)
+    _require_same_group_ids("missing_group_ids", value.missing_group_ids, missing_ids)
+    _require_same_group_ids("weak_group_ids", value.weak_group_ids, weak_ids)
+    _require_same_group_ids("ambiguous_group_ids", value.ambiguous_group_ids, ambiguous_ids)
+
+    expected_contract_status = _derive_bond_risk_contract_status(
+        satisfied_ids=satisfied_ids,
+        missing_ids=missing_ids,
+        weak_ids=weak_ids,
+        ambiguous_ids=ambiguous_ids,
+    )
+    if value.contract_status != expected_contract_status:
+        raise ValueError(
+            "bond_risk_evidence contract_status 与组状态不一致："
+            f"expected={expected_contract_status}, actual={value.contract_status}"
+        )
+
+
+def _validate_bond_risk_group_records(groups: tuple[BondRiskEvidenceGroupRecord, ...]) -> None:
+    """校验模板第 6 章七个债券风险组记录完整性。
+
+    Args:
+        groups: 债券风险证据组记录。
+
+    Returns:
+        校验通过时返回 `None`。
+
+    Raises:
+        ValueError: 当组数量、组 ID 或组内状态字段非法时抛出。
+    """
+
+    group_ids = tuple(group.group_id for group in groups)
+    if len(group_ids) != len(BOND_RISK_EVIDENCE_GROUP_IDS):
+        raise ValueError("bond_risk_evidence 必须恰好包含七个风险证据组")
+    if len(set(group_ids)) != len(group_ids):
+        raise ValueError("bond_risk_evidence group_id 不允许重复")
+    if set(group_ids) != set(BOND_RISK_EVIDENCE_GROUP_IDS):
+        raise ValueError("bond_risk_evidence group_id 必须匹配七个必需风险证据组")
+
+    for group in groups:
+        if group.status not in _BOND_RISK_EVIDENCE_STATUSES:
+            raise ValueError(f"bond_risk_evidence status 不受支持：{group.status}")
+        if group.strength not in _BOND_RISK_EVIDENCE_STRENGTHS:
+            raise ValueError(f"bond_risk_evidence strength 不受支持：{group.strength}")
+        if group.measurement_kind not in _BOND_RISK_EVIDENCE_MEASUREMENT_KINDS:
+            raise ValueError(f"bond_risk_evidence measurement_kind 不受支持：{group.measurement_kind}")
+        if not group.summary:
+            raise ValueError(f"bond_risk_evidence {group.group_id} summary 不能为空")
+        _validate_bond_risk_status_strength(group)
+
+
+def _validate_bond_risk_status_strength(group: BondRiskEvidenceGroupRecord) -> None:
+    """校验模板第 6 章单组状态与证据强度兼容性。
+
+    Args:
+        group: 单个债券风险证据组记录。
+
+    Returns:
+        校验通过时返回 `None`。
+
+    Raises:
+        ValueError: 当状态与强度组合会错误提升或弱化证据时抛出。
+    """
+
+    if group.status == "accepted" and group.strength not in _BOND_RISK_ACCEPTED_STRENGTHS:
+        raise ValueError(f"bond_risk_evidence {group.group_id} accepted 强度不兼容")
+    if group.strength == "quantitative_derived" and group.measurement_kind != "derived_metric":
+        raise ValueError(f"bond_risk_evidence {group.group_id} quantitative_derived 必须使用 derived_metric")
+    if group.status == "accepted_absence":
+        if group.strength != "quantitative_absence" or group.measurement_kind != "explicit_absence":
+            raise ValueError(f"bond_risk_evidence {group.group_id} accepted_absence 必须是显式定量缺席")
+    if group.status == "weak" and group.strength not in {
+        "qualitative_direct",
+        "qualitative_control_intent",
+        "ambiguous",
+    }:
+        raise ValueError(f"bond_risk_evidence {group.group_id} weak 强度不兼容")
+    if group.status == "ambiguous" and group.strength != "ambiguous":
+        raise ValueError(f"bond_risk_evidence {group.group_id} ambiguous 必须使用 ambiguous 强度")
+    if group.status == "missing" and group.strength != "missing":
+        raise ValueError(f"bond_risk_evidence {group.group_id} missing 必须使用 missing 强度")
+
+
+def _validate_bond_risk_anchor_refs(value: BondRiskEvidenceValue) -> frozenset[str]:
+    """校验模板第 6 章组级锚点唯一性与基础字段。
+
+    Args:
+        value: 债券风险证据契约值。
+
+    Returns:
+        可被组记录引用的锚点 ID 集合。
+
+    Raises:
+        ValueError: 当锚点重复、格式错误或缺少定位字段时抛出。
+    """
+
+    anchor_ids: set[str] = set()
+    for anchor in value.anchors:
+        if not anchor.anchor_id:
+            raise ValueError("bond_risk_evidence anchor_id 不能为空")
+        if anchor.anchor_id in anchor_ids:
+            raise ValueError(f"bond_risk_evidence anchor_id 重复：{anchor.anchor_id}")
+        anchor_ids.add(anchor.anchor_id)
+
+        group_id = _parse_bond_risk_anchor_id(anchor.anchor_id, value.fund_code, value.report_year)
+        if group_id not in BOND_RISK_EVIDENCE_GROUP_IDS:
+            raise ValueError(f"bond_risk_evidence anchor_id 包含未知 group_id：{group_id}")
+        if not anchor.section_id:
+            raise ValueError(f"bond_risk_evidence {anchor.anchor_id} section_id 不能为空")
+        if not anchor.row_locator:
+            raise ValueError(f"bond_risk_evidence {anchor.anchor_id} row_locator 不能为空")
+        if not anchor.evidence_role:
+            raise ValueError(f"bond_risk_evidence {anchor.anchor_id} evidence_role 不能为空")
+
+    return frozenset(anchor_ids)
+
+
+def _parse_bond_risk_anchor_id(anchor_id: str, fund_code: str, report_year: int) -> str:
+    """解析模板第 6 章债券风险稳定锚点 ID。
+
+    Args:
+        anchor_id: 稳定组级锚点 ID。
+        fund_code: 当前契约基金代码。
+        report_year: 当前契约年报年份。
+
+    Returns:
+        锚点所属风险组 ID。
+
+    Raises:
+        ValueError: 当锚点格式、基金代码、年份或序号不匹配时抛出。
+    """
+
+    parts = anchor_id.split(":")
+    if len(parts) != 5 or parts[0] != "bond-risk":
+        raise ValueError(f"bond_risk_evidence anchor_id 格式错误：{anchor_id}")
+    _, anchor_fund_code, anchor_year, group_id, ordinal = parts
+    if anchor_fund_code != fund_code:
+        raise ValueError(f"bond_risk_evidence anchor_id 基金代码不匹配：{anchor_id}")
+    if anchor_year != str(report_year):
+        raise ValueError(f"bond_risk_evidence anchor_id 年份不匹配：{anchor_id}")
+    if not ordinal.isdigit() or int(ordinal) <= 0:
+        raise ValueError(f"bond_risk_evidence anchor_id 序号必须为正整数：{anchor_id}")
+    return group_id
+
+
+def _validate_bond_risk_group_anchor_refs(
+    group: BondRiskEvidenceGroupRecord,
+    anchor_ids: frozenset[str],
+    fund_code: str,
+    report_year: int,
+) -> None:
+    """校验模板第 6 章单组记录对锚点的引用。
+
+    Args:
+        group: 单个债券风险证据组记录。
+        anchor_ids: 当前契约内可解析的锚点 ID 集合。
+        fund_code: 当前契约基金代码。
+        report_year: 当前契约年报年份。
+
+    Returns:
+        校验通过时返回 `None`。
+
+    Raises:
+        ValueError: 当 accepted/weak 记录无锚点或引用不存在锚点时抛出。
+    """
+
+    if group.status in _BOND_RISK_ACCEPTED_ANCHORED_STATUSES and not group.source_anchor_ids:
+        raise ValueError(f"bond_risk_evidence {group.group_id} 需要至少一个可解析年报锚点")
+
+    for anchor_id in group.source_anchor_ids:
+        if anchor_id not in anchor_ids:
+            raise ValueError(f"bond_risk_evidence {group.group_id} 引用缺失锚点：{anchor_id}")
+        anchor_group_id = _parse_bond_risk_anchor_id(anchor_id, fund_code, report_year)
+        if anchor_group_id and anchor_group_id != group.group_id:
+            raise ValueError(f"bond_risk_evidence {group.group_id} 引用其他风险组锚点：{anchor_id}")
+
+
+def _derive_bond_risk_group_id_sets(
+    groups: tuple[BondRiskEvidenceGroupRecord, ...],
+) -> tuple[
+    tuple[BondRiskEvidenceGroupId, ...],
+    tuple[BondRiskEvidenceGroupId, ...],
+    tuple[BondRiskEvidenceGroupId, ...],
+    tuple[BondRiskEvidenceGroupId, ...],
+]:
+    """从模板第 6 章组状态派生满足、缺失、弱证据和歧义组。
+
+    Args:
+        groups: 债券风险证据组记录。
+
+    Returns:
+        依次返回满足组、缺失组、弱证据组、歧义组。
+    """
+
+    by_id = {group.group_id: group for group in groups}
+    satisfied_ids: list[BondRiskEvidenceGroupId] = []
+    missing_ids: list[BondRiskEvidenceGroupId] = []
+    weak_ids: list[BondRiskEvidenceGroupId] = []
+    ambiguous_ids: list[BondRiskEvidenceGroupId] = []
+
+    for group_id in BOND_RISK_EVIDENCE_GROUP_IDS:
+        group = by_id[group_id]
+        if group.status in {"accepted", "accepted_absence"}:
+            satisfied_ids.append(group_id)
+        elif group.status == "missing":
+            missing_ids.append(group_id)
+        elif group.status == "weak":
+            weak_ids.append(group_id)
+        elif group.status == "ambiguous":
+            ambiguous_ids.append(group_id)
+
+    return tuple(satisfied_ids), tuple(missing_ids), tuple(weak_ids), tuple(ambiguous_ids)
+
+
+def _require_same_group_ids(
+    field_name: str,
+    actual: tuple[BondRiskEvidenceGroupId, ...],
+    expected: tuple[BondRiskEvidenceGroupId, ...],
+) -> None:
+    """校验模板第 6 章派生组 ID 字段未被调用方篡改。
+
+    Args:
+        field_name: 被校验字段名。
+        actual: 调用方提供的组 ID。
+        expected: 由组状态派生的组 ID。
+
+    Returns:
+        校验通过时返回 `None`。
+
+    Raises:
+        ValueError: 当调用方提供值与派生值不一致时抛出。
+    """
+
+    if actual != expected:
+        raise ValueError(
+            f"bond_risk_evidence {field_name} 与组状态不一致："
+            f"expected={expected}, actual={actual}"
+        )
+
+
+def _derive_bond_risk_contract_status(
+    *,
+    satisfied_ids: tuple[BondRiskEvidenceGroupId, ...],
+    missing_ids: tuple[BondRiskEvidenceGroupId, ...],
+    weak_ids: tuple[BondRiskEvidenceGroupId, ...],
+    ambiguous_ids: tuple[BondRiskEvidenceGroupId, ...],
+) -> BondRiskEvidenceContractStatus:
+    """从模板第 6 章风险组状态派生整体契约状态。
+
+    Args:
+        satisfied_ids: 已满足组 ID。
+        missing_ids: 缺失组 ID。
+        weak_ids: 弱证据组 ID。
+        ambiguous_ids: 歧义组 ID。
+
+    Returns:
+        `satisfied`、`partial` 或 `missing`。
+    """
+
+    if len(satisfied_ids) == len(BOND_RISK_EVIDENCE_GROUP_IDS):
+        return "satisfied"
+    if satisfied_ids or weak_ids or ambiguous_ids:
+        return "partial"
+    if missing_ids:
+        return "missing"
+    return "missing"
 
 
 @dataclass(frozen=True, slots=True)

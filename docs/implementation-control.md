@@ -1,333 +1,301 @@
 # 基金行为教练 Agent —— 实施总控文档
 
-> **版本**: v2.0
-> **日期**: 2026-05-25
-> **设计真源**: `docs/design.md` (v2.2)
+> **版本**: v2.3
+> **日期**: 2026-05-30
 > **规则真源**: `AGENTS.md`
-> **历史快照**: `docs/archive/implementation-control-history-20260525.md`
-> **当前状态**: release maintenance；Fund-layer executable CHAPTER_CONTRACT sidecar + dev-only report-writing audit implementation accepted locally；下一入口需单独开 renderer/report-writing output-changing gate 或 audit-output ergonomics gate
+> **设计真源**: `docs/design.md`
+> **控制真源**: `docs/implementation-control.md`
+> **短启动入口**: `docs/current-startup-packet.md`
+> **当前状态**: MVP real-provider stabilization and score-loop phase 已完成本地闭环；PR #21 保持 draft/open 且未由本 phase 修改外部状态。Gate A writer/auditor contract hardening、provider runtime timeout hardening、prompt-contract calibration、writer prompt contract diagnostic narrowing、writer marker syntax repair、programmatic audit L1 calibration、provider runtime timeout follow-up、independent body chapter execution、provider runtime budget and prompt-cost root-cause calibration 均已本地接受。Gate B real provider smoke acceptance 仍 blocked：真实 provider `006597 / 2024 --use-llm` 能观察章节 1-6 独立矩阵，但未生成完整 0-7 报告；当前唯一主 blocker 为 `provider_runtime_timeout_small_prompt`。Gate C chapter generation score-loop design accepted as design-only。当前 gate 是 `MVP Service ExecutionContract boundary hardening gate`；Slice 1-4 和 aggregate deepreview 均已本地接受，slice checkpoints 为 `4691da5`、`854d4b8`、`19b08cf`、`72c3a33`。当前 `--use-llm` 代码事实为 `CLI -> Service prepares FundLLMExecutionRequest / ExecutionContract -> Host runner -> Service -> fund_agent/fund -> provider HTTP call`；Host runner 提供进程内 run lifecycle、global deadline、cancel token、terminal run state、安全诊断和 phase events，但不理解基金业务、不读取 ExecutionContract 业务字段。async Host runner、durable session/resume/memory/outbox、Agent engine/tool-loop migration 保留为后续 gate。Dayu 是架构参考与能力来源，不是生产 runtime 直接依赖；不得把 `dayu-agent` / `dayu.host` / `dayu.engine` 作为生产 runtime 直接依赖。
 
 ---
 
 ## Startup Packet
 
+本文件只保留当前控制面。详细恢复入口见 `docs/current-startup-packet.md`；历史 release-maintenance 长账本只作为证据链，不再作为当前 phase 或 next entry。
+
 ### Current Truth Guardrails
 
-本节是每个总控 / 子 Agent 恢复任务时必须先读取并复述的当前执行口径。
-
-- 当前真源只包括 `AGENTS.md`、`docs/design.md` 当前设计章节、本文档 Startup Packet 和当前 gate。
-- `docs/reviews/` 与 `docs/archive/implementation-control-history-20260525.md` 只作为证据链；旧六层、Application、Runtime/Engine 表述只作为历史证据，不得作为当前架构依据。
-- 当前架构按 Dayu 四层 `UI -> Service -> Host -> Agent` 设计；当前确定性生产主链路仍是 UI -> Service -> `fund_agent/fund` Agent 层基金能力的过渡实现。
-- 未开独立 Host/Agent gate 前，不得创建占位 `fund_agent/host` 或 `fund_agent/agent` 包；确需 Host 时必须使用 `dayu.host`，确需 Agent 执行内核 / tool loop / runner / ToolRegistry / ToolTrace 时必须使用 `dayu.engine`。
-- 后续 plan/review 必须显式检查四层边界、Dayu Host/Agent 依赖纪律、显式参数 / 禁止 `extra_payload`、`dayu-agent` pyproject 工程基线和当前 gate 非目标。
+- `AGENTS.md` 是最高优先级执行规则真源；若与本文档或 `docs/design.md` 冲突，先调整方案/实现，再回写文档。
+- 当前 phase 是 `MVP real-provider stabilization and score-loop phase`；当前 gate 是 `MVP Service ExecutionContract boundary hardening gate`，分类为 `heavy`。Slice 1-4 已在本地 checkpoint 接受（`4691da5`、`854d4b8`、`19b08cf`、`72c3a33`）；aggregate deepreview 已完成并接受，无 remaining blocking findings。Provider runtime budget and prompt-cost root-cause calibration 已本地接受为诊断/runtime-cost hardening；当前唯一 provider blocker 仍是 `provider_runtime_timeout_small_prompt`。
+- 当前默认实现仍以确定性 `fund-analysis analyze/checklist` 为生产主链路：结构化抽取、确定性分析、模板渲染、程序审计和 FQ0-FQ6 quality gate。
+- Gate 1 已新增 Fund 层 typed projection：`project_chapter_facts()` / `ChapterFactProvider.project()` 将内存中的 `StructuredFundDataBundle` 投影为 `chapter_fact_projection.v1`。
+- Gate 1 typed projection 只消费现有 bundle、CHAPTER_CONTRACT、preferred_lens 和 ITEM_RULE truth APIs；不读取仓库、PDF/cache/source helper、parser、LLM、Service、Host 或 dayu。
+- facet 断言保持 fail-closed：无结构化精确证据时 `facets=()`；兼容标签只进入 `non_asserted_facets`，不得驱动 ITEM_RULE。
+- Gate 2 已新增 Fund 层单章 writer/auditor primitives：`chapter_writer.py` 和 `chapter_auditor.py`。
+- Gate 2 writer/auditor 只消费 Gate 1 chapter facts、writer draft 和显式注入的 LLM Protocol client；生产代码不读取仓库、PDF/cache/source helper、parser、真实 provider SDK、env/config、Service、Host 或 dayu。
+- Gate 2 冻结了 anchor/missing marker、LLM audit 行协议、`prompt_only`、`llm_unavailable`、must_not_cover、L1 数值闭合、`non_asserted_facets`、第 5 章跨期缺口、E2 deferred 和 `repair_hint` 聚合等 fail-closed 合约。
+- Gate 3 已新增 Service 层 `ChapterOrchestrator` / `orchestrate_chapters()`，作为 `chapter_orchestrator.v1` write-audit-repair façade：只消费显式 `StructuredFundDataBundle` 或 `ChapterFactProjection`、显式 writer/auditor LLM Protocol client 和可选 `ChapterFactProvider`，只生成模板第 1-6 章 accepted conclusions。
+- Gate 3 不生成第 0/7 章，不构造生产 LLM provider，不读取仓库、PDF/cache/source helper、parser，不接入 Host/Agent/dayu。
+- Gate 4 Slice 4A 已新增 Service 层 `FinalChapterAssembler` / `assemble_final_chapters()`，作为 `final_chapter_assembler.v1` deterministic final assembly：用现有 `FinalJudgmentDecision` 生成第 7 章，再用 accepted conclusions 与 Gate 4-local typed chapter 7 summary 生成第 0 章，最终渲染顺序为 `0 -> 1-6 -> 7`。
+- Gate 4 Slice 4B 已新增 Service 层 `FundAnalysisService.analyze_with_llm()` / `FundLLMAnalysisResult`：复用 `_run_analysis_core()`，通过显式注入的 `ChapterOrchestratorLLMClients` 调用 Gate 3，始终调用 Slice 4A final assembly，partial/blocked 不回退确定性报告。
+- Gate 4 Slice 4C/4D 已为 `fund-analysis analyze` 增加显式 `--use-llm` opt-in provider-backed 路径；当前由 Service-owned `build_fund_llm_execution_request()` 读取 typed env config、构造 `FundLLMExecutionContract` / `FundLLMExecutionRequest` / runtime plan 和 `openai_compatible` HTTP chat-completions writer/auditor clients，CLI 通过 Host 调用 Service `analyze_with_llm_execution()`。`checklist` 不支持 `--use-llm`。
+- Gate 4 Slice 4D provider contract 是 typed env config + openai-compatible HTTP chat-completions over existing `httpx`；无 vendor SDK、无默认 vendor/model/base URL、无 provider fallback、无 live pytest smoke。Provider runtime timeout hardening 已在后续 gate 增加 timeout-only bounded retry/backoff。
+- Missing/invalid config/construction fail-closed；provider runtime error、blocked/partial orchestration 或 incomplete final assembly fail-closed；无 deterministic fallback。pytest 使用 fake env、`httpx.MockTransport` 和 monkeypatch，不需要真实 key。
+- Gate A 已强化真实 provider writer/auditor 合约：writer 固定结构段落和 exact `required_output` marker，parser 精确分类 `missing_required_structure` / `missing_required_output_marker` / `unknown_anchor` / `response_too_long` / `response_incomplete`，auditor line protocol parse failure 保持 blocked，regenerate 带 typed `ChapterRepairContext`，provider runtime 分类到 `llm_timeout` / `llm_rate_limited` / `llm_malformed_response` / `llm_network_error`。
+- Provider runtime timeout hardening 已本地接受：`FUND_AGENT_LLM_TIMEOUT_MAX_ATTEMPTS` 默认 `2`、范围 `1..3`；`FUND_AGENT_LLM_TIMEOUT_BACKOFF_SECONDS` 默认 `1.0`、范围 `0..30`；只有 timeout 会有界重试，rate limit / malformed / network / non-2xx 不重试；Service 层补齐 provider-safe diagnostics 的章节身份；CLI incomplete result 输出安全 first failed chapter summary。
+- Prompt-contract calibration 已本地接受：writer prompt contract 更短且前置，auditor line protocol 继续严格 fail-closed，repair/regenerate 保持 bounded，`ChapterFailureCategory` 新增 `llm_timeout` / `audit_rule_too_strict`，`ChapterRunResult.failure_category` 驱动 CLI `first_failed_category`。
+- Writer prompt contract diagnostic narrowing 已本地接受：新增安全 `failure_subcategory`、`ChapterPromptContractDiagnostic` typed counters、CLI `first_failed_subcategory` 和 `serialize_chapter_prompt_contract_diagnostics()`；不存 prompt、draft、raw provider response、raw audit response、API key 或 Authorization header。
+- Writer marker syntax repair 已本地接受：missing marker guidance 改为 explicit contract block，parser / allowed missing reasons 仍严格；真实 provider 已越过上一 gate 的 chapter 1 `writer:invalid_missing_marker` blocker。
+- Programmatic audit L1 calibration 已本地接受：新增安全 `l1_numerical_closure` taxonomy 和 L1 repair guidance，未放松 `_audit_numerical_closure()` 或 anchor proximity；candidate facet / forbidden phrase precedence 保持高于 L1。
+- Provider runtime timeout follow-up 已本地接受：新增 `serialize_chapter_runtime_diagnostics()`、provider-bound prompt/runtime cost 标量和 CLI safe runtime summary；serializer/CLI 不输出 `message`、`model_name`、prompt、draft、raw provider response、raw audit response、API key 或 Authorization header。
+- 最新真实 provider smoke / diagnostic：`006597 / 2024 --use-llm` CLI exit `1` / stdout empty / no deterministic fallback / `orchestration_status=partial` / `final_assembly_status=incomplete`。Same-source Service diagnostic with `prompt_payload_mode=compact` has `generated_chapter_ids=[1,2,3,4,5,6]`, `skipped_chapter_ids=[]`, `accepted_chapter_ids=[]`, `report_markdown_present=false`。Failed rows are provider runtime writer timeouts below the large prompt threshold: chapter 1 approx `2109` tokens, chapter 2 `1590`, chapter 3 `2575`, chapter 4 `1274`, chapter 5 `2518`, chapter 6 `2110`, all under bounded `60s x2` writer budget。Chapter 2/6 former large prompt cost reduced from approx `26086` / `29078` to `1590` / `2110`。No provider config/auth, large prompt cost, prompt contract, audit parse, fact gap or code bug evidence.
+- Gate C score-loop design 已接受为 design-only：未来必须区分 `extraction_score`、`chapter_fact_score`、`chapter_generation_score`，并把 provider runtime timeout 作为 `not_scored` / `blocked_provider_runtime`，不得接入现有 golden / fixtures / score / quality gate / readiness。
+- 当前 `--use-llm` 路径为 `CLI -> Service prepares FundLLMExecutionRequest / ExecutionContract -> Host runner -> Service -> fund_agent/fund -> provider HTTP call`；默认确定性 `analyze/checklist` 仍为 UI -> Service -> fund_agent/fund 过渡路径；尚未接入 Agent 调度。
+- Service-owned `FundLLMExecutionContract` 只保存基金身份、报告模式、显式 opt-in、规范化业务输入和质量策略声明；provider runtime budget、章节策略、总装策略、安全诊断策略、Host timeout 和 LLM clients 只在 `FundLLMExecutionRequest` / runtime plan 中存在。
+- Host 只接收 generic operation、deadline 标量和可选 session id；Host 不导入 Service/Fund，不理解基金业务，不读取基金代码、年份、章节策略、ExecutionContract 业务字段或 provider clients，不接收 `extra_payload` 业务参数。
+- 当前 runtime budget / prompt-cost 继续作为 provider timeout 归因和安全诊断；Host run state 现在提供 MVP 进程内生命周期边界，但不解决 provider endpoint small-prompt timeout。
+- `internalized Host runtime governance adapter gate` 已完成 MVP 进程内最小闭环：global deadline、cancel token、terminal run state、safe diagnostics、run lifecycle 和 phase events。
+- internalized Agent engine/tool-loop migration 是后续 Agent/tool-loop gate，不是当前 small-prompt provider timeout blocker 的最小解。
+- Route C 是已接受的 MVP LLM report generation route；Gate 1-3 与 Gate 4 Slices 4A/4B/4C/4D 已作为当前代码事实 accepted locally。不得把 Agent runner/tool loop、durable Host session/resume/memory/reply outbox 或 dayu runtime 写成已实现事实。
+- 目标架构保持 UI -> Service -> Host -> Agent。未来 Host 必须内化 Dayu Host 能力且不得直接依赖 `dayu-agent` / `dayu.host`；未来 Agent engine/tool loop/runner/ToolRegistry/ToolTrace 必须内化 Dayu Engine 能力且不得直接依赖 `dayu-agent` / `dayu.engine`。
+- Service 可以组装业务用例、prompt/ExecutionContract 语义、报告生成策略和未来 write-audit-repair loop；Fund 作为 Agent 层基金领域能力包，拥有基金类型识别、CHAPTER_CONTRACT / preferred_lens / ITEM_RULE、事实抽取、审计规则和证据锚点语义。
+- 所有业务参数必须在 typed request / contract / config 中显式声明；禁止通过 `extra_payload` 传递显式参数。
+- 生产年报访问必须通过 `FundDocumentRepository`；Service、UI、Host、renderer、quality gate 不得直接调用具体来源、PDF cache 或下载 helper。
+- 年报来源 fallback 继续按 `not_found` / `unavailable` eligible，`schema_drift` / `identity_mismatch` / `integrity_error` fail-closed。
+- 本 gate 不改变 runtime、schema、score、snapshot、quality gate、golden fixture、golden answer、manifest、promotion state 或模板；本 gate 只为新裁决同步 `AGENTS.md` / design / control / startup 真源。
 
 | Field | State |
 |---|---|
-| Branch | `codex/local-reconciliation` |
-| Current phase | `release maintenance` |
-| Current gate | `Fund-layer executable CHAPTER_CONTRACT sidecar + dev-only report-writing audit implementation accepted locally` |
-| Next entry point | `future explicit gate: renderer/report-writing output emission or report-writing audit ergonomics; no product-flow integration authorized` |
-| Latest accepted gate checkpoint | `chapter contract sidecar + dev-only audit local accepted HEAD` |
-| Design truth | `docs/design.md` (v2.2) |
+| Branch baseline | `codex/local-reconciliation` |
+| Current phase | `MVP real-provider stabilization and score-loop phase` |
+| Current gate | `MVP Service ExecutionContract boundary hardening gate` |
+| Current gate classification | `heavy` |
+| Current gate status | Slice 1-4 and aggregate deepreview accepted locally; slice checkpoints `4691da5`, `854d4b8`, `19b08cf`, `72c3a33`; Gate B still blocked by `provider_runtime_timeout_small_prompt`; Gate C design accepted |
+| Next entry point | `ready-to-open-draft-PR` authorization point for the completed `MVP Service ExecutionContract boundary hardening gate`; do not push/create PR/mark ready without explicit user authorization |
+| Next gate classification | `standard/heavy`; Service/Host boundary contract hardening affects public execution contract and explicit parameter discipline |
+| Design truth | `docs/design.md` |
 | Control truth | `docs/implementation-control.md` |
-| Historical control snapshot | `docs/archive/implementation-control-history-20260525.md` |
-| External repo state | PR 18 merged at `2026-05-25T14:44:05Z`; PR 19 merged at `2026-05-25T15:43:35Z`; `origin/main` points to `44ea955` |
+| Short startup entry | `docs/current-startup-packet.md` |
+| Accepted plan commit | `beb6891` |
+| Accepted provider factory commit | `26203d3` |
+| Accepted CLI provider wiring commit | `ab0590a` |
+| Accepted docs/control sync commit | `4d0c19f` |
+| Accepted aggregate review commit | `7a3dab9` |
+| Accepted closeout entrypoint commit | `b0e68e0` |
 
 ## Current Gate
 
-### Accepted Artifacts
+### Gate Objective
+
+The local Gate 4 closeout is accepted and the user previously authorized the draft PR gate, but this phase made no external PR changes. PR #21 remains draft/open. Provider auth/config verification passed for the current MiMo-compatible configuration. Gate A hardened the writer/auditor contract, provider runtime timeout hardening is accepted locally, L1 calibration is accepted locally, provider runtime timeout follow-up is accepted as diagnostic/code hardening, and prompt-cost/root-cause calibration is accepted locally. Gate B real `006597 / 2024 --use-llm` smoke still fails closed: compact-mode service diagnostic proves chapters 1-6 all fail writer `llm_timeout` under bounded `60s x2`, while all writer prompts are below approx `3000` tokens. Final assembly is incomplete, stdout stays empty, and there is no deterministic fallback. Gate C score-loop design is accepted as design-only. PR #21 must not be marked ready, merged or released from this gate.
+
+### Current Accepted Artifacts
 
 | Purpose | Artifact |
 |---|---|
-| Chapter-audit report pipeline design implementation | `docs/reviews/release-maintenance-chapter-audit-report-pipeline-design-implementation-20260524.md` |
-| Methodology coverage matrix plan | `docs/reviews/release-maintenance-methodology-coverage-matrix-plan-20260525.md` |
-| Methodology coverage matrix implementation | `docs/reviews/release-maintenance-methodology-coverage-matrix-implementation-20260525.md` |
-| Report-quality baseline / Fact-Evidence contract plan | `docs/reviews/release-maintenance-report-quality-baseline-fact-evidence-contract-plan-20260525.md` |
-| Plan review: MiMo | `docs/reviews/release-maintenance-report-quality-baseline-fact-evidence-contract-plan-review-mimo-20260525.md` |
-| Plan review: DS | `docs/reviews/release-maintenance-report-quality-baseline-fact-evidence-contract-plan-review-ds-20260525.md` |
-| Plan controller judgment | `docs/reviews/release-maintenance-report-quality-baseline-fact-evidence-contract-plan-review-controller-judgment-20260525.md` |
-| S0 corpus-selection evidence | `docs/reviews/release-maintenance-report-quality-baseline-s0-corpus-selection-evidence-20260525.md` |
-| S0 review: MiMo | `docs/reviews/release-maintenance-report-quality-baseline-s0-corpus-selection-evidence-review-mimo-20260525.md` |
-| S0 review: DS | `docs/reviews/release-maintenance-report-quality-baseline-s0-corpus-selection-evidence-review-ds-20260525.md` |
-| S0 re-review: MiMo | `docs/reviews/release-maintenance-report-quality-baseline-s0-corpus-selection-evidence-rereview-mimo-20260525.md` |
-| S0 re-review: DS | `docs/reviews/release-maintenance-report-quality-baseline-s0-corpus-selection-evidence-rereview-ds-20260525.md` |
-| S0 controller judgment | `docs/reviews/release-maintenance-report-quality-baseline-s0-corpus-selection-evidence-controller-judgment-20260525.md` |
-| S1 score-schema fixture draft | `docs/reviews/release-maintenance-report-quality-baseline-s1-score-schema-fixture-draft-20260525.md` |
-| S1 review: MiMo | `docs/reviews/release-maintenance-report-quality-baseline-s1-score-schema-fixture-draft-review-mimo-20260525.md` |
-| S1 review: DS | `docs/reviews/release-maintenance-report-quality-baseline-s1-score-schema-fixture-draft-review-ds-20260525.md` |
-| S1 re-review: MiMo | `docs/reviews/release-maintenance-report-quality-baseline-s1-score-schema-fixture-draft-rereview-mimo-20260525.md` |
-| S1 re-review: DS | `docs/reviews/release-maintenance-report-quality-baseline-s1-score-schema-fixture-draft-rereview-ds-20260525.md` |
-| S1 controller judgment | `docs/reviews/release-maintenance-report-quality-baseline-s1-score-schema-fixture-draft-controller-judgment-20260525.md` |
-| S1 dry-run evidence | `docs/reviews/release-maintenance-report-quality-baseline-s1-dry-run-evidence-20260525.md` |
-| S1 dry-run review: MiMo | `docs/reviews/release-maintenance-report-quality-baseline-s1-dry-run-evidence-review-mimo-20260525.md` |
-| S1 dry-run review: DS | `docs/reviews/release-maintenance-report-quality-baseline-s1-dry-run-evidence-review-ds-20260525.md` |
-| S1 dry-run controller judgment | `docs/reviews/release-maintenance-report-quality-baseline-s1-dry-run-evidence-controller-judgment-20260525.md` |
-| S2 bundle candidate plan | `docs/reviews/release-maintenance-fact-evidence-contract-s2-bundle-candidate-plan-20260525.md` |
-| S2 plan review: MiMo | `docs/reviews/release-maintenance-fact-evidence-contract-s2-bundle-candidate-plan-review-mimo-20260525.md` |
-| S2 plan review: DS | `docs/reviews/release-maintenance-fact-evidence-contract-s2-bundle-candidate-plan-review-ds-20260525.md` |
-| S2 plan re-review: MiMo | `docs/reviews/release-maintenance-fact-evidence-contract-s2-bundle-candidate-plan-rereview-mimo-20260525.md` |
-| S2 plan re-review: DS | `docs/reviews/release-maintenance-fact-evidence-contract-s2-bundle-candidate-plan-rereview-ds-20260525.md` |
-| S2 plan controller judgment | `docs/reviews/release-maintenance-fact-evidence-contract-s2-bundle-candidate-plan-controller-judgment-20260525.md` |
-| ReportEvidenceBundle implementation plan | `docs/reviews/release-maintenance-report-evidence-bundle-typed-model-projection-implementation-plan-20260525.md` |
-| Implementation plan review: MiMo | `docs/reviews/release-maintenance-report-evidence-bundle-typed-model-projection-implementation-plan-review-mimo-20260525.md` |
-| Implementation plan review: DS | `docs/reviews/release-maintenance-report-evidence-bundle-typed-model-projection-implementation-plan-review-ds-20260525.md` |
-| Implementation plan re-review: MiMo | `docs/reviews/release-maintenance-report-evidence-bundle-typed-model-projection-implementation-plan-rereview-mimo-20260525.md` |
-| Implementation plan re-review: DS | `docs/reviews/release-maintenance-report-evidence-bundle-typed-model-projection-implementation-plan-rereview-ds-20260525.md` |
-| Implementation plan controller judgment | `docs/reviews/release-maintenance-report-evidence-bundle-typed-model-projection-implementation-plan-controller-judgment-20260525.md` |
-| ReportEvidenceBundle implementation review: MiMo | `docs/reviews/release-maintenance-report-evidence-bundle-typed-model-projection-implementation-review-mimo-20260525.md` |
-| ReportEvidenceBundle implementation review: GLM | `docs/reviews/release-maintenance-report-evidence-bundle-typed-model-projection-implementation-review-glm-20260525.md` |
-| ReportEvidenceBundle implementation re-review: MiMo | `docs/reviews/release-maintenance-report-evidence-bundle-typed-model-projection-implementation-rereview-mimo-20260525.md` |
-| ReportEvidenceBundle implementation re-review: GLM | `docs/reviews/release-maintenance-report-evidence-bundle-typed-model-projection-implementation-rereview-glm-20260525.md` |
-| ReportEvidenceBundle implementation controller judgment | `docs/reviews/release-maintenance-report-evidence-bundle-typed-model-projection-implementation-controller-judgment-20260525.md` |
-| Report-quality scoring JSONL content validation plan | `docs/reviews/release-maintenance-report-quality-scoring-jsonl-content-validation-plan-20260525.md` |
-| Report-quality validation plan review: MiMo | `docs/reviews/release-maintenance-report-quality-scoring-jsonl-content-validation-plan-review-mimo-20260525.md` |
-| Report-quality validation plan review: GLM | `docs/reviews/release-maintenance-report-quality-scoring-jsonl-content-validation-plan-review-glm-20260525.md` |
-| Report-quality validation plan re-review: MiMo | `docs/reviews/release-maintenance-report-quality-scoring-jsonl-content-validation-plan-rereview-mimo-20260525.md` |
-| Report-quality validation plan re-review: GLM | `docs/reviews/release-maintenance-report-quality-scoring-jsonl-content-validation-plan-rereview-glm-20260525.md` |
-| Report-quality validation plan controller judgment | `docs/reviews/release-maintenance-report-quality-scoring-jsonl-content-validation-plan-controller-judgment-20260525.md` |
-| Report-quality validation implementation review: MiMo | `docs/reviews/release-maintenance-report-quality-scoring-jsonl-content-validation-implementation-review-mimo-20260525.md` |
-| Report-quality validation implementation review: GLM | `docs/reviews/release-maintenance-report-quality-scoring-jsonl-content-validation-implementation-review-glm-20260525.md` |
-| Report-quality validation implementation re-review: MiMo | `docs/reviews/release-maintenance-report-quality-scoring-jsonl-content-validation-implementation-rereview-mimo-20260525.md` |
-| Report-quality validation implementation re-review: GLM | `docs/reviews/release-maintenance-report-quality-scoring-jsonl-content-validation-implementation-rereview-glm-20260525.md` |
-| Report-quality validation implementation controller judgment | `docs/reviews/release-maintenance-report-quality-scoring-jsonl-content-validation-implementation-controller-judgment-20260525.md` |
-| Report-quality validator dry-run evidence plan | `docs/reviews/release-maintenance-report-quality-validator-dry-run-evidence-plan-20260525.md` |
-| Report-quality validator dry-run plan review: MiMo | `docs/reviews/release-maintenance-report-quality-validator-dry-run-evidence-plan-review-mimo-20260525.md` |
-| Report-quality validator dry-run plan review: GLM | `docs/reviews/release-maintenance-report-quality-validator-dry-run-evidence-plan-review-glm-20260525.md` |
-| Report-quality validator dry-run plan re-review: MiMo | `docs/reviews/release-maintenance-report-quality-validator-dry-run-evidence-plan-rereview-mimo-20260525.md` |
-| Report-quality validator dry-run plan re-review: GLM | `docs/reviews/release-maintenance-report-quality-validator-dry-run-evidence-plan-rereview-glm-20260525.md` |
-| Report-quality validator dry-run plan controller judgment | `docs/reviews/release-maintenance-report-quality-validator-dry-run-evidence-plan-controller-judgment-20260525.md` |
-| Report-quality validator dry-run evidence | `docs/reviews/release-maintenance-report-quality-validator-dry-run-evidence-20260525.md` |
-| Report-quality validator dry-run evidence review: MiMo | `docs/reviews/release-maintenance-report-quality-validator-dry-run-evidence-review-mimo-20260525.md` |
-| Report-quality validator dry-run evidence review: GLM | `docs/reviews/release-maintenance-report-quality-validator-dry-run-evidence-review-glm-20260525.md` |
-| Report-quality validator dry-run evidence re-review: MiMo | `docs/reviews/release-maintenance-report-quality-validator-dry-run-evidence-rereview-mimo-20260525.md` |
-| Report-quality validator dry-run evidence controller judgment | `docs/reviews/release-maintenance-report-quality-validator-dry-run-evidence-controller-judgment-20260525.md` |
-| Release-readiness reconciliation | `docs/reviews/release-readiness-reconciliation-20260525.md` |
-| Release acceptance packaging / PR readiness | `docs/reviews/release-acceptance-packaging-pr-readiness-20260525.md` |
-| Overnight release-readiness closeout | `docs/reviews/overnight-release-readiness-closeout-20260525.md` |
-| Post-merge local reconciliation / artifact disposition | `docs/reviews/post-merge-local-reconciliation-artifact-disposition-20260525.md` |
-| Report-quality validator integration decision plan | `docs/reviews/release-maintenance-report-quality-validator-integration-decision-plan-20260525.md` |
-| Report-quality validator integration plan review | `docs/reviews/plan-review-20260525-235520.md` |
-| Report-quality validator integration plan re-review | `docs/reviews/plan-rereview-20260525-235615.md` |
-| Report-quality validator quasi-real bundle evidence | `docs/reviews/release-maintenance-report-quality-validator-quasi-real-bundle-evidence-20260525.md` |
-| Report-quality validator quasi-real bundle controller judgment | `docs/reviews/release-maintenance-report-quality-validator-quasi-real-bundle-controller-judgment-20260526.md` |
-| Report-quality validator quasi-real retrospective controller judgment | `docs/reviews/release-maintenance-report-quality-quasi-real-retrospective-controller-judgment-20260526.md` |
-| Small baseline corpus candidate selection | `docs/reviews/release-maintenance-small-baseline-corpus-candidate-selection-20260526.md` |
-| Small baseline evaluation plan / verifier design | `docs/reviews/release-maintenance-small-baseline-evaluation-plan-verifier-design-20260526.md` |
-| First report-quality improvement slice plan | `docs/reviews/release-maintenance-first-report-quality-improvement-slice-plan-20260526.md` |
-| First improvement slice plan review: MiMo | `docs/reviews/release-maintenance-first-report-quality-improvement-slice-plan-review-mimo-20260526.md` |
-| First improvement slice plan review: GLM | `docs/reviews/release-maintenance-first-report-quality-improvement-slice-plan-review-glm-20260526.md` |
-| First improvement slice plan re-review: MiMo | `docs/reviews/release-maintenance-first-report-quality-improvement-slice-plan-rereview-mimo-20260526.md` |
-| First improvement slice plan re-review: GLM | `docs/reviews/release-maintenance-first-report-quality-improvement-slice-plan-rereview-glm-20260526.md` |
-| First improvement slice plan controller judgment | `docs/reviews/release-maintenance-first-report-quality-improvement-slice-plan-controller-judgment-20260526.md` |
-| First improvement slice implementation review: MiMo | `docs/reviews/release-maintenance-first-report-quality-improvement-slice-implementation-review-mimo-20260526.md` |
-| First improvement slice implementation review: GLM | `docs/reviews/release-maintenance-first-report-quality-improvement-slice-implementation-review-glm-20260526.md` |
-| First improvement slice implementation controller judgment | `docs/reviews/release-maintenance-first-report-quality-improvement-slice-implementation-controller-judgment-20260526.md` |
-| Small baseline real evaluation run | `docs/reviews/release-maintenance-small-baseline-real-evaluation-run-20260526.md` |
-| Small baseline validator fix evidence | `docs/reviews/release-maintenance-small-baseline-real-evaluation-validator-fix-20260526.md` |
-| Validator fix review: MiMo | `docs/reviews/release-maintenance-small-baseline-real-evaluation-validator-fix-review-mimo-20260526.md` |
-| Validator fix review: GLM | `docs/reviews/release-maintenance-small-baseline-real-evaluation-validator-fix-review-glm-20260526.md` |
-| Validator fix re-review: MiMo | `docs/reviews/release-maintenance-small-baseline-real-evaluation-validator-fix-rereview-mimo-20260526.md` |
-| Validator fix re-review: GLM | `docs/reviews/release-maintenance-small-baseline-real-evaluation-validator-fix-rereview-glm-20260526.md` |
-| Dev-only report-quality eval tool | `docs/reviews/release-maintenance-small-baseline-real-evaluation-dev-tool-20260526.md` |
-| Small baseline real evaluation controller judgment / readiness | `docs/reviews/release-maintenance-small-baseline-real-evaluation-controller-judgment-20260526.md` |
-| Small baseline final aggregate review: MiMo | `docs/reviews/release-maintenance-small-baseline-real-evaluation-final-review-mimo-20260526.md` |
-| Small baseline final aggregate review: GLM | `docs/reviews/release-maintenance-small-baseline-real-evaluation-final-review-glm-20260526.md` |
-| Deepreview controller judgment evidence-chain artifact | `docs/reviews/release-maintenance-deepreview-controller-judgment-20260526.md` |
-| Escalation readiness check | `docs/reviews/release-maintenance-escalation-readiness-check-20260526.md` |
-| Escalation readiness re-review: MiMo | `docs/reviews/release-maintenance-escalation-readiness-rereview-mimo-20260526.md` |
-| Escalation readiness re-review: GLM | `docs/reviews/release-maintenance-escalation-readiness-rereview-glm-20260526.md` |
-| Chapter contract / report-writing upgrade design plan | `docs/reviews/release-maintenance-chapter-contract-writing-upgrade-design-plan-20260526.md` |
-| Plan review: MiMo | `docs/reviews/release-maintenance-chapter-contract-writing-upgrade-design-plan-review-mimo-20260526.md` |
-| Plan review: GLM | `docs/reviews/release-maintenance-chapter-contract-writing-upgrade-design-plan-review-glm-20260526.md` |
-| Plan re-review: MiMo | `docs/reviews/release-maintenance-chapter-contract-writing-upgrade-design-plan-rereview-mimo-20260526.md` |
-| Plan re-review: GLM | `docs/reviews/release-maintenance-chapter-contract-writing-upgrade-design-plan-rereview-glm-20260526.md` |
-| Chapter contract / report-writing upgrade controller judgment | `docs/reviews/release-maintenance-chapter-contract-writing-upgrade-design-plan-controller-judgment-20260526.md` |
-| Chapter contract sidecar implementation plan | `docs/reviews/release-maintenance-chapter-contract-sidecar-audit-implementation-plan-20260526.md` |
-| Sidecar implementation plan review: MiMo | `docs/reviews/release-maintenance-chapter-contract-sidecar-audit-implementation-plan-review-mimo-20260526.md` |
-| Sidecar implementation plan review: GLM | `docs/reviews/release-maintenance-chapter-contract-sidecar-audit-implementation-plan-review-glm-20260526.md` |
-| Sidecar implementation plan controller judgment | `docs/reviews/release-maintenance-chapter-contract-sidecar-audit-implementation-plan-controller-judgment-20260526.md` |
-| Sidecar implementation evidence | `docs/reviews/release-maintenance-chapter-contract-sidecar-audit-implementation-evidence-20260526.md` |
-| Sidecar implementation review: MiMo | `docs/reviews/release-maintenance-chapter-contract-sidecar-audit-implementation-review-mimo-20260526.md` |
-| Sidecar implementation review: GLM | `docs/reviews/release-maintenance-chapter-contract-sidecar-audit-implementation-review-glm-20260526.md` |
-| Sidecar implementation re-review: MiMo | `docs/reviews/release-maintenance-chapter-contract-sidecar-audit-implementation-rereview-mimo-20260526.md` |
-| Sidecar implementation re-review: GLM | `docs/reviews/release-maintenance-chapter-contract-sidecar-audit-implementation-rereview-glm-20260526.md` |
-| Sidecar implementation targeted re-review: GLM | `docs/reviews/release-maintenance-chapter-contract-sidecar-audit-implementation-rereview2-glm-20260526.md` |
-| Sidecar implementation controller judgment | `docs/reviews/release-maintenance-chapter-contract-sidecar-audit-implementation-controller-judgment-20260526.md` |
+| Source-of-truth plan | `docs/reviews/mvp-truth-pivot-context-compaction-plan-20260530.md` |
+| Independent plan reviews | `docs/reviews/mvp-truth-pivot-context-compaction-plan-review-mimo-20260530.md`; `docs/reviews/mvp-truth-pivot-context-compaction-plan-review-glm-20260530.md` |
+| Implementation evidence | `docs/reviews/mvp-truth-pivot-context-compaction-implementation-evidence-20260530.md` |
+| Gate 1 plan | `docs/reviews/mvp-gate1-chapter-fact-provider-plan-20260530.md` |
+| Gate 1 plan reviews | `docs/reviews/mvp-gate1-chapter-fact-provider-plan-review-mimo-20260530.md`; `docs/reviews/mvp-gate1-chapter-fact-provider-plan-review-glm-20260530.md` |
+| Gate 1 implementation evidence | `docs/reviews/mvp-gate1-chapter-fact-provider-implementation-evidence-20260530.md` |
+| Gate 1 implementation reviews | `docs/reviews/mvp-gate1-chapter-fact-provider-implementation-review-mimo-20260530.md`; `docs/reviews/mvp-gate1-chapter-fact-provider-implementation-review-glm-20260530.md` |
+| Gate 1 controller judgment | `docs/reviews/mvp-gate1-chapter-fact-provider-controller-judgment-20260530.md` |
+| Gate 2 plan | `docs/reviews/mvp-gate2-chapter-writer-auditor-plan-20260530.md` |
+| Gate 2 plan decision | `docs/reviews/mvp-gate2-chapter-writer-auditor-plan-decision-20260530.md` |
+| Gate 2 implementation evidence | `docs/reviews/mvp-gate2-chapter-writer-auditor-implementation-evidence-20260530.md` |
+| Gate 2 implementation reviews | `docs/reviews/mvp-gate2-chapter-writer-auditor-implementation-review-mimo-20260530.md`; `docs/reviews/mvp-gate2-chapter-writer-auditor-implementation-review-ds-20260530.md` |
+| Gate 2 implementation re-reviews | `docs/reviews/mvp-gate2-chapter-writer-auditor-implementation-rereview-mimo-20260530.md`; `docs/reviews/mvp-gate2-chapter-writer-auditor-implementation-rereview-ds-20260530.md` |
+| Gate 2 controller judgment | `docs/reviews/mvp-gate2-chapter-writer-auditor-controller-judgment-20260530.md` |
+| Gate 3 plan | `docs/reviews/mvp-gate3-chapter-orchestrator-plan-20260530.md` |
+| Gate 3 plan decision | `docs/reviews/mvp-gate3-chapter-orchestrator-plan-decision-20260530.md` |
+| Gate 3 implementation evidence | `docs/reviews/mvp-gate3-chapter-orchestrator-implementation-evidence-20260530.md` |
+| Gate 3 implementation reviews | `docs/reviews/mvp-gate3-chapter-orchestrator-implementation-review-mimo-20260530.md`; `docs/reviews/mvp-gate3-chapter-orchestrator-implementation-review-ds-20260530.md` |
+| Gate 3 review fix evidence | `docs/reviews/mvp-gate3-chapter-orchestrator-review-fix-evidence-20260530.md` |
+| Gate 3 review fix re-reviews | `docs/reviews/mvp-gate3-chapter-orchestrator-review-fix-rereview-mimo-20260530.md`; `docs/reviews/mvp-gate3-chapter-orchestrator-review-fix-rereview-ds-20260530.md` |
+| Gate 3 controller judgment | `docs/reviews/mvp-gate3-chapter-orchestrator-controller-judgment-20260530.md` |
+| Gate 4 plan | `docs/reviews/mvp-gate4-final-assembler-cli-plan-20260530.md` |
+| Gate 4 plan decision | `docs/reviews/mvp-gate4-final-assembler-cli-plan-decision-20260530.md` |
+| Gate 4 Slice 4A implementation evidence | `docs/reviews/mvp-gate4-final-assembler-slice4a-implementation-evidence-20260530.md` |
+| Gate 4 Slice 4A implementation reviews | `docs/reviews/mvp-gate4-final-assembler-slice4a-implementation-review-mimo-20260530.md`; `docs/reviews/mvp-gate4-final-assembler-slice4a-implementation-review-ds-20260530.md` |
+| Gate 4 Slice 4A review fix evidence | `docs/reviews/mvp-gate4-final-assembler-slice4a-review-fix-evidence-20260530.md` |
+| Gate 4 Slice 4A review fix re-reviews | `docs/reviews/mvp-gate4-final-assembler-slice4a-review-fix-rereview-mimo-20260530.md`; `docs/reviews/mvp-gate4-final-assembler-slice4a-review-fix-rereview-ds-20260530.md` |
+| Gate 4 Slice 4A controller judgment | `docs/reviews/mvp-gate4-final-assembler-slice4a-controller-judgment-20260530.md` |
+| Gate 4 Slice 4B implementation evidence | `docs/reviews/mvp-gate4-llm-service-implementation-evidence-20260530.md` |
+| Gate 4 Slice 4B implementation reviews | `docs/reviews/mvp-gate4-llm-service-implementation-review-mimo-20260530.md`; `docs/reviews/mvp-gate4-llm-service-implementation-review-glm-20260530.md` |
+| Gate 4 Slice 4B controller judgment | `docs/reviews/mvp-gate4-llm-service-controller-judgment-20260530.md` |
+| Gate 4 Slice 4C implementation evidence | `docs/reviews/mvp-gate4-cli-use-llm-implementation-evidence-20260530.md` |
+| Gate 4 Slice 4C implementation reviews | `docs/reviews/mvp-gate4-cli-use-llm-implementation-review-mimo-20260530.md`; `docs/reviews/mvp-gate4-cli-use-llm-implementation-review-glm-20260530.md` |
+| Gate 4 Slice 4C controller judgment | `docs/reviews/mvp-gate4-cli-use-llm-controller-judgment-20260530.md` |
+| Gate 4 Slice 4D provider plan | `docs/reviews/mvp-gate4-provider-construction-plan-20260530.md` |
+| Gate 4 Slice 4D provider plan reviews | `docs/reviews/mvp-gate4-provider-construction-plan-review-mimo-20260530.md`; `docs/reviews/mvp-gate4-provider-construction-plan-review-glm-20260530.md` |
+| Gate 4 Slice 4D provider plan decision | `docs/reviews/mvp-gate4-provider-construction-plan-decision-20260530.md` |
+| Gate 4 Slice 4D1 provider factory implementation evidence | `docs/reviews/mvp-gate4-provider-construction-4d1-implementation-evidence-20260530.md` |
+| Gate 4 Slice 4D1 provider factory reviews | `docs/reviews/mvp-gate4-provider-construction-4d1-implementation-review-mimo-20260530.md`; `docs/reviews/mvp-gate4-provider-construction-4d1-implementation-review-glm-20260530.md` |
+| Gate 4 Slice 4D1 provider factory controller judgment | `docs/reviews/mvp-gate4-provider-construction-4d1-controller-judgment-20260530.md` |
+| Gate 4 Slice 4D2 CLI provider wiring implementation evidence | `docs/reviews/mvp-gate4-provider-construction-4d2-implementation-evidence-20260530.md` |
+| Gate 4 Slice 4D2 CLI provider wiring reviews | `docs/reviews/mvp-gate4-provider-construction-4d2-implementation-review-mimo-20260530.md`; `docs/reviews/mvp-gate4-provider-construction-4d2-implementation-review-glm-20260530.md` |
+| Gate 4 Slice 4D2 CLI provider wiring controller judgment | `docs/reviews/mvp-gate4-provider-construction-4d2-controller-judgment-20260530.md` |
+| Gate 4 Slice 4D3 docs/control sync controller judgment | `docs/reviews/mvp-gate4-provider-construction-4d3-controller-judgment-20260530.md` |
+| Gate 4 Slice 4D aggregate reviews | `docs/reviews/mvp-gate4-provider-construction-aggregate-review-mimo-20260530.md`; `docs/reviews/mvp-gate4-provider-construction-aggregate-review-glm-20260530.md` |
+| Gate 4 Slice 4D aggregate controller judgment | `docs/reviews/mvp-gate4-provider-construction-aggregate-controller-judgment-20260530.md` |
+| Gate 4 closeout readiness reconciliation | `docs/reviews/mvp-gate4-closeout-readiness-reconciliation-20260530.md` |
+| MVP local acceptance / real provider smoke plan | `docs/reviews/mvp-local-acceptance-real-provider-smoke-plan-20260530.md` |
+| MVP local acceptance / real provider smoke evidence | `docs/reviews/mvp-local-acceptance-real-provider-smoke-evidence-20260530.md` |
+| MVP local acceptance / real provider smoke review | `docs/reviews/mvp-local-acceptance-real-provider-smoke-review-zeno-20260530.md` |
+| MVP local acceptance / real provider smoke controller judgment | `docs/reviews/mvp-local-acceptance-real-provider-smoke-controller-judgment-20260530.md` |
+| MVP local acceptance / real provider smoke rerun evidence | `docs/reviews/mvp-local-acceptance-real-provider-smoke-rerun-evidence-20260530.md` |
+| MVP local acceptance / real provider smoke rerun review | `docs/reviews/mvp-local-acceptance-real-provider-smoke-rerun-review-lovelace-20260530.md` |
+| MVP local acceptance / real provider smoke rerun controller judgment | `docs/reviews/mvp-local-acceptance-real-provider-smoke-rerun-controller-judgment-20260530.md` |
+| MVP real provider audit-block diagnostic | `docs/reviews/mvp-real-provider-audit-block-diagnostic-20260530.md` |
+| MVP real provider audit-block diagnostic controller judgment | `docs/reviews/mvp-real-provider-audit-block-diagnostic-controller-judgment-20260530.md` |
+| MVP provider auth/config verification | `docs/reviews/mvp-provider-auth-config-verification-20260531.md` |
+| MVP provider auth/config verification controller judgment | `docs/reviews/mvp-provider-auth-config-verification-controller-judgment-20260531.md` |
+| MVP writer/auditor contract hardening plan | `docs/reviews/mvp-llm-writer-auditor-contract-hardening-plan-20260531.md` |
+| MVP writer/auditor contract hardening implementation evidence | `docs/reviews/mvp-llm-writer-auditor-contract-hardening-implementation-evidence-20260531.md` |
+| MVP writer/auditor contract hardening reviews | `docs/reviews/mvp-llm-writer-auditor-contract-hardening-code-review-mimo-20260531.md`; `docs/reviews/mvp-llm-writer-auditor-contract-hardening-code-review-glm-20260531.md` |
+| MVP writer/auditor contract hardening re-reviews | `docs/reviews/mvp-llm-writer-auditor-contract-hardening-code-rereview-mimo-20260531.md`; `docs/reviews/mvp-llm-writer-auditor-contract-hardening-code-rereview-glm-20260531.md` |
+| MVP writer/auditor contract hardening controller judgment | `docs/reviews/mvp-llm-writer-auditor-contract-hardening-controller-judgment-20260531.md` |
+| MVP real provider smoke acceptance controller judgment | `docs/reviews/mvp-real-provider-smoke-acceptance-controller-judgment-20260531.md` |
+| MVP real provider independent body matrix evidence | `docs/reviews/mvp-real-provider-smoke-independent-body-matrix-evidence-20260531.md` |
+| MVP real provider independent body matrix reviews | `docs/reviews/mvp-real-provider-smoke-independent-body-matrix-review-mimo-20260531.md`; `docs/reviews/mvp-real-provider-smoke-independent-body-matrix-review-glm-20260531.md` |
+| MVP real provider independent body matrix controller judgment | `docs/reviews/mvp-real-provider-smoke-independent-body-matrix-controller-judgment-20260531.md` |
+| MVP chapter generation score-loop design | `docs/reviews/mvp-chapter-generation-score-loop-design-20260531.md` |
+| MVP chapter generation score-loop design reviews | `docs/reviews/mvp-chapter-generation-score-loop-design-review-mimo-20260531.md`; `docs/reviews/mvp-chapter-generation-score-loop-design-review-glm-20260531.md` |
+| MVP chapter generation score-loop design controller judgment | `docs/reviews/mvp-chapter-generation-score-loop-design-controller-judgment-20260531.md` |
+| MVP real-provider stabilization and score-loop phase judgment | `docs/reviews/mvp-real-provider-stabilization-score-loop-phase-controller-judgment-20260531.md` |
+| MVP provider runtime timeout hardening plan | `docs/reviews/mvp-provider-runtime-timeout-hardening-plan-20260531.md` |
+| MVP provider runtime timeout hardening implementation evidence | `docs/reviews/mvp-provider-runtime-timeout-hardening-implementation-evidence-20260531.md` |
+| MVP provider runtime timeout hardening reviews | `docs/reviews/mvp-provider-runtime-timeout-hardening-code-review-glm-20260531.md`; `docs/reviews/mvp-provider-runtime-timeout-hardening-code-rereview-mimo-20260531.md` |
+| MVP provider runtime timeout hardening controller judgment | `docs/reviews/mvp-provider-runtime-timeout-hardening-controller-judgment-20260531.md` |
+| MVP prompt-contract calibration plan | `docs/reviews/mvp-real-provider-smoke-prompt-contract-calibration-plan-20260531.md` |
+| MVP prompt-contract calibration implementation evidence | `docs/reviews/mvp-real-provider-smoke-prompt-contract-calibration-implementation-evidence-20260531.md` |
+| MVP prompt-contract calibration reviews | `docs/reviews/mvp-real-provider-smoke-prompt-contract-calibration-code-review-mimo-20260531.md`; `docs/reviews/mvp-real-provider-smoke-prompt-contract-calibration-code-review-glm-20260531.md` |
+| MVP prompt-contract calibration controller judgment | `docs/reviews/mvp-real-provider-smoke-prompt-contract-calibration-controller-judgment-20260531.md` |
+| MVP provider runtime budget and prompt-cost root-cause calibration plan | `docs/reviews/mvp-provider-runtime-budget-prompt-cost-root-cause-calibration-plan-20260531.md` |
+| MVP provider runtime budget and prompt-cost root-cause calibration plan reviews | `docs/reviews/mvp-provider-runtime-budget-prompt-cost-root-cause-calibration-plan-review-mimo-20260531.md`; `docs/reviews/mvp-provider-runtime-budget-prompt-cost-root-cause-calibration-plan-review-ds-20260531.md` |
+| MVP provider runtime budget and prompt-cost root-cause calibration implementation evidence | `docs/reviews/mvp-provider-runtime-budget-prompt-cost-root-cause-calibration-implementation-evidence-20260531.md` |
+| MVP provider runtime budget and prompt-cost root-cause calibration code reviews | `docs/reviews/mvp-provider-runtime-budget-prompt-cost-root-cause-calibration-code-review-mimo-20260531.md`; `docs/reviews/mvp-provider-runtime-budget-prompt-cost-root-cause-calibration-code-review-ds-20260531.md` |
+| MVP provider runtime budget and prompt-cost root-cause calibration validation evidence | `docs/reviews/mvp-provider-runtime-budget-prompt-cost-root-cause-calibration-validation-evidence-20260531.md` |
+| MVP provider runtime budget and prompt-cost root-cause calibration deep review | `docs/reviews/mvp-provider-runtime-budget-prompt-cost-root-cause-calibration-deepreview-20260531.md` |
+| MVP provider runtime budget and prompt-cost root-cause calibration controller judgment | `docs/reviews/mvp-provider-runtime-budget-prompt-cost-root-cause-calibration-controller-judgment-20260531.md` |
+| MVP internalized Host runtime governance adapter implementation evidence | `docs/reviews/mvp-internalized-host-runtime-governance-adapter-implementation-evidence-20260601.md` |
+| MVP internalized Host runtime governance adapter code review / re-review | `docs/reviews/mvp-internalized-host-runtime-governance-adapter-code-review-20260601.md`; `docs/reviews/mvp-internalized-host-runtime-governance-adapter-code-rereview-20260601.md` |
+| MVP internalized Host runtime governance adapter controller judgment | `docs/reviews/mvp-internalized-host-runtime-governance-adapter-controller-judgment-20260601.md` |
+| MVP Service ExecutionContract boundary hardening aggregate deepreview | `docs/reviews/mvp-service-executioncontract-boundary-hardening-aggregate-deepreview-20260601.md` |
+| MVP Service ExecutionContract boundary hardening aggregate fix / re-review | `docs/reviews/mvp-service-executioncontract-boundary-hardening-aggregate-fix-evidence-20260601.md`; `docs/reviews/mvp-service-executioncontract-boundary-hardening-aggregate-rereview-20260601.md` |
+| MVP Service ExecutionContract boundary hardening aggregate controller judgment | `docs/reviews/mvp-service-executioncontract-boundary-hardening-aggregate-controller-judgment-20260601.md` |
+| Prior release-maintenance roadmap summary | `docs/reviews/release-maintenance-phase-roadmap-consolidation-20260529.md` |
+| Prior overnight closeout summary | `docs/reviews/overnight-release-maintenance-closeout-20260529.md` |
+| Historical control snapshots | `docs/archive/implementation-control-history-20260525.md`; `docs/archive/implementation-control-release-maintenance-ledger-20260527.md` |
 
-### Current Decisions
+The Current Accepted Artifacts table is intentionally short. Older release-maintenance artifacts remain available through the historical index and review artifacts, but are not active gate truth for this MVP phase.
 
-- Report quality must first become observable through a small representative baseline corpus, report-quality scoring schema, and Fact/Evidence input contract.
-- Data-source / extraction iteration vs template / writing iteration must be selected from scoring failure categories, not from subjective report taste.
-- S0 should attempt FOF, but must not block if no repository-verified FOF annual report is available; missing FOF must be recorded as a `data_gap`.
-- S0 accepted active, index, enhanced index, bond, and QDII candidates as repository evidence; FOF remains a `data_gap` because current QDII-FOF candidates classify as `qdii_fund`.
-- S1 must recover the upstream failure category for fallback candidates (`110020`, `017641`, `017970`) before durable baseline selection, or exclude those candidates.
-- First scoring implementation remains issue-based; `N/A` dimensions are excluded from denominators, and all-`N/A` chapters are `skipped`, not `passing`.
-- S1 accepted schema uses issue-based observations, separates document identity from fund-type slot membership, requires `na_reason` for `N/A`, reserves `chapter_summary` for skipped chapter summaries, and excludes `unknown` / `probe_only` source boundaries from durable baseline selection.
-- S1 dry-run accepted one narrow pass and one material localized issue from `004393` / 2024 / `chapter_3`; it proves minimal issue localization only, not durable baseline readiness.
-- S1 dry-run outputs under `reports/scoring-runs/s1-dry-run-20260525/` are ignored scratch evidence; no JSON fixture or durable baseline was promoted.
-- The turnover-rate gap's immediate next action is `chapter_contract` first: require explicit gap wording and prohibit unsupported stability inference; choose `data_extraction` later only if an accepted chapter contract requires turnover / style-change evidence for the claim.
-- S2 accepted `ReportEvidenceBundle` as a projection wrapper over `StructuredFundDataBundle`; it must not replace the extraction bundle or create a parallel extraction path.
-- S2 accepted directly implementable contract decisions for `classified_fund_type`, `preferred_lens`, `corpus_id`, source boundaries, review-status progression / priority, anchor ids, `data_gap_refs`, score issue ids, and negative validation cases.
-- S2 excludes `nav_data` from the initial facts projection because `NavDataResult` is not an `ExtractedField`; a later `nav_data` source-contract slice must define a safe mapping before projecting it as report facts.
-- S2 accepted the active-fund Chapter 3 turnover stability wording constraint: stability / style-consistency claims require reviewed turnover or style-change evidence, otherwise the report must state insufficiency and next minimum validation question.
-- Implementation plan accepted the first code slice as `fund_agent/fund/report_evidence.py`, `tests/fund/test_report_evidence.py`, and minimal `fund_agent/fund/README.md` sync if source changes require it.
-- First code slice must use frozen slotted dataclasses, explicit Literal domains, explicit `ReportEvidenceProjectionContext`, deterministic ids, projection from `StructuredFundDataBundle`, preferred-lens projection, validation helpers, and derived review status.
-- First code slice must exclude `nav_data` facts, broad derived calculation population, renderer/FQ0-FQ6 changes, fixture promotion, durable baseline selection, Host/Agent runtime, and Dayu runtime.
-- `fact_prefill_reviewed` uses a Markdown evidence table under `docs/reviews/` until a later curated-fixture gate accepts JSON fixtures.
-- ReportEvidenceBundle implementation accepted commit `209cc25` adds typed model/projection, focused tests, README sync, implementation reviews, re-reviews, and controller judgment.
-- Implementation review accepted GLM F1 after fix: duplicate `classified_fund_type` gaps now merge duplicate references so the final missing-type gap preserves `related_fact_id="fact:fund_type.classified_fund_type"` and the classified fact references that gap.
-- Implementation review residuals are non-blocking: projection-context guard tests, review-status fallback-state tests, unknown extraction-mode fallback test, and turnover-rate override path asymmetry documentation can be handled in later robustness/scoring-validation work.
-- Report-quality scoring JSONL content validation plan accepted commit `e40a394` defines a pure Fund capability validator over `ReportEvidenceBundle` / JSONL serialization, keeps FQ0-FQ6 unchanged, and excludes renderer, Service, CLI, Host/Agent, Dayu, `nav_data`, durable baseline, and fixtures.
-- The validation plan requires canonical `scoring_ready` precondition handling, `ReportSourceDocument` fallback consistency, `N/A` and `chapter_summary` semantics, enum-domain checks, id-reference checks, and fact/gap/issue/anchor link integrity.
-- Report-quality scoring JSONL content validation implementation accepted commit `9f9bbf5` adds `fund_agent/fund/report_quality_validation.py`, focused tests, README sync, implementation reviews, re-reviews, and controller judgment.
-- Implementation review fixes aligned blocking data-gap semantics with `report_evidence.py`, removed duplicate `chapter_summary/report_level` emission, and collapsed fallback / fail-closed cascading issue output.
-- Report-quality validator dry-run evidence plan accepted commit `7990b8f` defines a single-bundle, synthetic, non-fixture dry-run evidence slice for proving validator consumer-contract behavior before any Service/CLI/renderer/FQ0-FQ6 or durable baseline integration.
-- The dry-run plan requires explicit `bundle_record_count == 1`, representative issues for fallback conflict, fail-closed source, `chapter_summary`, `N/A`, forward ref, backlink completeness, and `scoring_ready` precondition, plus boundary checks proving no product-flow integration.
-- Report-quality validator dry-run evidence accepted commit `1087c57` proves the validator can be consumed over a synthetic valid bundle and single-bundle JSONL, returns stable summary counts, pointers, run id, schema version, and representative issues, and still excludes product-flow integration.
-- Dry-run evidence residuals remain non-blocking: multi-bundle JSONL, exact unknown-upstream message assertions, non-scoring-ready `chapter_summary/report_level` policy, `nav_data`, derived calculations, durable baseline, fallback recovery, FOF taxonomy, real corpus evidence, and Host/Agent/Dayu runtime.
-- Release-readiness reconciliation accepted the current deterministic MVP path as locally release-ready: `fund-analysis analyze 004393 --report-year 2024 --quality-gate-policy block` exits 0 with `quality_gate_status: warn`; `fund-analysis checklist 004393 --report-year 2024` exits 0; `fund-analysis thermometer --json` exits 0; full pytest, ruff, and `git diff --check` pass; no tracked scratch report / scoring-run / quality-gate-run / JSONL / cache output was introduced; renderer, FQ0-FQ6 quality gate, Service, CLI, Host/Agent packages, and Dayu runtime dependencies remain unchanged.
-- Release acceptance packaging / PR readiness accepted the current branch as locally ready to push for a release-readiness PR, subject to user authorization. Evidence: branch `codex/v0-release-readiness-plan` has no upstream, no open PR, PR 15 is closed, PR 17 is merged; `origin/main..HEAD` contains release evidence and Fund-only new capabilities; product commands, full pytest, ruff, `git diff --check`, boundary checks, and tracked scratch checks pass.
-- After explicit user authorization, branch `codex/v0-release-readiness-plan` was pushed to origin and draft PR 18 was opened against `main`. First post-create poll: state `OPEN`, draft `true`, mergeable `MERGEABLE`, CI `test` `IN_PROGRESS`.
-- PR 18 CI follow-up: `test` check completed with `SUCCESS`; PR remains `OPEN`, draft `true`, and `MERGEABLE`.
-- After explicit user authorization in prior turns, PR 18 was marked ready for review and squash-merged into `main`. Read-only closeout evidence confirms PR 18 state `MERGED`, merge commit `c74223aefa1fe2c0ff66dd55bd8f17e5145c12c1`, and `origin/main` at `c74223a`.
-- After explicit user authorization, PR 19 was marked ready for review and squash-merged into `main`. Read-only closeout evidence confirms PR 19 state `MERGED`, merge commit `44ea95554f7b3f8fa48b62902dfb1a3469b3e471`, and `origin/main` at `44ea955`.
-- Local reconciliation accepted `codex/local-reconciliation` as the safe working baseline from `origin/main`; local `main` remains divergent and must not be reset, rebased, or used as the work baseline without explicit user decision. Ignored `reports/data-source-runs/` and `reports/scoring-runs/` outputs remain scratch evidence. The untracked report-quality validator integration decision plan remains a candidate artifact, not accepted truth.
-- Report-quality validator integration decision plan is accepted after plan review and targeted re-review. The next evidence run must use a manually assembled quasi-real bundle labeled `quasi_real_review_evidence`, derived from accepted S0/S1/S2 review evidence and current validator serialization shape. It must not fetch or parse annual reports, call production extractors, call `FundDocumentRepository`, PDF/cache/source helpers, downloaders, or source adapters, and must not claim `repository_verified`, `scoring_ready`, or `accepted_baseline`.
-- Report-quality validator quasi-real bundle evidence run is accepted locally. `validate_report_quality_bundle()` consumed 1 quasi-real bundle and `validate_report_quality_jsonl()` consumed a 3-line JSONL with 1 bundle record and 2 score-issue records; both returned no validator issues and no fail-closed state. The evidence remains quasi-real, not repository-verified, not scoring-ready, and not baseline. Failure-category decision: validator schema is not the blocker; next gate should be active-fund chapter 3 turnover/style-consistency contract wording before any data extraction, renderer, Service/CLI, FQ0-FQ6, durable baseline, Host/Agent, or Dayu work.
-- Retrospective verification accepted the prior quasi-real closeout process: AgentMiMo returned `PASS` for Gate 0 control-state sanity, AgentGLM returned `PASS_WITH_FINDINGS` for Gate 1 / Gate 2 evidence and failure-category review, and all findings were informational. Future corpus / chapter-contract gates should preserve the provenance chain for S0-derived `identity_status="verified_annual_report"` so it is not misread as a new repository verification claim.
-- Small baseline corpus candidate selection accepted 7 planning rows from existing accepted evidence only: clean near-term evaluation candidates `004393` / active, `004194` / enhanced index, and `006597` / bond; fallback-blocked planning candidates `110020` / index and `017641` / QDII pending upstream failure-category recovery or replacement; FOF remains a `data_gap` with `007721` and `017970` recorded as QDII-FOF/type-gap evidence, not fulfilled pure FOF coverage. No sample is `scoring_ready` or `accepted_baseline`.
-- Small baseline evaluation plan / verifier design is accepted as planning-only. The future offline loop must use explicit manifests, reviewed inputs, `ReportEvidenceBundle` / JSONL serialization, `validate_report_quality_bundle()` / `validate_report_quality_jsonl()`, scratch output under `/tmp/fund-agent-small-baseline-eval-20260526/` or ignored `reports/scoring-runs/small-baseline-eval-20260526/`, and a tracked summary artifact. It must keep fallback-blocked index/QDII rows out of the clean denominator, keep FOF as `data_gap`, and must not call default `analyze` / `checklist` or change renderer, FQ0-FQ6, Service/CLI, Host/Agent/dayu, fixtures, or product flow.
-- First improvement slice plan/review accepted `active_fund` Chapter 3 turnover/style-consistency data-gap wording contract as the minimal first implementation slice. The patched plan closed MiMo material findings by specifying exact Chinese contract wording, fixed audit route decisions, explicit modify/add decisions, and template-draft-first update order. Gate D must first verify whether adding a new `ContractRequiredItemRule` would affect default runtime audit behavior; if it would require renderer/product-flow changes, implementation must stop or defer that rule to a later renderer/report-writing gate.
-- First improvement slice implementation accepted the safe option: Chapter 3 active-fund contract wording and `narrative_guidance` `must_not_cover` coverage were hardened, `ReportDataGapOverride.required_report_wording` now preserves insufficiency and next-minimum-validation wording, and no new runtime `ContractRequiredItemRule` was added because current renderer output cannot satisfy that marker without a later renderer/report-writing gate. Focused tests, adjacent tests, ruff, `git diff --check`, boundary checks, and two independent code reviews passed.
-- Small baseline real evaluation accepted three clean fund-type slots: `004393` / active, `004194` / enhanced index, and `006597` / bond. Each sample produced scratch `ReportEvidenceBundle`, per-sample JSONL, validator summary, and failure-category localization under `/tmp/fund-agent-small-baseline-real-eval-20260526/`; `110020` / index and `017641` / QDII remain fallback-blocked, and FOF remains a data-gap/type-taxonomy residual. No sample is `scoring_ready`, `accepted_baseline`, or durable fixture.
-- The first concrete quality fix accepted for this gate is the multi-bundle JSONL validator consumer fix. `validate_report_quality_jsonl()` now assigns standalone `record_type="score_issue"` rows to the nearest preceding bundle, keeps bundle-before-score ownership fail-closed via `RQV_SCORE_ISSUE_ORPHANED`, and still rejects cross-bundle anchor/gap references. The Gate A combined JSONL now validates with `total_records=9`, `blocking_count=0`, and `failed_closed=false`.
-- Gate C accepted `scripts/report_quality_eval.py` as a maintainer-only/dev-only wrapper over explicit JSONL and bundle JSON inputs. It is not registered as a product CLI entry point and does not change `fund-analysis analyze`, `fund-analysis checklist`, Service defaults, renderer, FQ0-FQ6, Host/Agent/dayu, document repository, source helpers, `nav_data`, or durable fixtures.
-- Chapter contract / report-writing upgrade design plan is accepted locally. Gate A synthesized Top 5 evidence-backed report-quality issues and separated chapter-contract, writing-template, data-extraction, and validator-consumer categories. Gate B accepted a dev-only executable sidecar/wrapper over existing `ChapterContract`, not a replacement and not a parallel truth source. Gate C selected the minimal first implementation slice: Fund-layer executable constraints plus dev-only report-writing audit centered on active-fund Chapter 3 claim safety, with no renderer, Service/CLI, FQ0-FQ6, Host/Agent/dayu, source-helper, product-entrypoint, or default behavior changes.
-- The accepted implementation plan fixes the audit module path to `fund_agent/fund/report_writing_audit.py`, stores `required_evidence`, `allowed_na_reason`, `failure_behavior`, and overlay severity in `fund_agent/fund/template/chapter_contract_constraints.py` as sidecar data, integrates active Chapter 3 gap wording with `ReportDataGapOverride.required_report_wording`, keeps Chapter 2/6 deferred extraction-dependent requirements informational/config-only, targets >=80% per-file coverage for new modules, and treats `scripts/report_quality_eval.py` integration as optional/deferrable.
-- Fund-layer CHAPTER_CONTRACT sidecar + dev-only report-writing audit implementation is accepted locally. `fund_agent/fund/template/chapter_contract_constraints.py` wraps the existing 0-7 chapter manifest and adds the first material active-fund Chapter 3 turnover/style-consistency evidence requirement; `fund_agent/fund/report_writing_audit.py` consumes explicit `ReportEvidenceBundle` / records / chapter draft surrogates and outputs deterministic issues and summaries. The accepted behavior requires resolvable evidence anchors for satisfying facts, explicit insufficient-evidence wording and next minimum validation question for compatible `data_gap`, fail-closed records input handling, and no renderer/FQ0-FQ6/Service/CLI/Host/Agent/dayu/source-helper integration.
+### Current Decision Summary
 
-### Current Non-Goals
+- Route C is the accepted MVP LLM report generation route; Gates 1-3, Gate 4 Slices 4A/4B/4C/4D, internalized Host runtime governance adapter, and Service-owned ExecutionContract / typed request boundary are current local code facts; Agent engine/tool-loop migration remains future design.
+- Current deterministic `fund-analysis analyze/checklist` remains the default production report/checklist mainline; `fund-analysis analyze --use-llm` is the explicit provider-backed opt-in path.
+- Local PR #21 acceptance is no longer blocked by the old HTTP `401` provider_config issue for the current MiMo configuration. Provider timeout hardening, prompt-contract calibration, diagnostic narrowing, marker syntax repair, L1 calibration, provider runtime timeout follow-up and independent body execution are accepted locally. The current blocker is still real provider smoke acceptance: latest independent-body real provider rerun fails closed before complete chapters 0-7 with primary blocker `provider_runtime_timeout`; final assembly is incomplete, stdout empty and no deterministic fallback.
+- Gate 1 `ChapterFactProvider` typed projection is implemented and accepted locally as Fund-layer code fact.
+- Gate 2 `chapter_writer` / `chapter_auditor` single-chapter primitives are implemented and accepted locally as Fund-layer code facts.
+- Gate 3 `chapter_orchestrator` is implemented and accepted locally as Service-layer write-audit-repair façade for chapters 1-6.
+- Gate 4 Slice 4A `final_chapter_assembler` is implemented and accepted locally as Service-layer deterministic final assembly for chapters 0 and 7 plus accepted body chapters.
+- Gate 4 Slice 4B `FundAnalysisService.analyze_with_llm()` is implemented and accepted locally as Service-layer LLM analyze use case over deterministic core, Gate 3 and Slice 4A.
+- Current `fund-analysis analyze --use-llm` is implemented as explicit provider-backed CLI opt-in: Service builds `FundLLMExecutionRequest` / `FundLLMExecutionContract`, runtime plan and Service-owned `openai_compatible` writer/auditor clients, CLI gives Host only generic run parameters plus `host_timeout_seconds`, and Service executes `analyze_with_llm_execution()`; missing config, construction failure and incomplete LLM result fail closed without deterministic fallback.
+- `facet_recognizer` and full `FundToolService` remain future candidates; Gate 1 did not implement them.
+- Gate 4 Slice 4D1 provider factory was accepted in commit `26203d3`; Gate 4 Slice 4D2 CLI provider wiring was accepted in commit `ab0590a`; 4D3 docs/control sync was accepted in commit `4d0c19f`; 4D aggregate review was accepted in commit `7a3dab9`.
+- Golden / strict correctness / QDII / FOF / `110020` / fixture promotion blockers are residual product-quality work, not blockers for starting MVP report generation Gate 1.
+- Local Host runtime governance is implemented for `--use-llm`; Host remains business-agnostic and does not import Service/Fund or inspect ExecutionContract business fields. Agent/dayu runtime is not implemented. Internalized Agent engine/tool-loop remains deferred.
+- `MVP Service ExecutionContract boundary hardening gate` aggregate deepreview accepted two non-blocking findings and fixed both: runtime now validates `QualityFailClosedPolicy` before LLM execution, and `QualityGatePolicy` has a single Service contract type source in `execution_contract.py`; aggregate re-review passed with no blocking findings.
 
-- Do not change current v0 renderer or current 8-chapter output.
-- Do not change FQ0-FQ6 quality gate behavior.
-- Do not claim LLM audit / Evidence Confirm / repair loop is implemented.
-- Do not create Host/Agent packages or introduce `dayu.host` / `dayu.engine` before an explicit gate.
-- Do not introduce calculated index series, external index adapters beyond accepted thermometer data-source protocols, methodology extraction, constituents extraction, QDII subtype redesign, unsupported coverage targets, or quality-gate weakening.
-- Do not promote local scoring, writing, or data-source run outputs into tracked fixtures without a later reviewed gate.
+## Route C Future Route
 
-## Next Entry Point
-
-No product-flow integration is authorized by the accepted sidecar gate. The next explicit gate should be one of:
-
-- `renderer/report-writing output emission gate`: decide whether and how the current v0 renderer or a future chapter writer should emit active-fund Chapter 3 insufficiency wording; this must be opened separately because it changes user-visible output.
-- `report-writing audit ergonomics gate`: improve occurrence-level issue ids, broader records ingestion, or additional chapter/fund-type constraints without changing product defaults.
-
-Any next gate must start from `docs/reviews/release-maintenance-chapter-contract-sidecar-audit-implementation-controller-judgment-20260526.md`, `docs/design.md` §3.2, and the current Startup Packet.
-
-Do not integrate this dev-only audit into renderer, Service, CLI, FQ0-FQ6, source helpers, `FundDocumentRepository`, Host/Agent/dayu runtime, product entry points, scratch fixture promotion, or product default behavior without a separate reviewed gate.
-
-Do not push, create PR, mark ready, merge, close PRs, edit unrelated PRs, delete branches, or perform additional GitHub mutations without explicit user authorization. Do not modify Service, CLI, renderer, `quality_gate.py`, `extraction_score.py`, tracked reports, fixtures, repository/PDF/cache/source helpers, `FundDocumentRepository`, Host/Agent/dayu, `nav_data`, derived calculations, durable baseline, report-quality validator integration, or product-flow behavior unless a later explicit gate authorizes that scope.
+| Gate | Future scope | Boundary |
+|---|---|---|
+| MVP Gate 1 | `ChapterFactProvider` typed projection accepted locally; `facet_recognizer` / full `FundToolService` remain future candidates | Agent/Fund owns fund-type/facet/fact/evidence semantics; no Service/Host/dayu runtime introduced |
+| MVP Gate 2 | `chapter_writer` + `chapter_auditor` accepted locally as Fund-layer single-chapter primitives | LLM writing/audit consumes structured facts, derived calculations, explicit data gaps and evidence anchors only; no Service/Host/dayu/CLI integration introduced |
+| MVP Gate 3 | `chapter_orchestrator` accepted locally | Service owns write-audit-repair policy for chapters 1-6; calls Agent/Fund capabilities through explicit contracts |
+| MVP Gate 4 | Slices 4A `final_chapter_assembler`, 4B Service `analyze_with_llm`, 4C CLI `--use-llm`, 4D provider construction and Service-owned ExecutionContract / typed request boundary accepted locally | `--use-llm` is explicit opt-in; Service owns provider clients and typed request; deterministic `analyze/checklist` remains default unless a later gate changes it |
+| MVP Gate 5A | internalized Host runtime governance adapter | MVP process-local implementation accepted; covers global deadline, cancel token, terminal run state, safe diagnostics, run lifecycle and phase events; Host is business-agnostic and only receives generic operation/deadline/session fields; async runner and durable session/resume/memory/reply outbox remain future Host scope |
+| MVP Gate 5B | internalized Agent engine/tool-loop migration | Future Agent engine/tool loop internalizes Dayu Engine capabilities; not required to classify or resolve the current small-prompt provider timeout |
 
 ## Open Residuals
 
-| Residual | Owner / next gate | Required handling |
+| Residual | Current disposition | Owner / next gate |
 |---|---|---|
-| S0 corpus transition triggers | Completed in S0 | S0 defined trigger, actor, and minimum evidence for `candidate -> repository_verified -> fact_prefill_generated -> fact_prefill_reviewed -> scoring_ready -> accepted_baseline` |
-| FOF corpus coverage | S1 / fund-type taxonomy gate | S0 recorded QDII-FOF as `data_gap`; second pass must find pure `fof_fund` or open QDII-FOF taxonomy / precedence design |
-| Fallback upstream failure category | S1 entry gate / source reliability evidence | Recover original upstream failure category for `110020`, `017641`, and `017970`, or exclude / replace the fallback candidate before durable baseline selection |
-| S1 score schema details | Completed in S1 schema draft | `source_boundary`, issue-based output, `N/A` denominator semantics, `chapter_summary`, terminal states, and score issue localization are accepted as draft schema |
-| S1 dry-run evidence | Completed in S1 dry-run | Accepted ignored scoring-run output plus tracked Markdown review evidence; no fixture or durable baseline was promoted |
-| Fact/Evidence contract shape | Completed in S2 bundle plan | Accepted `ReportEvidenceBundle` wraps/projects from `StructuredFundDataBundle`; no parallel extraction path |
-| Anchor naming and review status derivation | Completed in S2 bundle plan / future implementation validation | S2 accepted namespaced ids, `sha256` locator hash, `data_gap_refs`, S0-aligned progression, and restrictive priority order |
-| Turnover-rate stability gap | Completed in S2 bundle plan / future chapter-contract implementation | S2 accepted narrow active-fund Chapter 3 wording constraint before extraction work |
-| JSONL content validation | Completed in implementation | `9f9bbf5` added pure validator module, focused tests, README sync, review artifacts, and controller judgment |
-| Typed model file placement | Completed in implementation | `209cc25` added `fund_agent/fund/report_evidence.py`, `tests/fund/test_report_evidence.py`, and minimal `fund_agent/fund/README.md` sync |
-| Bundle immutability | Completed in implementation | `ReportEvidenceBundle` and related records use frozen slotted dataclasses and tuple fields |
-| `type_slot_membership_status` value domain | Completed in implementation | Executable enum/domain and derivation cover `matches_slot`, `type_gap`, `taxonomy_pending`, `unknown`, and `not_applicable` |
-| Projection guard / fallback test hardening | future robustness or scoring validation slice | Add tests for context validation guards, review-status fallback states, and unknown extraction-mode fallback when those paths become consumer-critical |
-| Report-quality content validator | Completed in implementation | Pure validator module and tests accepted at `9f9bbf5`; no CLI/Service/FQ0-FQ6 integration |
-| Report-quality validator dry-run evidence | Completed in implementation | `1087c57` accepted synthetic single-bundle dry-run evidence; no source/test/product-flow changes |
-| Report-quality validator integration decision | Completed in planning | `11cde1d` accepted the manually assembled `quasi_real_review_evidence` next run path without product-flow integration |
-| Report-quality validator quasi-real evidence | Completed in evidence run | `05d037b` accepted one quasi-real bundle plus single-bundle JSONL validation; next decision is chapter-contract wording before extraction or integration |
-| Small baseline corpus candidate selection | Completed in candidate selection | Accepted clean evaluation-plan candidates `004393`, `004194`, `006597`; fallback-blocked `110020`, `017641`; FOF data-gap attempts `007721`, `017970`; no durable baseline promotion |
-| Small baseline evaluation plan / verifier design | Completed in planning | Offline explicit-manifest evaluator design accepted; durable baseline remains blocked until reviewed facts, source recovery or replacement, clean validator results, and a separate curated-fixture gate |
-| First improvement slice plan/review | Completed in planning | Accepted active-fund Chapter 3 turnover/style-consistency data-gap wording contract; Gate D must preflight runtime audit behavior before adding any required item rule |
-| First improvement slice implementation | Completed in implementation | Accepted safe-option contract hardening; no renderer/FQ0-FQ6/Service/CLI/default behavior change; runtime required item deferred |
-| Small baseline real evaluation | Completed in evidence run | Accepted three clean slots and scratch-only bundle / JSONL / validator evidence; no `scoring_ready`, durable baseline, or product-flow integration |
-| Multi-bundle JSONL validator consumer | Completed in implementation | Accepted nearest-preceding-bundle score_issue ownership fix; duplicate-index issue duplication remains low residual |
-| Dev-only report-quality eval tool | Completed in implementation | `scripts/report_quality_eval.py` is maintainer-only and explicit-input only; no product CLI integration |
-| Renderer/report-writing contract emission | next chapter contract / report-writing design gate | Decide whether active-fund Chapter 3 accepted gap wording requires renderer/report-writing changes; stop if FQ0-FQ6 or default Service/CLI changes would be required without explicit reviewed scope |
-| Chapter contract / report-writing design plan | Completed in design/plan/review | Accepted Fund-layer sidecar + dev-only report-writing audit plan; first implementation slice must not change renderer/product flow |
-| Fund-layer CHAPTER_CONTRACT sidecar + dev-only report-writing audit | Completed in implementation | Accepted Fund-layer sidecar and dev-only audit; no renderer/FQ0-FQ6/Service/CLI/Host/Agent/dayu/source-helper integration |
-| Report-writing audit duplicate occurrence ids | future audit-output ergonomics gate | Current deterministic `issue_id` values are class ids; add draft locator or occurrence ordinal only in a separate output-schema gate |
-| Report-writing audit records-mode breadth | future audit-output ergonomics gate | Current records helper is fail-closed and narrow to active-fund Chapter 3; broaden only after schema/design review |
-| Product renderer emission of active Chapter 3 insufficiency wording | future output-changing renderer/report-writing gate | Open only after dev-only audit evidence proves the exact minimal output change required |
-| `nav_data` mapping | future `nav_data` source-contract slice | Keep excluded from initial facts projection until a safe mapping contract exists |
-| Document identity vs fund-type slot membership | Completed in S1 schema draft | S1 split document verification from type-slot membership so `verified_as_annual_report_but_type_gap` cannot become scoring-ready FOF evidence |
-| Review-state terminal states | Completed in S1 schema draft / future implementation validation | S1 defined rejected / deferred / expired semantics; S2 or later implementation must add executable value-domain validation if schema becomes code |
-| `fq_gate_status` citation | S1 / S2 | Cite existing quality gate final judgment contract semantics for `pass`, `warn`, `block`, `not_run` |
-| PR 15 stale disposition | Completed by external state | Current GitHub state reports PR 15 as closed; no local action required |
-| Host/Agent boundary debt | Future explicit Host/Agent gate | Host must use `dayu.host`; Agent execution must use `dayu.engine`; no placeholder packages |
+| Golden / strict correctness / fixture promotion | Residual only for MVP report generation; no promotion allowed without a separate accepted future gate | Future strict golden / fixture promotion gate |
+| `004393` / `004194` / `006597` promotion readiness | `004393`, `004194`, `006597` are not promotion-prep-ready; `fixture_state=absent`; `promotion_allowed=false` | Future promotion-prep readiness owner |
+| QDII / FOF / `110020` / `017641` coverage | Deferred from minimum v1 and not ready for full v1; not blockers for MVP Route C Gate 1 | Future QDII / FOF / index evidence policy gates |
+| Release-maintenance long ledger | Preserved by archive and review links only; not active startup surface | Historical Evidence Index |
+| internalized Host runtime governance adapter | MVP process-local implementation complete for `--use-llm`; no external Dayu dependency added | Future durable Host scope only if session/resume/memory/outbox is required |
+| internalized Agent engine/tool-loop migration | Deferred; not the minimal fix for current provider timeout blocker | Future Agent/tool-loop migration gate |
+| O1 async-in-sync CLI Host closure | Deferred from Slice 3; current CLI remains sync and Host runner does not manage event loops | Future async CLI / Host async-runner design gate if async invocation becomes required |
+| O2 fake-only Host boundary coverage | Addressed in Slice 4 with real Host package boundary regression and CLI terminal-state regression; no remaining O2 residual | Current Slice 4 evidence artifact |
+| Deterministic renderer default | Remains current default production behavior; provider-backed LLM report path is explicit `--use-llm` opt-in only | Current behavior |
+| Provider reliability / polish | Timeout-only retry/backoff accepted locally; live provider smoke acceptance, multi-model writer/auditor split, provider fallback, chapter 0/7 LLM polish and Evidence Confirm are not implemented | Future provider reliability / LLM polish gates |
+| PR #21 real provider smoke | Provider auth now passes for current MiMo config; timeout hardening, prompt-contract calibration, diagnostic narrowing, marker syntax repair, L1 calibration, runtime-cost diagnostic, independent body execution and prompt-cost/root-cause calibration accepted; latest compact-mode rerun proves chapters 1-6 independent (`generated=[1..6]`, `skipped=[]`) and ch2/ch6 prompt cost reduced below large-prompt threshold, but still fails closed before complete 0-7 report with primary blocker `provider_runtime_timeout_small_prompt` | Provider endpoint calibration remains a later diagnostic gate; Host now records fail-closed run state but does not resolve endpoint runtime |
+| Programmatic audit C2 | Supplemental service diagnostic after a timeout-free run accepts chapters 1-2, then fails chapter 3 `programmatic_audit` with issue prefix `programmatic:C2` and subcategory `code_bug_other`; no complete 0-7 report | Future `MVP programmatic audit C2 calibration gate` after timeout is no longer first blocker |
+| Score-loop implementation | Gate C design accepted only; not implemented and not connected to readiness/golden/quality gate | Future score-loop implementation gate after Gate B timeout is handled |
+| Untracked unrelated workspace files | Not part of accepted evidence unless a later controller gate explicitly accepts them | Controller scope audit |
 
-## Active Gate Ledger
+## Recent Active Gate Ledger
 
-| Gate | Status | Artifact | Validation / judgment | Residual owner | Next action |
-|---|---|---|---|---|---|
-| `release-maintenance chapter-audit report pipeline design implementation` | accepted locally | `docs/reviews/release-maintenance-chapter-audit-report-pipeline-design-implementation-20260524.md` | Design promotes measurable report-quality baseline before data-script or template iteration; no source/test/runtime changes | concrete corpus/schema/mapping decisions | report-quality baseline / Fact-Evidence plan |
-| `release-maintenance methodology coverage matrix design` | accepted locally | `docs/reviews/release-maintenance-methodology-coverage-matrix-plan-20260525.md`, `docs/reviews/release-maintenance-methodology-coverage-matrix-implementation-20260525.md` | `docs/design.md` §5.4.3 adds Morningstar x 有知有行 x fund type x CHAPTER_CONTRACT matrix; validation `rg` and `git diff --check` passed | concrete scoring schema and baseline corpus | report-quality baseline / Fact-Evidence plan |
-| `release-maintenance report-quality baseline / Fact-Evidence contract plan/review` | accepted locally | `docs/reviews/release-maintenance-report-quality-baseline-fact-evidence-contract-plan-20260525.md`, `docs/reviews/release-maintenance-report-quality-baseline-fact-evidence-contract-plan-review-controller-judgment-20260525.md` | AgentCodex plan; AgentMiMo and AgentDS `PASS_WITH_FINDINGS`; controller accepted S0/S1/S2 sequence and resolved open questions | S0/S1/S2 details above | `report-quality-baseline S0 corpus-selection evidence` |
-| `report-quality-baseline S0 corpus-selection evidence` | accepted locally | `docs/reviews/release-maintenance-report-quality-baseline-s0-corpus-selection-evidence-20260525.md`, `docs/reviews/release-maintenance-report-quality-baseline-s0-corpus-selection-evidence-controller-judgment-20260525.md` | AgentCodex evidence; AgentMiMo and AgentDS `PASS_WITH_FINDINGS`; review fix completed; both re-reviews `PASS`; commit `c73e594` | S1 fallback category, FOF data_gap, score schema details | `report-quality-baseline S1 score-schema fixture draft` |
-| `report-quality-baseline S1 score-schema fixture draft` | accepted locally | `docs/reviews/release-maintenance-report-quality-baseline-s1-score-schema-fixture-draft-20260525.md`, `docs/reviews/release-maintenance-report-quality-baseline-s1-score-schema-fixture-draft-controller-judgment-20260525.md` | AgentCodex draft; AgentMiMo and AgentDS `PASS_WITH_FINDINGS`; review fix completed; both re-reviews `PASS`; commit `f22f47e` | S1 dry-run evidence, fallback source category, FOF data_gap, future value-domain validation | `report-quality-baseline S1 dry-run evidence collection` |
-| `report-quality-baseline S1 dry-run evidence` | accepted locally | `docs/reviews/release-maintenance-report-quality-baseline-s1-dry-run-evidence-20260525.md`, `docs/reviews/release-maintenance-report-quality-baseline-s1-dry-run-evidence-controller-judgment-20260525.md` | AgentCodex evidence; AgentMiMo and AgentDS `PASS_WITH_FINDINGS`; controller accepted minimal pass / issue localization; commit `1b1a30d` | S2 bundle shape, anchor/gap naming, JSONL content validation, turnover chapter-contract handling, fallback category, FOF data_gap | `fact-evidence-contract S2 bundle candidate planning` |
-| `fact-evidence-contract S2 bundle candidate planning` | accepted locally | `docs/reviews/release-maintenance-fact-evidence-contract-s2-bundle-candidate-plan-20260525.md`, `docs/reviews/release-maintenance-fact-evidence-contract-s2-bundle-candidate-plan-controller-judgment-20260525.md` | AgentCodex plan; AgentMiMo and AgentDS `PASS_WITH_FINDINGS`; plan patched; both re-reviews `PASS`; commit `bac54ba` | typed model file placement, immutability, `type_slot_membership_status`, `nav_data` mapping, fallback category, FOF data_gap, fixture gate | `typed ReportEvidenceBundle model/projection implementation plan review` |
-| `typed ReportEvidenceBundle model/projection implementation plan review` | accepted locally | `docs/reviews/release-maintenance-report-evidence-bundle-typed-model-projection-implementation-plan-20260525.md`, `docs/reviews/release-maintenance-report-evidence-bundle-typed-model-projection-implementation-plan-controller-judgment-20260525.md` | AgentCodex plan; AgentMiMo and AgentDS `PASS_WITH_FINDINGS`; plan patched; both re-reviews `PASS`; commit `81191c3` | code implementation, coverage, README sync, `nav_data` mapping, fallback category, FOF data_gap, fixture gate | `ReportEvidenceBundle typed model/projection implementation` |
-| `ReportEvidenceBundle typed model/projection implementation` | accepted locally | `docs/reviews/release-maintenance-report-evidence-bundle-typed-model-projection-implementation-controller-judgment-20260525.md`, `docs/reviews/release-maintenance-report-evidence-bundle-typed-model-projection-implementation-review-mimo-20260525.md`, `docs/reviews/release-maintenance-report-evidence-bundle-typed-model-projection-implementation-review-glm-20260525.md` | AgentCodex implementation; AgentMiMo `PASS_WITH_FINDINGS`; AgentGLM `PASS_WITH_FINDINGS`; GLM F1 fixed; both re-reviews `PASS`; validation 23 focused tests / 93% coverage / 40 adjacent tests / ruff / boundary rg / diff check; commit `209cc25` | JSONL content validation, guard/fallback hardening, `nav_data` mapping, fallback category, FOF data_gap, fixture gate | `report-quality scoring JSONL content validation plan` |
-| `report-quality scoring JSONL content validation plan` | accepted locally | `docs/reviews/release-maintenance-report-quality-scoring-jsonl-content-validation-plan-20260525.md`, `docs/reviews/release-maintenance-report-quality-scoring-jsonl-content-validation-plan-controller-judgment-20260525.md` | AgentCodex plan; AgentMiMo and AgentGLM `PASS_WITH_FINDINGS`; plan patched; both re-reviews `PASS`; commit `e40a394` | validator implementation, `nav_data` mapping, derived calculations, durable baseline, Host/Agent/dayu, fallback recovery, FOF taxonomy | `report-quality scoring JSONL content validation implementation` |
-| `report-quality scoring JSONL content validation implementation` | accepted locally | `docs/reviews/release-maintenance-report-quality-scoring-jsonl-content-validation-implementation-controller-judgment-20260525.md`, `docs/reviews/release-maintenance-report-quality-scoring-jsonl-content-validation-implementation-review-mimo-20260525.md`, `docs/reviews/release-maintenance-report-quality-scoring-jsonl-content-validation-implementation-review-glm-20260525.md` | AgentCodex implementation; AgentMiMo and AgentGLM `PASS_WITH_FINDINGS`; fixes completed; both re-reviews `PASS`; validation 25 focused tests / 92.34% coverage / 81 adjacent tests / ruff / boundary rg / diff check; commit `9f9bbf5` | dry-run evidence planning, multi-bundle JSONL, message-specific test hardening, `nav_data` mapping, derived calculations, durable baseline, Host/Agent/dayu, fallback recovery, FOF taxonomy | `report-quality validator dry-run evidence planning` |
-| `report-quality validator dry-run evidence planning` | accepted locally | `docs/reviews/release-maintenance-report-quality-validator-dry-run-evidence-plan-20260525.md`, `docs/reviews/release-maintenance-report-quality-validator-dry-run-evidence-plan-controller-judgment-20260525.md` | AgentCodex plan; AgentMiMo and AgentGLM `PASS_WITH_FINDINGS`; plan patched; both re-reviews `PASS`; commit `7990b8f` | dry-run evidence implementation, multi-bundle JSONL, message-specific test hardening, `nav_data` mapping, derived calculations, durable baseline, Host/Agent/dayu, fallback recovery, FOF taxonomy | `report-quality validator dry-run evidence implementation` |
-| `report-quality validator dry-run evidence implementation` | accepted locally | `docs/reviews/release-maintenance-report-quality-validator-dry-run-evidence-20260525.md`, `docs/reviews/release-maintenance-report-quality-validator-dry-run-evidence-controller-judgment-20260525.md` | AgentCodex evidence; AgentMiMo `PASS_WITH_FINDINGS`; AgentGLM `PASS`; MiMo targeted re-review `PASS`; validation evidence-only artifact / single-bundle JSONL / boundary rg / diff check; commit `1087c57` | integration decision planning, multi-bundle JSONL, message-specific test hardening, `nav_data` mapping, derived calculations, durable baseline, Host/Agent/dayu, fallback recovery, FOF taxonomy | `report-quality validator integration decision planning` |
-| `report-quality validator integration decision planning` | accepted locally | `docs/reviews/release-maintenance-report-quality-validator-integration-decision-plan-20260525.md`, `docs/reviews/plan-review-20260525-235520.md`, `docs/reviews/plan-rereview-20260525-235615.md` | Planning chose a manual `quasi_real_review_evidence` evidence loop; review F1 closed by locking input provenance and forbidding production extraction/repository access; commit `11cde1d` | quasi-real evidence run, multi-bundle JSONL, durable baseline, Service/CLI/FQ0-FQ6, Host/Agent/dayu, fallback recovery, FOF taxonomy | `report-quality validator quasi-real bundle evidence run` |
-| `report-quality validator quasi-real bundle evidence run` | accepted locally | `docs/reviews/release-maintenance-report-quality-validator-quasi-real-bundle-evidence-20260525.md`, `docs/reviews/release-maintenance-report-quality-validator-quasi-real-bundle-controller-judgment-20260526.md` | `validate_report_quality_bundle()` consumed 1 quasi-real bundle; `validate_report_quality_jsonl()` consumed 3 JSONL records; focused tests / ruff / diff check passed; commit `05d037b` | active-fund chapter 3 turnover/style-consistency wording, multi-bundle JSONL, durable baseline, source reliability, FOF taxonomy | `active-fund chapter 3 turnover/style-consistency contract wording plan` |
-| `report-quality validator quasi-real retrospective verification` | accepted locally | `docs/reviews/release-maintenance-report-quality-quasi-real-retrospective-controller-judgment-20260526.md` | AgentMiMo `PASS`; AgentGLM `PASS_WITH_FINDINGS`; no blocking or material findings; informational provenance observation accepted | provenance wording in future corpus/chapter-contract gates, untracked unrelated review artifact disposition | `small baseline corpus candidate selection + first report-quality improvement slice` |
-| `small baseline corpus candidate selection` | accepted locally | `docs/reviews/release-maintenance-small-baseline-corpus-candidate-selection-20260526.md` | AgentCodex selected 7 candidate/data-gap rows from accepted evidence only; `git diff --check` passed; no source/test/product-flow changes | fallback recovery or replacement for index/QDII, pure FOF coverage, fact-review/scoring-ready freeze, chapter 3 turnover contract | `baseline evaluation plan / verifier design` |
-| `baseline evaluation plan / verifier design` | accepted locally | `docs/reviews/release-maintenance-small-baseline-evaluation-plan-verifier-design-20260526.md` | AgentCodex designed an offline explicit-input evaluator loop with scratch-only outputs and failure-category mapping; `git diff --check` passed; no source/test/product-flow changes | reviewed fact availability for `004194` / `006597`, source recovery or replacement, pure FOF coverage, durable fixture gate | `first improvement slice selection plan/review` |
-| `first improvement slice selection plan/review` | accepted locally | `docs/reviews/release-maintenance-first-report-quality-improvement-slice-plan-20260526.md`, `docs/reviews/release-maintenance-first-report-quality-improvement-slice-plan-controller-judgment-20260526.md` | AgentCodex plan; AgentMiMo and AgentGLM `PASS_WITH_FINDINGS`; plan patched; MiMo re-review `PASS`; GLM re-review `PASS_WITH_FINDINGS`; mandatory Gate D preflight accepted | runtime audit rule behavior, renderer/product-flow boundary, README/design sync, durable baseline, source recovery, FOF taxonomy | `active-fund chapter 3 turnover/style-consistency data-gap wording contract implementation` |
-| `active-fund chapter 3 turnover/style-consistency data-gap wording contract implementation` | accepted locally | `docs/reviews/release-maintenance-first-report-quality-improvement-slice-implementation-controller-judgment-20260526.md` | AgentCodex implementation; focused tests `83 passed`; adjacent tests `190 passed`; ruff / diff check / boundary checks passed; AgentMiMo and AgentGLM `PASS_WITH_FINDINGS`; safe option accepted | renderer/report-writing marker emission, runtime required item, extraction evidence, fallback recovery, FOF taxonomy, durable baseline | `small baseline real evaluation run + first concrete quality fix + dev-only reporting tool` |
-| `small baseline real evaluation run + first concrete quality fix + dev-only reporting tool` | accepted locally | `docs/reviews/release-maintenance-small-baseline-real-evaluation-controller-judgment-20260526.md`, `docs/reviews/release-maintenance-small-baseline-real-evaluation-final-review-mimo-20260526.md`, `docs/reviews/release-maintenance-small-baseline-real-evaluation-final-review-glm-20260526.md` | AgentCodex evidence / implementation; Gate A validated three clean fund-type slots; Gate B fixed combined JSONL validator ownership; Gate C added maintainer-only script; MiMo final review `PASS`, GLM final review `PASS_WITH_FINDINGS`; focused / adjacent tests, ruff, diff check passed | duplicate-index residual, index/QDII fallback recovery, FOF data-gap, durable baseline blocked, active Chapter 3 renderer/report-writing emission | `escalation readiness check; if complete, chapter contract implementation + report writing quality upgrade design gate` |
-| `chapter contract implementation + report writing quality upgrade design plan` | accepted locally | `docs/reviews/release-maintenance-chapter-contract-writing-upgrade-design-plan-controller-judgment-20260526.md` | Gate A evidence synthesis, Gate B executable contract design, Gate C minimal report-writing upgrade slice, Gate D plan reviews and controller judgment accepted; local commit `aeea2be` | implementation of Fund-layer sidecar and dev-only audit | `Fund-layer executable CHAPTER_CONTRACT sidecar + dev-only report-writing audit implementation gate` |
-| `Fund-layer executable CHAPTER_CONTRACT sidecar + dev-only report-writing audit implementation` | accepted locally | `docs/reviews/release-maintenance-chapter-contract-sidecar-audit-implementation-controller-judgment-20260526.md` | Implementation, two code reviews, fixes, re-reviews, targeted re-review, focused tests `19 passed`, adjacent tests `147 passed`, ruff and boundary checks passed; accepted local HEAD recorded by `git log` | duplicate occurrence ids, records-mode breadth, coverage probe blocked by local numpy import issue, future renderer/report-writing emission | `future explicit renderer/report-writing output gate or audit-output ergonomics gate` |
+| Gate | Status | Summary | Next action |
+|---|---|---|---|
+| `MVP Service ExecutionContract boundary hardening gate aggregate deepreview` | accepted locally | Aggregate review accepted two non-blocking findings; fixes enforce `QualityFailClosedPolicy` at the typed LLM execution boundary and unify `QualityGatePolicy` to `execution_contract.py`; re-review PASS; targeted/full validation PASS | Stop at `ready-to-open-draft-PR` authorization point; do not push/create PR/mark ready without explicit user authorization |
+| `MVP Service ExecutionContract boundary hardening gate Slice 4` | accepted locally | Adds Host boundary regression and docs/control sync for accepted internalized Host runner plus Service-owned `FundLLMExecutionRequest` / `FundLLMExecutionContract` boundary; no Agent/tool-loop, provider runtime implementation, score, quality gate, golden, release or PR state changes; code review PASS with no blocking findings | Start aggregate deepreview for this completed gate |
+| `MVP Service ExecutionContract boundary hardening gate Slices 1-3` | accepted locally | Accepted checkpoints `4691da5`, `854d4b8`, `19b08cf`; Service contract/types, Service-owned provider preparation, and CLI -> Host typed execution request path are accepted; O1 deferred to future async CLI/Host async-runner gate and O2 assigned to Slice 4 | Complete Slice 4 only |
+| `MVP internalized Host runtime governance adapter implementation gate` | accepted locally | Adds `fund_agent/host` process-local Host runtime runner, safe run events, deadline/cancel, terminal state and `--use-llm` CLI integration without `dayu-agent`; full validation and code review/re-review passed; live provider smoke in current shell was blocked by absent provider env and does not change prior `provider_runtime_timeout_small_prompt` residual | Next entry remains `MVP Service ExecutionContract boundary hardening gate`; do not enter it until explicitly continuing that gate |
+| `MVP provider runtime budget and prompt-cost root-cause calibration gate` | accepted locally as diagnostic/runtime-cost hardening; smoke still blocked | Compact writer payload and safe prompt-cost/runtime diagnostics accepted; ruff/full pytest/deterministic smoke/missing-config fail-closed PASS; real provider compact-mode CLI exit `1`, stdout empty, no fallback; Service diagnostic generated `[1..6]`, `skipped=[]`, `accepted=[]`; ch2/ch6 reduced from approx `26086`/`29078` tokens to `1590`/`2110`; all chapters writer timeout below `3000` tokens | Start `MVP Service ExecutionContract boundary hardening gate`; do not revisit provider config/auth or large-prompt slimming |
+| `MVP real provider smoke acceptance rerun with independent body chapter matrix` | diagnostic complete; smoke blocked | Real provider CLI exit `1`, stdout empty, no deterministic fallback; service diagnostic generated full body matrix with `generated=[1..6]`, `skipped=[]`, `accepted=[4]`; final assembly incomplete; MiMo/GLM evidence reviews PASS; unique blocker `provider_runtime_timeout`, with chapter 2/6 writer prompts approx `26086`/`29078` tokens | Start `MVP provider runtime budget and prompt-cost calibration gate`; do not revisit provider config/auth |
+| `MVP independent body chapter execution gate` | accepted locally | Removed body chapter fail-fast semantics: chapters 1-6 now each run independent write/audit/repair attempts from the same projection; `dependency_missing` is reserved for true writer dependency; CLI incomplete output includes safe all-chapter matrix; final assembly remains fail-closed; ruff, targeted/full pytest, deterministic smoke, missing-config fail-closed and artifact secret scan pass | Rerun real provider smoke to observe independent body matrix before selecting the next calibration gate |
+| `MVP provider runtime timeout follow-up gate` | accepted diagnostic/code hardening; smoke still blocked | Added safe provider-bound prompt/runtime cost diagnostics, runtime serializer and CLI runtime summary; reviews PASS; earlier default provider budget proved chapter 1 auditor timeout, and later independent-body rerun localized current blocker to provider runtime timeout across writer/auditor rows | Historical evidence; current next entry is provider runtime budget and prompt-cost calibration |
+| `MVP real-provider stabilization and score-loop phase` | blocked with accepted local work | Gate A writer/auditor contract hardening accepted; provider runtime timeout hardening accepted; prompt-contract calibration accepted; writer diagnostic narrowing, marker syntax repair, L1 calibration, provider runtime timeout follow-up, independent body execution and prompt-cost/root-cause calibration accepted; Gate B real provider smoke still blocked by `provider_runtime_timeout_small_prompt`; Gate C score-loop design accepted as design-only | Start `MVP provider endpoint small-prompt runtime budget calibration gate`; do not mark PR ready |
+| `MVP programmatic audit L1 calibration gate` | accepted locally; superseded by timeout follow-up evidence | Added safe `l1_numerical_closure` taxonomy and L1 repair guidance without relaxing L1; local validation and two code reviews PASS; then provider runtime timeout follow-up showed default-budget chapter 1 auditor timeout and bounded-budget chapter 1 `audit_rule_too_strict` | Historical evidence for current gate; next active entry is chapter 1 auditor calibration |
+| `MVP writer prompt contract diagnostic narrowing gate` | accepted locally as diagnostic; smoke still blocked | Added safe failure subcategory and prompt-contract diagnostic matrix; controller real provider service diagnostic localizes latest primary blocker to chapter 1 `invalid_marker` / `writer:invalid_missing_marker`; CLI rerun observed `candidate_facet_assertion`; no prompt/draft/provider response stored | Start `MVP writer marker syntax repair gate`; keep candidate facet as monitored secondary boundary |
+| `MVP writer marker syntax repair gate` | accepted locally; smoke still blocked | Missing-marker prompt guidance changed to explicit contract block without parser relaxation; reviews PASS; real provider progressed to chapter 1 accepted and chapter 2 `programmatic:L1` audit failure | Start `MVP programmatic audit L1 calibration gate`; do not revisit provider config/auth |
+| `MVP real provider smoke prompt-contract calibration gate` | accepted locally; smoke still blocked | Writer prompt shortened, auditor protocol stricter, repair bounded, failure taxonomy/CLI category improved; code reviews PASS; real provider reaches chapter 1 accepted in service rerun but chapter 2 blocks `prompt_contract` | Narrow writer contract failure subcategory without storing prompt/draft/provider response |
+| `MVP provider runtime timeout hardening gate` | accepted locally; smoke still blocked | Timeout-only bounded retry, safe diagnostics and CLI first-failed summary implemented; MiMo/GLM review PASS; real provider still exits `1` without complete 0-7 report | Use evidence for prompt-contract calibration rerun; do not revisit auth/config unless env load fails |
+| `MVP chapter generation score loop design gate` | accepted design-only | Design distinguishes extraction/fact/generation scores, routes provider timeout as not-scored, defines schema/taxonomy/task rules/thresholds/lifecycle/manual override; MiMo/GLM reviews PASS | Future implementation only after Gate B runtime blocker is handled |
+| `MVP real provider smoke acceptance gate` | blocked by writer prompt contract | `006597 / 2024 --use-llm` exits `1` with empty stdout and no fallback; latest controller CLI first failed chapter `1` / `prompt_contract`; service diagnostic: chapter 1 accepted, chapter 2 `prompt_contract` | Start writer prompt contract diagnostic narrowing; preserve safety boundaries |
+| `MVP LLM writer/auditor contract hardening gate` | accepted locally | Writer/auditor contract hardened; ruff, targeted pytest, full coverage, missing-config smoke pass; real provider diagnostic now classifies chapter 2 timeout precisely | Evidence feeds Gate B timeout follow-up |
+| `MVP provider auth/config verification gate` | complete, blocked by writer/auditor contract | MiMo-compatible config loads and minimal chat-completions succeeds; real `--use-llm` smoke still exits `1`; chapter 1 writer produces draft but misses required structure/output markers, asserts candidate facets, LLM audit parse fails, and regenerate times out | Start `MVP LLM writer/auditor contract hardening gate` with plan/review before code changes |
+| `MVP real provider audit-block diagnostic gate` | diagnostic complete, blocked by `provider_config` | Same-source Service diagnostic found chapter 1 `llm_exception` from provider HTTP `401`; no draft/audit attempt existed; chapters 2-6 were fail-fast dependency skips; no code fix accepted | Verify provider key/base URL/model permission in a secret-safe shell, then rerun real provider smoke |
+| `MVP local acceptance / real provider smoke rerun with configured provider` | blocked by `audit_block` | Ruff and full pytest passed; deterministic default passed; missing-config `--use-llm` failed closed; real provider `--use-llm` loaded config but exited `1` with `orchestration_status=blocked`, no generated 0-7 report and no deterministic fallback | Start `MVP real provider audit-block diagnostic gate`; keep PR #21 draft/open |
+| `MVP local acceptance / real provider smoke gate` | blocked by environment | Ruff and full pytest passed; deterministic `fund-analysis analyze 006597 --report-year 2024` passed with chapters `0-7`; missing-config `--use-llm` failed closed with exit `1` and no deterministic fallback; real provider smoke did not run because typed provider env is missing | Rerun single-fund real provider smoke after provider config is supplied; keep PR #21 draft/open |
+| `MVP Gate 4 closeout / ready-to-open-draft-PR readiness reconciliation` | accepted locally | Local closeout accepted after ruff, `git diff --check`, CLI `--use-llm` fail-closed smoke and full pytest `1106 passed`, coverage `91.76%`; no runtime changes beyond accepted Gate 4 work | Await explicit user authorization for draft PR gate |
+| `MVP Gate 4 Slice 4D aggregate review` | accepted locally | MiMo and GLM aggregate reviews passed with no blocking findings; controller judgment accepted provider construction as a local checkpoint in commit `7a3dab9` | Start `MVP Gate 4 closeout / ready-to-open-draft-PR readiness reconciliation gate` |
+| `MVP Gate 4 Slice 4D3: docs, design/control sync, and full regression` | accepted locally | Synced README, design and control docs after 4D1/4D2; fixed `only` vs `default` control-doc blocker; full regression `1106 passed`, coverage `91.76%`; accepted commit `4d0c19f` | Completed by accepted aggregate review commit `7a3dab9` |
+| `MVP Gate 4 Slice 4D2: CLI --use-llm provider construction wiring` | accepted locally | CLI `analyze --use-llm` now reads typed LLM env config, constructs Service-owned provider clients, calls `analyze_with_llm()`, keeps default `analyze` deterministic, and fail-closes missing config/construction/incomplete LLM result without deterministic fallback; accepted commit `ab0590a` | Start `MVP Gate 4 Slice 4D3: docs, design/control sync, and full regression gate` |
+| `MVP Gate 4 Slice 4D1: typed LLM config and provider factory` | accepted locally | Added typed env config and Service-owned `openai_compatible` HTTP chat-completions provider factory over existing `httpx`; tests use fake env and `httpx.MockTransport`; accepted commit `26203d3` | Start `MVP Gate 4 Slice 4D2: CLI --use-llm provider construction wiring gate` |
+| `MVP Gate 4 Slice 4D: production LLM provider construction plan` | plan accepted locally | Plan accepts `openai_compatible` HTTP chat-completions over existing `httpx`, typed env config, Service-owned provider factory, no provider SDK, no live pytest network, no deterministic fallback and controller amendments for audit prompt passthrough, API key handling and CLI temporary error removal | Start `MVP Gate 4 Slice 4D1: typed LLM config and provider factory implementation gate` |
+| `MVP Gate 4 Slice 4C: CLI --use-llm opt-in fail-closed` | accepted locally | CLI `analyze --use-llm` added as explicit opt-in but fail-closes before Service LLM call because provider construction is absent; `checklist` rejects the flag; 46 CLI tests, Service regressions, full validation and two PASS reviews; no provider, Service internals, Fund, final judgment, quality, golden, score, snapshot, dayu changes | Start `MVP Gate 4 Slice 4D: production LLM provider construction plan gate` |
+| `MVP Gate 4 Slice 4B: Service analyze_with_llm` | accepted locally | Service-layer `FundAnalysisService.analyze_with_llm()` implemented with explicit `llm_clients`, deterministic core reuse, Gate 3 orchestration, Slice 4A final assembly, 7 targeted tests, full validation and two PASS reviews; no CLI, provider construction, source access, final judgment semantic change, dayu, golden or quality changes | Start `MVP Gate 4 Slice 4C: CLI --use-llm opt-in fail-closed integration gate` |
+| `MVP Gate 4 Slice 4A: final_chapter_assembler` | accepted locally | Service-layer deterministic final assembler implemented with typed contract, chapter 7 from existing final judgment, chapter 0 from accepted conclusions, 14 targeted tests, full validation, two PASS reviews and two PASS fix re-reviews; no Service LLM analyze use case, CLI, provider construction, source access, final judgment semantic change, dayu, golden or quality changes | Start `MVP Gate 4 Slice 4B: Service analyze_with_llm implementation gate` |
+| `MVP Gate 3: chapter_orchestrator` | accepted locally | Service-layer chapter orchestrator implemented with explicit bundle/projection input, injected writer/auditor clients, fail-closed repair policy, 30 targeted tests, full validation, two PASS reviews and two PASS fix re-reviews; no chapter 0/7 assembly, CLI, provider construction, source access, dayu, golden or quality changes | Start `MVP Gate 4: final_chapter_assembler + chapter 0 + CLI --use-llm plan gate` |
+| `MVP Gate 2: chapter_writer + chapter_auditor` | accepted locally | Fund-layer writer/auditor primitives implemented with 38 targeted tests, full validation, two PASS re-reviews and controller judgment; no orchestrator/repair loop/CLI/dayu/promotion/source access changes | Start `MVP Gate 3: chapter_orchestrator plan gate` |
+| `MVP Gate 1: ChapterFactProvider typed projection` | accepted locally | Fund-layer `chapter_fact_projection.v1` implemented with tests, docs, two PASS reviews and controller judgment; no writer/auditor/orchestrator/CLI/dayu/promotion changes | Start `MVP Gate 2: chapter_writer + chapter_auditor plan gate` |
+| `MVP truth pivot and context compaction gate` | accepted locally | Control truth pivots to MVP report generation; Route C future route recorded; deterministic current implementation preserved; docs-only validation recorded | Historical current-phase evidence only |
+| `release-maintenance consolidation + overnight closeout` | accepted locally as historical evidence | All `promotion_allowed=false`; `004393` / `004194` / `006597` not promotion-prep-ready with `fixture_state=absent`; QDII / FOF / `110020` deferred; Host/Agent/dayu deferred; no score/quality/FQ0-FQ6/golden fixture/golden-answer/manifest/runtime promotion changes | Use Historical Evidence Index only; do not treat as current phase |
 
 ## Historical Evidence Index
 
-The detailed pre-split control record is preserved verbatim at:
+Detailed historical control state is preserved outside the active startup surface:
 
 - `docs/archive/implementation-control-history-20260525.md`
+- `docs/archive/implementation-control-release-maintenance-ledger-20260527.md`
+- `docs/reviews/release-maintenance-phase-roadmap-consolidation-20260529.md`
+- `docs/reviews/overnight-release-maintenance-closeout-20260529.md`
 
-Use that archive only for evidence reconstruction. It is not current gate truth and must not override this Startup Packet or `docs/design.md` current design sections.
-
-Historical material retained there includes:
-
-- P0-P19 phase definitions, detailed gate logs, PR/commit records, validation counts, and residual histories.
-- Superseded six-layer / Application / Runtime/Engine wording.
-- Long-form release-maintenance PR 16 / PR 17 / 004393 quality gate / P19 thermometer records.
-- Original detailed control record and status update log.
+Use these files only to reconstruct evidence. They must not override this Startup Packet, the Current Gate table, or `docs/design.md` current implementation sections.
 
 ## Design / Control Alignment Rules
 
-1. `AGENTS.md` is the highest-priority execution rule source.
-2. `docs/design.md` remains the design truth for architecture, boundaries, current product behavior, Dayu non-dependency, `FundDocumentRepository` source boundaries, report-quality design, and thermometer design.
-3. `docs/implementation-control.md` remains the control truth for current phase, current gate, accepted artifacts, residual owners, and next entry point.
-4. Historical archive entries are evidence only. If archive content contradicts Startup Packet or `docs/design.md`, treat the archive content as superseded unless a new controller judgment says otherwise.
-5. Any future control-doc update should prefer a new `docs/reviews/` artifact plus a short control-doc reference over appending long logs.
+1. `AGENTS.md` remains the highest-priority execution rule source.
+2. `docs/design.md` remains the design truth for current architecture, boundaries, current product behavior, accepted future Route C, Dayu discipline, `FundDocumentRepository` source boundary, report-quality design and thermometer design.
+3. `docs/implementation-control.md` remains the control truth for current phase, current gate, accepted artifacts, residual owners and next entry point.
+4. `docs/current-startup-packet.md` is the short resume entry for later phaseflow work; it must mirror this control surface, not replace it.
+5. Historical archive/review entries are evidence only. If archive content contradicts Startup Packet or `docs/design.md`, treat archive content as superseded unless a later controller judgment says otherwise.
+6. Future updates should prefer a new `docs/reviews/` artifact plus a short control-doc reference over appending long logs.
 
 ## Resume Checklist
 
-When resuming:
-
 1. Read `AGENTS.md`.
-2. Read `docs/design.md` current relevant sections.
-3. Read this Startup Packet.
-4. Confirm `Current phase`, `Current gate`, and `Next entry point`.
-5. Confirm the next action is controller work or specialist work.
-6. If specialist work is required, delegate through the current gate handoff; do not write the specialist plan directly unless explicitly authorized.
-7. Preserve deterministic MVP boundaries and do not introduce Host/Agent/runtime work outside an explicit gate.
+2. Read `docs/current-startup-packet.md`.
+3. Read `docs/design.md` current implementation and Route C future design sections.
+4. Confirm current phase, current gate and next entry in this file.
+5. Confirm role: controller or specialist.
+6. Confirm allowed files and non-goals before edits.
+7. Classify the next gate per `AGENTS.md`; default heavier when uncertain.
+8. Preserve deterministic MVP boundaries and do not introduce runtime, golden, promotion, Host/Agent/dayu or template changes outside an explicit accepted gate.

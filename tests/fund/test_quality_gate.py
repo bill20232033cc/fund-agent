@@ -91,6 +91,278 @@ def test_run_quality_gate_warns_failed_p1_without_blocking(tmp_path: Path) -> No
     assert any(issue.severity == "info" and issue.rule_code == "FQ0" for issue in result.issues)
 
 
+def test_run_quality_gate_warns_turnover_only_p1_failure_without_fq4(
+    tmp_path: Path,
+) -> None:
+    """验证换手率单项 P1 失败只产生 warning，不触发 FQ4。
+
+    Args:
+        tmp_path: pytest 临时目录 fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当换手率 P1 缺口被误判为 block 或 FQ4 时抛出。
+    """
+
+    score_path = tmp_path / "score.json"
+    score_path.write_text(
+        json.dumps(
+            {
+                "field_scores": [
+                    _field_score("basic_identity", "P0", "pass", 1.0, 1.0),
+                    _field_score("turnover_rate", "P1", "fail", 0.0, 0.0),
+                ],
+                "fund_scores": [
+                    _fund_score(
+                        "004393",
+                        "pass",
+                        "fail",
+                        p1_failed_fields=["turnover_rate"],
+                    ),
+                ],
+                "fund_quality": [
+                    _fund_quality(
+                        missing_field_rate=0.01,
+                        reason="仅 turnover_rate 缺失",
+                    ),
+                ],
+                "correctness": {"status": "not_implemented"},
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    result = run_quality_gate(score_path=score_path)
+
+    assert result.status == GATE_STATUS_WARN
+    assert any(
+        issue.rule_code == "FQ2"
+        and issue.severity == "warn"
+        and issue.field_name == "turnover_rate"
+        for issue in result.issues
+    )
+    assert any(
+        issue.rule_code == "FQ2F"
+        and issue.severity == "warn"
+        and issue.priority == "P1"
+        for issue in result.issues
+    )
+    assert not any(issue.severity == "block" for issue in result.issues)
+    assert not any(issue.rule_code == "FQ4" for issue in result.issues)
+
+
+def test_run_quality_gate_projects_score_applicability_issue_as_fq2f_warn(
+    tmp_path: Path,
+) -> None:
+    """验证债券风险替代 issue 投影为 warn-level FQ2F。
+
+    Args:
+        tmp_path: pytest 临时目录 fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当投影规则不符合契约时抛出。
+    """
+
+    score_path = tmp_path / "score.json"
+    issue = _score_applicability_issue()
+    score_path.write_text(
+        json.dumps(
+            {
+                "field_scores": [_field_score("classified_fund_type", "P0", "pass", 1.0, 1.0)],
+                "fund_scores": [_fund_score("006597", "pass", "pass")],
+                "fund_quality": [
+                    _fund_quality(
+                        fund_code="006597",
+                        app_category="国内债券类",
+                        classified_fund_type="bond_fund",
+                        preferred_lens_key="bond_fund",
+                    )
+                ],
+                "score_applicability_issues": [issue],
+                "correctness": {"status": "unavailable"},
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    result = run_quality_gate(score_path=score_path)
+    payload = json.loads(result.gate_json_path.read_text(encoding="utf-8"))
+    projected = next(
+        issue for issue in result.issues if issue.reason == "bond_risk_evidence_missing"
+    )
+
+    assert result.status == GATE_STATUS_WARN
+    assert projected.rule_code == "FQ2F"
+    assert projected.severity == "warn"
+    assert projected.fund_code == "006597"
+    assert projected.field_name == "holdings_snapshot"
+    assert projected.priority == "P1"
+    assert "bond_risk_evidence.v1" in projected.message
+    assert any(
+        item["rule_code"] == "FQ2F" and item["reason"] == "bond_risk_evidence_missing"
+        for item in payload["issues"]
+    )
+
+
+def test_run_quality_gate_rejects_malformed_score_applicability_issue(
+    tmp_path: Path,
+) -> None:
+    """验证 malformed score_applicability_issues fail fast。
+
+    Args:
+        tmp_path: pytest 临时目录 fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当非法 issue 未被拒绝时抛出。
+    """
+
+    score_path = tmp_path / "score.json"
+    malformed_issue = _score_applicability_issue()
+    malformed_issue["issue_id"] = "bad-id"
+    score_path.write_text(
+        json.dumps(
+            {
+                "field_scores": [_field_score("classified_fund_type", "P0", "pass", 1.0, 1.0)],
+                "score_applicability_issues": [malformed_issue],
+                "correctness": {"status": "unavailable"},
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="issue_id"):
+        run_quality_gate(score_path=score_path)
+
+
+def test_run_quality_gate_rejects_score_applicability_issue_wrong_report_year_id(
+    tmp_path: Path,
+) -> None:
+    """验证 issue_id 中 report_year 片段错误时 fail fast。
+
+    Args:
+        tmp_path: pytest 临时目录 fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当错误年份片段未被拒绝时抛出。
+    """
+
+    score_path = tmp_path / "score.json"
+    malformed_issue = _score_applicability_issue()
+    malformed_issue["issue_id"] = (
+        "score-applicability:006597:2023:holdings_snapshot:"
+        "bond_risk_evidence_missing:bond_risk_evidence.v1"
+    )
+    score_path.write_text(
+        json.dumps(
+            {
+                "field_scores": [_field_score("classified_fund_type", "P0", "pass", 1.0, 1.0)],
+                "score_applicability_issues": [malformed_issue],
+                "correctness": {"status": "unavailable"},
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="issue_id"):
+        run_quality_gate(score_path=score_path)
+
+
+def test_run_quality_gate_treats_missing_score_applicability_issues_as_empty(
+    tmp_path: Path,
+) -> None:
+    """验证旧 score.json 缺少 score_applicability_issues 时保持兼容。
+
+    Args:
+        tmp_path: pytest 临时目录 fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当旧 payload 不兼容时抛出。
+    """
+
+    score_path = tmp_path / "score.json"
+    score_path.write_text(
+        json.dumps(
+            {
+                "field_scores": [_field_score("classified_fund_type", "P0", "pass", 1.0, 1.0)],
+                "fund_quality": [_fund_quality(missing_field_rate=0.0)],
+                "correctness": {"status": "unavailable"},
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    result = run_quality_gate(score_path=score_path)
+
+    assert result.status == GATE_STATUS_PASS
+    assert not any(issue.reason == "bond_risk_evidence_missing" for issue in result.issues)
+
+
+def test_run_quality_gate_has_no_bond_risk_fq2f_when_score_issue_absent(
+    tmp_path: Path,
+) -> None:
+    """验证七组债券风险证据满足后，quality gate 不凭其它字段生成 bond blocker。
+
+    Args:
+        tmp_path: pytest 临时目录 fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 score 未给 issue 仍生成 bond_risk_evidence_missing 时抛出。
+    """
+
+    score_path = tmp_path / "score.json"
+    score_path.write_text(
+        json.dumps(
+            {
+                "field_scores": [_field_score("classified_fund_type", "P0", "pass", 1.0, 1.0)],
+                "fund_scores": [_fund_score("006597", "pass", "pass")],
+                "fund_quality": [
+                    _fund_quality(
+                        fund_code="006597",
+                        app_category="国内债券类",
+                        classified_fund_type="bond_fund",
+                        preferred_lens_key="bond_fund",
+                        missing_field_rate=0.0,
+                    )
+                ],
+                "score_applicability_issues": [],
+                "correctness": {"status": "unavailable"},
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    result = run_quality_gate(score_path=score_path)
+
+    assert result.status == GATE_STATUS_PASS
+    assert not any(
+        issue.rule_code == "FQ2F" and issue.reason == "bond_risk_evidence_missing"
+        for issue in result.issues
+    )
+
+
 def test_run_quality_gate_blocks_single_fund_p0_failure_even_when_field_aggregate_passes(
     tmp_path: Path,
 ) -> None:
@@ -357,6 +629,74 @@ def test_run_quality_gate_reports_no_comparable_fields_as_fq0_info(tmp_path: Pat
     assert issue.coverage_scope == "no_comparable_fields"
     assert issue.comparable_records == 0
     assert issue.unavailable_records == 1
+
+
+def test_run_quality_gate_reports_correctness_year_not_covered_as_fq0_info(
+    tmp_path: Path,
+) -> None:
+    """验证当前年份缺 golden 覆盖时是 FQ0/info 而非 FQ1/block。
+
+    Args:
+        tmp_path: pytest 临时目录 fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 year_not_covered 被误阻断时抛出。
+    """
+
+    score_path = tmp_path / "score.json"
+    score_path.write_text(
+        json.dumps(
+            {
+                "field_scores": [_field_score("classified_fund_type", "P0", "pass", 1.0, 1.0)],
+                "fund_scores": [_fund_score("004393", "pass", "pass")],
+                "correctness": {
+                    "status": "available",
+                    "golden_answer_path": "reports/golden-answers/golden-answer.json",
+                    "coverage_scope": "year_not_covered",
+                    "coverage_reason": "year_not_covered",
+                    "coverage_required": False,
+                    "covered_fund_codes": [],
+                    "missing_fund_codes": ["004393"],
+                    "total_records": 2,
+                    "comparable_records": 0,
+                    "mismatched_records": 0,
+                    "unavailable_records": 2,
+                    "record_results": [
+                        {
+                            "fund_code": "004393",
+                            "report_year": 2024,
+                            "field_name": "classified_fund_type",
+                            "sub_field": "fund_type",
+                            "status": "unavailable",
+                            "expected_value": "active_fund",
+                            "actual_value": None,
+                            "normalized_expected": "active_fund",
+                            "normalized_actual": None,
+                            "reason": "snapshot 未显式暴露该 golden 子字段；不进入 correctness 分母。",
+                            "confidence": "high",
+                            "source": "年报2024 §2 page-5",
+                        }
+                    ],
+                },
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    result = run_quality_gate(score_path=score_path)
+    issue = next(issue for issue in result.issues if issue.rule_code == "FQ0")
+
+    assert result.status == GATE_STATUS_PASS
+    assert issue.severity == "info"
+    assert issue.fund_code == "004393"
+    assert issue.reason == "year_not_covered"
+    assert issue.coverage_scope == "year_not_covered"
+    assert issue.comparable_records == 0
+    assert not any(issue.rule_code == "FQ1" for issue in result.issues)
 
 
 def test_run_quality_gate_blocks_app_category_conflict_and_lens_mismatch(tmp_path: Path) -> None:
@@ -636,6 +976,125 @@ def test_run_quality_gate_warns_and_blocks_fq4_missing_rate_thresholds(tmp_path:
     assert fq4_by_fund["000002"].severity == "block"
     assert fq4_by_fund["000002"].observed_rate == 0.35
     assert fq4_by_fund["000002"].threshold == 0.35
+
+
+def test_run_quality_gate_preserves_fq4_thresholds_with_score_applicability_issue(
+    tmp_path: Path,
+) -> None:
+    """验证 score applicability 投影不改变 FQ4 阈值。
+
+    Args:
+        tmp_path: pytest 临时目录 fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 FQ4 阈值被替代 issue 改写时抛出。
+    """
+
+    score_path = tmp_path / "score.json"
+    score_path.write_text(
+        json.dumps(
+            {
+                "field_scores": [_field_score("classified_fund_type", "P0", "pass", 1.0, 1.0)],
+                "fund_quality": [
+                    _fund_quality(
+                        fund_code="006597",
+                        app_category="国内债券类",
+                        classified_fund_type="bond_fund",
+                        preferred_lens_key="bond_fund",
+                        missing_field_rate=0.35,
+                    )
+                ],
+                "score_applicability_issues": [_score_applicability_issue()],
+                "correctness": {"status": "unavailable"},
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    result = run_quality_gate(score_path=score_path)
+    fq4_issue = next(issue for issue in result.issues if issue.rule_code == "FQ4")
+
+    assert result.status == GATE_STATUS_BLOCK
+    assert fq4_issue.severity == "block"
+    assert fq4_issue.threshold == 0.35
+    assert any(issue.reason == "bond_risk_evidence_missing" for issue in result.issues)
+
+
+def test_run_quality_gate_synthetic_006597_like_bond_exclusion_does_not_mis_pass(
+    tmp_path: Path,
+) -> None:
+    """验证 006597-like 债券样本不会因 holdings 分母排除而误 pass。
+
+    Args:
+        tmp_path: pytest 临时目录 fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当替代风险 issue 缺失导致误 pass 时抛出。
+    """
+
+    score_path = tmp_path / "score.json"
+    score_path.write_text(
+        json.dumps(
+            {
+                "field_scores": [_field_score("classified_fund_type", "P0", "pass", 1.0, 1.0)],
+                "fund_scores": [_fund_score("006597", "pass", "pass")],
+                "fund_quality": [
+                    _fund_quality(
+                        fund_code="006597",
+                        app_category="国内债券类",
+                        classified_fund_type="bond_fund",
+                        preferred_lens_key="bond_fund",
+                        missing_field_rate=0.0,
+                    )
+                ],
+                "field_applicability_decisions": [
+                    {
+                        "fund_code": "006597",
+                        "report_year": "2024",
+                        "field_name": "holdings_snapshot",
+                        "classified_fund_type": "bond_fund",
+                        "applicability_status": "not_applicable_replaced",
+                        "reason_code": "not_applicable_to_bond_fund_equity_holdings",
+                        "replacement_field_name": "bond_risk_evidence",
+                        "contract_id": "bond_risk_evidence.v1",
+                        "denominator_effect": "excluded_with_replacement_issue",
+                        "raw_total_field_count": 2,
+                        "raw_missing_field_count": 1,
+                        "raw_missing_field_rate": 0.5,
+                        "applicable_total_field_count": 1,
+                        "applicable_missing_field_count": 0,
+                        "applicable_missing_field_rate": 0.0,
+                        "excluded_non_applicable_fields": ["holdings_snapshot"],
+                        "replacement_issue_ids": [
+                            "score-applicability:006597:2024:holdings_snapshot:bond_risk_evidence_missing:bond_risk_evidence.v1"
+                        ],
+                    }
+                ],
+                "score_applicability_issues": [_score_applicability_issue()],
+                "correctness": {"status": "unavailable"},
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    result = run_quality_gate(score_path=score_path)
+
+    assert result.status == GATE_STATUS_WARN
+    assert any(
+        issue.rule_code == "FQ2F"
+        and issue.reason == "bond_risk_evidence_missing"
+        and issue.fund_code == "006597"
+        for issue in result.issues
+    )
+    assert not any(issue.rule_code == "FQ4" for issue in result.issues)
 
 
 def test_run_quality_gate_rejects_unknown_unavailable_coverage_scope(tmp_path: Path) -> None:
@@ -1053,4 +1512,59 @@ def _fund_quality(
         "missing_p0_fields": [],
         "missing_p1_fields": [],
         "reason": reason,
+    }
+
+
+def _score_applicability_issue() -> dict[str, object]:
+    """构造测试用 score applicability issue。
+
+    Args:
+        无。
+
+    Returns:
+        score.json 中的 score_applicability_issues 对象。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return {
+        "issue_id": (
+            "score-applicability:006597:2024:holdings_snapshot:"
+            "bond_risk_evidence_missing:bond_risk_evidence.v1"
+        ),
+        "issue_code": "bond_risk_evidence_missing",
+        "severity": "warn",
+        "fund_code": "006597",
+        "report_year": "2024",
+        "field_name": "holdings_snapshot",
+        "classified_fund_type": "bond_fund",
+        "replacement_field_name": "bond_risk_evidence",
+        "contract_id": "bond_risk_evidence.v1",
+        "priority": "P1",
+        "message": (
+            "基金 `006597` 为债券基金，权益持仓型 holdings_snapshot 不进入股票持仓分母；"
+            "但 `bond_risk_evidence.v1` 尚无已复核债券风险证据。"
+        ),
+        "baseline_blocking": True,
+        "rule_code_hint": "FQ2F",
+        "denominator_excluded_fields": ["holdings_snapshot"],
+        "required_evidence_groups": [
+            "duration_rate_risk",
+            "credit_risk",
+            "leverage_liquidity",
+            "asset_allocation_holdings_mix",
+            "drawdown_stress",
+            "redemption_share_pressure",
+            "convertible_bond_equity_exposure",
+        ],
+        "missing_evidence_groups": [
+            "duration_rate_risk",
+            "credit_risk",
+            "leverage_liquidity",
+            "asset_allocation_holdings_mix",
+            "drawdown_stress",
+            "redemption_share_pressure",
+            "convertible_bond_equity_exposure",
+        ],
     }

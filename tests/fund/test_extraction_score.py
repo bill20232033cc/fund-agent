@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 
 from fund_agent.fund.extraction_score import (
+    BOND_RISK_EVIDENCE_GROUPS,
     CORRECTNESS_MATCH,
     CORRECTNESS_MISMATCH,
     CORRECTNESS_COVERAGE_COVERED,
@@ -13,6 +14,7 @@ from fund_agent.fund.extraction_score import (
     CORRECTNESS_COVERAGE_NO_COMPARABLE_FIELDS,
     CORRECTNESS_COVERAGE_NOT_CONFIGURED,
     CORRECTNESS_COVERAGE_PARTIALLY_COVERED,
+    CORRECTNESS_COVERAGE_YEAR_NOT_COVERED,
     CORRECTNESS_STATUS_AVAILABLE,
     CORRECTNESS_STATUS_UNAVAILABLE,
     CORRECTNESS_UNAVAILABLE,
@@ -24,6 +26,8 @@ from fund_agent.fund.extraction_score import (
     STATUS_PASS,
     STATUS_WATCH,
     derive_fund_quality_records,
+    derive_field_applicability_decisions,
+    derive_score_applicability_issues,
     load_snapshot_error_records,
     run_extraction_score,
     compare_snapshot_correctness,
@@ -32,6 +36,35 @@ from fund_agent.fund.extraction_score import (
     select_minimal_golden_set,
 )
 from fund_agent.fund.extraction_snapshot import load_selected_funds
+
+_SCORE_JSON_TOP_LEVEL_KEYS = {
+    "snapshot_path",
+    "source_csv",
+    "thresholds",
+    "field_count",
+    "fund_count",
+    "status_counts",
+    "p0_status",
+    "field_scores",
+    "fund_scores",
+    "fund_quality",
+    "field_applicability_decisions",
+    "score_applicability_issues",
+    "failed_funds",
+    "golden_set",
+    "correctness",
+}
+_PUBLIC_SOURCE_PROVENANCE_PAYLOAD = {
+    "source_provenance_schema_version": "repository_source_provenance.v1",
+    "source_strategy": "primary_then_fallback",
+    "resolved_source_name": "eastmoney",
+    "fallback_used": True,
+    "primary_failure_category": None,
+    "fallback_eligibility": "unknown_public_metadata_absent",
+    "source_provenance_status": "incomplete",
+    "source_provenance_reason": "fallback_used_primary_failure_category_absent",
+}
+_BOND_RISK_GROUP_IDS = tuple(group.group_id for group in BOND_RISK_EVIDENCE_GROUPS)
 
 
 def test_score_snapshot_records_computes_coverage_traceability_status_and_priority() -> None:
@@ -109,6 +142,53 @@ def test_score_snapshot_records_status_thresholds_are_deterministic() -> None:
     assert rows_by_name["basic_identity"].status == STATUS_PASS
     assert rows_by_name["benchmark"].status == STATUS_WATCH
     assert rows_by_name["fee_schedule"].status == STATUS_FAIL
+
+
+def test_source_provenance_keys_do_not_change_score_outputs() -> None:
+    """验证 additive provenance 字段不改变 score / FQ0-FQ6 敏感输出。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 provenance 字段影响评分语义时抛出。
+    """
+
+    legacy_records = [
+        _snapshot_record("profile", "basic_identity", value_present=True, anchor_present=True),
+        _snapshot_record("profile", "benchmark", value_present=False, anchor_present=False),
+    ]
+    provenance_records = [
+        _snapshot_record(
+            "profile",
+            "basic_identity",
+            value_present=True,
+            anchor_present=True,
+            include_source_provenance=True,
+        ),
+        _snapshot_record(
+            "profile",
+            "benchmark",
+            value_present=False,
+            anchor_present=False,
+            include_source_provenance=True,
+        ),
+    ]
+
+    assert score_snapshot_records(provenance_records) == score_snapshot_records(legacy_records)
+    assert score_fund_records(provenance_records) == score_fund_records(legacy_records)
+    assert derive_fund_quality_records(provenance_records) == derive_fund_quality_records(
+        legacy_records
+    )
+    assert derive_field_applicability_decisions(
+        provenance_records
+    ) == derive_field_applicability_decisions(legacy_records)
+    assert derive_score_applicability_issues(
+        provenance_records
+    ) == derive_score_applicability_issues(legacy_records)
 
 
 def test_score_fund_records_exposes_single_fund_p0_failure_when_aggregate_can_pass() -> None:
@@ -408,6 +488,571 @@ def test_holdings_snapshot_coverage_requires_explicit_status_source_allowlist() 
     assert quality_rows["004395"].missing_p1_fields == ()
 
 
+def test_bond_fund_excludes_equity_holdings_with_replacement_issue() -> None:
+    """验证债券基金权益持仓字段排除时必须输出替代风险证据 issue。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当分母排除或替代 issue 不符合契约时抛出。
+    """
+
+    records = [
+        _snapshot_record(
+            "profile",
+            "classified_fund_type",
+            fund_code="006597",
+            app_category="国内债券类",
+            classified_fund_type="bond_fund",
+            value_present=True,
+            anchor_present=True,
+        ),
+        _snapshot_record(
+            "holdings",
+            "holdings_snapshot",
+            fund_code="006597",
+            app_category="国内债券类",
+            classified_fund_type="bond_fund",
+            value_present=True,
+            anchor_present=True,
+            comparable_values={
+                "top_holdings_status": "missing",
+                "top_holdings_source": "none",
+            },
+        ),
+    ]
+
+    field_rows = {row.field_name: row for row in score_snapshot_records(records)}
+    fund_score = score_fund_records(records)[0]
+    fund_quality = derive_fund_quality_records(records)[0]
+    decisions = derive_field_applicability_decisions(records)
+    issues = derive_score_applicability_issues(records)
+
+    assert "holdings_snapshot" not in field_rows
+    assert fund_score.records == 1
+    assert fund_score.p1_failed_fields == ()
+    assert fund_quality.total_field_count == 1
+    assert fund_quality.missing_p1_fields == ()
+    assert len(decisions) == 1
+    assert decisions[0].applicability_status == "not_applicable_replaced"
+    assert decisions[0].reason_code == "not_applicable_to_bond_fund_equity_holdings"
+    assert decisions[0].raw_total_field_count == 2
+    assert decisions[0].applicable_total_field_count == 1
+    assert decisions[0].replacement_issue_ids == (
+        "score-applicability:006597:2024:holdings_snapshot:bond_risk_evidence_missing:bond_risk_evidence.v1",
+    )
+    assert len(issues) == 1
+    assert issues[0].issue_id == decisions[0].replacement_issue_ids[0]
+    assert issues[0].issue_code == "bond_risk_evidence_missing"
+    assert issues[0].contract_id == "bond_risk_evidence.v1"
+    assert issues[0].baseline_blocking is True
+    assert "convertible_bond_equity_exposure" in issues[0].missing_evidence_groups
+    assert len(issues[0].missing_evidence_groups) == 7
+
+
+def test_field_priority_includes_bond_risk_evidence_as_p1() -> None:
+    """验证债券风险替代证据字段进入 P1 优先级。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 `bond_risk_evidence` 未注册为 P1 时抛出。
+    """
+
+    assert FIELD_PRIORITY_BY_NAME["bond_risk_evidence"] == "P1"
+
+
+def test_complete_bond_risk_evidence_record_scores_p1_pass_without_issue() -> None:
+    """验证完整债券风险证据行满足 P1 coverage/traceability 且不再发缺口 issue。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当完整结构化证据仍触发 blocker 或分数异常时抛出。
+    """
+
+    records = [
+        _snapshot_record(
+            "profile",
+            "classified_fund_type",
+            fund_code="006597",
+            app_category="国内债券类",
+            classified_fund_type="bond_fund",
+            value_present=True,
+            anchor_present=True,
+        ),
+        _snapshot_record(
+            "holdings",
+            "holdings_snapshot",
+            fund_code="006597",
+            app_category="国内债券类",
+            classified_fund_type="bond_fund",
+            value_present=True,
+            anchor_present=True,
+        ),
+        _bond_risk_snapshot_record(
+            fund_code="006597",
+            contract_status="satisfied",
+            satisfied_groups=_BOND_RISK_GROUP_IDS,
+            anchor_present=True,
+        ),
+    ]
+
+    field_rows = {row.field_name: row for row in score_snapshot_records(records)}
+    fund_score = score_fund_records(records)[0]
+    fund_quality = derive_fund_quality_records(records)[0]
+    decisions = derive_field_applicability_decisions(records)
+
+    assert field_rows["bond_risk_evidence"].priority == "P1"
+    assert field_rows["bond_risk_evidence"].records == 1
+    assert field_rows["bond_risk_evidence"].coverage_rate == 1.0
+    assert field_rows["bond_risk_evidence"].traceability_rate == 1.0
+    assert field_rows["bond_risk_evidence"].status == STATUS_PASS
+    assert fund_score.p1_status == STATUS_PASS
+    assert fund_quality.missing_p1_fields == ()
+    assert decisions[0].replacement_issue_ids == ()
+    assert derive_score_applicability_issues(records) == ()
+
+
+def test_weak_drawdown_bond_risk_evidence_issue_lists_only_drawdown_group() -> None:
+    """验证弱回撤证据只让 drawdown_stress 保持阻断。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当弱证据组扩散到其他组时抛出。
+    """
+
+    issue = _single_bond_issue(
+        _bond_risk_snapshot_record(
+            contract_status="partial",
+            satisfied_groups=tuple(
+                group_id for group_id in _BOND_RISK_GROUP_IDS if group_id != "drawdown_stress"
+            ),
+            weak_groups=("drawdown_stress",),
+            anchor_present=True,
+        )
+    )
+
+    assert issue.required_evidence_groups == _BOND_RISK_GROUP_IDS
+    assert issue.missing_evidence_groups == ("drawdown_stress",)
+    assert issue.baseline_blocking is True
+
+
+def test_ambiguous_redemption_bond_risk_evidence_issue_lists_only_redemption_group() -> None:
+    """验证申赎压力歧义只让 redemption_share_pressure 保持阻断。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当歧义证据组扩散到其他组时抛出。
+    """
+
+    issue = _single_bond_issue(
+        _bond_risk_snapshot_record(
+            contract_status="partial",
+            satisfied_groups=tuple(
+                group_id
+                for group_id in _BOND_RISK_GROUP_IDS
+                if group_id != "redemption_share_pressure"
+            ),
+            ambiguous_groups=("redemption_share_pressure",),
+            anchor_present=True,
+        )
+    )
+
+    assert issue.required_evidence_groups == _BOND_RISK_GROUP_IDS
+    assert issue.missing_evidence_groups == ("redemption_share_pressure",)
+
+
+def test_partial_bond_risk_evidence_keeps_required_groups_full_and_missing_dynamic() -> None:
+    """验证 partial 记录 required 全量固定、missing 只列实际未满足组。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当动态缺口组或契约全量组不符合预期时抛出。
+    """
+
+    unsatisfied = ("leverage_liquidity", "drawdown_stress", "redemption_share_pressure")
+    issue = _single_bond_issue(
+        _bond_risk_snapshot_record(
+            contract_status="partial",
+            satisfied_groups=tuple(
+                group_id for group_id in _BOND_RISK_GROUP_IDS if group_id not in unsatisfied
+            ),
+            missing_groups=("leverage_liquidity",),
+            weak_groups=("drawdown_stress",),
+            ambiguous_groups=("redemption_share_pressure",),
+            anchor_present=True,
+        )
+    )
+
+    assert issue.required_evidence_groups == _BOND_RISK_GROUP_IDS
+    assert issue.missing_evidence_groups == unsatisfied
+
+
+def test_anchor_missing_accepted_bond_risk_evidence_remains_all_seven_blocking() -> None:
+    """验证缺少锚点的 accepted-looking 记录按整条契约不满足处理。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当无锚点记录被误判为满足时抛出。
+    """
+
+    issue = _single_bond_issue(
+        _bond_risk_snapshot_record(
+            contract_status="satisfied",
+            satisfied_groups=_BOND_RISK_GROUP_IDS,
+            anchor_present=False,
+        )
+    )
+
+    assert issue.required_evidence_groups == _BOND_RISK_GROUP_IDS
+    assert issue.missing_evidence_groups == _BOND_RISK_GROUP_IDS
+    assert issue.baseline_blocking is True
+
+
+def test_value_missing_accepted_bond_risk_evidence_remains_all_seven_blocking() -> None:
+    """验证缺少字段值的 accepted-looking 记录按整条契约不满足处理。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 value_present=false 的记录被误判为满足时抛出。
+    """
+
+    issue = _single_bond_issue(
+        _bond_risk_snapshot_record(
+            contract_status="satisfied",
+            satisfied_groups=_BOND_RISK_GROUP_IDS,
+            value_present=False,
+            anchor_present=True,
+        )
+    )
+
+    assert issue.issue_code == "bond_risk_evidence_missing"
+    assert issue.required_evidence_groups == _BOND_RISK_GROUP_IDS
+    assert issue.missing_evidence_groups == _BOND_RISK_GROUP_IDS
+    assert issue.baseline_blocking is True
+
+
+def test_malformed_bond_risk_evidence_record_remains_all_seven_blocking() -> None:
+    """验证结构化组字段 malformed 时 fail-closed 为全量缺口。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 malformed 结构化字段被当作满足时抛出。
+    """
+
+    record = _bond_risk_snapshot_record(
+        contract_status="satisfied",
+        satisfied_groups=_BOND_RISK_GROUP_IDS,
+        anchor_present=True,
+    )
+    record["bond_risk_satisfied_groups"] = "duration_rate_risk"
+
+    issue = _single_bond_issue(record)
+
+    assert issue.missing_evidence_groups == _BOND_RISK_GROUP_IDS
+
+
+def test_missing_contract_status_bond_risk_evidence_remains_all_seven_blocking() -> None:
+    """验证缺少 contract_status 时 fail-closed 为全量缺口。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当缺少契约状态的记录被误判为满足时抛出。
+    """
+
+    issue = _single_bond_issue(
+        _bond_risk_snapshot_record(
+            contract_status=None,
+            satisfied_groups=_BOND_RISK_GROUP_IDS,
+            anchor_present=True,
+        )
+    )
+
+    assert issue.missing_evidence_groups == _BOND_RISK_GROUP_IDS
+
+
+def test_non_bond_fund_ignores_bond_risk_evidence_record() -> None:
+    """验证非债基不因债券风险替代证据进入 P1 分母或触发 issue。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当非债基被 bond_risk_evidence 影响评分时抛出。
+    """
+
+    records = [
+        _snapshot_record(
+            "holdings",
+            "holdings_snapshot",
+            fund_code="004393",
+            classified_fund_type="active_fund",
+            value_present=True,
+            anchor_present=True,
+            comparable_values={
+                "top_holdings_status": "direct_top_ten",
+                "top_holdings_source": "top_ten",
+            },
+        ),
+        _bond_risk_snapshot_record(
+            fund_code="004393",
+            classified_fund_type="active_fund",
+            contract_status="missing",
+            missing_groups=_BOND_RISK_GROUP_IDS,
+            value_present=False,
+            anchor_present=False,
+        ),
+    ]
+
+    field_rows = {row.field_name: row for row in score_snapshot_records(records)}
+    fund_quality = derive_fund_quality_records(records)[0]
+
+    assert "bond_risk_evidence" not in field_rows
+    assert fund_quality.missing_p1_fields == ()
+    assert derive_score_applicability_issues(records) == ()
+
+
+def test_bond_risk_score_does_not_parse_note_for_satisfaction() -> None:
+    """验证评分不读取 note 文本来决定债券风险证据是否满足。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 note 伪造满足状态影响评分时抛出。
+    """
+
+    record = _bond_risk_snapshot_record(
+        contract_status="missing",
+        missing_groups=_BOND_RISK_GROUP_IDS,
+        value_present=False,
+        anchor_present=True,
+    )
+    record["note"] = "contract_status=satisfied; all seven groups satisfied"
+
+    issue = _single_bond_issue(record)
+
+    assert issue.missing_evidence_groups == _BOND_RISK_GROUP_IDS
+
+
+def test_bond_score_applicability_issue_id_is_deterministic() -> None:
+    """验证债券替代 issue id 使用计划要求的稳定格式。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 issue id 不稳定时抛出。
+    """
+
+    records = [
+        _snapshot_record(
+            "holdings",
+            "holdings_snapshot",
+            fund_code="006597",
+            report_year=2023,
+            app_category="国内债券类",
+            classified_fund_type="bond_fund",
+            value_present=False,
+            anchor_present=False,
+        )
+    ]
+
+    issue = derive_score_applicability_issues(records)[0]
+
+    assert issue.issue_id == (
+        "score-applicability:006597:2023:holdings_snapshot:bond_risk_evidence_missing:bond_risk_evidence.v1"
+    )
+
+
+def test_active_fund_keeps_holdings_snapshot_applicable() -> None:
+    """验证主动基金持仓字段继续进入 P1 分母。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当主动基金被错误套用债券排除时抛出。
+    """
+
+    records = [
+        _snapshot_record(
+            "holdings",
+            "holdings_snapshot",
+            classified_fund_type="active_fund",
+            value_present=True,
+            anchor_present=True,
+            comparable_values={
+                "top_holdings_status": "missing",
+                "top_holdings_source": "none",
+            },
+        )
+    ]
+
+    field_row = score_snapshot_records(records)[0]
+    fund_quality = derive_fund_quality_records(records)[0]
+
+    assert field_row.field_name == "holdings_snapshot"
+    assert field_row.records == 1
+    assert fund_quality.missing_p1_fields == ("holdings_snapshot",)
+    assert derive_score_applicability_issues(records) == ()
+
+
+def test_index_and_enhanced_keep_holdings_snapshot_applicable() -> None:
+    """验证指数和增强指数基金不被债券持仓替代规则影响。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当非债券基金 holdings_snapshot 被排除时抛出。
+    """
+
+    records = [
+        _snapshot_record(
+            "holdings",
+            "holdings_snapshot",
+            fund_code="510300",
+            classified_fund_type="index_fund",
+            value_present=False,
+            anchor_present=False,
+        ),
+        _snapshot_record(
+            "holdings",
+            "holdings_snapshot",
+            fund_code="161725",
+            classified_fund_type="enhanced_index",
+            value_present=False,
+            anchor_present=False,
+        ),
+    ]
+
+    fund_quality = {row.fund_code: row for row in derive_fund_quality_records(records)}
+
+    assert all(row.field_name == "holdings_snapshot" for row in score_snapshot_records(records))
+    assert fund_quality["510300"].missing_p1_fields == ("holdings_snapshot",)
+    assert fund_quality["161725"].missing_p1_fields == ("holdings_snapshot",)
+    assert derive_score_applicability_issues(records) == ()
+
+
+def test_unknown_or_conflicted_fund_type_keeps_holdings_fail_closed() -> None:
+    """验证未知或冲突基金类型不排除 holdings_snapshot，也不生成债券替代 issue。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 fail-closed 分母被错误排除时抛出。
+    """
+
+    unknown_records = [
+        _snapshot_record(
+            "holdings",
+            "holdings_snapshot",
+            fund_code="000001",
+            classified_fund_type="",
+            value_present=False,
+            anchor_present=False,
+        )
+    ]
+    conflicted_records = [
+        _snapshot_record(
+            "profile",
+            "classified_fund_type",
+            fund_code="000002",
+            classified_fund_type="active_fund",
+            value_present=True,
+            anchor_present=True,
+        ),
+        _snapshot_record(
+            "holdings",
+            "holdings_snapshot",
+            fund_code="000002",
+            classified_fund_type="bond_fund",
+            value_present=False,
+            anchor_present=False,
+        ),
+    ]
+
+    unknown_quality = derive_fund_quality_records(unknown_records)[0]
+    conflicted_quality = derive_fund_quality_records(conflicted_records)[0]
+    unknown_decision = derive_field_applicability_decisions(unknown_records)[0]
+    conflicted_decision = derive_field_applicability_decisions(conflicted_records)[0]
+
+    assert unknown_quality.missing_p1_fields == ("holdings_snapshot",)
+    assert conflicted_quality.missing_p1_fields == ("holdings_snapshot",)
+    assert unknown_decision.applicability_status == "unknown_fail_closed"
+    assert conflicted_decision.applicability_status == "unknown_fail_closed"
+    assert derive_score_applicability_issues(unknown_records) == ()
+    assert derive_score_applicability_issues(conflicted_records) == ()
+
+
 def test_derive_fund_quality_records_resolves_all_standard_fund_types() -> None:
     """验证所有标准基金类型都能解析当前模板契约。
 
@@ -700,6 +1345,7 @@ def test_run_extraction_score_writes_score_outputs(tmp_path: Path) -> None:
     assert result.score_json_path.exists()
     assert result.score_markdown_path.exists()
     assert result.golden_set_path.exists()
+    assert set(score_payload) == _SCORE_JSON_TOP_LEVEL_KEYS
     assert score_payload["fund_count"] == 1
     assert score_payload["failed_funds"] == []
     assert score_payload["fund_scores"][0]["fund_code"] == "004393"
@@ -718,6 +1364,9 @@ def test_run_extraction_score_writes_score_outputs(tmp_path: Path) -> None:
     assert decisions_by_rule["chapter_1_index_constituents"]["status"] == "delete"
     assert decisions_by_rule["chapter_2_tracking_error_analysis"]["status"] == "delete"
     assert "## Fund Quality" in markdown
+    assert score_payload["field_applicability_decisions"] == []
+    assert score_payload["score_applicability_issues"] == []
+    assert "## Score Applicability Issues" in markdown
     assert "delete=2/render=2" in markdown
     assert score_payload["correctness"]["status"] == CORRECTNESS_STATUS_UNAVAILABLE
     assert score_payload["p0_status"] == STATUS_FAIL
@@ -725,6 +1374,90 @@ def test_run_extraction_score_writes_score_outputs(tmp_path: Path) -> None:
     assert "## Fund Scores" in markdown
     assert "## Field Scores" in markdown
     assert MANDATORY_GOLDEN_CODE in {record["fund_code"] for record in golden_payload["records"]}
+
+
+def test_run_extraction_score_output_ignores_additive_source_provenance(
+    tmp_path: Path,
+) -> None:
+    """验证 score.json key 集合和 gate 敏感输出不因 provenance 字段变化。
+
+    Args:
+        tmp_path: pytest 临时目录 fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 additive provenance 改变 score.json 或 FQ 输出时抛出。
+    """
+
+    legacy_snapshot_path = tmp_path / "legacy-snapshot.jsonl"
+    provenance_snapshot_path = tmp_path / "provenance-snapshot.jsonl"
+    legacy_records = [
+        _snapshot_record("profile", "basic_identity", value_present=True, anchor_present=True),
+        _snapshot_record("profile", "benchmark", value_present=False, anchor_present=False),
+    ]
+    provenance_records = [
+        _snapshot_record(
+            "profile",
+            "basic_identity",
+            value_present=True,
+            anchor_present=True,
+            include_source_provenance=True,
+        ),
+        _snapshot_record(
+            "profile",
+            "benchmark",
+            value_present=False,
+            anchor_present=False,
+            include_source_provenance=True,
+        ),
+    ]
+    legacy_snapshot_path.write_text(
+        "\n".join(json.dumps(record, ensure_ascii=False) for record in legacy_records) + "\n",
+        encoding="utf-8",
+    )
+    provenance_snapshot_path.write_text(
+        "\n".join(json.dumps(record, ensure_ascii=False) for record in provenance_records) + "\n",
+        encoding="utf-8",
+    )
+
+    legacy_result = run_extraction_score(
+        snapshot_path=legacy_snapshot_path,
+        source_csv=Path("docs/code_20260519.csv"),
+        output_dir=tmp_path / "legacy-score",
+    )
+    provenance_result = run_extraction_score(
+        snapshot_path=provenance_snapshot_path,
+        source_csv=Path("docs/code_20260519.csv"),
+        output_dir=tmp_path / "provenance-score",
+    )
+
+    legacy_payload = json.loads(legacy_result.score_json_path.read_text(encoding="utf-8"))
+    provenance_payload = json.loads(
+        provenance_result.score_json_path.read_text(encoding="utf-8")
+    )
+    for payload in (legacy_payload, provenance_payload):
+        assert set(payload) == _SCORE_JSON_TOP_LEVEL_KEYS
+
+    gate_sensitive_keys = (
+        "thresholds",
+        "field_count",
+        "fund_count",
+        "status_counts",
+        "p0_status",
+        "field_scores",
+        "fund_scores",
+        "fund_quality",
+        "field_applicability_decisions",
+        "score_applicability_issues",
+        "failed_funds",
+        "golden_set",
+        "correctness",
+    )
+    assert {
+        key: legacy_payload[key] for key in gate_sensitive_keys
+    } == {key: provenance_payload[key] for key in gate_sensitive_keys}
 
 
 def test_run_extraction_score_includes_failed_funds_from_errors_path(tmp_path: Path) -> None:
@@ -866,6 +1599,7 @@ def test_compare_snapshot_correctness_perfect_match_and_skipped_denominator(tmp_
     assert summary.covered_fund_codes == ("004393",)
     assert summary.missing_fund_codes == ()
     assert summary.coverage_required is False
+    assert {row.report_year for row in summary.record_results} == {2024}
     statuses = {(row.field_name, row.sub_field): row.status for row in summary.record_results}
     assert statuses[("classified_fund_type", "fund_type")] == CORRECTNESS_MATCH
     assert statuses[("basic_identity", "fund_name")] == CORRECTNESS_MATCH
@@ -1002,6 +1736,47 @@ def test_compare_snapshot_correctness_marks_current_fund_not_covered(tmp_path: P
     assert summary.coverage_reason == CORRECTNESS_COVERAGE_FUND_NOT_COVERED
     assert summary.covered_fund_codes == ()
     assert summary.missing_fund_codes == ("000216",)
+
+
+def test_compare_snapshot_correctness_marks_current_year_not_covered(
+    tmp_path: Path,
+) -> None:
+    """验证同基金不同年报年份不会误用其它年份 golden answer。
+
+    Args:
+        tmp_path: pytest 临时目录 fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 2025 snapshot 被 2024 golden 误杀时抛出。
+    """
+
+    golden_path = _golden_answer_json(tmp_path, expected_fund_type="active_fund")
+    records = [
+        _snapshot_record(
+            "profile",
+            "classified_fund_type",
+            report_year=2025,
+            value_present=True,
+            anchor_present=True,
+            classified_fund_type="index_fund",
+            comparable_values={"fund_type": "index_fund"},
+        )
+    ]
+
+    summary = compare_snapshot_correctness(records=records, golden_answer_path=golden_path)
+
+    assert summary.status == CORRECTNESS_STATUS_AVAILABLE
+    assert summary.coverage_scope == CORRECTNESS_COVERAGE_YEAR_NOT_COVERED
+    assert summary.coverage_reason == CORRECTNESS_COVERAGE_YEAR_NOT_COVERED
+    assert summary.comparable_records == 0
+    assert summary.mismatched_records == 0
+    assert summary.covered_fund_codes == ()
+    assert summary.missing_fund_codes == ("004393",)
+    assert {row.report_year for row in summary.record_results} == {2024}
+    assert all(row.status == CORRECTNESS_UNAVAILABLE for row in summary.record_results)
 
 
 def test_compare_snapshot_correctness_marks_current_fund_no_comparable_fields(
@@ -1696,16 +2471,115 @@ def test_select_minimal_golden_set_uses_only_csv_codes_and_excludes_money_market
     assert sum(1 for record in selection.records if record.app_category == "国内股票类") >= 2
 
 
+def _single_bond_issue(bond_risk_record: dict[str, object]) -> object:
+    """构造单只债基评分输入并返回唯一债券风险缺口 issue。
+
+    Args:
+        bond_risk_record: 待测试的 `bond_risk_evidence` snapshot 行。
+
+    Returns:
+        唯一 `bond_risk_evidence_missing` issue。
+
+    Raises:
+        AssertionError: 当 issue 数量不为 1 时抛出。
+    """
+
+    records = [
+        _snapshot_record(
+            "profile",
+            "classified_fund_type",
+            fund_code="006597",
+            app_category="国内债券类",
+            classified_fund_type="bond_fund",
+            value_present=True,
+            anchor_present=True,
+        ),
+        _snapshot_record(
+            "holdings",
+            "holdings_snapshot",
+            fund_code="006597",
+            app_category="国内债券类",
+            classified_fund_type="bond_fund",
+            value_present=True,
+            anchor_present=True,
+        ),
+        bond_risk_record,
+    ]
+    issues = derive_score_applicability_issues(records)
+    assert len(issues) == 1
+    return issues[0]
+
+
+def _bond_risk_snapshot_record(
+    *,
+    fund_code: str = "006597",
+    report_year: int = 2024,
+    app_category: str = "国内债券类",
+    classified_fund_type: str = "bond_fund",
+    value_present: bool = True,
+    anchor_present: bool,
+    contract_status: str | None,
+    satisfied_groups: tuple[str, ...] = (),
+    missing_groups: tuple[str, ...] = (),
+    weak_groups: tuple[str, ...] = (),
+    ambiguous_groups: tuple[str, ...] = (),
+) -> dict[str, object]:
+    """构造 Slice 4 结构化债券风险 snapshot 记录。
+
+    Args:
+        fund_code: 基金代码。
+        report_year: 年报年份。
+        app_category: App 类别。
+        classified_fund_type: 系统识别基金类型。
+        value_present: 是否存在字段值。
+        anchor_present: 是否存在年报证据锚点。
+        contract_status: 债券风险证据契约状态。
+        satisfied_groups: 已满足证据组。
+        missing_groups: 缺失证据组。
+        weak_groups: 弱证据组。
+        ambiguous_groups: 歧义证据组。
+
+    Returns:
+        带 Slice 4 结构化字段的 snapshot 字典。
+
+    Raises:
+        无显式抛出。
+    """
+
+    record = _snapshot_record(
+        "risk",
+        "bond_risk_evidence",
+        fund_code=fund_code,
+        report_year=report_year,
+        app_category=app_category,
+        classified_fund_type=classified_fund_type,
+        value_present=value_present,
+        anchor_present=anchor_present,
+    )
+    record.update(
+        {
+            "bond_risk_contract_status": contract_status,
+            "bond_risk_satisfied_groups": satisfied_groups,
+            "bond_risk_missing_groups": missing_groups,
+            "bond_risk_weak_groups": weak_groups,
+            "bond_risk_ambiguous_groups": ambiguous_groups,
+        }
+    )
+    return record
+
+
 def _snapshot_record(
     field_group: str,
     field_name: str,
     *,
     fund_code: str = "004393",
+    report_year: int = 2024,
     app_category: str = "国内股票类",
     value_present: bool,
     anchor_present: bool,
     classified_fund_type: str = "active_fund",
     comparable_values: dict[str, str] | None = None,
+    include_source_provenance: bool = False,
 ) -> dict[str, object]:
     """构造测试用 snapshot 记录。
 
@@ -1713,11 +2587,13 @@ def _snapshot_record(
         field_group: 字段组。
         field_name: 字段名。
         fund_code: 基金代码。
+        report_year: 年报年份。
         app_category: App 类别。
         value_present: 是否存在字段值。
         anchor_present: 是否存在证据锚点。
         classified_fund_type: 系统识别基金类型。
         comparable_values: correctness 可比子字段；为空时模拟旧 snapshot。
+        include_source_provenance: 是否追加 additive 公共来源 provenance 字段。
 
     Returns:
         符合评分最小输入契约的字典。
@@ -1730,6 +2606,7 @@ def _snapshot_record(
         "fund_code": fund_code,
         "fund_name": f"测试基金{fund_code}",
         "app_category": app_category,
+        "report_year": report_year,
         "classified_fund_type": classified_fund_type,
         "field_group": field_group,
         "field_name": field_name,
@@ -1738,6 +2615,8 @@ def _snapshot_record(
     }
     if comparable_values is not None:
         record["comparable_values"] = comparable_values
+    if include_source_provenance:
+        record.update(_PUBLIC_SOURCE_PROVENANCE_PAYLOAD)
     return record
 
 
@@ -1764,6 +2643,7 @@ def _golden_answer_json(
     records = [
         {
             "fund_code": "004393",
+            "report_year": 2024,
             "field_name": "classified_fund_type",
             "sub_field": "fund_type",
             "expected_value": expected_fund_type,
@@ -1772,6 +2652,7 @@ def _golden_answer_json(
         },
         {
             "fund_code": "004393",
+            "report_year": 2024,
             "field_name": "basic_identity",
             "sub_field": "fund_name",
             "expected_value": "测试基金",
@@ -1787,7 +2668,7 @@ def _golden_answer_json(
 def _golden_answer_json_from_records(
     tmp_path: Path,
     *,
-    records: list[dict[str, str]],
+    records: list[dict[str, object]],
     skipped_fields: list[str] | None = None,
 ) -> Path:
     """按指定记录写入测试用 strict golden answer JSON。
@@ -1806,6 +2687,7 @@ def _golden_answer_json_from_records(
 
     path = tmp_path / "golden-answer.json"
     fund_code = records[0]["fund_code"] if records else "004393"
+    report_year = int(records[0].get("report_year", "2024")) if records else 2024
     path.write_text(
         json.dumps(
             {
@@ -1816,6 +2698,7 @@ def _golden_answer_json_from_records(
                 "funds": [
                     {
                         "fund_code": fund_code,
+                        "report_year": report_year,
                         "title": "测试基金（国内股票类）",
                         "records": records,
                         "skipped_fields": skipped_fields or [],

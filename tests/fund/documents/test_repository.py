@@ -212,6 +212,7 @@ def _eastmoney_fallback_metadata(
         fund_code=fund_code,
         report_year=year,
         fallback_used=True,
+        primary_failure_category="not_found",
     )
 
 
@@ -770,6 +771,7 @@ async def test_repository_attaches_eastmoney_fallback_metadata_on_fresh_fetch(
     assert loaded_report.metadata.source is not None
     assert loaded_report.metadata.source.source == "eastmoney"
     assert loaded_report.metadata.source.fallback_used is True
+    assert loaded_report.metadata.source.primary_failure_category == "not_found"
     assert loaded_report.metadata.source.fund_id is None
     assert loaded_report.metadata.source.upload_info_id is None
     assert loaded_report.metadata.source.upload_info_detail_id is None

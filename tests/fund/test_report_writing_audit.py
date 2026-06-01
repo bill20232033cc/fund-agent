@@ -89,6 +89,43 @@ def test_active_chapter_3_explicit_data_gap_allows_insufficient_evidence_wording
     assert result.issues == ()
 
 
+def test_active_chapter_3_exact_next_question_wording_does_not_emit_stability_claim() -> None:
+    """验证 exact 下一步验证问题措辞不会被误判为正向稳定性 claim。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 合规问句被误报为 unsupported_stability_claim 时抛出。
+    """
+
+    gap = _turnover_gap()
+    result = audit_report_writing_bundle(
+        _bundle(data_gaps=(gap,)),
+        chapter_drafts=(
+            ChapterDraftSurrogate(
+                chapter_id=3,
+                fund_type_slot="active_fund",
+                markdown=(
+                    "当前证据不足，不能据此判断风格稳定、风格一致或言行一致；"
+                    "下一步最小验证问题：复核年报§8换手率及跨期行业配置/持仓集中度变化后，"
+                    "风格稳定性和言行一致性判断是否仍成立？"
+                ),
+                gap_refs=(gap.gap_id,),
+            ),
+        ),
+    )
+
+    assert result.summary.material_count == 0
+    assert not any(
+        issue.failure_category == "unsupported_stability_claim"
+        for issue in result.issues
+    )
+
+
 def test_must_not_cover_hit_emits_issue() -> None:
     """验证 must_not_cover / 交易建议禁区会产出 forbidden_content。
 

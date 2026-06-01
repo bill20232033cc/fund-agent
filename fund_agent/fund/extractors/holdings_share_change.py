@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from decimal import Decimal, InvalidOperation
 from dataclasses import dataclass
+from decimal import Decimal, InvalidOperation
 from typing import Final
 
 from fund_agent.fund.documents.models import ParsedAnnualReport, ParsedTable
@@ -24,12 +24,7 @@ _SHARE_CHANGE_FLOW_KEYWORDS: Final[tuple[str, ...]] = ("申购", "赎回")
 _TOTAL_SHARE_HEADER_KEYWORDS: Final[tuple[str, ...]] = ("合计", "总计", "基金份额总额", "总份额")
 _SUBORDINATE_FUND_NAME_KEYWORDS: Final[tuple[str, ...]] = ("下属分级基金的基金简称", "下属分级基金的基\n金简称")
 _SUBORDINATE_FUND_CODE_KEYWORDS: Final[tuple[str, ...]] = ("下属分级基金的交易代码", "下属分级基金的交\n易代码")
-_SHARE_CLASS_A_LABEL: Final[str] = "A"
-_SHARE_CLASS_C_LABEL: Final[str] = "C"
-_SHARE_CLASS_TOKEN_BY_LABEL: Final[dict[str, tuple[str, ...]]] = {
-    _SHARE_CLASS_A_LABEL: ("A类", "A份额", "混合A"),
-    _SHARE_CLASS_C_LABEL: ("C类", "C份额", "混合C"),
-}
+_SUPPORTED_SHARE_CLASS_LABELS: Final[tuple[str, ...]] = tuple("ABCDEFGHIJKLMNOPQRSTUVWXYZ")
 _REASON_SINGLE_VALUE_COLUMN: Final[str] = "single_value_column"
 _REASON_FUND_CODE_HEADER_MATCH: Final[str] = "fund_code_header_match"
 _REASON_SECTION_TWO_CLASS_EVIDENCE: Final[str] = "section_2_share_class_evidence"
@@ -267,19 +262,14 @@ def _is_split_share_header_table(table: ParsedTable) -> bool:
         table: 待检查表格。
 
     Returns:
-        同时包含 A/C 份额列且不含完整期初/期末数据时返回 `True`。
+        至少包含两个份额类别列且不含完整期初/期末数据时返回 `True`。
 
     Raises:
         无显式抛出。
     """
 
     table_text = _compact_text(_joined_table_text(table))
-    return (
-        _contains_share_class_label(table_text, _SHARE_CLASS_A_LABEL)
-        and _contains_share_class_label(table_text, _SHARE_CLASS_C_LABEL)
-        and "期初" not in table_text
-        and "期末" not in table_text
-    )
+    return _table_share_class_label_count(table) >= 2 and "期初" not in table_text and "期末" not in table_text
 
 
 def _is_split_share_data_table(table: ParsedTable) -> bool:
@@ -289,7 +279,7 @@ def _is_split_share_data_table(table: ParsedTable) -> bool:
         table: 待检查表格。
 
     Returns:
-        缺少 A/C 表头但含期初/期末/申购/赎回数据时返回 `True`。
+        缺少份额类别表头但含期初/期末/申购/赎回数据时返回 `True`。
 
     Raises:
         无显式抛出。
@@ -300,8 +290,7 @@ def _is_split_share_data_table(table: ParsedTable) -> bool:
         "期初" in table_text
         and "期末" in table_text
         and all(keyword in table_text for keyword in _SHARE_CHANGE_FLOW_KEYWORDS)
-        and not _contains_share_class_label(table_text, _SHARE_CLASS_A_LABEL)
-        and not _contains_share_class_label(table_text, _SHARE_CLASS_C_LABEL)
+        and _table_share_class_label_count(table) == 0
     )
 
 
@@ -351,8 +340,7 @@ def _share_headers_from_split_header(
     class_headers = [
         text
         for text in header_texts
-        if _contains_share_class_label(text, _SHARE_CLASS_A_LABEL)
-        or _contains_share_class_label(text, _SHARE_CLASS_C_LABEL)
+        if _share_class_label_from_text(text) is not None
     ]
     first_header = _normalize_cell(data_table.headers[0]) if data_table.headers else "项目"
     return (first_header, *class_headers[: max(len(data_table.headers) - 1, 0)])
@@ -365,7 +353,7 @@ def _split_share_header_count(table: ParsedTable) -> int:
         table: 候选表头表。
 
     Returns:
-        A/C 份额类别表头数量。
+        份额类别表头数量。
 
     Raises:
         无显式抛出。
@@ -374,12 +362,7 @@ def _split_share_header_count(table: ParsedTable) -> int:
     header_texts = [_normalize_cell(header) for header in table.headers]
     for row in table.rows:
         header_texts.extend(_normalize_cell(cell) for cell in row)
-    return sum(
-        1
-        for text in header_texts
-        if _contains_share_class_label(text, _SHARE_CLASS_A_LABEL)
-        or _contains_share_class_label(text, _SHARE_CLASS_C_LABEL)
-    )
+    return sum(1 for text in header_texts if _share_class_label_from_text(text) is not None)
 
 
 def _split_share_value_column_count(table: ParsedTable) -> int:
@@ -750,7 +733,7 @@ def _share_class_column_matches(
 
 
 def _share_class_evidence(report: ParsedAnnualReport) -> _ShareClassEvidence | None:
-    """从同源 §2 识别当前基金代码对应的 A/C 份额类别。
+    """从同源 §2 识别当前基金代码对应的份额类别。
 
     Args:
         report: 已解析年报对象。
@@ -822,7 +805,7 @@ def _share_class_evidence_from_section_two_text(
         return None
     matches = [
         class_label
-        for class_label in (_SHARE_CLASS_A_LABEL, _SHARE_CLASS_C_LABEL)
+        for class_label in _SUPPORTED_SHARE_CLASS_LABELS
         if _section_two_text_contains_class_mapping(section_two, report.key.fund_code, class_label)
     ]
     unique_matches = sorted(set(matches))
@@ -848,7 +831,11 @@ def _table_likely_belongs_to_section_two(table: ParsedTable) -> bool:
     """
 
     table_text = _compact_text(_joined_table_text(table))
-    return "基金名称" in table_text and "基金主代码" in table_text
+    has_profile_identity = "基金名称" in table_text and "基金主代码" in table_text
+    has_subordinate_mapping = any(
+        _compact_text(keyword) in table_text for keyword in _SUBORDINATE_FUND_NAME_KEYWORDS
+    ) and any(_compact_text(keyword) in table_text for keyword in _SUBORDINATE_FUND_CODE_KEYWORDS)
+    return has_profile_identity or has_subordinate_mapping
 
 
 def _row_by_keywords(
@@ -900,10 +887,9 @@ def _class_matches_from_rows(
         if index == 0 or fund_code not in _compact_text(code_cell):
             continue
         label = _compact_text(label_row[index]) if index < len(label_row) else ""
-        if _contains_share_class_label(label, _SHARE_CLASS_A_LABEL):
-            matches.append(_SHARE_CLASS_A_LABEL)
-        elif _contains_share_class_label(label, _SHARE_CLASS_C_LABEL):
-            matches.append(_SHARE_CLASS_C_LABEL)
+        class_label = _share_class_label_from_text(label)
+        if class_label is not None:
+            matches.append(class_label)
     return matches
 
 
@@ -934,7 +920,7 @@ def _contains_share_class_label(text: str, class_label: str) -> bool:
 
     Args:
         text: 待检查文本。
-        class_label: 份额类别，当前支持 `A` / `C`。
+        class_label: 份额类别标签。
 
     Returns:
         包含 `A类`、`A份额` 或基金简称后缀等明确标签时返回 `True`。
@@ -943,10 +929,108 @@ def _contains_share_class_label(text: str, class_label: str) -> bool:
         无显式抛出。
     """
 
+    compact_text = _compact_text(text).upper()
+    normalized_class_label = class_label.upper()
+    return (
+        f"{normalized_class_label}类" in compact_text
+        or f"{normalized_class_label}份额" in compact_text
+        or _endswith_bare_share_class_label(compact_text, normalized_class_label)
+    )
+
+
+def _endswith_bare_share_class_label(text: str, class_label: str) -> bool:
+    """判断文本是否以安全的裸份额类别标签结尾。
+
+    Args:
+        text: 已压缩并大写的文本。
+        class_label: 份额类别标签。
+
+    Returns:
+        末尾标签前不是拉丁字母时返回 `True`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if not text.endswith(class_label):
+        return False
+    prefix = text[: -len(class_label)]
+    if not prefix:
+        return False
+    return not prefix[-1].isascii() or not prefix[-1].isalpha()
+
+
+def _share_class_label_from_text(text: str) -> str | None:
+    """从份额简称或表头中识别明确份额类别标签。
+
+    Args:
+        text: 待检查文本。
+
+    Returns:
+        唯一份额类别标签；缺失或歧义时返回 `None`。
+
+    Raises:
+        无显式抛出。
+    """
+
     compact_text = _compact_text(text)
-    if any(token in compact_text for token in _SHARE_CLASS_TOKEN_BY_LABEL.get(class_label, ())):
-        return True
-    return compact_text.endswith(class_label)
+    if not compact_text:
+        return None
+    matches = [
+        class_label
+        for class_label in _SUPPORTED_SHARE_CLASS_LABELS
+        if _contains_share_class_label(compact_text, class_label)
+    ]
+    unique_matches = sorted(set(matches))
+    if len(unique_matches) != 1:
+        return None
+    return unique_matches[0]
+
+
+def _share_class_label_count(text: str) -> int:
+    """统计文本中出现的唯一份额类别数量。
+
+    Args:
+        text: 待检查文本。
+
+    Returns:
+        唯一份额类别数量。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return len(
+        {
+            class_label
+            for class_label in _SUPPORTED_SHARE_CLASS_LABELS
+            if _contains_share_class_label(text, class_label)
+        }
+    )
+
+
+def _table_share_class_label_count(table: ParsedTable) -> int:
+    """统计表格单元格中的唯一份额类别数量。
+
+    Args:
+        table: 待检查表格。
+
+    Returns:
+        唯一份额类别数量。
+
+    Raises:
+        无显式抛出。
+    """
+
+    labels: set[str] = set()
+    cells = list(table.headers)
+    for row in table.rows:
+        cells.extend(row)
+    for cell in cells:
+        class_label = _share_class_label_from_text(cell)
+        if class_label is not None:
+            labels.add(class_label)
+    return len(labels)
 
 
 def _is_total_share_header(header: str) -> bool:

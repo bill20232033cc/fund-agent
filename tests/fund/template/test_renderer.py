@@ -35,6 +35,17 @@ from fund_agent.fund.extractors.models import (
     TrackingErrorValue,
 )
 from fund_agent.fund.fund_type import FundType
+from fund_agent.fund.report_evidence import (
+    REPORT_EVIDENCE_SCHEMA_VERSION,
+    ReportDataGap,
+    ReportEvidenceBundle,
+    ReportPreferredLensProjection,
+    ReportQualityContext,
+)
+from fund_agent.fund.report_writing_audit import (
+    ChapterDraftSurrogate,
+    audit_report_writing_bundle,
+)
 from fund_agent.fund.template import (
     TemplateRenderInput,
     build_programmatic_audit_input,
@@ -43,6 +54,7 @@ from fund_agent.fund.template import (
     render_template_report,
     split_rendered_chapter_blocks,
 )
+from fund_agent.fund.template.chapter_blocks import EVIDENCE_APPENDIX_HEADING
 from fund_agent.fund.template.renderer import (
     _validate_report_wording,
     _body_anchor_reference,
@@ -1462,6 +1474,100 @@ def test_render_template_report_formats_manager_alignment_and_reason_punctuation
     assert "投资者收益高于产品收益。。" not in result.report_markdown
 
 
+def test_active_fund_chapter_3_missing_evidence_emits_safe_insufficiency_wording() -> None:
+    """验证主动基金第 3 章缺证据路径输出安全降级措辞。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当缺证据降级措辞缺失或正向结论泄漏时抛出。
+    """
+
+    result = render_template_report(_render_input())
+    chapter_3 = result.chapter_blocks[3].body_markdown
+
+    assert "证据不足" in chapter_3
+    assert "不能据此判断风格稳定、风格一致或言行一致" in chapter_3
+    assert (
+        "下一步最小验证问题：复核年报§8换手率及跨期行业配置/持仓集中度变化后，"
+        "风格稳定性和言行一致性判断是否仍成立？"
+    ) in chapter_3
+    assert "言行一致性判断：" in chapter_3
+    assert "风格稳定性判断：" in chapter_3
+    assert "言行一致性判断：green / aligned" not in chapter_3
+    assert "言行一致性汇总：green / aligned" not in chapter_3
+    assert "原因=风格一致。" not in chapter_3
+    assert "原因=行业偏好一致。" not in chapter_3
+    assert result.audit_input.chapter_blocks == result.chapter_blocks
+    assert EVIDENCE_APPENDIX_HEADING in result.report_markdown
+    assert "> 📎 证据：年报2024§2 style_positioning" in chapter_3
+
+
+def test_active_fund_chapter_3_rendered_text_passes_dev_only_writing_audit() -> None:
+    """验证渲染后的主动基金第 3 章可通过 dev-only 写作审计。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当渲染文本触发 unsupported stability claim 时抛出。
+    """
+
+    result = render_template_report(_render_input())
+    chapter_3 = result.chapter_blocks[3]
+    gap = _active_chapter_3_turnover_gap()
+    audit_result = audit_report_writing_bundle(
+        _active_chapter_3_audit_bundle(gap),
+        chapter_drafts=(
+            ChapterDraftSurrogate(
+                chapter_id=chapter_3.chapter_id,
+                fund_type_slot="active_fund",
+                markdown=chapter_3.body_markdown,
+                gap_refs=(gap.gap_id,),
+            ),
+        ),
+    )
+
+    issue_categories = {issue.failure_category for issue in audit_result.issues}
+    assert "unsupported_stability_claim" not in issue_categories
+    assert "insufficient_evidence_wording_missing" not in issue_categories
+    assert audit_result.summary.material_count == 0
+
+
+@pytest.mark.parametrize("fund_type", ("index_fund", "enhanced_index", "bond_fund"))
+def test_non_active_chapter_3_keeps_existing_consistency_wording(
+    fund_type: FundType,
+) -> None:
+    """验证非主动基金第 3 章不进入主动基金缺证据降级路径。
+
+    Args:
+        fund_type: 标准基金类型。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 非主动基金误用主动基金缺证据文案时抛出。
+    """
+
+    result = render_template_report(_render_input(fund_type=fund_type))
+    chapter_3 = result.chapter_blocks[3].body_markdown
+
+    assert "不能据此判断风格稳定、风格一致或言行一致" not in chapter_3
+    assert "下一步最小验证问题：复核年报§8换手率" not in chapter_3
+    assert "言行一致性判断：green / aligned" in chapter_3
+    assert "风格稳定性判断：数据不足，当前需要多期持仓继续验证。" in chapter_3
+    assert "言行一致性汇总：green / aligned" in chapter_3
+    assert "原因=风格一致。" in chapter_3
+
+
 def test_fund_readme_has_single_current_template_layer_entry() -> None:
     """验证 Fund 包 README 不保留重复过期的 template 分层说明。
 
@@ -1987,3 +2093,62 @@ def test_render_template_report_outputs_thermometer_disclaimer_and_anchor() -> N
     assert "外部数据(external_api)§thermometer表fixture_source行000300:2024-12-31" in result.report_markdown
     assert result.audit_input.valuation_state_resolution == resolution
     assert all(term not in resolution.disclaimer for term in ("买入", "卖出", "仓位比例", "收益预测"))
+
+
+def _active_chapter_3_audit_bundle(gap: ReportDataGap) -> ReportEvidenceBundle:
+    """构造渲染器第 3 章 test-only 写作审计证据包。
+
+    Args:
+        gap: 主动基金第 3 章换手率/风格证据缺口。
+
+    Returns:
+        最小 `ReportEvidenceBundle`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return ReportEvidenceBundle(
+        bundle_id="bundle:004393:2024:renderer-test",
+        schema_version=REPORT_EVIDENCE_SCHEMA_VERSION,
+        corpus_id="renderer_test",
+        fund_code="004393",
+        report_year=2024,
+        classified_fund_type="active_fund",
+        type_slot_membership_status="matches_slot",
+        preferred_lens=ReportPreferredLensProjection(fund_type="active_fund", chapters=()),
+        quality_context=ReportQualityContext(),
+        review_status="fact_prefill_reviewed",
+        fund_type_slot="active_fund",
+        data_gaps=(gap,),
+    )
+
+
+def _active_chapter_3_turnover_gap() -> ReportDataGap:
+    """构造主动基金第 3 章换手率/风格证据缺口。
+
+    Args:
+        无。
+
+    Returns:
+        可被 dev-only 写作审计识别的 `ReportDataGap`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return ReportDataGap(
+        gap_id="gap:004393:2024:not_reviewed:manager.turnover_rate:not_reviewed_in_current_slice",
+        gap_kind="not_reviewed",
+        chapter_ids=("chapter_3",),
+        failure_category="not_reviewed_in_current_slice",
+        reason_code="not_reviewed_in_current_slice",
+        fallback_allowed=False,
+        fallback_used=False,
+        required_report_wording=(
+            "当前证据不足，不能据此判断风格稳定、风格一致或言行一致；"
+            "下一步最小验证问题：复核年报§8换手率及跨期行业配置/持仓集中度变化后，"
+            "风格稳定性和言行一致性判断是否仍成立？"
+        ),
+        field_path="manager.turnover_rate",
+    )

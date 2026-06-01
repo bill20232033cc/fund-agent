@@ -57,6 +57,8 @@ def test_extraction_score_service_delegates_explicit_params(monkeypatch, tmp_pat
             field_scores=(),
             fund_scores=(),
             fund_quality=(),
+            field_applicability_decisions=(),
+            score_applicability_issues=(),
             failed_funds=(),
             golden_set=GoldenSetSelection(
                 source_csv=str(kwargs["source_csv"]),

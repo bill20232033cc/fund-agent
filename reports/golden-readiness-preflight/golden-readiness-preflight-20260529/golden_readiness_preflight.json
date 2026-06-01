@@ -1,0 +1,1083 @@
+{
+  "schema_version": "fund-agent.golden-readiness-preflight.v1",
+  "run_id": "golden-readiness-preflight-20260529",
+  "generated_at": "2026-05-29T02:32:04.342562+00:00",
+  "source_csv": "docs/code_20260519.csv",
+  "golden_answer_path": "reports/golden-answers/golden-answer.json",
+  "static_disposition_manifest": {
+    "schema_version": "fund-agent.coverage-disposition.static-current.v1",
+    "accepted_as_of": "2026-05-29",
+    "source_artifacts": [
+      "docs/reviews/release-maintenance-source-provenance-post-implementation-bounded-evidence-rerun-controller-judgment-20260527.md",
+      "docs/reviews/release-maintenance-110020-reviewed-coverage-candidate-evidence-controller-judgment-20260527.md",
+      "docs/reviews/release-maintenance-consolidation-post-021539-disposition-controller-judgment-20260527.md",
+      "docs/reviews/release-maintenance-drawdown-stress-nav-derived-metric-controller-judgment-20260529.md"
+    ],
+    "lifecycle_semantics": [
+      "任一 controller judgment 改变 coverage disposition、owner、revisit condition、blocks_v1 或 promotion disposition 时，停止扩展代码内 manifest。",
+      "新 fund 加入候选池、已有 fund 移除、fixture promotion state 变更，必须开独立 machine-readable disposition manifest gate。",
+      "需要同时维护 3 个以上条目或跨多 gate 复用 disposition 数据时，产出 tracked JSON manifest 后再由 preflight 消费。"
+    ],
+    "entries": [
+      {
+        "fund_code": "004393",
+        "report_year": 2024,
+        "raw_disposition": "evaluated_carry_forward_candidate",
+        "preflight_disposition": "include_for_later_review",
+        "promotion_state": "not_promoted",
+        "coverage_owner": "future baseline preflight owner",
+        "next_gate": "fixture promotion / strict golden coverage gate",
+        "blocks_v1": true,
+        "evidence_artifacts": [
+          "docs/reviews/release-maintenance-source-provenance-post-implementation-bounded-evidence-rerun-controller-judgment-20260527.md"
+        ],
+        "snapshot_path": "reports/extraction-snapshots/small-baseline-corpus-v1-004393-2024/snapshot.jsonl",
+        "score_path": "reports/extraction-snapshots/small-baseline-corpus-v1-004393-2024/score.json",
+        "quality_gate_path": "reports/extraction-snapshots/small-baseline-corpus-v1-004393-2024/quality_gate.json",
+        "score_golden_set_path": "reports/extraction-snapshots/small-baseline-corpus-v1-004393-2024/golden_set.json",
+        "artifact_required": true,
+        "slot_kind": "fund",
+        "lifecycle_note": "static current accepted disposition; replace with tracked manifest on change"
+      },
+      {
+        "fund_code": "004194",
+        "report_year": 2024,
+        "raw_disposition": "evaluated_carry_forward_candidate",
+        "preflight_disposition": "include_for_later_review",
+        "promotion_state": "not_promoted",
+        "coverage_owner": "future baseline preflight owner",
+        "next_gate": "fixture promotion / strict golden coverage gate",
+        "blocks_v1": true,
+        "evidence_artifacts": [
+          "docs/reviews/release-maintenance-source-provenance-post-implementation-bounded-evidence-rerun-controller-judgment-20260527.md"
+        ],
+        "snapshot_path": "reports/extraction-snapshots/small-baseline-corpus-v1-004194-2024/snapshot.jsonl",
+        "score_path": "reports/extraction-snapshots/small-baseline-corpus-v1-004194-2024/score.json",
+        "quality_gate_path": "reports/extraction-snapshots/small-baseline-corpus-v1-004194-2024/quality_gate.json",
+        "score_golden_set_path": "reports/extraction-snapshots/small-baseline-corpus-v1-004194-2024/golden_set.json",
+        "artifact_required": true,
+        "slot_kind": "fund",
+        "lifecycle_note": "static current accepted disposition; replace with tracked manifest on change"
+      },
+      {
+        "fund_code": "017641",
+        "report_year": 2024,
+        "raw_disposition": "source_provenance_complete_quality_block_not_promoted",
+        "preflight_disposition": "include_for_later_review",
+        "promotion_state": "not_promoted",
+        "coverage_owner": "future baseline preflight owner",
+        "next_gate": "quality block disposition / fixture promotion gate",
+        "blocks_v1": true,
+        "evidence_artifacts": [
+          "docs/reviews/release-maintenance-source-provenance-post-implementation-bounded-evidence-rerun-controller-judgment-20260527.md"
+        ],
+        "snapshot_path": "reports/extraction-snapshots/source-provenance-rerun-017641-2024-20260527/snapshot.jsonl",
+        "score_path": "reports/extraction-snapshots/source-provenance-rerun-017641-2024-20260527/score.json",
+        "quality_gate_path": "reports/extraction-snapshots/source-provenance-rerun-017641-2024-20260527/quality_gate.json",
+        "score_golden_set_path": "reports/extraction-snapshots/source-provenance-rerun-017641-2024-20260527/golden_set.json",
+        "artifact_required": true,
+        "slot_kind": "fund",
+        "lifecycle_note": "static current accepted disposition; replace with tracked manifest on change"
+      },
+      {
+        "fund_code": "006597",
+        "report_year": 2024,
+        "raw_disposition": "bond_risk_evidence_resolved_not_promoted",
+        "preflight_disposition": "include_for_later_review",
+        "promotion_state": "not_promoted",
+        "coverage_owner": "future baseline/golden preflight owner",
+        "next_gate": "fixture promotion / strict golden coverage gate",
+        "blocks_v1": true,
+        "evidence_artifacts": [
+          "docs/reviews/release-maintenance-drawdown-stress-nav-derived-metric-controller-judgment-20260529.md"
+        ],
+        "snapshot_path": "reports/extraction-snapshots/bond-risk-drawdown-nav-006597-2024-20260529/snapshot.jsonl",
+        "score_path": "reports/scoring-runs/bond-risk-drawdown-nav-006597-2024-20260529/score.json",
+        "quality_gate_path": "reports/quality-gate-runs/bond-risk-drawdown-nav-006597-2024-20260529/quality_gate.json",
+        "score_golden_set_path": "reports/extraction-snapshots/bond-risk-drawdown-nav-006597-2024-20260529/golden_set.json",
+        "artifact_required": true,
+        "slot_kind": "fund",
+        "lifecycle_note": "static current accepted disposition; replace with tracked manifest on change"
+      },
+      {
+        "fund_code": "110020",
+        "report_year": 2024,
+        "raw_disposition": "reviewed_coverage_candidate_input_accepted",
+        "preflight_disposition": "reviewed_coverage_candidate",
+        "promotion_state": "not_promoted",
+        "coverage_owner": "future index evidence sufficiency gate",
+        "next_gate": "index reviewed fact freeze / methodology / constituents evidence gate",
+        "blocks_v1": true,
+        "evidence_artifacts": [
+          "docs/reviews/release-maintenance-110020-reviewed-coverage-candidate-evidence-controller-judgment-20260527.md"
+        ],
+        "snapshot_path": "reports/extraction-snapshots/110020-reviewed-coverage-candidate-2024-20260527/snapshot.jsonl",
+        "score_path": "reports/extraction-snapshots/110020-reviewed-coverage-candidate-2024-20260527/score.json",
+        "quality_gate_path": "reports/extraction-snapshots/110020-reviewed-coverage-candidate-2024-20260527/quality_gate.json",
+        "score_golden_set_path": "reports/extraction-snapshots/110020-reviewed-coverage-candidate-2024-20260527/golden_set.json",
+        "artifact_required": true,
+        "slot_kind": "fund",
+        "lifecycle_note": "static current accepted disposition; replace with tracked manifest on change"
+      },
+      {
+        "fund_code": "096001",
+        "report_year": 2024,
+        "raw_disposition": "quality_blocked_after_provenance_hard_stop",
+        "preflight_disposition": "blocked",
+        "promotion_state": "not_promoted",
+        "coverage_owner": "future QDII diagnosis or taxonomy / asset-class fitness gate",
+        "next_gate": "QDII diagnosis or explicit QDII deferred-from-v1 disposition gate",
+        "blocks_v1": true,
+        "evidence_artifacts": [
+          "docs/reviews/release-maintenance-consolidation-post-021539-disposition-controller-judgment-20260527.md"
+        ],
+        "snapshot_path": "reports/extraction-snapshots/qdii-replacement-candidate-096001-2024-20260527/snapshot.jsonl",
+        "score_path": "reports/extraction-snapshots/qdii-replacement-candidate-096001-2024-20260527/score.json",
+        "quality_gate_path": "reports/extraction-snapshots/qdii-replacement-candidate-096001-2024-20260527/quality_gate.json",
+        "score_golden_set_path": "reports/extraction-snapshots/qdii-replacement-candidate-096001-2024-20260527/golden_set.json",
+        "artifact_required": true,
+        "slot_kind": "fund",
+        "lifecycle_note": "static current accepted disposition; replace with tracked manifest on change"
+      },
+      {
+        "fund_code": "040046",
+        "report_year": 2024,
+        "raw_disposition": "quality_blocked_after_provenance_hard_stop",
+        "preflight_disposition": "blocked",
+        "promotion_state": "not_promoted",
+        "coverage_owner": "future QDII diagnosis or taxonomy / asset-class fitness gate",
+        "next_gate": "QDII diagnosis or explicit QDII deferred-from-v1 disposition gate",
+        "blocks_v1": true,
+        "evidence_artifacts": [
+          "docs/reviews/release-maintenance-consolidation-post-021539-disposition-controller-judgment-20260527.md"
+        ],
+        "snapshot_path": "reports/extraction-snapshots/qdii-replacement-fallback-040046-2024-20260527/snapshot.jsonl",
+        "score_path": "reports/extraction-snapshots/qdii-replacement-fallback-040046-2024-20260527/score.json",
+        "quality_gate_path": "reports/extraction-snapshots/qdii-replacement-fallback-040046-2024-20260527/quality_gate.json",
+        "score_golden_set_path": "reports/extraction-snapshots/qdii-replacement-fallback-040046-2024-20260527/golden_set.json",
+        "artifact_required": true,
+        "slot_kind": "fund",
+        "lifecycle_note": "static current accepted disposition; replace with tracked manifest on change"
+      },
+      {
+        "fund_code": "019172",
+        "report_year": 2024,
+        "raw_disposition": "quality_blocked_after_provenance_hard_stop",
+        "preflight_disposition": "blocked",
+        "promotion_state": "not_promoted",
+        "coverage_owner": "future QDII diagnosis or taxonomy / asset-class fitness gate",
+        "next_gate": "QDII diagnosis or explicit QDII deferred-from-v1 disposition gate",
+        "blocks_v1": true,
+        "evidence_artifacts": [
+          "docs/reviews/release-maintenance-consolidation-post-021539-disposition-controller-judgment-20260527.md"
+        ],
+        "snapshot_path": "reports/extraction-snapshots/qdii-replacement-fallback-019172-2024-20260527/snapshot.jsonl",
+        "score_path": "reports/extraction-snapshots/qdii-replacement-fallback-019172-2024-20260527/score.json",
+        "quality_gate_path": "reports/extraction-snapshots/qdii-replacement-fallback-019172-2024-20260527/quality_gate.json",
+        "score_golden_set_path": "reports/extraction-snapshots/qdii-replacement-fallback-019172-2024-20260527/golden_set.json",
+        "artifact_required": true,
+        "slot_kind": "fund",
+        "lifecycle_note": "static current accepted disposition; replace with tracked manifest on change"
+      },
+      {
+        "fund_code": "021539",
+        "report_year": 2024,
+        "raw_disposition": "quality_blocked_after_provenance_hard_stop",
+        "preflight_disposition": "blocked",
+        "promotion_state": "not_promoted",
+        "coverage_owner": "future QDII diagnosis or taxonomy / asset-class fitness gate",
+        "next_gate": "QDII diagnosis or explicit QDII deferred-from-v1 disposition gate",
+        "blocks_v1": true,
+        "evidence_artifacts": [
+          "docs/reviews/release-maintenance-consolidation-post-021539-disposition-controller-judgment-20260527.md"
+        ],
+        "snapshot_path": "reports/extraction-snapshots/qdii-replacement-fallback-021539-2024-20260527/snapshot.jsonl",
+        "score_path": "reports/extraction-snapshots/qdii-replacement-fallback-021539-2024-20260527/score.json",
+        "quality_gate_path": "reports/extraction-snapshots/qdii-replacement-fallback-021539-2024-20260527/quality_gate.json",
+        "score_golden_set_path": "reports/extraction-snapshots/qdii-replacement-fallback-021539-2024-20260527/golden_set.json",
+        "artifact_required": true,
+        "slot_kind": "fund",
+        "lifecycle_note": "static current accepted disposition; replace with tracked manifest on change"
+      },
+      {
+        "fund_code": "FOF_SLOT",
+        "report_year": 2024,
+        "raw_disposition": "data_gap_taxonomy_pending",
+        "preflight_disposition": "needs_taxonomy_gate",
+        "promotion_state": "not_promoted",
+        "coverage_owner": "future FOF taxonomy / pure FOF candidate gate",
+        "next_gate": "pure FOF repository-verified candidate gate",
+        "blocks_v1": true,
+        "evidence_artifacts": [
+          "docs/reviews/release-maintenance-consolidation-post-021539-disposition-controller-judgment-20260527.md"
+        ],
+        "snapshot_path": null,
+        "score_path": null,
+        "quality_gate_path": null,
+        "score_golden_set_path": null,
+        "artifact_required": false,
+        "slot_kind": "fof_slot",
+        "lifecycle_note": "static current accepted disposition; replace with tracked manifest on change"
+      }
+    ]
+  },
+  "overall_status": "block",
+  "ready_count": 0,
+  "blocked_count": 6,
+  "deferred_count": 4,
+  "not_evaluated_count": 0,
+  "rows": [
+    {
+      "fund_code": "004393",
+      "report_year": 2024,
+      "fund_name": "安信企业价值优选混合A",
+      "app_category": "国内股票类",
+      "classified_fund_type": "active_fund",
+      "readiness": "deferred_with_owner",
+      "promotion_state": "not_promoted",
+      "source_provenance_status": "not_applicable",
+      "fallback_eligibility": "not_applicable",
+      "quality_gate_status": "warn",
+      "strict_golden_coverage": "covered",
+      "fixture_promotion_state": "absent",
+      "raw_disposition": "evaluated_carry_forward_candidate",
+      "preflight_disposition": "include_for_later_review",
+      "blockers": [
+        {
+          "code": "fixture_promotion_absent",
+          "severity": "block",
+          "scope": "fund",
+          "fund_code": "004393",
+          "message": "004393 未发现 accepted fixture promotion state。",
+          "owner": "future baseline preflight owner",
+          "next_gate": "fixture promotion / strict golden coverage gate",
+          "evidence_artifacts": [
+            "docs/reviews/release-maintenance-source-provenance-post-implementation-bounded-evidence-rerun-controller-judgment-20260527.md"
+          ]
+        }
+      ],
+      "warnings": [
+        {
+          "code": "quality_gate_warn",
+          "severity": "warn",
+          "scope": "fund",
+          "fund_code": "004393",
+          "message": "004393 quality gate status=warn；不能证明 ready。",
+          "owner": "future baseline preflight owner",
+          "next_gate": "fixture promotion / strict golden coverage gate",
+          "evidence_artifacts": [
+            "docs/reviews/release-maintenance-source-provenance-post-implementation-bounded-evidence-rerun-controller-judgment-20260527.md"
+          ]
+        }
+      ],
+      "resolved_items": [],
+      "owner": "future baseline preflight owner",
+      "next_gate": "fixture promotion / strict golden coverage gate",
+      "evidence_artifacts": [
+        "docs/reviews/release-maintenance-source-provenance-post-implementation-bounded-evidence-rerun-controller-judgment-20260527.md"
+      ]
+    },
+    {
+      "fund_code": "004194",
+      "report_year": 2024,
+      "fund_name": "招商中证1000指数增强A",
+      "app_category": "国内股票类",
+      "classified_fund_type": "enhanced_index",
+      "readiness": "deferred_with_owner",
+      "promotion_state": "not_promoted",
+      "source_provenance_status": "not_applicable",
+      "fallback_eligibility": "not_applicable",
+      "quality_gate_status": "warn",
+      "strict_golden_coverage": "covered",
+      "fixture_promotion_state": "absent",
+      "raw_disposition": "evaluated_carry_forward_candidate",
+      "preflight_disposition": "include_for_later_review",
+      "blockers": [
+        {
+          "code": "fixture_promotion_absent",
+          "severity": "block",
+          "scope": "fund",
+          "fund_code": "004194",
+          "message": "004194 未发现 accepted fixture promotion state。",
+          "owner": "future baseline preflight owner",
+          "next_gate": "fixture promotion / strict golden coverage gate",
+          "evidence_artifacts": [
+            "docs/reviews/release-maintenance-source-provenance-post-implementation-bounded-evidence-rerun-controller-judgment-20260527.md"
+          ]
+        }
+      ],
+      "warnings": [
+        {
+          "code": "quality_gate_warn",
+          "severity": "warn",
+          "scope": "fund",
+          "fund_code": "004194",
+          "message": "004194 quality gate status=warn；不能证明 ready。",
+          "owner": "future baseline preflight owner",
+          "next_gate": "fixture promotion / strict golden coverage gate",
+          "evidence_artifacts": [
+            "docs/reviews/release-maintenance-source-provenance-post-implementation-bounded-evidence-rerun-controller-judgment-20260527.md"
+          ]
+        }
+      ],
+      "resolved_items": [],
+      "owner": "future baseline preflight owner",
+      "next_gate": "fixture promotion / strict golden coverage gate",
+      "evidence_artifacts": [
+        "docs/reviews/release-maintenance-source-provenance-post-implementation-bounded-evidence-rerun-controller-judgment-20260527.md"
+      ]
+    },
+    {
+      "fund_code": "017641",
+      "report_year": 2024,
+      "fund_name": "摩根标普500指数(QDII)人民币A",
+      "app_category": "海外股票类",
+      "classified_fund_type": "qdii_fund",
+      "readiness": "blocked",
+      "promotion_state": "not_promoted",
+      "source_provenance_status": "complete",
+      "fallback_eligibility": "eligible",
+      "quality_gate_status": "block",
+      "strict_golden_coverage": "fund_not_covered",
+      "fixture_promotion_state": "absent",
+      "raw_disposition": "source_provenance_complete_quality_block_not_promoted",
+      "preflight_disposition": "include_for_later_review",
+      "blockers": [
+        {
+          "code": "strict_golden_not_configured",
+          "severity": "block",
+          "scope": "fund",
+          "fund_code": "017641",
+          "message": "017641 score correctness 为 not_configured。",
+          "owner": "future baseline preflight owner",
+          "next_gate": "quality block disposition / fixture promotion gate",
+          "evidence_artifacts": [
+            "docs/reviews/release-maintenance-source-provenance-post-implementation-bounded-evidence-rerun-controller-judgment-20260527.md"
+          ]
+        },
+        {
+          "code": "quality_gate_block",
+          "severity": "block",
+          "scope": "fund",
+          "fund_code": "017641",
+          "message": "017641 quality gate status=block。",
+          "owner": "future baseline preflight owner",
+          "next_gate": "quality block disposition / fixture promotion gate",
+          "evidence_artifacts": [
+            "docs/reviews/release-maintenance-source-provenance-post-implementation-bounded-evidence-rerun-controller-judgment-20260527.md"
+          ]
+        },
+        {
+          "code": "strict_golden_fund_not_covered",
+          "severity": "block",
+          "scope": "fund",
+          "fund_code": "017641",
+          "message": "017641 不在 strict golden answer v1 fund-level coverage 中。",
+          "owner": "future baseline preflight owner",
+          "next_gate": "quality block disposition / fixture promotion gate",
+          "evidence_artifacts": [
+            "docs/reviews/release-maintenance-source-provenance-post-implementation-bounded-evidence-rerun-controller-judgment-20260527.md"
+          ]
+        },
+        {
+          "code": "fixture_promotion_absent",
+          "severity": "block",
+          "scope": "fund",
+          "fund_code": "017641",
+          "message": "017641 未发现 accepted fixture promotion state。",
+          "owner": "future baseline preflight owner",
+          "next_gate": "quality block disposition / fixture promotion gate",
+          "evidence_artifacts": [
+            "docs/reviews/release-maintenance-source-provenance-post-implementation-bounded-evidence-rerun-controller-judgment-20260527.md"
+          ]
+        }
+      ],
+      "warnings": [
+        {
+          "code": "source_provenance_eligible_fallback",
+          "severity": "warn",
+          "scope": "fund",
+          "fund_code": "017641",
+          "message": "017641 fallback eligible；仅解除 source blocker，不证明 ready。",
+          "owner": "future baseline preflight owner",
+          "next_gate": "quality block disposition / fixture promotion gate",
+          "evidence_artifacts": [
+            "docs/reviews/release-maintenance-source-provenance-post-implementation-bounded-evidence-rerun-controller-judgment-20260527.md"
+          ]
+        }
+      ],
+      "resolved_items": [],
+      "owner": "future baseline preflight owner",
+      "next_gate": "quality block disposition / fixture promotion gate",
+      "evidence_artifacts": [
+        "docs/reviews/release-maintenance-source-provenance-post-implementation-bounded-evidence-rerun-controller-judgment-20260527.md"
+      ]
+    },
+    {
+      "fund_code": "006597",
+      "report_year": 2024,
+      "fund_name": "国泰利享中短债债券A",
+      "app_category": "国内债券类",
+      "classified_fund_type": "bond_fund",
+      "readiness": "deferred_with_owner",
+      "promotion_state": "not_promoted",
+      "source_provenance_status": "not_applicable",
+      "fallback_eligibility": "not_applicable",
+      "quality_gate_status": "warn",
+      "strict_golden_coverage": "covered",
+      "fixture_promotion_state": "absent",
+      "raw_disposition": "bond_risk_evidence_resolved_not_promoted",
+      "preflight_disposition": "include_for_later_review",
+      "blockers": [
+        {
+          "code": "strict_golden_not_configured",
+          "severity": "block",
+          "scope": "fund",
+          "fund_code": "006597",
+          "message": "006597 score correctness 为 not_configured。",
+          "owner": "future baseline/golden preflight owner",
+          "next_gate": "fixture promotion / strict golden coverage gate",
+          "evidence_artifacts": [
+            "docs/reviews/release-maintenance-drawdown-stress-nav-derived-metric-controller-judgment-20260529.md"
+          ]
+        },
+        {
+          "code": "fixture_promotion_absent",
+          "severity": "block",
+          "scope": "fund",
+          "fund_code": "006597",
+          "message": "006597 未发现 accepted fixture promotion state。",
+          "owner": "future baseline/golden preflight owner",
+          "next_gate": "fixture promotion / strict golden coverage gate",
+          "evidence_artifacts": [
+            "docs/reviews/release-maintenance-drawdown-stress-nav-derived-metric-controller-judgment-20260529.md"
+          ]
+        }
+      ],
+      "warnings": [
+        {
+          "code": "quality_gate_warn",
+          "severity": "warn",
+          "scope": "fund",
+          "fund_code": "006597",
+          "message": "006597 quality gate status=warn；不能证明 ready。",
+          "owner": "future baseline/golden preflight owner",
+          "next_gate": "fixture promotion / strict golden coverage gate",
+          "evidence_artifacts": [
+            "docs/reviews/release-maintenance-drawdown-stress-nav-derived-metric-controller-judgment-20260529.md"
+          ]
+        }
+      ],
+      "resolved_items": [
+        {
+          "code": "blocker_resolved",
+          "original_blocker_code": "bond_risk_evidence_missing",
+          "fund_code": "006597",
+          "message": "006597 bond_risk_evidence_missing resolved by accepted NAV-derived drawdown metric gate.",
+          "evidence_artifacts": [
+            "docs/reviews/release-maintenance-drawdown-stress-nav-derived-metric-controller-judgment-20260529.md"
+          ]
+        }
+      ],
+      "owner": "future baseline/golden preflight owner",
+      "next_gate": "fixture promotion / strict golden coverage gate",
+      "evidence_artifacts": [
+        "docs/reviews/release-maintenance-drawdown-stress-nav-derived-metric-controller-judgment-20260529.md"
+      ]
+    },
+    {
+      "fund_code": "110020",
+      "report_year": 2024,
+      "fund_name": "易方达沪深300ETF联接A",
+      "app_category": "国内股票类",
+      "classified_fund_type": "index_fund",
+      "readiness": "deferred_with_owner",
+      "promotion_state": "not_promoted",
+      "source_provenance_status": "complete",
+      "fallback_eligibility": "eligible",
+      "quality_gate_status": "warn",
+      "strict_golden_coverage": "fund_not_covered",
+      "fixture_promotion_state": "absent",
+      "raw_disposition": "reviewed_coverage_candidate_input_accepted",
+      "preflight_disposition": "reviewed_coverage_candidate",
+      "blockers": [
+        {
+          "code": "strict_golden_not_configured",
+          "severity": "block",
+          "scope": "fund",
+          "fund_code": "110020",
+          "message": "110020 score correctness 为 not_configured。",
+          "owner": "future index evidence sufficiency gate",
+          "next_gate": "index reviewed fact freeze / methodology / constituents evidence gate",
+          "evidence_artifacts": [
+            "docs/reviews/release-maintenance-110020-reviewed-coverage-candidate-evidence-controller-judgment-20260527.md"
+          ]
+        },
+        {
+          "code": "strict_golden_fund_not_covered",
+          "severity": "block",
+          "scope": "fund",
+          "fund_code": "110020",
+          "message": "110020 不在 strict golden answer v1 fund-level coverage 中。",
+          "owner": "future index evidence sufficiency gate",
+          "next_gate": "index reviewed fact freeze / methodology / constituents evidence gate",
+          "evidence_artifacts": [
+            "docs/reviews/release-maintenance-110020-reviewed-coverage-candidate-evidence-controller-judgment-20260527.md"
+          ]
+        },
+        {
+          "code": "fixture_promotion_absent",
+          "severity": "block",
+          "scope": "fund",
+          "fund_code": "110020",
+          "message": "110020 未发现 accepted fixture promotion state。",
+          "owner": "future index evidence sufficiency gate",
+          "next_gate": "index reviewed fact freeze / methodology / constituents evidence gate",
+          "evidence_artifacts": [
+            "docs/reviews/release-maintenance-110020-reviewed-coverage-candidate-evidence-controller-judgment-20260527.md"
+          ]
+        },
+        {
+          "code": "reviewed_candidate_not_promoted",
+          "severity": "block",
+          "scope": "fund",
+          "fund_code": "110020",
+          "message": "110020 仅 accepted 为 reviewed coverage candidate input，尚未 promotion。",
+          "owner": "future index evidence sufficiency gate",
+          "next_gate": "index reviewed fact freeze / methodology / constituents evidence gate",
+          "evidence_artifacts": [
+            "docs/reviews/release-maintenance-110020-reviewed-coverage-candidate-evidence-controller-judgment-20260527.md"
+          ]
+        },
+        {
+          "code": "index_evidence_insufficient",
+          "severity": "block",
+          "scope": "fund",
+          "fund_code": "110020",
+          "message": "110020 methodology/constituents/reviewed fact freeze 证据仍不足。",
+          "owner": "future index evidence sufficiency gate",
+          "next_gate": "index reviewed fact freeze / methodology / constituents evidence gate",
+          "evidence_artifacts": [
+            "docs/reviews/release-maintenance-110020-reviewed-coverage-candidate-evidence-controller-judgment-20260527.md"
+          ]
+        }
+      ],
+      "warnings": [
+        {
+          "code": "source_provenance_eligible_fallback",
+          "severity": "warn",
+          "scope": "fund",
+          "fund_code": "110020",
+          "message": "110020 fallback eligible；仅解除 source blocker，不证明 ready。",
+          "owner": "future index evidence sufficiency gate",
+          "next_gate": "index reviewed fact freeze / methodology / constituents evidence gate",
+          "evidence_artifacts": [
+            "docs/reviews/release-maintenance-110020-reviewed-coverage-candidate-evidence-controller-judgment-20260527.md"
+          ]
+        },
+        {
+          "code": "quality_gate_warn",
+          "severity": "warn",
+          "scope": "fund",
+          "fund_code": "110020",
+          "message": "110020 quality gate status=warn；不能证明 ready。",
+          "owner": "future index evidence sufficiency gate",
+          "next_gate": "index reviewed fact freeze / methodology / constituents evidence gate",
+          "evidence_artifacts": [
+            "docs/reviews/release-maintenance-110020-reviewed-coverage-candidate-evidence-controller-judgment-20260527.md"
+          ]
+        }
+      ],
+      "resolved_items": [],
+      "owner": "future index evidence sufficiency gate",
+      "next_gate": "index reviewed fact freeze / methodology / constituents evidence gate",
+      "evidence_artifacts": [
+        "docs/reviews/release-maintenance-110020-reviewed-coverage-candidate-evidence-controller-judgment-20260527.md"
+      ]
+    },
+    {
+      "fund_code": "096001",
+      "report_year": 2024,
+      "fund_name": "大成标普500等权重指数(QDII)A人民币",
+      "app_category": "海外股票类",
+      "classified_fund_type": "qdii_fund",
+      "readiness": "blocked",
+      "promotion_state": "not_promoted",
+      "source_provenance_status": "complete",
+      "fallback_eligibility": "eligible",
+      "quality_gate_status": "block",
+      "strict_golden_coverage": "fund_not_covered",
+      "fixture_promotion_state": "absent",
+      "raw_disposition": "quality_blocked_after_provenance_hard_stop",
+      "preflight_disposition": "blocked",
+      "blockers": [
+        {
+          "code": "strict_golden_not_configured",
+          "severity": "block",
+          "scope": "fund",
+          "fund_code": "096001",
+          "message": "096001 score correctness 为 not_configured。",
+          "owner": "future QDII diagnosis or taxonomy / asset-class fitness gate",
+          "next_gate": "QDII diagnosis or explicit QDII deferred-from-v1 disposition gate",
+          "evidence_artifacts": [
+            "docs/reviews/release-maintenance-consolidation-post-021539-disposition-controller-judgment-20260527.md"
+          ]
+        },
+        {
+          "code": "quality_gate_block",
+          "severity": "block",
+          "scope": "fund",
+          "fund_code": "096001",
+          "message": "096001 quality gate status=block。",
+          "owner": "future QDII diagnosis or taxonomy / asset-class fitness gate",
+          "next_gate": "QDII diagnosis or explicit QDII deferred-from-v1 disposition gate",
+          "evidence_artifacts": [
+            "docs/reviews/release-maintenance-consolidation-post-021539-disposition-controller-judgment-20260527.md"
+          ]
+        },
+        {
+          "code": "strict_golden_fund_not_covered",
+          "severity": "block",
+          "scope": "fund",
+          "fund_code": "096001",
+          "message": "096001 不在 strict golden answer v1 fund-level coverage 中。",
+          "owner": "future QDII diagnosis or taxonomy / asset-class fitness gate",
+          "next_gate": "QDII diagnosis or explicit QDII deferred-from-v1 disposition gate",
+          "evidence_artifacts": [
+            "docs/reviews/release-maintenance-consolidation-post-021539-disposition-controller-judgment-20260527.md"
+          ]
+        },
+        {
+          "code": "fixture_promotion_absent",
+          "severity": "block",
+          "scope": "fund",
+          "fund_code": "096001",
+          "message": "096001 未发现 accepted fixture promotion state。",
+          "owner": "future QDII diagnosis or taxonomy / asset-class fitness gate",
+          "next_gate": "QDII diagnosis or explicit QDII deferred-from-v1 disposition gate",
+          "evidence_artifacts": [
+            "docs/reviews/release-maintenance-consolidation-post-021539-disposition-controller-judgment-20260527.md"
+          ]
+        },
+        {
+          "code": "qdii_coverage_blocked",
+          "severity": "block",
+          "scope": "slot",
+          "fund_code": "096001",
+          "message": "QDII replacement hard stop accepted; candidate quality block after eligible provenance.",
+          "owner": "future QDII diagnosis or taxonomy / asset-class fitness gate",
+          "next_gate": "QDII diagnosis or explicit QDII deferred-from-v1 disposition gate",
+          "evidence_artifacts": [
+            "docs/reviews/release-maintenance-consolidation-post-021539-disposition-controller-judgment-20260527.md"
+          ]
+        }
+      ],
+      "warnings": [
+        {
+          "code": "source_provenance_eligible_fallback",
+          "severity": "warn",
+          "scope": "fund",
+          "fund_code": "096001",
+          "message": "096001 fallback eligible；仅解除 source blocker，不证明 ready。",
+          "owner": "future QDII diagnosis or taxonomy / asset-class fitness gate",
+          "next_gate": "QDII diagnosis or explicit QDII deferred-from-v1 disposition gate",
+          "evidence_artifacts": [
+            "docs/reviews/release-maintenance-consolidation-post-021539-disposition-controller-judgment-20260527.md"
+          ]
+        }
+      ],
+      "resolved_items": [],
+      "owner": "future QDII diagnosis or taxonomy / asset-class fitness gate",
+      "next_gate": "QDII diagnosis or explicit QDII deferred-from-v1 disposition gate",
+      "evidence_artifacts": [
+        "docs/reviews/release-maintenance-consolidation-post-021539-disposition-controller-judgment-20260527.md"
+      ]
+    },
+    {
+      "fund_code": "040046",
+      "report_year": 2024,
+      "fund_name": "华安纳斯达克100ETF联接(QDII)A",
+      "app_category": "海外股票类",
+      "classified_fund_type": "qdii_fund",
+      "readiness": "blocked",
+      "promotion_state": "not_promoted",
+      "source_provenance_status": "complete",
+      "fallback_eligibility": "eligible",
+      "quality_gate_status": "block",
+      "strict_golden_coverage": "fund_not_covered",
+      "fixture_promotion_state": "absent",
+      "raw_disposition": "quality_blocked_after_provenance_hard_stop",
+      "preflight_disposition": "blocked",
+      "blockers": [
+        {
+          "code": "strict_golden_not_configured",
+          "severity": "block",
+          "scope": "fund",
+          "fund_code": "040046",
+          "message": "040046 score correctness 为 not_configured。",
+          "owner": "future QDII diagnosis or taxonomy / asset-class fitness gate",
+          "next_gate": "QDII diagnosis or explicit QDII deferred-from-v1 disposition gate",
+          "evidence_artifacts": [
+            "docs/reviews/release-maintenance-consolidation-post-021539-disposition-controller-judgment-20260527.md"
+          ]
+        },
+        {
+          "code": "quality_gate_block",
+          "severity": "block",
+          "scope": "fund",
+          "fund_code": "040046",
+          "message": "040046 quality gate status=block。",
+          "owner": "future QDII diagnosis or taxonomy / asset-class fitness gate",
+          "next_gate": "QDII diagnosis or explicit QDII deferred-from-v1 disposition gate",
+          "evidence_artifacts": [
+            "docs/reviews/release-maintenance-consolidation-post-021539-disposition-controller-judgment-20260527.md"
+          ]
+        },
+        {
+          "code": "strict_golden_fund_not_covered",
+          "severity": "block",
+          "scope": "fund",
+          "fund_code": "040046",
+          "message": "040046 不在 strict golden answer v1 fund-level coverage 中。",
+          "owner": "future QDII diagnosis or taxonomy / asset-class fitness gate",
+          "next_gate": "QDII diagnosis or explicit QDII deferred-from-v1 disposition gate",
+          "evidence_artifacts": [
+            "docs/reviews/release-maintenance-consolidation-post-021539-disposition-controller-judgment-20260527.md"
+          ]
+        },
+        {
+          "code": "fixture_promotion_absent",
+          "severity": "block",
+          "scope": "fund",
+          "fund_code": "040046",
+          "message": "040046 未发现 accepted fixture promotion state。",
+          "owner": "future QDII diagnosis or taxonomy / asset-class fitness gate",
+          "next_gate": "QDII diagnosis or explicit QDII deferred-from-v1 disposition gate",
+          "evidence_artifacts": [
+            "docs/reviews/release-maintenance-consolidation-post-021539-disposition-controller-judgment-20260527.md"
+          ]
+        },
+        {
+          "code": "qdii_coverage_blocked",
+          "severity": "block",
+          "scope": "slot",
+          "fund_code": "040046",
+          "message": "QDII replacement hard stop accepted; candidate quality block after eligible provenance.",
+          "owner": "future QDII diagnosis or taxonomy / asset-class fitness gate",
+          "next_gate": "QDII diagnosis or explicit QDII deferred-from-v1 disposition gate",
+          "evidence_artifacts": [
+            "docs/reviews/release-maintenance-consolidation-post-021539-disposition-controller-judgment-20260527.md"
+          ]
+        }
+      ],
+      "warnings": [
+        {
+          "code": "source_provenance_eligible_fallback",
+          "severity": "warn",
+          "scope": "fund",
+          "fund_code": "040046",
+          "message": "040046 fallback eligible；仅解除 source blocker，不证明 ready。",
+          "owner": "future QDII diagnosis or taxonomy / asset-class fitness gate",
+          "next_gate": "QDII diagnosis or explicit QDII deferred-from-v1 disposition gate",
+          "evidence_artifacts": [
+            "docs/reviews/release-maintenance-consolidation-post-021539-disposition-controller-judgment-20260527.md"
+          ]
+        }
+      ],
+      "resolved_items": [],
+      "owner": "future QDII diagnosis or taxonomy / asset-class fitness gate",
+      "next_gate": "QDII diagnosis or explicit QDII deferred-from-v1 disposition gate",
+      "evidence_artifacts": [
+        "docs/reviews/release-maintenance-consolidation-post-021539-disposition-controller-judgment-20260527.md"
+      ]
+    },
+    {
+      "fund_code": "019172",
+      "report_year": 2024,
+      "fund_name": "摩根纳斯达克100指数(QDII)人民币A",
+      "app_category": "海外股票类",
+      "classified_fund_type": "qdii_fund",
+      "readiness": "blocked",
+      "promotion_state": "not_promoted",
+      "source_provenance_status": "complete",
+      "fallback_eligibility": "eligible",
+      "quality_gate_status": "block",
+      "strict_golden_coverage": "fund_not_covered",
+      "fixture_promotion_state": "absent",
+      "raw_disposition": "quality_blocked_after_provenance_hard_stop",
+      "preflight_disposition": "blocked",
+      "blockers": [
+        {
+          "code": "strict_golden_not_configured",
+          "severity": "block",
+          "scope": "fund",
+          "fund_code": "019172",
+          "message": "019172 score correctness 为 not_configured。",
+          "owner": "future QDII diagnosis or taxonomy / asset-class fitness gate",
+          "next_gate": "QDII diagnosis or explicit QDII deferred-from-v1 disposition gate",
+          "evidence_artifacts": [
+            "docs/reviews/release-maintenance-consolidation-post-021539-disposition-controller-judgment-20260527.md"
+          ]
+        },
+        {
+          "code": "quality_gate_block",
+          "severity": "block",
+          "scope": "fund",
+          "fund_code": "019172",
+          "message": "019172 quality gate status=block。",
+          "owner": "future QDII diagnosis or taxonomy / asset-class fitness gate",
+          "next_gate": "QDII diagnosis or explicit QDII deferred-from-v1 disposition gate",
+          "evidence_artifacts": [
+            "docs/reviews/release-maintenance-consolidation-post-021539-disposition-controller-judgment-20260527.md"
+          ]
+        },
+        {
+          "code": "strict_golden_fund_not_covered",
+          "severity": "block",
+          "scope": "fund",
+          "fund_code": "019172",
+          "message": "019172 不在 strict golden answer v1 fund-level coverage 中。",
+          "owner": "future QDII diagnosis or taxonomy / asset-class fitness gate",
+          "next_gate": "QDII diagnosis or explicit QDII deferred-from-v1 disposition gate",
+          "evidence_artifacts": [
+            "docs/reviews/release-maintenance-consolidation-post-021539-disposition-controller-judgment-20260527.md"
+          ]
+        },
+        {
+          "code": "fixture_promotion_absent",
+          "severity": "block",
+          "scope": "fund",
+          "fund_code": "019172",
+          "message": "019172 未发现 accepted fixture promotion state。",
+          "owner": "future QDII diagnosis or taxonomy / asset-class fitness gate",
+          "next_gate": "QDII diagnosis or explicit QDII deferred-from-v1 disposition gate",
+          "evidence_artifacts": [
+            "docs/reviews/release-maintenance-consolidation-post-021539-disposition-controller-judgment-20260527.md"
+          ]
+        },
+        {
+          "code": "qdii_coverage_blocked",
+          "severity": "block",
+          "scope": "slot",
+          "fund_code": "019172",
+          "message": "QDII replacement hard stop accepted; candidate quality block after eligible provenance.",
+          "owner": "future QDII diagnosis or taxonomy / asset-class fitness gate",
+          "next_gate": "QDII diagnosis or explicit QDII deferred-from-v1 disposition gate",
+          "evidence_artifacts": [
+            "docs/reviews/release-maintenance-consolidation-post-021539-disposition-controller-judgment-20260527.md"
+          ]
+        }
+      ],
+      "warnings": [
+        {
+          "code": "source_provenance_eligible_fallback",
+          "severity": "warn",
+          "scope": "fund",
+          "fund_code": "019172",
+          "message": "019172 fallback eligible；仅解除 source blocker，不证明 ready。",
+          "owner": "future QDII diagnosis or taxonomy / asset-class fitness gate",
+          "next_gate": "QDII diagnosis or explicit QDII deferred-from-v1 disposition gate",
+          "evidence_artifacts": [
+            "docs/reviews/release-maintenance-consolidation-post-021539-disposition-controller-judgment-20260527.md"
+          ]
+        }
+      ],
+      "resolved_items": [],
+      "owner": "future QDII diagnosis or taxonomy / asset-class fitness gate",
+      "next_gate": "QDII diagnosis or explicit QDII deferred-from-v1 disposition gate",
+      "evidence_artifacts": [
+        "docs/reviews/release-maintenance-consolidation-post-021539-disposition-controller-judgment-20260527.md"
+      ]
+    },
+    {
+      "fund_code": "021539",
+      "report_year": 2024,
+      "fund_name": "华安法国CAC40ETF发起式联接(QDII)A",
+      "app_category": "海外股票类",
+      "classified_fund_type": "qdii_fund",
+      "readiness": "blocked",
+      "promotion_state": "not_promoted",
+      "source_provenance_status": "complete",
+      "fallback_eligibility": "eligible",
+      "quality_gate_status": "block",
+      "strict_golden_coverage": "fund_not_covered",
+      "fixture_promotion_state": "absent",
+      "raw_disposition": "quality_blocked_after_provenance_hard_stop",
+      "preflight_disposition": "blocked",
+      "blockers": [
+        {
+          "code": "strict_golden_not_configured",
+          "severity": "block",
+          "scope": "fund",
+          "fund_code": "021539",
+          "message": "021539 score correctness 为 not_configured。",
+          "owner": "future QDII diagnosis or taxonomy / asset-class fitness gate",
+          "next_gate": "QDII diagnosis or explicit QDII deferred-from-v1 disposition gate",
+          "evidence_artifacts": [
+            "docs/reviews/release-maintenance-consolidation-post-021539-disposition-controller-judgment-20260527.md"
+          ]
+        },
+        {
+          "code": "quality_gate_block",
+          "severity": "block",
+          "scope": "fund",
+          "fund_code": "021539",
+          "message": "021539 quality gate status=block。",
+          "owner": "future QDII diagnosis or taxonomy / asset-class fitness gate",
+          "next_gate": "QDII diagnosis or explicit QDII deferred-from-v1 disposition gate",
+          "evidence_artifacts": [
+            "docs/reviews/release-maintenance-consolidation-post-021539-disposition-controller-judgment-20260527.md"
+          ]
+        },
+        {
+          "code": "strict_golden_fund_not_covered",
+          "severity": "block",
+          "scope": "fund",
+          "fund_code": "021539",
+          "message": "021539 不在 strict golden answer v1 fund-level coverage 中。",
+          "owner": "future QDII diagnosis or taxonomy / asset-class fitness gate",
+          "next_gate": "QDII diagnosis or explicit QDII deferred-from-v1 disposition gate",
+          "evidence_artifacts": [
+            "docs/reviews/release-maintenance-consolidation-post-021539-disposition-controller-judgment-20260527.md"
+          ]
+        },
+        {
+          "code": "fixture_promotion_absent",
+          "severity": "block",
+          "scope": "fund",
+          "fund_code": "021539",
+          "message": "021539 未发现 accepted fixture promotion state。",
+          "owner": "future QDII diagnosis or taxonomy / asset-class fitness gate",
+          "next_gate": "QDII diagnosis or explicit QDII deferred-from-v1 disposition gate",
+          "evidence_artifacts": [
+            "docs/reviews/release-maintenance-consolidation-post-021539-disposition-controller-judgment-20260527.md"
+          ]
+        },
+        {
+          "code": "qdii_coverage_blocked",
+          "severity": "block",
+          "scope": "slot",
+          "fund_code": "021539",
+          "message": "QDII replacement hard stop accepted; candidate quality block after eligible provenance.",
+          "owner": "future QDII diagnosis or taxonomy / asset-class fitness gate",
+          "next_gate": "QDII diagnosis or explicit QDII deferred-from-v1 disposition gate",
+          "evidence_artifacts": [
+            "docs/reviews/release-maintenance-consolidation-post-021539-disposition-controller-judgment-20260527.md"
+          ]
+        }
+      ],
+      "warnings": [
+        {
+          "code": "source_provenance_eligible_fallback",
+          "severity": "warn",
+          "scope": "fund",
+          "fund_code": "021539",
+          "message": "021539 fallback eligible；仅解除 source blocker，不证明 ready。",
+          "owner": "future QDII diagnosis or taxonomy / asset-class fitness gate",
+          "next_gate": "QDII diagnosis or explicit QDII deferred-from-v1 disposition gate",
+          "evidence_artifacts": [
+            "docs/reviews/release-maintenance-consolidation-post-021539-disposition-controller-judgment-20260527.md"
+          ]
+        }
+      ],
+      "resolved_items": [],
+      "owner": "future QDII diagnosis or taxonomy / asset-class fitness gate",
+      "next_gate": "QDII diagnosis or explicit QDII deferred-from-v1 disposition gate",
+      "evidence_artifacts": [
+        "docs/reviews/release-maintenance-consolidation-post-021539-disposition-controller-judgment-20260527.md"
+      ]
+    },
+    {
+      "fund_code": "FOF_SLOT",
+      "report_year": 2024,
+      "fund_name": "Pure FOF coverage slot",
+      "app_category": "FOF",
+      "classified_fund_type": "fof_fund",
+      "readiness": "blocked",
+      "promotion_state": "not_promoted",
+      "source_provenance_status": "not_evaluated",
+      "fallback_eligibility": "not_evaluated",
+      "quality_gate_status": "not_evaluated",
+      "strict_golden_coverage": "not_applicable",
+      "fixture_promotion_state": "not_applicable",
+      "raw_disposition": "data_gap_taxonomy_pending",
+      "preflight_disposition": "needs_taxonomy_gate",
+      "blockers": [
+        {
+          "code": "fof_taxonomy_pending",
+          "severity": "block",
+          "scope": "slot",
+          "fund_code": "FOF_SLOT",
+          "message": "Pure FOF taxonomy pending；QDII-FOF 不可计为 pure FOF。",
+          "owner": "future FOF taxonomy / pure FOF candidate gate",
+          "next_gate": "pure FOF repository-verified candidate gate",
+          "evidence_artifacts": [
+            "docs/reviews/release-maintenance-consolidation-post-021539-disposition-controller-judgment-20260527.md"
+          ]
+        },
+        {
+          "code": "fof_data_gap",
+          "severity": "block",
+          "scope": "slot",
+          "fund_code": "FOF_SLOT",
+          "message": "缺少 repository-verified pure FOF candidate。",
+          "owner": "future FOF taxonomy / pure FOF candidate gate",
+          "next_gate": "pure FOF repository-verified candidate gate",
+          "evidence_artifacts": [
+            "docs/reviews/release-maintenance-consolidation-post-021539-disposition-controller-judgment-20260527.md"
+          ]
+        }
+      ],
+      "warnings": [],
+      "resolved_items": [],
+      "owner": "future FOF taxonomy / pure FOF candidate gate",
+      "next_gate": "pure FOF repository-verified candidate gate",
+      "evidence_artifacts": [
+        "docs/reviews/release-maintenance-consolidation-post-021539-disposition-controller-judgment-20260527.md"
+      ]
+    }
+  ],
+  "global_blockers": [
+    {
+      "code": "fixture_promotion_absent",
+      "severity": "block",
+      "scope": "global",
+      "fund_code": null,
+      "message": "未提供 accepted fixture promotion state manifest。",
+      "owner": "future fixture promotion gate",
+      "next_gate": "produce accepted fixture promotion state manifest",
+      "evidence_artifacts": []
+    },
+    {
+      "code": "qdii_replacement_hard_stop",
+      "severity": "block",
+      "scope": "global",
+      "fund_code": null,
+      "message": "QDII replacement hard stop accepted；禁止继续 automatic QDII probing。",
+      "owner": "future QDII diagnosis or taxonomy / asset-class fitness gate",
+      "next_gate": "QDII diagnosis or explicit QDII deferred-from-v1 disposition gate",
+      "evidence_artifacts": [
+        "docs/reviews/release-maintenance-source-provenance-post-implementation-bounded-evidence-rerun-controller-judgment-20260527.md",
+        "docs/reviews/release-maintenance-110020-reviewed-coverage-candidate-evidence-controller-judgment-20260527.md",
+        "docs/reviews/release-maintenance-consolidation-post-021539-disposition-controller-judgment-20260527.md",
+        "docs/reviews/release-maintenance-drawdown-stress-nav-derived-metric-controller-judgment-20260529.md"
+      ]
+    }
+  ],
+  "resolved_items": [
+    {
+      "code": "blocker_resolved",
+      "original_blocker_code": "bond_risk_evidence_missing",
+      "fund_code": "006597",
+      "message": "006597 bond_risk_evidence_missing resolved by accepted NAV-derived drawdown metric gate.",
+      "evidence_artifacts": [
+        "docs/reviews/release-maintenance-drawdown-stress-nav-derived-metric-controller-judgment-20260529.md"
+      ]
+    }
+  ],
+  "blocking_questions": [
+    "是否产出 accepted fixture promotion state manifest，并由独立 gate 接受？",
+    "pure FOF coverage 是否已有 repository-verified candidate 和 taxonomy gate？",
+    "110020 是否完成 methodology/constituents/reviewed fact freeze gate？"
+  ]
+}
