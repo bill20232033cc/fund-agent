@@ -3,15 +3,113 @@
 from __future__ import annotations
 
 from datetime import timedelta
+from pathlib import Path
 
 from fund_agent.host import (
+    build_safe_diagnostics,
     HostCancelReason,
     HostRunContext,
     HostRunStatus,
+    HostRuntimeError,
     HostRuntimeRunner,
     HostTimeoutClassification,
 )
 from fund_agent.host.runtime import HostRunEventType
+
+_HOST_PACKAGE_ROOT = Path(__file__).parents[2] / "fund_agent" / "host"
+
+
+def test_host_package_does_not_import_service_or_fund_layers() -> None:
+    """验证 Host 包不导入 Service 或 Fund 层实现。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 Host 越过 `UI -> Service -> Host -> Agent` 边界时抛出。
+    """
+
+    for source_path in _HOST_PACKAGE_ROOT.rglob("*.py"):
+        source = source_path.read_text(encoding="utf-8")
+        assert "fund_agent.services" not in source
+        assert "fund_agent.fund" not in source
+
+
+def test_host_runner_source_has_no_fund_business_semantics() -> None:
+    """验证 Host runner 不理解基金业务或 Service ExecutionContract 字段。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 Host 源码出现基金业务字段或 typed request 字段时抛出。
+    """
+
+    host_source = "\n".join(
+        source_path.read_text(encoding="utf-8")
+        for source_path in sorted(_HOST_PACKAGE_ROOT.rglob("*.py"))
+    )
+    forbidden_terms = (
+        "FundLLMExecutionContract",
+        "FundLLMExecutionRequest",
+        "FundAnalysisRequest",
+        "ExecutionContract",
+        "fund_code",
+        "report_year",
+        "report_mode",
+        "llm_opt_in_mode",
+        "analysis_input",
+        "chapter_policy",
+        "assembly_policy",
+        "provider_runtime_budget",
+        "quality_fail_closed_policy",
+        "quality_policy",
+        "preferred_lens",
+        "ITEM_RULE",
+        "CHAPTER_CONTRACT",
+        "FundDocumentRepository",
+        "extra_payload",
+    )
+
+    for term in forbidden_terms:
+        assert term not in host_source
+
+
+def test_build_safe_diagnostics_rejects_forbidden_business_payload_keys() -> None:
+    """验证 Host 安全诊断拒绝 prompt、草稿、原始响应和 secret 字段。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当不安全诊断字段被 Host 接受时抛出。
+    """
+
+    forbidden_keys = (
+        "system_prompt",
+        "chapter_draft",
+        "raw_provider_response",
+        "raw_audit_response",
+        "Authorization",
+        "api_key",
+    )
+
+    for key in forbidden_keys:
+        try:
+            build_safe_diagnostics({key: "secret payload"})
+        except HostRuntimeError as exc:
+            assert key.lower() in str(exc).lower()
+        else:  # pragma: no cover - 分支存在是为了给断言失败明确消息。
+            raise AssertionError(f"Host safe diagnostics accepted forbidden key: {key}")
 
 
 def test_run_sync_success_emits_terminal_result() -> None:

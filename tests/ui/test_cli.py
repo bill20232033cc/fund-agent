@@ -1999,6 +1999,83 @@ def test_analyze_cli_use_llm_host_failure_is_not_double_wrapped(
     assert "llm fixture failure" not in result.stderr
 
 
+def test_analyze_cli_use_llm_host_terminal_failure_does_not_fake_success(
+    monkeypatch,
+) -> None:  # type: ignore[no-untyped-def]
+    """验证 Host failed 终态不会被 CLI 当作成功报告输出。
+
+    Args:
+        monkeypatch: pytest monkeypatch fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 Host failed 被吞掉或伪造成成功时抛出。
+    """
+
+    _FailingLLMService.analyze_called = False
+    _FailingLLMService.analyze_with_llm_execution_called = False
+    monkeypatch.setattr(cli, "FundAnalysisService", _FailingLLMService)
+    monkeypatch.setattr(
+        cli,
+        "build_fund_llm_execution_request",
+        _fake_build_fund_llm_execution_request,
+    )
+    runner = CliRunner()
+
+    result = runner.invoke(cli.app, ["analyze", "110011", "--use-llm"])
+
+    assert result.exit_code == 1
+    assert result.stdout == ""
+    assert "LLM Host run 未完成：" in result.stderr
+    assert "status=failed" in result.stderr
+    assert "error_type=RuntimeError" in result.stderr
+    assert "status=succeeded" not in result.stderr
+    assert "# LLM report" not in result.output
+    assert "# 0. 投资要点概览" not in result.output
+
+
+def test_cli_use_llm_host_boundary_only_reads_runtime_timeout_scalar() -> None:
+    """验证 CLI Host closure 只从 Service-owned request 读取 Host timeout 标量。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 CLI Host boundary 读取业务字段或运行计划内部策略时抛出。
+    """
+
+    cli_source = Path(cli.__file__).read_text(encoding="utf-8")
+    function_start = cli_source.index("def _run_llm_analysis_in_host(")
+    function_end = cli_source.index("\ndef _hosted_llm_incomplete_message", function_start)
+    function_source = cli_source[function_start:function_end]
+    forbidden_terms = (
+        "execution_request.contract",
+        ".fund_code",
+        ".report_year",
+        ".report_mode",
+        ".llm_opt_in_mode",
+        ".analysis_input",
+        ".quality_policy",
+        ".chapter_policy",
+        ".assembly_policy",
+        ".provider_runtime_budget",
+        ".quality_fail_closed_policy",
+        ".safe_diagnostic_policy",
+        ".llm_clients",
+        "extra_payload",
+    )
+
+    assert "execution_request.runtime_plan.host_timeout_seconds" in function_source
+    assert "service.analyze_with_llm_execution(" in function_source
+    for term in forbidden_terms:
+        assert term not in function_source
+
+
 def test_cli_module_imports_service_but_not_agent_internals() -> None:
     """验证 UI 只依赖 Service，不直接导入 Agent 内部模块。
 

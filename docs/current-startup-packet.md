@@ -16,10 +16,10 @@ Use `docs/reviews/` and `docs/archive/` only as evidence chain. They do not over
 | Field | State |
 |---|---|
 | Current phase | `MVP real-provider stabilization and score-loop phase` |
-| Current gate | `MVP internalized Host runtime governance adapter implementation gate` |
+| Current gate | `MVP Service ExecutionContract boundary hardening gate` |
 | Current gate classification | `heavy` |
-| Current gate status | accepted locally; full validation and review/re-review passed; checkpoint created in this gate |
-| Next entry point | `MVP Service ExecutionContract boundary hardening gate` |
+| Current gate status | Slice 1-4 accepted locally; checkpoints `4691da5`, `854d4b8`, `19b08cf`, `this Slice 4 checkpoint commit` |
+| Next entry point | Controller-owned aggregate deepreview decision for the completed `MVP Service ExecutionContract boundary hardening gate` |
 | Control truth | `docs/implementation-control.md` |
 | Design truth | `docs/design.md` |
 | Accepted plan commit | `beb6891` |
@@ -29,13 +29,13 @@ Use `docs/reviews/` and `docs/archive/` only as evidence chain. They do not over
 | Accepted aggregate review commit | `7a3dab9` |
 | Accepted closeout entrypoint commit | `b0e68e0` |
 
-The user authorized the draft PR gate earlier, but this phase made no external PR changes. PR #21 remains draft/open. Provider auth/config verification passes for the current MiMo-compatible configuration, Gate A hardened writer/auditor protocol, provider runtime timeout hardening is accepted locally, and L1 calibration is accepted locally. Gate B remains blocked because real provider smoke still exits `1` without a complete 0-7 report. Independent body chapter execution and prompt-cost calibration are accepted locally. The current provider blocker is `provider_runtime_timeout_small_prompt`: chapters 1-6 writer calls are all below `3000` approximate prompt tokens yet time out under the bounded `60s x2` writer budget. Current `--use-llm` implementation is `CLI -> Host runner -> Service -> fund_agent/fund -> provider HTTP call`; default deterministic `analyze/checklist` still bypass Host. A prior direct `dayu.host` adapter implementation preflight is blocked because local importability came from undeclared `dayu-agent==0.1.4`; user has rejected direct `dayu-agent` production runtime dependency. Dayu is now an architecture reference and capability source, not a production runtime interface dependency. User-facing MVP readiness now has an accepted internalized Host runtime governance adapter for global deadline, cancel, terminal run state, safe diagnostics and run lifecycle. Internalized Agent engine/tool-loop migration remains a later gate. Gate C score-loop design is accepted as design-only and must not be treated as readiness/golden/quality-gate pass.
+The user authorized the draft PR gate earlier, but this phase made no external PR changes. PR #21 remains draft/open. Provider auth/config verification passes for the current MiMo-compatible configuration, Gate A hardened writer/auditor protocol, provider runtime timeout hardening is accepted locally, and L1 calibration is accepted locally. Gate B remains blocked because real provider smoke still exits `1` without a complete 0-7 report. Independent body chapter execution and prompt-cost calibration are accepted locally. The current provider blocker is `provider_runtime_timeout_small_prompt`: chapters 1-6 writer calls are all below `3000` approximate prompt tokens yet time out under the bounded `60s x2` writer budget. Current `--use-llm` implementation is `CLI -> Service prepares FundLLMExecutionRequest / ExecutionContract -> Host runner -> Service -> fund_agent/fund -> provider HTTP call`; default deterministic `analyze/checklist` still bypass Host. Service owns `FundLLMExecutionContract`, `FundLLMExecutionRequest`, runtime plan and provider clients; Host only receives generic operation/deadline/session fields and does not understand fund business semantics. A prior direct `dayu.host` adapter implementation preflight is blocked because local importability came from undeclared `dayu-agent==0.1.4`; user has rejected direct `dayu-agent` production runtime dependency. Dayu is now an architecture reference and capability source, not a production runtime interface dependency. User-facing MVP readiness now has an accepted internalized Host runtime governance adapter for global deadline, cancel, terminal run state, safe diagnostics and run lifecycle. Async Host runner, durable session/resume/memory/outbox and internalized Agent engine/tool-loop migration remain later gates. Gate C score-loop design is accepted as design-only and must not be treated as readiness/golden/quality-gate pass.
 
 ## 3. Current Implementation Facts
 
 - Default report generation is deterministic `fund-analysis analyze`.
 - Current checklist generation is deterministic `fund-analysis checklist`.
-- Current path is `CLI -> Service -> fund_agent/fund -> provider HTTP call`.
+- Current deterministic path is `CLI -> Service -> fund_agent/fund`.
 - Service orchestrates the current use case and calls Fund public capabilities directly as a transition path.
 - Fund owns the Agent-layer domain rules: fund-type recognition, annual-report facts, CHAPTER_CONTRACT, preferred_lens, ITEM_RULE, audit rules and evidence anchors.
 - Current report rendering uses the 8-chapter deterministic template.
@@ -54,7 +54,7 @@ The user authorized the draft PR gate earlier, but this phase made no external P
 - Slice 4A deterministic assembly generates chapter 7 from existing `FinalJudgmentDecision`, then chapter 0 from accepted conclusions plus a Gate 4-local typed chapter 7 summary; render order is `0 -> 1-6 -> 7`.
 - Service now has Gate 4 Slice 4B `FundAnalysisService.analyze_with_llm()` and `FundLLMAnalysisResult`: it reuses `_run_analysis_core()`, calls Gate 3 with explicit injected LLM clients, always calls Slice 4A final assembly, and does not fall back to deterministic markdown.
 - Slice 4B does not implement CLI `--use-llm`, production LLM provider construction, chapter 0/7 LLM polish/audit, or Evidence Confirm.
-- CLI now exposes `fund-analysis analyze --use-llm` as an explicit opt-in provider-backed path. With complete typed env config, CLI builds Service-owned `openai_compatible` HTTP chat-completions writer/auditor clients over existing `httpx` and calls `FundAnalysisService.analyze_with_llm()`.
+- CLI now exposes `fund-analysis analyze --use-llm` as an explicit opt-in provider-backed path. With complete typed env config, Service builds `FundLLMExecutionRequest` / `FundLLMExecutionContract`, runtime plan and Service-owned `openai_compatible` HTTP chat-completions writer/auditor clients over existing `httpx`; CLI gives Host only generic run parameters plus `runtime_plan.host_timeout_seconds`, and Host invokes Service `FundAnalysisService.analyze_with_llm_execution()`.
 - Missing/invalid LLM config and provider construction fail before Service execution with exit code `1` and empty stdout. Provider runtime failures, writer/auditor blocked status, partial orchestration and incomplete final assembly also fail closed with exit code `1`; there is no deterministic fallback.
 - Pytest coverage for the provider path uses fake env mappings, `httpx.MockTransport` and monkeypatch/test doubles; no live provider smoke or real API key is required.
 - Gate A hardened the LLM writer/auditor path for real providers: writer requires fixed body sections and exact `required_output` markers, parser preserves `missing_required_structure`, `missing_required_output_marker`, `unknown_anchor`, `response_too_long` and `response_incomplete`, auditor parse failure remains blocked, regenerate receives typed `ChapterRepairContext`, and provider runtime exceptions classify to `llm_timeout`, `llm_rate_limited`, `llm_malformed_response` or `llm_network_error`.
@@ -67,7 +67,7 @@ The user authorized the draft PR gate earlier, but this phase made no external P
 - Independent body chapter execution accepted locally: template chapters 1-6 now each run their own writer/auditor/repair attempts from the same `ChapterFactProjection`; prior body chapter failure no longer skips later body chapters; `dependency_missing` is reserved for a true writer dependency stop reason. CLI incomplete output now includes a safe all-chapter matrix; final assembly remains fail-closed and cannot turn a partial matrix into an accepted report.
 - Latest prompt-cost/root-cause calibration rerun for `006597 / 2024 --use-llm`: CLI exit `1`, stdout empty, no deterministic fallback, `orchestration_status=partial`, `final_assembly_status=incomplete`; same-source Service diagnostic with `prompt_payload_mode=compact` has `generated_chapter_ids=[1,2,3,4,5,6]`, `skipped_chapter_ids=[]`, `accepted_chapter_ids=[]`, `report_markdown_present=false`. Primary blocker is `provider_runtime_timeout_small_prompt`: chapters 1-6 all fail writer timeout with approximate prompt tokens `2109`, `1590`, `2575`, `1274`, `2518`, `2110` under `60s x2` bounded writer budget. Chapter 2/6 former large prompt cost is reduced from approx `26086` / `29078` to `1590` / `2110`.
 - Gate C score-loop design is accepted as design-only: it distinguishes `extraction_score`, `chapter_fact_score` and `chapter_generation_score`, routes provider runtime timeout as `not_scored` / `blocked_provider_runtime`, and remains separate from existing golden / fixtures / score / quality gate / readiness semantics.
-- `--use-llm` now runs through local `HostRuntimeRunner` for run lifecycle, global deadline, cancel token, terminal run state, safe diagnostics and phase events; default deterministic analyze/checklist still bypass Host; no Agent tool-loop or dayu runtime is present.
+- `--use-llm` now runs through local `HostRuntimeRunner` for run lifecycle, global deadline, cancel token, terminal run state, safe diagnostics and phase events; Host does not import Service/Fund and does not inspect fund code/year/type/chapter policy/ExecutionContract business fields; default deterministic analyze/checklist still bypass Host; no Agent tool-loop or dayu runtime is present.
 - Provider runtime budget and prompt-cost diagnostics remain transitional provider-calibration evidence; Host run state now provides the MVP process-local lifecycle boundary but does not solve provider endpoint small-prompt timeouts.
 
 ## 4. Route C Accepted Future Route
@@ -79,11 +79,11 @@ Route C is the accepted MVP LLM report generation route. Gates 1-3 and Gate 4 Sl
 | Gate 1 | `ChapterFactProvider` typed projection is accepted locally as Fund-layer code fact; `facet_recognizer` and full `FundToolService` remain future candidates |
 | Gate 2 | `chapter_writer` + `chapter_auditor` accepted locally as Fund-layer single-chapter primitives |
 | Gate 3 | `chapter_orchestrator` accepted locally as Service-owned write-audit-repair façade for chapters 1-6 |
-| Gate 4 | Slice 4A `final_chapter_assembler`, Slice 4B Service `analyze_with_llm`, Slice 4C CLI `--use-llm` and Slice 4D provider construction accepted locally; aggregate review accepted |
-| Gate 5A | internalized Host runtime governance adapter: MVP process-local implementation wraps `--use-llm`; durable session/resume/memory/reply outbox remain future Host scope |
+| Gate 4 | Slice 4A `final_chapter_assembler`, Slice 4B Service `analyze_with_llm`, Slice 4C CLI `--use-llm`, Slice 4D provider construction and Service-owned ExecutionContract / typed request boundary accepted locally |
+| Gate 5A | internalized Host runtime governance adapter: MVP process-local implementation wraps `--use-llm`; Host is business-agnostic and only receives generic operation/deadline/session fields; async runner and durable session/resume/memory/reply outbox remain future Host scope |
 | Gate 5B | internalized Agent engine/tool-loop migration: future Agent runner/tool-loop/ToolRegistry/ToolTrace work; not the minimal fix for current provider timeout |
 
-Gate 4 Slice 4D accepted typed env config, Service-owned `openai_compatible` provider construction and CLI wiring into `analyze_with_llm()`. Provider runtime timeout hardening later added timeout-only bounded retry/backoff and safe diagnostics. The current route now adds local Host run governance for `--use-llm`; it still does not implement Agent/dayu integration, full FundToolService, live provider smoke acceptance, multi-model writer/auditor split, chapter 0/7 LLM polish or Evidence Confirm.
+Gate 4 Slice 4D accepted typed env config and Service-owned `openai_compatible` provider construction. The current Service ExecutionContract boundary adds `FundLLMExecutionRequest` / `FundLLMExecutionContract` ownership in Service and routes CLI `--use-llm` through `analyze_with_llm_execution()`. Provider runtime timeout hardening later added timeout-only bounded retry/backoff and safe diagnostics. The current route has local Host run governance for `--use-llm`; it still does not implement Agent/dayu integration, full FundToolService, live provider smoke acceptance, multi-model writer/auditor split, chapter 0/7 LLM polish or Evidence Confirm.
 
 ## 5. Boundary Guardrails
 
@@ -92,6 +92,7 @@ Gate 4 Slice 4D accepted typed env config, Service-owned `openai_compatible` pro
 - Service handles use-case orchestration, scene/prompt/ExecutionContract semantics, report strategy and the current Gate 3 write-audit-repair facade.
 - Host handles session/run lifecycle, concurrency, timeout, cancel, resume, memory, reply outbox and event delivery.
 - Host runtime governance must stay internalized and must not directly depend on `dayu-agent` / `dayu.host` as production runtime.
+- Host currently only receives generic operation/deadline/session fields; it must not inspect fund business semantics, Service ExecutionContract business fields, chapter policy or provider clients.
 - Agent handles execution, tool loop, runner, ToolRegistry, ToolTrace, context budget, tool execution and Fund domain capabilities.
 - Future Agent engine/tool loop/runner/ToolRegistry/ToolTrace migration must internalize Dayu Engine capabilities and must not directly depend on `dayu-agent` / `dayu.engine` as production runtime.
 - `fund_agent/fund` is the current Agent-layer Fund domain package.
@@ -110,7 +111,7 @@ Gate 4 Slice 4D accepted typed env config, Service-owned `openai_compatible` pro
 - All promotion states remain `promotion_allowed=false`.
 - QDII, FOF, `110020` and `017641` remain deferred from minimum v1 and not ready for full v1.
 - Release-maintenance long ledger is preserved by links only.
-- Internalized Host runtime governance adapter MVP process-local implementation is complete; durable Host capabilities remain future scope.
+- Internalized Host runtime governance adapter MVP process-local implementation is complete; async runner and durable Host capabilities remain future scope.
 - Internalized Agent engine/tool-loop migration is deferred.
 - Deterministic renderer remains the default production behavior; provider-backed LLM report generation is explicit `--use-llm` opt-in only.
 - Live provider smoke acceptance, multi-model writer/auditor split, chapter 0/7 LLM polish and Evidence Confirm remain future residuals.
