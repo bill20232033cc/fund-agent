@@ -1171,6 +1171,23 @@ def _forbid_llm_execution_request_builder(
     raise AssertionError("LLM execution request builder must not be called")
 
 
+def _forbid_llm_artifact_writer(*args, **kwargs):  # type: ignore[no-untyped-def]
+    """不应触发 LLM artifact 写入的测试路径哨兵。
+
+    Args:
+        args: 未使用。
+        kwargs: 未使用。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 始终抛出。
+    """
+
+    raise AssertionError("LLM artifact writer must not be called")
+
+
 class _FakeHostRuntimeRunner:
     """记录 CLI 传给 Host 的生命周期参数并同步执行 operation。"""
 
@@ -1644,6 +1661,11 @@ def test_analyze_cli_use_llm_missing_config_fails_before_service(
     monkeypatch.setattr(cli, "FundAnalysisService", _FakeService)
     monkeypatch.setattr(cli, "build_fund_llm_execution_request", _raise_llm_config_error)
     monkeypatch.setattr(cli, "HostRuntimeRunner", _RaisingHostRuntimeRunner)
+    monkeypatch.setattr(
+        cli,
+        "write_llm_incomplete_run_artifacts",
+        _forbid_llm_artifact_writer,
+    )
     _reset_fake_host_runner()
     for env_name in (
         "FUND_AGENT_LLM_PROVIDER",
@@ -1806,6 +1828,124 @@ def test_analyze_cli_use_llm_incomplete_result_exits_without_fallback(
     assert "# 0. 投资要点概览" not in result.output
     assert _IncompleteLLMService.analyze_called is False
     assert _IncompleteLLMService.analyze_with_llm_execution_called is True
+
+
+def test_analyze_cli_use_llm_typed_incomplete_writes_artifact_path(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:  # type: ignore[no-untyped-def]
+    """验证 typed incomplete LLM 结果会写 artifact 并保持 fail-closed 输出。
+
+    Args:
+        monkeypatch: pytest monkeypatch fixture。
+        tmp_path: pytest 临时目录 fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 CLI 未调用 artifact writer 或改变 fail-closed 行为时抛出。
+    """
+
+    calls: list[tuple[object, str | None]] = []
+
+    def fake_write(result, *, host_run_id):  # type: ignore[no-untyped-def]
+        """记录 artifact writer 调用并返回安全 manifest 路径。
+
+        Args:
+            result: CLI 传入的 typed incomplete 结果。
+            host_run_id: Host run id。
+
+        Returns:
+            fake artifact 写入结果。
+
+        Raises:
+            无显式抛出。
+        """
+
+        calls.append((result, host_run_id))
+        return cli.LLMRunArtifactWriteResult(
+            artifact_dir=tmp_path / "run",
+            manifest_path=tmp_path / "run/manifest.json",
+            summary_path=tmp_path / "run/summary.json",
+            redaction_applied=False,
+            written_files=(tmp_path / "run/manifest.json",),
+        )
+
+    monkeypatch.setattr(cli, "FundLLMAnalysisResult", _FakeLLMResult)
+    monkeypatch.setattr(cli, "write_llm_incomplete_run_artifacts", fake_write)
+    monkeypatch.setattr(cli, "FundAnalysisService", _IncompleteLLMService)
+    monkeypatch.setattr(
+        cli,
+        "build_fund_llm_execution_request",
+        _fake_build_fund_llm_execution_request,
+    )
+    runner = CliRunner()
+
+    result = runner.invoke(cli.app, ["analyze", "110011", "--use-llm"])
+
+    assert result.exit_code == 1
+    assert result.stdout == ""
+    assert "LLM incomplete diagnostic artifacts:" in result.stderr
+    assert "manifest.json" in result.stderr
+    assert "LLM 分析未完成：" in result.stderr
+    assert "LLM Host run 未完成：" in result.stderr
+    assert len(calls) == 1
+    assert calls[0][1].startswith("host_run_")
+    assert "# 0. 投资要点概览" not in result.output
+
+
+def test_analyze_cli_incomplete_artifact_write_failure_preserves_fail_closed(
+    monkeypatch,
+) -> None:  # type: ignore[no-untyped-def]
+    """验证 artifact 写入失败只输出安全 warning，原 incomplete 仍 fail-closed。
+
+    Args:
+        monkeypatch: pytest monkeypatch fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当写入失败污染 stdout 或隐藏 incomplete 摘要时抛出。
+    """
+
+    def raise_write_failure(result, *, host_run_id):  # type: ignore[no-untyped-def]
+        """模拟 artifact 写入失败。
+
+        Args:
+            result: CLI 传入的 typed incomplete 结果。
+            host_run_id: Host run id。
+
+        Returns:
+            无返回值。
+
+        Raises:
+            OSError: 始终抛出。
+        """
+
+        raise OSError("secret path /tmp/sk-secret")
+
+    monkeypatch.setattr(cli, "FundLLMAnalysisResult", _FakeLLMResult)
+    monkeypatch.setattr(cli, "write_llm_incomplete_run_artifacts", raise_write_failure)
+    monkeypatch.setattr(cli, "FundAnalysisService", _IncompleteLLMService)
+    monkeypatch.setattr(
+        cli,
+        "build_fund_llm_execution_request",
+        _fake_build_fund_llm_execution_request,
+    )
+    runner = CliRunner()
+
+    result = runner.invoke(cli.app, ["analyze", "110011", "--use-llm"])
+
+    assert result.exit_code == 1
+    assert result.stdout == ""
+    assert "LLM incomplete diagnostic artifact warning: write_failed type=OSError" in result.stderr
+    assert "secret path" not in result.stderr
+    assert "sk-secret" not in result.stderr
+    assert "LLM 分析未完成：" in result.stderr
+    assert "LLM Host run 未完成：" in result.stderr
+    assert "# 0. 投资要点概览" not in result.output
 
 
 def test_analyze_cli_use_llm_incomplete_prints_safe_all_chapter_matrix(
@@ -2207,6 +2347,11 @@ def test_analyze_cli_default_product_request(monkeypatch) -> None:  # type: igno
         _forbid_llm_execution_request_builder,
     )
     monkeypatch.setattr(cli, "HostRuntimeRunner", _RaisingHostRuntimeRunner)
+    monkeypatch.setattr(
+        cli,
+        "write_llm_incomplete_run_artifacts",
+        _forbid_llm_artifact_writer,
+    )
     _reset_fake_host_runner()
     runner = CliRunner()
 
@@ -2541,6 +2686,11 @@ def test_checklist_cli_calls_service_and_prints_summary(monkeypatch) -> None:  #
         _forbid_llm_execution_request_builder,
     )
     monkeypatch.setattr(cli, "HostRuntimeRunner", _RaisingHostRuntimeRunner)
+    monkeypatch.setattr(
+        cli,
+        "write_llm_incomplete_run_artifacts",
+        _forbid_llm_artifact_writer,
+    )
     _reset_fake_host_runner()
     runner = CliRunner()
 

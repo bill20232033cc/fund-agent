@@ -54,6 +54,11 @@ from fund_agent.services import (
     ValuationState,
     FundLLMExecutionRequest,
     build_fund_llm_execution_request,
+    FundLLMAnalysisResult,
+)
+from fund_agent.services.llm_run_artifacts import (
+    LLMRunArtifactWriteResult,
+    write_llm_incomplete_run_artifacts,
 )
 
 app = typer.Typer(help="基金行为教练 Agent — 买入前专业级基金体检报告")
@@ -246,6 +251,10 @@ def analyze(
             host_result = _run_llm_analysis_in_host(execution_request)
             if host_result.status != HostRunStatus.SUCCEEDED or host_result.operation_result is None:
                 if host_result.operation_result is not None:
+                    _write_incomplete_llm_artifacts_for_cli(
+                        host_result.operation_result,
+                        host_run_id=host_result.run_id,
+                    )
                     typer.echo(
                         _hosted_llm_incomplete_message(host_result.operation_result, host_result),
                         err=True,
@@ -274,6 +283,7 @@ def analyze(
         typer.echo(f"分析失败：{exc}", err=True)
         raise typer.Exit(code=1) from exc
     if use_llm and result.final_assembly_result.report_markdown is None:
+        _write_incomplete_llm_artifacts_for_cli(result, host_run_id=None)
         typer.echo(_llm_incomplete_message(result), err=True)
         raise typer.Exit(code=1)
     _echo_quality_gate_summary(result)
@@ -886,6 +896,46 @@ def _hosted_llm_incomplete_message(result, host_result: HostRunResult) -> str:  
     """
 
     return f"{_llm_incomplete_message(result)}; {_host_run_failed_message(host_result)}"
+
+
+def _write_incomplete_llm_artifacts_for_cli(
+    result: object,
+    *,
+    host_run_id: str | None,
+) -> LLMRunArtifactWriteResult | None:
+    """为 CLI typed incomplete LLM 结果写入本地诊断 artifact。
+
+    Args:
+        result: Host/Service 返回的 operation result；只有 typed LLM incomplete 结果会写入。
+        host_run_id: Host run id；Host 成功但总装 incomplete 的兜底路径可为 `None`。
+
+    Returns:
+        写入结果；非 typed incomplete 或写入失败时返回 `None`。
+
+    Raises:
+        无显式抛出；写入失败只输出安全 warning 并保持原 fail-closed 流程。
+    """
+
+    if not isinstance(result, FundLLMAnalysisResult):
+        return None
+    if result.final_assembly_result.report_markdown is not None:
+        return None
+    try:
+        artifact_result = write_llm_incomplete_run_artifacts(
+            result,
+            host_run_id=host_run_id,
+        )
+    except Exception as exc:  # noqa: BLE001 - artifact 失败不得覆盖原始 fail-closed 结果。
+        typer.echo(
+            f"LLM incomplete diagnostic artifact warning: write_failed type={type(exc).__name__}",
+            err=True,
+        )
+        return None
+    typer.echo(
+        f"LLM incomplete diagnostic artifacts: {artifact_result.manifest_path}",
+        err=True,
+    )
+    return artifact_result
 
 
 def _host_run_failed_message(host_result: HostRunResult) -> str:
