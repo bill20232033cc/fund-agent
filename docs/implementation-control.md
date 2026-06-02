@@ -41,7 +41,7 @@
 - Writer marker syntax repair 已本地接受：missing marker guidance 改为 explicit contract block，parser / allowed missing reasons 仍严格；真实 provider 已越过上一 gate 的 chapter 1 `writer:invalid_missing_marker` blocker。
 - Programmatic audit L1 calibration 已本地接受：新增安全 `l1_numerical_closure` taxonomy 和 L1 repair guidance，未放松 `_audit_numerical_closure()` 或 anchor proximity；candidate facet / forbidden phrase precedence 保持高于 L1。
 - Provider runtime timeout follow-up 已本地接受：新增 `serialize_chapter_runtime_diagnostics()`、provider-bound prompt/runtime cost 标量和 CLI safe runtime summary；serializer/CLI 不输出 `message`、`model_name`、prompt、draft、raw provider response、raw audit response、API key 或 Authorization header。
-- 最新真实 provider smoke / diagnostic：`006597 / 2024 --use-llm` CLI exit `1` / stdout empty / no deterministic fallback / `orchestration_status=partial` / `final_assembly_status=incomplete`。Same-source Service diagnostic with `prompt_payload_mode=compact` has `generated_chapter_ids=[1,2,3,4,5,6]`, `skipped_chapter_ids=[]`, `accepted_chapter_ids=[]`, `report_markdown_present=false`。Failed rows are provider runtime writer timeouts below the large prompt threshold: chapter 1 approx `2109` tokens, chapter 2 `1590`, chapter 3 `2575`, chapter 4 `1274`, chapter 5 `2518`, chapter 6 `2110`, all under bounded `60s x2` writer budget。Chapter 2/6 former large prompt cost reduced from approx `26086` / `29078` to `1590` / `2110`。No provider config/auth, large prompt cost, prompt contract, audit parse, fact gap or code bug evidence.
+- 最新 accepted provider runtime plan evidence：`006597 / 2024 --use-llm` 2026-06-02 retained run has CLI exit `1`, stdout empty, no deterministic fallback, `orchestration_status=partial`, `final_assembly_status=incomplete`, Ch1/Ch5 accepted, Ch3 `prompt_contract` / `code_bug_other`, and Ch2/Ch4/Ch6 terminal small-prompt `auditor` timeouts at approx `743` / `584` / `731` tokens under `60s x2`。The 2026-05-31 compact-mode diagnostic remains historical context: it showed writer-timeout rows and reduced former Ch2/Ch6 large prompt cost from approx `26086` / `29078` to `1590` / `2110`, but it is not the latest retained-run root-cause claim.
 - Gate C score-loop design 已接受为 design-only：未来必须区分 `extraction_score`、`chapter_fact_score`、`chapter_generation_score`，并把 provider runtime timeout 作为 `not_scored` / `blocked_provider_runtime`，不得接入现有 golden / fixtures / score / quality gate / readiness。
 - 当前 `--use-llm` 路径为 `CLI -> Service prepares FundLLMExecutionRequest / ExecutionContract -> Host runner -> Service -> fund_agent/fund -> provider HTTP call`；默认确定性 `analyze/checklist` 仍为 UI -> Service -> fund_agent/fund 过渡路径；尚未接入 Agent 调度。
 - Service-owned `FundLLMExecutionContract` 只保存基金身份、报告模式、显式 opt-in、规范化业务输入和质量策略声明；provider runtime budget、章节策略、总装策略、安全诊断策略、Host timeout 和 LLM clients 只在 `FundLLMExecutionRequest` / runtime plan 中存在。
@@ -84,6 +84,7 @@
 | Accepted LLM progress/timeout UX plan commit | `5dc865f` |
 | Accepted LLM progress/timeout UX implementation commit | `d656816` |
 | Accepted real LLM chapter acceptance calibration plan commit | `a15dfcb` |
+| Accepted provider runtime budget calibration plan commit | `0fd8b7c` |
 
 ## Current Gate
 
