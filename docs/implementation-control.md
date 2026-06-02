@@ -6,7 +6,7 @@
 > **设计真源**: `docs/design.md`
 > **控制真源**: `docs/implementation-control.md`
 > **短启动入口**: `docs/current-startup-packet.md`
-> **当前状态**: `MVP real LLM observability and chapter acceptance phase` 已启动控制面同步。前置 gate `MVP incomplete LLM run artifact retention gate` 已完成 implementation / AgentDS code review / controller judgment / accepted checkpoint：plan checkpoint `5f18715`，implementation checkpoint `4f7903f`。当前 `--use-llm` 代码事实为 `CLI -> Service prepares FundLLMExecutionRequest / ExecutionContract -> Host runner -> Service -> fund_agent/fund -> provider HTTP call`；typed incomplete LLM result 会在保持 stdout empty、exit code 1、无 deterministic fallback 的前提下，把本地诊断 artifact 写入 ignored `reports/llm-runs/`，包含 manifest、summary、per-chapter JSON、writer draft、repair draft、normalized auditor feedback、chapter matrix 和 first failed diagnostic，并执行 allowlist/redaction。下一 gate 入口是 `MVP LLM run progress and timeout UX gate` 的 plan gate。chapter acceptance calibration、provider runtime budget calibration、score-loop entry、async Host runner、durable session/resume/memory/outbox、Agent engine/tool-loop migration 均保留为后续 gate。Dayu 是架构参考与能力来源，不是生产 runtime 直接依赖；不得把 `dayu-agent` / `dayu.host` / `dayu.engine` 作为生产 runtime 直接依赖。
+> **当前状态**: `MVP real LLM observability and chapter acceptance phase` 正在推进 `MVP LLM run progress and timeout UX gate`。前置 gate `MVP incomplete LLM run artifact retention gate` 已完成 implementation / AgentDS code review / controller judgment / accepted checkpoint：plan checkpoint `5f18715`，implementation checkpoint `4f7903f`。当前 `--use-llm` 代码事实为 `CLI -> Service prepares FundLLMExecutionRequest / ExecutionContract -> Host runner -> Service -> fund_agent/fund -> provider HTTP call`；typed incomplete LLM result 会在保持 stdout empty、exit code 1、无 deterministic fallback 的前提下，把本地诊断 artifact 写入 ignored `reports/llm-runs/`，包含 manifest、summary、per-chapter JSON、writer draft、repair draft、normalized auditor feedback、chapter matrix 和 first failed diagnostic，并执行 allowlist/redaction。`MVP LLM run progress and timeout UX gate` plan 已 accepted，checkpoint `5dc865f`；下一入口是 implementation handoff，只实现安全 stderr progress/timeout UX，不进入 calibration/provider budget/score-loop。chapter acceptance calibration、provider runtime budget calibration、score-loop entry、async Host runner、durable session/resume/memory/outbox、Agent engine/tool-loop migration 均保留为后续 gate。Dayu 是架构参考与能力来源，不是生产 runtime 直接依赖；不得把 `dayu-agent` / `dayu.host` / `dayu.engine` 作为生产 runtime 直接依赖。
 
 ---
 
@@ -17,7 +17,7 @@
 ### Current Truth Guardrails
 
 - `AGENTS.md` 是最高优先级执行规则真源；若与本文档或 `docs/design.md` 冲突，先调整方案/实现，再回写文档。
-- 当前 phase 是 `MVP real LLM observability and chapter acceptance phase`；当前 controller step 是 truth sync；前置 gate `MVP incomplete LLM run artifact retention gate` 已 accepted locally，checkpoint `4f7903f`，AgentDS code review PASS，无 blocking findings。下一 gate 是 `MVP LLM run progress and timeout UX gate` 的 plan gate，分类按 `heavy` 处理，因为它涉及 `--use-llm` CLI/Host 长运行反馈和 timeout presentation。
+- 当前 phase 是 `MVP real LLM observability and chapter acceptance phase`；当前 gate 是 `MVP LLM run progress and timeout UX gate` implementation handoff。该 gate plan 已 accepted locally，checkpoint `5dc865f`，两份 plan re-review PASS，无 blocking findings。gate 分类按 `heavy` 处理，因为它涉及 `--use-llm` CLI/Host 长运行反馈和 timeout presentation。
 - `MVP incomplete LLM run artifact retention gate` 已接受：typed incomplete `analyze --use-llm` run 自动写入 local ignored `reports/llm-runs/` artifact；artifact 写入失败只输出安全 warning，不改变原 fail-closed 退出；accepted final report、deterministic analyze、checklist、config/construction failure、quality gate block 和 Host failure without typed result 不写该 artifact。
 - artifact retention 只解决“失败后可审计”；progress UX、chapter acceptance calibration、provider runtime budget calibration 和 chapter_generation_score 接入均未实现。不得把这些后续 phase gates 写成当前代码事实。
 - 当前默认实现仍以确定性 `fund-analysis analyze/checklist` 为生产主链路：结构化抽取、确定性分析、模板渲染、程序审计和 FQ0-FQ6 quality gate。
@@ -61,10 +61,10 @@
 |---|---|
 | Branch baseline | `feat/mvp-llm-incomplete-run-artifacts` |
 | Current phase | `MVP real LLM observability and chapter acceptance phase` |
-| Current gate | `MVP incomplete LLM run artifact retention gate` accepted; controller truth sync in progress |
-| Current gate classification | `standard` for artifact retention; next progress/timeout UX gate is `heavy` |
-| Current gate status | Plan accepted at `5f18715`; implementation/review/controller judgment accepted at `4f7903f`; AgentDS code review PASS with no blocking findings |
-| Next entry point | `MVP LLM run progress and timeout UX gate` plan gate; do not implement progress UX until plan/review/accepted checkpoint |
+| Current gate | `MVP LLM run progress and timeout UX gate` |
+| Current gate classification | `heavy` |
+| Current gate status | Plan accepted at `5dc865f`; AgentDS and AgentMiMo plan re-reviews PASS with no blocking findings; implementation not started |
+| Next entry point | Dispatch implementation handoff through `$init-agents`; implement only accepted safe stderr progress/timeout UX plan |
 | Next gate classification | `heavy`; progress/timeout UX affects `--use-llm` CLI/Host long-running feedback and timeout diagnostics |
 | Design truth | `docs/design.md` |
 | Control truth | `docs/implementation-control.md` |
@@ -77,12 +77,13 @@
 | Accepted closeout entrypoint commit | `b0e68e0` |
 | Accepted incomplete artifact retention plan commit | `5f18715` |
 | Accepted incomplete artifact retention implementation commit | `4f7903f` |
+| Accepted LLM progress/timeout UX plan commit | `5dc865f` |
 
 ## Current Gate
 
 ### Gate Objective
 
-The current phase objective is to make real LLM failures auditable, reproducible and iteratable before improving chapter accepted rate. The artifact retention gate is accepted locally: incomplete typed `analyze --use-llm` results keep fail-closed stdout/exit behavior while retaining local ignored per-chapter diagnostics. The next gate should plan safe progress and timeout UX for long-running `--use-llm` commands. Calibration of chapters 2/3/6, provider runtime budget changes and score-loop entry remain deferred until their own phase gates. PR #21 must not be marked ready, merged or released from this controller truth sync.
+The current phase objective is to make real LLM failures auditable, reproducible and iteratable before improving chapter accepted rate. The artifact retention gate is accepted locally: incomplete typed `analyze --use-llm` results keep fail-closed stdout/exit behavior while retaining local ignored per-chapter diagnostics. The current gate plan for safe progress and timeout UX is accepted; implementation must add only safe stderr progress/timeout visibility for long-running `--use-llm` commands. Calibration of chapters 2/3/6, provider runtime budget changes and score-loop entry remain deferred until their own phase gates. PR #21 must not be marked ready, merged or released from this controller gate.
 
 ### Current Accepted Artifacts
 
@@ -94,6 +95,12 @@ The current phase objective is to make real LLM failures auditable, reproducible
 | Incomplete LLM artifact retention implementation evidence | `docs/reviews/mvp-incomplete-llm-run-artifact-retention-slice1-implementation-evidence-20260602.md` |
 | Incomplete LLM artifact retention code review | `docs/reviews/mvp-incomplete-llm-run-artifact-retention-slice1-code-review-20260602.md` |
 | Incomplete LLM artifact retention controller judgment | `docs/reviews/mvp-incomplete-llm-run-artifact-retention-slice1-controller-judgment-20260602.md` |
+| LLM progress/timeout UX plan | `docs/reviews/mvp-llm-run-progress-timeout-ux-plan-20260602.md` |
+| LLM progress/timeout UX plan reviews | `docs/reviews/mvp-llm-run-progress-timeout-ux-plan-review-ds-20260602.md`; `docs/reviews/mvp-llm-run-progress-timeout-ux-plan-review-mimo-20260602.md` |
+| LLM progress/timeout UX plan review controller judgment | `docs/reviews/mvp-llm-run-progress-timeout-ux-plan-review-controller-judgment-20260602.md` |
+| LLM progress/timeout UX plan fix evidence | `docs/reviews/mvp-llm-run-progress-timeout-ux-plan-fix-evidence-20260602.md` |
+| LLM progress/timeout UX plan re-reviews | `docs/reviews/mvp-llm-run-progress-timeout-ux-plan-rereview-ds-20260602.md`; `docs/reviews/mvp-llm-run-progress-timeout-ux-plan-rereview-mimo-20260602.md` |
+| LLM progress/timeout UX plan acceptance judgment | `docs/reviews/mvp-llm-run-progress-timeout-ux-plan-controller-judgment-20260602.md` |
 | Source-of-truth plan | `docs/reviews/mvp-truth-pivot-context-compaction-plan-20260530.md` |
 | Independent plan reviews | `docs/reviews/mvp-truth-pivot-context-compaction-plan-review-mimo-20260530.md`; `docs/reviews/mvp-truth-pivot-context-compaction-plan-review-glm-20260530.md` |
 | Implementation evidence | `docs/reviews/mvp-truth-pivot-context-compaction-implementation-evidence-20260530.md` |

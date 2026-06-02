@@ -16,10 +16,10 @@ Use `docs/reviews/` and `docs/archive/` only as evidence chain. They do not over
 | Field | State |
 |---|---|
 | Current phase | `MVP real LLM observability and chapter acceptance phase` |
-| Current gate | `MVP incomplete LLM run artifact retention gate` accepted; controller truth sync in progress |
-| Current gate classification | `standard` for artifact retention; next progress/timeout UX gate is `heavy` |
-| Current gate status | Plan checkpoint `5f18715`; accepted implementation checkpoint `4f7903f`; AgentDS code review PASS with no blocking findings |
-| Next entry point | `MVP LLM run progress and timeout UX gate` plan gate; do not implement progress UX before plan/review/accepted checkpoint |
+| Current gate | `MVP LLM run progress and timeout UX gate` |
+| Current gate classification | `heavy` |
+| Current gate status | Plan checkpoint `5dc865f`; AgentDS and AgentMiMo plan re-reviews PASS with no blocking findings; implementation not started |
+| Next entry point | Dispatch implementation handoff through `$init-agents`; implement only accepted safe stderr progress/timeout UX plan |
 | Control truth | `docs/implementation-control.md` |
 | Design truth | `docs/design.md` |
 | Accepted plan commit | `beb6891` |
@@ -30,8 +30,9 @@ Use `docs/reviews/` and `docs/archive/` only as evidence chain. They do not over
 | Accepted closeout entrypoint commit | `b0e68e0` |
 | Accepted incomplete artifact retention plan commit | `5f18715` |
 | Accepted incomplete artifact retention implementation commit | `4f7903f` |
+| Accepted LLM progress/timeout UX plan commit | `5dc865f` |
 
-The current phase goal is to make real LLM failures auditable, reproducible and iteratable before improving chapter accepted rate. Artifact retention is accepted locally: typed incomplete `fund-analysis analyze --use-llm` results keep stdout empty, exit `1`, and avoid deterministic fallback, while writing local ignored diagnostics under `reports/llm-runs/`. Those diagnostics include manifest, summary, per-chapter JSON, writer draft, repair draft, normalized auditor feedback, chapter matrix and first failed diagnostic with allowlist/redaction. The next gate is progress/timeout UX planning for long-running `--use-llm`; chapter acceptance calibration, provider runtime budget calibration and score-loop entry remain future gates. Current `--use-llm` implementation remains `CLI -> Service prepares FundLLMExecutionRequest / ExecutionContract -> Host runner -> Service -> fund_agent/fund -> provider HTTP call`; default deterministic `analyze/checklist` still bypass Host. Service owns `FundLLMExecutionContract`, `FundLLMExecutionRequest`, runtime plan and provider clients; Host only receives generic operation/deadline/session fields and does not understand fund business semantics. Dayu is an architecture reference and capability source, not a production runtime dependency. Async Host runner, durable session/resume/memory/outbox and internalized Agent engine/tool-loop migration remain later gates. Gate C score-loop design is accepted as design-only and must not be treated as readiness/golden/quality-gate pass.
+The current phase goal is to make real LLM failures auditable, reproducible and iteratable before improving chapter accepted rate. Artifact retention is accepted locally: typed incomplete `fund-analysis analyze --use-llm` results keep stdout empty, exit `1`, and avoid deterministic fallback, while writing local ignored diagnostics under `reports/llm-runs/`. Those diagnostics include manifest, summary, per-chapter JSON, writer draft, repair draft, normalized auditor feedback, chapter matrix and first failed diagnostic with allowlist/redaction. The current gate plan for progress/timeout UX is accepted; next step is implementation of safe stderr progress/timeout visibility for long-running `--use-llm`. Chapter acceptance calibration, provider runtime budget calibration and score-loop entry remain future gates. Current `--use-llm` implementation remains `CLI -> Service prepares FundLLMExecutionRequest / ExecutionContract -> Host runner -> Service -> fund_agent/fund -> provider HTTP call`; default deterministic `analyze/checklist` still bypass Host. Service owns `FundLLMExecutionContract`, `FundLLMExecutionRequest`, runtime plan and provider clients; Host only receives generic operation/deadline/session fields and does not understand fund business semantics. Dayu is an architecture reference and capability source, not a production runtime dependency. Async Host runner, durable session/resume/memory/outbox and internalized Agent engine/tool-loop migration remain later gates. Gate C score-loop design is accepted as design-only and must not be treated as readiness/golden/quality-gate pass.
 
 ## 3. Current Implementation Facts
 
@@ -121,7 +122,7 @@ Gate 4 Slice 4D accepted typed env config and Service-owned `openai_compatible` 
 - Live provider smoke acceptance, multi-model writer/auditor split, chapter 0/7 LLM polish and Evidence Confirm remain future residuals.
 - Local real provider smoke for PR #21 remains blocked: current MiMo provider auth passes; provider timeout hardening, prompt-contract calibration, diagnostic narrowing, marker syntax repair, L1 calibration, provider runtime timeout follow-up, independent body execution and prompt-cost/root-cause calibration are accepted locally. Latest compact-mode rerun fails closed before complete chapters 0-7 with primary blocker `provider_runtime_timeout_small_prompt`; no deterministic fallback and no partial accepted report.
 - Future score-loop implementation must first clarify `ChapterFactProjection` naming, its relationship to existing `extraction_score.py` / `extraction_score_service.py`, weights/value semantics, `not_scored_reason` enum, score CLI exit code, and candidate facet L2 source. It must not start before Gate B timeout is rerun or handled.
-- LLM run progress and timeout UX is not implemented; next gate should plan safe progress/stage diagnostics that do not expose prompts, provider raw responses, API keys or Authorization headers.
+- LLM run progress and timeout UX is not implemented; current gate plan is accepted and implementation must add only safe progress/stage diagnostics that do not expose prompts, provider raw responses, API keys or Authorization headers.
 - Chapter 2/3/6 acceptance calibration remains deferred until artifact evidence and progress UX are in place; it must not relax auditor rules or increase repair budget by default.
 - Provider runtime budget calibration and `chapter_generation_score` entry remain future gates.
 - Unrelated untracked workspace files are not accepted evidence unless a later controller gate accepts them.
