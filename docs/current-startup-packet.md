@@ -1,6 +1,6 @@
 # Current Startup Packet
 
-Purpose: this is the short resume entry for the MVP real LLM observability and chapter acceptance phase. It is a control packet, not a historical ledger.
+Purpose: this is the short resume entry for the MVP typed template and internalized agent execution phase. It is a control packet, not a historical ledger.
 
 ## 1. Read Order
 
@@ -15,11 +15,11 @@ Use `docs/reviews/` and `docs/archive/` only as evidence chain. They do not over
 
 | Field | State |
 |---|---|
-| Current phase | `MVP real LLM observability and chapter acceptance phase` |
-| Current gate | `MVP real LLM chapter acceptance calibration gate` |
+| Current phase | `MVP typed template and internalized agent execution phase` |
+| Current gate | `MVP fund report template typed contract redesign gate` |
 | Current gate classification | `heavy` |
-| Current gate status | Provider-restored Slice 1 evidence triage accepted; Ch2/Ch6 are provider runtime blockers, Ch3 is eligible same-source `must_not_cover` calibration evidence; no calibration implementation authorized |
-| Next entry point | Start separate Ch3-only must_not_cover calibration plan, provider runtime budget calibration for Ch2/Ch6, or Agent-engine implementation planning only with explicit authorization |
+| Current gate status | Accepted design-only future template/audit contract architecture; no implementation authorized |
+| Next entry point | Start `MVP internalized Agent engine/tool-loop contract execution design gate`; design/review only unless separately authorized |
 | Control truth | `docs/implementation-control.md` |
 | Design truth | `docs/design.md` |
 | Accepted plan commit | `beb6891` |
@@ -34,7 +34,7 @@ Use `docs/reviews/` and `docs/archive/` only as evidence chain. They do not over
 | Accepted LLM progress/timeout UX implementation commit | `d656816` |
 | Accepted real LLM chapter acceptance calibration plan commit | `a15dfcb` |
 
-The current phase goal is to make real LLM failures auditable, reproducible and iteratable before improving chapter accepted rate. Artifact retention is accepted locally: typed incomplete `fund-analysis analyze --use-llm` results keep stdout empty, exit `1`, and avoid deterministic fallback, while writing local ignored diagnostics under `reports/llm-runs/`. Progress/timeout UX is also accepted locally: long-running `--use-llm` commands now have safe stderr-only progress, `--llm-progress/--no-llm-progress`, and Host generic `event_sink`, without changing stdout/fail-closed behavior. Provider-restored Slice 1 evidence triage is accepted: env presence was checked without secrets; `006597 / 2024 --use-llm --llm-progress` exited `1`, stdout stayed empty, and retained artifact `reports/llm-runs/006597-2024-20260602T121553Z-host_run_1f8d428509c5431` was generated. Controller judgment classifies Ch2 as provider runtime blocker, Ch6 as mixed but currently provider runtime blocker, and Ch3 as eligible same-source `CHAPTER_CONTRACT must_not_cover` calibration evidence. Only a Ch3-only must_not_cover calibration plan is authorized by that evidence; no implementation is authorized. Current `--use-llm` implementation remains `CLI -> Service prepares FundLLMExecutionRequest / ExecutionContract -> Host runner -> Service -> fund_agent/fund -> provider HTTP call`; default deterministic `analyze/checklist` still bypass Host. Service owns `FundLLMExecutionContract`, `FundLLMExecutionRequest`, runtime plan and provider clients; Host only receives generic operation/deadline/session fields and does not understand fund business semantics. `MVP internalized Agent engine and typed audit contract design gate` is accepted as design-only future architecture: future Agent owns runner/tool-loop/retry/budget/ToolTrace and typed audit loop; Service keeps use case, ExecutionContract, quality policy, report strategy and first-MVP provider construction/runtime ceilings; Fund audit is programmatic-first and LLM auditor is bounded semantic only. Dayu is an architecture reference and capability source, not a production runtime dependency. Async Host runner, durable session/resume/memory/outbox, Agent-engine implementation, provider runtime budget calibration and score-loop entry remain later gates.
+The current phase goal is to move LLM report work from prompt patching into typed template/audit/evidence contracts and then Agent execution architecture. Gate 1 `MVP fund report template typed contract redesign gate` is accepted as design-only future architecture: future template contract may use typed `ChapterContract`, derived `EvidenceAvailability`, Ch3 evidence-conditional `must_not_cover`, `RequiredOutputItem.when_evidence_missing`, Ch0 consuming Ch7 with fail-closed required-body readiness, and per-chapter `audit_focus` for bounded semantic audit only. Current template truth, chapter ids `0-7`, deterministic `analyze/checklist`, `--use-llm` fail-closed behavior, `contracts.py`, auditor, provider budget, score-loop, quality gate, golden/readiness and retained reports are unchanged. Ch2 split, `0+9` / `0+10`, raw multi-year PDF prompt injection, external timeout percentage claims and provider budget changes are not accepted by Gate 1. Previous provider-restored Slice 1 evidence remains accepted: Ch2/Ch4/Ch6 timeout belongs to provider runtime budget gates, and Ch3 is same-source evidence for future contract-shape calibration. `MVP internalized Agent engine and typed audit contract design gate` is also accepted as design-only future architecture: future Agent owns runner/tool-loop/retry/budget/ToolTrace and typed audit loop; Service keeps use case, ExecutionContract, quality policy, report strategy and first-MVP provider construction/runtime ceilings; Fund audit is programmatic-first and LLM auditor is bounded semantic only. Dayu is an architecture reference and capability source, not a production runtime dependency.
 
 ## 3. Current Implementation Facts
 
@@ -44,6 +44,7 @@ The current phase goal is to make real LLM failures auditable, reproducible and 
 - Service orchestrates the current use case and calls Fund public capabilities directly as a transition path.
 - Fund owns the Agent-layer domain rules: fund-type recognition, annual-report facts, CHAPTER_CONTRACT, preferred_lens, ITEM_RULE, audit rules and evidence anchors.
 - Current report rendering uses the 8-chapter deterministic template.
+- Template typed contract redesign is accepted only as future design; current `docs/fund-analysis-template-draft.md`, `contracts.py`, renderer and auditor are unchanged, and public chapter ids remain `0-7`.
 - Current audit is programmatic and deterministic.
 - Current FQ0-FQ6 quality gate remains unchanged.
 - Fund now has a Gate 1 typed projection capability: `project_chapter_facts()` / `ChapterFactProvider.project()` maps an in-memory `StructuredFundDataBundle` to `chapter_fact_projection.v1`.
