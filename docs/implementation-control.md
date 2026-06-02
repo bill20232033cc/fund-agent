@@ -1,12 +1,12 @@
 # 基金行为教练 Agent —— 实施总控文档
 
-> **版本**: v2.3
-> **日期**: 2026-05-30
+> **版本**: v2.4
+> **日期**: 2026-06-02
 > **规则真源**: `AGENTS.md`
 > **设计真源**: `docs/design.md`
 > **控制真源**: `docs/implementation-control.md`
 > **短启动入口**: `docs/current-startup-packet.md`
-> **当前状态**: MVP real-provider stabilization and score-loop phase 已完成本地闭环；PR #21 保持 draft/open 且未由本 phase 修改外部状态。Gate A writer/auditor contract hardening、provider runtime timeout hardening、prompt-contract calibration、writer prompt contract diagnostic narrowing、writer marker syntax repair、programmatic audit L1 calibration、provider runtime timeout follow-up、independent body chapter execution、provider runtime budget and prompt-cost root-cause calibration 均已本地接受。Gate B real provider smoke acceptance 仍 blocked：真实 provider `006597 / 2024 --use-llm` 能观察章节 1-6 独立矩阵，但未生成完整 0-7 报告；当前唯一主 blocker 为 `provider_runtime_timeout_small_prompt`。Gate C chapter generation score-loop design accepted as design-only。当前 gate 是 `MVP Service ExecutionContract boundary hardening gate`；Slice 1-4 和 aggregate deepreview 均已本地接受，slice checkpoints 为 `4691da5`、`854d4b8`、`19b08cf`、`72c3a33`。当前 `--use-llm` 代码事实为 `CLI -> Service prepares FundLLMExecutionRequest / ExecutionContract -> Host runner -> Service -> fund_agent/fund -> provider HTTP call`；Host runner 提供进程内 run lifecycle、global deadline、cancel token、terminal run state、安全诊断和 phase events，但不理解基金业务、不读取 ExecutionContract 业务字段。async Host runner、durable session/resume/memory/outbox、Agent engine/tool-loop migration 保留为后续 gate。Dayu 是架构参考与能力来源，不是生产 runtime 直接依赖；不得把 `dayu-agent` / `dayu.host` / `dayu.engine` 作为生产 runtime 直接依赖。
+> **当前状态**: `MVP real LLM observability and chapter acceptance phase` 已启动控制面同步。前置 gate `MVP incomplete LLM run artifact retention gate` 已完成 implementation / AgentDS code review / controller judgment / accepted checkpoint：plan checkpoint `5f18715`，implementation checkpoint `4f7903f`。当前 `--use-llm` 代码事实为 `CLI -> Service prepares FundLLMExecutionRequest / ExecutionContract -> Host runner -> Service -> fund_agent/fund -> provider HTTP call`；typed incomplete LLM result 会在保持 stdout empty、exit code 1、无 deterministic fallback 的前提下，把本地诊断 artifact 写入 ignored `reports/llm-runs/`，包含 manifest、summary、per-chapter JSON、writer draft、repair draft、normalized auditor feedback、chapter matrix 和 first failed diagnostic，并执行 allowlist/redaction。下一 gate 入口是 `MVP LLM run progress and timeout UX gate` 的 plan gate。chapter acceptance calibration、provider runtime budget calibration、score-loop entry、async Host runner、durable session/resume/memory/outbox、Agent engine/tool-loop migration 均保留为后续 gate。Dayu 是架构参考与能力来源，不是生产 runtime 直接依赖；不得把 `dayu-agent` / `dayu.host` / `dayu.engine` 作为生产 runtime 直接依赖。
 
 ---
 
@@ -17,7 +17,9 @@
 ### Current Truth Guardrails
 
 - `AGENTS.md` 是最高优先级执行规则真源；若与本文档或 `docs/design.md` 冲突，先调整方案/实现，再回写文档。
-- 当前 phase 是 `MVP real-provider stabilization and score-loop phase`；当前 gate 是 `MVP Service ExecutionContract boundary hardening gate`，分类为 `heavy`。Slice 1-4 已在本地 checkpoint 接受（`4691da5`、`854d4b8`、`19b08cf`、`72c3a33`）；aggregate deepreview 已完成并接受，无 remaining blocking findings。Provider runtime budget and prompt-cost root-cause calibration 已本地接受为诊断/runtime-cost hardening；当前唯一 provider blocker 仍是 `provider_runtime_timeout_small_prompt`。
+- 当前 phase 是 `MVP real LLM observability and chapter acceptance phase`；当前 controller step 是 truth sync；前置 gate `MVP incomplete LLM run artifact retention gate` 已 accepted locally，checkpoint `4f7903f`，AgentDS code review PASS，无 blocking findings。下一 gate 是 `MVP LLM run progress and timeout UX gate` 的 plan gate，分类按 `heavy` 处理，因为它涉及 `--use-llm` CLI/Host 长运行反馈和 timeout presentation。
+- `MVP incomplete LLM run artifact retention gate` 已接受：typed incomplete `analyze --use-llm` run 自动写入 local ignored `reports/llm-runs/` artifact；artifact 写入失败只输出安全 warning，不改变原 fail-closed 退出；accepted final report、deterministic analyze、checklist、config/construction failure、quality gate block 和 Host failure without typed result 不写该 artifact。
+- artifact retention 只解决“失败后可审计”；progress UX、chapter acceptance calibration、provider runtime budget calibration 和 chapter_generation_score 接入均未实现。不得把这些后续 phase gates 写成当前代码事实。
 - 当前默认实现仍以确定性 `fund-analysis analyze/checklist` 为生产主链路：结构化抽取、确定性分析、模板渲染、程序审计和 FQ0-FQ6 quality gate。
 - Gate 1 已新增 Fund 层 typed projection：`project_chapter_facts()` / `ChapterFactProvider.project()` 将内存中的 `StructuredFundDataBundle` 投影为 `chapter_fact_projection.v1`。
 - Gate 1 typed projection 只消费现有 bundle、CHAPTER_CONTRACT、preferred_lens 和 ITEM_RULE truth APIs；不读取仓库、PDF/cache/source helper、parser、LLM、Service、Host 或 dayu。
@@ -57,13 +59,13 @@
 
 | Field | State |
 |---|---|
-| Branch baseline | `codex/local-reconciliation` |
-| Current phase | `MVP real-provider stabilization and score-loop phase` |
-| Current gate | `MVP Service ExecutionContract boundary hardening gate` |
-| Current gate classification | `heavy` |
-| Current gate status | Slice 1-4 and aggregate deepreview accepted locally; slice checkpoints `4691da5`, `854d4b8`, `19b08cf`, `72c3a33`; Gate B still blocked by `provider_runtime_timeout_small_prompt`; Gate C design accepted |
-| Next entry point | `ready-to-open-draft-PR` authorization point for the completed `MVP Service ExecutionContract boundary hardening gate`; do not push/create PR/mark ready without explicit user authorization |
-| Next gate classification | `standard/heavy`; Service/Host boundary contract hardening affects public execution contract and explicit parameter discipline |
+| Branch baseline | `feat/mvp-llm-incomplete-run-artifacts` |
+| Current phase | `MVP real LLM observability and chapter acceptance phase` |
+| Current gate | `MVP incomplete LLM run artifact retention gate` accepted; controller truth sync in progress |
+| Current gate classification | `standard` for artifact retention; next progress/timeout UX gate is `heavy` |
+| Current gate status | Plan accepted at `5f18715`; implementation/review/controller judgment accepted at `4f7903f`; AgentDS code review PASS with no blocking findings |
+| Next entry point | `MVP LLM run progress and timeout UX gate` plan gate; do not implement progress UX until plan/review/accepted checkpoint |
+| Next gate classification | `heavy`; progress/timeout UX affects `--use-llm` CLI/Host long-running feedback and timeout diagnostics |
 | Design truth | `docs/design.md` |
 | Control truth | `docs/implementation-control.md` |
 | Short startup entry | `docs/current-startup-packet.md` |
@@ -73,17 +75,25 @@
 | Accepted docs/control sync commit | `4d0c19f` |
 | Accepted aggregate review commit | `7a3dab9` |
 | Accepted closeout entrypoint commit | `b0e68e0` |
+| Accepted incomplete artifact retention plan commit | `5f18715` |
+| Accepted incomplete artifact retention implementation commit | `4f7903f` |
 
 ## Current Gate
 
 ### Gate Objective
 
-The local Gate 4 closeout is accepted and the user previously authorized the draft PR gate, but this phase made no external PR changes. PR #21 remains draft/open. Provider auth/config verification passed for the current MiMo-compatible configuration. Gate A hardened the writer/auditor contract, provider runtime timeout hardening is accepted locally, L1 calibration is accepted locally, provider runtime timeout follow-up is accepted as diagnostic/code hardening, and prompt-cost/root-cause calibration is accepted locally. Gate B real `006597 / 2024 --use-llm` smoke still fails closed: compact-mode service diagnostic proves chapters 1-6 all fail writer `llm_timeout` under bounded `60s x2`, while all writer prompts are below approx `3000` tokens. Final assembly is incomplete, stdout stays empty, and there is no deterministic fallback. Gate C score-loop design is accepted as design-only. PR #21 must not be marked ready, merged or released from this gate.
+The current phase objective is to make real LLM failures auditable, reproducible and iteratable before improving chapter accepted rate. The artifact retention gate is accepted locally: incomplete typed `analyze --use-llm` results keep fail-closed stdout/exit behavior while retaining local ignored per-chapter diagnostics. The next gate should plan safe progress and timeout UX for long-running `--use-llm` commands. Calibration of chapters 2/3/6, provider runtime budget changes and score-loop entry remain deferred until their own phase gates. PR #21 must not be marked ready, merged or released from this controller truth sync.
 
 ### Current Accepted Artifacts
 
 | Purpose | Artifact |
 |---|---|
+| Incomplete LLM artifact retention plan | `docs/reviews/mvp-real-llm-incomplete-run-artifact-retention-and-chapter-acceptance-calibration-plan-20260602.md` |
+| Incomplete LLM artifact retention plan review | `docs/reviews/mvp-real-llm-incomplete-run-artifact-retention-and-chapter-acceptance-calibration-plan-review-ds-20260602.md` |
+| Incomplete LLM artifact retention plan controller judgment | `docs/reviews/mvp-real-llm-incomplete-run-artifact-retention-and-chapter-acceptance-calibration-plan-controller-judgment-20260602.md` |
+| Incomplete LLM artifact retention implementation evidence | `docs/reviews/mvp-incomplete-llm-run-artifact-retention-slice1-implementation-evidence-20260602.md` |
+| Incomplete LLM artifact retention code review | `docs/reviews/mvp-incomplete-llm-run-artifact-retention-slice1-code-review-20260602.md` |
+| Incomplete LLM artifact retention controller judgment | `docs/reviews/mvp-incomplete-llm-run-artifact-retention-slice1-controller-judgment-20260602.md` |
 | Source-of-truth plan | `docs/reviews/mvp-truth-pivot-context-compaction-plan-20260530.md` |
 | Independent plan reviews | `docs/reviews/mvp-truth-pivot-context-compaction-plan-review-mimo-20260530.md`; `docs/reviews/mvp-truth-pivot-context-compaction-plan-review-glm-20260530.md` |
 | Implementation evidence | `docs/reviews/mvp-truth-pivot-context-compaction-implementation-evidence-20260530.md` |
@@ -198,6 +208,8 @@ The Current Accepted Artifacts table is intentionally short. Older release-maint
 - Golden / strict correctness / QDII / FOF / `110020` / fixture promotion blockers are residual product-quality work, not blockers for starting MVP report generation Gate 1.
 - Local Host runtime governance is implemented for `--use-llm`; Host remains business-agnostic and does not import Service/Fund or inspect ExecutionContract business fields. Agent/dayu runtime is not implemented. Internalized Agent engine/tool-loop remains deferred.
 - `MVP Service ExecutionContract boundary hardening gate` aggregate deepreview accepted two non-blocking findings and fixed both: runtime now validates `QualityFailClosedPolicy` before LLM execution, and `QualityGatePolicy` has a single Service contract type source in `execution_contract.py`; aggregate re-review passed with no blocking findings.
+- `MVP incomplete LLM run artifact retention gate` is accepted locally. It adds Service-owned incomplete-run artifact serialization and CLI trigger wiring for typed incomplete `--use-llm` results; artifacts are local ignored diagnostics and do not change final report stdout, exit code, quality gate semantics, repair budget or deterministic fallback behavior.
+- The broader work is now controlled as `MVP real LLM observability and chapter acceptance phase`: artifact retention is complete, progress/timeout UX is next for planning, chapter acceptance calibration follows only after artifacts and UX are sufficient, provider runtime budget calibration and score-loop entry stay later gates.
 
 ## Route C Future Route
 
@@ -227,12 +239,18 @@ The Current Accepted Artifacts table is intentionally short. Older release-maint
 | PR #21 real provider smoke | Provider auth now passes for current MiMo config; timeout hardening, prompt-contract calibration, diagnostic narrowing, marker syntax repair, L1 calibration, runtime-cost diagnostic, independent body execution and prompt-cost/root-cause calibration accepted; latest compact-mode rerun proves chapters 1-6 independent (`generated=[1..6]`, `skipped=[]`) and ch2/ch6 prompt cost reduced below large-prompt threshold, but still fails closed before complete 0-7 report with primary blocker `provider_runtime_timeout_small_prompt` | Provider endpoint calibration remains a later diagnostic gate; Host now records fail-closed run state but does not resolve endpoint runtime |
 | Programmatic audit C2 | Supplemental service diagnostic after a timeout-free run accepts chapters 1-2, then fails chapter 3 `programmatic_audit` with issue prefix `programmatic:C2` and subcategory `code_bug_other`; no complete 0-7 report | Future `MVP programmatic audit C2 calibration gate` after timeout is no longer first blocker |
 | Score-loop implementation | Gate C design accepted only; not implemented and not connected to readiness/golden/quality gate | Future score-loop implementation gate after Gate B timeout is handled |
+| LLM run progress and timeout UX | Not implemented. Artifact retention now preserves evidence after failure, but long `--use-llm` runs can still feel silent while provider calls are in progress | Next gate: `MVP LLM run progress and timeout UX gate` |
+| Incomplete LLM artifact lifecycle | Implemented with `retention_policy=manual_local_cleanup`; no automated cleanup or external upload | Future observability/control policy gate if disk lifecycle becomes material |
+| Chapter 2/3/6 acceptance calibration | Deferred until per-chapter artifacts and progress UX support evidence-based diagnosis; must not relax auditor or increase repair budget by default | Future `MVP real LLM chapter acceptance calibration gate` |
+| Provider runtime budget calibration | Deferred; artifact retention does not change timeout budget or provider execution policy | Future provider runtime budget calibration gate |
 | Untracked unrelated workspace files | Not part of accepted evidence unless a later controller gate explicitly accepts them | Controller scope audit |
 
 ## Recent Active Gate Ledger
 
 | Gate | Status | Summary | Next action |
 |---|---|---|---|
+| `MVP incomplete LLM run artifact retention gate` | accepted locally | Plan checkpoint `5f18715`; implementation checkpoint `4f7903f`; AgentDS code review PASS with no blocking findings; validation `156 passed` and `ruff check .` PASS; typed incomplete `--use-llm` results now write local ignored `reports/llm-runs/` diagnostics without changing fail-closed semantics | Start `MVP LLM run progress and timeout UX gate` plan; do not implement calibration/provider budget/score-loop |
+| `MVP real LLM observability and chapter acceptance phase truth sync` | active controller step | Sync control/design/startup truth after artifact retention acceptance; no runtime/code/test changes | Commit truth sync, then dispatch next gate planning |
 | `MVP Service ExecutionContract boundary hardening gate aggregate deepreview` | accepted locally | Aggregate review accepted two non-blocking findings; fixes enforce `QualityFailClosedPolicy` at the typed LLM execution boundary and unify `QualityGatePolicy` to `execution_contract.py`; re-review PASS; targeted/full validation PASS | Stop at `ready-to-open-draft-PR` authorization point; do not push/create PR/mark ready without explicit user authorization |
 | `MVP Service ExecutionContract boundary hardening gate Slice 4` | accepted locally | Adds Host boundary regression and docs/control sync for accepted internalized Host runner plus Service-owned `FundLLMExecutionRequest` / `FundLLMExecutionContract` boundary; no Agent/tool-loop, provider runtime implementation, score, quality gate, golden, release or PR state changes; code review PASS with no blocking findings | Start aggregate deepreview for this completed gate |
 | `MVP Service ExecutionContract boundary hardening gate Slices 1-3` | accepted locally | Accepted checkpoints `4691da5`, `854d4b8`, `19b08cf`; Service contract/types, Service-owned provider preparation, and CLI -> Host typed execution request path are accepted; O1 deferred to future async CLI/Host async-runner gate and O2 assigned to Slice 4 | Complete Slice 4 only |

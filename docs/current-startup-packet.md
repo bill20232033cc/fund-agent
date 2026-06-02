@@ -1,6 +1,6 @@
 # Current Startup Packet
 
-Purpose: this is the short resume entry for the MVP fund analysis report generation phase. It is a control packet, not a historical ledger.
+Purpose: this is the short resume entry for the MVP real LLM observability and chapter acceptance phase. It is a control packet, not a historical ledger.
 
 ## 1. Read Order
 
@@ -15,11 +15,11 @@ Use `docs/reviews/` and `docs/archive/` only as evidence chain. They do not over
 
 | Field | State |
 |---|---|
-| Current phase | `MVP real-provider stabilization and score-loop phase` |
-| Current gate | `MVP Service ExecutionContract boundary hardening gate` |
-| Current gate classification | `heavy` |
-| Current gate status | Slice 1-4 and aggregate deepreview accepted locally; slice checkpoints `4691da5`, `854d4b8`, `19b08cf`, `72c3a33` |
-| Next entry point | `ready-to-open-draft-PR` authorization point for the completed `MVP Service ExecutionContract boundary hardening gate`; do not push/create PR/mark ready without explicit user authorization |
+| Current phase | `MVP real LLM observability and chapter acceptance phase` |
+| Current gate | `MVP incomplete LLM run artifact retention gate` accepted; controller truth sync in progress |
+| Current gate classification | `standard` for artifact retention; next progress/timeout UX gate is `heavy` |
+| Current gate status | Plan checkpoint `5f18715`; accepted implementation checkpoint `4f7903f`; AgentDS code review PASS with no blocking findings |
+| Next entry point | `MVP LLM run progress and timeout UX gate` plan gate; do not implement progress UX before plan/review/accepted checkpoint |
 | Control truth | `docs/implementation-control.md` |
 | Design truth | `docs/design.md` |
 | Accepted plan commit | `beb6891` |
@@ -28,8 +28,10 @@ Use `docs/reviews/` and `docs/archive/` only as evidence chain. They do not over
 | Accepted docs/control sync commit | `4d0c19f` |
 | Accepted aggregate review commit | `7a3dab9` |
 | Accepted closeout entrypoint commit | `b0e68e0` |
+| Accepted incomplete artifact retention plan commit | `5f18715` |
+| Accepted incomplete artifact retention implementation commit | `4f7903f` |
 
-The user authorized the draft PR gate earlier, but this phase made no external PR changes. PR #21 remains draft/open. Provider auth/config verification passes for the current MiMo-compatible configuration, Gate A hardened writer/auditor protocol, provider runtime timeout hardening is accepted locally, and L1 calibration is accepted locally. Gate B remains blocked because real provider smoke still exits `1` without a complete 0-7 report. Independent body chapter execution and prompt-cost calibration are accepted locally. The current provider blocker is `provider_runtime_timeout_small_prompt`: chapters 1-6 writer calls are all below `3000` approximate prompt tokens yet time out under the bounded `60s x2` writer budget. Current `--use-llm` implementation is `CLI -> Service prepares FundLLMExecutionRequest / ExecutionContract -> Host runner -> Service -> fund_agent/fund -> provider HTTP call`; default deterministic `analyze/checklist` still bypass Host. Service owns `FundLLMExecutionContract`, `FundLLMExecutionRequest`, runtime plan and provider clients; Host only receives generic operation/deadline/session fields and does not understand fund business semantics. A prior direct `dayu.host` adapter implementation preflight is blocked because local importability came from undeclared `dayu-agent==0.1.4`; user has rejected direct `dayu-agent` production runtime dependency. Dayu is now an architecture reference and capability source, not a production runtime interface dependency. User-facing MVP readiness now has an accepted internalized Host runtime governance adapter for global deadline, cancel, terminal run state, safe diagnostics and run lifecycle. Async Host runner, durable session/resume/memory/outbox and internalized Agent engine/tool-loop migration remain later gates. Gate C score-loop design is accepted as design-only and must not be treated as readiness/golden/quality-gate pass.
+The current phase goal is to make real LLM failures auditable, reproducible and iteratable before improving chapter accepted rate. Artifact retention is accepted locally: typed incomplete `fund-analysis analyze --use-llm` results keep stdout empty, exit `1`, and avoid deterministic fallback, while writing local ignored diagnostics under `reports/llm-runs/`. Those diagnostics include manifest, summary, per-chapter JSON, writer draft, repair draft, normalized auditor feedback, chapter matrix and first failed diagnostic with allowlist/redaction. The next gate is progress/timeout UX planning for long-running `--use-llm`; chapter acceptance calibration, provider runtime budget calibration and score-loop entry remain future gates. Current `--use-llm` implementation remains `CLI -> Service prepares FundLLMExecutionRequest / ExecutionContract -> Host runner -> Service -> fund_agent/fund -> provider HTTP call`; default deterministic `analyze/checklist` still bypass Host. Service owns `FundLLMExecutionContract`, `FundLLMExecutionRequest`, runtime plan and provider clients; Host only receives generic operation/deadline/session fields and does not understand fund business semantics. Dayu is an architecture reference and capability source, not a production runtime dependency. Async Host runner, durable session/resume/memory/outbox and internalized Agent engine/tool-loop migration remain later gates. Gate C score-loop design is accepted as design-only and must not be treated as readiness/golden/quality-gate pass.
 
 ## 3. Current Implementation Facts
 
@@ -70,6 +72,7 @@ The user authorized the draft PR gate earlier, but this phase made no external P
 - `--use-llm` now runs through local `HostRuntimeRunner` for run lifecycle, global deadline, cancel token, terminal run state, safe diagnostics and phase events; Host does not import Service/Fund and does not inspect fund code/year/type/chapter policy/ExecutionContract business fields; default deterministic analyze/checklist still bypass Host; no Agent tool-loop or dayu runtime is present.
 - Provider runtime budget and prompt-cost diagnostics remain transitional provider-calibration evidence; Host run state now provides the MVP process-local lifecycle boundary but does not solve provider endpoint small-prompt timeouts.
 - `MVP Service ExecutionContract boundary hardening gate` aggregate deepreview is accepted locally. Its accepted fixes enforce `QualityFailClosedPolicy` at the typed LLM execution boundary and keep `QualityGatePolicy` sourced from `execution_contract.py`; aggregate re-review found no blocking findings.
+- `MVP incomplete LLM run artifact retention gate` is accepted locally. It adds Service-owned artifact serialization and CLI trigger wiring for typed incomplete `--use-llm` results; artifacts are local ignored diagnostics and do not change stdout, exit code, quality gate semantics, repair budget or deterministic fallback behavior.
 
 ## 4. Route C Accepted Future Route
 
@@ -118,6 +121,9 @@ Gate 4 Slice 4D accepted typed env config and Service-owned `openai_compatible` 
 - Live provider smoke acceptance, multi-model writer/auditor split, chapter 0/7 LLM polish and Evidence Confirm remain future residuals.
 - Local real provider smoke for PR #21 remains blocked: current MiMo provider auth passes; provider timeout hardening, prompt-contract calibration, diagnostic narrowing, marker syntax repair, L1 calibration, provider runtime timeout follow-up, independent body execution and prompt-cost/root-cause calibration are accepted locally. Latest compact-mode rerun fails closed before complete chapters 0-7 with primary blocker `provider_runtime_timeout_small_prompt`; no deterministic fallback and no partial accepted report.
 - Future score-loop implementation must first clarify `ChapterFactProjection` naming, its relationship to existing `extraction_score.py` / `extraction_score_service.py`, weights/value semantics, `not_scored_reason` enum, score CLI exit code, and candidate facet L2 source. It must not start before Gate B timeout is rerun or handled.
+- LLM run progress and timeout UX is not implemented; next gate should plan safe progress/stage diagnostics that do not expose prompts, provider raw responses, API keys or Authorization headers.
+- Chapter 2/3/6 acceptance calibration remains deferred until artifact evidence and progress UX are in place; it must not relax auditor rules or increase repair budget by default.
+- Provider runtime budget calibration and `chapter_generation_score` entry remain future gates.
 - Unrelated untracked workspace files are not accepted evidence unless a later controller gate accepts them.
 
 ## 7. Prohibited Actions
