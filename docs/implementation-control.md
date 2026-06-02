@@ -86,6 +86,7 @@
 | Accepted real LLM chapter acceptance calibration plan commit | `a15dfcb` |
 | Accepted provider runtime budget calibration plan commit | `0fd8b7c` |
 | Accepted Ch2 auditor timeout diagnostic plan commit | `023af63` |
+| Accepted Ch2 auditor timeout 120s evidence commit | `ceba7aa` |
 
 ## Current Gate
 
