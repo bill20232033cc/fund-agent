@@ -16,10 +16,10 @@ Use `docs/reviews/` and `docs/archive/` only as evidence chain. They do not over
 | Field | State |
 |---|---|
 | Current phase | `MVP typed template and internalized agent execution phase` |
-| Current gate | `MVP fund report template typed contract redesign gate` |
+| Current gate | `MVP internalized Agent engine/tool-loop contract execution design gate` |
 | Current gate classification | `heavy` |
-| Current gate status | Accepted design-only future template/audit contract architecture; no implementation authorized |
-| Next entry point | Start `MVP internalized Agent engine/tool-loop contract execution design gate`; design/review only unless separately authorized |
+| Current gate status | Accepted design-only future Agent execution architecture; no implementation authorized |
+| Next entry point | Start `MVP multi-year annual evidence scope design gate`; design/review only unless separately authorized |
 | Control truth | `docs/implementation-control.md` |
 | Design truth | `docs/design.md` |
 | Accepted plan commit | `beb6891` |
@@ -34,7 +34,7 @@ Use `docs/reviews/` and `docs/archive/` only as evidence chain. They do not over
 | Accepted LLM progress/timeout UX implementation commit | `d656816` |
 | Accepted real LLM chapter acceptance calibration plan commit | `a15dfcb` |
 
-The current phase goal is to move LLM report work from prompt patching into typed template/audit/evidence contracts and then Agent execution architecture. Gate 1 `MVP fund report template typed contract redesign gate` is accepted as design-only future architecture: future template contract may use typed `ChapterContract`, derived `EvidenceAvailability`, Ch3 evidence-conditional `must_not_cover`, `RequiredOutputItem.when_evidence_missing`, Ch0 consuming Ch7 with fail-closed required-body readiness, and per-chapter `audit_focus` for bounded semantic audit only. Current template truth, chapter ids `0-7`, deterministic `analyze/checklist`, `--use-llm` fail-closed behavior, `contracts.py`, auditor, provider budget, score-loop, quality gate, golden/readiness and retained reports are unchanged. Ch2 split, `0+9` / `0+10`, raw multi-year PDF prompt injection, external timeout percentage claims and provider budget changes are not accepted by Gate 1. Previous provider-restored Slice 1 evidence remains accepted: Ch2/Ch4/Ch6 timeout belongs to provider runtime budget gates, and Ch3 is same-source evidence for future contract-shape calibration. `MVP internalized Agent engine and typed audit contract design gate` is also accepted as design-only future architecture: future Agent owns runner/tool-loop/retry/budget/ToolTrace and typed audit loop; Service keeps use case, ExecutionContract, quality policy, report strategy and first-MVP provider construction/runtime ceilings; Fund audit is programmatic-first and LLM auditor is bounded semantic only. Dayu is an architecture reference and capability source, not a production runtime dependency.
+The current phase goal is to move LLM report work from prompt patching into typed template/audit/evidence contracts and then Agent execution architecture. Gate 1 `MVP fund report template typed contract redesign gate` is accepted as design-only future architecture: future template contract may use typed `ChapterContract`, derived `EvidenceAvailability`, Ch3 evidence-conditional `must_not_cover`, `RequiredOutputItem.when_evidence_missing`, Ch0 consuming Ch7 with fail-closed required-body readiness, and per-chapter `audit_focus` for bounded semantic audit only. Current template truth, chapter ids `0-7`, deterministic `analyze/checklist`, `--use-llm` fail-closed behavior, `contracts.py`, auditor, provider budget, score-loop, quality gate, golden/readiness and retained reports are unchanged. Ch2 split, `0+9` / `0+10`, raw multi-year PDF prompt injection, external timeout percentage claims and provider budget changes are not accepted by Gate 1. `MVP internalized Agent engine and typed audit contract design gate` and `MVP internalized Agent engine/tool-loop contract execution design gate` are accepted as design-only future architecture: future Agent owns `AgentReportRun`, `ChapterTask`, runner/tool-loop/retry/budget/ToolRegistry/ToolTrace, repair policy and `FinalAssemblyReadiness`; Service keeps use case, ExecutionContract, quality policy, report strategy, first-MVP provider construction/runtime ceilings and final product fail-closed mapping; Fund audit is programmatic-first and LLM auditor is bounded semantic only. `EvidenceAvailability` is a precomputed same-source `ChapterFactProjection` derived input, not a ToolRegistry tool. Service-constructed writer/auditor clients are explicit per-run typed fields passed by Agent into Fund tools, not tools or `extra_payload`. Ch3 retained evidence is `programmatic:C2` / `code_bug_other` under `prompt_contract` with `repair_budget_exhausted`; it does not prove `must_not_cover` / `言行一致` root cause. Dayu is an architecture reference and capability source, not a production runtime dependency.
 
 ## 3. Current Implementation Facts
 
@@ -89,7 +89,7 @@ Route C is the accepted MVP LLM report generation route. Gates 1-3 and Gate 4 Sl
 | Gate 3 | `chapter_orchestrator` accepted locally as Service-owned write-audit-repair façade for chapters 1-6 |
 | Gate 4 | Slice 4A `final_chapter_assembler`, Slice 4B Service `analyze_with_llm`, Slice 4C CLI `--use-llm`, Slice 4D provider construction and Service-owned ExecutionContract / typed request boundary accepted locally |
 | Gate 5A | internalized Host runtime governance adapter: MVP process-local implementation wraps `--use-llm`; Host is business-agnostic and only receives generic operation/deadline/session fields; async runner and durable session/resume/memory/reply outbox remain future Host scope |
-| Gate 5B | internalized Agent engine / typed audit contract migration: future Agent owns runner/tool-loop/retry/budget/ToolTrace and typed audit loop; Service keeps first-MVP provider construction; Fund audit is programmatic-first and LLM auditor is bounded semantic only |
+| Gate 5B | internalized Agent engine / typed audit contract migration: future Agent owns `AgentReportRun`, `ChapterTask`, runner/tool-loop/retry/budget/ToolRegistry/ToolTrace, repair policy and final assembly readiness; Service keeps first-MVP provider construction/runtime ceilings and final product fail-closed mapping; Fund audit is programmatic-first and LLM auditor is bounded semantic only |
 
 Gate 4 Slice 4D accepted typed env config and Service-owned `openai_compatible` provider construction. The current Service ExecutionContract boundary adds `FundLLMExecutionRequest` / `FundLLMExecutionContract` ownership in Service and routes CLI `--use-llm` through `analyze_with_llm_execution()`. Provider runtime timeout hardening later added timeout-only bounded retry/backoff and safe diagnostics. The current route has local Host run governance for `--use-llm`; it still does not implement Agent/dayu integration, full FundToolService, live provider smoke acceptance, multi-model writer/auditor split, chapter 0/7 LLM polish or Evidence Confirm.
 
@@ -123,10 +123,11 @@ Gate 4 Slice 4D accepted typed env config and Service-owned `openai_compatible` 
 - Internalized Agent engine / typed audit contract migration is accepted future design but unimplemented.
 - Deterministic renderer remains the default production behavior; provider-backed LLM report generation is explicit `--use-llm` opt-in only.
 - Live provider smoke acceptance, multi-model writer/auditor split, chapter 0/7 LLM polish and Evidence Confirm remain future residuals.
-- Provider-restored Slice 1 evidence retained a same-source artifact and kept fail-closed semantics. Ch2/Ch6 are provider runtime blockers; Ch3 is eligible same-source `must_not_cover` calibration evidence. No deterministic fallback and no partial accepted report are authorized.
+- Provider-restored Slice 1 evidence retained a same-source artifact and kept fail-closed semantics. Ch2/Ch4/Ch6 are provider runtime blockers. Ch3 retained evidence is `programmatic:C2` / `code_bug_other` under `prompt_contract` with `repair_budget_exhausted`; Ch3-only calibration must first decide whether the C2 rule, writer boundary, or typed contract clause mapping is root cause. No deterministic fallback and no partial accepted report are authorized.
 - Future score-loop implementation must first clarify `ChapterFactProjection` naming, its relationship to existing `extraction_score.py` / `extraction_score_service.py`, weights/value semantics, `not_scored_reason` enum, score CLI exit code, and candidate facet L2 source. It must not start before Gate B timeout is rerun or handled.
 - LLM run progress and timeout UX is implemented and accepted locally; it adds only safe stderr progress/stage diagnostics and does not expose prompts, provider raw responses, API keys or Authorization headers.
 - Chapter 2/3/6 acceptance calibration remains deferred until artifact evidence and progress UX are in place; it must not relax auditor rules or increase repair budget by default.
+- Multi-year annual evidence scope design is the next gate. It must design five-year annual report evidence scope through `FundDocumentRepository` and typed evidence bundles, must not feed five years of raw PDF text directly to LLM, and must keep quarterly reports in a separate gate.
 - Provider runtime budget calibration and `chapter_generation_score` entry remain future gates.
 - Unrelated untracked workspace files are not accepted evidence unless a later controller gate accepts them.
 
@@ -154,7 +155,7 @@ Gate 4 Slice 4D accepted typed env config and Service-owned `openai_compatible` 
 7. Classify the next gate per `AGENTS.md`; choose the heavier classification when uncertain.
 8. Check that Route C text stays future-only.
 9. Check that current deterministic `analyze/checklist` remains current implementation.
-10. Check that internalized Host runtime governance is treated as the next MVP readiness prerequisite and internalized Agent engine/tool-loop remains deferred unless the active gate explicitly covers it.
+10. Check that internalized Host runtime governance is already MVP process-local current fact and internalized Agent engine/tool-loop remains accepted future design, not current runtime implementation.
 11. Check that golden / strict correctness / QDII / FOF / `110020` / fixture promotion stay residuals unless the active gate explicitly covers them.
 12. Record validation commands and results in the relevant evidence artifact.
 
