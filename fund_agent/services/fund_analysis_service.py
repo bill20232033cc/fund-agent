@@ -633,8 +633,15 @@ class FundAnalysisService:
             Exception: 允许底层抽取器或 Agent 层基金能力传播异常。
         """
 
+        _record_host_phase_started(host_context, phase="analysis_core")
+        phase_started = time.monotonic()
         core_result = await self._run_analysis_core(
             replace(request, command_source="analyze")
+        )
+        _record_host_phase_completed(
+            host_context,
+            phase="analysis_core",
+            phase_started=phase_started,
         )
         _raise_if_host_cancelled(host_context)
         orchestration_input = build_chapter_orchestration_input(

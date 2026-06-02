@@ -420,6 +420,8 @@ def test_host_runner_records_llm_service_phase_events() -> None:
     ]
     assert host_result.status == "succeeded"
     assert [(event.event_type, event.diagnostics["phase"]) for event in phase_events] == [
+        (HostRunEventType.PHASE_STARTED, "analysis_core"),
+        (HostRunEventType.PHASE_COMPLETED, "analysis_core"),
         (HostRunEventType.PHASE_STARTED, "writer"),
         (HostRunEventType.PHASE_COMPLETED, "writer"),
         (HostRunEventType.PHASE_STARTED, "auditor"),
@@ -427,7 +429,13 @@ def test_host_runner_records_llm_service_phase_events() -> None:
         (HostRunEventType.PHASE_STARTED, "final_assembly"),
         (HostRunEventType.PHASE_COMPLETED, "final_assembly"),
     ]
-    assert phase_events[0].diagnostics["chapter_id"] == 1
+    assert phase_events[0].diagnostics == {
+        "phase": "analysis_core",
+        "chapter_id": None,
+        "attempt": None,
+        "provider_attempt": None,
+    }
+    assert phase_events[2].diagnostics["chapter_id"] == 1
 
 
 @pytest.mark.asyncio

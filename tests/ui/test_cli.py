@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from decimal import Decimal
 from pathlib import Path
@@ -33,6 +33,35 @@ from fund_agent.services import (
     normalize_fund_llm_analysis_input,
 )
 from fund_agent.ui import cli
+from fund_agent.host import build_safe_diagnostics
+
+
+def _record_fake_progress_events(host_context) -> None:  # type: ignore[no-untyped-def]
+    """在 fake LLM Service 中记录安全 Host phase events。
+
+    Args:
+        host_context: fake 或真实 Host context。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if host_context is None:
+        return
+    host_context.record_phase_started(phase="analysis_core")
+    host_context.record_phase_completed(phase="analysis_core", elapsed_ms=1)
+    host_context.record_phase_started(phase="writer", chapter_id=1, attempt=0)
+    host_context.record_phase_completed(
+        phase="writer",
+        chapter_id=1,
+        attempt=0,
+        elapsed_ms=2,
+    )
+    host_context.record_phase_started(phase="final_assembly")
+    host_context.record_phase_completed(phase="final_assembly", elapsed_ms=3)
 
 
 @dataclass(frozen=True, slots=True)
@@ -169,6 +198,7 @@ class _FakeService:
         type(self).analyze_with_llm_execution_called = True
         type(self).last_execution_request = execution_request
         type(self).last_host_context = host_context
+        _record_fake_progress_events(host_context)
         return _FakeLLMResult(
             final_assembly_result=_FakeLLMFinalAssemblyResult(
                 status="accepted",
@@ -488,6 +518,7 @@ class _IncompleteLLMService(_FakeService):
         type(self).analyze_with_llm_execution_called = True
         type(self).last_execution_request = execution_request
         type(self).last_host_context = host_context
+        _record_fake_progress_events(host_context)
         return _FakeLLMResult(
             final_assembly_result=_FakeLLMFinalAssemblyResult(
                 status="blocked",
@@ -522,6 +553,7 @@ class _L1IncompleteLLMService(_FakeService):
         type(self).analyze_with_llm_execution_called = True
         type(self).last_execution_request = execution_request
         type(self).last_host_context = host_context
+        _record_fake_progress_events(host_context)
         return _FakeLLMResult(
             final_assembly_result=_FakeLLMFinalAssemblyResult(
                 status="blocked",
@@ -567,6 +599,7 @@ class _TimeoutLLMService(_FakeService):
         type(self).analyze_with_llm_execution_called = True
         type(self).last_execution_request = execution_request
         type(self).last_host_context = host_context
+        _record_fake_progress_events(host_context)
         return _FakeLLMResult(
             final_assembly_result=_FakeLLMFinalAssemblyResult(
                 status="blocked",
@@ -650,6 +683,7 @@ class _MatrixIncompleteLLMService(_FakeService):
         type(self).analyze_with_llm_execution_called = True
         type(self).last_execution_request = execution_request
         type(self).last_host_context = host_context
+        _record_fake_progress_events(host_context)
         return _FakeLLMResult(
             final_assembly_result=_FakeLLMFinalAssemblyResult(
                 status="incomplete",
@@ -1196,6 +1230,7 @@ class _FakeHostRuntimeRunner:
     last_operation = None
     last_timeout_seconds = None
     last_session_id = None
+    last_event_sink = None
     forbidden_business_args: dict[str, object] = {}
 
     def run_sync(  # type: ignore[no-untyped-def]
@@ -1205,6 +1240,7 @@ class _FakeHostRuntimeRunner:
         operation,
         timeout_seconds=None,
         session_id=None,
+        event_sink=None,
         **kwargs,
     ):
         """执行 fake Host run 并记录 CLI 传入的 generic 参数。
@@ -1214,6 +1250,7 @@ class _FakeHostRuntimeRunner:
             operation: Host 托管闭包。
             timeout_seconds: Host run timeout。
             session_id: Host session id。
+            event_sink: Host 通用事件 sink。
             kwargs: 不允许出现的额外业务字段。
 
         Returns:
@@ -1229,12 +1266,16 @@ class _FakeHostRuntimeRunner:
         type(self).last_operation = operation
         type(self).last_timeout_seconds = timeout_seconds
         type(self).last_session_id = session_id
+        type(self).last_event_sink = event_sink
         type(self).forbidden_business_args = kwargs
         host_context = _FakeHostContext(
             run_id="host_run_fake",
             timeout_seconds=timeout_seconds,
+            event_sink=event_sink,
         )
+        host_context.commit_event(cli.HostRunEventType.RUN_STARTED, timeout_seconds=timeout_seconds)
         operation_result = operation(host_context)
+        host_context.commit_event(cli.HostRunEventType.RUN_COMPLETED)
         now = datetime.now(timezone.utc)
         return cli.HostRunResult(
             run_id=host_context.run_id,
@@ -1246,7 +1287,7 @@ class _FakeHostRuntimeRunner:
             operation_result=operation_result,
             timeout_classification=None,
             safe_diagnostics={},
-            events=(),
+            events=tuple(host_context.events),
         )
 
 
@@ -1278,6 +1319,8 @@ class _FakeHostContext:
 
     run_id: str
     timeout_seconds: int | None
+    event_sink: object | None = None
+    events: list[cli.HostRunEvent] = field(default_factory=list)
 
     def record_diagnostic(self, **diagnostics):  # type: ignore[no-untyped-def]
         """记录 fake Host 诊断。
@@ -1291,6 +1334,101 @@ class _FakeHostContext:
         Raises:
             无显式抛出。
         """
+
+        event_type = diagnostics.pop(
+            "event_type",
+            cli.HostRunEventType.DIAGNOSTIC_RECORDED,
+        )
+        self.commit_event(event_type, **diagnostics)
+
+    def record_phase_started(  # type: ignore[no-untyped-def]
+        self,
+        *,
+        phase,
+        chapter_id=None,
+        attempt=None,
+        provider_attempt=None,
+    ) -> None:
+        """记录 fake phase started 事件。
+
+        Args:
+            phase: phase 名称。
+            chapter_id: 可选章节编号。
+            attempt: 可选 attempt 序号。
+            provider_attempt: 可选 provider attempt 序号。
+
+        Returns:
+            无返回值。
+
+        Raises:
+            无显式抛出。
+        """
+
+        self.commit_event(
+            cli.HostRunEventType.PHASE_STARTED,
+            phase=phase,
+            chapter_id=chapter_id,
+            attempt=attempt,
+            provider_attempt=provider_attempt,
+        )
+
+    def record_phase_completed(  # type: ignore[no-untyped-def]
+        self,
+        *,
+        phase,
+        chapter_id=None,
+        attempt=None,
+        provider_attempt=None,
+        elapsed_ms=None,
+    ) -> None:
+        """记录 fake phase completed 事件。
+
+        Args:
+            phase: phase 名称。
+            chapter_id: 可选章节编号。
+            attempt: 可选 attempt 序号。
+            provider_attempt: 可选 provider attempt 序号。
+            elapsed_ms: 可选耗时毫秒。
+
+        Returns:
+            无返回值。
+
+        Raises:
+            无显式抛出。
+        """
+
+        self.commit_event(
+            cli.HostRunEventType.PHASE_COMPLETED,
+            phase=phase,
+            chapter_id=chapter_id,
+            attempt=attempt,
+            provider_attempt=provider_attempt,
+            elapsed_ms=elapsed_ms,
+        )
+
+    def commit_event(self, event_type, **diagnostics):  # type: ignore[no-untyped-def]
+        """提交 fake Host 事件并调用 sink。
+
+        Args:
+            event_type: Host event type。
+            diagnostics: 安全诊断字段。
+
+        Returns:
+            无返回值。
+
+        Raises:
+            HostRuntimeError: 当 fake 诊断字段不安全时抛出。
+        """
+
+        event = cli.HostRunEvent(
+            event_type=event_type,
+            run_id=self.run_id,
+            created_at=datetime.now(timezone.utc),
+            diagnostics=build_safe_diagnostics(diagnostics),
+        )
+        self.events.append(event)
+        if self.event_sink is not None:
+            self.event_sink(event)  # type: ignore[operator]
 
 
 def _reset_fake_host_runner() -> None:
@@ -1311,6 +1449,7 @@ def _reset_fake_host_runner() -> None:
     _FakeHostRuntimeRunner.last_operation = None
     _FakeHostRuntimeRunner.last_timeout_seconds = None
     _FakeHostRuntimeRunner.last_session_id = None
+    _FakeHostRuntimeRunner.last_event_sink = None
     _FakeHostRuntimeRunner.forbidden_business_args = {}
     _RaisingHostRuntimeRunner.run_called = False
 
@@ -1746,7 +1885,377 @@ def test_analyze_cli_use_llm_configured_calls_llm_service_and_prints_report(
         == execution_request.runtime_plan.host_timeout_seconds
     )
     assert _FakeHostRuntimeRunner.last_session_id is None
+    assert _FakeHostRuntimeRunner.last_event_sink is not None
     assert _FakeHostRuntimeRunner.forbidden_business_args == {}
+
+
+def test_analyze_cli_use_llm_default_non_tty_does_not_print_progress(
+    monkeypatch,
+) -> None:  # type: ignore[no-untyped-def]
+    """验证非 TTY auto 模式默认不输出 LLM progress。"""
+
+    monkeypatch.setattr(cli, "_llm_progress_auto_enabled", lambda: False)
+    monkeypatch.setattr(cli, "FundAnalysisService", _FakeService)
+    monkeypatch.setattr(
+        cli,
+        "build_fund_llm_execution_request",
+        _fake_build_fund_llm_execution_request,
+    )
+    monkeypatch.setattr(cli, "HostRuntimeRunner", _FakeHostRuntimeRunner)
+    _reset_fake_host_runner()
+    runner = CliRunner()
+
+    result = runner.invoke(cli.app, ["analyze", "110011", "--use-llm"])
+
+    assert result.exit_code == 0
+    assert result.stdout == "# LLM report\n"
+    assert "LLM progress:" not in result.stderr
+
+
+def test_analyze_cli_use_llm_forced_progress_prints_safe_stderr(
+    monkeypatch,
+) -> None:  # type: ignore[no-untyped-def]
+    """验证 forced progress 只向 stderr 输出安全进度行。"""
+
+    monkeypatch.setattr(cli, "_llm_progress_auto_enabled", lambda: False)
+    monkeypatch.setattr(cli, "FundAnalysisService", _FakeService)
+    monkeypatch.setattr(
+        cli,
+        "build_fund_llm_execution_request",
+        _fake_build_fund_llm_execution_request,
+    )
+    monkeypatch.setattr(cli, "HostRuntimeRunner", _FakeHostRuntimeRunner)
+    _reset_fake_host_runner()
+    runner = CliRunner()
+
+    result = runner.invoke(
+        cli.app,
+        ["analyze", "110011", "--use-llm", "--llm-progress"],
+    )
+
+    assert result.exit_code == 0
+    assert result.stdout == "# LLM report\n"
+    progress_lines = [
+        line for line in result.stderr.splitlines() if line.startswith("LLM progress:")
+    ]
+    assert sum(" run_started " in line for line in progress_lines) == 1
+    assert any(" phase_started phase=analysis_core " in line for line in progress_lines)
+    assert any(" phase_completed phase=analysis_core " in line for line in progress_lines)
+    assert any(" phase_started phase=writer " in line for line in progress_lines)
+    assert any(" phase_completed phase=writer " in line for line in progress_lines)
+    assert sum(" run_terminal " in line for line in progress_lines) == 1
+    assert progress_lines[-1].endswith("event=run_completed elapsed_ms=0")
+    assert "LLM progress:" not in result.stdout
+    for forbidden in (
+        "Authorization",
+        "Bearer",
+        "sk-",
+        "api_key",
+        "cookie",
+        "secret_key",
+        "access_key",
+        "system_prompt",
+        "user_prompt",
+        "prompt",
+        "draft_markdown",
+        "raw_response",
+        "provider_response",
+        "provider body",
+        "raw audit",
+        "model_name",
+        "header",
+    ):
+        assert forbidden not in "\n".join(progress_lines)
+
+
+def test_analyze_cli_use_llm_auto_tty_prints_progress(
+    monkeypatch,
+) -> None:  # type: ignore[no-untyped-def]
+    """验证 auto 模式在 helper 返回 TTY 时启用 progress。"""
+
+    monkeypatch.setattr(cli, "_llm_progress_auto_enabled", lambda: True)
+    monkeypatch.setattr(cli, "FundAnalysisService", _FakeService)
+    monkeypatch.setattr(
+        cli,
+        "build_fund_llm_execution_request",
+        _fake_build_fund_llm_execution_request,
+    )
+    monkeypatch.setattr(cli, "HostRuntimeRunner", _FakeHostRuntimeRunner)
+    _reset_fake_host_runner()
+    runner = CliRunner()
+
+    result = runner.invoke(cli.app, ["analyze", "110011", "--use-llm"])
+
+    assert result.exit_code == 0
+    assert result.stdout == "# LLM report\n"
+    assert "LLM progress: run_started" in result.stderr
+
+
+def test_analyze_cli_use_llm_no_progress_overrides_tty_auto(
+    monkeypatch,
+) -> None:  # type: ignore[no-untyped-def]
+    """验证 `--no-llm-progress` 会覆盖 TTY auto。"""
+
+    monkeypatch.setattr(cli, "_llm_progress_auto_enabled", lambda: True)
+    monkeypatch.setattr(cli, "FundAnalysisService", _FakeService)
+    monkeypatch.setattr(
+        cli,
+        "build_fund_llm_execution_request",
+        _fake_build_fund_llm_execution_request,
+    )
+    monkeypatch.setattr(cli, "HostRuntimeRunner", _FakeHostRuntimeRunner)
+    _reset_fake_host_runner()
+    runner = CliRunner()
+
+    result = runner.invoke(
+        cli.app,
+        ["analyze", "110011", "--use-llm", "--no-llm-progress"],
+    )
+
+    assert result.exit_code == 0
+    assert result.stdout == "# LLM report\n"
+    assert "LLM progress:" not in result.stderr
+
+
+def test_llm_progress_reporter_heartbeat_tick_lifecycle(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    """验证 reporter heartbeat 的 deterministic tick 生命周期。
+
+    Args:
+        monkeypatch: pytest monkeypatch fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 heartbeat 判定或 throttle 失效时抛出。
+    """
+
+    lines: list[str] = []
+    monkeypatch.setattr(cli.typer, "echo", lambda line, err=True, nl=True: lines.append(line))
+    reporter = cli._LLMProgressReporter(enabled=True)
+    event = cli.HostRunEvent(
+        event_type=cli.HostRunEventType.PHASE_STARTED,
+        run_id="host_run_test",
+        created_at=datetime.now(timezone.utc),
+        diagnostics={
+            "phase": "writer",
+            "chapter_id": 1,
+            "attempt": 0,
+            "provider_attempt": None,
+        },
+    )
+
+    reporter.handle_event(event)
+    assert reporter._heartbeat_tick(now_monotonic=100.0) is True
+    assert reporter._heartbeat_tick(now_monotonic=110.0) is False
+    assert reporter._heartbeat_tick(now_monotonic=130.0) is True
+    assert lines[-1].startswith("LLM progress: still_running phase=writer")
+    reporter.stop()
+    assert reporter._heartbeat_tick(now_monotonic=200.0) is False
+
+
+def test_llm_progress_reporter_heartbeat_suppressed_after_sink_failure(
+    monkeypatch,
+) -> None:  # type: ignore[no-untyped-def]
+    """验证 sink 失败后 heartbeat 被关闭。
+
+    Args:
+        monkeypatch: pytest monkeypatch fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 sink 失败后仍输出 heartbeat 时抛出。
+    """
+
+    def raise_echo(*args, **kwargs):  # type: ignore[no-untyped-def]
+        """模拟 stderr 写入失败。
+
+        Args:
+            args: 未使用。
+            kwargs: 未使用。
+
+        Returns:
+            无返回值。
+
+        Raises:
+            RuntimeError: 始终抛出。
+        """
+
+        raise RuntimeError("stderr closed")
+
+    monkeypatch.setattr(cli.typer, "echo", raise_echo)
+    reporter = cli._LLMProgressReporter(enabled=True)
+    event = cli.HostRunEvent(
+        event_type=cli.HostRunEventType.PHASE_STARTED,
+        run_id="host_run_test",
+        created_at=datetime.now(timezone.utc),
+        diagnostics={
+            "phase": "writer",
+            "chapter_id": 1,
+            "attempt": 0,
+            "provider_attempt": None,
+        },
+    )
+
+    reporter.handle_event(event)
+
+    assert reporter.sink_failed is True
+    assert reporter._heartbeat_tick(now_monotonic=100.0) is False
+
+
+def test_llm_progress_reporter_suppresses_heartbeat_after_terminal(
+    monkeypatch,
+) -> None:  # type: ignore[no-untyped-def]
+    """验证 run_terminal 后不再输出 still_running。
+
+    Args:
+        monkeypatch: pytest monkeypatch fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 terminal 后仍输出 heartbeat 时抛出。
+    """
+
+    lines: list[str] = []
+    monkeypatch.setattr(cli.typer, "echo", lambda line, err=True, nl=True: lines.append(line))
+    reporter = cli._LLMProgressReporter(enabled=True)
+    event = cli.HostRunEvent(
+        event_type=cli.HostRunEventType.PHASE_STARTED,
+        run_id="host_run_test",
+        created_at=datetime.now(timezone.utc),
+        diagnostics={
+            "phase": "writer",
+            "chapter_id": 1,
+            "attempt": 0,
+            "provider_attempt": None,
+        },
+    )
+    now = datetime.now(timezone.utc)
+    host_result = cli.HostRunResult(
+        run_id="host_run_test",
+        status=cli.HostRunStatus.SUCCEEDED,
+        started_at=now,
+        deadline_at=None,
+        completed_at=now,
+        elapsed_ms=42,
+        operation_result=object(),
+        timeout_classification=None,
+        safe_diagnostics={},
+        events=(),
+    )
+
+    reporter.handle_event(event)
+    reporter.emit_terminal(host_result)
+
+    assert lines[-1] == "LLM progress: run_terminal run_id=host_run_test event=run_completed elapsed_ms=42"
+    assert reporter._heartbeat_tick(now_monotonic=100.0) is False
+
+
+def test_llm_progress_reporter_sink_exception_does_not_escape(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    """验证 CLI sink wrapper 捕获 reporter 异常。
+
+    Args:
+        monkeypatch: pytest monkeypatch fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 reporter 异常逃逸或未标记 sink_failed 时抛出。
+    """
+
+    def raise_echo(*args, **kwargs):  # type: ignore[no-untyped-def]
+        """模拟 stderr 写入失败。
+
+        Args:
+            args: 未使用。
+            kwargs: 未使用。
+
+        Returns:
+            无返回值。
+
+        Raises:
+            RuntimeError: 始终抛出。
+        """
+
+        raise RuntimeError("stderr closed")
+
+    monkeypatch.setattr(cli.typer, "echo", raise_echo)
+    reporter = cli._LLMProgressReporter(enabled=True)
+    event = cli.HostRunEvent(
+        event_type=cli.HostRunEventType.RUN_STARTED,
+        run_id="host_run_test",
+        created_at=datetime.now(timezone.utc),
+        diagnostics={"timeout_seconds": 1},
+    )
+
+    reporter.event_sink(event)
+
+    assert reporter.sink_failed is True
+
+
+def test_analyze_cli_progress_sink_failure_does_not_affect_success(
+    monkeypatch,
+) -> None:  # type: ignore[no-untyped-def]
+    """验证 progress sink 失败不影响 Host 终态、stdout 或 exit code。
+
+    Args:
+        monkeypatch: pytest monkeypatch fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 progress 失败改变 CLI 成功路径时抛出。
+    """
+
+    original_echo = cli.typer.echo
+
+    def fail_progress_echo(message=None, *args, **kwargs):  # type: ignore[no-untyped-def]
+        """只让 progress 行写入失败，普通 CLI 输出仍使用原 echo。
+
+        Args:
+            message: Typer echo 消息。
+            args: 透传给原 echo 的位置参数。
+            kwargs: 透传给原 echo 的关键字参数。
+
+        Returns:
+            原 echo 的返回值。
+
+        Raises:
+            RuntimeError: progress 行始终抛出，模拟 stderr 写入失败。
+            Exception: 原 echo 可能传播的异常。
+        """
+
+        if isinstance(message, str) and message.startswith("LLM progress:"):
+            raise RuntimeError("stderr closed")
+        return original_echo(message, *args, **kwargs)
+
+    monkeypatch.setattr(cli.typer, "echo", fail_progress_echo)
+    monkeypatch.setattr(cli, "_llm_progress_auto_enabled", lambda: False)
+    monkeypatch.setattr(cli, "FundAnalysisService", _FakeService)
+    monkeypatch.setattr(
+        cli,
+        "build_fund_llm_execution_request",
+        _fake_build_fund_llm_execution_request,
+    )
+    monkeypatch.setattr(cli, "HostRuntimeRunner", _FakeHostRuntimeRunner)
+    _reset_fake_host_runner()
+    runner = CliRunner()
+
+    result = runner.invoke(
+        cli.app,
+        ["analyze", "110011", "--use-llm", "--llm-progress"],
+    )
+
+    assert result.exit_code == 0
+    assert result.stdout == "# LLM report\n"
+    assert "LLM progress:" not in result.stderr
+    assert _FakeHostRuntimeRunner.run_called is True
 
 
 def test_analyze_cli_use_llm_construction_error_fails_before_service(
@@ -1828,6 +2337,35 @@ def test_analyze_cli_use_llm_incomplete_result_exits_without_fallback(
     assert "# 0. 投资要点概览" not in result.output
     assert _IncompleteLLMService.analyze_called is False
     assert _IncompleteLLMService.analyze_with_llm_execution_called is True
+
+
+def test_analyze_cli_use_llm_forced_progress_incomplete_keeps_fail_closed(
+    monkeypatch,
+) -> None:  # type: ignore[no-untyped-def]
+    """验证 forced progress 不改变 incomplete fail-closed 语义。"""
+
+    monkeypatch.setattr(cli, "_llm_progress_auto_enabled", lambda: False)
+    monkeypatch.setattr(cli, "FundAnalysisService", _IncompleteLLMService)
+    monkeypatch.setattr(
+        cli,
+        "build_fund_llm_execution_request",
+        _fake_build_fund_llm_execution_request,
+    )
+    runner = CliRunner()
+
+    result = runner.invoke(
+        cli.app,
+        ["analyze", "110011", "--use-llm", "--llm-progress"],
+    )
+
+    assert result.exit_code == 1
+    assert result.stdout == ""
+    assert "LLM progress: run_started" in result.stderr
+    assert "LLM progress: run_terminal" in result.stderr
+    assert "event=run_failed" in result.stderr
+    assert "LLM 分析未完成：" in result.stderr
+    assert "LLM Host run 未完成：" in result.stderr
+    assert "# 0. 投资要点概览" not in result.output
 
 
 def test_analyze_cli_use_llm_typed_incomplete_writes_artifact_path(
@@ -2113,6 +2651,56 @@ def test_analyze_cli_use_llm_timeout_fail_closed_without_fallback(
     assert "# 0. 投资要点概览" not in result.output
     assert _TimeoutLLMService.analyze_called is False
     assert _TimeoutLLMService.analyze_with_llm_execution_called is True
+
+
+def test_analyze_cli_use_llm_forced_progress_timeout_is_safe(
+    monkeypatch,
+) -> None:  # type: ignore[no-untyped-def]
+    """验证 timeout incomplete 下 progress 仍只输出安全 allowlist 字段。"""
+
+    monkeypatch.setattr(cli, "_llm_progress_auto_enabled", lambda: False)
+    monkeypatch.setattr(cli, "FundAnalysisService", _TimeoutLLMService)
+    monkeypatch.setattr(
+        cli,
+        "build_fund_llm_execution_request",
+        _fake_build_fund_llm_execution_request,
+    )
+    runner = CliRunner()
+
+    result = runner.invoke(
+        cli.app,
+        ["analyze", "110011", "--use-llm", "--llm-progress"],
+    )
+
+    assert result.exit_code == 1
+    assert result.stdout == ""
+    assert "LLM progress: phase_started phase=writer" in result.stderr
+    assert "LLM progress: run_terminal" in result.stderr
+    assert "first_failed_provider_runtime_category=timeout" in result.stderr
+    progress_stderr = "\n".join(
+        line for line in result.stderr.splitlines() if line.startswith("LLM progress:")
+    )
+    for forbidden in (
+        "Authorization",
+        "Bearer",
+        "sk-",
+        "api_key",
+        "cookie",
+        "secret_key",
+        "access_key",
+        "system_prompt",
+        "user_prompt",
+        "prompt",
+        "draft_markdown",
+        "raw_response",
+        "provider_response",
+        "provider body",
+        "raw audit",
+        "model_name",
+        "header",
+    ):
+        assert forbidden not in progress_stderr
+    assert "# 0. 投资要点概览" not in result.output
 
 
 def test_analyze_cli_use_llm_host_failure_is_not_double_wrapped(
@@ -2477,6 +3065,48 @@ def test_analyze_cli_use_llm_structured_quality_gate_block(
     assert "status=succeeded" not in result.stderr
 
 
+def test_analyze_cli_use_llm_progress_quality_gate_block_preserves_error(
+    monkeypatch,
+) -> None:  # type: ignore[no-untyped-def]
+    """验证 progress 启用时 LLM quality gate block 仍走既有错误路径。
+
+    Args:
+        monkeypatch: pytest monkeypatch fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 progress 破坏 quality gate block 退出语义时抛出。
+    """
+
+    monkeypatch.setattr(cli, "_llm_progress_auto_enabled", lambda: False)
+    monkeypatch.setattr(cli, "FundAnalysisService", _FakeLLMBlockedAnalysisService)
+    monkeypatch.setattr(
+        cli,
+        "build_fund_llm_execution_request",
+        _fake_build_fund_llm_execution_request,
+    )
+    runner = CliRunner()
+
+    result = runner.invoke(
+        cli.app,
+        ["analyze", "110011", "--use-llm", "--llm-progress"],
+    )
+
+    assert result.exit_code == 2
+    assert result.stdout == ""
+    assert "质量 gate 阻断报告输出" in result.stderr
+    assert "quality_gate_status: block" in result.stderr
+    assert "quality_gate_issues: 2" in result.stderr
+    assert "LLM progress: run_started" in result.stderr
+    assert "LLM progress: run_terminal" not in result.stderr
+    assert "UnboundLocalError" not in result.stderr
+    assert "host_result" not in result.stderr
+    assert "分析失败：" not in result.stderr
+    assert "LLM Host run 未完成" not in result.stderr
+
+
 def test_analyze_cli_structured_quality_gate_not_run_block(
     monkeypatch,
 ) -> None:  # type: ignore[no-untyped-def]
@@ -2536,6 +3166,48 @@ def test_analyze_cli_use_llm_structured_quality_gate_not_run_block(
     assert "quality_gate_not_run_reason: fund_code `110011` not found" in result.stderr
     assert "LLM Host run 未完成" not in result.stderr
     assert "status=succeeded" not in result.stderr
+
+
+def test_analyze_cli_use_llm_progress_quality_gate_not_run_preserves_error(
+    monkeypatch,
+) -> None:  # type: ignore[no-untyped-def]
+    """验证 progress 启用时 LLM quality gate not-run 仍走既有错误路径。
+
+    Args:
+        monkeypatch: pytest monkeypatch fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 progress 破坏 quality gate not-run 退出语义时抛出。
+    """
+
+    monkeypatch.setattr(cli, "_llm_progress_auto_enabled", lambda: False)
+    monkeypatch.setattr(cli, "FundAnalysisService", _FakeLLMNotRunBlockedAnalysisService)
+    monkeypatch.setattr(
+        cli,
+        "build_fund_llm_execution_request",
+        _fake_build_fund_llm_execution_request,
+    )
+    runner = CliRunner()
+
+    result = runner.invoke(
+        cli.app,
+        ["analyze", "110011", "--use-llm", "--llm-progress"],
+    )
+
+    assert result.exit_code == 2
+    assert result.stdout == ""
+    assert "质量 gate 阻断报告输出" in result.stderr
+    assert "quality_gate_status: not_run" in result.stderr
+    assert "quality_gate_not_run_reason: fund_code `110011` not found" in result.stderr
+    assert "LLM progress: run_started" in result.stderr
+    assert "LLM progress: run_terminal" not in result.stderr
+    assert "UnboundLocalError" not in result.stderr
+    assert "host_result" not in result.stderr
+    assert "分析失败：" not in result.stderr
+    assert "LLM Host run 未完成" not in result.stderr
 
 
 def test_analyze_cli_exits_nonzero_with_clear_message(monkeypatch) -> None:  # type: ignore[no-untyped-def]

@@ -11,6 +11,9 @@ import asyncio
 from dataclasses import replace
 import json
 from pathlib import Path
+import sys
+import threading
+import time
 from typing import Annotated
 
 import typer
@@ -23,7 +26,14 @@ from fund_agent.config.paths import (
     DEFAULT_GOLDEN_TEMPLATE_PATH,
     DEFAULT_SELECTED_FUNDS_CSV,
 )
-from fund_agent.host import HostRunResult, HostRunStatus, HostRuntimeRunner
+from fund_agent.host import (
+    HostRunEvent,
+    HostRunEventSink,
+    HostRunEventType,
+    HostRunResult,
+    HostRunStatus,
+    HostRuntimeRunner,
+)
 from fund_agent.services import (
     ExtractionScoreRequest,
     ExtractionScoreService,
@@ -74,6 +84,521 @@ DEFAULT_GOLDEN_READINESS_PREFLIGHT_OUTPUT_DIR = (
     / "golden-readiness-preflight"
     / DEFAULT_GOLDEN_READINESS_PREFLIGHT_RUN_ID
 )
+_LLM_PROGRESS_PREFIX = "LLM progress:"
+_LLM_PROGRESS_HEARTBEAT_INTERVAL_SECONDS = 30.0
+_LLM_PROGRESS_THREAD_JOIN_SECONDS = 2.0
+_LLM_PROGRESS_THREAD_POLL_SECONDS = 1.0
+_LLM_PROGRESS_SAFE_VALUE_MAX_LENGTH = 80
+_LLM_PROGRESS_FORBIDDEN_VALUE_PARTS = (
+    "api_key",
+    "authorization",
+    "bearer",
+    "cookie",
+    "secret_key",
+    "access_key",
+    "system_prompt",
+    "user_prompt",
+    "prompt",
+    "draft_markdown",
+    "raw_response",
+    "provider_response",
+    "provider body",
+    "raw audit",
+    "model_name",
+    "header",
+)
+
+
+def _llm_progress_auto_enabled() -> bool:
+    """判断自动模式下是否启用 LLM progress。
+
+    Args:
+        无。
+
+    Returns:
+        `True` 表示当前 stderr 是 TTY，应启用交互式 progress。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return sys.stderr.isatty()
+
+
+def _resolve_llm_progress_enabled(llm_progress: bool | None) -> bool:
+    """解析 LLM progress CLI 开关。
+
+    Args:
+        llm_progress: CLI 传入的三态开关；`None` 表示自动。
+
+    Returns:
+        `True` 表示启用 stderr progress。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if llm_progress is True:
+        return True
+    if llm_progress is False:
+        return False
+    return _llm_progress_auto_enabled()
+
+
+def _progress_scalar(value: object) -> str:
+    """把 progress allowlist 值格式化为安全短标量。
+
+    Args:
+        value: Host event 中的 allowlist 字段值。
+
+    Returns:
+        可写入 stderr 的短字符串；缺失值返回 `none`。
+
+    Raises:
+        ValueError: 当值疑似包含 secret、prompt、raw response 或复杂 payload 时抛出。
+    """
+
+    if value is None:
+        return "none"
+    if isinstance(value, bool):
+        text = "true" if value else "false"
+    elif isinstance(value, int | float):
+        text = str(value)
+    else:
+        text = str(value)
+    lowered = text.lower()
+    if any(part in lowered for part in _LLM_PROGRESS_FORBIDDEN_VALUE_PARTS):
+        raise ValueError("progress value contains forbidden diagnostic fragment")
+    text = " ".join(text.split())
+    if len(text) > _LLM_PROGRESS_SAFE_VALUE_MAX_LENGTH:
+        text = text[: _LLM_PROGRESS_SAFE_VALUE_MAX_LENGTH - 3].rstrip() + "..."
+    return text or "none"
+
+
+class _LLMProgressReporter:
+    """CLI-owned 安全 LLM progress reporter。
+
+    Reporter 只消费 Host 通用事件，维护当前 phase 状态，并把 allowlist
+    字段写入 stderr。任何 reporter 内部异常都会关闭 progress，不影响 Host
+    终态、stdout 或 CLI fail-closed 处理。
+    """
+
+    def __init__(
+        self,
+        *,
+        enabled: bool,
+        heartbeat_interval_seconds: float = _LLM_PROGRESS_HEARTBEAT_INTERVAL_SECONDS,
+    ) -> None:
+        """初始化 progress reporter。
+
+        Args:
+            enabled: 是否启用 progress 输出。
+            heartbeat_interval_seconds: heartbeat 最小间隔秒数。
+
+        Returns:
+            无返回值。
+
+        Raises:
+            ValueError: heartbeat 间隔小于 30 秒时抛出。
+        """
+
+        if heartbeat_interval_seconds < _LLM_PROGRESS_HEARTBEAT_INTERVAL_SECONDS:
+            raise ValueError("LLM progress heartbeat interval must be at least 30 seconds")
+        self.enabled = enabled
+        self._heartbeat_interval_seconds = heartbeat_interval_seconds
+        self._stop_event = threading.Event()
+        self._lock = threading.Lock()
+        self._current_phase: str | None = None
+        self._current_chapter_id: int | None = None
+        self._current_attempt: int | None = None
+        self._phase_started_monotonic: float | None = None
+        self._last_heartbeat_monotonic: float | None = None
+        self._terminal_emitted = False
+        self._sink_failed = False
+        self._thread: threading.Thread | None = None
+
+    @property
+    def event_sink(self) -> HostRunEventSink:
+        """返回传给 Host 的 no-raise event sink。
+
+        Args:
+            无。
+
+        Returns:
+            Host 通用事件接收函数。
+
+        Raises:
+            无显式抛出；内部异常会被 sink wrapper 捕获。
+        """
+
+        return self.handle_event
+
+    @property
+    def sink_failed(self) -> bool:
+        """返回 progress sink 是否已经失败。
+
+        Args:
+            无。
+
+        Returns:
+            `True` 表示 reporter 已关闭后续 progress 输出。
+
+        Raises:
+            无显式抛出。
+        """
+
+        with self._lock:
+            return self._sink_failed
+
+    def start(self) -> None:
+        """启动 heartbeat 线程。
+
+        Args:
+            无。
+
+        Returns:
+            无返回值。
+
+        Raises:
+            无显式抛出；禁用 progress 时不启动线程。
+        """
+
+        if not self.enabled:
+            return
+        with self._lock:
+            if self._thread is not None:
+                return
+            self._stop_event.clear()
+            self._thread = threading.Thread(
+                target=self._heartbeat_loop,
+                name="fund-agent-llm-progress",
+                daemon=True,
+            )
+            self._thread.start()
+
+    def stop(self) -> None:
+        """停止 heartbeat 线程并做有界 join。
+
+        Args:
+            无。
+
+        Returns:
+            无返回值。
+
+        Raises:
+            无显式抛出。
+        """
+
+        self._stop_event.set()
+        thread = self._thread
+        if thread is not None and thread.is_alive():
+            thread.join(timeout=_LLM_PROGRESS_THREAD_JOIN_SECONDS)
+
+    def handle_event(self, event: HostRunEvent) -> None:
+        """处理 Host 通用事件并输出即时 progress。
+
+        Args:
+            event: Host 已提交的安全事件。
+
+        Returns:
+            无返回值。
+
+        Raises:
+            无显式抛出；所有异常都会被捕获并关闭后续 progress。
+        """
+
+        if not self.enabled:
+            return
+        try:
+            self._handle_event(event)
+        except Exception:  # noqa: BLE001 - progress 失败不能影响 Host/CLI 主流程。
+            self._mark_sink_failed()
+
+    def emit_terminal(self, host_result: HostRunResult) -> None:
+        """在 Host run 返回后输出 terminal progress 行。
+
+        Args:
+            host_result: Host run 终态结果。
+
+        Returns:
+            无返回值。
+
+        Raises:
+            无显式抛出；输出失败只关闭 progress。
+        """
+
+        if not self.enabled:
+            return
+        try:
+            event_name = _terminal_progress_event_name(host_result)
+            if event_name is None:
+                return
+            with self._lock:
+                if self._sink_failed:
+                    return
+                self._terminal_emitted = True
+                self._current_phase = None
+                self._current_chapter_id = None
+                self._current_attempt = None
+                self._phase_started_monotonic = None
+                self._stop_event.set()
+            self.stop()
+            self._safe_echo(
+                (
+                    f"{_LLM_PROGRESS_PREFIX} run_terminal "
+                    f"run_id={_progress_scalar(host_result.run_id)} "
+                    f"event={event_name} "
+                    f"elapsed_ms={_progress_scalar(host_result.elapsed_ms)}"
+                )
+            )
+        except Exception:  # noqa: BLE001 - terminal progress 失败不能覆盖原终态。
+            self._mark_sink_failed()
+
+    def _heartbeat_tick(self, now_monotonic: float | None = None) -> bool:
+        """执行一次确定性 heartbeat 判定。
+
+        Args:
+            now_monotonic: 可选 monotonic 时间；测试可注入固定值。
+
+        Returns:
+            `True` 表示本次输出了 `still_running` 行。
+
+        Raises:
+            无显式抛出；输出失败只关闭 progress 并返回 `False`。
+        """
+
+        if not self.enabled:
+            return False
+        now = time.monotonic() if now_monotonic is None else now_monotonic
+        try:
+            with self._lock:
+                if (
+                    self._stop_event.is_set()
+                    or self._terminal_emitted
+                    or self._sink_failed
+                    or self._current_phase is None
+                    or self._phase_started_monotonic is None
+                ):
+                    return False
+                if (
+                    self._last_heartbeat_monotonic is not None
+                    and now - self._last_heartbeat_monotonic
+                    < self._heartbeat_interval_seconds
+                ):
+                    return False
+                phase = self._current_phase
+                chapter_id = self._current_chapter_id
+                attempt = self._current_attempt
+                elapsed_ms = max(0, int((now - self._phase_started_monotonic) * 1000))
+                self._last_heartbeat_monotonic = now
+            self._safe_echo(
+                (
+                    f"{_LLM_PROGRESS_PREFIX} still_running "
+                    f"phase={_progress_scalar(phase)} "
+                    f"chapter_id={_progress_scalar(chapter_id)} "
+                    f"attempt={_progress_scalar(attempt)} "
+                    f"elapsed_ms={_progress_scalar(elapsed_ms)}"
+                )
+            )
+            return True
+        except Exception:  # noqa: BLE001 - heartbeat 失败不能影响主流程。
+            self._mark_sink_failed()
+            return False
+
+    def _handle_event(self, event: HostRunEvent) -> None:
+        """处理单个 Host 事件的状态转移。
+
+        Args:
+            event: Host 已提交事件。
+
+        Returns:
+            无返回值。
+
+        Raises:
+            ValueError: progress 值不满足安全输出契约时抛出。
+        """
+
+        if event.event_type == HostRunEventType.RUN_STARTED:
+            self._safe_echo(
+                (
+                    f"{_LLM_PROGRESS_PREFIX} run_started "
+                    f"run_id={_progress_scalar(event.run_id)} "
+                    f"timeout_seconds={_progress_scalar(event.diagnostics.get('timeout_seconds'))}"
+                )
+            )
+            return
+        if event.event_type == HostRunEventType.PHASE_STARTED:
+            self._handle_phase_started(event)
+            return
+        if event.event_type == HostRunEventType.PHASE_COMPLETED:
+            self._handle_phase_completed(event)
+
+    def _handle_phase_started(self, event: HostRunEvent) -> None:
+        """记录 phase started 状态并输出 progress 行。
+
+        Args:
+            event: Host phase started 事件。
+
+        Returns:
+            无返回值。
+
+        Raises:
+            ValueError: progress 值不满足安全输出契约时抛出。
+        """
+
+        phase = event.diagnostics.get("phase")
+        chapter_id = event.diagnostics.get("chapter_id")
+        attempt = event.diagnostics.get("attempt")
+        with self._lock:
+            if self._sink_failed or self._terminal_emitted:
+                return
+            self._current_phase = _progress_scalar(phase)
+            self._current_chapter_id = _optional_int(chapter_id)
+            self._current_attempt = _optional_int(attempt)
+            self._phase_started_monotonic = time.monotonic()
+            self._last_heartbeat_monotonic = None
+        self._safe_echo(
+            (
+                f"{_LLM_PROGRESS_PREFIX} phase_started "
+                f"phase={_progress_scalar(phase)} "
+                f"chapter_id={_progress_scalar(chapter_id)} "
+                f"attempt={_progress_scalar(attempt)}"
+            )
+        )
+
+    def _handle_phase_completed(self, event: HostRunEvent) -> None:
+        """记录 phase completed 状态并输出 progress 行。
+
+        Args:
+            event: Host phase completed 事件。
+
+        Returns:
+            无返回值。
+
+        Raises:
+            ValueError: progress 值不满足安全输出契约时抛出。
+        """
+
+        phase = event.diagnostics.get("phase")
+        chapter_id = event.diagnostics.get("chapter_id")
+        attempt = event.diagnostics.get("attempt")
+        elapsed_ms = event.diagnostics.get("elapsed_ms")
+        with self._lock:
+            if self._sink_failed or self._terminal_emitted:
+                return
+            if self._current_phase == _progress_scalar(phase):
+                self._current_phase = None
+                self._current_chapter_id = None
+                self._current_attempt = None
+                self._phase_started_monotonic = None
+                self._last_heartbeat_monotonic = None
+        self._safe_echo(
+            (
+                f"{_LLM_PROGRESS_PREFIX} phase_completed "
+                f"phase={_progress_scalar(phase)} "
+                f"chapter_id={_progress_scalar(chapter_id)} "
+                f"attempt={_progress_scalar(attempt)} "
+                f"elapsed_ms={_progress_scalar(elapsed_ms)}"
+            )
+        )
+
+    def _heartbeat_loop(self) -> None:
+        """后台 heartbeat 循环。
+
+        Args:
+            无。
+
+        Returns:
+            无返回值。
+
+        Raises:
+            无显式抛出；内部异常会关闭 progress。
+        """
+
+        while not self._stop_event.wait(_LLM_PROGRESS_THREAD_POLL_SECONDS):
+            self._heartbeat_tick()
+
+    def _safe_echo(self, line: str) -> None:
+        """把 progress 行写入 stderr。
+
+        Args:
+            line: 已格式化的 progress 行。
+
+        Returns:
+            无返回值。
+
+        Raises:
+            Exception: `typer.echo` 底层写入异常原样抛出，由调用方捕获。
+        """
+
+        typer.echo(line, err=True)
+
+    def _mark_sink_failed(self) -> None:
+        """标记 progress sink 失败并关闭后续输出。
+
+        Args:
+            无。
+
+        Returns:
+            无返回值。
+
+        Raises:
+            无显式抛出。
+        """
+
+        with self._lock:
+            self._sink_failed = True
+            self._current_phase = None
+            self._current_chapter_id = None
+            self._current_attempt = None
+            self._phase_started_monotonic = None
+            self._last_heartbeat_monotonic = None
+            self._stop_event.set()
+
+
+def _optional_int(value: object) -> int | None:
+    """把 Host progress 诊断值转换为可选整数。
+
+    Args:
+        value: Host event 诊断值。
+
+    Returns:
+        整数值；缺失时返回 `None`。
+
+    Raises:
+        ValueError: 当值无法安全转换为整数时抛出。
+    """
+
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        raise ValueError("progress int field cannot be bool")
+    return int(value)
+
+
+def _terminal_progress_event_name(host_result: HostRunResult) -> str | None:
+    """把 Host 终态映射为 progress terminal event 名称。
+
+    Args:
+        host_result: Host run 结果。
+
+    Returns:
+        `run_completed` / `run_failed` / `run_cancelled`；非可展示终态返回 `None`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if host_result.status == HostRunStatus.SUCCEEDED:
+        return "run_completed"
+    if host_result.status == HostRunStatus.FAILED:
+        return "run_failed"
+    if host_result.status in {
+        HostRunStatus.CANCELLED,
+        HostRunStatus.DEADLINE_EXCEEDED,
+    }:
+        return "run_cancelled"
+    return None
 
 
 @app.command()
@@ -175,6 +700,13 @@ def analyze(
         bool,
         typer.Option("--use-llm", help="显式启用 Route C LLM 分章写作路径"),
     ] = False,
+    llm_progress: Annotated[
+        bool | None,
+        typer.Option(
+            "--llm-progress/--no-llm-progress",
+            help="控制 --use-llm 安全 stderr progress；默认仅 TTY 启用",
+        ),
+    ] = None,
 ) -> None:
     """对指定基金执行完整分析，输出 8 章 Markdown 体检报告。
 
@@ -203,6 +735,7 @@ def analyze(
         quality_gate_run_id: 质量 gate 运行 ID。
         quality_gate_golden_answer_path: strict golden answer JSON 路径。
         use_llm: 是否显式启用 Route C LLM 分章写作路径。
+        llm_progress: 是否为 `--use-llm` 启用安全 stderr progress；`None` 表示自动。
 
     Returns:
         无返回值，报告写入 stdout。
@@ -248,7 +781,20 @@ def analyze(
     try:
         if use_llm:
             execution_request = _build_llm_execution_request_or_fail(request)
-            host_result = _run_llm_analysis_in_host(execution_request)
+            progress_enabled = _resolve_llm_progress_enabled(llm_progress)
+            reporter = _LLMProgressReporter(enabled=progress_enabled)
+            host_result: HostRunResult | None = None
+            try:
+                reporter.start()
+                host_result = _run_llm_analysis_in_host(
+                    execution_request,
+                    event_sink=reporter.event_sink,
+                )
+            finally:
+                reporter.stop()
+            if host_result is None:
+                raise RuntimeError("LLM Host run did not return a result")
+            reporter.emit_terminal(host_result)
             if host_result.status != HostRunStatus.SUCCEEDED or host_result.operation_result is None:
                 if host_result.operation_result is not None:
                     _write_incomplete_llm_artifacts_for_cli(
@@ -827,11 +1373,14 @@ class _LLMIncompleteHostRunError(RuntimeError):
 
 def _run_llm_analysis_in_host(
     execution_request: FundLLMExecutionRequest,
+    *,
+    event_sink: HostRunEventSink | None = None,
 ) -> HostRunResult:
     """通过本地 Host runtime governance 托管 LLM 分析。
 
     Args:
         execution_request: Service-owned typed LLM 执行请求。
+        event_sink: 可选 Host 通用事件 sink，用于 CLI stderr progress。
 
     Returns:
         Host run 终态结果。
@@ -873,6 +1422,7 @@ def _run_llm_analysis_in_host(
         operation_name="fund_analysis_llm_report",
         operation=operation,
         timeout_seconds=timeout_seconds,
+        event_sink=event_sink,
     )
     if quality_gate_exception is not None:
         raise quality_gate_exception
