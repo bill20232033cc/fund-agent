@@ -20,6 +20,7 @@ DEFAULT_GOLDEN_REVIEWED_MARKDOWN: Final[Path] = Path(
 DEFAULT_GOLDEN_ANSWER_JSON: Final[Path] = Path("reports/golden-answers/golden-answer.json")
 DEFAULT_EXTRACTION_SNAPSHOT_ROOT: Final[Path] = Path("reports/extraction-snapshots")
 DEFAULT_QUALITY_GATE_OUTPUT_ROOT: Final[Path] = Path("reports/quality-gate-runs")
+DEFAULT_LLM_RUN_ARTIFACT_ROOT: Final[Path] = Path("reports/llm-runs")
 DEFAULT_CACHE_ROOT: Final[Path] = Path("cache")
 DEFAULT_DOCUMENT_CACHE_ROOT: Final[Path] = DEFAULT_CACHE_ROOT / "documents"
 DEFAULT_PDF_CACHE_ROOT: Final[Path] = DEFAULT_CACHE_ROOT / "pdf"

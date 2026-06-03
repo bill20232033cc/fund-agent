@@ -86,6 +86,12 @@ ProviderRuntimeCategory = Literal[
     "network",
     "http_error",
 ]
+DiagnosticConsistencyStatus = Literal[
+    "consistent",
+    "missing_terminal_runtime_diagnostic",
+    "terminal_category_conflict",
+    "non_runtime_terminal_without_scalar",
+]
 ChapterFailureCategory = Literal[
     "provider_runtime",
     "llm_timeout",
@@ -160,6 +166,23 @@ _SUBCATEGORY_PRECEDENCE: Final[tuple[ChapterFailureSubcategory, ...]] = (
     "l1_numerical_closure",
     "code_bug_other",
 )
+_RUNTIME_TERMINAL_STOP_REASONS: Final[frozenset[ChapterRunStopReason]] = frozenset(
+    (
+        "llm_timeout",
+        "llm_rate_limited",
+        "llm_malformed_response",
+        "llm_network_error",
+        "llm_exception",
+    )
+)
+_RUNTIME_STOP_REASON_CATEGORY: Final[
+    dict[ChapterRunStopReason, ProviderRuntimeCategory]
+] = {
+    "llm_timeout": "timeout",
+    "llm_rate_limited": "rate_limit",
+    "llm_malformed_response": "malformed",
+    "llm_network_error": "network",
+}
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -1184,6 +1207,7 @@ def _exception_result(
         attempt_index=attempt_index,
         exc=exc,
     )
+    attached_to_attempt = False
     if attempts and attempts[-1].attempt_index == attempt_index and not attempts[-1].runtime_diagnostics:
         last_attempt = attempts[-1]
         attempts = (
@@ -1196,6 +1220,7 @@ def _exception_result(
                 runtime_diagnostics=runtime_diagnostics,
             ),
         )
+        attached_to_attempt = True
     return ChapterRunResult(
         chapter_id=chapter_id,
         title=title,
@@ -1206,7 +1231,7 @@ def _exception_result(
         attempts=attempts,
         issues=(f"LLM client exception category={stop_reason}: {type(exc).__name__}: {_safe_exception_message(exc)}",),
         failure_category=_chapter_failure_category_from_exception(exc),
-        runtime_diagnostics=runtime_diagnostics if not attempts else (),
+        runtime_diagnostics=() if attached_to_attempt else runtime_diagnostics,
     )
 
 
@@ -2574,47 +2599,82 @@ def _first_failed_runtime_diagnostic(
         if result.status == "accepted":
             continue
         diagnostics = _runtime_diagnostics_for_run(result)
+        terminal_diagnostic = _terminal_runtime_diagnostic(result, diagnostics)
+        representative_diagnostics = _representative_runtime_diagnostics(
+            result,
+            diagnostics,
+            terminal_diagnostic,
+        )
         return {
             "chapter_id": result.chapter_id,
             "status": result.status,
             "stop_reason": result.stop_reason,
             "category": result.failure_category,
             "subcategory": result.failure_subcategory,
-            "runtime_operation": _first_runtime_operation(diagnostics),
-            "repair_attempt_index": _first_repair_attempt_index(diagnostics),
-        "provider_attempt_count": _provider_attempt_count(diagnostics),
-        "provider_max_attempts": _provider_max_attempts(diagnostics),
-        "provider_runtime_categories": _provider_runtime_categories(diagnostics),
-        "timeout_seconds": _max_optional_float(
-            diagnostic.timeout_seconds for diagnostic in diagnostics
-        ),
-        "timeout_max_attempts": _max_optional_int(
-            diagnostic.timeout_max_attempts for diagnostic in diagnostics
-        ),
-        "timeout_backoff_seconds": _max_optional_float(
-            diagnostic.timeout_backoff_seconds for diagnostic in diagnostics
-        ),
-        "timeout_budget_kind": _first_timeout_budget_kind(diagnostics),
-        "timeout_root_cause_hint": _first_timeout_root_cause_hint(diagnostics),
-        "system_prompt_chars": _max_optional_int(
-            diagnostic.system_prompt_chars for diagnostic in diagnostics
-        ),
-        "user_prompt_chars": _max_optional_int(
-            diagnostic.user_prompt_chars for diagnostic in diagnostics
-        ),
-        "approx_prompt_tokens": _max_optional_int(
-            diagnostic.approx_prompt_tokens for diagnostic in diagnostics
-        ),
-        "allowed_fact_count": _max_optional_int(
-            diagnostic.allowed_fact_count for diagnostic in diagnostics
-        ),
-        "allowed_anchor_count": _max_optional_int(
-            diagnostic.allowed_anchor_count for diagnostic in diagnostics
-        ),
-        "max_output_chars": _max_optional_int(
-            diagnostic.max_output_chars for diagnostic in diagnostics
-        ),
-    }
+            "diagnostic_consistency_status": _diagnostic_consistency_status(
+                result,
+                diagnostics,
+                terminal_diagnostic,
+            ),
+            "terminal_runtime_diagnostic_present": terminal_diagnostic is not None,
+            "terminal_stop_reason": result.stop_reason,
+            "terminal_failure_category": result.failure_category,
+            "terminal_runtime_operation": terminal_diagnostic.operation
+            if terminal_diagnostic is not None
+            else None,
+            "terminal_repair_attempt_index": terminal_diagnostic.repair_attempt_index
+            if terminal_diagnostic is not None
+            else None,
+            "terminal_issue_class": _terminal_issue_class(result),
+            "runtime_operation": _first_runtime_operation(representative_diagnostics),
+            "repair_attempt_index": _first_repair_attempt_index(
+                representative_diagnostics
+            ),
+            "provider_attempt_count": _provider_attempt_count(representative_diagnostics),
+            "provider_max_attempts": _provider_max_attempts(representative_diagnostics),
+            "provider_runtime_categories": _provider_runtime_categories(
+                representative_diagnostics
+            ),
+            "timeout_seconds": _max_optional_float(
+                diagnostic.timeout_seconds for diagnostic in representative_diagnostics
+            ),
+            "timeout_max_attempts": _max_optional_int(
+                diagnostic.timeout_max_attempts
+                for diagnostic in representative_diagnostics
+            ),
+            "timeout_backoff_seconds": _max_optional_float(
+                diagnostic.timeout_backoff_seconds
+                for diagnostic in representative_diagnostics
+            ),
+            "timeout_budget_kind": _first_timeout_budget_kind(
+                representative_diagnostics
+            ),
+            "timeout_root_cause_hint": _first_timeout_root_cause_hint(
+                representative_diagnostics
+            ),
+            "system_prompt_chars": _max_optional_int(
+                diagnostic.system_prompt_chars
+                for diagnostic in representative_diagnostics
+            ),
+            "user_prompt_chars": _max_optional_int(
+                diagnostic.user_prompt_chars for diagnostic in representative_diagnostics
+            ),
+            "approx_prompt_tokens": _max_optional_int(
+                diagnostic.approx_prompt_tokens
+                for diagnostic in representative_diagnostics
+            ),
+            "allowed_fact_count": _max_optional_int(
+                diagnostic.allowed_fact_count
+                for diagnostic in representative_diagnostics
+            ),
+            "allowed_anchor_count": _max_optional_int(
+                diagnostic.allowed_anchor_count
+                for diagnostic in representative_diagnostics
+            ),
+            "max_output_chars": _max_optional_int(
+                diagnostic.max_output_chars for diagnostic in representative_diagnostics
+            ),
+        }
     return None
 
 
@@ -2658,6 +2718,8 @@ def _chapter_runtime_diagnostic_row(result: ChapterRunResult) -> dict[str, objec
         无显式抛出。
     """
 
+    diagnostics = _runtime_diagnostics_for_run(result)
+    terminal_diagnostic = _terminal_runtime_diagnostic(result, diagnostics)
     return {
         "chapter_id": result.chapter_id,
         "status": result.status,
@@ -2665,9 +2727,23 @@ def _chapter_runtime_diagnostic_row(result: ChapterRunResult) -> dict[str, objec
         "failure_category": result.failure_category,
         "failure_subcategory": result.failure_subcategory,
         "attempt_count": len(result.attempts),
+        "diagnostic_consistency_status": _diagnostic_consistency_status(
+            result,
+            diagnostics,
+            terminal_diagnostic,
+        ),
+        "terminal_runtime_diagnostic_present": terminal_diagnostic is not None,
+        "terminal_stop_reason": result.stop_reason,
+        "terminal_failure_category": result.failure_category,
+        "terminal_runtime_operation": terminal_diagnostic.operation
+        if terminal_diagnostic is not None
+        else None,
+        "terminal_repair_attempt_index": terminal_diagnostic.repair_attempt_index
+        if terminal_diagnostic is not None
+        else None,
+        "terminal_issue_class": _terminal_issue_class(result),
         "runtime_diagnostics": tuple(
-            _runtime_diagnostic_payload(diagnostic)
-            for diagnostic in _runtime_diagnostics_for_run(result)
+            _runtime_diagnostic_payload(diagnostic) for diagnostic in diagnostics
         ),
     }
 
@@ -2693,6 +2769,340 @@ def _runtime_diagnostics_for_run(
     )
 
 
+def runtime_diagnostic_consistency_payload(
+    result: ChapterRunResult,
+    diagnostics: tuple[ChapterLLMRuntimeDiagnostic, ...] | None = None,
+) -> dict[str, object]:
+    """构造单章 terminal runtime lineage 安全摘要。
+
+    Args:
+        result: 单章编排结果。
+        diagnostics: 可选 runtime 诊断序列；缺省时从 result 收集。
+
+    Returns:
+        只含 allowlisted scalar 的 terminal consistency payload。
+
+    Raises:
+        无显式抛出。
+    """
+
+    collected = diagnostics if diagnostics is not None else _runtime_diagnostics_for_run(result)
+    terminal_diagnostic = _terminal_runtime_diagnostic(result, collected)
+    return {
+        "diagnostic_consistency_status": _diagnostic_consistency_status(
+            result,
+            collected,
+            terminal_diagnostic,
+        ),
+        "terminal_runtime_diagnostic_present": terminal_diagnostic is not None,
+        "terminal_stop_reason": result.stop_reason,
+        "terminal_failure_category": result.failure_category,
+        "terminal_runtime_operation": terminal_diagnostic.operation
+        if terminal_diagnostic is not None
+        else None,
+        "terminal_repair_attempt_index": terminal_diagnostic.repair_attempt_index
+        if terminal_diagnostic is not None
+        else None,
+        "terminal_issue_class": _terminal_issue_class(result),
+    }
+
+
+def attempt_runtime_diagnostic_consistency_payload(
+    result: ChapterRunResult,
+    attempt: ChapterAttemptRecord,
+) -> dict[str, object]:
+    """构造 attempt-level terminal runtime lineage 安全摘要。
+
+    Args:
+        result: 单章编排结果。
+        attempt: 单次 write/audit attempt 记录。
+
+    Returns:
+        只含 allowlisted scalar 的 attempt terminal consistency payload。
+
+    Raises:
+        无显式抛出。
+    """
+
+    diagnostics = attempt.runtime_diagnostics
+    terminal_diagnostic = _terminal_runtime_diagnostic(result, diagnostics)
+    return {
+        "diagnostic_consistency_status": _diagnostic_consistency_status(
+            result,
+            diagnostics,
+            terminal_diagnostic,
+        ),
+        "terminal_runtime_diagnostic_present": terminal_diagnostic is not None,
+        "terminal_stop_reason": result.stop_reason,
+        "terminal_failure_category": result.failure_category,
+        "terminal_runtime_operation": terminal_diagnostic.operation
+        if terminal_diagnostic is not None
+        else None,
+        "terminal_repair_attempt_index": terminal_diagnostic.repair_attempt_index
+        if terminal_diagnostic is not None
+        else None,
+        "terminal_issue_class": _terminal_issue_class(result),
+    }
+
+
+def _terminal_runtime_diagnostic(
+    result: ChapterRunResult,
+    diagnostics: tuple[ChapterLLMRuntimeDiagnostic, ...],
+) -> ChapterLLMRuntimeDiagnostic | None:
+    """按终态 stop reason 匹配 terminal runtime diagnostic。
+
+    Args:
+        result: 单章编排结果。
+        diagnostics: runtime 诊断序列。
+
+    Returns:
+        匹配终态的 runtime diagnostic；没有匹配时返回 `None`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if result.stop_reason not in _RUNTIME_TERMINAL_STOP_REASONS:
+        return None
+    if result.stop_reason == "llm_timeout":
+        for diagnostic in diagnostics:
+            if _is_timeout_runtime_diagnostic(diagnostic):
+                return diagnostic
+        return None
+    expected_category = _RUNTIME_STOP_REASON_CATEGORY.get(result.stop_reason)
+    if expected_category is None:
+        for diagnostic in diagnostics:
+            if diagnostic.provider_runtime_category is not None:
+                return diagnostic
+        return None
+    for diagnostic in diagnostics:
+        if diagnostic.provider_runtime_category == expected_category:
+            return diagnostic
+    return None
+
+
+def _representative_runtime_diagnostics(
+    result: ChapterRunResult,
+    diagnostics: tuple[ChapterLLMRuntimeDiagnostic, ...],
+    terminal_diagnostic: ChapterLLMRuntimeDiagnostic | None,
+) -> tuple[ChapterLLMRuntimeDiagnostic, ...]:
+    """选择 first-failed 摘要使用的代表 runtime diagnostic 序列。
+
+    Args:
+        result: 单章编排结果。
+        diagnostics: 全量 runtime 诊断序列。
+        terminal_diagnostic: 已匹配的 terminal diagnostic。
+
+    Returns:
+        代表性 runtime 诊断序列。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if terminal_diagnostic is None:
+        if result.stop_reason in _RUNTIME_TERMINAL_STOP_REASONS:
+            return ()
+        return diagnostics
+    return tuple(
+        diagnostic
+        for diagnostic in diagnostics
+        if _diagnostic_matches_terminal(result, diagnostic, terminal_diagnostic)
+    )
+
+
+def _diagnostic_matches_terminal(
+    result: ChapterRunResult,
+    diagnostic: ChapterLLMRuntimeDiagnostic,
+    terminal_diagnostic: ChapterLLMRuntimeDiagnostic,
+) -> bool:
+    """判断 diagnostic 是否属于同一个 terminal runtime failure。
+
+    Args:
+        result: 单章编排结果。
+        diagnostic: 候选 runtime diagnostic。
+        terminal_diagnostic: 已匹配的 terminal diagnostic。
+
+    Returns:
+        同一 terminal runtime failure 返回 `True`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if diagnostic.operation != terminal_diagnostic.operation:
+        return False
+    if diagnostic.repair_attempt_index != terminal_diagnostic.repair_attempt_index:
+        return False
+    if result.stop_reason == "llm_timeout":
+        return _is_timeout_runtime_diagnostic(diagnostic)
+    expected_category = _RUNTIME_STOP_REASON_CATEGORY.get(result.stop_reason)
+    if expected_category is None:
+        return diagnostic.provider_runtime_category is not None
+    return diagnostic.provider_runtime_category == expected_category
+
+
+def _diagnostic_consistency_status(
+    result: ChapterRunResult,
+    diagnostics: tuple[ChapterLLMRuntimeDiagnostic, ...],
+    terminal_diagnostic: ChapterLLMRuntimeDiagnostic | None,
+) -> DiagnosticConsistencyStatus:
+    """计算 terminal diagnostic consistency 状态。
+
+    Args:
+        result: 单章编排结果。
+        diagnostics: runtime 诊断序列。
+        terminal_diagnostic: 已匹配的 terminal diagnostic。
+
+    Returns:
+        allowlisted consistency status。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if result.stop_reason not in _RUNTIME_TERMINAL_STOP_REASONS:
+        if _has_provider_runtime_scalar(diagnostics):
+            return "non_runtime_terminal_without_scalar"
+        return "consistent"
+    if terminal_diagnostic is None:
+        return "missing_terminal_runtime_diagnostic"
+    expected_category = _RUNTIME_STOP_REASON_CATEGORY.get(result.stop_reason)
+    if expected_category is not None and result.stop_reason != "llm_timeout":
+        if terminal_diagnostic.provider_runtime_category != expected_category:
+            return "terminal_category_conflict"
+    if result.stop_reason == "llm_timeout" and not _is_timeout_runtime_diagnostic(
+        terminal_diagnostic
+    ):
+        return "terminal_category_conflict"
+    return "consistent"
+
+
+def _is_timeout_runtime_diagnostic(diagnostic: ChapterLLMRuntimeDiagnostic) -> bool:
+    """判断 runtime diagnostic 是否明确表示 provider timeout。
+
+    Args:
+        diagnostic: runtime 诊断。
+
+    Returns:
+        明确 timeout 返回 `True`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return (
+        diagnostic.provider_runtime_category == "timeout"
+        or diagnostic.timeout_budget_kind is not None
+    )
+
+
+def _has_provider_runtime_scalar(
+    diagnostics: tuple[ChapterLLMRuntimeDiagnostic, ...],
+) -> bool:
+    """判断非 runtime terminal 是否意外携带 provider runtime scalar。
+
+    Args:
+        diagnostics: runtime 诊断序列。
+
+    Returns:
+        存在 provider runtime scalar 返回 `True`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return any(
+        diagnostic.provider_runtime_category is not None
+        or diagnostic.provider_attempt_index is not None
+        or diagnostic.timeout_budget_kind is not None
+        for diagnostic in diagnostics
+    )
+
+
+def _terminal_issue_class(result: ChapterRunResult) -> str | None:
+    """提取安全 terminal issue class。
+
+    Args:
+        result: 单章编排结果。
+
+    Returns:
+        异常类型或 issue id prefix；缺失时返回 `None`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    for diagnostic in result.runtime_diagnostics:
+        if diagnostic.error_type:
+            return diagnostic.error_type
+    for attempt in result.attempts:
+        for diagnostic in attempt.runtime_diagnostics:
+            if diagnostic.error_type:
+                return diagnostic.error_type
+    if result.stop_reason in _RUNTIME_TERMINAL_STOP_REASONS:
+        for issue in result.issues:
+            issue_text = str(issue)
+            if "LLMProviderTimeoutError" in issue_text:
+                return "LLMProviderTimeoutError"
+            if "LLMProviderRateLimitError" in issue_text:
+                return "LLMProviderRateLimitError"
+            if "LLMProviderMalformedResponseError" in issue_text:
+                return "LLMProviderMalformedResponseError"
+            if "LLMProviderNetworkError" in issue_text:
+                return "LLMProviderNetworkError"
+    return _first_safe_issue_prefix(result.issues)
+
+
+def _first_safe_issue_prefix(issues: tuple[str, ...]) -> str | None:
+    """提取首个安全 issue prefix。
+
+    Args:
+        issues: issue 文本序列。
+
+    Returns:
+        安全 issue prefix；没有时返回 `None`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    for issue in issues:
+        raw_prefix = str(issue).split(":", 2)
+        if len(raw_prefix) >= 2:
+            prefix = f"{raw_prefix[0]}:{raw_prefix[1]}"
+        else:
+            continue
+        safe = "".join(
+            ch for ch in prefix if ch.isascii() and (ch.isalnum() or ch in "_:-")
+        )
+        if not safe.startswith(("writer:", "programmatic:", "llm:", "audit:")):
+            continue
+        if safe:
+            return safe[:80]
+    return None
+
+
+def _safe_status_code(status_code: int | None) -> int | None:
+    """过滤非标准 HTTP 状态码。
+
+    Args:
+        status_code: provider 诊断中的状态码。
+
+    Returns:
+        标准 HTTP 状态码整数；其他值返回 `None`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if isinstance(status_code, bool) or not isinstance(status_code, int):
+        return None
+    if 100 <= status_code <= 599:
+        return status_code
+    return None
+
+
 def _runtime_diagnostic_payload(
     diagnostic: ChapterLLMRuntimeDiagnostic,
 ) -> dict[str, object]:
@@ -2716,7 +3126,7 @@ def _runtime_diagnostic_payload(
         "provider_runtime_category": diagnostic.provider_runtime_category,
         "chapter_failure_category": diagnostic.chapter_failure_category,
         "elapsed_ms": diagnostic.elapsed_ms,
-        "status_code": diagnostic.status_code,
+        "status_code": _safe_status_code(diagnostic.status_code),
         "request_id": diagnostic.request_id,
         "finish_reason": diagnostic.finish_reason,
         "response_chars": diagnostic.response_chars,

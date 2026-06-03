@@ -15,6 +15,7 @@ from pathlib import Path
 import re
 from typing import Final, Literal
 
+from fund_agent.config.paths import DEFAULT_LLM_RUN_ARTIFACT_ROOT as _CONFIG_LLM_RUN_ARTIFACT_ROOT
 from fund_agent.fund.chapter_auditor import ChapterAuditIssue
 from fund_agent.fund.chapter_writer import ChapterWriteIssue
 from fund_agent.services.chapter_orchestrator import (
@@ -24,12 +25,14 @@ from fund_agent.services.chapter_orchestrator import (
     ChapterPromptContractDiagnostic,
     ChapterRepairDecision,
     ChapterRunResult,
+    attempt_runtime_diagnostic_consistency_payload,
+    runtime_diagnostic_consistency_payload,
     serialize_chapter_prompt_contract_diagnostics,
     serialize_chapter_runtime_diagnostics,
 )
 from fund_agent.services.fund_analysis_service import FundLLMAnalysisResult
 
-DEFAULT_LLM_RUN_ARTIFACT_ROOT: Final[Path] = Path("reports/llm-runs")
+DEFAULT_LLM_RUN_ARTIFACT_ROOT: Final[Path] = _CONFIG_LLM_RUN_ARTIFACT_ROOT
 MANIFEST_SCHEMA_VERSION: Final[str] = "llm_incomplete_run_artifact_manifest.v1"
 SUMMARY_SCHEMA_VERSION: Final[str] = "llm_incomplete_run_summary.v1"
 CHAPTER_SCHEMA_VERSION: Final[str] = "llm_incomplete_run_chapter_artifact.v1"
@@ -378,6 +381,7 @@ def _build_chapter_payload(
             _prompt_contract_diagnostic_payload(diagnostic)
             for diagnostic in chapter_result.prompt_contract_diagnostics
         ),
+        **runtime_diagnostic_consistency_payload(chapter_result),
         "chapter_runtime_diagnostics": tuple(
             _runtime_diagnostic_payload(diagnostic)
             for diagnostic in _runtime_diagnostics_for_chapter(chapter_result)
@@ -471,6 +475,7 @@ def _build_attempt_payload(
             _audit_issue_summary(issue, stats=stats) for issue in _llm_issues(audit_result)
         ),
         "repair_decision": _repair_decision_payload(repair_decision, stats=stats),
+        **attempt_runtime_diagnostic_consistency_payload(chapter_result, attempt),
         "runtime_diagnostics": tuple(
             _runtime_diagnostic_payload(diagnostic)
             for diagnostic in attempt.runtime_diagnostics
@@ -781,7 +786,7 @@ def _runtime_diagnostic_payload(
         "provider_runtime_category": diagnostic.provider_runtime_category,
         "chapter_failure_category": diagnostic.chapter_failure_category,
         "elapsed_ms": diagnostic.elapsed_ms,
-        "status_code": diagnostic.status_code,
+        "status_code": _safe_status_code(diagnostic.status_code),
         "request_id": diagnostic.request_id,
         "finish_reason": diagnostic.finish_reason,
         "response_chars": diagnostic.response_chars,
@@ -824,6 +829,26 @@ def _runtime_diagnostics_for_chapter(
             for diagnostic in attempt.runtime_diagnostics
         ),
     )
+
+
+def _safe_status_code(status_code: int | None) -> int | None:
+    """过滤非标准 HTTP 状态码。
+
+    Args:
+        status_code: provider 诊断中的状态码。
+
+    Returns:
+        标准 HTTP 状态码整数；其他值返回 `None`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if isinstance(status_code, bool) or not isinstance(status_code, int):
+        return None
+    if 100 <= status_code <= 599:
+        return status_code
+    return None
 
 
 def _programmatic_issues(audit_result: object | None) -> tuple[ChapterAuditIssue, ...]:

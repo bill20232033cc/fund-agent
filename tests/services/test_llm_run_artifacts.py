@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import datetime, timezone
 import json
 from pathlib import Path
@@ -25,6 +26,7 @@ from fund_agent.fund.chapter_writer import (
 )
 from fund_agent.services.chapter_orchestrator import (
     ChapterAttemptRecord,
+    ChapterLLMRuntimeDiagnostic,
     ChapterRepairDecision,
     ChapterRunResult,
 )
@@ -119,6 +121,55 @@ def test_artifact_includes_writer_repair_and_auditor_feedback(tmp_path: Path) ->
         written.artifact_dir / "chapters/chapter-02-attempt-01-repair.md"
     ).read_text(encoding="utf-8")
     assert "repair draft for chapter 2" in repair_text
+
+
+def test_artifact_records_terminal_runtime_lineage_at_chapter_and_attempt_levels(
+    tmp_path: Path,
+) -> None:
+    """验证 retained artifact 同时记录章节级和 attempt 级 terminal lineage。"""
+
+    result = _incomplete_timeout_result()
+
+    written = write_llm_incomplete_run_artifacts(
+        result,
+        host_run_id="host_run_fixture",
+        output_root=tmp_path,
+        clock=_fixed_clock,
+    )
+
+    summary = _read_json(written.summary_path)
+    runtime_summary = summary["runtime_diagnostics"]
+    first_failed = runtime_summary["first_failed"]
+    row = runtime_summary["chapter_runtime_matrix"][1]
+    chapter_payload = _read_json(written.artifact_dir / "chapters/chapter-02.json")
+    attempts = chapter_payload["attempts"]
+
+    assert first_failed["diagnostic_consistency_status"] == "consistent"
+    assert first_failed["terminal_runtime_diagnostic_present"] is True
+    assert first_failed["terminal_stop_reason"] == "llm_timeout"
+    assert first_failed["terminal_failure_category"] == "llm_timeout"
+    assert first_failed["terminal_runtime_operation"] == "writer"
+    assert first_failed["terminal_repair_attempt_index"] == 1
+    assert first_failed["terminal_issue_class"] == "ReadTimeout"
+    assert first_failed["timeout_budget_kind"] == "writer_repair"
+    assert row["diagnostic_consistency_status"] == "consistent"
+    assert chapter_payload["diagnostic_consistency_status"] == "consistent"
+    assert chapter_payload["terminal_runtime_diagnostic_present"] is True
+    assert chapter_payload["terminal_runtime_operation"] == "writer"
+    assert attempts[0]["diagnostic_consistency_status"] == (
+        "missing_terminal_runtime_diagnostic"
+    )
+    assert attempts[0]["terminal_runtime_diagnostic_present"] is False
+    assert attempts[1]["diagnostic_consistency_status"] == (
+        "missing_terminal_runtime_diagnostic"
+    )
+    assert attempts[1]["terminal_runtime_diagnostic_present"] is False
+    diagnostics = chapter_payload["chapter_runtime_diagnostics"]
+    assert diagnostics[0]["provider_runtime_category"] == "timeout"
+    assert diagnostics[0]["status_code"] is None
+    assert diagnostics[1]["status_code"] == 504
+    assert "prompt_cost_diagnostic" not in diagnostics[0]
+    assert "secret-model" not in json.dumps(chapter_payload, ensure_ascii=False)
 
 
 def test_artifact_redacts_secret_canaries(tmp_path: Path) -> None:
@@ -270,6 +321,120 @@ def _incomplete_result(
             fund_code="110011",
             report_year=2024,
             report_markdown=report_markdown,
+            chapter0_markdown=None,
+            chapter7_markdown=None,
+            chapter7_summary=None,
+            assembled_chapter_ids=(1,),
+            source_accepted_chapter_ids=(1,),
+            final_judgment_selected="needs_attention",
+            issues=(
+                FinalAssemblyIssue(
+                    issue_id="final:chapter_not_accepted:2",
+                    severity="blocking",
+                    reason="chapter_not_accepted",
+                    message="第 2 章未 accepted。",
+                    chapter_ids=(2,),
+                ),
+            ),
+        ),
+    )
+
+
+def _incomplete_timeout_result() -> FundLLMAnalysisResult:
+    """构造含 terminal timeout lineage 的 incomplete LLM 结果。
+
+    Args:
+        无。
+
+    Returns:
+        typed LLM 分析结果。
+
+    Raises:
+        无显式抛出。
+    """
+
+    projection = _projection()
+    accepted_run = _accepted_chapter_run(projection)
+    failed_run = _failed_chapter_run(
+        projection,
+        secret_canaries=False,
+        prompt_and_raw_canaries=False,
+    )
+    timeout_diagnostic = ChapterLLMRuntimeDiagnostic(
+        operation="writer",
+        chapter_id=2,
+        fund_code="110011",
+        report_year=2024,
+        repair_attempt_index=1,
+        provider_attempt_index=1,
+        provider_max_attempts=2,
+        provider_runtime_category="timeout",
+        chapter_failure_category="llm_timeout",
+        elapsed_ms=60000,
+        status_code=900,
+        request_id="req-opaque-safe",
+        model_name="secret-model",
+        finish_reason=None,
+        response_chars=None,
+        error_type="ReadTimeout",
+        system_prompt_chars=20,
+        user_prompt_chars=2980,
+        approx_prompt_tokens=750,
+        allowed_fact_count=3,
+        allowed_anchor_count=2,
+        max_output_chars=12000,
+        timeout_seconds=60,
+        timeout_max_attempts=2,
+        timeout_backoff_seconds=1,
+        timeout_budget_kind="writer_repair",
+    )
+    prompt_contract_diagnostic = ChapterLLMRuntimeDiagnostic(
+        operation="auditor",
+        chapter_id=2,
+        fund_code="110011",
+        report_year=2024,
+        repair_attempt_index=0,
+        provider_attempt_index=None,
+        provider_max_attempts=None,
+        provider_runtime_category=None,
+        chapter_failure_category="prompt_contract",
+        elapsed_ms=None,
+        status_code=504,
+        request_id="req-audit-safe",
+        model_name=None,
+        finish_reason="stop",
+        response_chars=22,
+        error_type=None,
+    )
+    attempts = (
+        replace(
+            failed_run.attempts[0],
+            runtime_diagnostics=(prompt_contract_diagnostic,),
+        ),
+        failed_run.attempts[1],
+    )
+    failed_run = replace(
+        failed_run,
+        stop_reason="llm_timeout",
+        failure_category="llm_timeout",
+        failure_subcategory=None,
+        attempts=attempts,
+        issues=("LLM client exception category=llm_timeout: LLMProviderTimeoutError",),
+        runtime_diagnostics=(timeout_diagnostic,),
+    )
+    orchestration_result = _projection_orchestration_result(
+        projection,
+        chapter_results=(accepted_run, failed_run),
+    )
+    return FundLLMAnalysisResult(
+        structured_data=_bundle(),
+        final_judgment_decision=_final_judgment_decision(),
+        llm_orchestration_result=orchestration_result,
+        final_assembly_result=FinalChapterAssemblyResult(
+            status="incomplete",
+            fund_code="110011",
+            report_year=2024,
+            report_markdown=None,
             chapter0_markdown=None,
             chapter7_markdown=None,
             chapter7_summary=None,
