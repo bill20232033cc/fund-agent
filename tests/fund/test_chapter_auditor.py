@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import ast
+from dataclasses import replace
 from pathlib import Path
 
+from fund_agent.fund.template.typed_contracts import SUPPORTED_AUDIT_FOCUS, get_typed_chapter_contract
 from fund_agent.fund.chapter_auditor import (
     ChapterAuditInput,
     ChapterAuditLLMRequest,
     ChapterAuditLLMResponse,
+    DEFAULT_AUDIT_FOCUS,
     audit_chapter,
     audit_chapter_llm,
     audit_chapter_programmatic,
@@ -320,6 +323,132 @@ def test_audit_focus_cannot_disable_programmatic_must_not_cover() -> None:
 
     assert result.status == "fail"
     assert any(issue.issue_id == "programmatic:C2:ch3.must_not_cover.item_04" for issue in result.issues)
+
+
+def test_per_chapter_audit_focus_is_passed_to_llm_request() -> None:
+    """验证 typed per-chapter audit_focus 会传入 LLM request。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 LLM request 未收到闭集 focus id 时抛出。
+    """
+
+    typed_contract = get_typed_chapter_contract(3)
+    client = _FakeAuditLLMClient("PASS|chapter|no issues")
+    input_data = _ch3_typed_audit_input("证据不足，不能据此判断言行一致。")
+    input_data = ChapterAuditInput(
+        writer_input=input_data.writer_input,
+        draft=input_data.draft,
+        typed_chapter_contract=typed_contract,
+        run_programmatic=False,
+        run_llm=True,
+    )
+
+    result = audit_chapter_llm(input_data, llm_client=client)
+
+    assert result.status == "pass"
+    request = client.requests[0]
+    assert request.audit_focus == typed_contract.audit_focus
+    assert set(request.audit_focus) <= set(SUPPORTED_AUDIT_FOCUS)
+    assert "manager_consistency, evidence_anchors" in request.user_prompt
+
+
+def test_programmatic_blocker_fires_even_when_focus_omits_must_not_cover_boundary() -> None:
+    """验证 focus 缺少 must_not_cover_boundary 时程序 C2 仍触发。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 typed focus 影响程序审计阻断时抛出。
+    """
+
+    typed_contract = get_typed_chapter_contract(3)
+    input_data = _ch3_typed_audit_input("风格稳定性判断：基本稳定。")
+    input_data = ChapterAuditInput(
+        writer_input=input_data.writer_input,
+        draft=input_data.draft,
+        typed_chapter_contract=typed_contract,
+        run_programmatic=True,
+        run_llm=False,
+    )
+
+    result = audit_chapter_programmatic(input_data)
+
+    assert "must_not_cover_boundary" not in typed_contract.audit_focus
+    assert result.status == "fail"
+    assert any(issue.issue_id == "programmatic:C2:ch3.must_not_cover.item_04" for issue in result.issues)
+
+
+def test_invalid_typed_audit_focus_blocks_without_calling_client() -> None:
+    """验证非法 typed audit_focus 会 fail-closed 且不调用 LLM client。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当非法 focus 泄漏到 client 或未 blocked 时抛出。
+    """
+
+    typed_contract = replace(get_typed_chapter_contract(3), audit_focus=("disable_programmatic",))  # type: ignore[arg-type]
+    client = _FakeAuditLLMClient("PASS|chapter|no issues")
+    input_data = _ch3_typed_audit_input("证据不足，不能据此判断言行一致。")
+    input_data = ChapterAuditInput(
+        writer_input=input_data.writer_input,
+        draft=input_data.draft,
+        typed_chapter_contract=typed_contract,
+    )
+
+    result = audit_chapter_llm(input_data, llm_client=client)
+
+    assert result.status == "blocked"
+    assert client.requests == []
+    assert result.issues[0].issue_id == "llm:audit_focus_invalid"
+    assert result.issues[0].layer == "llm"
+    assert result.issues[0].rule_code == "LLM_UNAVAILABLE"
+    assert result.issues[0].severity == "blocking"
+    assert result.issues[0].location == "typed_chapter_contract.audit_focus"
+
+
+def test_mismatched_typed_audit_focus_blocks_without_calling_client() -> None:
+    """验证章节不匹配的 typed contract 会 blocked 且不调用 LLM client。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当章节不匹配仍调用 client 或未 blocked 时抛出。
+    """
+
+    typed_contract = get_typed_chapter_contract(2)
+    client = _FakeAuditLLMClient("PASS|chapter|no issues")
+    input_data = _ch3_typed_audit_input("证据不足，不能据此判断言行一致。")
+    input_data = ChapterAuditInput(
+        writer_input=input_data.writer_input,
+        draft=input_data.draft,
+        typed_chapter_contract=typed_contract,
+    )
+
+    result = audit_chapter_llm(input_data, llm_client=client)
+
+    assert result.status == "blocked"
+    assert client.requests == []
+    assert result.issues[0].issue_id == "llm:audit_focus_invalid"
+    assert result.issues[0].message == "typed audit_focus 无法安全投影为闭集 LLM 审计关注点。"
 
 
 def test_programmatic_audit_blocks_non_asserted_facet_as_asserted_fact() -> None:
@@ -723,6 +852,7 @@ def test_llm_audit_prompt_spells_exact_pass_and_issue_line_protocol() -> None:
     assert "PASS|chapter|no issues" in request.user_prompt
     assert "BLOCKING|<location>|<message>" in request.user_prompt
     assert "禁止输出空行以外的额外文本" in request.user_prompt
+    assert request.audit_focus == DEFAULT_AUDIT_FOCUS
 
 
 def test_llm_audit_blocks_markdown_or_explanatory_prefix() -> None:

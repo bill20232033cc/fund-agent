@@ -19,7 +19,12 @@ from fund_agent.fund.chapter_writer import (
     REQUIRED_OUTPUT_MARKER_PREFIX,
 )
 from fund_agent.fund.evidence_availability import EvidenceAvailability, RequirementAvailability
-from fund_agent.fund.template.typed_contracts import MustNotCoverClause, TypedChapterContract, get_typed_chapter_contract
+from fund_agent.fund.template.typed_contracts import (
+    MustNotCoverClause,
+    SUPPORTED_AUDIT_FOCUS,
+    TypedChapterContract,
+    get_typed_chapter_contract,
+)
 
 ChapterAuditSchemaVersion = Literal["chapter_audit.v1"]
 ChapterAuditLayer = Literal["programmatic", "llm"]
@@ -287,6 +292,9 @@ class ChapterAuditInput:
         schema_version: 审计 schema 版本。
         writer_input: 写作输入。
         draft: 待审计草稿。
+        typed_chapter_contract: typed per-chapter contract；提供时只把 `audit_focus`
+            投影给 LLM bounded semantic audit。为空时保留旧 `DEFAULT_AUDIT_FOCUS`
+            LLM request 兼容路径。程序审计不得读取该字段。
         run_programmatic: 是否执行程序审计。
         run_llm: 是否执行 LLM 审计。
     """
@@ -294,6 +302,7 @@ class ChapterAuditInput:
     schema_version: ChapterAuditSchemaVersion = CHAPTER_AUDIT_SCHEMA_VERSION
     writer_input: ChapterWriterInput
     draft: ChapterDraft
+    typed_chapter_contract: TypedChapterContract | None = None
     run_programmatic: bool = True
     run_llm: bool = True
 
@@ -475,7 +484,26 @@ def audit_chapter_llm(
             model_name=None,
             finish_reason=None,
         )
-    response = llm_client.audit_chapter(_llm_request(input_data))
+    try:
+        request = _llm_request(input_data)
+    except ValueError:
+        issue = _issue(
+            "llm:audit_focus_invalid",
+            "llm",
+            "LLM_UNAVAILABLE",
+            "blocking",
+            "typed audit_focus 无法安全投影为闭集 LLM 审计关注点。",
+            "typed_chapter_contract.audit_focus",
+            repair_hint="regenerate",
+        )
+        return ChapterLLMAuditResult(
+            status="blocked",
+            issues=(issue,),
+            raw_response=None,
+            model_name=None,
+            finish_reason=None,
+        )
+    response = llm_client.audit_chapter(request)
     parsed = _parse_llm_audit_response(response)
     return parsed
 
@@ -1381,7 +1409,7 @@ def _clean_must_not_cover_fragment(fragment: str) -> str:
 
 
 def _llm_request(input_data: ChapterAuditInput) -> ChapterAuditLLMRequest:
-    """构造 LLM 审计请求。
+    """构造 LLM 审计请求，见模板第 0-7 章 bounded semantic audit。
 
     Args:
         input_data: 章节审计输入。
@@ -1390,10 +1418,11 @@ def _llm_request(input_data: ChapterAuditInput) -> ChapterAuditLLMRequest:
         LLM 审计请求。
 
     Raises:
-        无显式抛出。
+        ValueError: 显式 typed contract 的 `audit_focus` 包含闭集外 id 时抛出。
     """
 
     chapter = input_data.writer_input.chapter
+    audit_focus = _llm_audit_focus(input_data)
     return ChapterAuditLLMRequest(
         chapter_id=chapter.chapter_id,
         fund_code=input_data.writer_input.fund_code,
@@ -1410,14 +1439,44 @@ def _llm_request(input_data: ChapterAuditInput) -> ChapterAuditLLMRequest:
             "禁止输出空行以外的额外文本、Markdown、编号列表、解释性前后缀或 JSON。\n"
             "示例 pass：PASS|chapter|no issues\n"
             "示例 blocking：BLOCKING|证据与出处|证据锚点缺失，请补 allowed anchor marker。\n"
-            "检查 evidence_support、must_not_cover_boundary、missing_semantics、readability 和 "
-            "non_asserted_facet_boundary。"
+            "审计关注点只作为 bounded semantic emphasis，不改变程序审计、阻断等级或修复预算。\n"
+            f"本章 bounded semantic audit focus ids：{', '.join(audit_focus)}。"
+            "如需给出修复动作，message 只可按最相关 focus id 做语义归组。"
         ),
         draft_markdown=input_data.draft.markdown,
         allowed_fact_ids=tuple(fact.fact_id for fact in chapter.facts),
         allowed_anchor_ids=tuple(anchor.anchor_id for anchor in chapter.evidence_anchors),
-        audit_focus=DEFAULT_AUDIT_FOCUS,
+        audit_focus=audit_focus,
     )
+
+
+def _llm_audit_focus(input_data: ChapterAuditInput) -> tuple[str, ...]:
+    """从 typed contract 投影 LLM bounded semantic audit focus。
+
+    Args:
+        input_data: 章节审计输入。
+
+    Returns:
+        LLM request 使用的 focus id；未提供 typed contract 时返回旧默认 focus。
+
+    Raises:
+        ValueError: typed contract 章节不匹配、focus 为空或包含闭集外 id 时抛出。
+    """
+
+    typed_contract = input_data.typed_chapter_contract
+    if typed_contract is None:
+        return DEFAULT_AUDIT_FOCUS
+    if typed_contract.chapter_id != input_data.writer_input.chapter.chapter_id:
+        raise ValueError(
+            "typed audit_focus 章节不匹配："
+            f"contract={typed_contract.chapter_id}, input={input_data.writer_input.chapter.chapter_id}"
+        )
+    if not typed_contract.audit_focus:
+        raise ValueError("章节 LLM audit_focus 不能为空")
+    unknown = tuple(focus for focus in typed_contract.audit_focus if focus not in SUPPORTED_AUDIT_FOCUS)
+    if unknown:
+        raise ValueError(f"章节 LLM audit_focus 包含闭集外 id：{unknown}")
+    return typed_contract.audit_focus
 
 
 def _parse_llm_audit_response(response: ChapterAuditLLMResponse) -> ChapterLLMAuditResult:

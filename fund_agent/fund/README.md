@@ -119,7 +119,7 @@ chapter_lens = resolve_preferred_lens(chapter_id=2, fund_type="active_fund")
 - typed schema 版本为 `typed_chapter_contract.v1`，公开章节 id 仍严格为 `0-7`
 - 第 2 章的 `performance / attribution / cost` 只作为 `chapter_id=2` 内部 `ChapterInternalSubcontract`，不会成为公开章节或 chapter matrix row
 - 第 0 章声明 `consumes_chapter_conclusions=(7,)`，且 `independent_action_source=False`，不独立派生动作判断
-- `audit_focus` 是 bounded semantic audit 的数据提示，只能表达语义关注点，不能关闭 programmatic blockers
+- `audit_focus` 是 bounded semantic audit 的数据提示；显式传入 typed contract 时会投影到 LLM audit request 和 prompt 语义强调，但不能关闭 programmatic blockers、改变阻断等级或修复预算
 - `RequiredOutputItem.when_evidence_missing` 当前为第 2/3 章 typed writer path 提供缺证行为数据：第 2 章 R=A+B-C required outputs 缺少同源证据时 `block`，第 3 章策略/实际行为/言行一致性/风格稳定性缺少已复核证据时只允许输出证据缺口，利益一致性缺证时只允许输出下一步最小验证问题
 - loader 使用显式 reviewed exact mapping 校验当前 `must_answer / must_not_cover / required_output_items` 文本；当前 manifest 文本漂移会 fail-closed，而不是 fuzzy、substring、embedding 或 LLM 匹配
 
@@ -138,6 +138,7 @@ chapter_lens = resolve_preferred_lens(chapter_id=2, fund_type="active_fund")
 - writer 支持 `prompt_payload_mode="compact"`，当前由显式 `--use-llm` Service 路径使用；compact 只压缩大 `value` 的表达，保留 `fact_id`、`source_field_id`、`status`、`missing_reason`、`evidence_anchor_ids`、anchor id 和 source location metadata，并明确禁止 LLM 引用或推断被省略的 raw detail
 - writer prompt-cost diagnostic 只记录 component 字符数、fact/anchor 成本行和 prompt char/token 标量，不保存完整 prompt、fact 原文、anchor note、draft、provider request 或 provider response
 - `write_chapter()` 通过调用方显式注入的 `ChapterLLMClient` 生成单章草稿；`mode="prompt_only"` 只返回 prompt 和 blocked result，不伪造草稿
+- `audit_chapter_llm()` 在未提供 typed contract 时继续使用旧 `DEFAULT_AUDIT_FOCUS` 兼容路径；提供 typed contract 时只把闭集 `audit_focus` id 传入 LLM request，程序审计不读取 focus
 - writer 要求第 1-6 章输出固定顶层段落 `### 结论要点`、`### 详细情况`、`### 证据与出处`；每个 `required_output_items` 必须先输出 exact marker `<!-- required_output:<item> -->`
 - writer 可显式接收 typed `RequiredOutputItem` 与 `EvidenceAvailability` 作为 additive path；该路径使用 stable item id marker `<!-- required_output:<typed item id> -->`，按 `render_evidence_gap / render_minimum_verification_question / delete_if_not_applicable / block` 裁定缺证 required output。`block` 在调用 LLM client 前 fail-closed，`delete_if_not_applicable` 必须有 typed reason，gap/verification 输出必须包含 approved 缺口或最小验证问题措辞。未传 typed 输入时保持当前生产默认 marker 和写作行为
 - writer 只接受精确 marker：`<!-- required_output:<item> -->`、`<!-- anchor:<anchor_id> -->` 和 `<!-- missing:<reason> -->`；未知 anchor、缺固定段落、缺 required output marker、超出 `max_output_chars`、`finish_reason=length/max_tokens/content_filter` 都会 fail-closed 到稳定 stop reason，不截断或部分接受
