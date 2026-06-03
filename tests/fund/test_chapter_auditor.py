@@ -285,6 +285,37 @@ def test_ch3_positive_consistency_claim_blocks_without_evidence_availability() -
     assert any(issue.issue_id == "programmatic:C2:ch3.must_not_cover.item_04" for issue in result.issues)
 
 
+def test_ch3_positive_claim_after_anchor_marker_blocks_when_actual_behavior_unreviewed() -> None:
+    """验证 anchor marker 同行正文不能绕过 typed C2。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 marker 同行正向结论被当作 metadata 跳过时抛出。
+    """
+
+    projection = project_chapter_facts(_bundle(), chapter_ids=(3,))
+    availability = derive_evidence_availability(projection)
+    writer_input = build_chapter_writer_input(
+        projection,
+        chapter_id=3,
+        evidence_availability=availability,
+    )
+    anchor_id = writer_input.chapter.evidence_anchors[0].anchor_id
+    result = audit_chapter_programmatic(
+        _ch3_typed_audit_input(
+            f"<!-- anchor:{anchor_id} --> 言行一致性判断：言行一致。",
+        )
+    )
+
+    assert result.status == "fail"
+    assert any(issue.issue_id == "programmatic:C2:ch3.must_not_cover.item_04" for issue in result.issues)
+
+
 def test_ch3_quasi_positive_consistency_claim_blocks_when_style_evidence_missing() -> None:
     """验证风格证据缺失或未复核时准正向稳定性判断触发 typed C2。
 

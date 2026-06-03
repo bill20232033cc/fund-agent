@@ -1173,9 +1173,11 @@ def _line_is_contract_or_anchor_metadata(line: str) -> bool:
     """
 
     stripped = line.strip()
-    return stripped.startswith(_REQUIRED_OUTPUT_MARKER_TEXT) or any(
-        stripped.startswith(prefix) for prefix in _ANCHOR_CAPTION_PREFIXES
-    )
+    if stripped.startswith(_REQUIRED_OUTPUT_MARKER_TEXT):
+        return stripped.endswith("-->")
+    if stripped.startswith("<!-- anchor:"):
+        return stripped.endswith("-->")
+    return False
 
 
 def _audit_item_rule_deleted_sections(input_data: ChapterAuditInput) -> tuple[ChapterAuditIssue, ...]:
