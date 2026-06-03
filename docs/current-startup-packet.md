@@ -18,7 +18,7 @@ Use `docs/reviews/` and `docs/archive/` only as evidence chain. They do not over
 | Current phase | `MVP typed template and internalized agent execution phase` |
 | Current gate | `MVP typed template contract Slice 8 Documentation And Control Sync After Accepted Implementation gate` |
 | Current gate classification | `heavy` |
-| Current gate status | Slice 8 documentation/control sync accepted locally at checkpoint `80cf581` |
+| Current gate status | Slice 8 documentation/control sync accepted locally at checkpoint `984d3be` |
 | Next entry point | Start aggregate deepreview for the completed typed template implementation slices; do not enter provider/runtime/live probe, Agent runtime implementation, score-loop or PR external actions |
 | Control truth | `docs/implementation-control.md` |
 | Design truth | `docs/design.md` |
@@ -51,7 +51,7 @@ Use `docs/reviews/` and `docs/archive/` only as evidence chain. They do not over
 | Accepted typed template Slice 5 audit_focus commit | `ae0b9fa` |
 | Accepted typed template Slice 6 Ch0/Ch7 readiness commit | `1ec22e0` |
 | Accepted typed template Slice 7 Service facade commit | `23b8f5f` |
-| Accepted typed template Slice 8 docs/control sync commit | `80cf581` |
+| Accepted typed template Slice 8 docs/control sync commit | `984d3be` |
 
 The current phase goal is to move LLM report work from prompt patching into typed template/audit/evidence contracts and then Agent execution architecture. Gate 1 `MVP fund report template typed contract redesign gate` was accepted as design-only future architecture, and `MVP typed template contract implementation planning gate` plus Slice 0-8 have now accepted the additive implementation path and documentation/control sync: typed `ChapterContract` sidecar, same-source `EvidenceAvailability`, Ch3 evidence-conditional `must_not_cover`, `RequiredOutputItem.when_evidence_missing`, Ch0 consuming Ch7 readiness metadata, bounded per-chapter `audit_focus`, explicit Service-owned `typed_template_path` wiring for `--use-llm`, and current truth-doc/README alignment. The implementation preserves deterministic default `analyze/checklist`, Host business opacity, provider/runtime defaults, template truth and public chapter ids `0-7`. `MVP internalized Agent engine and typed audit contract design gate` and `MVP internalized Agent engine/tool-loop contract execution design gate` remain accepted future architecture; Agent runtime implementation is not current scope. Provider-runtime evidence gates through `MVP PASS-only timing probe evidence harness contract gate` are accepted only as future evidence design and paused before live PASS-only probe. Current template truth, provider budget defaults, score-loop, quality gate, golden/readiness and retained reports are unchanged. Dayu is an architecture reference and capability source, not a production runtime dependency.
 

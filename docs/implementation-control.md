@@ -67,7 +67,7 @@
 | Current phase | `MVP typed template and internalized agent execution phase` |
 | Current gate | `MVP typed template contract Slice 8 Documentation And Control Sync After Accepted Implementation gate` |
 | Current gate classification | `heavy` |
-| Current gate status | Slice 8 documentation/control sync accepted locally at checkpoint `80cf581` |
+| Current gate status | Slice 8 documentation/control sync accepted locally at checkpoint `984d3be` |
 | Next entry point | Start aggregate deepreview for the completed typed template implementation slices; do not enter provider/runtime/live probe, Agent runtime implementation, score-loop or PR external actions |
 | Next gate classification | `heavy`; typed contract schema affects future public template/audit contract behavior |
 | Design truth | `docs/design.md` |
@@ -102,7 +102,7 @@
 | Accepted typed template Slice 5 audit_focus commit | `ae0b9fa` |
 | Accepted typed template Slice 6 Ch0/Ch7 readiness commit | `1ec22e0` |
 | Accepted typed template Slice 7 Service facade commit | `23b8f5f` |
-| Accepted typed template Slice 8 docs/control sync commit | `80cf581` |
+| Accepted typed template Slice 8 docs/control sync commit | `984d3be` |
 
 ## Current Gate
 
