@@ -64,6 +64,11 @@ SUPPORTED_EVIDENCE_STATUSES: Final[tuple[EvidenceAvailabilityStatus, ...]] = get
 SUPPORTED_ALLOWED_CONTEXTS: Final[tuple[AllowedContextLiteral, ...]] = get_args(
     AllowedContextLiteral
 )
+SUPPORTED_LENS_KEYS: Final[tuple[str, ...]] = tuple(
+    key
+    for literal_group in get_args(LensKey)
+    for key in get_args(literal_group)
+)
 AUDIT_FOCUS_IS_SEMANTIC_ONLY: Final[bool] = True
 
 
@@ -803,6 +808,8 @@ def _validate_preferred_lens(chapter: TypedChapterContract) -> None:
     for key, rule in chapter.preferred_lens.items():
         if key != rule.fund_type:
             raise ValueError(f"typed 章节 {chapter.chapter_id} lens key 与 fund_type 不一致：{key}")
+        if rule.fund_type not in SUPPORTED_LENS_KEYS:
+            raise ValueError(f"typed 章节 {chapter.chapter_id} preferred_lens fund_type 不受支持：{rule.fund_type}")
         if not rule.statements:
             raise ValueError(f"typed 章节 {chapter.chapter_id} preferred_lens statements 不能为空")
         if any(not statement.strip() for statement in rule.statements):

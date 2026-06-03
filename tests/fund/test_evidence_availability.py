@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 
+import fund_agent.fund.evidence_availability as evidence_availability_module
 from fund_agent.fund.chapter_facts import project_chapter_facts
 from fund_agent.fund.evidence_availability import (
     EVIDENCE_AVAILABILITY_SCHEMA_VERSION,
@@ -168,6 +169,58 @@ def test_ch2_subcontract_availability_stays_under_public_chapter_2() -> None:
         "attribution",
         "cost",
     }
+
+
+def test_requirement_specs_cross_validate_against_projected_typed_manifest() -> None:
+    """验证 EvidenceAvailability 私有 specs 与同一 typed manifest 投影一致。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: Ch2/Ch3 requirement specs 与 typed manifest 投影不一致时抛出。
+    """
+
+    manifest = load_typed_template_contract_manifest()
+    chapter_2 = manifest.chapters[2]
+    chapter_3 = manifest.chapters[3]
+    ch2_spec_ids = {spec.requirement_id for spec in evidence_availability_module._CH2_REQUIREMENT_SPECS}
+    ch2_manifest_ids = {
+        *(clause.clause_id for clause in chapter_2.must_answer),
+        *(item.item_id for item in chapter_2.required_output_items),
+    }
+    ch2_specs_by_subcontract = {
+        subcontract_id: {
+            spec.requirement_id
+            for spec in evidence_availability_module._CH2_REQUIREMENT_SPECS
+            if spec.internal_subcontract_id == subcontract_id
+        }
+        for subcontract_id in ("performance", "attribution", "cost")
+    }
+    ch2_manifest_by_subcontract = {
+        subcontract.subcontract_id: set(subcontract.requirement_ids)
+        for subcontract in chapter_2.internal_subcontracts
+    }
+    ch3_base_spec_ids = {spec.requirement_id for spec in evidence_availability_module._CH3_REQUIREMENT_SPECS}
+    ch3_required_output_ids = {item.item_id for item in chapter_3.required_output_items}
+    ch3_predicate_requirement_ids = {
+        requirement_id
+        for clause in chapter_3.must_not_cover
+        if clause.applies_when is not None
+        for requirement_id in clause.applies_when.requirement_ids
+    }
+
+    assert ch2_spec_ids == ch2_manifest_ids
+    assert ch2_specs_by_subcontract == ch2_manifest_by_subcontract
+    assert set(evidence_availability_module._CH3_ACTUAL_BEHAVIOR_OUTPUT_IDS) <= ch3_required_output_ids
+    assert evidence_availability_module._CH3_ACTUAL_BEHAVIOR_REQUIREMENT_ID in ch3_predicate_requirement_ids
+    assert set(evidence_availability_module._CH3_ACTUAL_BEHAVIOR_DEPENDENCIES) <= ch3_base_spec_ids
+    assert ch3_required_output_ids <= (
+        ch3_base_spec_ids | set(evidence_availability_module._CH3_ACTUAL_BEHAVIOR_OUTPUT_IDS)
+    )
 
 
 def test_derivation_does_not_call_document_repository() -> None:

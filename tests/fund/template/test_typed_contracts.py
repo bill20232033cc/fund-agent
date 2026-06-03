@@ -21,6 +21,7 @@ from fund_agent.fund.template import typed_contracts
 from fund_agent.fund.template.typed_contracts import (
     ChapterInternalSubcontract,
     RequiredOutputItem,
+    TemplateLensRule,
 )
 
 
@@ -351,6 +352,36 @@ def test_audit_focus_literals_are_closed_and_do_not_imply_programmatic_disable()
     illegal_chapter = replace(manifest.chapters[3], audit_focus=("disable_programmatic",))  # type: ignore[arg-type]
     illegal_manifest = _replace_typed_chapter(manifest, 3, illegal_chapter)
     with pytest.raises(ValueError, match="audit_focus 不受支持"):
+        validate_typed_template_contract_manifest(illegal_manifest)
+
+
+def test_preferred_lens_fund_type_literal_is_closed() -> None:
+    """验证 preferred_lens fund_type 必须属于 LensKey 闭集。
+
+    Args:
+        无。
+
+    Returns:
+        无。
+
+    Raises:
+        AssertionError: 非法 fund_type literal 未被 fail-closed 拒绝。
+    """
+
+    manifest = load_typed_template_contract_manifest()
+    chapter_1 = manifest.chapters[1]
+    illegal_chapter = replace(
+        chapter_1,
+        preferred_lens={
+            "unsupported_fund": TemplateLensRule(
+                fund_type="unsupported_fund",  # type: ignore[arg-type]
+                statements=("fixture invalid lens",),
+            )
+        },
+    )
+    illegal_manifest = _replace_typed_chapter(manifest, 1, illegal_chapter)
+
+    with pytest.raises(ValueError, match="preferred_lens fund_type 不受支持"):
         validate_typed_template_contract_manifest(illegal_manifest)
 
 

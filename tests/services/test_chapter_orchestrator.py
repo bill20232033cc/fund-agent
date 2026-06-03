@@ -57,6 +57,7 @@ from fund_agent.services.llm_provider import (
     LLMProviderRateLimitError,
     LLMProviderTimeoutError,
 )
+from fund_agent.fund.template.typed_contracts import load_typed_template_contract_manifest
 from tests.fund.test_chapter_facts import _bundle, _field
 
 
@@ -2086,13 +2087,18 @@ def test_typed_contract_path_preserves_independent_body_execution(monkeypatch) -
     """
 
     availability_calls: list[tuple[str, int]] = []
+    typed_manifest = load_typed_template_contract_manifest()
+    typed_by_id = {chapter.chapter_id: chapter for chapter in typed_manifest.chapters}
     original_derive_availability = chapter_orchestrator_module.derive_evidence_availability
 
     def _record_derive_availability(projection):  # type: ignore[no-untyped-def]
         """记录 Service façade 是否显式派生 EvidenceAvailability。"""
 
         availability_calls.append((projection.fund_code, projection.report_year))
-        return original_derive_availability(projection)
+        availability = original_derive_availability(projection)
+        assert availability.require("ch2.required_output.item_01").chapter_id == 2
+        assert availability.require("ch3.required_output.item_03").status == "unreviewed"
+        return availability
 
     monkeypatch.setattr(
         chapter_orchestrator_module,
@@ -2121,26 +2127,26 @@ def test_typed_contract_path_preserves_independent_body_execution(monkeypatch) -
     assert rows[3].status == "failed"
     assert rows[2].attempts[0].writer_result.prompt.required_output_evidence_plan
     assert rows[3].attempts[0].writer_result.prompt.required_output_evidence_plan
-    assert rows[2].attempts[0].writer_result.prompt.required_output_items[0].startswith(
-        "ch2.required_output."
+    assert rows[2].attempts[0].writer_result.prompt.required_output_items == tuple(
+        item.item_id for item in typed_by_id[2].required_output_items
     )
-    assert rows[3].attempts[0].writer_result.prompt.required_output_items[0].startswith(
-        "ch3.required_output."
+    assert rows[3].attempts[0].writer_result.prompt.required_output_items == tuple(
+        item.item_id for item in typed_by_id[3].required_output_items
     )
     ch3_plan_by_id = {
         plan.item_id: plan
         for plan in rows[3].attempts[0].writer_result.prompt.required_output_evidence_plan
     }
+    assert ch3_plan_by_id["ch3.required_output.item_03"].text == (
+        typed_by_id[3].required_output_items[2].text
+    )
     assert ch3_plan_by_id["ch3.required_output.item_03"].action == "render_evidence_gap"
     assert ch3_plan_by_id["ch3.required_output.item_03"].availability_status == "unreviewed"
     assert availability_calls == [("110011", 2024)]
     assert auditor.requests[0].chapter_id == 2
-    assert auditor.requests[0].audit_focus == ("r_abc", "evidence_anchors")
+    assert auditor.requests[0].audit_focus == typed_by_id[2].audit_focus
     assert auditor.requests[1].chapter_id == 3
-    assert auditor.requests[1].audit_focus == (
-        "manager_consistency",
-        "evidence_anchors",
-    )
+    assert auditor.requests[1].audit_focus == typed_by_id[3].audit_focus
     assert result.skipped_chapter_ids == ()
     assert all(run.stop_reason != "dependency_missing" for run in result.chapter_results[1:])
 
