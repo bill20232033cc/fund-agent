@@ -90,7 +90,7 @@
 | Accepted diagnostic evidence reconciliation plan commit | `534d8e4` |
 | Accepted diagnostic serialization repair implementation commit | `218a4f6` |
 | Accepted provider endpoint disposition design plan commit | `e329f2f` |
-| Accepted post-repair endpoint disposition evidence commit | pending local checkpoint |
+| Accepted post-repair endpoint disposition evidence commit | `0778e44` |
 
 ## Current Gate
 
