@@ -119,7 +119,7 @@ chapter_lens = resolve_preferred_lens(chapter_id=2, fund_type="active_fund")
 - typed schema 版本为 `typed_chapter_contract.v1`，公开章节 id 仍严格为 `0-7`
 - 第 2 章的 `performance / attribution / cost` 只作为 `chapter_id=2` 内部 `ChapterInternalSubcontract`，不会成为公开章节或 chapter matrix row
 - 第 0 章声明 `consumes_chapter_conclusions=(7,)`，且 `independent_action_source=False`，不独立派生动作判断
-- `audit_focus` 是 bounded semantic audit 的数据提示；显式传入 typed contract 时会投影到 LLM audit request 和 prompt 语义强调，但不能关闭 programmatic blockers、改变阻断等级或修复预算
+- `audit_focus` 是 bounded semantic audit 的闭集语义提示；显式传入 typed contract 时只投影到 LLM audit request 和 prompt 语义强调，不能关闭 programmatic blockers、改变阻断等级或修复预算
 - `RequiredOutputItem.when_evidence_missing` 当前为第 2/3 章 typed writer path 提供缺证行为数据：第 2 章 R=A+B-C required outputs 缺少同源证据时 `block`，第 3 章策略/实际行为/言行一致性/风格稳定性缺少已复核证据时只允许输出证据缺口，利益一致性缺证时只允许输出下一步最小验证问题
 - loader 使用显式 reviewed exact mapping 校验当前 `must_answer / must_not_cover / required_output_items` 文本；当前 manifest 文本漂移会 fail-closed，而不是 fuzzy、substring、embedding 或 LLM 匹配
 
@@ -130,6 +130,8 @@ chapter_lens = resolve_preferred_lens(chapter_id=2, fund_type="active_fund")
 - 第 2 章的 availability 使用 typed Ch2 `performance / attribution / cost` 内部子契约 requirement id，但所有记录仍归属公开 `chapter_id=2`，不会形成 Ch2 公开拆章
 - 第 3 章当前覆盖基金经理基本信息、manager strategy text、turnover、holdings snapshot、cross-period style evidence、manager alignment 和 actual behavior 聚合 requirement；当前单年 `ChapterFactProjection` 不加载 prior-year 文档，跨期风格证据保持 `unreviewed` 缺口
 - malformed 或未知 typed requirement id 会 fail-closed；该能力不读取文档仓库、PDF/cache/source helper、Service、Host、provider、retained report、文件系统、环境变量或 dayu，也不替代 `ChapterFactProjection`
+
+typed sidecar 和 `EvidenceAvailability` 的当前非目标是：不替换 `docs/fund-analysis-template-draft.md` 或 `contracts.py` 模板真源，不改变 deterministic `analyze/checklist`、renderer、FQ0-FQ6 quality gate、final judgment、provider/runtime defaults、score/golden/readiness，不实现 Ch2 公开拆章、多年证据 runtime、Agent runner/tool-loop、Host 业务理解或 dayu runtime。
 
 `fund_agent/fund/chapter_writer.py` 和 `fund_agent/fund/chapter_auditor.py` 当前提供 Gate 2 单章 writer / auditor primitives：
 
@@ -147,7 +149,7 @@ chapter_lens = resolve_preferred_lens(chapter_id=2, fund_type="active_fund")
 - `audit_chapter_programmatic()` 对 required output 只以 exact marker 作为通过条件，正文裸 item 文案不能替代 marker；候选 facet 的“候选/未断言信息”说明允许通过，但任一断言式写法仍阻断
 - `audit_chapter_llm()` 只通过调用方显式注入的 `ChapterAuditLLMClient` 审计；唯一 pass 行为 `PASS|chapter|no issues`，问题行只能是 `BLOCKING|LOCATION|MESSAGE`、`REVIEWABLE|LOCATION|MESSAGE` 或 `INFO|LOCATION|MESSAGE`；解析失败或缺少 client 都 fail-closed
 - E2 证据与断言源文匹配复核不在 Gate 2 实现范围，后续 Evidence Confirm gate 处理
-- 这些 primitives 不实现 chapter orchestrator、repair loop、final assembler、第 0 章 assembly、CLI `--use-llm`、Service 编排或 Host/Agent/dayu runtime
+- 这些 primitives 不实现 Service 用例、provider construction、CLI `--use-llm`、Host lifecycle、Agent runner/tool-loop 或 dayu runtime；当前显式 `--use-llm` typed path 由 Service 选择并把 typed inputs 传入这些 Fund primitives
 
 `FundNavRepository.load_nav_series()` 是 data 层当前 typed NAV series contract，返回 `FundNavSeries`，显式承载份额类别、NAV 类型、调整基础、分红调整状态、identity 状态、source/cache/query provenance、完整性约束和强回撤证据资格。无参 `FundNavRepository()` 当前默认使用 CSRC EID accumulated NAV adapter：通过公开 search/detail/classification 页面验证 006597=A/2030-1010、006598=C/2030-1020、014217=E/2030-1040、022176=F/2030-1050，并按份额分别输出 `nav_type="accumulated_nav"`、`adjusted_basis="accumulated_nav"`、`dividend_adjustment_status="not_applicable"`、`identity_status="verified"`。旧 `FundNavDataAdapter.load_nav_data()` 继续作为 legacy/snapshot/analyze 兼容入口，返回 `NavDataResult` 并保持 `source="nav_cache" / "akshare"` 与 `cached` 语义；constructor-injected Akshare raw-unit adapter 兼容分支仍标记 `unit_nav/raw_unit_nav/requested_code_only` 且 `strong_drawdown_evidence_eligible=False`。
 
