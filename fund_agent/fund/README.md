@@ -16,6 +16,7 @@ from fund_agent.fund.extractors import (
 )
 from fund_agent.fund.data_extractor import FundDataExtractor
 from fund_agent.fund.chapter_facts import ChapterFactProvider, project_chapter_facts
+from fund_agent.fund.evidence_availability import derive_evidence_availability
 from fund_agent.fund.chapter_writer import build_chapter_writer_input, write_chapter
 from fund_agent.fund.chapter_auditor import ChapterAuditInput, audit_chapter
 from fund_agent.fund.analysis import (
@@ -47,6 +48,7 @@ data_extractor = FundDataExtractor()
 bundle = await data_extractor.extract("110011", 2024)
 chapter_projection = project_chapter_facts(bundle)
 chapter_projection_via_provider = ChapterFactProvider().project(bundle)
+evidence_availability = derive_evidence_availability(chapter_projection)
 writer_input = build_chapter_writer_input(chapter_projection, chapter_id=1, mode="prompt_only")
 write_result = write_chapter(writer_input, llm_client=None)
 if write_result.draft is not None:
@@ -119,6 +121,14 @@ chapter_lens = resolve_preferred_lens(chapter_id=2, fund_type="active_fund")
 - 第 0 章声明 `consumes_chapter_conclusions=(7,)`，且 `independent_action_source=False`，不独立派生动作判断
 - `audit_focus` 是 bounded semantic audit 的数据提示，只能表达语义关注点，不能关闭 programmatic blockers
 - loader 使用显式 reviewed exact mapping 校验当前 `must_answer / must_not_cover / required_output_items` 文本；当前 manifest 文本漂移会 fail-closed，而不是 fuzzy、substring、embedding 或 LLM 匹配
+
+`fund_agent/fund/evidence_availability.py` 当前提供 additive same-source `EvidenceAvailability`：
+
+- `derive_evidence_availability()` 只消费已经存在的 `ChapterFactProjection`、章节 facts、evidence anchor ids、missing reasons 和 typed contract requirement ids
+- 输出 `evidence_availability.v1`，逐 requirement 区分 `available / missing / unavailable / not_applicable / unreviewed`
+- 第 2 章的 availability 使用 typed Ch2 `performance / attribution / cost` 内部子契约 requirement id，但所有记录仍归属公开 `chapter_id=2`，不会形成 Ch2 公开拆章
+- 第 3 章当前覆盖 manager strategy text、turnover、holdings snapshot、cross-period style evidence、manager alignment 和 actual behavior 聚合 requirement；当前单年 `ChapterFactProjection` 不加载 prior-year 文档，跨期风格证据保持 `unreviewed` 缺口
+- malformed 或未知 typed requirement id 会 fail-closed；该能力不读取文档仓库、PDF/cache/source helper、Service、Host、provider、retained report、文件系统、环境变量或 dayu，也不替代 `ChapterFactProjection`
 
 `fund_agent/fund/chapter_writer.py` 和 `fund_agent/fund/chapter_auditor.py` 当前提供 Gate 2 单章 writer / auditor primitives：
 

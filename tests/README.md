@@ -18,6 +18,7 @@ CI 当前固定 Python 3.11，使用 `uv sync --extra dev --frozen` 安装锁定
 - `tests/fund/test_source_provenance.py`：公共来源 provenance 投影测试，覆盖主源 not-applicable、fallback 缺失分类 unknown、metadata-owned eligible/fail-closed 分类映射、metadata 优先级、kwarg 兼容路径和稳定字典输出；不读取文档仓库、PDF、cache 或来源 helper
 - `tests/fund/test_data_extractor.py`：P1 结构化数据 façade 测试，覆盖 `FundDataExtractor` 在年报仓库成功后对 NAV provider/cache/akshare 失败降级为 `NavDataResult(unavailable=True)`、从 `ParsedAnnualReport.metadata.source` 显式投影 `source_provenance` 与 metadata 主源失败分类、债券基金通过 fake typed NAV repository 只加载 A 类年度最大回撤且不混合 A/C/E/F，以及年报仓库/PDF 类异常不被 NAV 降级吞掉；使用 fake repository、fake nav provider 和 fake typed NAV repository，不触发真实网络、PDF 或 akshare
 - `tests/fund/test_chapter_facts.py`：Route C Gate 1 章节事实 typed projection 测试，覆盖 `StructuredFundDataBundle -> ChapterFactProjection`、`ChapterFactProvider` smoke、章节编号 fail-closed/happy path、基金类型 unknown、preferred_lens、ITEM_RULE、facet 不猜 subtype、锚点引用完整性、NAV 三态、债券风险组级 anchors 保留在 value 内和导入隔离；使用内存 fixture，不触发文档仓库、PDF、cache、来源 helper、LLM、Service、Host 或 dayu
+- `tests/fund/test_evidence_availability.py`：typed template Slice 2 same-source `EvidenceAvailability` 测试，覆盖从 `ChapterFactProjection` fact ids / anchor ids 派生 available requirement、区分 missing / unavailable / not_applicable / unreviewed、第 3 章 actual behavior 在单年缺跨期证据时保持 unreviewed、Ch2 内部子契约仍归属公开第 2 章、导入隔离和未知 typed requirement id fail-closed；使用内存 fixture，不触发文档仓库、PDF、cache、来源 helper、Service、Host、provider、retained report、文件系统、LLM 或 dayu
 - `tests/fund/test_chapter_writer.py`：Route C Gate 2 单章 writer primitive 测试，覆盖 writer input/prompt、compact payload、prompt-cost diagnostic、`prompt_only` blocked 语义、unknown fund type、第 0/7 章 accepted conclusions 缺口、critical `evidence_missing`、精确 `<!-- anchor:<anchor_id> -->` / `<!-- missing:<reason> -->` marker 解析、超长输出 hard block、禁用交易建议、债券风险内部组级锚点错误消息和导入隔离；使用 fake LLM client，不触发真实 provider、文档仓库、PDF、cache、来源 helper、Service、Host 或 dayu
 - `tests/fund/test_chapter_auditor.py`：Route C Gate 2 单章 auditor primitive 测试，覆盖程序审计结构/占位符/锚点/ITEM_RULE 删除段落/禁用交易建议、`non_asserted_facets` 误断言、第 5 章跨期缺口措辞、LLM unavailable blocked、`SEVERITY|LOCATION|MESSAGE` 行协议 pass/info/reviewable/parse failure、`repair_hint` 聚合和导入隔离；使用 fake LLM audit client，不触发真实 provider、文档仓库、PDF、cache、来源 helper、Service、Host 或 dayu
 - `tests/fund/test_extraction_snapshot.py`：P4-S1/P5-S3/P13/P14-S1 精选基金池字段级抽取快照测试，覆盖 CSV 校验、snapshot schema、公共来源 provenance 字段、`comparable_values` 白名单子字段、`index_profile` / `tracking_error` dataclass 子字段序列化、derived-only `bond_risk_evidence` 锚点投影、summary 重复代码标红、Source Provenance 表、单基金失败继续和 `004393` known failure 捕获；使用 fake extractor，不触发真实网络或 PDF
@@ -88,6 +89,7 @@ pytest tests/fund/extractors/test_holdings_share_change.py -q
 pytest tests/fund/test_extraction_snapshot.py -q
 pytest tests/fund/test_data_extractor.py -q
 pytest tests/fund/test_chapter_facts.py -q
+pytest tests/fund/test_evidence_availability.py -q
 pytest tests/fund/test_chapter_writer.py tests/fund/test_chapter_auditor.py -q
 pytest tests/services/test_chapter_orchestrator.py -q
 pytest tests/config/test_llm_config.py tests/services/test_llm_provider.py -q
