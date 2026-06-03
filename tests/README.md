@@ -46,6 +46,7 @@ CI 当前固定 Python 3.11，使用 `uv sync --extra dev --frozen` 安装锁定
 - `tests/fund/analysis/test_thermometer_calculator.py`：自建温度计纯计算器测试，覆盖 PE/PB 百分位、综合温度、阈值映射、空历史和非法估值 fail-closed
 - `tests/fund/audit/test_audit_programmatic.py`：程序审计测试，覆盖 P1/P2/P3/C2/L1/R1/R2 规则、每章最小证据行、required_output_items marker、must_not_cover 禁止 marker、ITEM_RULE 渲染/删除合规、跟踪误差和指数画像 deterministic source guard、估值状态结构化真源 R1 审计、章节切分 fallback、必需输入缺失、selected/derived/source 最终判断冲突、故意注入错误和未知检查清单信号
 - `tests/fund/template/test_contracts.py`：模板 CHAPTER_CONTRACT manifest 测试，覆盖 0-7 章完整性、设计标题、必需字段非空、所有标准基金类型 preferred_lens 解析和 fail-closed 校验
+- `tests/fund/template/test_typed_contracts.py`：typed CHAPTER_CONTRACT sidecar 测试，覆盖 additive loader 保持公开章节 0-7、Ch2 内部子契约不变成公开章节、Ch0 消费 Ch7 且不独立派生动作、required output item id 唯一、`audit_focus` 闭集语义数据和当前 manifest 非突变
 - `tests/fund/template/test_chapter_contract_constraints.py`：CHAPTER_CONTRACT 可执行 sidecar 测试，覆盖第 0-7 章 wrapper、主动基金第 3 章 material 证据要求，以及 deferred config-only 要求映射
 - `tests/fund/template/test_lens_application.py`：preferred_lens 应用计划测试，覆盖所有标准基金类型 8 章 plan、default fallback 标记，以及非法基金类型、空章节、重复章节和越界章节 fail-closed
 - `tests/fund/template/test_item_rules.py`：模板 ITEM_RULE manifest 测试，覆盖四条 conditional 规则、源文案 fidelity、optional schema fixture、显式 facet/fund type 冲突 fail-closed 和唯一段落标记检查
@@ -111,6 +112,7 @@ pytest tests/fund/analysis/test_risk_check.py -q
 pytest tests/fund/analysis/test_checklist.py -q
 pytest tests/fund/audit/test_audit_programmatic.py -q
 pytest tests/fund/template/test_contracts.py -q
+pytest tests/fund/template/test_typed_contracts.py -q
 pytest tests/fund/template/test_renderer.py -q
 pytest tests/services -q
 pytest tests/ui -q

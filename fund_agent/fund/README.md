@@ -31,6 +31,7 @@ from fund_agent.fund.audit import ProgrammaticAuditInput, run_programmatic_audit
 from fund_agent.fund.template import (
     TemplateRenderInput,
     load_template_contract_manifest,
+    load_typed_template_contract_manifest,
     render_template_report,
     resolve_preferred_lens,
 )
@@ -55,6 +56,7 @@ if write_result.draft is not None:
     )
 rabc = calculate_r_abc_from_bundle(bundle, equity_position="80%")
 manifest = load_template_contract_manifest()
+typed_manifest = load_typed_template_contract_manifest()
 chapter_lens = resolve_preferred_lens(chapter_id=2, fund_type="active_fund")
 ```
 
@@ -108,6 +110,15 @@ chapter_lens = resolve_preferred_lens(chapter_id=2, fund_type="active_fund")
 - facet 行为保持确定性：没有 exact structured evidence 时 `facets=()`，候选 catalog 标签只进入 `non_asserted_facets`，不会传给 ITEM_RULE
 - `bond_risk_evidence` 的组级 anchors 保留在 value 内部，不展开为普通章节 `ChapterEvidenceAnchor`
 - 该能力不读取文档仓库、PDF、cache、source helper、下载器或 parser，不调用 LLM、Service、Host 或 dayu；它不是 writer、auditor、orchestrator 或 `FundToolService`
+
+`fund_agent/fund/template/typed_contracts.py` 当前提供 additive typed CHAPTER_CONTRACT sidecar：
+
+- `load_typed_template_contract_manifest()` 从当前 `contracts.py` manifest 精确投影 typed contract，不替换模板真源、renderer、auditor 或 deterministic analyze/checklist 行为
+- typed schema 版本为 `typed_chapter_contract.v1`，公开章节 id 仍严格为 `0-7`
+- 第 2 章的 `performance / attribution / cost` 只作为 `chapter_id=2` 内部 `ChapterInternalSubcontract`，不会成为公开章节或 chapter matrix row
+- 第 0 章声明 `consumes_chapter_conclusions=(7,)`，且 `independent_action_source=False`，不独立派生动作判断
+- `audit_focus` 是 bounded semantic audit 的数据提示，只能表达语义关注点，不能关闭 programmatic blockers
+- loader 使用显式 reviewed exact mapping 校验当前 `must_answer / must_not_cover / required_output_items` 文本；当前 manifest 文本漂移会 fail-closed，而不是 fuzzy、substring、embedding 或 LLM 匹配
 
 `fund_agent/fund/chapter_writer.py` 和 `fund_agent/fund/chapter_auditor.py` 当前提供 Gate 2 单章 writer / auditor primitives：
 
