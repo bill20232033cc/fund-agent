@@ -2991,6 +2991,47 @@ def test_analyze_cli_default_product_request(monkeypatch) -> None:  # type: igno
     assert _RaisingHostRuntimeRunner.run_called is False
 
 
+def test_default_analyze_unchanged_with_typed_contract_modules_present(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    """验证默认 analyze 不读取 LLM config 或 typed LLM provider config。
+
+    Args:
+        monkeypatch: pytest monkeypatch fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当默认 analyze 触发 LLM builder、provider config、Host 或 artifact 写入时抛出。
+    """
+
+    _FakeService.last_request = None
+    _FakeService.analyze_called = False
+    _FakeService.analyze_with_llm_execution_called = False
+    monkeypatch.setattr(cli, "FundAnalysisService", _FakeService)
+    monkeypatch.setattr(
+        cli,
+        "build_fund_llm_execution_request",
+        _forbid_llm_execution_request_builder,
+    )
+    monkeypatch.setattr(cli, "HostRuntimeRunner", _RaisingHostRuntimeRunner)
+    monkeypatch.setattr(
+        cli,
+        "write_llm_incomplete_run_artifacts",
+        _forbid_llm_artifact_writer,
+    )
+    _reset_fake_host_runner()
+    runner = CliRunner()
+
+    result = runner.invoke(cli.app, ["analyze", "110011", "--report-year", "2024"])
+
+    assert result.exit_code == 0
+    assert result.stdout == "# 0. 投资要点概览\n\n# 7. 是否值得持有——最终判断\n"
+    assert _FakeService.analyze_called is True
+    assert _FakeService.analyze_with_llm_execution_called is False
+    assert _FakeService.last_request.command_source == "analyze"
+    assert _RaisingHostRuntimeRunner.run_called is False
+
+
 def test_analyze_cli_rejects_dev_options_without_dev_override(monkeypatch) -> None:  # type: ignore[no-untyped-def]
     """验证开发参数未配 `--dev-override` 会统一失败。
 

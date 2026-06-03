@@ -26,6 +26,10 @@ from fund_agent.fund.chapter_facts import (
     ChapterFactProjection,
     ChapterFactProvider,
 )
+from fund_agent.fund.evidence_availability import (
+    EvidenceAvailability,
+    derive_evidence_availability,
+)
 from fund_agent.fund.chapter_writer import (
     ChapterRepairContext,
     ChapterDraft,
@@ -36,6 +40,11 @@ from fund_agent.fund.chapter_writer import (
     write_chapter,
 )
 from fund_agent.fund.data_extractor import StructuredFundDataBundle
+from fund_agent.fund.template.typed_contracts import (
+    RequiredOutputItem,
+    TypedChapterContract,
+    get_typed_chapter_contract,
+)
 from fund_agent.host import HostRunContext
 
 ChapterOrchestratorSchemaVersion = Literal["chapter_orchestrator.v1"]
@@ -68,6 +77,7 @@ ChapterRunStopReason = Literal[
 ]
 ChapterRepairAction = Literal["none", "regenerate", "needs_more_facts", "stop"]
 ChapterOrchestrationInputKind = Literal["structured_bundle", "chapter_projection"]
+TypedTemplatePathMode = Literal["legacy_contract", "typed_template_contract"]
 AcceptedChapterConclusionSource = Literal["heading", "fallback_lines"]
 ProviderOperation = Literal["writer", "auditor"]
 TimeoutBudgetKind = Literal["writer_initial", "auditor", "writer_repair"]
@@ -119,6 +129,9 @@ CHAPTER_ORCHESTRATOR_SCHEMA_VERSION: ChapterOrchestratorSchemaVersion = (
 DEFAULT_TARGET_CHAPTER_IDS: Final[tuple[int, ...]] = (1, 2, 3, 4, 5, 6)
 MAX_ACCEPTED_CONCLUSION_CHARS: Final[int] = 500
 _TARGET_CHAPTER_ID_SET: Final[frozenset[int]] = frozenset(DEFAULT_TARGET_CHAPTER_IDS)
+_ALLOWED_TYPED_TEMPLATE_PATH_MODES: Final[frozenset[str]] = frozenset(
+    ("legacy_contract", "typed_template_contract")
+)
 _CONCLUSION_HEADINGS: Final[tuple[str, ...]] = ("### 结论要点", "## 结论要点")
 _WRITER_STOP_REASON_MAPPING: Final[
     dict[ChapterWriteStopReason, tuple[ChapterRunStatus, ChapterRunStopReason]]
@@ -331,6 +344,7 @@ class ChapterOrchestrationPolicy:
         fail_fast: 兼容旧调用方的遗留参数；模板第 1-6 章固定独立执行，不因前章失败跳过后章。
         run_programmatic_audit: 是否执行 Gate 2 programmatic audit。
         run_llm_audit: 是否执行 Gate 2 LLM audit。
+        typed_template_path: 显式模板契约路径；默认 legacy，不消费 typed sidecar。
     """
 
     target_chapter_ids: tuple[int, ...] = DEFAULT_TARGET_CHAPTER_IDS
@@ -340,6 +354,7 @@ class ChapterOrchestrationPolicy:
     fail_fast: bool = False
     run_programmatic_audit: bool = True
     run_llm_audit: bool = True
+    typed_template_path: TypedTemplatePathMode = "legacy_contract"
 
     def __post_init__(self) -> None:
         """校验章节编排策略。
@@ -522,6 +537,18 @@ class ChapterOrchestrationResult:
     schema_version: ChapterOrchestratorSchemaVersion = CHAPTER_ORCHESTRATOR_SCHEMA_VERSION
 
 
+@dataclass(frozen=True, slots=True, kw_only=True)
+class _TypedTemplateInputs:
+    """Service façade 内部 typed 模板输入。
+
+    Attributes:
+        evidence_availability: 从同源 `ChapterFactProjection` 派生的证据可用性。
+
+    """
+
+    evidence_availability: EvidenceAvailability
+
+
 class ChapterOrchestrator:
     """Service 层章节编排 façade，见模板第 1-6 章。"""
 
@@ -649,6 +676,7 @@ def orchestrate_chapters(
             issue="缺少显式注入的章节 LLM 审计 client，不能进入写作。",
         )
 
+    typed_inputs = _typed_template_inputs(projection, policy=policy)
     chapter_results: list[ChapterRunResult] = []
     skipped_chapter_ids: tuple[int, ...] = ()
     for chapter_id in policy.target_chapter_ids:
@@ -658,6 +686,7 @@ def orchestrate_chapters(
             chapter_id=chapter_id,
             policy=policy,
             llm_clients=llm_clients,
+            typed_inputs=typed_inputs,
             host_context=host_context,
         )
         chapter_results.append(run_result)
@@ -754,6 +783,8 @@ def _validate_policy(policy: ChapterOrchestrationPolicy) -> None:
         raise ValueError("max_output_chars 必须为正数")
     if policy.prompt_payload_mode not in {"full", "compact"}:
         raise ValueError("prompt_payload_mode 必须为 full 或 compact")
+    if policy.typed_template_path not in _ALLOWED_TYPED_TEMPLATE_PATH_MODES:
+        raise ValueError("typed_template_path 必须为 legacy_contract / typed_template_contract")
 
 
 def _validate_orchestration_input(input_data: ChapterOrchestrationInput) -> None:
@@ -924,12 +955,107 @@ def _global_blocked_result(
     )
 
 
+def _typed_template_inputs(
+    projection: ChapterFactProjection,
+    *,
+    policy: ChapterOrchestrationPolicy,
+) -> _TypedTemplateInputs | None:
+    """按显式 policy 构造 typed contract / availability 输入。
+
+    Args:
+        projection: Gate 1 章节事实投影。
+        policy: Service-owned 章节编排策略。
+
+    Returns:
+        typed path 开启时返回内部 typed 输入；默认 legacy path 返回 `None`。
+
+    Raises:
+        ValueError: 当 typed path 模式非法或 availability 派生失败时抛出。
+    """
+
+    if policy.typed_template_path == "legacy_contract":
+        return None
+    if policy.typed_template_path != "typed_template_contract":
+        raise ValueError("typed_template_path 必须为 legacy_contract / typed_template_contract")
+    return _TypedTemplateInputs(
+        evidence_availability=derive_evidence_availability(projection),
+    )
+
+
+def _typed_chapter_contract(
+    chapter_id: int,
+    *,
+    typed_inputs: _TypedTemplateInputs | None,
+) -> TypedChapterContract | None:
+    """读取 typed path 的单章 contract。
+
+    Args:
+        chapter_id: 模板章节编号。
+        typed_inputs: typed path 内部输入；为空表示 legacy path。
+
+    Returns:
+        typed 单章 contract；legacy path 返回 `None`。
+
+    Raises:
+        ValueError: 当 typed sidecar 缺失或校验失败时由 Fund 层 loader 抛出。
+    """
+
+    if typed_inputs is None:
+        return None
+    return get_typed_chapter_contract(chapter_id)
+
+
+def _typed_required_output_items(
+    chapter_id: int,
+    *,
+    typed_inputs: _TypedTemplateInputs | None,
+) -> tuple[RequiredOutputItem, ...]:
+    """读取 typed path 的 required output items。
+
+    Args:
+        chapter_id: 模板章节编号。
+        typed_inputs: typed path 内部输入；为空表示 legacy path。
+
+    Returns:
+        typed required output items；legacy path 返回空元组。
+
+    Raises:
+        ValueError: 当 typed sidecar 缺失或校验失败时由 Fund 层 loader 抛出。
+    """
+
+    typed_contract = _typed_chapter_contract(chapter_id, typed_inputs=typed_inputs)
+    if typed_contract is None:
+        return ()
+    return typed_contract.required_output_items
+
+
+def _typed_evidence_availability(
+    typed_inputs: _TypedTemplateInputs | None,
+) -> EvidenceAvailability | None:
+    """读取 typed path 的同源 EvidenceAvailability。
+
+    Args:
+        typed_inputs: typed path 内部输入；为空表示 legacy path。
+
+    Returns:
+        `EvidenceAvailability` 或 `None`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if typed_inputs is None:
+        return None
+    return typed_inputs.evidence_availability
+
+
 def _run_single_chapter(
     projection: ChapterFactProjection,
     *,
     chapter_id: int,
     policy: ChapterOrchestrationPolicy,
     llm_clients: ChapterOrchestratorLLMClients,
+    typed_inputs: _TypedTemplateInputs | None = None,
     host_context: HostRunContext | None = None,
 ) -> ChapterRunResult:
     """执行单章写作、审计和有限 regenerate。
@@ -939,6 +1065,7 @@ def _run_single_chapter(
         chapter_id: 模板章节编号。
         policy: 编排策略。
         llm_clients: 显式注入的 writer/auditor LLM client。
+        typed_inputs: typed path 开启时的 Service façade typed 输入。
         host_context: 可选 Host run 上下文；Host 不理解本模块的基金业务语义。
 
     Returns:
@@ -956,6 +1083,11 @@ def _run_single_chapter(
         chapter_id=chapter_id,
         max_output_chars=policy.max_output_chars,
         prompt_payload_mode=policy.prompt_payload_mode,  # type: ignore[arg-type]
+        typed_required_output_items=_typed_required_output_items(
+            chapter_id,
+            typed_inputs=typed_inputs,
+        ),
+        evidence_availability=_typed_evidence_availability(typed_inputs),
     )
     attempt_index = 0
     while True:
@@ -1036,6 +1168,10 @@ def _run_single_chapter(
         audit_input = ChapterAuditInput(
             writer_input=writer_input,
             draft=draft,
+            typed_chapter_contract=_typed_chapter_contract(
+                chapter_id,
+                typed_inputs=typed_inputs,
+            ),
             run_programmatic=policy.run_programmatic_audit,
             run_llm=policy.run_llm_audit,
         )
@@ -1145,6 +1281,11 @@ def _run_single_chapter(
                     attempt_index=attempt_index,
                 ),
                 prompt_payload_mode=policy.prompt_payload_mode,  # type: ignore[arg-type]
+                typed_required_output_items=_typed_required_output_items(
+                    chapter_id,
+                    typed_inputs=typed_inputs,
+                ),
+                evidence_availability=_typed_evidence_availability(typed_inputs),
             )
             _host_phase_completed(
                 host_context,

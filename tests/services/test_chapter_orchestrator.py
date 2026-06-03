@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 
+import fund_agent.services.chapter_orchestrator as chapter_orchestrator_module
 from fund_agent.fund.chapter_auditor import (
     ChapterAuditIssue,
     ChapterAuditLLMRequest,
@@ -2071,6 +2072,129 @@ def test_dependency_missing_only_for_true_writer_dependency_not_prior_failure() 
     assert result.generated_chapter_ids == (1, 2)
 
 
+def test_typed_contract_path_preserves_independent_body_execution(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    """验证 typed contract path 接入后仍独立执行正文章节。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 typed path 未传入 availability/audit_focus 或前章失败跳过后章时抛出。
+    """
+
+    availability_calls: list[tuple[str, int]] = []
+    original_derive_availability = chapter_orchestrator_module.derive_evidence_availability
+
+    def _record_derive_availability(projection):  # type: ignore[no-untyped-def]
+        """记录 Service façade 是否显式派生 EvidenceAvailability。"""
+
+        availability_calls.append((projection.fund_code, projection.report_year))
+        return original_derive_availability(projection)
+
+    monkeypatch.setattr(
+        chapter_orchestrator_module,
+        "derive_evidence_availability",
+        _record_derive_availability,
+    )
+    writer = _ChapterPlanWriterClient({1: LLMProviderTimeoutError("timeout")})
+    auditor = _FakeAuditLLMClient()
+    result = _orchestrate(
+        policy=ChapterOrchestrationPolicy(
+            target_chapter_ids=(1, 2, 3),
+            max_repair_attempts=0,
+            prompt_payload_mode="compact",
+            typed_template_path="typed_template_contract",
+        ),
+        writer=writer,
+        auditor=auditor,
+    )
+
+    rows = {run.chapter_id: run for run in result.chapter_results}
+    assert result.status == "blocked"
+    assert [request.chapter_id for request in writer.requests] == [1, 2, 3]
+    assert rows[1].status == "failed"
+    assert rows[1].stop_reason == "llm_timeout"
+    assert rows[2].status == "failed"
+    assert rows[3].status == "failed"
+    assert rows[2].attempts[0].writer_result.prompt.required_output_evidence_plan
+    assert rows[3].attempts[0].writer_result.prompt.required_output_evidence_plan
+    assert rows[2].attempts[0].writer_result.prompt.required_output_items[0].startswith(
+        "ch2.required_output."
+    )
+    assert rows[3].attempts[0].writer_result.prompt.required_output_items[0].startswith(
+        "ch3.required_output."
+    )
+    ch3_plan_by_id = {
+        plan.item_id: plan
+        for plan in rows[3].attempts[0].writer_result.prompt.required_output_evidence_plan
+    }
+    assert ch3_plan_by_id["ch3.required_output.item_03"].action == "render_evidence_gap"
+    assert ch3_plan_by_id["ch3.required_output.item_03"].availability_status == "unreviewed"
+    assert availability_calls == [("110011", 2024)]
+    assert auditor.requests[0].chapter_id == 2
+    assert auditor.requests[0].audit_focus == ("r_abc", "evidence_anchors")
+    assert auditor.requests[1].chapter_id == 3
+    assert auditor.requests[1].audit_focus == (
+        "manager_consistency",
+        "evidence_anchors",
+    )
+    assert result.skipped_chapter_ids == ()
+    assert all(run.stop_reason != "dependency_missing" for run in result.chapter_results[1:])
+
+
+def test_typed_contract_path_repair_keeps_typed_required_output_items() -> None:
+    """验证 typed path repair 轮次也把 required output items 传给 writer。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 repair writer input 丢失 typed required output 行为时抛出。
+    """
+
+    writer = _FakeChapterLLMClient()
+    auditor = _FakeAuditLLMClient(
+        (
+            "BLOCKING|chapter|fixture semantic repair",
+            "PASS|chapter|no issues",
+        )
+    )
+
+    result = _orchestrate(
+        policy=ChapterOrchestrationPolicy(
+            target_chapter_ids=(2,),
+            max_repair_attempts=1,
+            prompt_payload_mode="compact",
+            typed_template_path="typed_template_contract",
+        ),
+        writer=writer,
+        auditor=auditor,
+    )
+
+    run = result.chapter_results[0]
+    assert result.status == "blocked"
+    assert run.status == "failed"
+    assert run.stop_reason == "repair_budget_exhausted"
+    assert [request.chapter_id for request in writer.requests] == [2, 2]
+    assert len(run.attempts) == 2
+    assert all(
+        attempt.writer_result.prompt.required_output_evidence_plan
+        for attempt in run.attempts
+    )
+    assert all(
+        attempt.writer_result.prompt.required_output_items[0].startswith(
+            "ch2.required_output."
+        )
+        for attempt in run.attempts
+    )
+
+
 def test_first_failed_diagnostic_keeps_full_chapter_matrix() -> None:
     """验证 first_failed 不隐藏完整章节矩阵。"""
 
@@ -2861,8 +2985,28 @@ def _required_items_from_request(request: ChapterLLMRequest) -> tuple[str, ...]:
         if line.startswith(marker):
             value = line.removeprefix(marker)
             parsed = ast.literal_eval(value)
-            return tuple(parsed)
+            return tuple(_required_item_from_prompt_payload(item) for item in parsed)
     return ()
+
+
+def _required_item_from_prompt_payload(item: str) -> str:
+    """从 prompt required output payload 中提取 exact marker item。
+
+    Args:
+        item: legacy required output 原文，或 typed payload 多行字符串。
+
+    Returns:
+        legacy 原文或 typed stable item id。
+
+    Raises:
+        无显式抛出。
+    """
+
+    first_line = item.splitlines()[0] if item else ""
+    if first_line.startswith("<!-- required_output:") and first_line.endswith(" -->"):
+        return first_line.removeprefix("<!-- required_output:").removesuffix(" -->")
+    return item
+
 
 
 def _required_lines(required_items: tuple[str, ...]) -> str:
@@ -2878,10 +3022,25 @@ def _required_lines(required_items: tuple[str, ...]) -> str:
         无显式抛出。
     """
 
-    return "\n".join(
-        f"<!-- required_output:{item} -->\n- {item}: 已根据结构化事实说明。"
-        for item in required_items
-    )
+    return "\n".join(f"<!-- required_output:{item} -->\n- {item}: {_required_line_text(item)}" for item in required_items)
+
+
+def _required_line_text(item: str) -> str:
+    """构造单个 required output 的测试文本。
+
+    Args:
+        item: required output item 原文或 typed item id。
+
+    Returns:
+        可通过 writer / auditor 程序检查的测试文本。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if item.startswith("ch2.required_output.") or item.startswith("ch3.required_output."):
+        return "证据不足，下一步最小验证问题是复核同源年报披露。"
+    return "已根据结构化事实说明。"
 
 
 def _imports_for(source_path: Path) -> set[str]:

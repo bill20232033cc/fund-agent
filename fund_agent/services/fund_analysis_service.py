@@ -947,6 +947,7 @@ def build_fund_llm_execution_request(
     chapter_policy = ChapterOrchestrationPolicy(
         max_output_chars=config.max_output_chars,
         prompt_payload_mode="compact",
+        typed_template_path="typed_template_contract",
     )
     provider_runtime_budget = ProviderRuntimeBudget(
         writer_timeout_seconds=config.writer_timeout_seconds,
@@ -971,6 +972,7 @@ def build_fund_llm_execution_request(
         provider_runtime_budget=provider_runtime_budget,
         quality_fail_closed_policy=quality_fail_closed_policy,
         safe_diagnostic_policy=SafeDiagnosticPolicy(),
+        typed_template_path="typed_template_contract",
         host_timeout_seconds=derive_host_timeout_seconds(
             provider_runtime_budget,
             chapter_count=LLM_REPORT_HOST_TIMEOUT_CHAPTER_COUNT,
@@ -987,6 +989,7 @@ def build_fund_llm_execution_request(
         contract=contract,
         runtime_plan=runtime_plan,
         llm_clients=llm_clients,
+        typed_template_path="typed_template_contract",
     )
 
 
