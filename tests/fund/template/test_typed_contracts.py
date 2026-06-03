@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+from copy import deepcopy
 from dataclasses import replace
+from pathlib import Path
+from typing import Any, Mapping
 
 import pytest
 
@@ -14,6 +17,7 @@ from fund_agent.fund.template import (
     load_typed_template_contract_manifest,
     validate_typed_template_contract_manifest,
 )
+from fund_agent.fund.template import typed_contracts
 from fund_agent.fund.template.typed_contracts import (
     ChapterInternalSubcontract,
     RequiredOutputItem,
@@ -44,6 +48,183 @@ def test_typed_manifest_preserves_public_chapter_ids_0_to_7() -> None:
         "cost",
     }
     assert all(not chapter.internal_subcontracts for chapter in manifest.chapters if chapter.chapter_id != 2)
+
+
+def test_typed_contracts_has_no_code_authored_text_mapping_truth() -> None:
+    """验证 typed_contracts.py 不再保留代码 authored stable id/text 真源。
+
+    Args:
+        无。
+
+    Returns:
+        无。
+
+    Raises:
+        AssertionError: 旧 authored truth symbol 仍残留在 typed_contracts.py。
+    """
+
+    source = Path(typed_contracts.__file__).read_text(encoding="utf-8")
+
+    assert "_CURRENT_TEXT_MAPPING" not in source
+    assert "_TextIdMapping" not in source
+    assert "_ChapterTextMapping" not in source
+    assert "_AUDIT_FOCUS_BY_CHAPTER" not in source
+    assert "_CH3_STYLE_EVIDENCE_UNREVIEWED" not in source
+
+
+def test_current_typed_projection_matches_template_json_exact_fields() -> None:
+    """验证 typed manifest 精确投影模板 JSON 中的 id、文本和 typed 侧字段。
+
+    Args:
+        无。
+
+    Returns:
+        无。
+
+    Raises:
+        AssertionError: typed manifest 与 canonical JSON 不一致。
+    """
+
+    raw_manifest = typed_contracts._load_raw_template_contract_manifest()
+    typed_manifest = load_typed_template_contract_manifest()
+
+    assert typed_manifest.schema_version == raw_manifest["schema_version"]
+    assert typed_manifest.template_id == raw_manifest["template_id"]
+    assert typed_manifest.source_template_id == raw_manifest["source_template_id"]
+    assert typed_manifest.source_path == raw_manifest["source_path"]
+
+    for typed_chapter, raw_chapter in zip(typed_manifest.chapters, raw_manifest["chapters"], strict=True):
+        assert typed_chapter.chapter_id == raw_chapter["chapter_id"]
+        assert typed_chapter.title == raw_chapter["title"]
+        assert typed_chapter.narrative_mode == raw_chapter["narrative_mode"]
+        assert tuple((item.clause_id, item.text) for item in typed_chapter.must_answer) == tuple(
+            (item["id"], item["text"]) for item in raw_chapter["must_answer"]
+        )
+        assert tuple((item.item_id, item.text) for item in typed_chapter.required_output_items) == tuple(
+            (item["id"], item["text"]) for item in raw_chapter["required_output_items"]
+        )
+        assert tuple(
+            (item.when_evidence_missing, item.missing_evidence_reason)
+            for item in typed_chapter.required_output_items
+        ) == tuple(
+            (item["when_evidence_missing"], item["missing_evidence_reason"])
+            for item in raw_chapter["required_output_items"]
+        )
+        assert typed_chapter.audit_focus == tuple(raw_chapter["audit_focus"])
+        assert typed_chapter.consumes_chapter_conclusions == tuple(
+            raw_chapter["consumes_chapter_conclusions"]
+        )
+        assert typed_chapter.independent_action_source == raw_chapter["independent_action_source"]
+        assert tuple(
+            (item.subcontract_id, item.title, item.requirement_ids, item.public_chapter_id)
+            for item in typed_chapter.internal_subcontracts
+        ) == tuple(
+            (
+                item["subcontract_id"],
+                item["title"],
+                tuple(item["requirement_ids"]),
+                item["public_chapter_id"],
+            )
+            for item in raw_chapter["internal_subcontracts"]
+        )
+
+    raw_ch3_predicate = raw_manifest["chapters"][3]["must_not_cover"][3]["applies_when"]
+    typed_ch3_predicate = typed_manifest.chapters[3].must_not_cover[3].applies_when
+    assert typed_ch3_predicate is not None
+    assert typed_ch3_predicate.predicate_id == raw_ch3_predicate["predicate_id"]
+    assert typed_ch3_predicate.requirement_ids == tuple(raw_ch3_predicate["requirement_ids"])
+    assert typed_ch3_predicate.required_statuses == tuple(raw_ch3_predicate["required_statuses"])
+    assert typed_ch3_predicate.description == raw_ch3_predicate["description"]
+
+
+def test_stale_source_manifest_raises_value_error() -> None:
+    """验证 source_manifest 只做 compatibility validation，stale 输入 fail-closed。
+
+    Args:
+        无。
+
+    Returns:
+        无。
+
+    Raises:
+        AssertionError: stale source_manifest 未触发 ValueError。
+    """
+
+    current_manifest = load_template_contract_manifest()
+    stale_chapter = replace(current_manifest.chapters[0], title="stale title")
+    stale_manifest = replace(
+        current_manifest,
+        chapters=(stale_chapter, *current_manifest.chapters[1:]),
+    )
+
+    with pytest.raises(ValueError, match="source_manifest 与当前模板文档投影不一致"):
+        load_typed_template_contract_manifest(stale_manifest)
+
+
+def test_changing_template_json_changes_projected_typed_manifest(monkeypatch: pytest.MonkeyPatch) -> None:
+    """验证 typed manifest 来自模板 JSON，而不是 source_manifest 或代码 mapping。
+
+    Args:
+        monkeypatch: pytest monkeypatch fixture。
+
+    Returns:
+        无。
+
+    Raises:
+        AssertionError: raw JSON 合法变化未反映到 typed manifest。
+    """
+
+    raw_manifest = _mutable_raw_manifest()
+    raw_manifest["chapters"][0]["must_answer"][0]["text"] = "测试用模板 JSON 改写后的第一条"
+    monkeypatch.setattr(typed_contracts, "_load_raw_template_contract_manifest", lambda: raw_manifest)
+
+    typed_manifest = load_typed_template_contract_manifest()
+
+    assert typed_manifest.chapters[0].must_answer[0].text == "测试用模板 JSON 改写后的第一条"
+
+
+def test_unknown_template_requirement_id_fails_closed(monkeypatch: pytest.MonkeyPatch) -> None:
+    """验证模板 JSON 中未知 EvidenceRequirementId 会 fail-closed。
+
+    Args:
+        monkeypatch: pytest monkeypatch fixture。
+
+    Returns:
+        无。
+
+    Raises:
+        AssertionError: 未知 evidence requirement id 未被拒绝。
+    """
+
+    raw_manifest = _mutable_raw_manifest()
+    raw_manifest["chapters"][3]["must_not_cover"][3]["applies_when"]["requirement_ids"] = [
+        "ch3.requirement.unknown_reviewed"
+    ]
+    monkeypatch.setattr(typed_contracts, "_load_raw_template_contract_manifest", lambda: raw_manifest)
+
+    with pytest.raises(ValueError, match="evidence predicate requirement_id 不受支持"):
+        load_typed_template_contract_manifest()
+
+
+def test_malformed_typed_values_fail_closed(monkeypatch: pytest.MonkeyPatch) -> None:
+    """验证 malformed typed-only JSON 值会在 typed validation 中 fail-closed。
+
+    Args:
+        monkeypatch: pytest monkeypatch fixture。
+
+    Returns:
+        无。
+
+    Raises:
+        AssertionError: 非法 typed 值未被拒绝。
+    """
+
+    raw_manifest = _mutable_raw_manifest()
+    raw_manifest["chapters"][3]["required_output_items"][1]["when_evidence_missing"] = "silent_skip"
+    monkeypatch.setattr(typed_contracts, "_load_raw_template_contract_manifest", lambda: raw_manifest)
+
+    with pytest.raises(ValueError, match="missing evidence behavior 不受支持"):
+        load_typed_template_contract_manifest()
 
 
 def test_typed_manifest_rejects_ch2_public_subchapter_ids() -> None:
@@ -268,6 +449,25 @@ def test_non_ch2_internal_subcontracts_fail_closed() -> None:
 
     with pytest.raises(ValueError, match="不允许内部子契约"):
         validate_typed_template_contract_manifest(illegal_manifest)
+
+
+def _mutable_raw_manifest() -> dict[str, Any]:
+    """读取当前模板 JSON，并返回可修改副本。
+
+    Args:
+        无。
+
+    Returns:
+        当前 raw template manifest 的深拷贝。
+
+    Raises:
+        AssertionError: raw manifest 不是 dict 时抛出。
+    """
+
+    raw_manifest: Mapping[str, Any] = typed_contracts._load_raw_template_contract_manifest()
+    mutable = deepcopy(raw_manifest)
+    assert isinstance(mutable, dict)
+    return mutable
 
 
 def _replace_typed_chapter(manifest, chapter_id, replacement):

@@ -1,8 +1,7 @@
-"""基金分析模板 typed CHAPTER_CONTRACT sidecar。
+"""基金分析模板 typed CHAPTER_CONTRACT 投影。
 
-本模块只在 Agent 层 Fund 包内提供模板第 0-7 章的 typed schema sidecar。
-它从当前 `contracts.py` 机器契约精确投影，不替换模板真源、不改变 renderer、
-auditor、deterministic analyze/checklist 或 `--use-llm` fail-closed 行为。
+本模块属于 Agent 层 Fund 包，只把 `docs/fund-analysis-template-draft.md`
+中的 `TEMPLATE_CONTRACT_MANIFEST_JSON` 真源投影为 typed dataclasses。
 见模板第 2 章 R=A+B-C：Ch2 的 performance / attribution / cost 只能作为
 第 2 章内部 typed subcontract，不能成为公开章节。
 """
@@ -10,11 +9,12 @@ auditor、deterministic analyze/checklist 或 `--use-llm` fail-closed 行为。
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Final, Literal, Mapping, TypeAlias, get_args
+from pathlib import Path
+from typing import Any, Final, Literal, Mapping, TypeAlias, cast, get_args
 
 from fund_agent.fund.fund_type import FundType
+from fund_agent.fund.template import contracts as contracts_module
 from fund_agent.fund.template.contracts import (
-    ChapterContract,
     TemplateContractManifest,
     load_template_contract_manifest,
 )
@@ -73,7 +73,7 @@ class EvidencePredicate:
 
     Attributes:
         predicate_id: 稳定谓词编号。
-        requirement_ids: 谓词依赖的 requirement id；Slice 1 只保存数据，不派生证据。
+        requirement_ids: 谓词依赖的 requirement id。
         required_statuses: 触发谓词所需的证据状态闭集。
         description: 面向 review 的中文说明。
     """
@@ -90,7 +90,7 @@ class MustAnswerClause:
 
     Attributes:
         clause_id: 稳定条款编号。
-        text: 当前 CHAPTER_CONTRACT 中的原始条款文本。
+        text: 模板 JSON 中的原始条款文本。
     """
 
     clause_id: str
@@ -103,9 +103,9 @@ class MustNotCoverClause:
 
     Attributes:
         clause_id: 稳定条款编号。
-        text: 当前 CHAPTER_CONTRACT 中的原始禁写文本。
-        applies_when: 证据条件；为空表示无条件禁写。Slice 1 不执行该谓词。
-        allowed_contexts: 未来 deterministic allowed_contexts 的闭集数据。
+        text: 模板 JSON 中的原始禁写文本。
+        applies_when: 证据条件；为空表示无条件禁写。
+        allowed_contexts: 条件禁写允许出现的上下文闭集。
     """
 
     clause_id: str
@@ -120,9 +120,9 @@ class RequiredOutputItem:
 
     Attributes:
         item_id: 稳定输出条目编号。
-        text: 当前 CHAPTER_CONTRACT 中的原始 required output 文本。
-        when_evidence_missing: 未来缺证处理行为；Slice 1 仅保存 schema 字段。
-        missing_evidence_reason: 缺证行为的 reviewed typed reason；删除行为必须填写。
+        text: 模板 JSON 中的原始 required output 文本。
+        when_evidence_missing: 缺证处理行为。
+        missing_evidence_reason: 缺证行为的 reviewed typed reason。
     """
 
     item_id: str
@@ -180,7 +180,7 @@ class TypedChapterContract:
         preferred_lens: typed preferred_lens 规则。
         audit_focus: bounded semantic audit 的关注点数据，只作语义强调。
         consumes_chapter_conclusions: 本章消费的其它章节结论编号。
-        independent_action_source: 是否允许本章独立派生动作判断；第 0 章必须为 False。
+        independent_action_source: 是否允许本章独立派生动作判断。
         internal_subcontracts: 章节内部子契约；当前仅第 2 章允许。
     """
 
@@ -205,7 +205,7 @@ class TypedTemplateContractManifest:
     Attributes:
         schema_version: typed schema 版本。
         template_id: typed 模板 id。
-        source_template_id: 当前 `contracts.py` manifest 的 id。
+        source_template_id: 当前 untyped manifest 的 id。
         source_path: 当前模板真源路径。
         chapters: 第 0-7 章 typed contract。
     """
@@ -217,391 +217,41 @@ class TypedTemplateContractManifest:
     chapters: tuple[TypedChapterContract, ...]
 
 
-@dataclass(frozen=True, slots=True)
-class _TextIdMapping:
-    """当前契约原文到 stable id 的精确映射。"""
-
-    text: str
-    stable_id: str
-
-
-@dataclass(frozen=True, slots=True)
-class _ChapterTextMapping:
-    """单章当前契约原文映射。"""
-
-    must_answer: tuple[_TextIdMapping, ...]
-    must_not_cover: tuple[_TextIdMapping, ...]
-    required_output_items: tuple[_TextIdMapping, ...]
-
-
-_CURRENT_TEXT_MAPPING: Final[Mapping[int, _ChapterTextMapping]] = {
-    0: _ChapterTextMapping(
-        must_answer=(
-            _TextIdMapping("用一句话定义这只基金到底是什么产品。", "ch0.must_answer.item_01"),
-            _TextIdMapping(
-                "给出一个极简基金简介，帮助第一次接触这只基金的读者快速建立产品画像；只保留基金类型、基金经理、管理规模、成立时间中最必要的信息。",
-                "ch0.must_answer.item_02",
-            ),
-            _TextIdMapping("回答当前判断应是值得持有、需要关注还是建议替换。", "ch0.must_answer.item_03"),
-            _TextIdMapping(
-                "回答这只基金当前业绩和运作处在什么状态，但只保留最能支撑当前动作判断的净值表现、超额收益或风险指标。",
-                "ch0.must_answer.item_04",
-            ),
-            _TextIdMapping(
-                "回答支撑当前动作的最主要理由，默认压缩成 1 条；只有在第二条判断彼此独立且缺一不可时才允许写第 2 条。",
-                "ch0.must_answer.item_05",
-            ),
-            _TextIdMapping(
-                "回答当前最值得盯住的变量是什么；先点出看这类基金时通常最先要看的东西；如果基金还有一个更能决定整份报告判断的特别情况，就把它放到最前面来写。",
-                "ch0.must_answer.item_06",
-            ),
-            _TextIdMapping("回答当前最大的风险是什么，默认只保留一个主要风险。", "ch0.must_answer.item_07"),
-            _TextIdMapping(
-                "回答下一步最小验证问题是什么，默认先写 1 个最关键问题。",
-                "ch0.must_answer.item_08",
-            ),
-            _TextIdMapping(
-                "回答什么变化会升级、降级或终止当前动作，优先压缩成 1 个升级阈值和 1 个降级或终止阈值。",
-                "ch0.must_answer.item_09",
-            ),
-        ),
-        must_not_cover=(
-            _TextIdMapping(
-                "不把本章写成后续章节的摘要、材料摘抄、按顺序复述，或信息罗列式导读。",
-                "ch0.must_not_cover.item_01",
-            ),
-            _TextIdMapping(
-                "不把“基金简介 / 业绩概览 / 风险提示”拆成并列分栏。",
-                "ch0.must_not_cover.item_02",
-            ),
-            _TextIdMapping("不把本章写成优点/缺点清单、投资亮点清单。", "ch0.must_not_cover.item_03"),
-            _TextIdMapping(
-                "不把“最主要的理由”写成多条优点堆砌；默认只保留 1 条。",
-                "ch0.must_not_cover.item_04",
-            ),
-            _TextIdMapping(
-                "不把“最大风险”写成并列风险列表；默认只写一个主要风险。",
-                "ch0.must_not_cover.item_05",
-            ),
-            _TextIdMapping(
-                "不把“下一步最小验证问题”写成愿望清单；默认先写 1 个。",
-                "ch0.must_not_cover.item_06",
-            ),
-            _TextIdMapping(
-                "不把本章拆成“结论要点 / 详细情况 / 证据与出处”三段结构；第 0 章是封面页。",
-                "ch0.must_not_cover.item_07",
-            ),
-            _TextIdMapping("不输出“证据与出处”小节。", "ch0.must_not_cover.item_08"),
-        ),
-        required_output_items=(
-            _TextIdMapping("一句话这是什么基金", "ch0.required_output.item_01"),
-            _TextIdMapping("基金简介", "ch0.required_output.item_02"),
-            _TextIdMapping(
-                "当前动作（🟢 值得持有 / 🟡 需要关注 / 🔴 建议替换）",
-                "ch0.required_output.item_03",
-            ),
-            _TextIdMapping("当前业绩与运作状态", "ch0.required_output.item_04"),
-            _TextIdMapping("支撑当前动作的最主要理由", "ch0.required_output.item_05"),
-            _TextIdMapping("当前最值得盯住的变量", "ch0.required_output.item_06"),
-            _TextIdMapping("当前最大的风险", "ch0.required_output.item_07"),
-            _TextIdMapping("下一步最小验证问题", "ch0.required_output.item_08"),
-            _TextIdMapping("什么变化会升级、降级或终止当前动作", "ch0.required_output.item_09"),
-        ),
-    ),
-    1: _ChapterTextMapping(
-        must_answer=(
-            _TextIdMapping("用最低认知负担定义这只基金到底是什么产品。", "ch1.must_answer.item_01"),
-            _TextIdMapping(
-                "说明基金的投资目标和投资策略（从招募说明书和年报§2提取）。",
-                "ch1.must_answer.item_02",
-            ),
-            _TextIdMapping("说明基金的业绩基准是什么，为什么选这个基准。", "ch1.must_answer.item_03"),
-            _TextIdMapping(
-                "说明基金的类型分类（按有知有行三维标签：市值×风格×管理方式）。",
-                "ch1.must_answer.item_04",
-            ),
-            _TextIdMapping("回答看这类基金时，通常最先要看什么。", "ch1.must_answer.item_05"),
-            _TextIdMapping(
-                "如果基金有一个不太符合常规、却会直接改变你对“这是什么产品”理解的特别情况，要说明它为什么重要。",
-                "ch1.must_answer.item_06",
-            ),
-        ),
-        must_not_cover=(
-            _TextIdMapping(
-                "不展开基金经理选股能力的分析（属于第 3 章）。",
-                "ch1.must_not_cover.item_01",
-            ),
-            _TextIdMapping(
-                "不展开收益率的详细计算（属于第 2 章）。",
-                "ch1.must_not_cover.item_02",
-            ),
-            _TextIdMapping(
-                "不分析市场竞争或同业比较（属于横向比较模块，不在本报告范围内）。",
-                "ch1.must_not_cover.item_03",
-            ),
-        ),
-        required_output_items=(
-            _TextIdMapping("基金类型与分类标签", "ch1.required_output.item_01"),
-            _TextIdMapping("投资目标（一句话）", "ch1.required_output.item_02"),
-            _TextIdMapping("投资策略概述", "ch1.required_output.item_03"),
-            _TextIdMapping("业绩基准及合理性", "ch1.required_output.item_04"),
-            _TextIdMapping("看这类基金最先看什么", "ch1.required_output.item_05"),
-            _TextIdMapping("会改变产品理解的特别情况（如有）", "ch1.required_output.item_06"),
-        ),
-    ),
-    2: _ChapterTextMapping(
-        must_answer=(
-            _TextIdMapping("近 1 年、3 年、5 年的基金净值增长率（R）。", "ch2.must_answer.item_01"),
-            _TextIdMapping("同期业绩基准收益率（B）。", "ch2.must_answer.item_02"),
-            _TextIdMapping("计算超额收益（A = R - B）。", "ch2.must_answer.item_03"),
-            _TextIdMapping("判断超额收益是结构性的还是阶段性的。", "ch2.must_answer.item_04"),
-            _TextIdMapping(
-                "拆解成本 C：管理费 + 托管费 + 销售服务费 + 交易成本（估算）。",
-                "ch2.must_answer.item_05",
-            ),
-            _TextIdMapping("判断超额收益是否为正且稳定、是否覆盖成本。", "ch2.must_answer.item_06"),
-        ),
-        must_not_cover=(
-            _TextIdMapping(
-                "不展开基金经理选股能力的详细归因（属于第 3 章）。",
-                "ch2.must_not_cover.item_01",
-            ),
-            _TextIdMapping("不展开市场走势分析（不属于本报告范围）。", "ch2.must_not_cover.item_02"),
-            _TextIdMapping("不做未来收益预测。", "ch2.must_not_cover.item_03"),
-        ),
-        required_output_items=(
-            _TextIdMapping("近 1/3/5 年净值增长率", "ch2.required_output.item_01"),
-            _TextIdMapping("近 1/3/5 年业绩基准收益率", "ch2.required_output.item_02"),
-            _TextIdMapping("超额收益（A = R - B）及稳定性", "ch2.required_output.item_03"),
-            _TextIdMapping("超额收益性质判断（结构性 vs 阶段性）", "ch2.required_output.item_04"),
-            _TextIdMapping("成本拆解（管理费、托管费、交易成本）", "ch2.required_output.item_05"),
-            _TextIdMapping("成本合理性判断（同类对比）", "ch2.required_output.item_06"),
-            _TextIdMapping("R=A+B-C 综合评估", "ch2.required_output.item_07"),
-        ),
-    ),
-    3: _ChapterTextMapping(
-        must_answer=(
-            _TextIdMapping(
-                "基金经理的基本信息（从业年限、管理本基金时间、管理规模）。",
-                "ch3.must_answer.item_01",
-            ),
-            _TextIdMapping(
-                "基金经理宣称的投资策略和风格（从年报§4提取）。",
-                "ch3.must_answer.item_02",
-            ),
-            _TextIdMapping(
-                "基金经理实际的投资行为（从年报§8提取：行业配置、持仓集中度、换手率）。",
-                "ch3.must_answer.item_03",
-            ),
-            _TextIdMapping(
-                "言行一致性判断：说的和做的一样吗？主动基金如缺少已复核的换手率或风格变化证据，不得据此判断言行一致。",
-                "ch3.must_answer.item_04",
-            ),
-            _TextIdMapping(
-                "风格稳定性判断：跨期风格是否漂移？主动基金必须基于已复核的换手率或风格变化证据。",
-                "ch3.must_answer.item_05",
-            ),
-            _TextIdMapping("利益一致性判断：基金经理是否持有本基金？", "ch3.must_answer.item_06"),
-        ),
-        must_not_cover=(
-            _TextIdMapping("不做基金经理性格或人品的主观评价。", "ch3.must_not_cover.item_01"),
-            _TextIdMapping("不猜测基金经理的动机。", "ch3.must_not_cover.item_02"),
-            _TextIdMapping(
-                "不展开选股能力的量化分析（属于第 2 章超额收益范畴）。",
-                "ch3.must_not_cover.item_03",
-            ),
-            _TextIdMapping(
-                "不在换手率或风格变化证据缺失、不可用、未复核时，推断主动基金风格稳定、风格一致或言行一致。",
-                "ch3.must_not_cover.item_04",
-            ),
-        ),
-        required_output_items=(
-            _TextIdMapping("基金经理基本信息", "ch3.required_output.item_01"),
-            _TextIdMapping("宣称的投资策略（§4）", "ch3.required_output.item_02"),
-            _TextIdMapping("实际投资行为（§8）", "ch3.required_output.item_03"),
-            _TextIdMapping("言行一致性判断", "ch3.required_output.item_04"),
-            _TextIdMapping("风格稳定性判断", "ch3.required_output.item_05"),
-            _TextIdMapping("利益一致性判断", "ch3.required_output.item_06"),
-        ),
-    ),
-    4: _ChapterTextMapping(
-        must_answer=(
-            _TextIdMapping("基金产品收益（净值增长率）。", "ch4.must_answer.item_01"),
-            _TextIdMapping(
-                "投资者实际收益（盈利投资者占比、加权平均收益率）。",
-                "ch4.must_answer.item_02",
-            ),
-            _TextIdMapping(
-                "行为损益 = 投资者实际收益 - 基金产品收益。",
-                "ch4.must_answer.item_03",
-            ),
-            _TextIdMapping("份额变动趋势（资金是在追涨还是在抄底？）。", "ch4.must_answer.item_04"),
-        ),
-        must_not_cover=(
-            _TextIdMapping("不分析具体投资者的交易行为。", "ch4.must_not_cover.item_01"),
-            _TextIdMapping("不做未来投资者行为预测。", "ch4.must_not_cover.item_02"),
-        ),
-        required_output_items=(
-            _TextIdMapping("基金产品收益 vs 投资者实际收益", "ch4.required_output.item_01"),
-            _TextIdMapping("盈利投资者占比", "ch4.required_output.item_02"),
-            _TextIdMapping("行为损益估算", "ch4.required_output.item_03"),
-            _TextIdMapping("份额变动趋势", "ch4.required_output.item_04"),
-        ),
-    ),
-    5: _ChapterTextMapping(
-        must_answer=(
-            _TextIdMapping(
-                "当前阶段是什么（建仓期/稳定期/膨胀期/萎缩期/转型期）。",
-                "ch5.must_answer.item_01",
-            ),
-            _TextIdMapping(
-                "相比上一期或历史，过去一年最关键的 1-3 个变化是什么（基金经理、规模、策略、费率、仓位或大额申赎）。",
-                "ch5.must_answer.item_02",
-            ),
-            _TextIdMapping("这些变化是否影响原始投资假设或第 1-4 章判断。", "ch5.must_answer.item_03"),
-            _TextIdMapping("为什么偏偏是现在需要关注这只基金。", "ch5.must_answer.item_04"),
-            _TextIdMapping("下一步最小验证问题是什么。", "ch5.must_answer.item_05"),
-        ),
-        must_not_cover=(
-            _TextIdMapping("不做市场整体走势预测。", "ch5.must_not_cover.item_01"),
-            _TextIdMapping(
-                "不罗列所有变化，只保留最关键的 1-3 个。",
-                "ch5.must_not_cover.item_02",
-            ),
-            _TextIdMapping("不给最终持有/替换结论。", "ch5.must_not_cover.item_03"),
-            _TextIdMapping(
-                "不展开风险清单；变化事实只有转译为风险或否决项时才进入第 6 章。",
-                "ch5.must_not_cover.item_04",
-            ),
-            _TextIdMapping("不重复基金经理长期画像或成本收益总评。", "ch5.must_not_cover.item_05"),
-        ),
-        required_output_items=(
-            _TextIdMapping("过去一年最关键的变化（1-3 个）", "ch5.required_output.item_01"),
-            _TextIdMapping("基金当前所处阶段", "ch5.required_output.item_02"),
-            _TextIdMapping("变化是否改变前文判断", "ch5.required_output.item_03"),
-            _TextIdMapping("接下来最该跟踪的变量", "ch5.required_output.item_04"),
-        ),
-    ),
-    6: _ChapterTextMapping(
-        must_answer=(
-            _TextIdMapping(
-                "核心风险是什么，其中哪些是结构性风险、哪些是阶段性风险。",
-                "ch6.must_answer.item_01",
-            ),
-            _TextIdMapping(
-                "最关键的风险或否决项（1-2 个最致命的风险）。",
-                "ch6.must_answer.item_02",
-            ),
-            _TextIdMapping(
-                "为什么足以改变结论——这个风险推翻了哪条核心假设。",
-                "ch6.must_answer.item_03",
-            ),
-            _TextIdMapping("是否触发一票否决，还是仍可跟踪。", "ch6.must_answer.item_04"),
-            _TextIdMapping("压力测试结论是什么。", "ch6.must_answer.item_05"),
-            _TextIdMapping(
-                "哪个信息缺口最可能改变最终判断，下一轮先验证什么。",
-                "ch6.must_answer.item_06",
-            ),
-        ),
-        must_not_cover=(
-            _TextIdMapping("不把本章写成所有可能风险的罗列。", "ch6.must_not_cover.item_01"),
-            _TextIdMapping(
-                "不把“最大风险”写成并列列表；默认只写 1 个最致命的。",
-                "ch6.must_not_cover.item_02",
-            ),
-            _TextIdMapping("不做风险发生概率的定量预测。", "ch6.must_not_cover.item_03"),
-            _TextIdMapping(
-                "不复述当前阶段事实，除非明确转译为风险、压力测试或否决项。",
-                "ch6.must_not_cover.item_04",
-            ),
-            _TextIdMapping("不给最终持有/替换结论。", "ch6.must_not_cover.item_05"),
-            _TextIdMapping("不预测收益或市场走势。", "ch6.must_not_cover.item_06"),
-        ),
-        required_output_items=(
-            _TextIdMapping("最关键的风险或否决项", "ch6.required_output.item_01"),
-            _TextIdMapping("为什么足以改变结论", "ch6.required_output.item_02"),
-            _TextIdMapping("否决 vs 跟踪判断", "ch6.required_output.item_03"),
-            _TextIdMapping("下一轮先验证什么", "ch6.required_output.item_04"),
-        ),
-    ),
-    7: _ChapterTextMapping(
-        must_answer=(
-            _TextIdMapping("三选一明确立场：值得持有、需要关注、建议替换。", "ch7.must_answer.item_01"),
-            _TextIdMapping("为什么现在更适合这个判断，而不是另外两个。", "ch7.must_answer.item_02"),
-            _TextIdMapping("当前最容易看错的地方是什么。", "ch7.must_answer.item_03"),
-            _TextIdMapping(
-                "下一轮先核实什么（1-2 个最小验证问题）。",
-                "ch7.must_answer.item_04",
-            ),
-            _TextIdMapping("什么变化会升级、降级或终止当前判断。", "ch7.must_answer.item_05"),
-        ),
-        must_not_cover=(
-            _TextIdMapping(
-                "不输出具体的买入金额、卖出时机或仓位比例。",
-                "ch7.must_not_cover.item_01",
-            ),
-            _TextIdMapping("不把本章写成前 6 章的摘要复述。", "ch7.must_not_cover.item_02"),
-            _TextIdMapping(
-                "不把“为什么”写成多条理由堆砌；默认只保留 1-2 条核心依据。",
-                "ch7.must_not_cover.item_03",
-            ),
-        ),
-        required_output_items=(
-            _TextIdMapping(
-                "最终判断（🟢 值得持有 / 🟡 需要关注 / 🔴 建议替换）",
-                "ch7.required_output.item_01",
-            ),
-            _TextIdMapping("支撑判断的核心依据（1-2 条）", "ch7.required_output.item_02"),
-            _TextIdMapping("当前最容易看错的地方", "ch7.required_output.item_03"),
-            _TextIdMapping("下一轮最小验证计划", "ch7.required_output.item_04"),
-            _TextIdMapping("危级/降级阈值", "ch7.required_output.item_05"),
-        ),
-    ),
-}
-
-_AUDIT_FOCUS_BY_CHAPTER: Final[Mapping[int, tuple[AuditFocusLiteral, ...]]] = {
-    0: ("final_judgment", "chapter_structure"),
-    1: ("chapter_structure", "evidence_anchors"),
-    2: ("r_abc", "evidence_anchors"),
-    3: ("manager_consistency", "evidence_anchors"),
-    4: ("investor_experience", "evidence_anchors"),
-    5: ("current_stage", "evidence_anchors"),
-    6: ("risk", "evidence_anchors"),
-    7: ("final_judgment", "risk"),
-}
-
-_CH3_STYLE_EVIDENCE_UNREVIEWED: Final[EvidencePredicate] = EvidencePredicate(
-    predicate_id="ch3.evidence.manager_behavior_style_unreviewed",
-    requirement_ids=(
-        "ch3.requirement.actual_behavior_reviewed",
-    ),
-    required_statuses=("missing", "unavailable", "unreviewed"),
-    description="主动基金第 3 章缺少已复核换手率或跨期风格变化证据时，禁止正向一致性推断。",
-)
-
-
 def load_typed_template_contract_manifest(
     source_manifest: TemplateContractManifest | None = None,
 ) -> TypedTemplateContractManifest:
     """读取 typed 模板契约清单。
 
     Args:
-        source_manifest: 可选的当前 `contracts.py` manifest；为空时读取内置 manifest。
+        source_manifest: 可选兼容参数，只用于校验调用方传入的 untyped manifest
+            与当前模板文档投影一致；不得用于生成 typed 字段。
 
     Returns:
         覆盖公开章节 0-7 的 `TypedTemplateContractManifest`。
 
     Raises:
-        ValueError: 当前 manifest 与 reviewed exact mapping 不一致，或 typed 校验失败时抛出。
+        ValueError: 传入的 `source_manifest` stale/different，模板 JSON 结构无效，
+            或 typed 校验失败时抛出。
     """
 
-    manifest = source_manifest if source_manifest is not None else load_template_contract_manifest()
+    current_manifest = load_template_contract_manifest()
+    if source_manifest is not None and source_manifest != current_manifest:
+        raise ValueError("source_manifest 与当前模板文档投影不一致")
+
+    raw_manifest = _load_raw_template_contract_manifest()
+    chapters = raw_manifest["chapters"]
+    if not isinstance(chapters, list):
+        raise ValueError("typed manifest.chapters 必须是 array")
     typed_manifest = TypedTemplateContractManifest(
-        schema_version=TYPED_TEMPLATE_CONTRACT_SCHEMA_VERSION,
-        template_id=TYPED_TEMPLATE_CONTRACT_TEMPLATE_ID,
-        source_template_id=manifest.template_id,
-        source_path=manifest.source_path,
-        chapters=tuple(_project_chapter(chapter) for chapter in manifest.chapters),
+        schema_version=_read_required_string(raw_manifest, "schema_version", "manifest.schema_version"),
+        template_id=_read_required_string(raw_manifest, "template_id", "manifest.template_id"),
+        source_template_id=_read_required_string(
+            raw_manifest,
+            "source_template_id",
+            "manifest.source_template_id",
+        ),
+        source_path=_read_required_string(raw_manifest, "source_path", "manifest.source_path"),
+        chapters=tuple(_project_typed_chapter(raw_chapter) for raw_chapter in chapters),
     )
     validate_typed_template_contract_manifest(typed_manifest)
     return typed_manifest
@@ -618,13 +268,14 @@ def validate_typed_template_contract_manifest(manifest: TypedTemplateContractMan
 
     Raises:
         ValueError: schema、章节 id、依赖、Ch2 内部子契约、required output id、
-            clause id 或 `audit_focus` 闭集不满足 fail-closed 约束时抛出。
+            clause id、`audit_focus` 闭集或 evidence requirement guard 不满足
+            fail-closed 约束时抛出。
     """
 
     if manifest.schema_version != TYPED_TEMPLATE_CONTRACT_SCHEMA_VERSION:
         raise ValueError(f"typed schema_version 不受支持：{manifest.schema_version}")
-    if not manifest.template_id.strip():
-        raise ValueError("typed template_id 不能为空")
+    if manifest.template_id != TYPED_TEMPLATE_CONTRACT_TEMPLATE_ID:
+        raise ValueError(f"typed template_id 不受支持：{manifest.template_id}")
     if not manifest.source_template_id.strip():
         raise ValueError("typed source_template_id 不能为空")
     if not manifest.source_path.strip():
@@ -666,321 +317,304 @@ def get_typed_chapter_contract(chapter_id: int) -> TypedChapterContract:
     raise ValueError(f"未找到 typed 模板章节契约：chapter_id={chapter_id}")
 
 
-def _project_chapter(chapter: ChapterContract) -> TypedChapterContract:
-    """把当前单章契约精确投影为 typed 契约。
+def _load_raw_template_contract_manifest(path: str | Path | None = None) -> Mapping[str, Any]:
+    """读取并返回模板文档中的 canonical JSON object。
 
     Args:
-        chapter: 当前 `contracts.py` 的单章契约。
+        path: 可选模板 Markdown 路径；为空时使用 `contracts.py` 当前默认路径。
+
+    Returns:
+        已由 Slice 2 parser 解析出的 raw JSON object。
+
+    Raises:
+        ValueError: 模板文档读取失败、JSON 区块非法或 untyped 投影校验失败时抛出。
+    """
+
+    template_path = Path(path) if path is not None else contracts_module._DEFAULT_TEMPLATE_PATH
+    # 先走 Slice 2 的严格 untyped parser/validator，确保 typed 投影与同一文档真源共享校验入口。
+    contracts_module._load_template_contract_manifest_from_path(template_path)
+    try:
+        template_text = template_path.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise ValueError(f"读取 typed 模板契约文档失败：{template_path}") from exc
+    return contracts_module._parse_template_contract_manifest_json(template_text)
+
+
+def _project_typed_chapter(raw_chapter: Mapping[str, Any]) -> TypedChapterContract:
+    """把单章模板 JSON 投影为 typed 章节契约。
+
+    Args:
+        raw_chapter: 单章 canonical JSON object。
 
     Returns:
         typed 单章契约。
 
     Raises:
-        ValueError: 当前文本未命中 reviewed exact mapping 时抛出。
+        ValueError: typed 字段类型不符合 dataclass 投影要求时抛出。
     """
 
-    text_mapping = _CURRENT_TEXT_MAPPING.get(chapter.chapter_id)
-    if text_mapping is None:
-        raise ValueError(f"章节 {chapter.chapter_id} 缺少 typed exact mapping")
-
+    chapter_id = _read_required_int(raw_chapter, "chapter_id", "chapter.chapter_id")
     return TypedChapterContract(
         schema_version=TYPED_TEMPLATE_CONTRACT_SCHEMA_VERSION,
-        chapter_id=chapter.chapter_id,
-        title=chapter.title,
-        narrative_mode=chapter.narrative_mode,
-        must_answer=_project_must_answer(chapter, text_mapping),
-        must_not_cover=_project_must_not_cover(chapter, text_mapping),
-        required_output_items=_project_required_output_items(chapter, text_mapping),
-        preferred_lens=_project_lens_rules(chapter),
-        audit_focus=_AUDIT_FOCUS_BY_CHAPTER[chapter.chapter_id],
-        consumes_chapter_conclusions=(7,) if chapter.chapter_id == 0 else (),
-        independent_action_source=False,
-        internal_subcontracts=_build_internal_subcontracts(chapter.chapter_id),
+        chapter_id=chapter_id,
+        title=_read_required_string(raw_chapter, "title", f"chapter[{chapter_id}].title"),
+        narrative_mode=_read_required_string(
+            raw_chapter,
+            "narrative_mode",
+            f"chapter[{chapter_id}].narrative_mode",
+        ),
+        must_answer=_project_must_answer_entries(
+            raw_chapter["must_answer"],
+            f"chapter[{chapter_id}].must_answer",
+        ),
+        must_not_cover=_project_must_not_cover_entries(
+            raw_chapter["must_not_cover"],
+            f"chapter[{chapter_id}].must_not_cover",
+        ),
+        required_output_items=_project_required_output_entries(
+            raw_chapter["required_output_items"],
+            f"chapter[{chapter_id}].required_output_items",
+        ),
+        preferred_lens=_project_typed_lens_rules(
+            raw_chapter["preferred_lens"],
+            f"chapter[{chapter_id}].preferred_lens",
+        ),
+        audit_focus=tuple(
+            cast(AuditFocusLiteral, value)
+            for value in _read_string_array(
+                raw_chapter["audit_focus"],
+                f"chapter[{chapter_id}].audit_focus",
+                allow_empty=False,
+            )
+        ),
+        consumes_chapter_conclusions=tuple(
+            _read_int_array(
+                raw_chapter["consumes_chapter_conclusions"],
+                f"chapter[{chapter_id}].consumes_chapter_conclusions",
+            )
+        ),
+        independent_action_source=_read_required_bool(
+            raw_chapter,
+            "independent_action_source",
+            f"chapter[{chapter_id}].independent_action_source",
+        ),
+        internal_subcontracts=_project_internal_subcontracts(
+            raw_chapter["internal_subcontracts"],
+            f"chapter[{chapter_id}].internal_subcontracts",
+        ),
     )
 
 
-def _project_must_answer(
-    chapter: ChapterContract,
-    text_mapping: _ChapterTextMapping,
-) -> tuple[MustAnswerClause, ...]:
-    """投影单章 must_answer 条款。
+def _project_must_answer_entries(raw_entries: Any, path: str) -> tuple[MustAnswerClause, ...]:
+    """投影 must_answer 条目。
 
     Args:
-        chapter: 当前单章契约。
-        text_mapping: 本章 reviewed exact mapping。
+        raw_entries: 模板 JSON 中的 must_answer array。
+        path: 错误路径。
 
     Returns:
-        typed must_answer 条款。
+        typed must_answer 条款元组。
 
     Raises:
-        ValueError: 当前 must_answer 文本与 reviewed mapping 不一致时抛出。
+        ValueError: 条目不是 object 或字段不是非空字符串时抛出。
     """
 
-    _assert_exact_text_mapping(chapter.chapter_id, "must_answer", chapter.must_answer, text_mapping.must_answer)
     return tuple(
-        MustAnswerClause(clause_id=item.stable_id, text=item.text)
-        for item in text_mapping.must_answer
+        MustAnswerClause(
+            clause_id=_read_required_string(entry, "id", f"{path}[{index}].id"),
+            text=_read_required_string(entry, "text", f"{path}[{index}].text"),
+        )
+        for index, entry in enumerate(_read_mapping_array(raw_entries, path, allow_empty=False))
     )
 
 
-def _project_must_not_cover(
-    chapter: ChapterContract,
-    text_mapping: _ChapterTextMapping,
-) -> tuple[MustNotCoverClause, ...]:
-    """投影单章 must_not_cover 条款。
+def _project_must_not_cover_entries(raw_entries: Any, path: str) -> tuple[MustNotCoverClause, ...]:
+    """投影 must_not_cover 条目。
 
     Args:
-        chapter: 当前单章契约。
-        text_mapping: 本章 reviewed exact mapping。
+        raw_entries: 模板 JSON 中的 must_not_cover array。
+        path: 错误路径。
 
     Returns:
-        typed must_not_cover 条款。
+        typed must_not_cover 条款元组。
 
     Raises:
-        ValueError: 当前 must_not_cover 文本与 reviewed mapping 不一致时抛出。
+        ValueError: 条目、predicate 或 allowed_contexts 类型无效时抛出。
     """
 
-    _assert_exact_text_mapping(
-        chapter.chapter_id,
-        "must_not_cover",
-        chapter.must_not_cover,
-        text_mapping.must_not_cover,
-    )
-    clauses = []
-    for item in text_mapping.must_not_cover:
+    clauses: list[MustNotCoverClause] = []
+    for index, entry in enumerate(_read_mapping_array(raw_entries, path, allow_empty=False)):
+        entry_path = f"{path}[{index}]"
+        applies_when = entry["applies_when"]
         clauses.append(
             MustNotCoverClause(
-                clause_id=item.stable_id,
-                text=item.text,
-                applies_when=_must_not_cover_predicate(item.stable_id),
-                allowed_contexts=_must_not_cover_allowed_contexts(item.stable_id),
+                clause_id=_read_required_string(entry, "id", f"{entry_path}.id"),
+                text=_read_required_string(entry, "text", f"{entry_path}.text"),
+                applies_when=(
+                    None
+                    if applies_when is None
+                    else _project_evidence_predicate(applies_when, f"{entry_path}.applies_when")
+                ),
+                allowed_contexts=tuple(
+                    cast(AllowedContextLiteral, value)
+                    for value in _read_string_array(
+                        entry["allowed_contexts"],
+                        f"{entry_path}.allowed_contexts",
+                        allow_empty=True,
+                    )
+                ),
             )
         )
     return tuple(clauses)
 
 
-def _project_required_output_items(
-    chapter: ChapterContract,
-    text_mapping: _ChapterTextMapping,
-) -> tuple[RequiredOutputItem, ...]:
-    """投影单章 required_output_items 条目。
+def _project_required_output_entries(raw_entries: Any, path: str) -> tuple[RequiredOutputItem, ...]:
+    """投影 required_output_items 条目。
 
     Args:
-        chapter: 当前单章契约。
-        text_mapping: 本章 reviewed exact mapping。
+        raw_entries: 模板 JSON 中的 required_output_items array。
+        path: 错误路径。
 
     Returns:
-        typed required output 条目。
+        typed required output 条目元组。
 
     Raises:
-        ValueError: 当前 required_output_items 文本与 reviewed mapping 不一致时抛出。
+        ValueError: 缺证行为或原因字段类型无效时抛出。
     """
 
-    _assert_exact_text_mapping(
-        chapter.chapter_id,
-        "required_output_items",
-        chapter.required_output_items,
-        text_mapping.required_output_items,
-    )
-    return tuple(
-        RequiredOutputItem(
-            item_id=item.stable_id,
-            text=item.text,
-            when_evidence_missing=_required_output_missing_behavior(item.stable_id),
-            missing_evidence_reason=_required_output_missing_reason(item.stable_id),
+    items: list[RequiredOutputItem] = []
+    for index, entry in enumerate(_read_mapping_array(raw_entries, path, allow_empty=False)):
+        entry_path = f"{path}[{index}]"
+        behavior = _read_optional_string(
+            entry,
+            "when_evidence_missing",
+            f"{entry_path}.when_evidence_missing",
         )
-        for item in text_mapping.required_output_items
-    )
+        items.append(
+            RequiredOutputItem(
+                item_id=_read_required_string(entry, "id", f"{entry_path}.id"),
+                text=_read_required_string(entry, "text", f"{entry_path}.text"),
+                when_evidence_missing=cast(MissingEvidenceBehavior | None, behavior),
+                missing_evidence_reason=_read_optional_string(
+                    entry,
+                    "missing_evidence_reason",
+                    f"{entry_path}.missing_evidence_reason",
+                ),
+            )
+        )
+    return tuple(items)
 
 
-def _required_output_missing_behavior(item_id: str) -> MissingEvidenceBehavior | None:
-    """读取 required output 的缺证行为默认值。
-
-    Args:
-        item_id: typed required output item id。
-
-    Returns:
-        缺证行为；无需 typed 缺证处理时返回 `None`。
-
-    Raises:
-        无。
-    """
-
-    if item_id.startswith("ch2.required_output."):
-        return "block"
-    if item_id in {
-        "ch3.required_output.item_02",
-        "ch3.required_output.item_03",
-        "ch3.required_output.item_04",
-        "ch3.required_output.item_05",
-    }:
-        return "render_evidence_gap"
-    if item_id == "ch3.required_output.item_06":
-        return "render_minimum_verification_question"
-    return None
-
-
-def _required_output_missing_reason(item_id: str) -> str | None:
-    """读取 required output 缺证行为的 reviewed reason。
+def _project_typed_lens_rules(raw_lens: Any, path: str) -> Mapping[str, TemplateLensRule]:
+    """投影 preferred_lens 规则。
 
     Args:
-        item_id: typed required output item id。
-
-    Returns:
-        reviewed reason；仅需要显式原因的行为返回文本。
-
-    Raises:
-        无。
-    """
-
-    if item_id.startswith("ch2.required_output."):
-        return "第 2 章 R=A+B-C 数值与成本判断缺少同源证据时不得生成替代结论。"
-    if item_id in {
-        "ch3.required_output.item_02",
-        "ch3.required_output.item_03",
-        "ch3.required_output.item_04",
-        "ch3.required_output.item_05",
-    }:
-        return "第 3 章策略、实际行为、言行一致性和风格稳定性在缺少已复核证据时只能输出证据缺口。"
-    if item_id == "ch3.required_output.item_06":
-        return "第 3 章利益一致性证据缺失时只能输出下一步最小验证问题。"
-    return None
-
-
-def _project_lens_rules(chapter: ChapterContract) -> Mapping[str, TemplateLensRule]:
-    """投影当前 preferred_lens 规则。
-
-    Args:
-        chapter: 当前单章契约。
+        raw_lens: 模板 JSON 中的 preferred_lens object。
+        path: 错误路径。
 
     Returns:
         typed preferred_lens 映射。
 
     Raises:
-        无显式抛出；当前 manifest 的 lens 合法性由 `contracts.py` 校验。
+        ValueError: lens object 或字段类型无效时抛出。
     """
 
-    return {
-        key: TemplateLensRule(
-            fund_type=rule.fund_type,
-            statements=rule.statements,
-            facets_any=rule.facets_any,
-            priority=rule.priority,
+    if not isinstance(raw_lens, dict):
+        raise ValueError(f"{path} 必须是 object")
+    projected: dict[str, TemplateLensRule] = {}
+    for lens_key, raw_rule in raw_lens.items():
+        rule_path = f"{path}.{lens_key}"
+        if not isinstance(lens_key, str) or not isinstance(raw_rule, dict):
+            raise ValueError(f"{rule_path} 必须是 object")
+        projected[lens_key] = TemplateLensRule(
+            fund_type=cast(
+                LensKey,
+                _read_required_string(raw_rule, "fund_type", f"{rule_path}.fund_type"),
+            ),
+            statements=tuple(
+                _read_string_array(raw_rule["statements"], f"{rule_path}.statements", allow_empty=False)
+            ),
+            facets_any=tuple(
+                _read_string_array(raw_rule["facets_any"], f"{rule_path}.facets_any", allow_empty=True)
+            ),
+            priority=_read_optional_string(raw_rule, "priority", f"{rule_path}.priority"),
         )
-        for key, rule in chapter.preferred_lens.items()
-    }
+    return projected
 
 
-def _build_internal_subcontracts(chapter_id: int) -> tuple[ChapterInternalSubcontract, ...]:
-    """构造章节内部子契约。
+def _project_internal_subcontracts(raw_subcontracts: Any, path: str) -> tuple[ChapterInternalSubcontract, ...]:
+    """投影章节内部 subcontract。
 
     Args:
-        chapter_id: 当前公开章节编号。
+        raw_subcontracts: 模板 JSON 中的 internal_subcontracts array。
+        path: 错误路径。
 
     Returns:
-        第 2 章返回 performance / attribution / cost；其它章节返回空元组。
+        typed internal subcontract 元组。
 
     Raises:
-        无。
+        ValueError: subcontract array 或字段类型无效时抛出。
     """
 
-    if chapter_id != 2:
-        return ()
-    return (
-        ChapterInternalSubcontract(
-            subcontract_id="performance",
-            title="收益表现",
-            requirement_ids=(
-                "ch2.must_answer.item_01",
-                "ch2.must_answer.item_02",
-                "ch2.required_output.item_01",
-                "ch2.required_output.item_02",
-            ),
+    subcontracts: list[ChapterInternalSubcontract] = []
+    for index, entry in enumerate(_read_mapping_array(raw_subcontracts, path, allow_empty=True)):
+        entry_path = f"{path}[{index}]"
+        subcontracts.append(
+            ChapterInternalSubcontract(
+                subcontract_id=_read_required_string(entry, "subcontract_id", f"{entry_path}.subcontract_id"),
+                title=_read_required_string(entry, "title", f"{entry_path}.title"),
+                requirement_ids=tuple(
+                    _read_string_array(
+                        entry["requirement_ids"],
+                        f"{entry_path}.requirement_ids",
+                        allow_empty=False,
+                    )
+                ),
+                public_chapter_id=_read_optional_int(
+                    entry,
+                    "public_chapter_id",
+                    f"{entry_path}.public_chapter_id",
+                ),
+            )
+        )
+    return tuple(subcontracts)
+
+
+def _project_evidence_predicate(raw_predicate: Any, path: str) -> EvidencePredicate:
+    """投影 evidence predicate。
+
+    Args:
+        raw_predicate: 模板 JSON 中的 applies_when object。
+        path: 错误路径。
+
+    Returns:
+        typed evidence predicate。
+
+    Raises:
+        ValueError: predicate 不是 object 或字段类型无效时抛出。
+    """
+
+    if not isinstance(raw_predicate, dict):
+        raise ValueError(f"{path} 必须是 object")
+    return EvidencePredicate(
+        predicate_id=_read_required_string(raw_predicate, "predicate_id", f"{path}.predicate_id"),
+        requirement_ids=tuple(
+            _read_string_array(
+                raw_predicate["requirement_ids"],
+                f"{path}.requirement_ids",
+                allow_empty=False,
+            )
         ),
-        ChapterInternalSubcontract(
-            subcontract_id="attribution",
-            title="超额归因",
-            requirement_ids=(
-                "ch2.must_answer.item_03",
-                "ch2.must_answer.item_04",
-                "ch2.required_output.item_03",
-                "ch2.required_output.item_04",
-            ),
+        required_statuses=tuple(
+            cast(EvidenceAvailabilityStatus, value)
+            for value in _read_string_array(
+                raw_predicate["required_statuses"],
+                f"{path}.required_statuses",
+                allow_empty=False,
+            )
         ),
-        ChapterInternalSubcontract(
-            subcontract_id="cost",
-            title="成本拆解",
-            requirement_ids=(
-                "ch2.must_answer.item_05",
-                "ch2.must_answer.item_06",
-                "ch2.required_output.item_05",
-                "ch2.required_output.item_06",
-                "ch2.required_output.item_07",
-            ),
-        ),
+        description=_read_required_string(raw_predicate, "description", f"{path}.description"),
     )
-
-
-def _must_not_cover_predicate(clause_id: str) -> EvidencePredicate | None:
-    """读取 must_not_cover 的证据谓词。
-
-    Args:
-        clause_id: typed must_not_cover clause id。
-
-    Returns:
-        需要证据条件的 clause 返回 `EvidencePredicate`，其它返回 `None`。
-
-    Raises:
-        无。
-    """
-
-    if clause_id == "ch3.must_not_cover.item_04":
-        return _CH3_STYLE_EVIDENCE_UNREVIEWED
-    return None
-
-
-def _must_not_cover_allowed_contexts(clause_id: str) -> tuple[AllowedContextLiteral, ...]:
-    """读取 must_not_cover 的 allowed_contexts 数据。
-
-    Args:
-        clause_id: typed must_not_cover clause id。
-
-    Returns:
-        未来 deterministic allowed_contexts 闭集数据；Slice 1 不执行匹配。
-
-    Raises:
-        无。
-    """
-
-    if clause_id == "ch3.must_not_cover.item_04":
-        return ("required_label", "evidence_gap_statement", "quote", "anchor_caption")
-    return ()
-
-
-def _assert_exact_text_mapping(
-    chapter_id: int,
-    field_name: str,
-    source_values: tuple[str, ...],
-    mapped_values: tuple[_TextIdMapping, ...],
-) -> None:
-    """校验当前文本与 reviewed mapping 精确一致。
-
-    Args:
-        chapter_id: 当前章节编号。
-        field_name: 字段名。
-        source_values: 当前 manifest 中的原文序列。
-        mapped_values: reviewed mapping 中的原文与 id 序列。
-
-    Returns:
-        校验通过时返回 `None`。
-
-    Raises:
-        ValueError: 长度、顺序或原文不一致时抛出。
-    """
-
-    mapped_text = tuple(item.text for item in mapped_values)
-    if source_values != mapped_text:
-        raise ValueError(f"章节 {chapter_id} {field_name} 未命中 typed reviewed exact mapping")
 
 
 def _validate_typed_chapter_contract(
@@ -1068,6 +702,10 @@ def _validate_must_not_cover_clause(chapter_id: int, clause: MustNotCoverClause)
 
     if clause.applies_when is not None:
         _validate_evidence_predicate(chapter_id, clause.applies_when)
+        if not clause.allowed_contexts:
+            raise ValueError(f"typed 章节 {chapter_id} conditional must_not_cover 缺少 allowed_contexts")
+    elif clause.allowed_contexts:
+        raise ValueError(f"typed 章节 {chapter_id} allowed_contexts 必须有 applies_when")
     for context in clause.allowed_contexts:
         if context not in SUPPORTED_ALLOWED_CONTEXTS:
             raise ValueError(f"typed 章节 {chapter_id} allowed_context 不受支持：{context}")
@@ -1091,8 +729,14 @@ def _validate_evidence_predicate(chapter_id: int, predicate: EvidencePredicate) 
         raise ValueError(f"typed 章节 {chapter_id} evidence predicate id 不能为空")
     if not predicate.requirement_ids:
         raise ValueError(f"typed 章节 {chapter_id} evidence predicate requirement_ids 不能为空")
-    if any(not requirement_id.strip() for requirement_id in predicate.requirement_ids):
-        raise ValueError(f"typed 章节 {chapter_id} evidence predicate requirement_id 不能为空")
+    known_requirement_ids = _known_evidence_requirement_ids()
+    for requirement_id in predicate.requirement_ids:
+        if not requirement_id.strip():
+            raise ValueError(f"typed 章节 {chapter_id} evidence predicate requirement_id 不能为空")
+        if requirement_id not in known_requirement_ids:
+            raise ValueError(
+                f"typed 章节 {chapter_id} evidence predicate requirement_id 不受支持：{requirement_id}"
+            )
     if not predicate.required_statuses:
         raise ValueError(f"typed 章节 {chapter_id} evidence predicate statuses 不能为空")
     for status in predicate.required_statuses:
@@ -1135,10 +779,10 @@ def _validate_required_output_items(chapter: TypedChapterContract) -> None:
                 f"typed 章节 {chapter.chapter_id} missing evidence behavior 不受支持："
                 f"{item.when_evidence_missing}"
             )
+        if item.when_evidence_missing is not None and item.missing_evidence_reason is None:
+            raise ValueError(f"typed 章节 {chapter.chapter_id} missing evidence behavior 缺少 typed reason")
         if item.missing_evidence_reason is not None and not item.missing_evidence_reason.strip():
             raise ValueError(f"typed 章节 {chapter.chapter_id} missing evidence reason 不能为空")
-        if item.when_evidence_missing == "delete_if_not_applicable" and item.missing_evidence_reason is None:
-            raise ValueError(f"typed 章节 {chapter.chapter_id} delete_if_not_applicable 缺少 typed reason")
 
 
 def _validate_preferred_lens(chapter: TypedChapterContract) -> None:
@@ -1192,7 +836,7 @@ def _validate_dependencies(
     unknown = tuple(chapter_id for chapter_id in dependencies if chapter_id not in known_chapter_ids)
     if unknown:
         raise ValueError(f"typed 章节 {chapter.chapter_id} 存在未知 dependency id：{unknown}")
-    if chapter.chapter_id == 0 and 7 not in dependencies:
+    if chapter.chapter_id == 0 and dependencies != (7,):
         raise ValueError("typed 第 0 章必须消费第 7 章最终判断结论")
     if chapter.chapter_id == 0 and chapter.independent_action_source:
         raise ValueError("typed 第 0 章不得独立派生动作判断")
@@ -1229,7 +873,7 @@ def _validate_internal_subcontracts(chapter: TypedChapterContract) -> None:
 
     Raises:
         ValueError: 非第 2 章存在子契约、第 2 章缺子契约、子契约携带公开章节 id、
-            或子契约编号无效时抛出。
+            子契约编号无效或 requirement id 不在 strict guard 时抛出。
     """
 
     if chapter.chapter_id != 2:
@@ -1240,10 +884,11 @@ def _validate_internal_subcontracts(chapter: TypedChapterContract) -> None:
     subcontract_ids = tuple(item.subcontract_id for item in chapter.internal_subcontracts)
     if subcontract_ids != ("performance", "attribution", "cost"):
         raise ValueError("typed 第 2 章内部子契约必须为 performance / attribution / cost")
-    known_requirement_ids = {
+    known_chapter_requirement_ids = {
         *(clause.clause_id for clause in chapter.must_answer),
         *(item.item_id for item in chapter.required_output_items),
     }
+    known_evidence_requirement_ids = _known_evidence_requirement_ids()
     for subcontract in chapter.internal_subcontracts:
         if subcontract.public_chapter_id is not None:
             raise ValueError("typed 第 2 章内部子契约不得携带公开 chapter_id")
@@ -1257,16 +902,226 @@ def _validate_internal_subcontracts(chapter: TypedChapterContract) -> None:
             raise ValueError(
                 f"typed 第 2 章内部子契约 {subcontract.subcontract_id} requirement_id 不能为空"
             )
-        unknown_ids = tuple(
+        unknown_chapter_ids = tuple(
             requirement_id
             for requirement_id in subcontract.requirement_ids
-            if requirement_id not in known_requirement_ids
+            if requirement_id not in known_chapter_requirement_ids
         )
-        if unknown_ids:
+        if unknown_chapter_ids:
             raise ValueError(
                 f"typed 第 2 章内部子契约 {subcontract.subcontract_id} 存在未知 requirement_id："
-                f"{unknown_ids}"
+                f"{unknown_chapter_ids}"
             )
+        unknown_evidence_ids = tuple(
+            requirement_id
+            for requirement_id in subcontract.requirement_ids
+            if requirement_id not in known_evidence_requirement_ids
+        )
+        if unknown_evidence_ids:
+            raise ValueError(
+                f"typed 第 2 章内部子契约 {subcontract.subcontract_id} requirement_id 不受支持："
+                f"{unknown_evidence_ids}"
+            )
+
+
+def _known_evidence_requirement_ids() -> frozenset[str]:
+    """读取证据 availability 的 strict requirement id guard。
+
+    Returns:
+        `EvidenceRequirementId` 当前闭集。
+
+    Raises:
+        ValueError: guard 不存在或不是 frozenset 时抛出。
+    """
+
+    from fund_agent.fund.evidence_availability import _KNOWN_REQUIREMENT_IDS
+
+    if not isinstance(_KNOWN_REQUIREMENT_IDS, frozenset):
+        raise ValueError("EvidenceRequirementId guard 不是 frozenset")
+    return _KNOWN_REQUIREMENT_IDS
+
+
+def _read_mapping_array(value: Any, path: str, *, allow_empty: bool) -> tuple[Mapping[str, Any], ...]:
+    """读取 JSON object array。
+
+    Args:
+        value: 待读取的 JSON value。
+        path: 错误路径。
+        allow_empty: 是否允许空数组。
+
+    Returns:
+        object 元组。
+
+    Raises:
+        ValueError: 值不是 array、空数组不被允许或成员不是 object 时抛出。
+    """
+
+    if not isinstance(value, list):
+        raise ValueError(f"{path} 必须是 array")
+    if not allow_empty and not value:
+        raise ValueError(f"{path} 不能为空")
+    entries: list[Mapping[str, Any]] = []
+    for index, item in enumerate(value):
+        if not isinstance(item, dict):
+            raise ValueError(f"{path}[{index}] 必须是 object")
+        entries.append(item)
+    return tuple(entries)
+
+
+def _read_string_array(value: Any, path: str, *, allow_empty: bool) -> tuple[str, ...]:
+    """读取字符串数组。
+
+    Args:
+        value: 待检查 JSON value。
+        path: 错误路径。
+        allow_empty: 是否允许空数组。
+
+    Returns:
+        字符串元组。
+
+    Raises:
+        ValueError: 值不是 array、空数组不被允许或成员不是非空字符串时抛出。
+    """
+
+    if not isinstance(value, list):
+        raise ValueError(f"{path} 必须是 array")
+    if not allow_empty and not value:
+        raise ValueError(f"{path} 不能为空")
+    for index, item in enumerate(value):
+        if not isinstance(item, str) or not item.strip():
+            raise ValueError(f"{path}[{index}] 必须是非空字符串")
+    return tuple(value)
+
+
+def _read_int_array(value: Any, path: str) -> tuple[int, ...]:
+    """读取整数数组。
+
+    Args:
+        value: 待读取的 JSON value。
+        path: 错误路径。
+
+    Returns:
+        整数元组。
+
+    Raises:
+        ValueError: 值不是 array 或成员不是 integer 时抛出。
+    """
+
+    if not isinstance(value, list):
+        raise ValueError(f"{path} 必须是 array")
+    for index, item in enumerate(value):
+        if not isinstance(item, int) or isinstance(item, bool):
+            raise ValueError(f"{path}[{index}] 必须是 integer")
+    return tuple(value)
+
+
+def _read_required_string(data: Mapping[str, Any], key: str, path: str) -> str:
+    """读取必需非空字符串字段。
+
+    Args:
+        data: JSON object。
+        key: 字段名。
+        path: 错误路径。
+
+    Returns:
+        原始字符串值。
+
+    Raises:
+        ValueError: 字段不是非空字符串时抛出。
+    """
+
+    value = data[key]
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"{path} 必须是非空字符串")
+    return value
+
+
+def _read_optional_string(data: Mapping[str, Any], key: str, path: str) -> str | None:
+    """读取可空字符串字段。
+
+    Args:
+        data: JSON object。
+        key: 字段名。
+        path: 错误路径。
+
+    Returns:
+        `None` 或非空字符串。
+
+    Raises:
+        ValueError: 字段不是 `None` 或非空字符串时抛出。
+    """
+
+    value = data[key]
+    if value is None:
+        return None
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"{path} 必须是非空字符串或 null")
+    return value
+
+
+def _read_required_int(data: Mapping[str, Any], key: str, path: str) -> int:
+    """读取必需整数字段。
+
+    Args:
+        data: JSON object。
+        key: 字段名。
+        path: 错误路径。
+
+    Returns:
+        整数字段值。
+
+    Raises:
+        ValueError: 字段不是整数或是 boolean 时抛出。
+    """
+
+    value = data[key]
+    if not isinstance(value, int) or isinstance(value, bool):
+        raise ValueError(f"{path} 必须是 integer")
+    return value
+
+
+def _read_optional_int(data: Mapping[str, Any], key: str, path: str) -> int | None:
+    """读取可空整数字段。
+
+    Args:
+        data: JSON object。
+        key: 字段名。
+        path: 错误路径。
+
+    Returns:
+        `None` 或整数字段值。
+
+    Raises:
+        ValueError: 字段不是 `None`、整数或是 boolean 时抛出。
+    """
+
+    value = data[key]
+    if value is None:
+        return None
+    if not isinstance(value, int) or isinstance(value, bool):
+        raise ValueError(f"{path} 必须是 integer 或 null")
+    return value
+
+
+def _read_required_bool(data: Mapping[str, Any], key: str, path: str) -> bool:
+    """读取必需布尔字段。
+
+    Args:
+        data: JSON object。
+        key: 字段名。
+        path: 错误路径。
+
+    Returns:
+        布尔字段值。
+
+    Raises:
+        ValueError: 字段不是 boolean 时抛出。
+    """
+
+    value = data[key]
+    if not isinstance(value, bool):
+        raise ValueError(f"{path} 必须是 boolean")
+    return value
 
 
 __all__ = [
