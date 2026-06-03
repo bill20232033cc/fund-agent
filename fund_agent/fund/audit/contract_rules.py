@@ -34,9 +34,12 @@ _MUST_ANSWER_COVERAGE_KINDS: Final[frozenset[str]] = frozenset(
 
 MustNotCoverCoverageKind = Literal[
     "narrative_guidance",
+    "typed_programmatic_evidence_conditional",
 ]
 
-_MUST_NOT_COVER_COVERAGE_KINDS: Final[frozenset[str]] = frozenset(("narrative_guidance",))
+_MUST_NOT_COVER_COVERAGE_KINDS: Final[frozenset[str]] = frozenset(
+    ("narrative_guidance", "typed_programmatic_evidence_conditional")
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -93,13 +96,13 @@ class ContractMustAnswerCoverageRule:
 
 @dataclass(frozen=True, slots=True)
 class ContractMustNotCoverCoverageRule:
-    """模板 must_not_cover 的非程序化覆盖路由规则。
+    """模板 must_not_cover 的覆盖路由规则。
 
     Attributes:
         chapter_id: 模板章节编号。
         item_text: manifest 中的 must_not_cover 原文。
-        coverage_kind: 当前禁止项的非程序化覆盖类型。
-        rationale: 非程序化覆盖说明；用于声明为什么不能靠字面 marker 稳定证明。
+        coverage_kind: 当前禁止项的覆盖类型。
+        rationale: 覆盖说明；用于声明为什么不能靠无条件字面 marker 稳定证明。
     """
 
     chapter_id: int
@@ -276,8 +279,8 @@ _MUST_NOT_COVER_COVERAGE_RULES: Final[tuple[ContractMustNotCoverCoverageRule, ..
     ContractMustNotCoverCoverageRule(
         3,
         "不在换手率或风格变化证据缺失、不可用、未复核时，推断主动基金风格稳定、风格一致或言行一致。",
-        "narrative_guidance",
-        "这是主动基金第 3 章证据不足时的语义禁止项，缺少稳定低误报字面 marker，当前由叙事指引和人工/语义复核覆盖。",
+        "typed_programmatic_evidence_conditional",
+        "这是主动基金第 3 章证据不足时的条件禁止项，由 typed MustNotCoverClause + EvidenceAvailability + allowed_contexts 程序审计覆盖，不走无条件字面 marker。",
     ),
     ContractMustNotCoverCoverageRule(
         5,

@@ -573,8 +573,7 @@ _AUDIT_FOCUS_BY_CHAPTER: Final[Mapping[int, tuple[AuditFocusLiteral, ...]]] = {
 _CH3_STYLE_EVIDENCE_UNREVIEWED: Final[EvidencePredicate] = EvidencePredicate(
     predicate_id="ch3.evidence.manager_behavior_style_unreviewed",
     requirement_ids=(
-        "ch3.requirement.turnover_rate_reviewed",
-        "ch3.requirement.cross_period_style_evidence_reviewed",
+        "ch3.requirement.actual_behavior_reviewed",
     ),
     required_statuses=("missing", "unavailable", "unreviewed"),
     description="主动基金第 3 章缺少已复核换手率或跨期风格变化证据时，禁止正向一致性推断。",

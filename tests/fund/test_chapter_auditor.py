@@ -18,6 +18,7 @@ from fund_agent.fund.chapter_writer import (
     ChapterDraft,
     build_chapter_writer_input,
 )
+from fund_agent.fund.evidence_availability import derive_evidence_availability
 from tests.fund.test_chapter_facts import _bundle
 
 
@@ -191,6 +192,134 @@ def test_programmatic_audit_fails_must_not_cover_phrase() -> None:
 
     assert result.status == "fail"
     assert any("must_not_cover" in issue.message for issue in result.issues)
+
+
+def test_ch3_required_label_allowed_under_missing_evidence() -> None:
+    """验证第 3 章缺证时 required label 加缺口说明不会被误判为 C2。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 required label 允许上下文被误阻断时抛出。
+    """
+
+    body_line = (
+        "言行一致性判断：证据不足，当前缺少已复核的换手率或跨期风格变化证据，不能据此判断言行一致。\n"
+        "风格稳定性判断：证据不足，当前缺少已复核的换手率或跨期风格变化证据，不能据此判断风格稳定。"
+    )
+
+    result = audit_chapter_programmatic(_ch3_typed_audit_input(body_line))
+
+    assert not any("ch3.must_not_cover.item_04" in issue.issue_id for issue in result.issues)
+
+
+def test_ch3_explicit_evidence_gap_statement_allowed() -> None:
+    """验证第 3 章显式证据缺口句允许提及一致性/稳定性边界。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当缺口句被误阻断时抛出。
+    """
+
+    body_line = (
+        "证据不足，当前缺少已复核的换手率或跨期风格变化证据，不能据此判断风格稳定、风格一致或言行一致。"
+    )
+
+    result = audit_chapter_programmatic(_ch3_typed_audit_input(body_line))
+
+    assert not any("ch3.must_not_cover.item_04" in issue.issue_id for issue in result.issues)
+
+
+def test_ch3_positive_consistency_claim_blocks_when_actual_behavior_unreviewed() -> None:
+    """验证实际行为证据未复核时正向言行一致判断触发 typed C2。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当正向判断未阻断时抛出。
+    """
+
+    result = audit_chapter_programmatic(_ch3_typed_audit_input("言行一致性判断：言行一致。"))
+
+    assert result.status == "fail"
+    assert any(issue.issue_id == "programmatic:C2:ch3.must_not_cover.item_04" for issue in result.issues)
+
+
+def test_ch3_positive_consistency_claim_blocks_without_evidence_availability() -> None:
+    """验证缺少 EvidenceAvailability 时第 3 章正向一致性判断 fail-closed。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当缺 availability 导致 silent pass 时抛出。
+    """
+
+    result = audit_chapter_programmatic(
+        _ch3_typed_audit_input(
+            "言行一致性判断：言行一致。",
+            include_evidence_availability=False,
+        )
+    )
+
+    assert result.status == "fail"
+    assert any(issue.issue_id == "programmatic:C2:ch3.must_not_cover.item_04" for issue in result.issues)
+
+
+def test_ch3_quasi_positive_consistency_claim_blocks_when_style_evidence_missing() -> None:
+    """验证风格证据缺失或未复核时准正向稳定性判断触发 typed C2。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当准正向判断未阻断时抛出。
+    """
+
+    result = audit_chapter_programmatic(_ch3_typed_audit_input("风格稳定性判断：未见明显不一致，整体变化不大。"))
+
+    assert result.status == "fail"
+    assert any(issue.issue_id == "programmatic:C2:ch3.must_not_cover.item_04" for issue in result.issues)
+
+
+def test_audit_focus_cannot_disable_programmatic_must_not_cover() -> None:
+    """验证 audit_focus 不能关闭 typed programmatic must_not_cover。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 audit_focus 省略边界导致 C2 未触发时抛出。
+    """
+
+    input_data = _ch3_typed_audit_input("风格稳定性判断：基本稳定。")
+
+    result = audit_chapter_programmatic(input_data)
+
+    assert result.status == "fail"
+    assert any(issue.issue_id == "programmatic:C2:ch3.must_not_cover.item_04" for issue in result.issues)
 
 
 def test_programmatic_audit_blocks_non_asserted_facet_as_asserted_fact() -> None:
@@ -739,6 +868,77 @@ def _audit_input(
         finish_reason="stop",
     )
     return ChapterAuditInput(writer_input=writer_input, draft=draft)
+
+
+def _ch3_typed_audit_input(body_line: str, *, include_evidence_availability: bool = True) -> ChapterAuditInput:
+    """构造带 EvidenceAvailability 的第 3 章 typed 审计输入。
+
+    Args:
+        body_line: 第 3 章详细情况中的待审计文本。
+        include_evidence_availability: 是否显式传入同源证据可用性；False 用于 fail-closed 回归测试。
+
+    Returns:
+        第 3 章审计输入。
+
+    Raises:
+        AssertionError: 当投影缺少 anchor 时抛出。
+    """
+
+    projection = project_chapter_facts(_bundle(), chapter_ids=(3,))
+    availability = derive_evidence_availability(projection) if include_evidence_availability else None
+    writer_input = build_chapter_writer_input(
+        projection,
+        chapter_id=3,
+        evidence_availability=availability,
+    )
+    anchor_id = writer_input.chapter.evidence_anchors[0].anchor_id
+    markdown = _ch3_markdown(body_line, writer_input=writer_input, anchor_id=anchor_id)
+    draft = ChapterDraft(
+        chapter_id=writer_input.chapter.chapter_id,
+        title=writer_input.chapter.title,
+        markdown=markdown,
+        used_fact_ids=tuple(fact.fact_id for fact in writer_input.chapter.facts[:1]),
+        used_anchor_ids=(anchor_id,),
+        declared_missing_reasons=(),
+        deleted_item_rule_ids=tuple(
+            decision.rule_id
+            for decision in writer_input.chapter.item_rule_projection.decisions
+            if decision.status == "delete"
+        ),
+        model_name="fake-writer",
+        finish_reason="stop",
+    )
+    return ChapterAuditInput(writer_input=writer_input, draft=draft)
+
+
+def _ch3_markdown(
+    body_line: str,
+    *,
+    writer_input: object | None = None,
+    anchor_id: str = "",
+) -> str:
+    """构造第 3 章合法结构 Markdown。
+
+    Args:
+        body_line: 第 3 章详细情况正文。
+        writer_input: 可选 writer input；为空时临时构造。
+        anchor_id: 可选证据 anchor id。
+
+    Returns:
+        测试用第 3 章 Markdown。
+
+    Raises:
+        AttributeError: writer input 类型不符合预期时抛出。
+    """
+
+    if writer_input is None:
+        projection = project_chapter_facts(_bundle(), chapter_ids=(3,))
+        writer_input = build_chapter_writer_input(projection, chapter_id=3)
+        anchor_id = writer_input.chapter.evidence_anchors[0].anchor_id
+    return _valid_markdown(writer_input, anchor_id).replace(
+        "本章只使用已断言事实，并把候选 facet 写成未断言。",
+        body_line,
+    )
 
 
 def _valid_markdown(writer_input: object, anchor_id: str) -> str:
