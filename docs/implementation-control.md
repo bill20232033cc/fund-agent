@@ -89,7 +89,7 @@
 | Accepted Ch2 auditor timeout 120s evidence commit | `ceba7aa` |
 | Accepted diagnostic evidence reconciliation plan commit | `534d8e4` |
 | Accepted diagnostic serialization repair implementation commit | `218a4f6` |
-| Accepted provider endpoint disposition design plan commit | pending local checkpoint |
+| Accepted provider endpoint disposition design plan commit | `e329f2f` |
 
 ## Current Gate
 
