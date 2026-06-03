@@ -138,6 +138,39 @@ class _FakeAuditLLMClient:
         )
 
 
+class _Chapter6BlockingWriterLLMClient(_FakeChapterLLMClient):
+    """测试用章节写作 fake client，只让第 6 章缺少 required structure。
+
+    Attributes:
+        requests: 收到的 writer typed requests。
+        texts: 父类兼容字段。
+    """
+
+    def generate_chapter(self, request: ChapterLLMRequest) -> ChapterLLMResponse:
+        """返回第 6 章非法、其他章节合法的 fake 响应。
+
+        Args:
+            request: Gate 2 writer typed request。
+
+        Returns:
+            fake LLM 写作响应。
+
+        Raises:
+            无显式抛出。
+        """
+
+        self.requests.append(request)
+        if request.chapter_id == 6:
+            text = "第 6 章缺少固定结构。"
+        else:
+            text = _valid_markdown_from_request(request)
+        return ChapterLLMResponse(
+            text=text,
+            model_name="fake-writer",
+            finish_reason="stop",
+        )
+
+
 @pytest.mark.asyncio
 async def test_analyze_with_llm_returns_accepted_final_assembly_and_report_markdown() -> None:
     """验证 LLM Service 用例串起 core、Gate 3 和 Gate 4 accepted 报告。
@@ -519,6 +552,43 @@ async def test_missing_writer_or_auditor_blocks_without_deterministic_fallback()
     ) == (1, 2, 3, 4, 5, 6)
     assert result.final_assembly_result.status == "incomplete"
     assert result.final_assembly_result.report_markdown is None
+    with pytest.raises(ValueError, match="LLM 分析报告尚未完成"):
+        _ = result.report_markdown
+
+
+@pytest.mark.asyncio
+async def test_partial_llm_result_does_not_fallback_to_deterministic_after_typed_readiness() -> None:
+    """验证 typed readiness incomplete 后仍 fail-closed，不回退确定性报告。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 partial LLM 结果被 deterministic markdown 掩盖时抛出。
+    """
+
+    service = FundAnalysisService(extractor=_FakeExtractor(_bundle()))
+
+    result = await service.analyze_with_llm(
+        _developer_request(),
+        llm_clients=ChapterOrchestratorLLMClients(
+            writer=_Chapter6BlockingWriterLLMClient(),
+            auditor=_FakeAuditLLMClient(),
+        ),
+        chapter_policy=ChapterOrchestrationPolicy(run_programmatic_audit=False),
+    )
+
+    assert result.llm_orchestration_result.status == "partial"
+    assert result.final_assembly_result.status == "incomplete"
+    assert result.final_assembly_result.report_markdown is None
+    assert result.final_assembly_result.chapter7_markdown is None
+    assert result.final_assembly_result.chapter0_markdown is None
+    assert "chapter7_readiness_blocked" in {
+        issue.reason for issue in result.final_assembly_result.issues
+    }
     with pytest.raises(ValueError, match="LLM 分析报告尚未完成"):
         _ = result.report_markdown
 

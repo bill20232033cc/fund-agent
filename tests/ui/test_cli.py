@@ -2339,6 +2339,42 @@ def test_analyze_cli_use_llm_incomplete_result_exits_without_fallback(
     assert _IncompleteLLMService.analyze_with_llm_execution_called is True
 
 
+def test_use_llm_incomplete_typed_readiness_empty_stdout_exit_one(
+    monkeypatch,
+) -> None:  # type: ignore[no-untyped-def]
+    """验证 typed readiness incomplete 时 stdout 为空、退出 1 且无确定性回退。
+
+    Args:
+        monkeypatch: pytest monkeypatch fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 incomplete 被输出或回退 deterministic 报告时抛出。
+    """
+
+    _IncompleteLLMService.last_request = None
+    _IncompleteLLMService.analyze_called = False
+    _IncompleteLLMService.analyze_with_llm_execution_called = False
+    monkeypatch.setattr(cli, "FundAnalysisService", _IncompleteLLMService)
+    monkeypatch.setattr(
+        cli,
+        "build_fund_llm_execution_request",
+        _fake_build_fund_llm_execution_request,
+    )
+    runner = CliRunner()
+
+    result = runner.invoke(cli.app, ["analyze", "110011", "--use-llm"])
+
+    assert result.exit_code == 1
+    assert result.stdout == ""
+    assert "LLM 分析未完成：" in result.stderr
+    assert "# 0. 投资要点概览" not in result.output
+    assert _IncompleteLLMService.analyze_called is False
+    assert _IncompleteLLMService.analyze_with_llm_execution_called is True
+
+
 def test_analyze_cli_use_llm_forced_progress_incomplete_keeps_fail_closed(
     monkeypatch,
 ) -> None:  # type: ignore[no-untyped-def]

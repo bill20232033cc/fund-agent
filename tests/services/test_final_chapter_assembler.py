@@ -61,6 +61,30 @@ def test_assembles_report_in_render_order_while_chapter0_uses_chapter7_summary()
     )
 
 
+def test_ch0_action_must_equal_ch7_action() -> None:
+    """验证第 0 章当前动作必须完全等于第 7 章 typed action。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当第 0 章独立派生或强化最终动作时抛出。
+    """
+
+    result = assemble_final_chapters(_assembly_input())
+
+    assert result.status == "accepted"
+    assert result.chapter7_summary is not None
+    assert result.chapter0_markdown is not None
+    expected_action = result.chapter7_summary.selected_judgment_label
+    assert f"- **当前动作**：{expected_action}" in result.chapter0_markdown
+    assert "🟢 值得持有" not in result.chapter0_markdown
+    assert "🔴 建议替换" not in result.chapter0_markdown
+
+
 @pytest.mark.parametrize("orchestration_status", ["partial", "blocked"])
 def test_incomplete_when_orchestration_not_accepted(orchestration_status: str) -> None:
     """验证 Gate 3 非 accepted 不能被当作完整报告输出。
@@ -83,7 +107,94 @@ def test_incomplete_when_orchestration_not_accepted(orchestration_status: str) -
     assert result.report_markdown is None
     assert result.chapter0_markdown is None
     assert result.chapter7_markdown is None
-    assert [issue.reason for issue in result.issues] == ["orchestration_not_accepted"]
+    assert "orchestration_not_accepted" in {issue.reason for issue in result.issues}
+    assert "chapter7_readiness_blocked" in {issue.reason for issue in result.issues}
+
+
+def test_missing_required_body_chapter_blocks_ch7_and_ch0() -> None:
+    """验证缺少必需正文章节时第 7 章和第 0 章均不能 accepted。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当缺失第 1-6 章仍生成第 7/0 章或完整报告时抛出。
+    """
+
+    orchestration = _orchestration_result()
+    chapter_results = tuple(
+        chapter_result for chapter_result in orchestration.chapter_results if chapter_result.chapter_id != 3
+    )
+    orchestration = replace(
+        orchestration,
+        chapter_results=chapter_results,
+        accepted_conclusions=tuple(
+            conclusion
+            for conclusion in orchestration.accepted_conclusions
+            if conclusion.chapter_id != 3
+        ),
+        generated_chapter_ids=(1, 2, 4, 5, 6),
+    )
+
+    result = assemble_final_chapters(_assembly_input(orchestration_result=orchestration))
+
+    assert result.status == "incomplete"
+    assert result.report_markdown is None
+    assert result.chapter7_markdown is None
+    assert result.chapter0_markdown is None
+    assert result.chapter7_summary is None
+    assert result.source_accepted_chapter_ids == (1, 2, 4, 5, 6)
+    assert "missing_required_chapter" in {issue.reason for issue in result.issues}
+    assert "chapter7_readiness_blocked" in {issue.reason for issue in result.issues}
+
+
+def test_missing_ch7_blocks_ch0_complete_report(monkeypatch: pytest.MonkeyPatch) -> None:
+    """验证第 7 章 typed bundle 缺失时第 0 章不能独立完成报告。
+
+    Args:
+        monkeypatch: pytest monkeypatch fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当第 0 章绕过第 7 章生成完整报告时抛出。
+    """
+
+    def _missing_chapter7_summary(
+        _decision: FinalJudgmentDecision,
+        _body_conclusions: tuple[AcceptedChapterConclusion, ...],
+        _readiness: object,
+    ) -> None:
+        """模拟第 7 章 typed bundle 缺失。
+
+        Args:
+            _decision: 未使用的最终判断。
+            _body_conclusions: 未使用的正文结论。
+            _readiness: 未使用的 readiness。
+
+        Returns:
+            `None` 表示第 7 章缺失。
+
+        Raises:
+            无显式抛出。
+        """
+
+        return None
+
+    monkeypatch.setattr(final_chapter_assembler, "_build_chapter7_summary", _missing_chapter7_summary)
+
+    result = assemble_final_chapters(_assembly_input())
+
+    assert result.status == "incomplete"
+    assert result.report_markdown is None
+    assert result.chapter7_markdown is None
+    assert result.chapter0_markdown is None
+    assert result.chapter7_summary is None
+    assert "chapter7_missing" in {issue.reason for issue in result.issues}
 
 
 def test_incomplete_when_required_chapter_lacks_accepted_conclusion() -> None:
