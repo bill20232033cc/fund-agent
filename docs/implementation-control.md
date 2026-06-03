@@ -91,7 +91,7 @@
 | Accepted diagnostic serialization repair implementation commit | `218a4f6` |
 | Accepted provider endpoint disposition design plan commit | `e329f2f` |
 | Accepted post-repair endpoint disposition evidence commit | `0778e44` |
-| Accepted PASS-only provider timing probe design commit | pending local checkpoint |
+| Accepted PASS-only provider timing probe design commit | `2c0108c` |
 
 ## Current Gate
 
