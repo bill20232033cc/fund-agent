@@ -67,8 +67,8 @@
 | Current phase | `MVP typed template and internalized agent execution phase` |
 | Current gate | `MVP typed template contract aggregate deepreview gate` |
 | Current gate classification | `heavy` |
-| Current gate status | Aggregate deepreview accepted locally; checkpoint commit pending |
-| Next entry point | Create accepted aggregate deepreview checkpoint, then stop at ready-to-open-draft-PR authorization point or explicitly start a separate Agent engine implementation planning gate; do not enter provider/runtime/live probe, Agent runtime implementation, score-loop or PR external actions without controller authorization |
+| Current gate status | Aggregate deepreview accepted locally at checkpoint `d08eab9` |
+| Next entry point | Stop at ready-to-open-draft-PR authorization point or explicitly start a separate Agent engine implementation planning gate; do not enter provider/runtime/live probe, Agent runtime implementation, score-loop or PR external actions without controller authorization |
 | Next gate classification | `heavy`; typed contract schema affects future public template/audit contract behavior |
 | Design truth | `docs/design.md` |
 | Control truth | `docs/implementation-control.md` |
@@ -103,7 +103,7 @@
 | Accepted typed template Slice 6 Ch0/Ch7 readiness commit | `1ec22e0` |
 | Accepted typed template Slice 7 Service facade commit | `23b8f5f` |
 | Accepted typed template Slice 8 docs/control sync commit | `984d3be` |
-| Accepted typed template aggregate deepreview commit | pending local commit |
+| Accepted typed template aggregate deepreview commit | `d08eab9` |
 
 ## Current Gate
 
