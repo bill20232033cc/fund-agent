@@ -122,11 +122,13 @@ class RequiredOutputItem:
         item_id: 稳定输出条目编号。
         text: 当前 CHAPTER_CONTRACT 中的原始 required output 文本。
         when_evidence_missing: 未来缺证处理行为；Slice 1 仅保存 schema 字段。
+        missing_evidence_reason: 缺证行为的 reviewed typed reason；删除行为必须填写。
     """
 
     item_id: str
     text: str
     when_evidence_missing: MissingEvidenceBehavior | None = None
+    missing_evidence_reason: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -782,9 +784,68 @@ def _project_required_output_items(
         text_mapping.required_output_items,
     )
     return tuple(
-        RequiredOutputItem(item_id=item.stable_id, text=item.text)
+        RequiredOutputItem(
+            item_id=item.stable_id,
+            text=item.text,
+            when_evidence_missing=_required_output_missing_behavior(item.stable_id),
+            missing_evidence_reason=_required_output_missing_reason(item.stable_id),
+        )
         for item in text_mapping.required_output_items
     )
+
+
+def _required_output_missing_behavior(item_id: str) -> MissingEvidenceBehavior | None:
+    """读取 required output 的缺证行为默认值。
+
+    Args:
+        item_id: typed required output item id。
+
+    Returns:
+        缺证行为；无需 typed 缺证处理时返回 `None`。
+
+    Raises:
+        无。
+    """
+
+    if item_id.startswith("ch2.required_output."):
+        return "block"
+    if item_id in {
+        "ch3.required_output.item_02",
+        "ch3.required_output.item_03",
+        "ch3.required_output.item_04",
+        "ch3.required_output.item_05",
+    }:
+        return "render_evidence_gap"
+    if item_id == "ch3.required_output.item_06":
+        return "render_minimum_verification_question"
+    return None
+
+
+def _required_output_missing_reason(item_id: str) -> str | None:
+    """读取 required output 缺证行为的 reviewed reason。
+
+    Args:
+        item_id: typed required output item id。
+
+    Returns:
+        reviewed reason；仅需要显式原因的行为返回文本。
+
+    Raises:
+        无。
+    """
+
+    if item_id.startswith("ch2.required_output."):
+        return "第 2 章 R=A+B-C 数值与成本判断缺少同源证据时不得生成替代结论。"
+    if item_id in {
+        "ch3.required_output.item_02",
+        "ch3.required_output.item_03",
+        "ch3.required_output.item_04",
+        "ch3.required_output.item_05",
+    }:
+        return "第 3 章策略、实际行为、言行一致性和风格稳定性在缺少已复核证据时只能输出证据缺口。"
+    if item_id == "ch3.required_output.item_06":
+        return "第 3 章利益一致性证据缺失时只能输出下一步最小验证问题。"
+    return None
 
 
 def _project_lens_rules(chapter: ChapterContract) -> Mapping[str, TemplateLensRule]:
@@ -1075,6 +1136,10 @@ def _validate_required_output_items(chapter: TypedChapterContract) -> None:
                 f"typed 章节 {chapter.chapter_id} missing evidence behavior 不受支持："
                 f"{item.when_evidence_missing}"
             )
+        if item.missing_evidence_reason is not None and not item.missing_evidence_reason.strip():
+            raise ValueError(f"typed 章节 {chapter.chapter_id} missing evidence reason 不能为空")
+        if item.when_evidence_missing == "delete_if_not_applicable" and item.missing_evidence_reason is None:
+            raise ValueError(f"typed 章节 {chapter.chapter_id} delete_if_not_applicable 缺少 typed reason")
 
 
 def _validate_preferred_lens(chapter: TypedChapterContract) -> None:

@@ -54,6 +54,7 @@ EvidenceRequirementId: TypeAlias = Literal[
     "ch3.requirement.cross_period_style_evidence_reviewed",
     "ch3.requirement.manager_alignment_reviewed",
     "ch3.requirement.actual_behavior_reviewed",
+    "ch3.required_output.item_01",
     "ch3.required_output.item_02",
     "ch3.required_output.item_03",
     "ch3.required_output.item_04",
@@ -223,6 +224,12 @@ _CH3_REQUIREMENT_SPECS: Final[tuple[_RequirementSpec, ...]] = (
         3,
         ("structured.manager_alignment",),
         detail="模板第 3 章 §9 基金经理持有披露证据。",
+    ),
+    _RequirementSpec(
+        "ch3.required_output.item_01",
+        3,
+        ("structured.basic_identity",),
+        detail="基金经理基本信息 required output 证据。",
     ),
     _RequirementSpec(
         "ch3.required_output.item_02",

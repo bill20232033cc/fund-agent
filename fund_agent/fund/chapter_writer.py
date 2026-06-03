@@ -12,7 +12,7 @@ import json
 import re
 from dataclasses import dataclass
 from decimal import Decimal
-from typing import Final, Literal, Protocol, get_args
+from typing import Final, Literal, Protocol, cast, get_args
 
 from fund_agent.fund.chapter_facts import (
     ChapterEvidenceAnchor,
@@ -21,6 +21,16 @@ from fund_agent.fund.chapter_facts import (
     ChapterFactMissingReason,
     ChapterFactProjection,
     ChapterFactSchemaVersion,
+)
+from fund_agent.fund.evidence_availability import (
+    AvailabilityStatus,
+    EvidenceAvailability,
+    EvidenceRequirementId,
+    RequirementAvailability,
+)
+from fund_agent.fund.template.typed_contracts import (
+    MissingEvidenceBehavior,
+    RequiredOutputItem,
 )
 
 ChapterWriterSchemaVersion = Literal["chapter_writer.v1"]
@@ -98,6 +108,55 @@ _FORBIDDEN_PHRASES: Final[tuple[str, ...]] = (
     "预测收益",
     "基金经理动机",
 )
+_MISSING_EVIDENCE_STATUSES: Final[frozenset[AvailabilityStatus]] = frozenset(
+    ("missing", "unavailable", "not_applicable", "unreviewed")
+)
+_GAP_OUTPUT_PHRASES: Final[tuple[str, ...]] = (
+    "证据不足",
+    "数据不足",
+    "未披露",
+    "缺少",
+    "不可用",
+    "未复核",
+    "无法判断",
+    "不能据此判断",
+)
+_VERIFICATION_OUTPUT_PHRASES: Final[tuple[str, ...]] = (
+    "下一步最小验证问题",
+    "最小验证问题",
+    "需要验证",
+    "后续验证",
+    "下一步验证",
+)
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class RequiredOutputEvidencePlan:
+    """typed required output 缺证写作计划，见模板第 2/3 章。
+
+    Attributes:
+        item_id: typed required output item id。
+        text: required output 原始展示文本。
+        marker: writer 要求输出的 exact marker。
+        availability_status: 同源证据可用性；无 requirement 时为 `None`。
+        when_evidence_missing: typed 缺证行为。
+        missing_evidence_reason: reviewed typed 缺证原因。
+        action: writer 对该项采取的动作。
+        prompt_instruction: 传给 writer 的安全输出说明。
+        requirement_fact_ids: 关联 availability fact ids。
+        requirement_anchor_ids: 关联 availability anchor ids。
+    """
+
+    item_id: str
+    text: str
+    marker: str
+    availability_status: AvailabilityStatus | None
+    when_evidence_missing: MissingEvidenceBehavior | None
+    missing_evidence_reason: str | None
+    action: Literal["render", "render_evidence_gap", "render_minimum_verification_question", "delete", "block"]
+    prompt_instruction: str
+    requirement_fact_ids: tuple[str, ...] = ()
+    requirement_anchor_ids: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -319,6 +378,8 @@ class ChapterWriterInput:
         max_output_chars: LLM 输出硬上限。
         repair_context: 可选重写上下文。
         prompt_payload_mode: writer prompt payload 模式；compact 只压缩表达，不放松事实边界。
+        typed_required_output_items: 可选 typed required output 条目；为空时保持当前生产默认。
+        evidence_availability: 可选同源证据可用性；typed required output 路径必须显式传入。
     """
 
     schema_version: ChapterWriterSchemaVersion = CHAPTER_WRITER_SCHEMA_VERSION
@@ -331,6 +392,8 @@ class ChapterWriterInput:
     max_output_chars: int = 12000
     repair_context: ChapterRepairContext | None = None
     prompt_payload_mode: ChapterPromptPayloadMode = "full"
+    typed_required_output_items: tuple[RequiredOutputItem, ...] = ()
+    evidence_availability: EvidenceAvailability | None = None
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -346,6 +409,7 @@ class ChapterWriterPrompt:
         must_answer: CHAPTER_CONTRACT 必答项。
         must_not_cover: CHAPTER_CONTRACT 禁止项。
         required_output_items: 必须输出项目。
+        required_output_evidence_plan: typed required output 缺证计划；默认路径为空。
         allowed_fact_ids: 允许使用的 fact id。
         allowed_anchor_ids: 允许引用的 anchor id。
         deleted_item_rule_ids: 必须删除的 ITEM_RULE id。
@@ -365,6 +429,7 @@ class ChapterWriterPrompt:
     allowed_anchor_ids: tuple[str, ...]
     deleted_item_rule_ids: tuple[str, ...]
     required_gap_phrases: tuple[str, ...]
+    required_output_evidence_plan: tuple[RequiredOutputEvidencePlan, ...] = ()
     prompt_cost_diagnostic: ChapterPromptCostDiagnostic | None = None
 
 
@@ -485,6 +550,8 @@ def build_chapter_writer_input(
     max_output_chars: int = 12000,
     repair_context: ChapterRepairContext | None = None,
     prompt_payload_mode: ChapterPromptPayloadMode = "full",
+    typed_required_output_items: tuple[RequiredOutputItem, ...] = (),
+    evidence_availability: EvidenceAvailability | None = None,
 ) -> ChapterWriterInput:
     """从 Gate 1 投影构造单章写作输入，见模板第 0-7 章。
 
@@ -496,6 +563,8 @@ def build_chapter_writer_input(
         max_output_chars: LLM 输出硬上限。
         repair_context: 可选重写上下文。
         prompt_payload_mode: writer prompt payload 模式。
+        typed_required_output_items: 可选 typed required output 条目；为空时保持默认路径。
+        evidence_availability: 可选同源证据可用性；typed 路径必须显式传入。
 
     Returns:
         单章写作输入。
@@ -522,6 +591,8 @@ def build_chapter_writer_input(
         max_output_chars=max_output_chars,
         repair_context=repair_context,
         prompt_payload_mode=prompt_payload_mode,
+        typed_required_output_items=typed_required_output_items,
+        evidence_availability=evidence_availability,
     )
 
 
@@ -542,6 +613,7 @@ def build_chapter_prompt(input_data: ChapterWriterInput) -> ChapterWriterPrompt:
     contract = chapter.contract
     allowed_anchor_ids = _allowed_anchor_ids(chapter)
     deleted_item_rule_ids = _deleted_item_rule_ids(chapter)
+    required_output_plan = _required_output_evidence_plan(input_data)
     system_prompt = (
         "你是基金分析章节写作器。只能使用输入 facts、missing reasons 和 evidence anchors；"
         "不得读取外部资料，不得输出买入/卖出/仓位/收益预测。"
@@ -549,6 +621,7 @@ def build_chapter_prompt(input_data: ChapterWriterInput) -> ChapterWriterPrompt:
     fragments = _chapter_prompt_fragments(
         input_data,
         deleted_item_rule_ids=deleted_item_rule_ids,
+        required_output_plan=required_output_plan,
     )
     user_prompt = "\n".join(
         (
@@ -569,11 +642,12 @@ def build_chapter_prompt(input_data: ChapterWriterInput) -> ChapterWriterPrompt:
         user_prompt=user_prompt,
         must_answer=contract.must_answer,
         must_not_cover=contract.must_not_cover,
-        required_output_items=contract.required_output_items,
+        required_output_items=_prompt_required_output_marker_items(input_data, required_output_plan),
         allowed_fact_ids=tuple(fact.fact_id for fact in chapter.facts),
         allowed_anchor_ids=allowed_anchor_ids,
         deleted_item_rule_ids=deleted_item_rule_ids,
         required_gap_phrases=("未披露", "数据不足", "下一步最小验证问题"),
+        required_output_evidence_plan=required_output_plan,
         prompt_cost_diagnostic=_prompt_cost_diagnostic(
             input_data,
             system_prompt=system_prompt,
@@ -587,12 +661,14 @@ def _chapter_prompt_fragments(
     input_data: ChapterWriterInput,
     *,
     deleted_item_rule_ids: tuple[str, ...],
+    required_output_plan: tuple[RequiredOutputEvidencePlan, ...],
 ) -> ChapterPromptFragments:
     """构造 writer prompt 命名片段，见模板第 1-6 章。
 
     Args:
         input_data: 章节写作输入。
         deleted_item_rule_ids: 已裁定删除的 ITEM_RULE id。
+        required_output_plan: typed required output 缺证计划。
 
     Returns:
         可独立计费的 prompt 片段。
@@ -616,7 +692,9 @@ def _chapter_prompt_fragments(
             "第 1-6 章必须包含且只用这些顶层结构段落："
             + " / ".join(REQUIRED_BODY_SECTION_HEADINGS),
             "每个 required_output_items 必须先输出 exact marker："
-            "`<!-- required_output:<exact required output item> -->`，marker 后再写同源证据内容或明确缺口。",
+            "`<!-- required_output:<exact required output item> -->`；"
+            "typed 路径使用 `<!-- required_output:<typed item id> -->`；"
+            "marker 后再写同源证据内容或 approved 缺口/验证问题。",
             "证据断言只能使用 allowed anchor set 中的 marker：`<!-- anchor:<anchor_id> -->`；"
             "required_anchor_ids 是允许集合，不要求全量使用。",
             "第2章 R=A+B-C 数字闭环：若写公式/百分比闭合断言，必须让 allowed anchor marker 与该断言同句或上下2行；"
@@ -648,7 +726,7 @@ def _chapter_prompt_fragments(
         must_answer="必须回答：" + _json_text(contract.must_answer),
         must_not_cover="禁止覆盖：" + _json_text(contract.must_not_cover),
         required_output="必须输出项："
-        + _json_text(_prompt_required_output_payload(contract.required_output_items)),
+        + _json_text(_prompt_required_output_payload(input_data, required_output_plan)),
         facts="允许 facts：" + _json_text(_prompt_fact_payload(chapter.facts, mode=input_data.prompt_payload_mode)),
         anchors="允许 anchors："
         + _json_text(_prompt_anchor_payload(chapter.evidence_anchors, mode=input_data.prompt_payload_mode)),
@@ -800,6 +878,7 @@ def _preflight_issues(input_data: ChapterWriterInput) -> tuple[ChapterWriteIssue
                     item_rule_ids=(decision.rule_id,),
                 )
             )
+    issues.extend(_required_output_preflight_issues(input_data))
     return tuple(issues)
 
 
@@ -817,6 +896,218 @@ def _available_facts(chapter: ChapterFactInput) -> tuple[ChapterFactEntry, ...]:
     """
 
     return tuple(fact for fact in chapter.facts if fact.status == "available")
+
+
+def _required_output_evidence_plan(input_data: ChapterWriterInput) -> tuple[RequiredOutputEvidencePlan, ...]:
+    """构造 typed required output 缺证计划。
+
+    Args:
+        input_data: 章节写作输入。
+
+    Returns:
+        typed required output 缺证计划；未启用 typed 路径时为空。
+
+    Raises:
+        ValueError: typed 条目启用但缺少 availability，或 typed 条目不属于当前章节时抛出。
+    """
+
+    typed_items = input_data.typed_required_output_items
+    if not typed_items:
+        return ()
+    if input_data.evidence_availability is None:
+        raise ValueError("typed required output 写作路径必须显式传入 EvidenceAvailability")
+    plan = tuple(
+        _required_output_plan_item(input_data.chapter.chapter_id, item, input_data.evidence_availability)
+        for item in typed_items
+    )
+    _validate_required_output_plan(plan, input_data.chapter.chapter_id)
+    return plan
+
+
+def _required_output_plan_item(
+    chapter_id: int,
+    item: RequiredOutputItem,
+    evidence_availability: EvidenceAvailability,
+) -> RequiredOutputEvidencePlan:
+    """构造单个 typed required output 缺证计划。
+
+    Args:
+        chapter_id: 当前公开章节编号。
+        item: typed required output item。
+        evidence_availability: 同源证据可用性。
+
+    Returns:
+        单项 required output 缺证计划。
+
+    Raises:
+        ValueError: item id 不属于当前章节，或 availability 缺失且需要缺证行为时抛出。
+    """
+
+    if not item.item_id.startswith(f"ch{chapter_id}.required_output."):
+        raise ValueError(f"typed required output item 不属于当前章节：{item.item_id}")
+    requirement = _availability_for_required_output(item, evidence_availability)
+    status = requirement.status if requirement is not None else None
+    missing = status in _MISSING_EVIDENCE_STATUSES
+    action = _required_output_action(item, status)
+    return RequiredOutputEvidencePlan(
+        item_id=item.item_id,
+        text=item.text,
+        marker=_required_output_marker(item.item_id),
+        availability_status=status,
+        when_evidence_missing=item.when_evidence_missing,
+        missing_evidence_reason=item.missing_evidence_reason,
+        action=action,
+        prompt_instruction=_required_output_prompt_instruction(item, action, status),
+        requirement_fact_ids=requirement.fact_ids if requirement is not None else (),
+        requirement_anchor_ids=requirement.evidence_anchor_ids if requirement is not None and not missing else (),
+    )
+
+
+def _availability_for_required_output(
+    item: RequiredOutputItem,
+    evidence_availability: EvidenceAvailability,
+) -> RequirementAvailability | None:
+    """读取 required output 对应 availability。
+
+    Args:
+        item: typed required output item。
+        evidence_availability: 同源证据可用性。
+
+    Returns:
+        匹配的 availability；无缺证行为且未映射时返回 `None`。
+
+    Raises:
+        ValueError: item 需要缺证行为但 availability 中没有对应 requirement 时抛出。
+    """
+
+    try:
+        return evidence_availability.require(cast(EvidenceRequirementId, item.item_id))
+    except ValueError as exc:
+        if item.when_evidence_missing is None:
+            return None
+        raise ValueError(f"typed required output 缺少 EvidenceAvailability requirement：{item.item_id}") from exc
+
+
+def _required_output_action(
+    item: RequiredOutputItem,
+    status: AvailabilityStatus | None,
+) -> Literal["render", "render_evidence_gap", "render_minimum_verification_question", "delete", "block"]:
+    """按 availability 和 typed 行为裁定 writer 动作。
+
+    Args:
+        item: typed required output item。
+        status: 当前 evidence availability 状态。
+
+    Returns:
+        writer 动作。
+
+    Raises:
+        ValueError: 静默删除缺少 typed reason，或缺证但没有 approved 行为时抛出。
+    """
+
+    if status == "available" or status is None:
+        return "render"
+    behavior = item.when_evidence_missing
+    if behavior is None:
+        raise ValueError(f"typed required output 缺证但未声明 when_evidence_missing：{item.item_id}")
+    if behavior == "render_evidence_gap":
+        return "render_evidence_gap"
+    if behavior == "render_minimum_verification_question":
+        return "render_minimum_verification_question"
+    if behavior == "delete_if_not_applicable":
+        if status != "not_applicable" or item.missing_evidence_reason is None:
+            raise ValueError(f"delete_if_not_applicable 需要 not_applicable 状态和 typed reason：{item.item_id}")
+        return "delete"
+    return "block"
+
+
+def _required_output_prompt_instruction(
+    item: RequiredOutputItem,
+    action: Literal["render", "render_evidence_gap", "render_minimum_verification_question", "delete", "block"],
+    status: AvailabilityStatus | None,
+) -> str:
+    """渲染 required output plan 的安全写作说明。
+
+    Args:
+        item: typed required output item。
+        action: writer 动作。
+        status: availability 状态。
+
+    Returns:
+        prompt instruction。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if action == "render":
+        return "使用同源 facts 和 allowed anchors 输出该项，不得超出证据。"
+    if action == "render_evidence_gap":
+        return (
+            f"必须输出该 marker，但只能写证据缺口；状态={status}；"
+            f"原因={item.missing_evidence_reason or 'typed reason absent'}；"
+            "必须包含“证据不足/数据不足/未披露/未复核/不能据此判断”之一，不得给出正向结论。"
+        )
+    if action == "render_minimum_verification_question":
+        return (
+            f"必须输出该 marker，但只能写下一步最小验证问题；状态={status}；"
+            f"原因={item.missing_evidence_reason or 'typed reason absent'}；"
+            "必须包含“下一步最小验证问题”或等价验证措辞，不得给出正向结论。"
+        )
+    if action == "delete":
+        return f"该项 not_applicable，允许删除；typed reason={item.missing_evidence_reason}。"
+    return f"缺少支持该项的证据且无安全降级，必须在 writer preflight fail-closed；状态={status}。"
+
+
+def _validate_required_output_plan(
+    plan: tuple[RequiredOutputEvidencePlan, ...],
+    chapter_id: int,
+) -> None:
+    """校验 typed required output plan。
+
+    Args:
+        plan: required output 缺证计划。
+        chapter_id: 当前章节编号。
+
+    Returns:
+        校验通过时返回 `None`。
+
+    Raises:
+        ValueError: item id 重复、章节不匹配或删除缺少 typed reason 时抛出。
+    """
+
+    item_ids = tuple(item.item_id for item in plan)
+    if len(set(item_ids)) != len(item_ids):
+        raise ValueError(f"typed 章节 {chapter_id} required output plan item_id 存在重复")
+    for item in plan:
+        if item.action == "delete" and item.missing_evidence_reason is None:
+            raise ValueError(f"typed 章节 {chapter_id} required output 删除缺少 typed reason：{item.item_id}")
+
+
+def _required_output_preflight_issues(input_data: ChapterWriterInput) -> tuple[ChapterWriteIssue, ...]:
+    """生成 typed required output preflight 阻断 issue。
+
+    Args:
+        input_data: 章节写作输入。
+
+    Returns:
+        block 行为对应的 fail-closed issue。
+
+    Raises:
+        无显式抛出；typed plan 构造错误由调用链抛出 `ValueError`。
+    """
+
+    return tuple(
+        _issue(
+            f"writer:required_output_block:{plan.item_id}",
+            "missing_required_facts",
+            f"typed required output 缺少证据且无安全降级：{plan.item_id}；{plan.prompt_instruction}",
+            fact_ids=plan.requirement_fact_ids,
+            anchor_ids=plan.requirement_anchor_ids,
+        )
+        for plan in _required_output_evidence_plan(input_data)
+        if plan.action == "block"
+    )
 
 
 def _missing_issues(chapter: ChapterFactInput) -> tuple[ChapterWriteIssue, ...]:
@@ -1125,11 +1416,15 @@ def _missing_marker_contract_prompt(
     )
 
 
-def _prompt_required_output_payload(required_output_items: tuple[str, ...]) -> tuple[str, ...]:
+def _prompt_required_output_payload(
+    input_data: ChapterWriterInput,
+    required_output_plan: tuple[RequiredOutputEvidencePlan, ...],
+) -> tuple[str, ...]:
     """把 required output items 转为带 exact marker 的 prompt payload。
 
     Args:
-        required_output_items: CHAPTER_CONTRACT 必须输出项目。
+        input_data: 章节写作输入。
+        required_output_plan: typed required output 缺证计划。
 
     Returns:
         每项以 exact marker 开头的 prompt 文本。
@@ -1138,7 +1433,54 @@ def _prompt_required_output_payload(required_output_items: tuple[str, ...]) -> t
         无显式抛出。
     """
 
-    return tuple(f"{_required_output_marker(item)}\n{item}" for item in required_output_items)
+    if required_output_plan:
+        return tuple(_prompt_required_output_plan_item(plan) for plan in required_output_plan)
+    return tuple(f"{_required_output_marker(item)}\n{item}" for item in input_data.chapter.contract.required_output_items)
+
+
+def _prompt_required_output_plan_item(plan: RequiredOutputEvidencePlan) -> str:
+    """渲染 typed required output plan 的单项 prompt。
+
+    Args:
+        plan: typed required output 缺证计划。
+
+    Returns:
+        writer prompt 中的单项要求。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return "\n".join(
+        (
+            plan.marker,
+            f"{plan.item_id} | {plan.text}",
+            f"availability={plan.availability_status or 'not_mapped'}; action={plan.action}",
+            f"instruction={plan.prompt_instruction}",
+        )
+    )
+
+
+def _prompt_required_output_marker_items(
+    input_data: ChapterWriterInput,
+    required_output_plan: tuple[RequiredOutputEvidencePlan, ...],
+) -> tuple[str, ...]:
+    """读取 parser 必须检查的 required output marker items。
+
+    Args:
+        input_data: 章节写作输入。
+        required_output_plan: typed required output 缺证计划。
+
+    Returns:
+        marker item 元组；typed 路径使用 stable item id，默认路径使用原文。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if required_output_plan:
+        return tuple(plan.item_id for plan in required_output_plan if plan.action != "delete")
+    return input_data.chapter.contract.required_output_items
 
 
 def _draft_from_llm_response(
@@ -1185,6 +1527,7 @@ def _draft_from_llm_response(
     issues.extend(_invalid_marker_issues(text))
     issues.extend(_required_structure_issues(text, input_data.chapter))
     issues.extend(_required_output_marker_issues(text, prompt))
+    issues.extend(_required_output_degrade_issues(text, prompt))
     used_anchor_ids, anchor_issues = _parse_anchor_markers(text, prompt, input_data.chapter)
     used_missing_reasons, missing_issues = _parse_missing_markers(text, input_data.chapter)
     issues.extend(anchor_issues)
@@ -1298,6 +1641,85 @@ def _required_output_marker_issues(
         for index, item in enumerate(prompt.required_output_items)
         if item and _required_output_marker(item) not in text
     )
+
+
+def _required_output_degrade_issues(
+    text: str,
+    prompt: ChapterWriterPrompt,
+) -> tuple[ChapterWriteIssue, ...]:
+    """检查 typed required output 缺证降级是否按 approved 输出满足。
+
+    Args:
+        text: LLM 输出文本。
+        prompt: 章节写作 prompt。
+
+    Returns:
+        降级输出不合格的 issue。
+
+    Raises:
+        无显式抛出。
+    """
+
+    issues: list[ChapterWriteIssue] = []
+    for plan in prompt.required_output_evidence_plan:
+        if plan.action == "render_evidence_gap" and not _required_output_segment_contains(
+            text,
+            plan.item_id,
+            _GAP_OUTPUT_PHRASES,
+        ):
+            issues.append(
+                _issue(
+                    f"writer:required_output_gap_missing:{plan.item_id}",
+                    "missing_required_output_marker",
+                    f"缺证 required output 未通过 approved evidence gap 输出满足：{plan.item_id}",
+                    fact_ids=plan.requirement_fact_ids,
+                    anchor_ids=plan.requirement_anchor_ids,
+                )
+            )
+        if plan.action == "render_minimum_verification_question" and not _required_output_segment_contains(
+            text,
+            plan.item_id,
+            _VERIFICATION_OUTPUT_PHRASES,
+        ):
+            issues.append(
+                _issue(
+                    f"writer:required_output_verification_missing:{plan.item_id}",
+                    "missing_required_output_marker",
+                    f"缺证 required output 未通过 approved minimum verification question 输出满足：{plan.item_id}",
+                    fact_ids=plan.requirement_fact_ids,
+                    anchor_ids=plan.requirement_anchor_ids,
+                )
+            )
+    return tuple(issues)
+
+
+def _required_output_segment_contains(
+    text: str,
+    item_id: str,
+    phrases: tuple[str, ...],
+) -> bool:
+    """判断 required output marker 后的局部内容是否包含要求措辞。
+
+    Args:
+        text: LLM 输出文本。
+        item_id: typed required output item id。
+        phrases: 必须出现的安全措辞集合。
+
+    Returns:
+        marker 后到下一个 required output marker 前包含任一措辞时返回 `True`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    marker = _required_output_marker(item_id)
+    start = text.find(marker)
+    if start < 0:
+        return False
+    segment_start = start + len(marker)
+    next_start = text.find(REQUIRED_OUTPUT_MARKER_PREFIX, segment_start)
+    segment = text[segment_start:] if next_start < 0 else text[segment_start:next_start]
+    return any(phrase in segment for phrase in phrases)
 
 
 def _required_output_marker(item: str) -> str:

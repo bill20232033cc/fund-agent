@@ -17,7 +17,12 @@ from fund_agent.fund.chapter_writer import (
     build_chapter_writer_input,
     write_chapter,
 )
+from fund_agent.fund.evidence_availability import derive_evidence_availability
 from fund_agent.fund.extractors.models import ExtractedField
+from fund_agent.fund.template.typed_contracts import (
+    RequiredOutputItem,
+    load_typed_template_contract_manifest,
+)
 from tests.fund.test_chapter_facts import _bundle, _field
 
 
@@ -206,6 +211,232 @@ def test_writer_prompt_contains_missing_marker_exact_contract_near_allowed_reaso
     assert "Do not wrap the marker in backticks or code fences." in prompt.user_prompt
     assert "可用缺口原因：" not in prompt.user_prompt
     assert "allowed missing marker：`<!-- missing:<reason> -->`" not in prompt.user_prompt
+
+
+def test_required_output_missing_evidence_renders_gap_marker() -> None:
+    """验证 typed required output 缺证可通过 approved gap 输出满足，见模板第 3 章。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 缺证输出未按 typed gap 行为接受时抛出。
+    """
+
+    projection = project_chapter_facts(_bundle(), chapter_ids=(3,))
+    availability = derive_evidence_availability(projection)
+    typed_items = (_typed_required_output_item(3, "ch3.required_output.item_05"),)
+    input_data = build_chapter_writer_input(
+        projection,
+        chapter_id=3,
+        typed_required_output_items=typed_items,
+        evidence_availability=availability,
+    )
+    anchor_id = input_data.chapter.evidence_anchors[0].anchor_id
+    text = _valid_chapter_markdown_for_prompt(input_data, build_chapter_prompt(input_data), anchor_id)
+
+    result = write_chapter(input_data, llm_client=_FakeChapterLLMClient(text))
+
+    assert result.status == "drafted"
+    assert result.stop_reason == "none"
+    assert result.draft is not None
+    assert "<!-- required_output:ch3.required_output.item_05 -->" in result.draft.markdown
+    assert "证据不足" in result.draft.markdown
+
+
+def test_required_output_delete_if_not_applicable_requires_typed_reason() -> None:
+    """验证 delete_if_not_applicable 必须携带 typed reason。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 静默删除未 fail-closed 时抛出。
+    """
+
+    projection = project_chapter_facts(
+        replace(
+            _bundle(),
+            manager_alignment=ExtractedField(
+                value=None,
+                anchors=(),
+                extraction_mode="missing",
+                note="not_applicable fixture",
+            ),
+        ),
+        chapter_ids=(3,),
+    )
+    item = replace(
+        _typed_required_output_item(3, "ch3.required_output.item_06"),
+        when_evidence_missing="delete_if_not_applicable",
+        missing_evidence_reason=None,
+    )
+
+    with pytest.raises(ValueError, match="typed reason"):
+        build_chapter_prompt(
+            build_chapter_writer_input(
+                projection,
+                chapter_id=3,
+                typed_required_output_items=(item,),
+                evidence_availability=derive_evidence_availability(projection),
+            )
+        )
+
+
+def test_required_output_minimum_verification_question_satisfies_missing_evidence() -> None:
+    """验证缺证 required output 可通过 approved 最小验证问题输出满足。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 最小验证问题降级未被接受时抛出。
+    """
+
+    projection = project_chapter_facts(
+        replace(
+            _bundle(),
+            manager_alignment=ExtractedField(
+                value=None,
+                anchors=(),
+                extraction_mode="missing",
+                note="fixture missing",
+            ),
+        ),
+        chapter_ids=(3,),
+    )
+    input_data = build_chapter_writer_input(
+        projection,
+        chapter_id=3,
+        typed_required_output_items=(_typed_required_output_item(3, "ch3.required_output.item_06"),),
+        evidence_availability=derive_evidence_availability(projection),
+    )
+    anchor_id = input_data.chapter.evidence_anchors[0].anchor_id
+    text = _valid_chapter_markdown_for_prompt(input_data, build_chapter_prompt(input_data), anchor_id)
+
+    result = write_chapter(input_data, llm_client=_FakeChapterLLMClient(text))
+
+    assert result.status == "drafted"
+    assert result.stop_reason == "none"
+    assert result.draft is not None
+    assert "<!-- required_output:ch3.required_output.item_06 -->" in result.draft.markdown
+    assert "下一步最小验证问题" in result.draft.markdown
+
+
+def test_required_output_block_stops_before_provider_success_path() -> None:
+    """验证 typed block 在 provider 成功路径前 fail-closed，见模板第 2 章 R=A+B-C。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: block 未阻断或误调用 writer client 时抛出。
+    """
+
+    projection = project_chapter_facts(
+        replace(
+            _bundle(),
+            nav_benchmark_performance=ExtractedField(
+                value=None,
+                anchors=(),
+                extraction_mode="missing",
+                note="fixture missing",
+            ),
+        ),
+        chapter_ids=(2,),
+    )
+    typed_items = (_typed_required_output_item(2, "ch2.required_output.item_01"),)
+    input_data = build_chapter_writer_input(
+        projection,
+        chapter_id=2,
+        typed_required_output_items=typed_items,
+        evidence_availability=derive_evidence_availability(projection),
+    )
+    client = _FakeChapterLLMClient("provider would have succeeded")
+
+    result = write_chapter(input_data, llm_client=client)
+
+    assert result.status == "blocked"
+    assert result.stop_reason == "missing_required_facts"
+    assert result.draft is None
+    assert client.requests == []
+    assert any(issue.issue_id == "writer:required_output_block:ch2.required_output.item_01" for issue in result.issues)
+
+
+def test_writer_prompt_contains_typed_required_output_ids_not_freeform_fallbacks() -> None:
+    """验证 typed writer prompt 使用 stable required output ids 而非自由文本 fallback。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: prompt 未使用 typed item id 时抛出。
+    """
+
+    projection = project_chapter_facts(_bundle(), chapter_ids=(3,))
+    input_data = build_chapter_writer_input(
+        projection,
+        chapter_id=3,
+        typed_required_output_items=(_typed_required_output_item(3, "ch3.required_output.item_05"),),
+        evidence_availability=derive_evidence_availability(projection),
+    )
+
+    prompt = build_chapter_prompt(input_data)
+
+    assert "<!-- required_output:ch3.required_output.item_05 -->" in prompt.user_prompt
+    assert "ch3.required_output.item_05 | 风格稳定性判断" in prompt.user_prompt
+    assert "action=render_evidence_gap" in prompt.user_prompt
+    assert prompt.required_output_items == ("ch3.required_output.item_05",)
+    assert "<!-- required_output:风格稳定性判断 -->" not in prompt.user_prompt
+
+
+def test_existing_missing_marker_contract_remains_strict() -> None:
+    """验证 typed required output path 不放松 existing missing marker contract。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 非法 missing marker 被 typed path 接受时抛出。
+    """
+
+    projection = project_chapter_facts(
+        replace(_bundle(), turnover_rate=ExtractedField(value=None, anchors=(), extraction_mode="missing", note="fixture")),
+        chapter_ids=(3,),
+    )
+    input_data = build_chapter_writer_input(
+        projection,
+        chapter_id=3,
+        typed_required_output_items=(_typed_required_output_item(3, "ch3.required_output.item_05"),),
+        evidence_availability=derive_evidence_availability(projection),
+    )
+    anchor_id = input_data.chapter.evidence_anchors[0].anchor_id
+    text = _valid_chapter_markdown_for_prompt(input_data, build_chapter_prompt(input_data), anchor_id)
+    text = text + "\n<!-- missing:{reason} -->\n"
+
+    result = write_chapter(input_data, llm_client=_FakeChapterLLMClient(text))
+
+    assert result.status == "blocked"
+    assert result.stop_reason == "llm_contract_violation"
+    assert any(issue.issue_id.startswith("writer:invalid_missing_marker") for issue in result.issues)
 
 
 def test_writer_prompt_without_missing_reasons_forbids_missing_marker() -> None:
@@ -954,6 +1185,57 @@ def _valid_chapter_markdown(input_data: object, anchor_id: str) -> str:
         f"<!-- anchor:{anchor_id} -->\n"
         "> 📎 证据：年报2024§§2表None行basic_identity（fixture）\n"
     )
+
+
+def _valid_chapter_markdown_for_prompt(input_data: object, prompt: object, anchor_id: str) -> str:
+    """按当前 prompt.required_output_items 构造测试章节 Markdown。
+
+    Args:
+        input_data: `ChapterWriterInput`。
+        prompt: `ChapterWriterPrompt`。
+        anchor_id: 要嵌入的 anchor id。
+
+    Returns:
+        测试用章节 Markdown。
+
+    Raises:
+        AttributeError: 输入对象不符合 writer prompt/input 契约时抛出。
+    """
+
+    required_lines = "\n".join(
+        f"<!-- required_output:{item} -->\n- {item}: 证据不足，当前缺少已复核证据，不能据此判断。下一步最小验证问题：复核年报披露。"
+        for item in prompt.required_output_items
+    )
+    return (
+        "### 结论要点\n"
+        f"{required_lines}\n"
+        "### 详细情况\n"
+        "本章只使用结构化 facts，不使用候选 facet 作为断言。\n"
+        "### 证据与出处\n"
+        f"<!-- anchor:{anchor_id} -->\n"
+        "> 📎 证据：年报2024§§2表None行basic_identity（fixture）\n"
+    )
+
+
+def _typed_required_output_item(chapter_id: int, item_id: str) -> RequiredOutputItem:
+    """按 typed item id 读取 required output item。
+
+    Args:
+        chapter_id: 公开章节编号。
+        item_id: typed required output item id。
+
+    Returns:
+        匹配的 `RequiredOutputItem`。
+
+    Raises:
+        AssertionError: 未找到对应 item 时抛出。
+    """
+
+    chapter = load_typed_template_contract_manifest().chapters[chapter_id]
+    for item in chapter.required_output_items:
+        if item.item_id == item_id:
+            return item
+    raise AssertionError(f"missing typed required output item: {item_id}")
 
 
 def _imports_for(source_path: Path) -> set[str]:

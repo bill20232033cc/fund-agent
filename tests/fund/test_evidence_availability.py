@@ -117,6 +117,30 @@ def test_ch3_actual_behavior_requirement_is_unreviewed_when_turnover_or_style_ev
     assert any(gap.source_field_id is None for gap in actual_behavior.gap_references)
 
 
+def test_ch3_basic_manager_info_required_output_uses_basic_identity_availability() -> None:
+    """验证第 3 章基金经理基本信息 required output 有显式 availability。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: item_01 未映射到 basic identity 同源 fact 时抛出。
+    """
+
+    projection = project_chapter_facts(_bundle(), chapter_ids=(3,))
+
+    availability = derive_evidence_availability(projection)
+    basic_manager = availability.require("ch3.required_output.item_01")
+
+    assert basic_manager.status == "available"
+    assert basic_manager.chapter_id == 3
+    assert basic_manager.source_field_ids == ("structured.basic_identity",)
+    assert basic_manager.fact_ids == (_fact_id(projection, 3, "basic_identity"),)
+
+
 def test_ch2_subcontract_availability_stays_under_public_chapter_2() -> None:
     """验证 Ch2 内部子契约 availability 不创建公开拆章。
 
