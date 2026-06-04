@@ -113,15 +113,17 @@ chapter_lens = resolve_preferred_lens(chapter_id=2, fund_type="active_fund")
 - `bond_risk_evidence` 的组级 anchors 保留在 value 内部，不展开为普通章节 `ChapterEvidenceAnchor`
 - 该能力不读取文档仓库、PDF、cache、source helper、下载器或 parser，不调用 LLM、Service、Host 或 dayu；它不是 writer、auditor、orchestrator 或 `FundToolService`
 
-`fund_agent/fund/template/typed_contracts.py` 当前提供 additive typed CHAPTER_CONTRACT sidecar：
+`docs/fund-analysis-template-draft.md` canonical `TEMPLATE_CONTRACT_MANIFEST_JSON` 当前是 Fund template contract 的 authored truth source。模板层从同一 JSON 生成 untyped 与 typed 两种投影：
 
-- `load_typed_template_contract_manifest()` 从当前 `contracts.py` manifest 精确投影 typed contract，不替换模板真源、renderer、auditor 或 deterministic analyze/checklist 行为
+- `fund_agent/fund/template/contracts.py` 解析、投影并验证 untyped `TemplateContractManifest`，继续提供 `load_template_contract_manifest()`、`validate_template_contract_manifest()`、`get_chapter_contract()` 和 `resolve_preferred_lens()`
+- `fund_agent/fund/template/typed_contracts.py` 从同一 JSON 投影并验证 typed `TypedChapterContract` dataclasses，继续提供 `load_typed_template_contract_manifest()` 和 `get_typed_chapter_contract()`
+- 模板文档中的 visible per-chapter `CHAPTER_CONTRACT_REF` 只是非权威引用；结构化 `must_answer`、`must_not_cover`、`required_output_items`、`preferred_lens`、typed ids、Ch2 internal subcontracts、Ch0/Ch7 metadata、Ch3 predicate、missing behavior 和 `audit_focus` 均以 canonical JSON 为准
 - typed schema 版本为 `typed_chapter_contract.v1`，公开章节 id 仍严格为 `0-7`
 - 第 2 章的 `performance / attribution / cost` 只作为 `chapter_id=2` 内部 `ChapterInternalSubcontract`，不会成为公开章节或 chapter matrix row
 - 第 0 章声明 `consumes_chapter_conclusions=(7,)`，且 `independent_action_source=False`，不独立派生动作判断
 - `audit_focus` 是 bounded semantic audit 的闭集语义提示；显式传入 typed contract 时只投影到 LLM audit request 和 prompt 语义强调，不能关闭 programmatic blockers、改变阻断等级或修复预算
 - `RequiredOutputItem.when_evidence_missing` 当前为第 2/3 章 typed writer path 提供缺证行为数据：第 2 章 R=A+B-C required outputs 缺少同源证据时 `block`，第 3 章策略/实际行为/言行一致性/风格稳定性缺少已复核证据时只允许输出证据缺口，利益一致性缺证时只允许输出下一步最小验证问题
-- loader 使用显式 reviewed exact mapping 校验当前 `must_answer / must_not_cover / required_output_items` 文本；当前 manifest 文本漂移会 fail-closed，而不是 fuzzy、substring、embedding 或 LLM 匹配
+- loader 使用 strict parser/projection validation 校验当前 `must_answer / must_not_cover / required_output_items` 文本和 stable ids；template JSON 漂移、未知 requirement id 或 stale `source_manifest` 会 fail-closed，而不是 fuzzy、substring、embedding 或 LLM 匹配
 
 `fund_agent/fund/evidence_availability.py` 当前提供 additive same-source `EvidenceAvailability`：
 
@@ -131,7 +133,7 @@ chapter_lens = resolve_preferred_lens(chapter_id=2, fund_type="active_fund")
 - 第 3 章当前覆盖基金经理基本信息、manager strategy text、turnover、holdings snapshot、cross-period style evidence、manager alignment 和 actual behavior 聚合 requirement；当前单年 `ChapterFactProjection` 不加载 prior-year 文档，跨期风格证据保持 `unreviewed` 缺口
 - malformed 或未知 typed requirement id 会 fail-closed；该能力不读取文档仓库、PDF/cache/source helper、Service、Host、provider、retained report、文件系统、环境变量或 dayu，也不替代 `ChapterFactProjection`
 
-typed sidecar 和 `EvidenceAvailability` 的当前非目标是：不替换 `docs/fund-analysis-template-draft.md` 或 `contracts.py` 模板真源，不改变 deterministic `analyze/checklist`、renderer、FQ0-FQ6 quality gate、final judgment、provider/runtime defaults、score/golden/readiness，不实现 Ch2 公开拆章、多年证据 runtime、Agent runner/tool-loop、Host 业务理解或 dayu runtime。
+template truth-source replacement、typed projection 和 `EvidenceAvailability` 的当前非目标是：不改变 deterministic `analyze/checklist`、renderer、FQ0-FQ6 quality gate、final judgment、provider/runtime defaults、score/golden/readiness，不实现 Ch2 公开拆章、多年证据 runtime、Agent runner/tool-loop、Host 业务理解或 dayu runtime。
 
 `fund_agent/fund/chapter_writer.py` 和 `fund_agent/fund/chapter_auditor.py` 当前提供 Gate 2 单章 writer / auditor primitives：
 
@@ -374,9 +376,9 @@ C2 当前只做确定性 marker / 元数据检查，不调用 LLM，不判断语
 
 当前模板渲染器是 MVP 模板填充，不调用 LLM，不预测未来收益，不输出交易或配置指令。`FinalJudgment` 只允许 `worth_holding`、`needs_attention`、`suggest_replace` 三类，单一定义点为 `fund_agent/fund/analysis/final_judgment.py`。最终判断由 `derive_final_judgment()` 根据检查清单、否决项、压力测试和 Service 归一化后的 quality gate 状态派生；开发覆盖只改变 selected 判断，并保留 derived/source 供 R2 审计。
 
-`load_template_contract_manifest()` 返回 `TemplateContractManifest`，当前覆盖 `docs/design.md` 第 3.1 节和 `docs/fund-analysis-template-draft.md` 的第 0-7 章 `CHAPTER_CONTRACT`：
+`load_template_contract_manifest()` 返回 `TemplateContractManifest`，当前从 `docs/fund-analysis-template-draft.md` canonical `TEMPLATE_CONTRACT_MANIFEST_JSON` 投影 `docs/design.md` 第 3.1 节和模板第 0-7 章 `CHAPTER_CONTRACT`：
 
-- manifest 位于 Fund 模板层 `fund_agent/fund/template/contracts.py`，自带章节标题，不依赖 renderer 私有 `_CHAPTER_TITLES`
+- authored manifest 位于模板文档 canonical JSON；Fund 模板层 `fund_agent/fund/template/contracts.py` 只负责 strict parse / projection / validation，自带章节标题，不依赖 renderer 私有 `_CHAPTER_TITLES`
 - 每章包含 `narrative_mode`、`must_answer`、`must_not_cover`、`required_output_items` 和 `preferred_lens`
 - 第 3 章主动基金契约要求：风格稳定、风格一致或言行一致判断必须基于已复核的换手率或风格变化证据；证据缺失、不可用或未复核时，契约禁止推断主动基金风格稳定、风格一致或言行一致
 - 第 5 章“当前阶段与关键变化”只承载当前阶段、上一期或历史对比下的关键变化、变化是否影响原始投资假设和下一步最小验证问题；不得给最终判断或展开风险清单
@@ -384,7 +386,7 @@ C2 当前只做确定性 marker / 元数据检查，不调用 LLM，不判断语
 - `preferred_lens` key 只允许当前标准基金类型 `index_fund`、`active_fund`、`bond_fund`、`enhanced_index`、`qdii_fund`、`fof_fund` 和 `default`
 - `resolve_preferred_lens(chapter_id, fund_type)` 优先返回精确基金类型 lens，没有精确命中时返回 `default`；章节缺失、基金类型不支持或缺少 fallback 时抛出 `ValueError`
 - `validate_template_contract_manifest()` 对章节数量、id 连续性、重复 id、空字段、unsupported lens key 和无 lens fallback 执行 fail-closed 校验
-- 当前 CHAPTER_CONTRACT manifest 是可机器消费的契约清单，不改变 `render_template_report()` 的 Markdown 输出结构；FQ5 只使用它派生模板契约适用性，不声明 renderer compliance
+- 当前 CHAPTER_CONTRACT manifest 是从模板文档 JSON 投影出的可机器消费契约清单，不改变 `render_template_report()` 的 Markdown 输出结构；FQ5 只使用它派生模板契约适用性，不声明 renderer compliance
 - `fund_agent/fund/audit/contract_rules.py` 中的 `ContractAuditCoverageManifest` 逐条映射 `must_answer` 到 `covered_by_required_item`、`programmatic_marker`、`structured_data_availability`、`llm_semantic_audit`、`evidence_confirm` 或 `narrative_guidance`；当前内置规则没有 `programmatic_marker`，因此既有报告 C2 行为保持不变
 - `build_lens_application_plan(fund_type)` 返回 `LensApplicationPlan`，把每章 `preferred_lens` 解析为 normalized `primary_focus`、`watch_variable_label` 和 `risk_focus_label`；renderer 当前只在第 0 章“当前最值得盯住的变量”和第 1 章“看这类基金最先看什么”两个既有 slot 消费这些标签，不把 raw `lens:` statements 渲染进最终报告
 
@@ -472,7 +474,7 @@ C2 当前只做确定性 marker / 元数据检查，不调用 LLM，不判断语
 - `fund_type.py`：基金类型识别规则，供 extractor 先行消费。
 - `analysis/`：分析计算模块。当前包含 `r_abc.py`、`alpha_judge.py`、`consistency_check.py`、`investor_return.py`、`risk_check.py` 与内部比例解析 helper，只消费 P1/P2 结构化数据和显式判断证据，不直接读取年报文件。
 - `template/`：模板渲染能力。当前包含 `renderer.py`，只消费 P1/P2 结构化结果并输出 8 章 Markdown、章节块与程序审计输入。
-- `template/contracts.py`：模板契约能力，维护第 0-7 章 CHAPTER_CONTRACT 机器契约、章节契约读取和基金类型 lens 解析。
+- `template/contracts.py`：模板契约能力，从模板文档 canonical JSON 投影第 0-7 章 CHAPTER_CONTRACT 机器契约、章节契约读取和基金类型 lens 解析。
 - `template/chapter_contract_constraints.py`：CHAPTER_CONTRACT 可执行写作约束 sidecar，包裹既有章节契约并为 dev-only 写作审计提供 required evidence / N/A / failure behavior 配置。
 - `template/item_rules.py`：模板 ITEM_RULE manifest，维护当前四条 conditional 规则、确定性触发评估和段落标记检查。
 - `report_writing_audit.py`：dev-only 报告写作审计，只消费调用方显式传入的 `ReportEvidenceBundle`、已解析 records 和章节草稿代理，不读取基金文档、不接入 renderer、Service/CLI 或 FQ0-FQ6 质量门。
@@ -505,7 +507,7 @@ C2 当前只做确定性 marker / 元数据检查，不调用 LLM，不判断语
 - 当前 `analysis/risk_check.py` 同时实现压力测试，按基金类型阈值为固定下跌场景分级，不预测风险发生概率。
 - 当前 `analysis/checklist.py` 实现 7 问题检查清单，消费分析结果和显式用户输入，不读取外部数据。
 - 当前 `audit/audit_programmatic.py` 实现 MVP 程序审计，不调用 LLM 或证据复核。
-- 当前 `template/contracts.py` 实现第 0-7 章 CHAPTER_CONTRACT manifest、章节契约读取、基金类型 lens 解析和 fail-closed manifest 校验；不运行时解析 Markdown 注释。
+- 当前 `template/contracts.py` 从模板文档 canonical JSON 投影第 0-7 章 CHAPTER_CONTRACT manifest、章节契约读取和基金类型 lens，并执行 fail-closed manifest 校验。
 - 当前 `template/chapter_contract_constraints.py` 实现第 0-7 章默认 wrapper 和首个 material overlay：主动基金第 3 章换手率 / 风格变化证据约束。增强指数第 2 章和债券第 6 章只登记为 deferred `config_only` 要求，不执行材料级审计。
 - 当前 `template/item_rules.py` 实现 ITEM_RULE manifest、显式基金类型/facet 评估、审计上下文类型和唯一段落标记检查；不调用 LLM、不读取基金文档、不接入质量门禁。
 - 当前 `template/renderer.py` 实现 8 章 Markdown 模板渲染，按 CHAPTER_CONTRACT manifest 生成章节标题，按 ITEM_RULE 决策渲染/删除固定段落，并返回可直接用于程序审计的 `ProgrammaticAuditInput` 与 `RenderedChapterBlock` 章节块；主动基金第 3 章在缺少显式 reviewed turnover/style evidence 输入时输出证据不足降级措辞，不输出风格稳定、风格一致或言行一致正向结论。
