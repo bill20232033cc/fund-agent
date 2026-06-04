@@ -16,10 +16,10 @@ Use `docs/reviews/` and `docs/archive/` only as evidence chain. They do not over
 | Field | State |
 |---|---|
 | Current phase | `MVP typed template and internalized agent execution phase` |
-| Current gate | `MVP typed template truth-source replacement gate` Slice 5 Documentation/control sync |
+| Current gate | `MVP typed template truth-source replacement gate` accepted locally |
 | Current gate classification | `heavy` |
-| Current gate status | Slices 1-4 accepted at checkpoints `3c2b237`, `0263bc2`, `202b396`, `e613876`; Slice 5 implementation/control sync in progress |
-| Next entry point | Complete Slice 5 evidence, then return for review/controller judgment; do not enter phaseflow stabilization, provider/runtime/live probe, Agent runtime, multi-year runtime, score-loop, golden/readiness, PR/push/release |
+| Current gate status | Accepted locally at aggregate checkpoint `115b075`; plan `266e18f`; slices `3c2b237`, `0263bc2`, `202b396`, `e613876`, `42243b9`; aggregate DS/MiMo reviews PASS and controller judgment accepted |
+| Next entry point | Wait for explicit user authorization, then use `$phaseflow` to start `MVP typed-template-to-agent report generation stabilization phase` from `Template truth validation gate`; do not enter real LLM smoke, provider/runtime/live probe, Agent runtime, multi-year runtime, score-loop, golden/readiness, PR/push/release |
 | Control truth | `docs/implementation-control.md` |
 | Design truth | `docs/design.md` |
 | Accepted plan commit | `beb6891` |
@@ -58,10 +58,12 @@ Use `docs/reviews/` and `docs/archive/` only as evidence chain. They do not over
 | Accepted typed template truth-source replacement Slice 2 commit | `0263bc2` |
 | Accepted typed template truth-source replacement Slice 3 commit | `202b396` |
 | Accepted typed template truth-source replacement Slice 4 commit | `e613876` |
+| Accepted typed template truth-source replacement Slice 5 commit | `42243b9` |
+| Accepted typed template truth-source replacement aggregate review commit | `115b075` |
 
-The current phase goal is to move LLM report work from prompt patching into typed template/audit/evidence contracts and then Agent execution architecture. Gate 1 `MVP fund report template typed contract redesign gate` was accepted as design-only future architecture, and the prior `MVP typed template contract implementation` accepted the typed path as additive through aggregate checkpoint `d08eab9`. The current `MVP typed template truth-source replacement gate` Slices 1-4 now make `docs/fund-analysis-template-draft.md` canonical `TEMPLATE_CONTRACT_MANIFEST_JSON` the authored Fund template contract truth source: `contracts.py` parses/projects/validates the untyped manifest from that template doc JSON, and `typed_contracts.py` projects/validates typed dataclasses from the same JSON. The implementation preserves deterministic default `analyze/checklist`, renderer output, Host business opacity, provider/runtime defaults, quality gate, golden/readiness, score-loop state and public chapter ids `0-7`. `MVP internalized Agent engine and typed audit contract design gate` and `MVP internalized Agent engine/tool-loop contract execution design gate` remain accepted future architecture; Agent runtime implementation is not current scope. Provider-runtime evidence gates through `MVP PASS-only timing probe evidence harness contract gate` are accepted only as future evidence design and paused before live PASS-only probe. Dayu is an architecture reference and capability source, not a production runtime dependency.
+The current phase goal is to move LLM report work from prompt patching into typed template/audit/evidence contracts and then Agent execution architecture. Gate 1 `MVP fund report template typed contract redesign gate` was accepted as design-only future architecture, and the prior `MVP typed template contract implementation` accepted the typed path as additive through aggregate checkpoint `d08eab9`. The current `MVP typed template truth-source replacement gate` is accepted locally at aggregate checkpoint `115b075`: `docs/fund-analysis-template-draft.md` canonical `TEMPLATE_CONTRACT_MANIFEST_JSON` is now the authored Fund template contract truth source; `contracts.py` parses/projects/validates the untyped manifest from that template doc JSON; `typed_contracts.py` projects/validates typed dataclasses from the same JSON. Aggregate reviews `docs/reviews/mvp-typed-template-truth-source-replacement-aggregate-deepreview-ds-20260604.md` and `docs/reviews/mvp-typed-template-truth-source-replacement-aggregate-deepreview-mimo-20260604.md` both PASS with no blocking findings; controller judgment `docs/reviews/mvp-typed-template-truth-source-replacement-aggregate-controller-judgment-20260604.md` accepted the gate. The implementation preserves deterministic default `analyze/checklist`, renderer output, Host business opacity, provider/runtime defaults, quality gate, golden/readiness, score-loop state and public chapter ids `0-7`. `MVP internalized Agent engine and typed audit contract design gate` and `MVP internalized Agent engine/tool-loop contract execution design gate` remain accepted future architecture; Agent runtime implementation is not current scope. Provider-runtime evidence gates through `MVP PASS-only timing probe evidence harness contract gate` are accepted only as future evidence design and paused before live PASS-only probe. Dayu is an architecture reference and capability source, not a production runtime dependency.
 
-Current Slice 5 evidence artifact: `docs/reviews/mvp-typed-template-truth-source-replacement-slice5-implementation-evidence-20260604.md`.
+Current closeout evidence artifact: `docs/reviews/mvp-typed-template-truth-source-replacement-control-closeout-evidence-20260604.md`.
 
 ## 3. Current Implementation Facts
 
@@ -71,7 +73,7 @@ Current Slice 5 evidence artifact: `docs/reviews/mvp-typed-template-truth-source
 - Service orchestrates the current use case and calls Fund public capabilities directly as a transition path.
 - Fund owns the Agent-layer domain rules: fund-type recognition, annual-report facts, CHAPTER_CONTRACT, preferred_lens, ITEM_RULE, audit rules and evidence anchors.
 - Current report rendering uses the 8-chapter deterministic template.
-- Template truth-source replacement Slices 1-4 have implemented the current template contract authority: `docs/fund-analysis-template-draft.md` canonical `TEMPLATE_CONTRACT_MANIFEST_JSON` is the authored Fund template contract truth source; `contracts.py` projects the current untyped `TemplateContractManifest`; `typed_contracts.py` projects `typed_chapter_contract.v1`; public chapter ids remain `0-7`; renderer default behavior remains unchanged.
+- Template truth-source replacement gate has implemented the current template contract authority and is accepted locally at aggregate checkpoint `115b075`: `docs/fund-analysis-template-draft.md` canonical `TEMPLATE_CONTRACT_MANIFEST_JSON` is the authored Fund template contract truth source; `contracts.py` projects the current untyped `TemplateContractManifest`; `typed_contracts.py` projects `typed_chapter_contract.v1`; public chapter ids remain `0-7`; renderer default behavior remains unchanged.
 - Current audit is programmatic and deterministic.
 - Current FQ0-FQ6 quality gate remains unchanged.
 - Fund now has a Gate 1 typed projection capability: `project_chapter_facts()` / `ChapterFactProvider.project()` maps an in-memory `StructuredFundDataBundle` to `chapter_fact_projection.v1`.
