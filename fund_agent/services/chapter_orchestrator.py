@@ -1,25 +1,22 @@
 """Service 层章节编排器，见基金分析模板第 1-6 章。
 
-本模块只负责编排 Route C Gate 3 的 write-audit-repair policy：调用 Gate 1
-`ChapterFactProvider` 投影和 Gate 2 `chapter_writer` / `chapter_auditor`
-primitive。它不读取年报仓库、PDF、cache、source helper、下载器或 parser，
-不构造真实 LLM provider，不接入 Host/Agent/dayu，也不生成第 0/7 章正文。
+本模块负责 Service 层章节编排入口：解析输入、执行早期 fail-closed 校验，
+再委托 Service bridge 调用 Agent body runner。它不读取年报仓库、PDF、cache、
+source helper、下载器或 parser，不构造真实 LLM provider；Host cancel/deadline
+只透传给 bridge 翻译，不由本模块解释基金业务语义。
 """
 
 from __future__ import annotations
 
-import time
 from dataclasses import dataclass, field
 from typing import Final, Literal, get_args
 
 from fund_agent.fund.chapter_auditor import (
-    ChapterAuditInput,
     ChapterAuditIssue,
     ChapterAuditLLMClient,
     ChapterAuditRepairHint,
     ChapterAuditResult,
     ChapterAuditRuleCode,
-    audit_chapter,
 )
 from fund_agent.fund.chapter_facts import (
     ChapterFactMissingReason,
@@ -36,8 +33,6 @@ from fund_agent.fund.chapter_writer import (
     ChapterLLMClient,
     ChapterWriteResult,
     ChapterWriteStopReason,
-    build_chapter_writer_input,
-    write_chapter,
 )
 from fund_agent.fund.data_extractor import StructuredFundDataBundle
 from fund_agent.fund.template.typed_contracts import (
@@ -676,22 +671,14 @@ def orchestrate_chapters(
             issue="缺少显式注入的章节 LLM 审计 client，不能进入写作。",
         )
 
-    typed_inputs = _typed_template_inputs(projection, policy=policy)
-    chapter_results: list[ChapterRunResult] = []
-    skipped_chapter_ids: tuple[int, ...] = ()
-    for chapter_id in policy.target_chapter_ids:
-        _raise_if_host_cancelled(host_context)
-        run_result = _run_single_chapter(
-            projection,
-            chapter_id=chapter_id,
-            policy=policy,
-            llm_clients=llm_clients,
-            typed_inputs=typed_inputs,
-            host_context=host_context,
-        )
-        chapter_results.append(run_result)
+    from fund_agent.services.agent_bridge import run_agent_chapter_orchestration_bridge
 
-    return _orchestration_result(input_data, projection, tuple(chapter_results), skipped_chapter_ids)
+    return run_agent_chapter_orchestration_bridge(
+        input_data,
+        projection=projection,
+        llm_clients=llm_clients,
+        host_context=host_context,
+    )
 
 
 def serialize_chapter_prompt_contract_diagnostics(
@@ -1047,414 +1034,6 @@ def _typed_evidence_availability(
     if typed_inputs is None:
         return None
     return typed_inputs.evidence_availability
-
-
-def _run_single_chapter(
-    projection: ChapterFactProjection,
-    *,
-    chapter_id: int,
-    policy: ChapterOrchestrationPolicy,
-    llm_clients: ChapterOrchestratorLLMClients,
-    typed_inputs: _TypedTemplateInputs | None = None,
-    host_context: HostRunContext | None = None,
-) -> ChapterRunResult:
-    """执行单章写作、审计和有限 regenerate。
-
-    Args:
-        projection: Gate 1 投影。
-        chapter_id: 模板章节编号。
-        policy: 编排策略。
-        llm_clients: 显式注入的 writer/auditor LLM client。
-        typed_inputs: typed path 开启时的 Service façade typed 输入。
-        host_context: 可选 Host run 上下文；Host 不理解本模块的基金业务语义。
-
-    Returns:
-        单章编排结果。
-
-    Raises:
-        ValueError: 当 writer stop reason 未被 Gate 3 接受时抛出。
-    """
-
-    title = _chapter_title(projection, chapter_id)
-    attempts: list[ChapterAttemptRecord] = []
-    issues: list[str] = []
-    writer_input = build_chapter_writer_input(
-        projection,
-        chapter_id=chapter_id,
-        max_output_chars=policy.max_output_chars,
-        prompt_payload_mode=policy.prompt_payload_mode,  # type: ignore[arg-type]
-        typed_required_output_items=_typed_required_output_items(
-            chapter_id,
-            typed_inputs=typed_inputs,
-        ),
-        evidence_availability=_typed_evidence_availability(typed_inputs),
-    )
-    attempt_index = 0
-    while True:
-        _raise_if_host_cancelled(host_context)
-        _host_phase_started(
-            host_context,
-            phase="writer",
-            chapter_id=chapter_id,
-            attempt_index=attempt_index,
-        )
-        phase_started = time.monotonic()
-        try:
-            writer_result = write_chapter(writer_input, llm_client=llm_clients.writer)
-        except Exception as exc:  # noqa: BLE001 - Service 层必须把 provider 异常 fail-closed。
-            return _exception_result(
-                projection,
-                chapter_id,
-                title,
-                attempts=tuple(attempts),
-                exc=exc,
-                operation="writer",
-                attempt_index=attempt_index,
-            )
-        finally:
-            _host_phase_completed(
-                host_context,
-                phase="writer",
-                chapter_id=chapter_id,
-                attempt_index=attempt_index,
-                phase_started=phase_started,
-            )
-        _raise_if_host_cancelled(host_context)
-
-        if writer_result.status == "blocked":
-            issues.extend(_writer_issue_messages(writer_result))
-            prompt_diagnostic = _writer_prompt_contract_diagnostic(
-                writer_result,
-                chapter_id=chapter_id,
-                attempt_index=attempt_index,
-            )
-            attempts.append(
-                ChapterAttemptRecord(
-                    attempt_index=attempt_index,
-                    writer_result=writer_result,
-                    audit_result=None,
-                    repair_decision=None,
-                    runtime_diagnostics=(
-                        _writer_runtime_diagnostic(
-                            projection,
-                            chapter_id=chapter_id,
-                            operation="writer",
-                            attempt_index=attempt_index,
-                            writer_result=writer_result,
-                        ),
-                    ),
-                )
-            )
-            status, stop_reason = _map_writer_stop_reason(writer_result.stop_reason)
-            return ChapterRunResult(
-                chapter_id=chapter_id,
-                title=title,
-                status=status,
-                stop_reason=stop_reason,
-                accepted_draft=None,
-                accepted_conclusion=None,
-                attempts=tuple(attempts),
-                issues=tuple(issues),
-                failure_category=_chapter_failure_category_from_writer_result(writer_result),
-                failure_subcategory=prompt_diagnostic.primary_subcategory
-                if prompt_diagnostic is not None
-                else None,
-                prompt_contract_diagnostics=(prompt_diagnostic,) if prompt_diagnostic is not None else (),
-            )
-
-        draft = writer_result.draft
-        if draft is None:
-            raise ValueError("writer drafted 状态必须包含 draft")
-        audit_input = ChapterAuditInput(
-            writer_input=writer_input,
-            draft=draft,
-            typed_chapter_contract=_typed_chapter_contract(
-                chapter_id,
-                typed_inputs=typed_inputs,
-            ),
-            run_programmatic=policy.run_programmatic_audit,
-            run_llm=policy.run_llm_audit,
-        )
-        _host_phase_started(
-            host_context,
-            phase="auditor",
-            chapter_id=chapter_id,
-            attempt_index=attempt_index,
-        )
-        phase_started = time.monotonic()
-        try:
-            audit_result = audit_chapter(audit_input, llm_client=llm_clients.auditor)
-        except Exception as exc:  # noqa: BLE001 - Service 层必须把 provider 异常 fail-closed。
-            attempts.append(
-                ChapterAttemptRecord(
-                    attempt_index=attempt_index,
-                    writer_result=writer_result,
-                    audit_result=None,
-                    repair_decision=None,
-                )
-            )
-            return _exception_result(
-                projection,
-                chapter_id,
-                title,
-                attempts=tuple(attempts),
-                exc=exc,
-                operation="auditor",
-                attempt_index=attempt_index,
-            )
-        finally:
-            _host_phase_completed(
-                host_context,
-                phase="auditor",
-                chapter_id=chapter_id,
-                attempt_index=attempt_index,
-                phase_started=phase_started,
-            )
-        _raise_if_host_cancelled(host_context)
-
-        if audit_result.accepted:
-            attempts.append(
-                ChapterAttemptRecord(
-                    attempt_index=attempt_index,
-                    writer_result=writer_result,
-                    audit_result=audit_result,
-                    repair_decision=None,
-                )
-            )
-            conclusion = _accepted_conclusion(draft, audit_result)
-            return ChapterRunResult(
-                chapter_id=chapter_id,
-                title=title,
-                status="accepted",
-                stop_reason="none",
-                accepted_draft=draft,
-                accepted_conclusion=conclusion,
-                attempts=tuple(attempts),
-                issues=tuple(issues),
-                failure_category=None,
-            )
-
-        issues.extend(_audit_issue_messages(audit_result))
-        prompt_diagnostic = _audit_prompt_contract_diagnostic(
-            audit_result,
-            chapter_id=chapter_id,
-            attempt_index=attempt_index,
-        )
-        decision = _decide_repair(
-            audit_result,
-            remaining_budget=policy.max_repair_attempts - attempt_index,
-            auditor_available=llm_clients.auditor is not None,
-            run_llm_audit=policy.run_llm_audit,
-        )
-        attempts.append(
-            ChapterAttemptRecord(
-                attempt_index=attempt_index,
-                writer_result=writer_result,
-                audit_result=audit_result,
-                repair_decision=decision,
-                runtime_diagnostics=(
-                    _audit_runtime_diagnostic(
-                        projection,
-                        chapter_id=chapter_id,
-                        operation="auditor",
-                        attempt_index=attempt_index,
-                        audit_result=audit_result,
-                    ),
-                ),
-            )
-        )
-        if decision.action == "regenerate":
-            _host_phase_started(
-                host_context,
-                phase="repair",
-                chapter_id=chapter_id,
-                attempt_index=attempt_index,
-            )
-            phase_started = time.monotonic()
-            attempt_index += 1
-            writer_input = build_chapter_writer_input(
-                projection,
-                chapter_id=chapter_id,
-                max_output_chars=policy.max_output_chars,
-                repair_context=_repair_context_from_audit(
-                    audit_result,
-                    attempt_index=attempt_index,
-                ),
-                prompt_payload_mode=policy.prompt_payload_mode,  # type: ignore[arg-type]
-                typed_required_output_items=_typed_required_output_items(
-                    chapter_id,
-                    typed_inputs=typed_inputs,
-                ),
-                evidence_availability=_typed_evidence_availability(typed_inputs),
-            )
-            _host_phase_completed(
-                host_context,
-                phase="repair",
-                chapter_id=chapter_id,
-                attempt_index=attempt_index - 1,
-                phase_started=phase_started,
-            )
-            continue
-        return ChapterRunResult(
-            chapter_id=chapter_id,
-            title=title,
-            status=_status_from_audit_stop(decision, audit_result),
-            stop_reason=_stop_reason_from_repair_decision(decision),
-            accepted_draft=None,
-            accepted_conclusion=None,
-            attempts=tuple(attempts),
-            issues=tuple(issues),
-            failure_category=_chapter_failure_category_from_audit_result(audit_result),
-            failure_subcategory=prompt_diagnostic.primary_subcategory
-            if prompt_diagnostic is not None
-            else None,
-            prompt_contract_diagnostics=(prompt_diagnostic,) if prompt_diagnostic is not None else (),
-        )
-
-
-def _exception_result(
-    projection: ChapterFactProjection,
-    chapter_id: int,
-    title: str,
-    *,
-    attempts: tuple[ChapterAttemptRecord, ...],
-    exc: Exception,
-    operation: ProviderOperation,
-    attempt_index: int,
-) -> ChapterRunResult:
-    """把 LLM client 异常转换为 fail-closed 单章结果。
-
-    Args:
-        projection: Gate 1 投影。
-        chapter_id: 模板章节编号。
-        title: 章节标题。
-        attempts: 已记录的 attempt。
-        exc: 捕获到的异常。
-        operation: 当前失败操作。
-        attempt_index: 当前章节 attempt 序号。
-
-    Returns:
-        单章 failed 结果。
-
-    Raises:
-        无显式抛出。
-    """
-
-    stop_reason = _provider_runtime_stop_reason(exc)
-    runtime_diagnostics = _exception_runtime_diagnostics(
-        projection,
-        chapter_id=chapter_id,
-        operation=operation,
-        attempt_index=attempt_index,
-        exc=exc,
-    )
-    attached_to_attempt = False
-    if attempts and attempts[-1].attempt_index == attempt_index and not attempts[-1].runtime_diagnostics:
-        last_attempt = attempts[-1]
-        attempts = (
-            *attempts[:-1],
-            ChapterAttemptRecord(
-                attempt_index=last_attempt.attempt_index,
-                writer_result=last_attempt.writer_result,
-                audit_result=last_attempt.audit_result,
-                repair_decision=last_attempt.repair_decision,
-                runtime_diagnostics=runtime_diagnostics,
-            ),
-        )
-        attached_to_attempt = True
-    return ChapterRunResult(
-        chapter_id=chapter_id,
-        title=title,
-        status="failed",
-        stop_reason=stop_reason,
-        accepted_draft=None,
-        accepted_conclusion=None,
-        attempts=attempts,
-        issues=(f"LLM client exception category={stop_reason}: {type(exc).__name__}: {_safe_exception_message(exc)}",),
-        failure_category=_chapter_failure_category_from_exception(exc),
-        runtime_diagnostics=() if attached_to_attempt else runtime_diagnostics,
-    )
-
-
-def _raise_if_host_cancelled(host_context: HostRunContext | None) -> None:
-    """在章节 phase 边界传播 Host deadline/cancel。
-
-    Args:
-        host_context: 可选 Host run 上下文。
-
-    Returns:
-        无返回值。
-
-    Raises:
-        HostRuntimeError: 当 Host run 已取消或超过 deadline 时抛出。
-    """
-
-    if host_context is None:
-        return
-    host_context.raise_if_cancelled_or_deadline_exceeded()
-
-
-def _host_phase_started(
-    host_context: HostRunContext | None,
-    *,
-    phase: str,
-    chapter_id: int,
-    attempt_index: int,
-) -> None:
-    """记录章节 phase_started 安全事件。"""
-
-    if host_context is None:
-        return
-    host_context.record_phase_started(
-        phase=phase,
-        chapter_id=chapter_id,
-        attempt=attempt_index,
-    )
-
-
-def _host_phase_completed(
-    host_context: HostRunContext | None,
-    *,
-    phase: str,
-    chapter_id: int,
-    attempt_index: int,
-    phase_started: float,
-) -> None:
-    """记录章节 phase_completed 安全事件。"""
-
-    if host_context is None:
-        return
-    host_context.record_phase_completed(
-        phase=phase,
-        chapter_id=chapter_id,
-        attempt=attempt_index,
-        elapsed_ms=max(0, int((time.monotonic() - phase_started) * 1000)),
-    )
-
-
-def _provider_runtime_stop_reason(exc: Exception) -> ChapterRunStopReason:
-    """把 provider runtime 异常映射为 Service stop reason。
-
-    Args:
-        exc: 捕获到的异常。
-
-    Returns:
-        精确 Service stop reason；未知异常返回 `llm_exception`。
-
-    Raises:
-        无显式抛出。
-    """
-
-    type_name = type(exc).__name__
-    if type_name == "LLMProviderTimeoutError":
-        return "llm_timeout"
-    if type_name == "LLMProviderRateLimitError":
-        return "llm_rate_limited"
-    if type_name == "LLMProviderMalformedResponseError":
-        return "llm_malformed_response"
-    if type_name == "LLMProviderNetworkError":
-        return "llm_network_error"
-    return "llm_exception"
 
 
 def _exception_runtime_diagnostics(
