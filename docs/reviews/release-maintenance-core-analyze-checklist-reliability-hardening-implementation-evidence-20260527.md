@@ -105,4 +105,3 @@ Additional validation:
 - No report-quality validator integration changes.
 - No durable fixtures or tracked run artifacts added.
 - No commit, push, PR, merge, approval, branch deletion, external comment, or issue mutation performed.
-

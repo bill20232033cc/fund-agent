@@ -142,7 +142,7 @@ The closed set is enforced at two levels:
 2. **Runtime validation:** `_validate_typed_requirement_ids()` (`evidence_availability.py:337-359`) checks that all `requirement_ids` referenced in:
    - `MustNotCoverClause.applies_when.requirement_ids` (from typed contract predicates)
    - `ChapterInternalSubcontract.requirement_ids` (from Ch2 subcontracts)
-   
+
    are members of `_KNOWN_REQUIREMENT_IDS`. Unknown ids raise `ValueError`.
 
 The test `test_unknown_requirement_id_fails_closed` (`test_evidence_availability.py:186-222`) constructs a manifest with `ch3.requirement.unknown_reviewed` and verifies `ValueError` with message `"未知 EvidenceRequirementId"`.

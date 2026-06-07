@@ -69,6 +69,8 @@ ChapterRunStopReason = Literal[
     "llm_malformed_response",
     "llm_network_error",
     "llm_exception",
+    "scheduler_cancelled",
+    "scheduler_deadline_exceeded",
 ]
 ChapterRepairAction = Literal["none", "regenerate", "needs_more_facts", "stop"]
 ChapterOrchestrationInputKind = Literal["structured_bundle", "chapter_projection"]
@@ -105,6 +107,8 @@ ChapterFailureCategory = Literal[
     "audit_rule_too_strict",
     "fact_gap",
     "code_bug",
+    "scheduler_cancelled",
+    "scheduler_deadline_exceeded",
 ]
 ChapterFailureSubcategory = Literal[
     "missing_structure",
@@ -1330,6 +1334,8 @@ def _chapter_failure_category_from_stop_reason(
 
     if stop_reason == "llm_timeout":
         return "llm_timeout"
+    if stop_reason in ("scheduler_cancelled", "scheduler_deadline_exceeded"):
+        return stop_reason
     if stop_reason in ("fund_type_unknown", "missing_required_facts", "needs_more_facts", "dependency_missing"):
         return "fact_gap"
     if stop_reason in (

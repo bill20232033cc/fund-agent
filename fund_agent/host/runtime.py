@@ -28,6 +28,26 @@ _FORBIDDEN_DIAGNOSTIC_KEY_PARTS = (
     "stdout",
     "stderr",
 )
+_FORBIDDEN_DIAGNOSTIC_VALUE_PARTS = (
+    "api_key",
+    "authorization",
+    "auth_header",
+    "bearer ",
+    "sk-",
+    "system_prompt",
+    "user_prompt",
+    "full_prompt",
+    "chapter_draft",
+    "draft_markdown",
+    "provider_response",
+    "audit_response",
+    "raw_response",
+    "raw_provider_response",
+    "raw_audit_response",
+    "cookie",
+    "password",
+    "secret",
+)
 
 TResult = TypeVar("TResult")
 HostRunEventSink = Callable[["HostRunEvent"], None]
@@ -132,6 +152,9 @@ def _normalize_diagnostic_value(value: object) -> object:
     if isinstance(value, StrEnum):
         return value.value
     if isinstance(value, str):
+        lowered_value = value.lower()
+        if any(part in lowered_value for part in _FORBIDDEN_DIAGNOSTIC_VALUE_PARTS):
+            raise HostRuntimeError("Host 安全诊断禁止敏感字符串值")
         if len(value) <= _MAX_DIAGNOSTIC_STRING_LENGTH:
             return value
         return value[: _MAX_DIAGNOSTIC_STRING_LENGTH - 3].rstrip() + "..."

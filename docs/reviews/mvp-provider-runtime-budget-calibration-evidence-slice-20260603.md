@@ -50,11 +50,11 @@ jq -r '.runtime_diagnostics.chapter_runtime_matrix[] | [.chapter_id,.status,.sto
 Exact output:
 
 ```text
-1	accepted	none						
+1	accepted	none
 2	failed	llm_timeout	llm_timeout	auditor	743	60.0	2	60035
-3	failed	repair_budget_exhausted	prompt_contract					
+3	failed	repair_budget_exhausted	prompt_contract
 4	failed	llm_timeout	llm_timeout	auditor	584	60.0	2	60036
-5	accepted	none						
+5	accepted	none
 6	failed	llm_timeout	llm_timeout	auditor	731	60.0	2	60032
 ```
 

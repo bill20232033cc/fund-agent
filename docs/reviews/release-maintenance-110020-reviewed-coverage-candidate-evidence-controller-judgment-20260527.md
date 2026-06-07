@@ -1,8 +1,8 @@
 # 110020 Reviewed Coverage Candidate Evidence — Controller Judgment
 
-> Controller: Codex  
-> Date: 2026-05-27  
-> Gate: `110020 reviewed coverage candidate evidence gate`  
+> Controller: Codex
+> Date: 2026-05-27
+> Gate: `110020 reviewed coverage candidate evidence gate`
 > Latest prior accepted checkpoint: `46e4f13 docs: accept 110020 coverage decision plan`
 
 ## Startup Alignment

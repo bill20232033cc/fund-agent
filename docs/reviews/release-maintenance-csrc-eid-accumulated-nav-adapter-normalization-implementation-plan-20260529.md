@@ -1,8 +1,8 @@
 # CSRC EID Accumulated NAV Adapter Normalization — Implementation Plan
 
-日期：2026-05-29  
-角色：planning worker  
-Gate：`CSRC EID accumulated NAV adapter normalization implementation gate`  
+日期：2026-05-29
+角色：planning worker
+Gate：`CSRC EID accumulated NAV adapter normalization implementation gate`
 Gate classification：`heavy`
 
 ## 0. Step Self-Check

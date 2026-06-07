@@ -8,7 +8,7 @@ readiness 和 accepted conclusions 投影回现有 Service 结果类型。
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Callable, Literal
 
 from fund_agent.agent import (
     AgentLLMClients,
@@ -30,6 +30,9 @@ if TYPE_CHECKING:
         ChapterOrchestrationResult,
         ChapterOrchestratorLLMClients,
     )
+
+_AgentPhaseEvent = Literal["started", "completed"]
+_AgentPhaseRecorder = Callable[[_AgentPhaseEvent, str, int, int, int | None], None]
 
 
 def run_agent_chapter_orchestration_bridge(
@@ -64,8 +67,8 @@ def run_agent_chapter_orchestration_bridge(
         policy=_agent_policy_from_service(input_data),
         evidence_availability=_service_evidence_availability(input_data, projection),
         interruption_checker=_interruption_checker(host_context),
+        phase_recorder=_phase_recorder(host_context),
     )
-    _record_agent_phase_events(agent_run.tasks, host_context=host_context)
     chapter_results = tuple(
         _service_chapter_result_from_task(task, projection=projection) for task in agent_run.tasks
     )
@@ -88,7 +91,7 @@ def run_agent_chapter_orchestration_bridge(
         chapter_results=chapter_results,
         accepted_conclusions=accepted_conclusions,
         blocked_reasons=tuple(reason for task in agent_run.tasks for reason in task.blocked_reasons),
-        generated_chapter_ids=tuple(task.chapter_id for task in agent_run.tasks if task.status != "skipped"),
+        generated_chapter_ids=_generated_chapter_ids_from_tasks(agent_run.tasks),
         skipped_chapter_ids=(),
     )
 
@@ -144,92 +147,91 @@ def _service_evidence_availability(
     return chapter_orchestrator.derive_evidence_availability(projection)
 
 
-def _record_agent_phase_events(
-    tasks: tuple[ChapterTask, ...],
-    *,
-    host_context: HostRunContext | None,
-) -> None:
-    """按 Agent tool traces 回放 Host 安全 phase events。
+def _phase_recorder(host_context: HostRunContext | None) -> _AgentPhaseRecorder | None:
+    """构造 Agent phase 到 Host phase events 的实时记录器。
 
     Args:
-        tasks: Agent 正文章节任务。
         host_context: 可选 Host run context。
 
     Returns:
-        无返回值。
+        Agent phase recorder；没有 Host context 时返回 `None`。
 
     Raises:
-        HostRuntimeError: 当 Host 事件诊断字段非法时由 Host 抛出。
+        无。
     """
 
     if host_context is None:
-        return
-    for task in tasks:
-        for attempt in task.attempts:
-            for trace in attempt.tool_traces:
-                phase = _phase_from_tool_name(trace.request.tool_name)
-                if phase is None:
-                    continue
-                host_context.record_phase_started(
-                    phase=phase,
-                    chapter_id=task.chapter_id,
-                    attempt=attempt.attempt_index,
-                )
-                host_context.record_phase_completed(
-                    phase=phase,
-                    chapter_id=task.chapter_id,
-                    attempt=attempt.attempt_index,
-                    elapsed_ms=trace.elapsed_ms,
-                )
-            if _attempt_entered_repair(attempt):
-                host_context.record_phase_started(
-                    phase="repair",
-                    chapter_id=task.chapter_id,
-                    attempt=attempt.attempt_index,
-                )
-                host_context.record_phase_completed(
-                    phase="repair",
-                    chapter_id=task.chapter_id,
-                    attempt=attempt.attempt_index,
-                    elapsed_ms=0,
-                )
+        return None
+    return _HostPhaseRecorder(host_context=host_context)
 
 
-def _phase_from_tool_name(tool_name: str) -> str | None:
-    """把 Agent tool name 映射为 Host phase。
+@dataclass(frozen=True, slots=True)
+class _HostPhaseRecorder:
+    """Agent phase 到 Host phase event 的可调用适配器。"""
+
+    host_context: HostRunContext
+
+    def __call__(
+        self,
+        event: _AgentPhaseEvent,
+        phase: str,
+        chapter_id: int,
+        attempt_index: int,
+        elapsed_ms: int | None,
+    ) -> None:
+        """记录单个 Agent phase event。
+
+        Args:
+            event: phase event 类型。
+            phase: phase 名称。
+            chapter_id: 模板章节编号。
+            attempt_index: attempt 序号。
+            elapsed_ms: phase 完成耗时毫秒。
+
+        Returns:
+            无返回值。
+
+        Raises:
+            HostRuntimeError: 当 Host 事件诊断字段非法时由 Host 抛出。
+            ValueError: 当 event 类型未知时抛出。
+        """
+
+        if event == "started":
+            self.host_context.record_phase_started(
+                phase=phase,
+                chapter_id=chapter_id,
+                attempt=attempt_index,
+            )
+            return
+        if event == "completed":
+            self.host_context.record_phase_completed(
+                phase=phase,
+                chapter_id=chapter_id,
+                attempt=attempt_index,
+                elapsed_ms=elapsed_ms,
+            )
+            return
+        raise ValueError("未知 Agent phase event")
+
+
+def _generated_chapter_ids_from_tasks(tasks: tuple[ChapterTask, ...]) -> tuple[int, ...]:
+    """从 Agent tasks 投影已进入生成路径的章节编号。
 
     Args:
-        tool_name: Agent tool name。
+        tasks: Agent 正文章节任务。
 
     Returns:
-        Host phase；非 writer/auditor 工具返回 `None`。
+        已进入 writer/audit attempt 或 provider exception 路径的章节编号。
 
     Raises:
         无。
     """
 
-    if tool_name == "fund.write_chapter":
-        return "writer"
-    if tool_name == "fund.audit_chapter_llm":
-        return "auditor"
-    return None
-
-
-def _attempt_entered_repair(attempt: ChapterAttempt) -> bool:
-    """判断 Agent attempt 是否进入显式 repair phase。
-
-    Args:
-        attempt: Agent 单章 attempt。
-
-    Returns:
-        `True` 表示该 attempt 的 repair decision 要求 regenerate。
-
-    Raises:
-        无。
-    """
-
-    decision = attempt.repair_decision
-    return getattr(decision, "action", None) == "regenerate"
+    return tuple(
+        task.chapter_id
+        for task in tasks
+        if task.attempts or task.exception_attempt_index is not None
+    )
 
 
 def _interruption_checker(host_context: HostRunContext | None):
@@ -477,7 +479,7 @@ def _service_stop_reason_from_task(task: ChapterTask) -> str:
 
     if task.status == "accepted":
         return "none"
-    if task.stop_reason is not None and task.stop_reason != "scheduler_interrupted":
+    if task.stop_reason is not None:
         return task.stop_reason
     if task.terminal_state == "blocked_repair_budget_exhausted":
         return "repair_budget_exhausted"
@@ -500,7 +502,7 @@ def _service_stop_reason_from_task(task: ChapterTask) -> str:
     if task.terminal_state == "blocked_audit_failed":
         return "auditor_failed"
     if task.terminal_state == "blocked_scheduler_interrupted":
-        return "llm_exception"
+        return _scheduler_stop_reason_from_task(task)
     if task.terminal_state == "blocked_internal_code_bug":
         return "llm_exception"
     return "writer_blocked"
@@ -604,6 +606,24 @@ def _attempt_runtime_diagnostics(
             ),
         )
     return ()
+
+
+def _scheduler_stop_reason_from_task(task: ChapterTask) -> str:
+    """从 Agent scheduler task 读取 Service scheduler stop reason。
+
+    Args:
+        task: Agent 正文章节任务。
+
+    Returns:
+        Service 可识别的 scheduler stop reason。
+
+    Raises:
+        ValueError: 当 Agent task 未携带精确 scheduler stop reason 时抛出。
+    """
+
+    if task.stop_reason in ("scheduler_cancelled", "scheduler_deadline_exceeded"):
+        return task.stop_reason
+    raise ValueError("Agent scheduler interrupted task 缺少精确 scheduler stop reason")
 
 
 def _runtime_diagnostics_from_task(

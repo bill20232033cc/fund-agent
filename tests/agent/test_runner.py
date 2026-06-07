@@ -243,6 +243,8 @@ def test_cancel_before_first_chapter_fails_closed_without_generation() -> None:
     assert run.scheduler_interruption.status == "cancelled"
     assert writer.requests == []
     assert all(task.terminal_state == "blocked_scheduler_interrupted" for task in run.tasks)
+    assert all(task.stop_reason == "scheduler_cancelled" for task in run.tasks)
+    assert all(task.failure_category == "scheduler_cancelled" for task in run.tasks)
 
 
 def test_deadline_between_writer_and_auditor_fails_closed_without_budget_use() -> None:
@@ -281,6 +283,8 @@ def test_deadline_between_writer_and_auditor_fails_closed_without_budget_use() -
 
     task = run.tasks[0]
     assert task.terminal_state == "blocked_scheduler_interrupted"
+    assert task.stop_reason == "scheduler_deadline_exceeded"
+    assert task.failure_category == "scheduler_deadline_exceeded"
     assert len(writer.requests) == 1
     assert auditor.requests == []
     assert len(task.attempts) == 1

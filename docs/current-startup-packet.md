@@ -218,7 +218,7 @@ Current closeout evidence artifact: `docs/reviews/mvp-real-llm-chapter-acceptanc
 
 ## 4. Route C Accepted Future Route
 
-Route C is the accepted MVP LLM report generation route. Gates 1-3 and Gate 4 Slices 4A/4B/4C/4D are accepted local code facts. Gate 5A `internalized Host runtime governance adapter` has an MVP process-local implementation; Gate 5B `internalized Agent engine / typed audit contract migration` is accepted future design and remains unimplemented.
+Route C is the accepted MVP LLM report generation route. Gates 1-3 and Gate 4 Slices 4A/4B/4C/4D are accepted local code facts. Gate 5A `internalized Host runtime governance adapter` has an MVP process-local implementation; Gate 5B first no-live body-chapter mechanics are accepted in Slice E, while fuller tool-loop/retry/budget/ToolRegistry/live runtime expansion remains future design.
 
 | Gate | Status / scope |
 |---|---|
@@ -236,7 +236,7 @@ Gate 4 Slice 4D accepted typed env config and Service-owned `openai_compatible` 
 
 - Target architecture remains UI -> Service -> Host -> Agent.
 - UI handles interaction, rendering and display only.
-- Service handles use-case orchestration, scene/prompt/ExecutionContract semantics, report strategy, provider construction/runtime ceilings in the first Agent MVP, and the current Gate 3 write-audit-repair façade until a later implementation gate migrates execution mechanics into Agent.
+- Service handles use-case orchestration, scene/prompt/ExecutionContract semantics, report strategy, provider construction/runtime ceilings in the first Agent MVP, and the current Service bridge into accepted Agent body-chapter mechanics.
 - Host handles session/run lifecycle, concurrency, timeout, cancel, resume, memory, reply outbox and event delivery.
 - Host runtime governance must stay internalized and must not directly depend on `dayu-agent` / `dayu.host` as production runtime.
 - Host currently only receives generic operation/deadline/session fields; it must not inspect fund business semantics, Service ExecutionContract business fields, chapter policy or provider clients.
@@ -259,7 +259,7 @@ Gate 4 Slice 4D accepted typed env config and Service-owned `openai_compatible` 
 - QDII, FOF, `110020` and `017641` remain deferred from minimum v1 and not ready for full v1.
 - Release-maintenance long ledger is preserved by links only.
 - Internalized Host runtime governance adapter MVP process-local implementation is complete; async runner and durable Host capabilities remain future scope.
-- Internalized Agent engine / typed audit contract migration is accepted future design but unimplemented.
+- Internalized Agent engine / typed audit contract migration has first no-live body-chapter mechanics accepted in Slice E; fuller tool-loop/retry/budget/ToolRegistry/live runtime expansion remains future scope.
 - Deterministic renderer remains the default production behavior; provider-backed LLM report generation is explicit `--use-llm` opt-in only.
 - Live provider smoke acceptance, multi-model writer/auditor split, chapter 0/7 LLM polish and Evidence Confirm remain future residuals.
 - Provider-restored Slice 1 baseline retained artifact kept fail-closed semantics and historically showed Ch2/Ch4/Ch6 provider runtime blockers. Later default live evidence narrowed that historical provider-runtime blocker to Ch2 auditor timeout only, with Ch4/Ch5/Ch6 accepted and Ch3 retained evidence `programmatic:C2` / `code_bug_other`; later same-run live evidence showed all six body chapters failing at writer operation with `llm_network_error` / `ConnectError` before any accepted draft/conclusion. The latest post-config live smoke evidence now supersedes both for current next-entry routing: provider-backed writer/auditor behavior is reachable, but chapters 1-6 still lack accepted draft/conclusion due to chapter contract/audit blockers. No deterministic fallback and no partial accepted report are authorized.
@@ -307,9 +307,9 @@ Gate 4 Slice 4D accepted typed env config and Service-owned `openai_compatible` 
 5. Read the accepted plan and reviews for the active gate.
 6. Confirm allowed files before editing.
 7. Classify the next gate per `AGENTS.md`; choose the heavier classification when uncertain.
-8. Check that Route C text stays future-only.
+8. Check that Route C text keeps current accepted facts separate from future-only expansion.
 9. Check that current deterministic `analyze/checklist` remains current implementation.
-10. Check that internalized Host runtime governance is already MVP process-local current fact and internalized Agent engine/tool-loop remains accepted future design, not current runtime implementation.
+10. Check that internalized Host runtime governance is already MVP process-local current fact, Gate 5B Slice E no-live body-chapter mechanics are current accepted code fact, and fuller Agent tool-loop/retry/budget/ToolRegistry/live runtime expansion remains future design.
 11. Check that golden / strict correctness / QDII / FOF / `110020` / fixture promotion stay residuals unless the active gate explicitly covers them.
 12. Record validation commands and results in the relevant evidence artifact.
 

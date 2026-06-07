@@ -1,9 +1,9 @@
 # Re-Review: 110020 Reviewed Coverage Candidate Decision Plan
 
-> Reviewer: AgentMiMo (re-review, findings closure check)  
-> Date: 2026-05-27  
-> Target: `docs/reviews/release-maintenance-110020-reviewed-coverage-candidate-decision-plan-20260527.md`  
-> Prior review: `docs/reviews/release-maintenance-110020-reviewed-coverage-candidate-decision-plan-review-mimo-20260527.md`  
+> Reviewer: AgentMiMo (re-review, findings closure check)
+> Date: 2026-05-27
+> Target: `docs/reviews/release-maintenance-110020-reviewed-coverage-candidate-decision-plan-20260527.md`
+> Prior review: `docs/reviews/release-maintenance-110020-reviewed-coverage-candidate-decision-plan-review-mimo-20260527.md`
 > GLM review: `docs/reviews/release-maintenance-110020-reviewed-coverage-candidate-decision-plan-review-glm-20260527.md`
 
 ## Verdict: PASS

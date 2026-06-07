@@ -1,8 +1,8 @@
 # Release Maintenance Report-Quality Baseline S0 Corpus Selection Evidence
 
-> Date: 2026-05-25  
-> Worker: AgentCodex specialist evidence worker  
-> Gate: `release-maintenance report-quality baseline / Fact-Evidence contract plan accepted locally`  
+> Date: 2026-05-25
+> Worker: AgentCodex specialist evidence worker
+> Gate: `release-maintenance report-quality baseline / Fact-Evidence contract plan accepted locally`
 > Scope: S0 corpus-selection evidence only; no code/test/renderer/FQ0-FQ6/Host/Agent/PR/commit work.
 
 ## Step Self-Check

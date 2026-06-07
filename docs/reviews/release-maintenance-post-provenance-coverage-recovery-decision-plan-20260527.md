@@ -1,8 +1,8 @@
 # Release Maintenance: Post-Provenance Coverage Recovery Decision Plan
 
-> Worker: AgentCodex planning worker, not controller  
-> Date: 2026-05-27  
-> Gate: `post-provenance coverage recovery decision plan/review gate`  
+> Worker: AgentCodex planning worker, not controller
+> Date: 2026-05-27
+> Gate: `post-provenance coverage recovery decision plan/review gate`
 > Scope: plan artifact only; no implementation, no promotion, no `docs/implementation-control.md` update
 
 ## Startup Packet Replay

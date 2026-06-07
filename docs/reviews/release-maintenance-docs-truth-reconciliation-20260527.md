@@ -1,9 +1,9 @@
 # Docs Truth Reconciliation
 
-> Controller: Codex  
-> Date: 2026-05-27  
-> Gate: `docs-only truth reconciliation`  
-> Trigger evidence: `docs/reviews/repo-review-20260527-065237.md` F1/F2/F3  
+> Controller: Codex
+> Date: 2026-05-27
+> Gate: `docs-only truth reconciliation`
+> Trigger evidence: `docs/reviews/repo-review-20260527-065237.md` F1/F2/F3
 > Scope: docs-only; no production code, renderer, quality gate, final judgment, Host/Agent/dayu, baseline, golden, or GitHub mutation
 
 ## Startup Packet Replay

@@ -75,4 +75,3 @@ None requiring controller or user input for plan handoff.
 - Source of truth: read `AGENTS.md`, fixed plan, and both original review artifacts.
 - Scope boundary: wrote only this re-review artifact; no production code, commit, push, PR, or implementation.
 - Evidence and validation: re-review conclusion is based on fixed plan line evidence against all accepted blocking findings.
-

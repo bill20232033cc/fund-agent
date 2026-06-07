@@ -1,8 +1,8 @@
 # CSRC EID Accumulated NAV Adapter Normalization Implementation Evidence
 
-日期：2026-05-29  
-角色：implementation worker  
-Gate：`CSRC EID accumulated NAV adapter normalization implementation gate`  
+日期：2026-05-29
+角色：implementation worker
+Gate：`CSRC EID accumulated NAV adapter normalization implementation gate`
 Accepted plan commit：`6dce229`
 
 ## 1. Scope

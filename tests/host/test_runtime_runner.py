@@ -277,6 +277,27 @@ def test_run_sync_event_sink_payload_is_safe() -> None:
             assert value is None or isinstance(value, bool | int | float | str)
 
 
+def test_run_sync_rejects_diagnostic_sensitive_values_before_event_sink() -> None:
+    """验证 Host 事件提交前拒绝敏感诊断字符串值。"""
+
+    sink_events = []
+
+    def operation(context: HostRunContext) -> str:
+        context.record_diagnostic(message="Bearer sk-test-secret system_prompt raw_response")
+        return "ok"
+
+    result = HostRuntimeRunner().run_sync(
+        operation_name="unit_operation",
+        operation=operation,
+        timeout_seconds=10,
+        event_sink=sink_events.append,
+    )
+
+    assert result.status == "failed"
+    assert sink_events == list(result.events)
+    assert all("sk-test-secret" not in str(event.diagnostics) for event in sink_events)
+
+
 def test_run_sync_event_sink_receives_committed_event_object() -> None:
     """验证 sink 收到的是已进入 HostRunResult.events 的同一事件对象。
 

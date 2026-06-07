@@ -1,9 +1,9 @@
 # V0 Release Readiness Local Validation
 
-> Date: 2026-05-24  
-> Branch: `codex/v0-release-readiness-plan`  
-> Base: `origin/main` through merge commit `9deace0` plus local docs checkpoints  
-> Plan: `docs/reviews/v0-release-readiness-plan-20260524.md`  
+> Date: 2026-05-24
+> Branch: `codex/v0-release-readiness-plan`
+> Base: `origin/main` through merge commit `9deace0` plus local docs checkpoints
+> Plan: `docs/reviews/v0-release-readiness-plan-20260524.md`
 > Result: `blocked pending PR #17 integration / authorized external action`
 
 ## Scope

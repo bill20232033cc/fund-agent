@@ -90,7 +90,7 @@ Plan 规定的确定性推导规则 (plan lines 209-216)：
 | `FOF_SLOT` | `fof_taxonomy_pending`, `fof_data_gap` | `fof_taxonomy_pending`, `fof_data_gap` | ✅ |
 | `110020` | `strict_golden_not_configured`, `strict_golden_fund_not_covered`, `fixture_promotion_absent`, `reviewed_candidate_not_promoted`, `index_evidence_insufficient` | 同左 5 个 | ✅ |
 
-**结论：所有 row 的 blocker reconciliation 完全一致。** 
+**结论：所有 row 的 blocker reconciliation 完全一致。**
 - 无 preflight severity=block 的 blocker 在 manifest 中缺失。
 - 无 manifest 中有而 preflight 中不存在的意外 blocker。
 - `fixture_promotion_absent` 在需要它的 row 中正确出现，在 global/policy-only 上下文中正确处理。

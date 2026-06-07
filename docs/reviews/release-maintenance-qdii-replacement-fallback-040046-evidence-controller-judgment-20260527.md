@@ -99,4 +99,3 @@ Do not change code, tests, renderer, FQ0-FQ6, Service/CLI defaults, `FundDocumen
 | Terminal matrix lacks explicit FQ4 / non-P0 quality block row | next fallback evidence plan gate | Add explicit row to avoid ambiguity. |
 | `019172` provenance/quality unknown | next fallback evidence plan gate | Plan before evidence; keep not promoted. |
 | Eastmoney fallback source for `096001` and `040046` | future source/coverage decision gate | Source is eligible but quality reflects fallback-source extraction. |
-

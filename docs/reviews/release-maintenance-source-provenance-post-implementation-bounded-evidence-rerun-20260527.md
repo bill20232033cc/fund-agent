@@ -1,8 +1,8 @@
 # Source Provenance Post-Implementation Bounded Evidence Rerun
 
-> Worker: Codex evidence worker  
-> Date: 2026-05-27  
-> Gate: `source provenance post-implementation bounded evidence rerun`  
+> Worker: Codex evidence worker
+> Date: 2026-05-27
+> Gate: `source provenance post-implementation bounded evidence rerun`
 > Repository: `/Users/maomao/fund-agent`
 
 ## Startup Packet Replay

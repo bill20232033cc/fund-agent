@@ -1,8 +1,8 @@
 # Plan Review: 110020 Reviewed Coverage Candidate Decision Plan
 
-> Reviewer: AgentMiMo (independent plan reviewer, not controller)  
-> Date: 2026-05-27  
-> Target: `docs/reviews/release-maintenance-110020-reviewed-coverage-candidate-decision-plan-20260527.md`  
+> Reviewer: AgentMiMo (independent plan reviewer, not controller)
+> Date: 2026-05-27
+> Target: `docs/reviews/release-maintenance-110020-reviewed-coverage-candidate-decision-plan-20260527.md`
 > Gate: `110020 reviewed coverage candidate decision gate`
 
 ## Truth Sources Used

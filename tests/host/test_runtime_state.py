@@ -67,6 +67,21 @@ def test_safe_diagnostics_rejects_forbidden_keys() -> None:
         build_safe_diagnostics({"Authorization": "Bearer token"})
 
 
+def test_safe_diagnostics_rejects_forbidden_string_values() -> None:
+    """验证安全诊断拒绝敏感字符串值。"""
+
+    forbidden_values = (
+        "Bearer sk-test-secret",
+        "system_prompt raw_response",
+        "chapter_draft draft_markdown",
+        "provider_response payload",
+    )
+
+    for value in forbidden_values:
+        with pytest.raises(HostRuntimeError, match="敏感字符串值"):
+            build_safe_diagnostics({"message": value})
+
+
 def test_safe_diagnostics_truncates_long_string() -> None:
     """验证安全诊断截断长字符串，避免 unbounded exception 泄漏。"""
 

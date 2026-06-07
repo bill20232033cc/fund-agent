@@ -181,4 +181,3 @@ Stop and return to controller if any of the following occurs:
 - Implementing snapshot projection requires editing `extraction_score.py` before Slice 5.
 - Implementing score applicability requires changing Service/UI/Host/Agent, FQ0-FQ6 semantics, source orchestration, PDF/cache helpers, golden fixtures, or baseline fixtures.
 - Any validation suggests the temporary post-Slice-4 state changes existing score behavior beyond adding an unmapped snapshot field.
-

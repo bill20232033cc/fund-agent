@@ -17,7 +17,39 @@ from fund_agent.services.chapter_orchestrator import (
     ChapterOrchestratorLLMClients,
     build_chapter_orchestration_input,
 )
+from fund_agent.fund.chapter_writer import ChapterLLMRequest, ChapterLLMResponse
 from tests.agent.test_runner import _FakeAuditor, _FakeWriter, _projection
+
+
+class _ObservingWriter(_FakeWriter):
+    """测试用 writer：校验 writer 调用期间 Host phase 已实时投递。"""
+
+    def __init__(self, observed_events: list[object]) -> None:
+        """初始化 observing writer。
+
+        Args:
+            observed_events: HostRuntimeRunner event sink 捕获的事件。
+
+        Returns:
+            无返回值。
+
+        Raises:
+            无。
+        """
+
+        super().__init__()
+        self.observed_events = observed_events
+
+    def generate_chapter(self, request: ChapterLLMRequest) -> ChapterLLMResponse:
+        """生成章节前确认 writer phase_started 已投递。"""
+
+        assert any(
+            getattr(event, "event_type", None) == HostRunEventType.PHASE_STARTED
+            and getattr(event, "diagnostics", {}).get("phase") == "writer"
+            and getattr(event, "diagnostics", {}).get("chapter_id") == request.chapter_id
+            for event in self.observed_events
+        )
+        return super().generate_chapter(request)
 
 
 def test_service_bridge_projects_accepted_agent_run_to_service_result() -> None:
@@ -107,9 +139,46 @@ def test_service_bridge_translates_host_cancel_to_agent_interruption() -> None:
     row = result.chapter_results[0]
     assert result.status == "blocked"
     assert row.status == "blocked"
-    assert row.stop_reason == "llm_exception"
+    assert row.stop_reason == "scheduler_cancelled"
+    assert row.failure_category == "scheduler_cancelled"
     assert row.attempts == ()
+    assert result.generated_chapter_ids == ()
     assert "blocked_scheduler_interrupted" in result.blocked_reasons[0]
+
+
+def test_service_bridge_records_writer_phase_before_writer_returns() -> None:
+    """验证 writer phase event 在 provider 调用期间实时投递。"""
+
+    projection = _projection((1,))
+    input_data = build_chapter_orchestration_input(
+        fund_code="110011",
+        report_year=2024,
+        chapter_projection=projection,
+        policy=ChapterOrchestrationPolicy(target_chapter_ids=(1,)),
+    )
+    sink_events: list[object] = []
+
+    def _operation(host_context: HostRunContext):
+        return run_agent_chapter_orchestration_bridge(
+            input_data,
+            projection=projection,
+            llm_clients=ChapterOrchestratorLLMClients(
+                writer=_ObservingWriter(sink_events),
+                auditor=_FakeAuditor(),
+            ),
+            host_context=host_context,
+        )
+
+    host_result = HostRuntimeRunner().run_sync(
+        operation_name="agent_bridge_realtime_phase_test",
+        operation=_operation,
+        timeout_seconds=10,
+        event_sink=sink_events.append,
+    )
+
+    assert host_result.status == "succeeded"
+    assert host_result.operation_result is not None
+    assert host_result.operation_result.status == "accepted"
 
 
 def test_service_bridge_records_repair_phase_events() -> None:

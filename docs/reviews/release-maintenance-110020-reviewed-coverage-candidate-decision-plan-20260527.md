@@ -1,8 +1,8 @@
 # Release Maintenance: 110020 Reviewed Coverage Candidate Decision Plan
 
-> Worker: AgentCodex planning worker, not controller  
-> Date: 2026-05-27  
-> Gate: `110020 reviewed coverage candidate decision gate`  
+> Worker: AgentCodex planning worker, not controller
+> Date: 2026-05-27
+> Gate: `110020 reviewed coverage candidate decision gate`
 > Scope: plan artifact only; no implementation, no promotion, no `docs/implementation-control.md` update
 
 ## Startup Packet Replay

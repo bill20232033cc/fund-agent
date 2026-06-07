@@ -293,4 +293,3 @@ Required validation after creating this artifact:
 ```bash
 git diff --check -- docs/reviews/mvp-typed-template-contract-slice0-calibration-precondition-evidence-20260603.md
 ```
-

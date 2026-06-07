@@ -1,8 +1,8 @@
 # Post-Provenance Coverage Recovery Decision Plan — Controller Judgment
 
-> Controller: Codex  
-> Date: 2026-05-27  
-> Gate: `post-provenance coverage recovery decision plan/review gate`  
+> Controller: Codex
+> Date: 2026-05-27
+> Gate: `post-provenance coverage recovery decision plan/review gate`
 > Latest prior accepted checkpoint: `41b808c docs: reconcile design truth findings`
 
 ## Startup Reconciliation

@@ -1,8 +1,8 @@
 # Source Provenance Post-Implementation Bounded Evidence Rerun Plan
 
-> Worker: Codex planning worker  
-> Date: 2026-05-27  
-> Gate: `source provenance post-implementation bounded evidence rerun plan/review gate`  
+> Worker: Codex planning worker
+> Date: 2026-05-27
+> Gate: `source provenance post-implementation bounded evidence rerun plan/review gate`
 > Output summary artifact for evidence worker: `docs/reviews/release-maintenance-source-provenance-post-implementation-bounded-evidence-rerun-20260527.md`
 
 ## Startup Packet Replay

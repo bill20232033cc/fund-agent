@@ -297,6 +297,47 @@ def test_missing_required_bundle_field_is_blocking() -> None:
     assert result.summary.failed_closed is True
 
 
+def test_scoring_ready_requires_nested_primary_ids() -> None:
+    """验证 scoring_ready 嵌套记录必须携带稳定主键。"""
+
+    cases = (
+        ("source_documents", "document_id"),
+        ("facts", "fact_id"),
+        ("evidence_anchors", "anchor_id"),
+        ("data_gaps", "gap_id"),
+        ("derived_calculations", "calculation_id"),
+    )
+
+    for collection_name, field_name in cases:
+        bundle = _valid_bundle_dict()
+        if collection_name == "data_gaps":
+            bundle["data_gaps"] = [_gap_dict(gap_id="gap:nested")]
+        if collection_name == "derived_calculations":
+            bundle["derived_calculations"] = [
+                {
+                    "calculation_id": "calc:nested",
+                    "formula_name": "r_abc",
+                    "calculation_status": "computed",
+                    "input_fact_ids": [],
+                    "input_anchor_ids": [],
+                    "data_gap_refs": [],
+                    "score_issue_ids": [],
+                }
+            ]
+        record = bundle[collection_name][0]  # type: ignore[index]
+        del record[field_name]  # type: ignore[index]
+
+        result = validate_report_quality_bundle(bundle)
+
+        assert _has_issue(
+            result.issues,
+            "RQV_FIELD_MISSING",
+            "blocking",
+            f"/bundle/{collection_name}/0/{field_name}",
+        )
+        assert result.summary.failed_closed is True
+
+
 def test_invalid_nested_enum_value_is_blocking() -> None:
     """验证 nested enum 非法值会阻断。
 

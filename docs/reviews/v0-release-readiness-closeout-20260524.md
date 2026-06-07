@@ -1,8 +1,8 @@
 # V0 Release Readiness Closeout
 
-> Date: 2026-05-24  
-> Branch: `codex/v0-release-readiness-plan`  
-> Integrated main: `origin/main` at PR #17 merge commit `99df84c266430a89e321fe75989708adc5b3858a`  
+> Date: 2026-05-24
+> Branch: `codex/v0-release-readiness-plan`
+> Integrated main: `origin/main` at PR #17 merge commit `99df84c266430a89e321fe75989708adc5b3858a`
 > Result: `v0 release readiness accepted locally`
 
 ## External Actions

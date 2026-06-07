@@ -1,8 +1,8 @@
 # 110020 Reviewed Coverage Candidate Evidence
 
-> Worker: AgentCodex evidence worker, not controller  
-> Date: 2026-05-27  
-> Gate: `110020 reviewed coverage candidate evidence gate`  
+> Worker: AgentCodex evidence worker, not controller
+> Date: 2026-05-27
+> Gate: `110020 reviewed coverage candidate evidence gate`
 > Scope: public-only evidence matrix for `110020` / report_year `2024`; no implementation, no promotion, no `docs/implementation-control.md` update
 
 ## Startup Replay

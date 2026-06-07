@@ -79,6 +79,13 @@ _SCORE_ISSUE_REQUIRED_FIELDS: tuple[str, ...] = (
     "evidence_anchor_refs",
     "data_gap_refs",
 )
+_NESTED_ID_REQUIRED_FIELDS: dict[str, tuple[str, ...]] = {
+    "source_documents": ("document_id",),
+    "facts": ("fact_id",),
+    "evidence_anchors": ("anchor_id",),
+    "data_gaps": ("gap_id",),
+    "derived_calculations": ("calculation_id",),
+}
 _PREFERRED_LENS_CHAPTER_REQUIRED_FIELDS: tuple[str, ...] = (
     "chapter_id",
     "lens_key",
@@ -485,6 +492,18 @@ def _validate_bundle_record(
     gaps = _list_of_mappings(bundle.get("data_gaps"))
     issues_records = _list_of_mappings(bundle.get("score_issue_links"))
     calculations = _list_of_mappings(bundle.get("derived_calculations"))
+    _validate_nested_id_required_fields(
+        {
+            "source_documents": source_documents,
+            "facts": facts,
+            "evidence_anchors": anchors,
+            "data_gaps": gaps,
+            "derived_calculations": calculations,
+        },
+        pointer,
+        context,
+        issues,
+    )
     indexes = _build_indexes(bundle, pointer, context, issues)
 
     _validate_preferred_lens(bundle, pointer, context, issues, scoring_ready)
@@ -578,6 +597,46 @@ def _validate_required_fields(
                     actual="missing",
                 )
             )
+
+
+def _validate_nested_id_required_fields(
+    records_by_name: Mapping[str, Sequence[_JsonRecord]],
+    pointer: str,
+    context: _ValidationContext,
+    issues: list[ReportQualityValidationIssue],
+) -> None:
+    """校验嵌套记录主键字段存在。
+
+    Args:
+        records_by_name: 按 bundle 字段名分组的嵌套 records。
+        pointer: bundle pointer。
+        context: 校验上下文。
+        issues: issue accumulator。
+
+    Returns:
+        无返回值。
+    """
+
+    for collection_name, required_fields in _NESTED_ID_REQUIRED_FIELDS.items():
+        for index, record in enumerate(records_by_name.get(collection_name, ())):
+            record_pointer = f"{pointer}/{collection_name}/{index}"
+            for field_name in required_fields:
+                value = record.get(field_name)
+                if _non_empty_string(value):
+                    continue
+                issues.append(
+                    _make_issue(
+                        error_code="RQV_FIELD_MISSING",
+                        severity="blocking",
+                        pointer=f"{record_pointer}/{field_name}",
+                        message="嵌套记录缺少必填主键字段。",
+                        context=context,
+                        record_id=_record_id(record),
+                        field_name=field_name,
+                        expected="non-empty string",
+                        actual=_actual(value),
+                    )
+                )
 
 
 def _validate_schema_version(

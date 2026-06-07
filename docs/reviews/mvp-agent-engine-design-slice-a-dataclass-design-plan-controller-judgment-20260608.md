@@ -137,4 +137,3 @@ Still not authorized:
 - provider/runtime/default changes;
 - score-loop, multi-year runtime, golden/readiness or quality gate changes;
 - external PR/push/release actions.
-

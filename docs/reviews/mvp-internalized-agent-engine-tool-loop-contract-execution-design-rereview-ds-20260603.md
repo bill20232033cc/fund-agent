@@ -54,23 +54,23 @@ Each fix claim from `fix-evidence` is verified against the updated design artifa
 
 ### N1. ToolTrace `redaction_policy_id` and `artifact_safe` remain as premature implementation fields
 
-**Source**: MiMo F10 (low severity).  
-**Status**: Not addressed in fix evidence. These two fields are still in the ToolTrace table (design lines 156-157).  
-**Assessment**: Non-blocking. These are legitimate schema design decisions — a design-phase trace schema can include serialization safety markers without over-specifying the mechanism. The existing safety constraints ("Never serialize API key, Authorization header...") provide sufficient guidance.  
+**Source**: MiMo F10 (low severity).
+**Status**: Not addressed in fix evidence. These two fields are still in the ToolTrace table (design lines 156-157).
+**Assessment**: Non-blocking. These are legitimate schema design decisions — a design-phase trace schema can include serialization safety markers without over-specifying the mechanism. The existing safety constraints ("Never serialize API key, Authorization header...") provide sufficient guidance.
 **Recommendation**: Accept as-is. The implementation planning gate can decide whether to keep these fields in the trace schema or move them to serializer metadata.
 
 ### N2. Body chapter concurrency model not explicitly stated
 
-**Source**: DS review section 4 (under-design assessment).  
-**Status**: The dependency rules state Agent checks Host cancel/deadline "before each `ChapterTask` dispatch" and the description says body chapters "are independent." Sequential execution is implied but not explicitly stated.  
-**Assessment**: Non-blocking for design phase. The scheduling language and cancel-token check pattern imply sequential dispatch. The implementation planning gate should make the concurrency model explicit.  
+**Source**: DS review section 4 (under-design assessment).
+**Status**: The dependency rules state Agent checks Host cancel/deadline "before each `ChapterTask` dispatch" and the description says body chapters "are independent." Sequential execution is implied but not explicitly stated.
+**Assessment**: Non-blocking for design phase. The scheduling language and cancel-token check pattern imply sequential dispatch. The implementation planning gate should make the concurrency model explicit.
 **Recommendation**: Accept as-is; note for implementation planning gate.
 
 ### N3. `audit_focus` boundary enforcement mechanism still unspecified
 
-**Source**: DS review section 7 (residual risk).  
-**Status**: The design states "programmatic blockers are independent of it" but does not specify the typed constraint that guarantees this at runtime.  
-**Assessment**: Non-blocking for design phase. The constraint is correctly stated as a design invariant. The typed enforcement mechanism is an implementation detail.  
+**Source**: DS review section 7 (residual risk).
+**Status**: The design states "programmatic blockers are independent of it" but does not specify the typed constraint that guarantees this at runtime.
+**Assessment**: Non-blocking for design phase. The constraint is correctly stated as a design invariant. The typed enforcement mechanism is an implementation detail.
 **Recommendation**: Accept as-is; implementation gate must add typed guard (e.g., `audit_focus` passed as read-only input that programmatic audit cannot consume, or separate invocation paths).
 
 ---

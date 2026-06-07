@@ -191,4 +191,3 @@ Template truth validation gate 的 plan 阶段 accepted 必须具备：
 - deterministic analyze/checklist、provider defaults、golden/readiness、Agent runtime、multi-year runtime、score-loop 出现行为变化。
 - 需要改 source/test/config/runtime behavior 才能完成 validation。
 - 任何直接 dayu runtime 依赖、PDF/cache/source helper 越界读取、`extra_payload` 业务参数传递。
-

@@ -55,6 +55,11 @@ AgentInterruptionChecker = Callable[
     [str, int | None, int | None],
     AgentSchedulerInterruption,
 ]
+AgentPhaseEvent = Literal["started", "completed"]
+AgentPhaseRecorder = Callable[
+    [AgentPhaseEvent, str, int, int, int | None],
+    None,
+]
 
 DEFAULT_TARGET_CHAPTER_IDS: Final[tuple[int, ...]] = (1, 2, 3, 4, 5, 6)
 MAX_ACCEPTED_CONCLUSION_CHARS: Final[int] = 500
@@ -141,6 +146,7 @@ class AgentRunner:
         policy: AgentRunPolicy | None = None,
         evidence_availability: object | None = None,
         interruption_checker: AgentInterruptionChecker | None = None,
+        phase_recorder: AgentPhaseRecorder | None = None,
     ) -> AgentReportRun:
         """执行模板第 1-6 章 Agent body run。
 
@@ -150,6 +156,7 @@ class AgentRunner:
             policy: Agent 执行策略；为空时使用默认策略。
             evidence_availability: Service bridge 可显式传入的同源 availability。
             interruption_checker: Host 信号翻译后的可选中断检查器。
+            phase_recorder: 可选 phase 事件记录器，由 Service bridge 翻译到 Host。
 
         Returns:
             Agent run 记录。
@@ -164,6 +171,7 @@ class AgentRunner:
             policy=policy,
             evidence_availability=evidence_availability,
             interruption_checker=interruption_checker,
+            phase_recorder=phase_recorder,
         )
 
 
@@ -174,6 +182,7 @@ def run_agent_body_chapters(
     policy: AgentRunPolicy | None = None,
     evidence_availability: object | None = None,
     interruption_checker: AgentInterruptionChecker | None = None,
+    phase_recorder: AgentPhaseRecorder | None = None,
 ) -> AgentReportRun:
     """执行模板第 1-6 章 Agent body run。
 
@@ -183,6 +192,7 @@ def run_agent_body_chapters(
         policy: Agent 执行策略；为空时使用默认策略。
         evidence_availability: 可选同源证据可用性；为空时 Agent 派生一次。
         interruption_checker: Host 信号翻译后的可选中断检查器。
+        phase_recorder: 可选 phase 事件记录器，由 Service bridge 翻译到 Host。
 
     Returns:
         Agent run 记录，包含 body readiness handoff。
@@ -244,6 +254,7 @@ def run_agent_body_chapters(
                 llm_clients=llm_clients,
                 evidence_availability=run_evidence_availability,
                 interruption_checker=interruption_checker,
+                phase_recorder=phase_recorder,
             )
         )
     return _run_from_tasks(
@@ -263,6 +274,7 @@ def _run_single_chapter(
     llm_clients: AgentLLMClients,
     evidence_availability: object,
     interruption_checker: AgentInterruptionChecker | None,
+    phase_recorder: AgentPhaseRecorder | None,
 ) -> ChapterTask:
     """执行单个正文章节。
 
@@ -273,6 +285,7 @@ def _run_single_chapter(
         llm_clients: Service 显式注入的 writer/auditor client。
         evidence_availability: run-level 同源证据可用性。
         interruption_checker: 可选中断检查器。
+        phase_recorder: 可选 phase 事件记录器。
 
     Returns:
         单章任务结果。
@@ -301,10 +314,18 @@ def _run_single_chapter(
         if interruption.status != "none":
             return _scheduler_blocked_task(title, chapter_id=chapter_id, interruption=interruption, attempts=tuple(attempts))
 
+        _record_phase_started(phase_recorder, "writer", chapter_id, attempt_index)
         writer_execution = write_chapter_tool(
             writer_input,
             llm_client=llm_clients.writer,
             attempt_index=attempt_index,
+        )
+        _record_phase_completed(
+            phase_recorder,
+            "writer",
+            chapter_id,
+            attempt_index,
+            writer_execution.trace.elapsed_ms,
         )
         if writer_execution.exception is not None:
             return _exception_task(
@@ -403,10 +424,18 @@ def _run_single_chapter(
                 checked_rules=(),
             )
         if policy.run_llm_audit:
+            _record_phase_started(phase_recorder, "auditor", chapter_id, attempt_index)
             llm_execution = audit_chapter_llm_tool(
                 audit_input,
                 llm_client=llm_clients.auditor,
                 attempt_index=attempt_index,
+            )
+            _record_phase_completed(
+                phase_recorder,
+                "auditor",
+                chapter_id,
+                attempt_index,
+                llm_execution.trace.elapsed_ms,
             )
             audit_traces.append(llm_execution.trace)
             if llm_execution.exception is not None:
@@ -506,6 +535,8 @@ def _run_single_chapter(
             )
         )
         if decision.action == "regenerate":
+            _record_phase_started(phase_recorder, "repair", chapter_id, attempt_index)
+            _record_phase_completed(phase_recorder, "repair", chapter_id, attempt_index, 0)
             attempt_index += 1
             writer_input = _writer_input(
                 projection,
@@ -771,16 +802,37 @@ def _scheduler_blocked_task(
         ValueError: 当 task 校验失败时抛出。
     """
 
+    stop_reason = _scheduler_stop_reason(interruption)
     return ChapterTask(
         chapter_id=chapter_id,
         title=title,
         status="blocked",
         terminal_state="blocked_scheduler_interrupted",
         attempts=attempts,
-        stop_reason="scheduler_interrupted",
+        stop_reason=stop_reason,
         blocked_reasons=(f"{chapter_id}:blocked_scheduler_interrupted:{interruption.status}:{interruption.phase}",),
-        failure_category="scheduler_interrupted",
+        failure_category=stop_reason,
     )
+
+
+def _scheduler_stop_reason(interruption: AgentSchedulerInterruption) -> str:
+    """把 Agent scheduler interruption 投影为安全停止原因。
+
+    Args:
+        interruption: scheduler 中断。
+
+    Returns:
+        可由 Service bridge 继续投影的 scheduler 停止原因。
+
+    Raises:
+        ValueError: 当 interruption status 非中断状态时抛出。
+    """
+
+    if interruption.status == "cancelled":
+        return "scheduler_cancelled"
+    if interruption.status == "deadline_exceeded":
+        return "scheduler_deadline_exceeded"
+    raise ValueError("scheduler blocked task 必须来自 cancelled 或 deadline_exceeded")
 
 
 def _exception_task(
@@ -1043,6 +1095,60 @@ def _check_interruption(
             attempt_index=attempt_index,
         )
     return interruption_checker(phase, chapter_id, attempt_index)
+
+
+def _record_phase_started(
+    phase_recorder: AgentPhaseRecorder | None,
+    phase: str,
+    chapter_id: int,
+    attempt_index: int,
+) -> None:
+    """记录 Agent phase 开始事件。
+
+    Args:
+        phase_recorder: 可选 phase 事件记录器。
+        phase: Agent phase 名称。
+        chapter_id: 模板章节编号。
+        attempt_index: attempt 序号。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        HostRuntimeError: 当上层 recorder 连接 Host 且诊断字段非法时由 Host 抛出。
+    """
+
+    if phase_recorder is None:
+        return
+    phase_recorder("started", phase, chapter_id, attempt_index, None)
+
+
+def _record_phase_completed(
+    phase_recorder: AgentPhaseRecorder | None,
+    phase: str,
+    chapter_id: int,
+    attempt_index: int,
+    elapsed_ms: int | None,
+) -> None:
+    """记录 Agent phase 完成事件。
+
+    Args:
+        phase_recorder: 可选 phase 事件记录器。
+        phase: Agent phase 名称。
+        chapter_id: 模板章节编号。
+        attempt_index: attempt 序号。
+        elapsed_ms: phase 耗时毫秒。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        HostRuntimeError: 当上层 recorder 连接 Host 且诊断字段非法时由 Host 抛出。
+    """
+
+    if phase_recorder is None:
+        return
+    phase_recorder("completed", phase, chapter_id, attempt_index, elapsed_ms)
 
 
 def _validate_projection_coverage(

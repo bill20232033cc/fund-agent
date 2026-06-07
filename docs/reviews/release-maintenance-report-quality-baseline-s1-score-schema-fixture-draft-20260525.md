@@ -1,8 +1,8 @@
 # Release Maintenance Report-Quality Baseline S1 Score-Schema Fixture Draft
 
-> Date: 2026-05-25  
-> Worker: AgentCodex specialist evidence/planning worker  
-> Gate: `report-quality-baseline S1 score-schema fixture draft`  
+> Date: 2026-05-25
+> Worker: AgentCodex specialist evidence/planning worker
+> Gate: `report-quality-baseline S1 score-schema fixture draft`
 > Scope: observational schema and reviewed dry-run fixture plan only; no source code, tests, renderer, FQ0-FQ6, Host/Agent package, `dayu.host`, `dayu.engine`, PR, push, or commit work.
 
 ## Step Self-Check

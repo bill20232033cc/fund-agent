@@ -507,4 +507,3 @@ Planning worker should report:
 - review route used;
 - blocking findings, if any;
 - whether the artifact is ready for controller judgment.
-

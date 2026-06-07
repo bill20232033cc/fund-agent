@@ -369,4 +369,3 @@ Only the following validation is required for this plan gate:
 | Command | Required result |
 |---|---|
 | `git diff --check` | pass |
-
