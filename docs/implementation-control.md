@@ -59,17 +59,17 @@
 - 所有业务参数必须在 typed request / contract / config 中显式声明；禁止通过 `extra_payload` 传递显式参数。
 - 生产年报访问必须通过 `FundDocumentRepository`；Service、UI、Host、renderer、quality gate 不得直接调用具体来源、PDF cache 或下载 helper。
 - 年报来源 fallback 继续按 `not_found` / `unavailable` eligible，`schema_drift` / `identity_mismatch` / `integrity_error` fail-closed。
-- 当前 control sync 只同步 Slice 1G accepted 状态并记录 closeout evidence；不修改代码、测试源码、模板文档或 README。它不改变 runtime、score、snapshot、quality gate、golden fixture、golden answer、promotion state、provider defaults、Agent runtime、multi-year runtime、PR/release 或外部状态。
+- 当前 control sync 记录 Slice 1A-1G no-live closeout accepted checkpoint 和后续非 live spike review blocker；它不改变 runtime、score、snapshot、quality gate、golden fixture、golden answer、promotion state、provider defaults、Agent runtime、multi-year runtime、PR/release 或外部状态。
 
 | Field | State |
 |---|---|
 | Branch baseline | `feat/mvp-llm-incomplete-run-artifacts` |
 | Current phase | `MVP typed-template-to-agent report generation stabilization phase` |
-| Current gate | `Real LLM chapter acceptance calibration gate` active; Slice 1A-1G and no-live closeout accepted locally |
-| Current gate classification | `heavy` |
-| Current gate status | Post-config live smoke evidence remains the same-source routing baseline: readiness passed, exactly one unchanged-default `006597 / 2024 --use-llm` command reached provider-backed writer/auditor behavior, exited `1`, and retained artifact `reports/llm-runs/006597-2024-20260606T231450Z-host_run_435c8c7c2b8d4e2/` showed Ch1 `prompt_contract/code_bug_other`, Ch2 `prompt_contract/l1_numerical_closure`, Ch3 `prompt_contract/code_bug_other`, Ch4 `audit_parse`, Ch5 `prompt_contract/code_bug_other`, Ch6 `prompt_contract/unknown_anchor`. Slice 1A-1G accepted local fixes/evidence for typed marker protocol, Ch3/Ch5 marker sharing, Ch6 unknown anchors, Ch2 L1 numerical closure, Ch4 audit-parse prompt/repair context, Ch3/Ch5 approved missing-marker semantics, Ch2 deleted ITEM_RULE marker false positive / repair ambiguity, and Ch6 pressure-test `must_not_cover` exception extraction. No-live closeout accepted `covered_locally=8`, `covered_by_no_code_evidence=2`, `not_covered=0`, `blocked_conflict=0` for known deterministic residual routes. The live report remains not accepted and no chapter live acceptance is claimed |
-| Next entry point | Controller-selected next reviewed gate after no-live closeout. Allowed directions are control/doc closeout only or a separately planned/reviewed live acceptance evidence gate with exact authorization boundaries. Do not run another live command, retry, probe, fallback, change provider/default/runtime/budget, enter Agent runtime, multi-year runtime, score-loop, golden/readiness, PR/push/release, or implement the next gate before a new plan/review/controller judgment and explicit authorization where required |
-| Next gate classification | `heavy` for Chapter acceptance calibration because it can affect quality gate semantics, final report acceptance, template contract behavior, and live LLM evidence routing |
+| Current gate | `Agent Engine Design Refresh Gate` plan accepted as design-only |
+| Current gate classification | `standard` for non-live design/plan; previous Real LLM chapter acceptance calibration closeout was `heavy` and is accepted locally |
+| Current gate status | Real LLM chapter acceptance calibration Slice 1A-1G and no-live closeout are accepted locally at checkpoint `13a8c19`; follow-up control sync checkpoint `64057e6` records that accepted checkpoint. The live report remains not accepted, Ch1-Ch6 live acceptance remains unproven, Ch3/Ch5 required-output marker live proof remains unproven, and complete fail-closed 0-7 report acceptance remains unproven. `LLM Tool Calling And State Machine Calibration Spike` is accepted with DS-only review due MiMo network/API failure. `Agent Engine Design Refresh Gate` plan is accepted as design-only with DS review and controller judgment. No Agent runtime implementation is authorized |
+| Next entry point | Choose either pause for morning controller selection or open a design-only `MVP Agent Engine Design Slice A Dataclass Design Plan`. Do not enter implementation, create `fund_agent/agent`, implement ToolRegistry/ToolTrace, run live LLM, retry, endpoint probe, fallback, change provider/default/runtime/budget, enter multi-year runtime, score-loop, golden/readiness, PR/push/release, or external state before a new plan/review/controller judgment and explicit authorization |
+| Next gate classification | `standard` for design-only Slice A planning; `heavy` if user later authorizes live acceptance evidence or Agent runtime implementation gates |
 | Design truth | `docs/design.md` |
 | Control truth | `docs/implementation-control.md` |
 | Short startup entry | `docs/current-startup-packet.md` |
@@ -183,6 +183,12 @@
 | Prepared real LLM chapter acceptance live evidence gate plan | `docs/reviews/mvp-real-llm-chapter-acceptance-live-evidence-gate-plan-20260607.md` |
 | Prepared real LLM chapter acceptance live evidence gate plan review | `docs/reviews/plan-review-20260607-170712.md` |
 | Prepared real LLM chapter acceptance live evidence gate plan judgment | `docs/reviews/mvp-real-llm-chapter-acceptance-live-evidence-gate-plan-controller-judgment-20260607.md` |
+| Accepted LLM tool calling / state machine calibration spike | `docs/reviews/mvp-llm-tool-calling-state-machine-calibration-spike-20260607.md` |
+| Accepted LLM tool calling / state machine calibration spike review | `docs/reviews/mvp-llm-tool-calling-state-machine-calibration-spike-review-ds-20260607.md` |
+| Accepted LLM tool calling / state machine calibration spike judgment | `docs/reviews/mvp-llm-tool-calling-state-machine-calibration-spike-controller-judgment-20260607.md` |
+| Accepted Agent Engine Design Refresh Gate plan | `docs/reviews/mvp-agent-engine-design-refresh-gate-plan-20260607.md` |
+| Accepted Agent Engine Design Refresh Gate plan review | `docs/reviews/mvp-agent-engine-design-refresh-gate-plan-review-ds-20260607.md` |
+| Accepted Agent Engine Design Refresh Gate plan judgment | `docs/reviews/mvp-agent-engine-design-refresh-gate-plan-controller-judgment-20260607.md` |
 | Accepted provider runtime operator evidence / environment availability reconciliation plan | `docs/reviews/mvp-provider-runtime-operator-evidence-environment-availability-reconciliation-gate-plan-20260606.md` |
 | Accepted provider runtime operator evidence / environment availability reconciliation plan reviews | `docs/reviews/mvp-provider-runtime-operator-evidence-environment-availability-reconciliation-gate-plan-review-ds-20260606.md`; `docs/reviews/plan-review-20260606-174338.md` |
 | Accepted provider runtime operator evidence / environment availability reconciliation judgment | `docs/reviews/mvp-provider-runtime-operator-evidence-environment-availability-reconciliation-gate-controller-judgment-20260606.md` |
