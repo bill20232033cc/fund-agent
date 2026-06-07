@@ -6,7 +6,11 @@ import ast
 from dataclasses import replace
 from pathlib import Path
 
-from fund_agent.fund.template.typed_contracts import SUPPORTED_AUDIT_FOCUS, get_typed_chapter_contract
+from fund_agent.fund.template.typed_contracts import (
+    RequiredOutputItem,
+    SUPPORTED_AUDIT_FOCUS,
+    get_typed_chapter_contract,
+)
 from fund_agent.fund.chapter_auditor import (
     ChapterAuditInput,
     ChapterAuditLLMRequest,
@@ -155,6 +159,51 @@ def test_programmatic_audit_fails_deleted_item_rule_section() -> None:
     assert any("ITEM_RULE" in issue.message for issue in result.issues)
 
 
+def test_ch2_deleted_item_rule_does_not_block_required_stability_wording() -> None:
+    """验证 Ch2 required output 的稳定性讨论不被删除段落规则误伤。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当合法稳定性缺口被 ITEM_RULE 阻断时抛出。
+    """
+
+    input_data = _audit_input(chapter_id=2, markdown_suffix="\n多年度超额收益稳定性判断仍受披露数据不足限制。")
+
+    result = audit_chapter_programmatic(input_data)
+
+    assert not any("chapter_2_alpha_yearly_breakdown" in issue.item_rule_ids for issue in result.issues)
+
+
+def test_ch2_deleted_item_rule_still_blocks_deleted_segment_heading() -> None:
+    """验证 Ch2 被删除的分年度拆解段落标题仍触发 C2。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当删除段落标题未被阻断时抛出。
+    """
+
+    input_data = _audit_input_with_deleted_item_rule(
+        chapter_id=2,
+        rule_id="chapter_2_alpha_yearly_breakdown",
+        markdown_suffix="\n#### 超额收益分年度拆解\n逐年拆解。",
+    )
+
+    result = audit_chapter_programmatic(input_data)
+
+    assert result.status == "fail"
+    assert any("chapter_2_alpha_yearly_breakdown" in issue.item_rule_ids for issue in result.issues)
+
+
 def test_programmatic_audit_fails_forbidden_trading_advice() -> None:
     """验证禁用交易建议触发 C1，见模板投资建议边界。
 
@@ -195,6 +244,50 @@ def test_programmatic_audit_fails_must_not_cover_phrase() -> None:
 
     assert result.status == "fail"
     assert any("must_not_cover" in issue.message for issue in result.issues)
+
+
+def test_ch6_pressure_test_exception_does_not_trigger_must_not_cover() -> None:
+    """验证 Ch6 must_not_cover 的“除非”例外不会误禁压力测试。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当压力测试例外被误判为禁区时抛出。
+    """
+
+    input_data = _audit_input(
+        chapter_id=6,
+        markdown_suffix="\n压力测试方面：当前数据不足，只能作为下一步风险验证问题。",
+    )
+
+    result = audit_chapter_programmatic(input_data)
+
+    assert not any("压力测试" in issue.message for issue in result.issues)
+
+
+def test_ch6_must_not_cover_still_blocks_current_stage_repetition() -> None:
+    """验证 Ch6 must_not_cover 仍阻断真正的当前阶段事实复述。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当真实 forbidden phrase 未被阻断时抛出。
+    """
+
+    input_data = _audit_input(chapter_id=6, markdown_suffix="\n这里复述当前阶段事实。")
+
+    result = audit_chapter_programmatic(input_data)
+
+    assert result.status == "fail"
+    assert any("复述当前阶段事实" in issue.message for issue in result.issues)
 
 
 def test_ch3_required_label_allowed_under_missing_evidence() -> None:
@@ -592,6 +685,84 @@ def test_programmatic_audit_passes_required_output_marker_protocol() -> None:
     assert not any("required output item marker" in issue.message for issue in result.issues)
 
 
+def test_programmatic_audit_passes_typed_ch1_required_output_id_markers() -> None:
+    """验证 typed 第 1 章使用 stable item id marker 时通过 C2 marker 审计。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 typed marker 被 legacy marker 规则误阻断时抛出。
+    """
+
+    result = audit_chapter_programmatic(_typed_audit_input(chapter_id=1))
+
+    assert not any("required output item marker" in issue.message for issue in result.issues)
+
+
+def test_programmatic_audit_fails_missing_typed_required_output_id_marker() -> None:
+    """验证 typed marker 缺失时仍 fail-closed，见模板第 1 章 CHAPTER_CONTRACT。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当缺 typed marker 被错误放行时抛出。
+    """
+
+    typed_contract = get_typed_chapter_contract(1)
+    omitted_item_id = typed_contract.required_output_items[0].item_id
+
+    result = audit_chapter_programmatic(
+        _typed_audit_input(chapter_id=1, omitted_required_output_item_id=omitted_item_id)
+    )
+
+    assert result.status == "fail"
+    assert any(
+        issue.rule_code == "C2" and omitted_item_id in issue.message
+        for issue in result.issues
+    )
+
+
+def test_programmatic_audit_legacy_path_still_requires_legacy_required_output_marker() -> None:
+    """验证 legacy path 不接受 typed item id marker 代替原文 marker。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 legacy marker 规则被 typed path 改动放松时抛出。
+    """
+
+    legacy_input = _audit_input()
+    typed_contract = get_typed_chapter_contract(1)
+    legacy_items = legacy_input.writer_input.chapter.contract.required_output_items
+    typed_lines = "\n".join(
+        f"<!-- required_output:{item.item_id} -->\n- {item.text}: 已根据结构化事实说明。"
+        for item in typed_contract.required_output_items
+    )
+    legacy_lines = "\n".join(
+        f"<!-- required_output:{item} -->\n- {item}: 已根据结构化事实说明。"
+        for item in legacy_items
+    )
+    markdown = legacy_input.draft.markdown.replace(legacy_lines, typed_lines)
+    legacy_input = _audit_input(markdown_override=markdown)
+
+    result = audit_chapter_programmatic(legacy_input)
+
+    assert result.status == "fail"
+    assert any("required output item marker" in issue.message for issue in result.issues)
+
+
 def test_programmatic_audit_fails_l1_formula_without_nearby_anchor_marker() -> None:
     """验证 R=A+B-C 数字闭环断言缺邻近 marker 时触发 L1。
 
@@ -689,6 +860,60 @@ def test_programmatic_audit_allows_l1_formula_framework_without_concrete_percent
     """
 
     input_data = _audit_input(markdown_suffix="\n这里只说明 R=A+B-C 是归因框架，不填写具体百分比。")
+
+    result = audit_chapter_programmatic(input_data)
+
+    assert not any(issue.rule_code == "L1" for issue in result.issues)
+
+
+def test_programmatic_audit_blocks_ch2_source_section_unanchored_numeric_closure() -> None:
+    """验证第 2 章出处段无锚点复述公式百分比时仍触发 L1。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当出处段无锚点数字闭环被错误放行时抛出。
+    """
+
+    input_data = _audit_input(
+        markdown_suffix=(
+            "\n### 证据与出处\n"
+            "净值增长率2.57%来源于年报§3，基准收益率3.42%来源于年报§3，"
+            "因此无法完成完整R=A+B-C数字闭环。"
+        )
+    )
+
+    result = audit_chapter_programmatic(input_data)
+
+    assert result.status == "fail"
+    assert any(issue.rule_code == "L1" for issue in result.issues)
+
+
+def test_programmatic_audit_allows_ch2_source_section_numeric_closure_with_nearby_anchor() -> None:
+    """验证第 2 章出处段有邻近锚点时不因数字闭环触发 L1。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当出处段已锚定数字闭环被误阻断时抛出。
+    """
+
+    input_data = _audit_input(
+        markdown_suffix=(
+            "\n### 证据与出处\n"
+            "<!-- anchor:annual:110011:2024:basic_identity:1 -->\n"
+            "净值增长率2.57%来源于年报§3，基准收益率3.42%来源于年报§3，"
+            "因此无法完成完整R=A+B-C数字闭环。"
+        )
+    )
 
     result = audit_chapter_programmatic(input_data)
 
@@ -881,7 +1106,14 @@ def test_llm_audit_prompt_spells_exact_pass_and_issue_line_protocol() -> None:
     assert result.status == "pass"
     request = client.requests[0]
     assert "PASS|chapter|no issues" in request.user_prompt
+    assert "唯一 pass 响应必须精确为一行" in request.user_prompt
     assert "BLOCKING|<location>|<message>" in request.user_prompt
+    assert "第一段只能是 BLOCKING / REVIEWABLE / INFO" in request.user_prompt
+    assert "不得输出 SEVERITY 占位词" in request.user_prompt
+    assert "不得包含 `|`" in request.user_prompt
+    assert "`<!-- missing:<reason> -->` 是 approved evidence-gap marker" in request.user_prompt
+    assert "不要仅因缺少事实、缺少 anchor 或缺少外部来源而阻断" in request.user_prompt
+    assert "把缺失数据写成确定性结论" in request.user_prompt
     assert "禁止输出空行以外的额外文本" in request.user_prompt
     assert request.audit_focus == DEFAULT_AUDIT_FOCUS
 
@@ -1031,6 +1263,98 @@ def _audit_input(
     return ChapterAuditInput(writer_input=writer_input, draft=draft)
 
 
+def _audit_input_with_deleted_item_rule(
+    *,
+    chapter_id: int,
+    rule_id: str,
+    markdown_suffix: str,
+) -> ChapterAuditInput:
+    """构造指定 ITEM_RULE 为 delete 的章节审计输入。
+
+    Args:
+        chapter_id: 模板章节编号。
+        rule_id: 要强制设为删除状态的 ITEM_RULE id。
+        markdown_suffix: 附加 Markdown。
+
+    Returns:
+        测试用 `ChapterAuditInput`。
+
+    Raises:
+        AssertionError: 当目标规则不存在时抛出。
+    """
+
+    base_input = _audit_input(chapter_id=chapter_id, markdown_suffix=markdown_suffix)
+    decisions = []
+    found = False
+    for decision in base_input.writer_input.chapter.item_rule_projection.decisions:
+        if decision.rule_id == rule_id:
+            decisions.append(replace(decision, status="delete"))
+            found = True
+        else:
+            decisions.append(decision)
+    assert found
+    item_rule_projection = replace(
+        base_input.writer_input.chapter.item_rule_projection,
+        decisions=tuple(decisions),
+    )
+    chapter = replace(base_input.writer_input.chapter, item_rule_projection=item_rule_projection)
+    writer_input = replace(base_input.writer_input, chapter=chapter)
+    draft = replace(base_input.draft, deleted_item_rule_ids=(rule_id,))
+    return ChapterAuditInput(writer_input=writer_input, draft=draft)
+
+
+def _typed_audit_input(
+    *,
+    chapter_id: int,
+    omitted_required_output_item_id: str | None = None,
+) -> ChapterAuditInput:
+    """构造 typed required-output marker 审计输入。
+
+    Args:
+        chapter_id: 模板章节编号。
+        omitted_required_output_item_id: 可选要省略的 typed required output item id。
+
+    Returns:
+        测试用 typed `ChapterAuditInput`。
+
+    Raises:
+        AssertionError: 当投影缺少 anchor 时抛出。
+    """
+
+    projection = project_chapter_facts(_bundle(), chapter_ids=(chapter_id,))
+    availability = derive_evidence_availability(projection)
+    typed_contract = get_typed_chapter_contract(chapter_id)
+    writer_input = build_chapter_writer_input(
+        projection,
+        chapter_id=chapter_id,
+        typed_required_output_items=typed_contract.required_output_items,
+        evidence_availability=availability,
+    )
+    anchor_id = writer_input.chapter.evidence_anchors[0].anchor_id
+    markdown = _typed_valid_markdown(
+        writer_input,
+        typed_contract.required_output_items,
+        anchor_id,
+        omitted_required_output_item_id=omitted_required_output_item_id,
+    )
+    draft = ChapterDraft(
+        chapter_id=writer_input.chapter.chapter_id,
+        title=writer_input.chapter.title,
+        markdown=markdown,
+        used_fact_ids=tuple(fact.fact_id for fact in writer_input.chapter.facts[:1]),
+        used_anchor_ids=(anchor_id,),
+        declared_missing_reasons=(),
+        deleted_item_rule_ids=tuple(
+            decision.rule_id
+            for decision in writer_input.chapter.item_rule_projection.decisions
+            if decision.status == "delete"
+        ),
+        model_name="fake-writer",
+        finish_reason="stop",
+    )
+    return ChapterAuditInput(writer_input=writer_input, draft=draft)
+
+
 def _ch3_typed_audit_input(body_line: str, *, include_evidence_availability: bool = True) -> ChapterAuditInput:
     """构造带 EvidenceAvailability 的第 3 章 typed 审计输入。
 
@@ -1132,6 +1456,50 @@ def _valid_markdown(writer_input: object, anchor_id: str) -> str:
         f"{required_lines}\n"
         "### 详细情况\n"
         "本章只使用已断言事实，并把候选 facet 写成未断言。\n"
+        "### 证据与出处\n"
+        f"{evidence}"
+    )
+
+
+def _typed_valid_markdown(
+    writer_input: object,
+    typed_required_output_items: tuple[RequiredOutputItem, ...],
+    anchor_id: str,
+    *,
+    omitted_required_output_item_id: str | None = None,
+) -> str:
+    """构造使用 typed item id marker 的最小章节 Markdown。
+
+    Args:
+        writer_input: `ChapterWriterInput`。
+        typed_required_output_items: typed required output items。
+        anchor_id: 证据锚点 ID。
+        omitted_required_output_item_id: 可选要省略的 typed item id。
+
+    Returns:
+        测试用 Markdown。
+
+    Raises:
+        AttributeError: 当输入不是 writer input 时抛出。
+    """
+
+    chapter = writer_input.chapter
+    required_lines = "\n".join(
+        f"<!-- required_output:{item.item_id} -->\n- {item.text}: 已根据结构化事实说明。"
+        for item in typed_required_output_items
+        if item.item_id != omitted_required_output_item_id
+    )
+    evidence = ""
+    if anchor_id:
+        evidence = (
+            f"<!-- anchor:{anchor_id} -->\n"
+            "> 📎 证据：年报2024§§2表None行basic_identity（fixture）\n"
+        )
+    return (
+        "### 结论要点\n"
+        f"{required_lines}\n"
+        "### 详细情况\n"
+        f"本章只使用已断言事实，并把候选 facet 写成未断言。章节：{chapter.title}\n"
         "### 证据与出处\n"
         f"{evidence}"
     )

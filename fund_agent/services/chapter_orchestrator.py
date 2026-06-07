@@ -2408,18 +2408,29 @@ def _required_correction_from_issue(issue: ChapterAuditIssue) -> str:
             "为对应 required output item 补齐 <!-- required_output:<item> --> marker，"
             "并在 marker 后只写有同源证据或明确缺口的内容。"
         )
+    if issue.rule_code == "C2" and issue.item_rule_ids:
+        return (
+            "删除 ITEM_RULE 要求删除的 optional/conditional 段落标题和专属段落；"
+            "不得删除 required output marker，若相关语义属于 required output，"
+            "只能在 required output 下用同源证据或缺口措辞简短说明。"
+        )
     if issue.rule_code == "C2" and "候选 facet" in message:
         return "将候选 facet 改写为候选/未断言信息，不得使用 是/为/属于/定位为/可判定为 等断言动词。"
     if issue.rule_code == "L1" or _audit_issue_id_prefix(issue.issue_id) == _PROGRAMMATIC_L1_PREFIX:
         return (
             "修复模板第2章 R=A+B-C 数字闭环：公式/百分比闭合断言必须在同一句或上下2行内放入"
             " allowed anchor marker；若没有同源事实支撑 R、A、B、C 或 A-C 数值关系，删除具体数值闭合断言，"
-            "改写为未披露/数据不足/下一步最小验证问题；不得编造 Alpha、Beta、Cost 或 R 数值。"
+            "改写为未披露/数据不足/下一步最小验证问题；同时检查 ### 结论要点 与 ### 证据与出处，"
+            "不得在这些段落无锚点复述 R/A/B/C/A-C 具体百分比；不得编造 Alpha、Beta、Cost 或 R 数值。"
         )
     if issue.rule_code == "E1" or "anchor" in message.lower() or "锚点" in message:
         return "只使用 allowed anchor marker，删除未知 anchor 或改用 allowed anchor。"
     if issue.issue_id == "llm:parse_failure":
-        return "按 auditor 行协议修复：PASS|chapter|no issues 或 SEVERITY|LOCATION|MESSAGE，禁止解释性文本。"
+        return (
+            "按 auditor 原始行协议修复：无问题时只能输出一行 PASS|chapter|no issues；"
+            "有问题时每行只能以 BLOCKING、REVIEWABLE 或 INFO 开头并恰好三段，"
+            "禁止 SEVERITY 占位词、解释性前缀、Markdown、JSON、标题、总结句或额外 `|`。"
+        )
     return _sanitize_text(message)
 
 

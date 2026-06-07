@@ -657,11 +657,30 @@ def _audit_contract_markers(input_data: ChapterAuditInput) -> tuple[ChapterAudit
     """
 
     markdown = input_data.draft.markdown
+    marker_items = _required_output_marker_items(input_data.writer_input)
     return tuple(
         _program_issue("C2", f"缺少 required output item marker：{item}", item, repair_hint="patch")
-        for item in input_data.writer_input.chapter.contract.required_output_items
+        for item in marker_items
         if item and _required_output_marker(item) not in markdown
     )
+
+
+def _required_output_marker_items(writer_input: ChapterWriterInput) -> tuple[str, ...]:
+    """读取程序审计应检查的 required output marker 项。
+
+    Args:
+        writer_input: 章节写作输入。
+
+    Returns:
+        typed path 返回 stable item id；legacy path 返回 CHAPTER_CONTRACT 原文。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if writer_input.typed_required_output_items:
+        return tuple(item.item_id for item in writer_input.typed_required_output_items)
+    return writer_input.chapter.contract.required_output_items
 
 
 def _audit_must_not_cover(input_data: ChapterAuditInput) -> tuple[ChapterAuditIssue, ...]:
@@ -1348,6 +1367,7 @@ def _must_not_cover_phrases(clause: str) -> tuple[str, ...]:
     """
 
     normalized = _MUST_NOT_COVER_PARENS_RE.sub("", clause).strip()
+    normalized = normalized.split("除非", maxsplit=1)[0].strip()
     normalized = _MUST_NOT_COVER_PREFIX_RE.sub("", normalized).strip(" 。")
     phrases: list[str] = []
     for fragment in _MUST_NOT_COVER_SPLIT_RE.split(normalized):
@@ -1433,12 +1453,16 @@ def _llm_request(input_data: ChapterAuditInput) -> ChapterAuditLLMRequest:
             "你是基金分析章节审计器。只能返回固定行协议，禁止 Markdown、JSON、编号列表、解释性前缀或总结句。"
         ),
         user_prompt=(
-            "唯一 pass 响应必须精确为：PASS|chapter|no issues\n"
+            "唯一 pass 响应必须精确为一行：PASS|chapter|no issues；不得输出第二行或任何前后缀。\n"
             "非 pass 行只允许：BLOCKING|<location>|<message>、REVIEWABLE|<location>|<message>、"
             "INFO|<location>|<message>\n"
+            "每条非 pass 行必须恰好三段，第一段只能是 BLOCKING / REVIEWABLE / INFO，不得输出 SEVERITY 占位词。\n"
             "location 和 message 不得为空；location 优先使用 required output item、heading、anchor id 或 line:N。\n"
-            "message 必须说明为什么不通过和最小修复动作，不能要求补外部来源。\n"
-            "禁止输出空行以外的额外文本、Markdown、编号列表、解释性前后缀或 JSON。\n"
+            "message 必须说明为什么不通过和最小修复动作，不能要求补外部来源，且不得包含 `|`。\n"
+            "`<!-- missing:<reason> -->` 是 approved evidence-gap marker；当草稿已用 allowed missing marker "
+            "和谨慎缺口措辞说明数据缺失时，不要仅因缺少事实、缺少 anchor 或缺少外部来源而阻断。\n"
+            "只有在草稿把缺失数据写成确定性结论、遗漏必要缺口语义、引用未知 anchor 或与 allowed facts 矛盾时才阻断。\n"
+            "禁止输出空行以外的额外文本、Markdown、编号列表、解释性前后缀、标题、总结句、JSON 或代码块。\n"
             "示例 pass：PASS|chapter|no issues\n"
             "示例 blocking：BLOCKING|证据与出处|证据锚点缺失，请补 allowed anchor marker。\n"
             "审计关注点只作为 bounded semantic emphasis，不改变程序审计、阻断等级或修复预算。\n"
@@ -1757,7 +1781,7 @@ def _deleted_rule_marker_present(rule_id: str, markdown: str) -> bool:
     markers = {
         "chapter_1_index_constituents": ("指数编制规则与成分股", "跟踪指数"),
         "chapter_1_manager_philosophy": ("基金经理投资哲学", "选股标准"),
-        "chapter_2_alpha_yearly_breakdown": ("超额收益分年度拆解", "超额收益稳定性"),
+        "chapter_2_alpha_yearly_breakdown": ("超额收益分年度拆解",),
         "chapter_2_tracking_error_analysis": ("跟踪误差分析", "日均偏离度"),
     }
     return any(marker in markdown for marker in markers.get(rule_id, ()))

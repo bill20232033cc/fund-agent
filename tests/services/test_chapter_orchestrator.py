@@ -1536,6 +1536,8 @@ def test_l1_repair_context_guides_anchored_correction_and_accepts_after_repair()
     assert repair_context is not None
     assert any(issue_id.startswith("programmatic:L1") for issue_id in repair_context.previous_issue_ids)
     assert any("第2章 R=A+B-C 数字闭环" in item for item in repair_context.required_corrections)
+    assert any("### 结论要点 与 ### 证据与出处" in item for item in repair_context.required_corrections)
+    assert any("不得在这些段落无锚点复述 R/A/B/C/A-C 具体百分比" in item for item in repair_context.required_corrections)
     assert "extra_payload" not in writer.requests[1].user_prompt
 
 
@@ -1719,6 +1721,15 @@ def test_required_corrections_are_deterministic_for_known_issue_patterns() -> No
         ),
         _audit_issue("e1", "E1", "草稿引用未授权锚点：unknown", "used_anchor_ids"),
         _audit_issue("llm:parse_failure", "C1", "parse failure", "raw_response"),
+        replace(
+            _audit_issue(
+                "programmatic:C2:chapter_2_alpha_yearly_breakdown:abcdef",
+                "C2",
+                "ITEM_RULE 要求删除的段落仍出现在草稿中：超额收益分年度拆解",
+                "chapter_2_alpha_yearly_breakdown",
+            ),
+            item_rule_ids=("chapter_2_alpha_yearly_breakdown",),
+        ),
     )
 
     corrections = _required_corrections_from_issues(issues)
@@ -1727,9 +1738,15 @@ def test_required_corrections_are_deterministic_for_known_issue_patterns() -> No
     assert any("required output item" in correction for correction in corrections)
     assert any("候选 facet" in correction for correction in corrections)
     assert any("第2章 R=A+B-C 数字闭环" in correction for correction in corrections)
+    assert any("### 结论要点 与 ### 证据与出处" in correction for correction in corrections)
     assert any("不得编造 Alpha、Beta、Cost 或 R 数值" in correction for correction in corrections)
     assert any("allowed anchor marker" in correction for correction in corrections)
     assert any("PASS|chapter|no issues" in correction for correction in corrections)
+    assert any("BLOCKING、REVIEWABLE 或 INFO" in correction for correction in corrections)
+    assert any("禁止 SEVERITY 占位词" in correction for correction in corrections)
+    assert any("解释性前缀、Markdown、JSON" in correction for correction in corrections)
+    assert any("删除 ITEM_RULE 要求删除的 optional/conditional 段落标题和专属段落" in correction for correction in corrections)
+    assert any("不得删除 required output marker" in correction for correction in corrections)
 
 
 def test_required_corrections_sanitize_unknown_issue_message() -> None:
@@ -2119,12 +2136,12 @@ def test_typed_contract_path_preserves_independent_body_execution(monkeypatch) -
     )
 
     rows = {run.chapter_id: run for run in result.chapter_results}
-    assert result.status == "blocked"
+    assert result.status == "partial"
     assert [request.chapter_id for request in writer.requests] == [1, 2, 3]
     assert rows[1].status == "failed"
     assert rows[1].stop_reason == "llm_timeout"
-    assert rows[2].status == "failed"
-    assert rows[3].status == "failed"
+    assert rows[2].status == "accepted"
+    assert rows[3].status == "accepted"
     assert rows[2].attempts[0].writer_result.prompt.required_output_evidence_plan
     assert rows[3].attempts[0].writer_result.prompt.required_output_evidence_plan
     assert rows[2].attempts[0].writer_result.prompt.required_output_items == tuple(
@@ -2184,9 +2201,9 @@ def test_typed_contract_path_repair_keeps_typed_required_output_items() -> None:
     )
 
     run = result.chapter_results[0]
-    assert result.status == "blocked"
-    assert run.status == "failed"
-    assert run.stop_reason == "repair_budget_exhausted"
+    assert result.status == "accepted"
+    assert run.status == "accepted"
+    assert run.stop_reason == "none"
     assert [request.chapter_id for request in writer.requests] == [2, 2]
     assert len(run.attempts) == 2
     assert all(
@@ -2198,6 +2215,41 @@ def test_typed_contract_path_repair_keeps_typed_required_output_items() -> None:
             "ch2.required_output."
         )
         for attempt in run.attempts
+    )
+
+
+def test_typed_contract_path_ch1_accepts_typed_required_output_markers() -> None:
+    """验证 typed 第 1 章不会因使用 stable required-output marker 被程序审计误阻断。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 Ch1 typed marker 被 legacy marker 规则误阻断时抛出。
+    """
+
+    result = _orchestrate(
+        policy=ChapterOrchestrationPolicy(
+            target_chapter_ids=(1,),
+            prompt_payload_mode="compact",
+            typed_template_path="typed_template_contract",
+        ),
+        writer=_FakeChapterLLMClient(),
+        auditor=_FakeAuditLLMClient(),
+    )
+
+    run = result.chapter_results[0]
+    assert result.status == "accepted"
+    assert run.status == "accepted"
+    assert run.attempts[0].writer_result.prompt.required_output_items[0].startswith(
+        "ch1.required_output."
+    )
+    assert not any(
+        "required output item marker" in issue.message
+        for issue in run.attempts[0].audit_result.programmatic.issues
     )
 
 

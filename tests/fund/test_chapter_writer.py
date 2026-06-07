@@ -131,6 +131,8 @@ def test_writer_prompt_contains_contract_lens_item_rules_and_fact_ids() -> None:
     assert prompt.allowed_anchor_ids
     assert "chapter_1_index_constituents" in prompt.deleted_item_rule_ids
     assert "preferred_lens" in prompt.user_prompt
+    assert "删除的 ITEM_RULE 只禁止对应 optional/conditional 段落标题和专属段落" in prompt.user_prompt
+    assert "不得因此省略 required_output marker" in prompt.user_prompt
 
 
 def test_writer_prompt_marks_non_asserted_facets_as_not_asserted() -> None:
@@ -483,7 +485,30 @@ def test_writer_prompt_contains_l1_numerical_closure_anchor_rule() -> None:
 
     assert "第2章 R=A+B-C 数字闭环" in prompt.user_prompt
     assert "同句或上下2行" in prompt.user_prompt
+    assert "`### 结论要点` 不要重复未带 anchor 的 R/A/B/C/A-C 具体百分比" in prompt.user_prompt
+    assert "`### 证据与出处` 只列来源标签或带 anchor 的事实句" in prompt.user_prompt
     assert "不得编造 R、A、B、C 或 A-C 数值" in prompt.user_prompt
+
+
+def test_non_ch2_writer_prompt_omits_l1_numerical_closure_anchor_rule() -> None:
+    """验证非第 2 章不注入 R=A+B-C 专属数字闭环约束。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当非第 2 章 prompt 含第 2 章专属规则时抛出。
+    """
+
+    input_data = build_chapter_writer_input(project_chapter_facts(_bundle(), chapter_ids=(1,)), chapter_id=1)
+
+    prompt = build_chapter_prompt(input_data)
+
+    assert "第2章 R=A+B-C 数字闭环" not in prompt.user_prompt
+    assert "`### 结论要点` 不要重复未带 anchor 的 R/A/B/C/A-C 具体百分比" not in prompt.user_prompt
 
 
 def test_compact_prompt_payload_preserves_fact_and_anchor_contract() -> None:
@@ -1055,6 +1080,55 @@ def test_writer_reports_bond_risk_internal_anchor_message() -> None:
     result = write_chapter(input_data, llm_client=_FakeChapterLLMClient(text))
 
     assert result.status == "blocked"
+    assert "组级锚点未展开" in result.issues[0].message
+
+
+def test_ch6_prompt_forbids_synthesized_bond_risk_anchor_ids() -> None:
+    """验证第 6 章 prompt 明确禁止合成债券风险内部锚点，见模板第 6 章。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 prompt 未说明内部锚点不可引用时抛出。
+    """
+
+    projection = project_chapter_facts(_bundle(fund_type="bond_fund"), chapter_ids=(6,))
+    input_data = build_chapter_writer_input(projection, chapter_id=6)
+
+    prompt = build_chapter_prompt(input_data)
+
+    assert "禁止根据 fact_id、source_field_id、source_field_name 或 fact value 自行合成 anchor id" in prompt.user_prompt
+    assert "bond_risk_evidence 内部/组级 anchors 不是 ChapterEvidenceAnchor" in prompt.user_prompt
+    assert "只有“允许 anchors”列表中的 anchor_id 可引用" in prompt.user_prompt
+    assert "允许 anchors" in prompt.user_prompt
+
+
+def test_writer_rejects_synthesized_bond_risk_source_field_anchor() -> None:
+    """验证第 6 章合成的 bond_risk_evidence anchor 仍被 fail-closed 阻断。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当合成锚点被错误接受时抛出。
+    """
+
+    projection = project_chapter_facts(_bundle(fund_type="bond_fund"), chapter_ids=(6,))
+    input_data = build_chapter_writer_input(projection, chapter_id=6)
+    synthesized_anchor_id = "chapter-anchor:110011:2024:ch6:structured.bond_risk_evidence"
+    text = _valid_chapter_markdown(input_data, synthesized_anchor_id)
+
+    result = write_chapter(input_data, llm_client=_FakeChapterLLMClient(text))
+
+    assert result.status == "blocked"
+    assert result.stop_reason == "unknown_anchor"
     assert "组级锚点未展开" in result.issues[0].message
 
 

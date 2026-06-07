@@ -697,8 +697,10 @@ def _chapter_prompt_fragments(
             "marker 后再写同源证据内容或 approved 缺口/验证问题。",
             "证据断言只能使用 allowed anchor set 中的 marker：`<!-- anchor:<anchor_id> -->`；"
             "required_anchor_ids 是允许集合，不要求全量使用。",
-            "第2章 R=A+B-C 数字闭环：若写公式/百分比闭合断言，必须让 allowed anchor marker 与该断言同句或上下2行；"
-            "缺同源事实时写未披露/数据不足/下一步最小验证问题，不得编造 R、A、B、C 或 A-C 数值。",
+            "禁止根据 fact_id、source_field_id、source_field_name 或 fact value 自行合成 anchor id；"
+            "若 fact 可用但没有 evidence_anchor_ids，只能无 anchor 概述或写 approved 缺口/验证问题。",
+            _bond_risk_anchor_contract_prompt(chapter),
+            _ch2_numerical_closure_contract_prompt(chapter),
             _missing_marker_contract_prompt(chapter.missing_reasons),
             "缺少同源事实时写“未披露 / 数据不足 / 下一步最小验证问题”，不得编造。",
             f"输出长度硬上限：{input_data.max_output_chars} 字符；每个 required item 后写 1-3 句，"
@@ -718,6 +720,8 @@ def _chapter_prompt_fragments(
             "当前结构化证据不足，不能写成本基金属于/是/定位为该 facet。",
             "候选 facet 禁止断言形式：是<facet>、为<facet>、属于<facet>、定位为<facet>、可判定为<facet>。",
             "删除的 ITEM_RULE：" + _json_text(deleted_item_rule_ids),
+            "删除的 ITEM_RULE 只禁止对应 optional/conditional 段落标题和专属段落；"
+            "不得因此省略 required_output marker。若相关语义属于 required_output，只能在 required_output 下用同源证据或缺口措辞简短说明。",
         )
     )
     return ChapterPromptFragments(
@@ -1209,6 +1213,50 @@ def _allowed_anchor_ids(chapter: ChapterFactInput) -> tuple[str, ...]:
     """
 
     return tuple(anchor.anchor_id for anchor in chapter.evidence_anchors)
+
+
+def _bond_risk_anchor_contract_prompt(chapter: ChapterFactInput) -> str:
+    """构造债券风险证据内部锚点引用约束，见模板第 6 章核心风险。
+
+    Args:
+        chapter: 单章事实输入。
+
+    Returns:
+        当前章节含债券风险证据时返回内部锚点禁止引用说明；否则返回空字符串。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if not any(fact.source_field_name == "bond_risk_evidence" for fact in chapter.facts):
+        return ""
+    return (
+        "bond_risk_evidence 内部/组级 anchors 不是 ChapterEvidenceAnchor，"
+        "不得写入 `<!-- anchor:... -->`；只有“允许 anchors”列表中的 anchor_id 可引用。"
+    )
+
+
+def _ch2_numerical_closure_contract_prompt(chapter: ChapterFactInput) -> str:
+    """构造第 2 章 R=A+B-C 数字闭环锚点约束，见模板第 2 章。
+
+    Args:
+        chapter: 单章事实输入。
+
+    Returns:
+        第 2 章返回数字闭环锚点约束；其他章节返回空字符串。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if chapter.chapter_id != 2:
+        return ""
+    return (
+        "第2章 R=A+B-C 数字闭环：若写公式/百分比闭合断言，必须让 allowed anchor marker 与该断言同句或上下2行；"
+        "`### 结论要点` 不要重复未带 anchor 的 R/A/B/C/A-C 具体百分比；"
+        "`### 证据与出处` 只列来源标签或带 anchor 的事实句，不要无锚点复述公式百分比；"
+        "缺同源事实时写未披露/数据不足/下一步最小验证问题，不得编造 R、A、B、C 或 A-C 数值。"
+    )
 
 
 def _forbidden_phrases() -> tuple[str, ...]:
