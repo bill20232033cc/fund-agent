@@ -189,6 +189,7 @@
 | Accepted Agent Engine Design Refresh Gate plan | `docs/reviews/mvp-agent-engine-design-refresh-gate-plan-20260607.md` |
 | Accepted Agent Engine Design Refresh Gate plan review | `docs/reviews/mvp-agent-engine-design-refresh-gate-plan-review-ds-20260607.md` |
 | Accepted Agent Engine Design Refresh Gate plan judgment | `docs/reviews/mvp-agent-engine-design-refresh-gate-plan-controller-judgment-20260607.md` |
+| Accepted Agent Engine Design Refresh Gate plan checkpoint | `b862381` |
 | Accepted provider runtime operator evidence / environment availability reconciliation plan | `docs/reviews/mvp-provider-runtime-operator-evidence-environment-availability-reconciliation-gate-plan-20260606.md` |
 | Accepted provider runtime operator evidence / environment availability reconciliation plan reviews | `docs/reviews/mvp-provider-runtime-operator-evidence-environment-availability-reconciliation-gate-plan-review-ds-20260606.md`; `docs/reviews/plan-review-20260606-174338.md` |
 | Accepted provider runtime operator evidence / environment availability reconciliation judgment | `docs/reviews/mvp-provider-runtime-operator-evidence-environment-availability-reconciliation-gate-controller-judgment-20260606.md` |
