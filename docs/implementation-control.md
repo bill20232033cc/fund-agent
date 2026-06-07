@@ -178,6 +178,11 @@
 | Accepted real LLM chapter acceptance calibration Slice 1A-1G no-live closeout evidence | `docs/reviews/mvp-real-llm-chapter-acceptance-calibration-slice1a-1g-no-live-closeout-evidence-20260607.md` |
 | Accepted real LLM chapter acceptance calibration Slice 1A-1G no-live closeout evidence review | `docs/reviews/mvp-real-llm-chapter-acceptance-calibration-slice1a-1g-no-live-closeout-evidence-review-20260607.md` |
 | Accepted real LLM chapter acceptance calibration Slice 1A-1G no-live closeout judgment | `docs/reviews/mvp-real-llm-chapter-acceptance-calibration-slice1a-1g-no-live-closeout-controller-judgment-20260607.md` |
+| Accepted real LLM chapter acceptance calibration workspace ownership closeout | `docs/reviews/mvp-real-llm-chapter-acceptance-calibration-workspace-ownership-closeout-20260607.md` |
+| Accepted real LLM chapter acceptance calibration no-live closeout checkpoint | `13a8c19` |
+| Prepared real LLM chapter acceptance live evidence gate plan | `docs/reviews/mvp-real-llm-chapter-acceptance-live-evidence-gate-plan-20260607.md` |
+| Prepared real LLM chapter acceptance live evidence gate plan review | `docs/reviews/plan-review-20260607-170712.md` |
+| Prepared real LLM chapter acceptance live evidence gate plan judgment | `docs/reviews/mvp-real-llm-chapter-acceptance-live-evidence-gate-plan-controller-judgment-20260607.md` |
 | Accepted provider runtime operator evidence / environment availability reconciliation plan | `docs/reviews/mvp-provider-runtime-operator-evidence-environment-availability-reconciliation-gate-plan-20260606.md` |
 | Accepted provider runtime operator evidence / environment availability reconciliation plan reviews | `docs/reviews/mvp-provider-runtime-operator-evidence-environment-availability-reconciliation-gate-plan-review-ds-20260606.md`; `docs/reviews/plan-review-20260606-174338.md` |
 | Accepted provider runtime operator evidence / environment availability reconciliation judgment | `docs/reviews/mvp-provider-runtime-operator-evidence-environment-availability-reconciliation-gate-controller-judgment-20260606.md` |
