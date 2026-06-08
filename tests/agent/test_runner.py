@@ -5,6 +5,8 @@ from __future__ import annotations
 import ast
 import inspect
 
+import pytest
+
 import fund_agent.agent.runner as runner_module
 from fund_agent.agent import (
     AgentLLMClients,
@@ -289,6 +291,77 @@ def test_deadline_between_writer_and_auditor_fails_closed_without_budget_use() -
     assert auditor.requests == []
     assert len(task.attempts) == 1
     assert len(task.attempts[0].tool_traces) == 1
+
+
+def test_deadline_after_programmatic_audit_fails_closed_before_llm_auditor() -> None:
+    """验证程序审计后 deadline 中断不继续调用 LLM auditor。"""
+
+    writer = _FakeWriter()
+    auditor = _FakeAuditor()
+
+    def _checker(
+        phase: str,
+        chapter_id: int | None,
+        attempt_index: int | None,
+    ) -> AgentSchedulerInterruption:
+        if phase == "between_programmatic_and_llm_auditor":
+            return AgentSchedulerInterruption(
+                status="deadline_exceeded",
+                reason="deadline",
+                phase=phase,
+                chapter_id=chapter_id,
+                attempt_index=attempt_index,
+            )
+        return AgentSchedulerInterruption(
+            status="none",
+            reason=None,
+            phase=phase,
+            chapter_id=chapter_id,
+            attempt_index=attempt_index,
+        )
+
+    run = run_agent_body_chapters(
+        _projection((1,)),
+        llm_clients=AgentLLMClients(writer=writer, auditor=auditor),
+        policy=AgentRunPolicy(target_chapter_ids=(1,)),
+        interruption_checker=_checker,
+    )
+
+    task = run.tasks[0]
+    assert task.terminal_state == "blocked_scheduler_interrupted"
+    assert task.stop_reason == "scheduler_deadline_exceeded"
+    assert task.failure_category == "scheduler_deadline_exceeded"
+    assert len(writer.requests) == 1
+    assert auditor.requests == []
+    assert len(task.attempts) == 1
+    assert [trace.request.tool_name for trace in task.attempts[0].tool_traces] == [
+        "fund.write_chapter",
+        "fund.audit_chapter_programmatic",
+    ]
+
+
+def test_legacy_contract_does_not_derive_typed_evidence_availability(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """验证 legacy path 不读取 typed availability sidecar。"""
+
+    def _unexpected_availability(_: object) -> object:
+        raise AssertionError("legacy path must not derive typed evidence availability")
+
+    monkeypatch.setattr(
+        runner_module,
+        "derive_evidence_availability",
+        _unexpected_availability,
+    )
+
+    run = run_agent_body_chapters(
+        _projection((1,)),
+        llm_clients=AgentLLMClients(writer=_FakeWriter(), auditor=_FakeAuditor()),
+        policy=AgentRunPolicy(target_chapter_ids=(1,), typed_template_path="legacy_contract"),
+    )
+
+    assert run.status == "accepted"
+    assert run.evidence_availability.requirements == ()
 
 
 def test_agent_runner_does_not_import_host_or_service() -> None:

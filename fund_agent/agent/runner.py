@@ -43,7 +43,11 @@ from fund_agent.fund.chapter_writer import (
     ChapterWriteStopReason,
     build_chapter_writer_input,
 )
-from fund_agent.fund.evidence_availability import derive_evidence_availability
+from fund_agent.fund.evidence_availability import (
+    EVIDENCE_AVAILABILITY_SCHEMA_VERSION,
+    EvidenceAvailability,
+    derive_evidence_availability,
+)
 from fund_agent.fund.template.typed_contracts import (
     RequiredOutputItem,
     TypedChapterContract,
@@ -203,7 +207,11 @@ def run_agent_body_chapters(
 
     run_policy = policy or AgentRunPolicy()
     _validate_projection_coverage(projection, run_policy.target_chapter_ids)
-    run_evidence_availability = evidence_availability or derive_evidence_availability(projection)
+    run_evidence_availability = _run_evidence_availability(
+        projection,
+        policy=run_policy,
+        evidence_availability=evidence_availability,
+    )
     if projection.fund_type == "unknown":
         return _blocked_run(
             projection,
@@ -423,6 +431,22 @@ def _run_single_chapter(
                 issues=(),
                 checked_rules=(),
             )
+        interruption = _check_interruption(
+            interruption_checker,
+            phase="between_programmatic_and_llm_auditor",
+            chapter_id=chapter_id,
+            attempt_index=attempt_index,
+        )
+        if interruption.status != "none":
+            attempts.append(
+                ChapterAttempt(
+                    attempt_index=attempt_index,
+                    tool_traces=tuple(audit_traces),
+                    terminal_state="blocked_scheduler_interrupted",
+                    writer_result=writer_result,
+                )
+            )
+            return _scheduler_blocked_task(title, chapter_id=chapter_id, interruption=interruption, attempts=tuple(attempts))
         if policy.run_llm_audit:
             _record_phase_started(phase_recorder, "auditor", chapter_id, attempt_index)
             llm_execution = audit_chapter_llm_tool(
@@ -592,6 +616,41 @@ def _writer_input(
         evidence_availability=evidence_availability
         if policy.typed_template_path == "typed_template_contract"
         else None,  # type: ignore[arg-type]
+    )
+
+
+def _run_evidence_availability(
+    projection: ChapterFactProjection,
+    *,
+    policy: AgentRunPolicy,
+    evidence_availability: object | None,
+) -> EvidenceAvailability:
+    """按 Agent policy 选择 run-level evidence availability。
+
+    Args:
+        projection: 同源章节事实投影。
+        policy: Agent 执行策略。
+        evidence_availability: Service bridge 可显式传入的 availability。
+
+    Returns:
+        typed path 返回完整同源 availability；legacy path 返回空 requirement 信封。
+
+    Raises:
+        ValueError: 当传入对象不是 `EvidenceAvailability` 时抛出。
+    """
+
+    if evidence_availability is not None:
+        if not isinstance(evidence_availability, EvidenceAvailability):
+            raise ValueError("Agent runner evidence_availability 必须是 EvidenceAvailability")
+        return evidence_availability
+    if policy.typed_template_path == "typed_template_contract":
+        return derive_evidence_availability(projection)
+    return EvidenceAvailability(
+        schema_version=EVIDENCE_AVAILABILITY_SCHEMA_VERSION,
+        source_schema_version=projection.schema_version,
+        fund_code=projection.fund_code,
+        report_year=projection.report_year,
+        requirements=(),
     )
 
 
