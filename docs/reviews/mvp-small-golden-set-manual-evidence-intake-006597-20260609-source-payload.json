@@ -1,0 +1,42 @@
+{
+  "schema_version": "fund-agent.small_golden_set_manual_source_payload.v1",
+  "provider": "user_provided",
+  "fund_code": "006597",
+  "report_year": 2024,
+  "document_kind": "annual_report",
+  "official_search_url": "http://eid.csrc.gov.cn/fund/disclose/advanced_search.html?queryType=1&reportType=FB010&fundCode=006597",
+  "official_fund_detail_url": "unknown",
+  "official_document_url": "https://static.cninfo.com.cn/finalpage/2025-03-29/1222957988.PDF",
+  "official_document_id": "cninfo:1222957988",
+  "official_announcement_id": "unknown",
+  "source_document_title": "国泰利享中短债债券型证券投资基金2024年年度报告",
+  "source_publisher": "国泰基金管理有限公司",
+  "source_registry": "巨潮资讯 / CNINFO；EID search locator provided, EID document id unknown",
+  "publication_date": "2025-03-29",
+  "fund_name": "国泰利享中短债债券型证券投资基金",
+  "share_class": {
+    "target": "A",
+    "target_code": "006597",
+    "other_classes": [
+      "C=006598",
+      "E=014217",
+      "F=022176"
+    ]
+  },
+  "user_provided_pdf_sha256": "not_provided",
+  "identity_anchor": {
+    "registry_metadata": {
+      "source": "CNINFO PDF metadata/search result",
+      "evidence": "公告标题=国泰利享中短债债券型证券投资基金2024年年度报告；PDF id=1222957988；披露日期/报告送出日期=2025-03-29"
+    },
+    "pdf_title_page": {
+      "source": "official PDF title page",
+      "evidence": "标题=国泰利享中短债债券型证券投资基金2024年年度报告；基金管理人=国泰基金管理有限公司；报告送出日期=2025-03-29"
+    },
+    "pdf_profile": {
+      "source": "§2 基金简介 / 2.1 基金基本情况",
+      "evidence": "基金主代码=006597；基金名称=国泰利享中短债债券型证券投资基金；下属分级基金交易代码 A=006597，C=006598，E=014217，F=022176"
+    }
+  },
+  "notes": "候选记录；待 manual evidence intake gate 复核。EID instanceid 未确认。"
+}
