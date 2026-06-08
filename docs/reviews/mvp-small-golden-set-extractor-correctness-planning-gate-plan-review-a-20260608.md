@@ -41,4 +41,3 @@ No blocking questions.
 Original verdict: not passed because of A1.
 
 Re-review required after fallback wording fix.
-

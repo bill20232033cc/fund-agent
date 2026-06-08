@@ -23,4 +23,3 @@ The plan now explicitly prohibits fallback invocation in both this planning gate
 ## Verdict
 
 PLAN_REVIEW_PASS.
-

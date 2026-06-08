@@ -77,4 +77,3 @@ Closed for now:
 - score-loop;
 - golden/readiness promotion;
 - release, merge and mark-ready.
-
