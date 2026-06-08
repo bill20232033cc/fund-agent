@@ -1,0 +1,40 @@
+{
+  "schema_version": "fund-agent.small_golden_set_manual_source_payload.v1",
+  "provider": "user_provided",
+  "fund_code": "004393",
+  "report_year": 2024,
+  "document_kind": "annual_report",
+  "official_search_url": "http://eid.csrc.gov.cn/fund/disclose/advanced_search.html?queryType=1&reportType=FB010&fundCode=004393",
+  "official_fund_detail_url": "http://eid.csrc.gov.cn/fund/disclose/fund_detail_search.do?cFundCode=1618&rnd=0.602227203698933",
+  "official_document_url": "http://eid.csrc.gov.cn/fund/disclose/instance_show_pdf_id.do?instanceid=1248088",
+  "official_document_id": "instanceid=1248088",
+  "official_announcement_id": "unknown",
+  "source_document_title": "安信企业价值优选混合型证券投资基金2024年年度报告",
+  "source_publisher": "安信基金管理有限责任公司",
+  "source_registry": "中国证监会基金电子披露网站 / EID",
+  "publication_date": "2025-03-28",
+  "fund_name": "安信企业价值优选混合型证券投资基金",
+  "share_class": {
+    "target": "A",
+    "target_code": "004393",
+    "other_classes": [
+      "C=020964"
+    ]
+  },
+  "user_provided_pdf_sha256": "bc6b0a1ae2f709f4cb4fa501f88ba9c19aa0f37d36758160577c57222e9860bf",
+  "identity_anchor": {
+    "registry_metadata": {
+      "source": "EID search/detail page",
+      "evidence": "fundCode=004393；reportType=FB010；公告标题=安信企业价值优选混合型证券投资基金2024年年度报告；披露日期=2025-03-28；document instanceid=1248088"
+    },
+    "pdf_title_page": {
+      "source": "official PDF title page",
+      "evidence": "标题=安信企业价值优选混合型证券投资基金2024年年度报告；基金管理人=安信基金管理有限责任公司；报告送出日期=2025-03-28"
+    },
+    "pdf_profile": {
+      "source": "§2 基金简介 / 基金产品概况",
+      "evidence": "基金主代码=004393；下属分级基金交易代码 A=004393；C=020964"
+    }
+  },
+  "notes": "用户手工提供；待 manual evidence intake gate 复核。"
+}

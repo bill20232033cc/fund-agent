@@ -1,0 +1,113 @@
+{
+  "schema_version": "fund-agent.small_golden_set_source_identity_recovery.v1",
+  "gate": "matched-source manual evidence intake gate",
+  "classification": "standard",
+  "source_access_performed": false,
+  "pdf_file_read_performed": false,
+  "network_access_performed": false,
+  "fund_document_repository_access_performed": false,
+  "fallback_invocation_performed": false,
+  "exact_numeric_correctness_accepted": false,
+  "fixture_projection_performed": false,
+  "rows": [
+    {
+      "fund_code": "004393",
+      "report_year": 2024,
+      "row_key": "004393:2024",
+      "identity_status": "matched",
+      "identity_review_status": "controller_accepted",
+      "retrieval_mode": "manual_user_provided_metadata",
+      "retrieval_gate": "matched-source manual evidence intake gate",
+      "source_document_kind": "annual_report",
+      "source_document_year": 2024,
+      "source_document_title": "安信企业价值优选混合型证券投资基金2024年年度报告",
+      "source_publisher": "安信基金管理有限责任公司",
+      "source_registry": "中国证监会基金电子披露网站 / EID",
+      "publication_date": "2025-03-28",
+      "fund_name": "安信企业价值优选混合型证券投资基金",
+      "share_class": {
+        "target": "A",
+        "target_code": "004393",
+        "other_classes": [
+          "C=020964"
+        ]
+      },
+      "source_document_id": "instanceid=1248088",
+      "source_locator": "http://eid.csrc.gov.cn/fund/disclose/instance_show_pdf_id.do?instanceid=1248088",
+      "official_search_url": "http://eid.csrc.gov.cn/fund/disclose/advanced_search.html?queryType=1&reportType=FB010&fundCode=004393",
+      "official_fund_detail_url": "http://eid.csrc.gov.cn/fund/disclose/fund_detail_search.do?cFundCode=1618&rnd=0.602227203698933",
+      "official_announcement_id": "unknown",
+      "source_boundary": "manual_review",
+      "source_failure_category": "none",
+      "fallback_allowed": false,
+      "fallback_used": false,
+      "identity_evidence_origin": "user_provided_official_metadata",
+      "identity_evidence_anchor": {
+        "registry_metadata": "fundCode=004393；reportType=FB010；公告标题=安信企业价值优选混合型证券投资基金2024年年度报告；披露日期=2025-03-28；document instanceid=1248088",
+        "pdf_title_page": "标题=安信企业价值优选混合型证券投资基金2024年年度报告；基金管理人=安信基金管理有限责任公司；报告送出日期=2025-03-28",
+        "pdf_profile": "基金主代码=004393；下属分级基金交易代码 A=004393；C=020964"
+      },
+      "user_provided_pdf_sha256": "bc6b0a1ae2f709f4cb4fa501f88ba9c19aa0f37d36758160577c57222e9860bf",
+      "metadata_payload_ref": "docs/reviews/mvp-small-golden-set-manual-evidence-intake-004393-20260608-source-payload.json",
+      "metadata_payload_sha256": "3926f237f48cfae0e59b92769039c655e0ba09692d7fb3535288a365e7d8c4d3",
+      "intake_artifact_ref": "docs/reviews/mvp-small-golden-set-manual-evidence-intake-004393-20260608.md",
+      "review_artifact_refs": [
+        "docs/reviews/mvp-small-golden-set-manual-evidence-intake-004393-review-a-20260608.md",
+        "docs/reviews/mvp-small-golden-set-manual-evidence-intake-004393-review-b-20260608.md"
+      ],
+      "controller_judgment_ref": "docs/reviews/mvp-small-golden-set-manual-evidence-intake-004393-controller-judgment-20260608.md",
+      "report_source_document_mapping_if_accepted": {
+        "document_type": "annual_report",
+        "identity_status": "verified_annual_report",
+        "source_boundary": "manual_review",
+        "source_failure_category": "none",
+        "fallback_allowed": false,
+        "fallback_used": false
+      },
+      "field_unlocks": [],
+      "exact_numeric_correctness_allowed": false,
+      "fixture_projection_performed": false,
+      "notes": "Docs-only manual intake candidate. No source/PDF/network/FundDocumentRepository access performed."
+    },
+    {
+      "fund_code": "110020",
+      "report_year": 2024,
+      "row_key": "110020:2024",
+      "identity_status": "deferred",
+      "identity_review_status": "not_reviewed",
+      "reason": "No manual evidence provided in this gate.",
+      "exact_numeric_correctness_allowed": false,
+      "fixture_projection_performed": false
+    },
+    {
+      "fund_code": "004194",
+      "report_year": 2024,
+      "row_key": "004194:2024",
+      "identity_status": "deferred",
+      "identity_review_status": "not_reviewed",
+      "reason": "No manual evidence provided in this gate.",
+      "exact_numeric_correctness_allowed": false,
+      "fixture_projection_performed": false
+    },
+    {
+      "fund_code": "006597",
+      "report_year": 2024,
+      "row_key": "006597:2024",
+      "identity_status": "deferred",
+      "identity_review_status": "not_reviewed",
+      "reason": "No manual evidence provided in this gate.",
+      "exact_numeric_correctness_allowed": false,
+      "fixture_projection_performed": false
+    },
+    {
+      "fund_code": "017641",
+      "report_year": 2024,
+      "row_key": "017641:2024",
+      "identity_status": "deferred",
+      "identity_review_status": "not_reviewed",
+      "reason": "No manual evidence provided in this gate.",
+      "exact_numeric_correctness_allowed": false,
+      "fixture_projection_performed": false
+    }
+  ]
+}
