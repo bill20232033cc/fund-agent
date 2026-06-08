@@ -26,6 +26,7 @@ CI 当前固定 Python 3.11，使用 `uv sync --extra dev --frozen` 安装锁定
 - `tests/fund/test_golden_prefill.py`：correctness golden answer 预填底稿测试，覆盖模板基金代码识别、dict/dataclass 字段预填、证据 source 和跳过字段保留；使用 fake extractor，不触发真实网络或 PDF
 - `tests/fund/test_golden_answer.py`：人工审核后的 golden answer Markdown 转 JSON 与 strict JSON loader 测试，覆盖 strict 校验、跳过字段、转义竖线、report_year legacy 默认值、跨年份重复 identity 和机器可读 JSON 输出；不触发真实网络或 PDF
 - `tests/fund/test_golden_readiness_preflight.py`：baseline/golden readiness preflight 聚合测试，覆盖缺失 artifact fail-closed、006597 bond blocker resolved、baseline_blocking score issue、quality block/warn、source provenance unknown/ineligible/eligible fallback、QDII hard stop、FOF taxonomy/data gap、110020 reviewed candidate disposition、strict golden fund-level coverage、fixture promotion absence、static disposition manifest metadata、preflight input unknown-field 拒绝和 JSON/Markdown 输出；使用临时 JSON/JSONL，不触发真实网络或 PDF
+- `tests/fund/test_small_golden_set_manifest.py` / `tests/fund/test_small_golden_set_fixture_shape.py`：small golden set extractor correctness gate 的 review-owned manifest 与 Slice B fixture shape 测试，覆盖五行集合、`promotion_allowed=false`、offline-only、fallback prohibited、synthetic fixture 不能接受 exact/numeric correctness，以及 field group status / assertion_kind / source_anchor 或 unavailable_reason；只读取本地 `docs/reviews/` artifact 和 `tests/fixtures/fund/small_golden_set/`，不触发 repository、PDF、provider、fallback 或网络
 - `tests/fund/test_quality_gate.py`：P4-S4/P5-S2/P5-S4/P6-S5/P9-S2 报告质量 gate 测试，覆盖字段级与单基金 P0 fail 阻断、P1 fail 警告、correctness 未接入 info、correctness coverage FQ0 metadata、report-year coverage gap、correctness mismatch 触发 FQ1、App 类别冲突 FQ1、缺失率 FQ4、模板契约适用性 FQ5、`rule_results`、失败基金 FQ6、`bond_risk_evidence_missing` 仅来自 score issue 的自然投影和旧 score 兼容；只消费 score JSON，不触发真实网络或 PDF
 - `tests/fund/test_quality_gate_integration.py`：P5-S1/P9-S2 单基金 quality gate adapter 测试，覆盖从已抽取 `StructuredFundDataBundle` 生成 snapshot/score/gate 产物、精选池成员缺 golden coverage 或当前 report_year 缺 golden coverage 仍运行 gate，以及基金不在精选池时返回 not-run reason；不触发真实网络或 PDF
 - `tests/fund/data/test_nav_data.py`：净值数据适配器测试，覆盖 `nav_cache` 命中、强制刷新和 typed source DTO 的 cache origin/source_nav_type/source_adjustment_basis metadata；不触发真实网络
@@ -74,6 +75,7 @@ CI 当前固定 Python 3.11，使用 `uv sync --extra dev --frozen` 安装锁定
 - `tests/fixtures/fund/extractors/profile/*.txt`：基础画像最小文本夹具，当前覆盖主动权益、增强指数、债券三类样本
 - `tests/fixtures/fund/extractors/performance/*.txt`：`§3` 最小文本夹具，当前覆盖直接披露、估算披露、未披露三类投资者收益率路径
 - `tests/fixtures/fund/extractors/manager_ownership/*.txt`：`§4/§8/§9` 最小文本夹具，当前覆盖完整披露、部分披露、未披露、换手率口径-only 路径
+- `tests/fixtures/fund/small_golden_set/<fund_code>_2024/`：small golden set Slice B 离线 fixture，每行只保留最小 `annual_report_excerpt.txt` 和 `expected_fields.json`；当前均为 `fixture_source_kind=synthetic`，只能验证 parser/fixture shape mechanics，不能满足 source identity，也不能驱动 exact、normalized_text 或 numeric_percent correctness；目录禁止依赖 repository、PDF/cache、source helper、fallback、provider、akshare、EID 或网络
 
 ## 运行方式
 
@@ -101,6 +103,7 @@ pytest tests/services/test_final_chapter_assembler.py -q
 pytest tests/services/test_fund_analysis_service_llm.py -q
 pytest tests/fund/test_extraction_score.py -q
 pytest tests/fund/test_golden_readiness_preflight.py -q
+pytest tests/fund/test_small_golden_set_manifest.py tests/fund/test_small_golden_set_fixture_shape.py -q
 pytest tests/fund/data/test_nav_data.py -q
 pytest tests/fund/data/test_nav_repository_contract.py -q
 pytest tests/fund/data/test_nav_metrics.py -q

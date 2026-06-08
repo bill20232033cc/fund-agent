@@ -1,0 +1,26 @@
+{
+  "schema_version": "fund-agent.small_golden_set_expected_fields.v1",
+  "fund_code": "004393",
+  "report_year": 2024,
+  "promotion_allowed": false,
+  "fallback_invocation": "prohibited",
+  "fixture_source_kind": "synthetic",
+  "source_identity": {
+    "status": "unmatched_synthetic",
+    "matched_source_document": false,
+    "fallback_used": false,
+    "reason": "No retained real annual-report excerpt or pre-existing offline source identity was established in Slice B."
+  },
+  "exact_numeric_correctness_allowed": false,
+  "field_groups": {
+    "identity": {"status": "expected", "assertion_kind": "availability_status", "fixture_source_kind": "synthetic", "source_anchor": "synthetic§identity"},
+    "source_document": {"status": "expected", "assertion_kind": "availability_status", "fixture_source_kind": "synthetic", "source_anchor": "synthetic§source_document"},
+    "benchmark": {"status": "expected", "assertion_kind": "availability_status", "fixture_source_kind": "synthetic", "source_anchor": "synthetic§benchmark"},
+    "manager": {"status": "expected", "assertion_kind": "availability_status", "fixture_source_kind": "synthetic", "source_anchor": "synthetic§manager"},
+    "scale": {"status": "expected", "assertion_kind": "availability_status", "fixture_source_kind": "synthetic", "source_anchor": "synthetic§scale"},
+    "fee": {"status": "expected", "assertion_kind": "availability_status", "fixture_source_kind": "synthetic", "source_anchor": "synthetic§fee"},
+    "return": {"status": "expected", "assertion_kind": "availability_status", "fixture_source_kind": "synthetic", "source_anchor": "synthetic§return"},
+    "holdings": {"status": "expected", "assertion_kind": "availability_status", "fixture_source_kind": "synthetic", "source_anchor": "synthetic§holdings"},
+    "risk": {"status": "expected", "assertion_kind": "availability_status", "fixture_source_kind": "synthetic", "source_anchor": "synthetic§risk"}
+  }
+}
