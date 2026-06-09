@@ -128,6 +128,10 @@ def _eid_metadata(fund_code: str = "110011", year: int = 2024) -> AnnualReportSo
         operation_upload_type="9090-1010",
         corrections_num=0,
         fallback_used=False,
+        selected_source="eid",
+        source_mode="single_source_only",
+        fallback_enabled=False,
+        discovery_contract_version="eid_annual_report_discovery.v1",
     )
 
 
@@ -157,6 +161,31 @@ def test_source_metadata_round_trips_primary_failure_category() -> None:
     assert restored.primary_failure_category == "unavailable"
 
 
+def test_source_metadata_round_trips_eid_single_source_policy() -> None:
+    """验证 EID single-source policy 元数据会稳定序列化。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当新增 policy 字段无法往返时抛出。
+    """
+
+    metadata = _eid_metadata()
+
+    payload = metadata.to_dict()
+    restored = AnnualReportSourceMetadata.from_dict(payload)
+
+    assert payload["selected_source"] == "eid"
+    assert payload["source_mode"] == "single_source_only"
+    assert payload["fallback_enabled"] is False
+    assert payload["discovery_contract_version"] == "eid_annual_report_discovery.v1"
+    assert restored == metadata
+
+
 def test_source_metadata_legacy_or_unknown_failure_category_degrades_to_none() -> None:
     """验证旧元数据或未知失败类别兼容降级为空分类。
 
@@ -181,6 +210,9 @@ def test_source_metadata_legacy_or_unknown_failure_category_degrades_to_none() -
 
     assert legacy.primary_failure_category is None
     assert unknown.primary_failure_category is None
+    assert legacy.selected_source is None
+    assert legacy.source_mode is None
+    assert legacy.fallback_enabled is None
 
 
 def test_document_models_exports_source_failure_category_without_sources_import() -> None:

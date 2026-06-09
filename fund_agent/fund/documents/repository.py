@@ -264,6 +264,33 @@ def _with_annual_report_metadata(
     )
 
 
+def _is_current_eid_single_source_metadata(
+    metadata: AnnualReportSourceMetadata | None,
+) -> bool:
+    """判断来源元数据是否满足当前 EID single-source cache policy。
+
+    Args:
+        metadata: 待检查的来源元数据。
+
+    Returns:
+        元数据证明当前 EID single-source policy 时返回 ``True``。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if metadata is None:
+        return False
+    return (
+        metadata.source == "eid"
+        and metadata.fallback_used is False
+        and metadata.primary_failure_category is None
+        and metadata.selected_source == "eid"
+        and metadata.source_mode == "single_source_only"
+        and metadata.fallback_enabled is False
+    )
+
+
 class FundDocumentRepository:
     """基金文档仓库。
 
@@ -322,7 +349,10 @@ class FundDocumentRepository:
         document_key = self._build_document_key(normalized_fund_code, normalized_year)
         if not force_refresh:
             cached_report = await self._cache.load_parsed_report(document_key)
-            if cached_report is not None:
+            if (
+                cached_report is not None
+                and _is_current_eid_single_source_metadata(cached_report.metadata.source)
+            ):
                 return _with_annual_report_metadata(
                     cached_report,
                     source_metadata=cached_report.metadata.source,
@@ -338,7 +368,10 @@ class FundDocumentRepository:
         pdf_cache_hit = False
         if not force_refresh:
             pdf_entry = await self._cache.get_pdf_entry(document_key)
-            if pdf_entry is not None:
+            if (
+                pdf_entry is not None
+                and _is_current_eid_single_source_metadata(pdf_entry.source_metadata)
+            ):
                 pdf_path = pdf_entry.pdf_path
                 source_metadata = pdf_entry.source_metadata
                 pdf_cache_hit = True

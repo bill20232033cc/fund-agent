@@ -68,9 +68,9 @@ chapter_lens = resolve_preferred_lens(chapter_id=2, fund_type="active_fund")
 - `raw_text`：年报全文文本
 - `sections`：章节索引，供后续模板第 2 章 `R=A+B-C` 和第 4 章“投资者获得感”提取复用
 - `tables`：年报表格的结构化结果
-- `metadata`：年报来源与缓存来源信息；`metadata.source` 标识 EID 或 Eastmoney fallback 及可用公告/PDF ID，`metadata.cache` 标识 parsed report 或 PDF cache 命中来源
+- `metadata`：年报来源与缓存来源信息；`metadata.source` 标识当前 EID single-source policy、可用公告/PDF ID 和 fail-closed 分类，`metadata.cache` 标识 parsed report 或 PDF cache 命中来源
 
-年报 PDF 获取由 documents 层内部的来源编排器完成，调用方不感知具体下载源。当前生产默认顺序是 EID/证监会资本市场统一信息披露平台主源，Eastmoney/akshare fallback；来源优先级、fallback、EID 请求级 timeout/retry、PDF 文件头校验、损坏 PDF cache 自动刷新、原子写入和来源元数据持久化只存在于 Fund 内部，不暴露给 Service、UI、Host、Agent 执行内核或 CLI。来源失败按 `not_found`、`unavailable`、`schema_drift`、`identity_mismatch`、`integrity_error` 显式分类，只有 `not_found` 与 `unavailable` 允许 fallback；EID schema drift、身份矛盾和 PDF 完整性错误会 fail-closed，并在阻断异常中保留来源、类别和原始错误。缓存读取时，如果历史或人工污染的 `source_metadata_json` 无法解析为合法来源元数据，documents 层会保留可用 PDF 路径并将 `metadata.source` 降级为 `None`；正常写入和模型反序列化仍保持来源闭集校验。
+年报 PDF 获取由 documents 层内部的来源编排器完成，调用方不感知具体下载源。当前生产默认策略是 EID/证监会资本市场统一信息披露平台 single-source：`selected_source=eid`、`mode=single_source_only`、`fallback_enabled=false`。默认来源编排器只构造 EID source，并拒绝多来源构造；Eastmoney、基金公司官网/CDN、CNINFO 只保留为 future candidate / 历史 evidence route，不是当前生产 fallback。EID 请求级 timeout/retry、PDF 文件头校验、原子写入和来源元数据持久化只存在于 Fund 内部，不暴露给 Service、UI、Host、Agent 执行内核或 CLI。来源失败按 `not_found`、`unavailable`、`schema_drift`、`identity_mismatch`、`integrity_error` 显式分类；`not_found` 与 `unavailable` 是 terminal EID source failure，不触发 fallback；EID schema drift、身份矛盾和 PDF 完整性错误会 fail-closed，并在阻断异常中保留来源、类别和原始错误。缓存读取时，documents 层只复用带当前 EID single-source metadata 的 parsed/PDF cache；历史、人工污染、metadata-less 或 Eastmoney/fallback-origin cache 会被忽略而不是删除。正常写入和模型反序列化仍保持来源闭集校验。
 
 `extract_profile()` 返回 `ProfileExtractionResult`，当前只覆盖模板第 1 章“这只基金到底是什么产品”的最小数据底座：
 

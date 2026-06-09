@@ -6,9 +6,9 @@ CI 当前固定 Python 3.11，使用 `uv sync --extra dev --frozen` 安装锁定
 
 ## 当前目录
 
-- `tests/fund/documents/test_repository.py`：文档仓库契约测试，验证仓库对外返回 `ParsedAnnualReport`，不暴露本地 `Path`，并覆盖来源元数据、fallback 主源失败分类、cache provenance、metadata-aware/legacy loader 和并发防串扰
-- `tests/fund/documents/test_annual_report_sources.py`：年报来源编排测试，使用 fake source 和 fake EID network 覆盖 EID 主源、Eastmoney fallback、主源失败分类持久化、fail-closed 阻断 provenance、请求级 timeout、PDF 校验、PDF cache 完整性校验、原子写入、`force_refresh` 转发和 PDF 适配器来源调用；不触发真实 EID/Eastmoney/akshare 网络
-- `tests/fund/documents/test_cache.py`：文档缓存最小闭环测试，覆盖 PDF 元信息缓存、source metadata JSON、主源失败分类往返、损坏来源元数据降级、parsed report 物化、parsed payload 原子替换失败清理、损坏 parsed payload 回退未命中、legacy metadata 兼容和缓存失效回退
+- `tests/fund/documents/test_repository.py`：文档仓库契约测试，验证仓库对外返回 `ParsedAnnualReport`，不暴露本地 `Path`，并覆盖 EID single-source metadata、cache provenance、metadata-aware/legacy loader、parsed/PDF cache admissibility、legacy/metadata-less/Eastmoney fallback cache rejection 和并发防串扰
+- `tests/fund/documents/test_annual_report_sources.py`：年报来源编排测试，使用 fake source 和 fake EID network 覆盖 EID single-source 默认、拒绝多来源构造、`not_found` / `unavailable` terminal、`schema_drift` / `identity_mismatch` / `integrity_error` fail-closed、EID metadata policy、请求级 timeout、PDF 校验、PDF cache 完整性校验、原子写入、`force_refresh` 转发和 PDF 适配器来源调用；Eastmoney wrapper 只作为 deferred candidate 做直接单元测试；不触发真实 EID/Eastmoney/akshare 网络
+- `tests/fund/documents/test_cache.py`：文档缓存最小闭环测试，覆盖 PDF 元信息缓存、source metadata JSON、EID single-source policy metadata 往返、主源失败分类往返、损坏来源元数据降级、parsed report 物化、parsed payload 原子替换失败清理、损坏 parsed payload 回退未命中、legacy metadata 兼容和缓存失效回退
 - `tests/fund/pdf/test_downloader.py`：PDF 下载 helper 测试，验证内部缓存命中、损坏缓存刷新、非 PDF 响应拒绝、强制刷新下载和年报 URL 组装
 - `tests/fund/pdf/test_parser.py`：章节定位测试，覆盖 `§3` 正文命中、目录误判回归和偏移单调递增
 - `tests/fund/extractors/test_profile.py`：基础画像 extractor 测试，覆盖分类先行、`classified_fund_type` / `classification_basis` 稳定输出、纯指数/指数增强/非指数 `index_profile`，以及费率/基准/规模/经理 anchor

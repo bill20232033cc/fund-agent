@@ -1,9 +1,9 @@
 # 基金行为教练 Agent —— 设计真源文档
 
-> **版本**: v2.11
-> **日期**: 2026-06-08
-> **状态**: 已按 `AGENTS.md` 统一为 Dayu 四层边界 `UI -> Service -> Host -> Agent`；当前默认 `fund-analysis analyze/checklist` 与 Route C provider-backed `--use-llm` opt-in 路径的状态边界已显式区分；Dayu 是架构参考与能力来源，不是当前生产 runtime 直接依赖；internalized Host runtime governance adapter 已有 MVP 最小闭环；Slice E first no-live Agent body-chapter mechanics 已是当前代码事实，`fund_agent/agent` 已存在并拥有当前 no-live contracts、ToolTrace、Fund adapters、repair policy、body runner 和 `FinalAssemblyReadiness`；full production Agent tool-loop/retry/budget/ToolRegistry/live runtime expansion、durable Host session/resume/memory/reply outbox、multi-year annual evidence runtime、provider/default/runtime/budget change、score-loop、golden/readiness 和 live acceptance 仍是未来 scope；typed template truth-source replacement 已把 `docs/fund-analysis-template-draft.md` 中的 canonical `TEMPLATE_CONTRACT_MANIFEST_JSON` 变成当前 untyped 和 typed template contract projection 的 authored Fund template contract truth source；EID single-source annual-report policy 是当前 heavy operational hardening gate 的已接受目标：`selected_source=eid`, `mode=single_source_only`, `fallback_enabled=false`，但尚未作为代码实现事实；deterministic renderer/checklist/analyze、multi-year runtime、provider/runtime defaults、score-loop、golden/readiness 和 public chapter ids `0-7` 未改变。
-> **变更摘要**: v2.11 当前修订确认 Slice E 后的设计真源状态，并补充 EID single-source operational hardening 的目标边界：`fund_agent/agent` 是当前 no-live Agent body-chapter execution package，拥有 `AgentReportRun` / `ChapterTask` contracts、attempt ledger、safe `ToolTrace`、Fund tool adapters、repair policy、body runner 和 `FinalAssemblyReadiness`；当前 `--use-llm` 路径为 `CLI -> Service prepares FundLLMExecutionRequest / ExecutionContract -> Host runner -> Service -> Agent body runner -> fund_agent/fund -> provider HTTP call`，Service bridge 将 Host cancel/deadline 翻译为 Agent scheduler interruption，并在 Agent writer/auditor/repair 执行期间记录 safe Host phase events；Service 仍拥有 use case、ExecutionContract、quality policy、report strategy、provider construction/runtime ceilings、Host context translation 和 final product fail-closed mapping；Fund 仍拥有 typed writer、programmatic-first audit、bounded semantic LLM audit adapter、derived `EvidenceAvailability` 和 `RepairSemantics`；Host 不理解基金业务、不读取 ExecutionContract 业务字段，只读取 Service runtime plan 暴露的 `host_timeout_seconds` 标量。完整 Agent tool-loop/retry/budget/ToolRegistry/live runtime expansion、async Host runner、durable session/resume/memory/reply outbox、multi-year annual evidence runtime、chapter live acceptance、provider runtime budget/default changes、score-loop entry、dayu runtime 和 EID single-source implementation 仍未实现，必须进入后续独立 gate；不把 `dayu-agent` / `dayu.host` / `dayu.engine` 作为生产 runtime 直接依赖；如复制或改写上游 Dayu 代码，必须先经过独立 license/compliance gate。
+> **版本**: v2.12
+> **日期**: 2026-06-10
+> **状态**: 已按 `AGENTS.md` 统一为 Dayu 四层边界 `UI -> Service -> Host -> Agent`；当前默认 `fund-analysis analyze/checklist` 与 Route C provider-backed `--use-llm` opt-in 路径的状态边界已显式区分；Dayu 是架构参考与能力来源，不是当前生产 runtime 直接依赖；internalized Host runtime governance adapter 已有 MVP 最小闭环；Slice E first no-live Agent body-chapter mechanics 已是当前代码事实，`fund_agent/agent` 已存在并拥有当前 no-live contracts、ToolTrace、Fund adapters、repair policy、body runner 和 `FinalAssemblyReadiness`；full production Agent tool-loop/retry/budget/ToolRegistry/live runtime expansion、durable Host session/resume/memory/reply outbox、multi-year annual evidence runtime、provider/default/runtime/budget change、score-loop、golden/readiness 和 live acceptance 仍是未来 scope；typed template truth-source replacement 已把 `docs/fund-analysis-template-draft.md` 中的 canonical `TEMPLATE_CONTRACT_MANIFEST_JSON` 变成当前 untyped 和 typed template contract projection 的 authored Fund template contract truth source；EID single-source annual-report no-live implementation 已是当前代码事实：`selected_source=eid`, `mode=single_source_only`, `fallback_enabled=false`，默认 production orchestrator 只构造 EID source，repository/cache 只复用带当前 EID single-source metadata 的缓存；live EID/network/PDF/FDR proof 仍未授权且未证明；deterministic renderer/checklist/analyze、multi-year runtime、provider/runtime defaults、score-loop、golden/readiness 和 public chapter ids `0-7` 未改变。
+> **变更摘要**: v2.12 当前修订确认 EID single-source operational no-live implementation：`AnnualReportSourceMetadata` 增加 additive policy metadata，默认 `AnnualReportSourceOrchestrator` 为 EID-only 且拒绝多源构造，`not_found` / `unavailable` 在 `single_source_only` 下为 terminal EID source failures，`schema_drift` / `identity_mismatch` / `integrity_error` 继续 fail-closed，`FundDocumentRepository` parsed/PDF cache reuse 需要当前 EID single-source metadata 并忽略 legacy、Eastmoney/fallback 或 metadata-less cache。`fund_agent/agent` 仍是当前 no-live Agent body-chapter execution package，Service 仍拥有 use case、ExecutionContract、quality policy、report strategy、provider construction/runtime ceilings、Host context translation 和 final product fail-closed mapping；Fund 仍拥有 typed writer、programmatic-first audit、bounded semantic LLM audit adapter、derived `EvidenceAvailability` 和 `RepairSemantics`；Host 不理解基金业务、不读取 ExecutionContract 业务字段，只读取 Service runtime plan 暴露的 `host_timeout_seconds` 标量。完整 Agent tool-loop/retry/budget/ToolRegistry/live runtime expansion、async Host runner、durable session/resume/memory/reply outbox、multi-year annual evidence runtime、chapter live acceptance、provider runtime budget/default changes、score-loop entry、dayu runtime 和 live EID source smoke 仍未实现，必须进入后续独立 gate；不把 `dayu-agent` / `dayu.host` / `dayu.engine` 作为生产 runtime 直接依赖；如复制或改写上游 Dayu 代码，必须先经过独立 license/compliance gate。
 > **关联文档**: `docs/implementation-control.md`（实施总控）、`fund-agent-mvp-plan.md`（MVP 计划书）、`docs/fund-analysis-template-draft.md`（定性模板 v2）、`docs/audit-alignment.md`（审计机制对照研究）
 
 ⚠️ **重要声明**：本文档记录当前代码设计真源；若本文档、实施总控、README 或代码与用户提供的仓库执行规则冲突，必须先修正方案和实现，再回写本文档；不得长期保留“设计未来”口径冒充已实现状态。
@@ -647,14 +647,14 @@ Route C 不删除当前 deterministic rendering，也不降低 release-maintenan
 | 仓库入口 | `repository.py` | `FundDocumentRepository` —— 对外唯一文档读取入口 |
 | 数据模型 | `models.py` | `ParsedAnnualReport`、`ParsedTable`、`ReportSection`、`DocumentKey` 等 |
 | 缓存层 | `cache.py` | `AnnualReportDocumentCache` —— PDF + parsed report 两级缓存，schema 版本控制 |
-| 数据源 | `sources.py` | 当前代码仍保留历史多源编排；当前 heavy gate 接受的目标是 EID single-source policy：`selected_source=eid`, `mode=single_source_only`, `fallback_enabled=false` |
+| 数据源 | `sources.py` | 当前 production default 是 EID single-source policy：`selected_source=eid`, `mode=single_source_only`, `fallback_enabled=false`；Eastmoney 仅保留为 deferred future source candidate |
 | PDF 适配器 | `adapters/annual_report_pdf.py` | `AnnualReportPdfAdapter` —— PDF 下载 + 解析适配 |
 
-**来源失败分类与 EID single-source 目标策略**（P8-S3 + EID operational hardening）：
+**来源失败分类与 EID single-source 当前策略**（P8-S3 + EID operational hardening）：
 
-当前代码事实：仓库源码中仍可能保留历史 EID primary 与 Eastmoney fallback 机制，需等待单独实现 gate 修改，不能把 EID-only 写成已实现。
+当前代码事实：production default annual-report source path 是 EID single-source。`AnnualReportSourceOrchestrator(None)` 只构造 `EidAnnualReportSource`，并拒绝空来源或多来源构造。`EastmoneyAnnualReportSource` 仍保留在源码中，但只作为 deferred future source candidate，不是当前 production fallback。
 
-已接受的当前 gate 目标：生产年报 acquisition 后续实现必须通过 EID source path 单源解析 operational annual reports，source policy 固定为 `selected_source=eid`, `mode=single_source_only`, `fallback_enabled=false`。Eastmoney、基金公司官网/CDN、CNINFO 或其他 first-party disclosure route 只能作为 deferred source candidate / historical evidence route；本 gate 不允许把它们写成当前 production fallback。
+生产年报 acquisition 通过 EID source path 单源解析 operational annual reports，source policy 固定为 `selected_source=eid`, `mode=single_source_only`, `fallback_enabled=false`。Eastmoney、基金公司官网/CDN、CNINFO 或其他 first-party disclosure route 只能作为 deferred source candidate / historical evidence route；不得写成当前 production fallback。
 
 在 `single_source_only` 下，EID source outcome 是 terminal source outcome；`not_found` 与 `unavailable` 可以作为 EID source failure 上报，但不授权 fallback：
 
@@ -671,11 +671,11 @@ Route C 不删除当前 deterministic rendering，也不降低 release-maintenan
 - `AnnualReportSourceFallbackBlockedError`：当非 eligible 失败触发 fallback 时抛出，强制开发者显式处理
 
 **缓存策略**：
-- PDF 文件缓存：按 `cache/annual-reports/{fund_code}/{year}.pdf` 路径缓存；后续 EID single-source implementation gate 必须阻止 fallback-origin PDF 被复用为 EID-selected production source。
+- PDF 文件缓存：按 `cache/annual-reports/{fund_code}/{year}.pdf` 路径缓存；当前 repository 只复用带当前 EID single-source metadata 的 PDF cache，legacy、Eastmoney/fallback 或 metadata-less PDF cache 会被忽略而不是删除。
 - Parsed report 缓存：JSON 格式，带 `PARSED_REPORT_SCHEMA_VERSION` 版本号；parsed cache 必须绑定 schema version 与 source identity，source mismatch / schema drift 必须 invalidate 或 block reuse。
-- 来源元数据：后续 EID single-source implementation gate 必须支持 `selected_source=eid`、`resolved_source_name=eid`、`fallback_enabled=false`、`fallback_used=false`、EID URL/identifier、source failure category、identity status 和 integrity status；不得通过隐藏 fallback metadata 伪装 EID source。
+- 来源元数据：当前 `AnnualReportSourceMetadata` 支持 `selected_source=eid`、`source_mode=single_source_only`、`fallback_enabled=false`、`fallback_used=false`、EID URL/identifier、source failure category、identity status 和 integrity status；不得通过隐藏 fallback metadata 伪装 EID source。
 
-**当前已实现：公共来源 provenance 输出契约**：`fund_agent/fund/source_provenance.py` 将 `AnnualReportSourceMetadata` 投影为 additive public provenance 字段；`StructuredFundDataBundle.source_provenance` 使用安全 `not_applicable` 默认值，生产 `FundDataExtractor.extract()` 显式从 `ParsedAnnualReport.metadata.source` 投影。公共 extraction snapshot JSONL 每条记录包含 `source_provenance_schema_version`、`source_strategy`、`resolved_source_name`、`fallback_used`、`primary_failure_category`、`fallback_eligibility`、`source_provenance_status` 和 `source_provenance_reason`，`summary.md` 额外输出独立 `Source Provenance` 表。该实现是当前代码事实，只暴露已审查的公共 provenance，不授权 baseline/golden promotion，不改变 renderer、FQ0-FQ6、默认 analyze/checklist 行为、Host/Agent/dayu 或当前源码。EID single-source operational hardening 的接受目标会在后续单独实现 gate 中替换生产来源策略；在该目标下 `schema_drift`、`identity_mismatch`、`integrity_error` 必须 fail-closed，`not_found` / `unavailable` 只作为 terminal EID source failures，不再产生 fallback eligibility。2026-06-09 repository review 记录的 Eastmoney integrity-classification risk 是 future source-candidate/fallback gate 的 deferred risk，不是当前实现目标。
+**当前已实现：公共来源 provenance 输出契约**：`fund_agent/fund/source_provenance.py` 将 `AnnualReportSourceMetadata` 投影为 additive public provenance 字段；`StructuredFundDataBundle.source_provenance` 使用安全 `not_applicable` 默认值，生产 `FundDataExtractor.extract()` 显式从 `ParsedAnnualReport.metadata.source` 投影。公共 extraction snapshot JSONL 每条记录包含 `source_provenance_schema_version`、`source_strategy`、`resolved_source_name`、`fallback_used`、`primary_failure_category`、`fallback_eligibility`、`source_provenance_status` 和 `source_provenance_reason`，`summary.md` 额外输出独立 `Source Provenance` 表。该实现是当前代码事实，只暴露已审查的公共 provenance，不授权 baseline/golden promotion，不改变 renderer、FQ0-FQ6、默认 analyze/checklist 行为、Host/Agent/dayu。当前 EID single-source implementation 下 `schema_drift`、`identity_mismatch`、`integrity_error` 必须 fail-closed，`not_found` / `unavailable` 只作为 terminal EID source failures，不再产生 production fallback eligibility。2026-06-09 repository review 记录的 Eastmoney integrity-classification risk 是 future source-candidate/fallback gate 的 deferred risk，不是当前实现目标。
 
 ### 6.2 结构化抽取层
 
@@ -708,7 +708,7 @@ Route C 不删除当前 deterministic rendering，也不降低 release-maintenan
 
 | 数据 | 来源 | 获取方式 | 代码位置 |
 |------|------|---------|---------|
-| 基金年报 PDF | Accepted target: EID single-source operational annual-report source only (`selected_source=eid`, `mode=single_source_only`, `fallback_enabled=false`); Eastmoney、基金公司官网/CDN、CNINFO 仅为 deferred candidate / historical evidence route | httpx 下载；后续实现仍必须经 `FundDocumentRepository` 边界 | `documents/sources.py` |
+| 基金年报 PDF | Current production default: EID single-source operational annual-report source only (`selected_source=eid`, `mode=single_source_only`, `fallback_enabled=false`); Eastmoney、基金公司官网/CDN、CNINFO 仅为 deferred candidate / historical evidence route | httpx 下载；必须经 `FundDocumentRepository` 边界；live EID smoke 仍需单独授权 | `documents/sources.py` |
 | 基金净值序列 | CSRC EID 分类累计净值；legacy Akshare raw-unit 兼容分支 | httpx + HTML parser；legacy Akshare API | `data/csrc_eid_nav_source.py`, `data/nav_source_contract.py`, `data/nav_data.py`, `data/nav_repository.py` |
 | 温度计公开页适配器（过渡/对比） | 有知有行公开页面 | httpx + HTML 解析 | `data/thermometer.py` |
 | 自建温度计（当前生产方向） | akshare 指数估值接口；全 A 使用 `stock_a_ttm_lyr()` 的 `middlePETTM` 与 `stock_a_all_pb()` 的 `middlePB` | akshare API；经 Protocol 封装 | `data/thermometer_source.py`, `analysis/thermometer_calculator.py`, `data/thermometer_cache.py`, `data/thermometer_types.py` |
@@ -962,7 +962,7 @@ fund-agent/
 │   │   │   ├── repository.py            # 仓库入口（Protocol + 默认实现）
 │   │   │   ├── models.py                # ParsedAnnualReport / ParsedTable / DocumentKey
 │   │   │   ├── cache.py                 # PDF + parsed report 两级缓存
-│   │   │   ├── sources.py               # 当前代码仍含历史多源编排；当前 accepted target 为 EID single-source
+│   │   │   ├── sources.py               # 当前 production default 为 EID single-source；Eastmoney 为 deferred candidate
 │   │   │   └── adapters/
 │   │   │       ├── __init__.py
 │   │   │       └── annual_report_pdf.py # PDF 下载 + 解析适配器
@@ -1093,7 +1093,7 @@ Host / Agent 通用执行包是目标边界。当前已创建 `fund_agent/host` 
 | PDF 解析 | pdfplumber | PyPDF2 | 表格提取能力更强 |
 | 文档存取 | 统一仓库（FundDocumentRepository） | 直接文件操作 | 隔离 PDF/缓存细节，支持 Protocol 注入测试 |
 | 数据缓存 | PDF 文件缓存 + parsed report JSON 缓存 | 仅文件缓存 | 避免重复解析，schema 版本控制支持缓存失效 |
-| 年报来源 | EID single-source accepted target：`selected_source=eid`、`mode=single_source_only`、`fallback_enabled=false`；当前代码仍待后续实现 gate 对齐 | Eastmoney、基金公司官网/CDN、CNINFO 或其他非 EID route 仅作为 deferred source candidate / historical evidence route | 单源 operational hardening 降低来源身份漂移；`not_found` / `unavailable` 是 terminal EID source failures；schema drift、identity mismatch、integrity error 必须 fail-closed |
+| 年报来源 | 当前 production default 为 EID single-source：`selected_source=eid`、`mode=single_source_only`、`fallback_enabled=false`；默认 orchestrator 只构造 EID source，repository/cache 只复用当前 EID policy metadata | Eastmoney、基金公司官网/CDN、CNINFO 或其他非 EID route 仅作为 deferred source candidate / historical evidence route | 单源 operational hardening 降低来源身份漂移；`not_found` / `unavailable` 是 terminal EID source failures；schema drift、identity mismatch、integrity error 必须 fail-closed |
 | 审计策略 | MVP 程序审计（P1/P2/P3/C2/L1/R1/R2） | 三层全实现 | 降低复杂度，v2 引入 LLM 审计 |
 | 质量门控 | FQ0-FQ6 规则 + golden answer correctness | 无质量门控 | 确保精选基金池抽取质量可量化追踪 |
 | 温度计 | 当前生产方向为项目内自建温度计；CLI 默认全 A `wind_all_a`，并支持 `000300` / `000905` | 永久依赖有知有行页面抓取 | 公开页抓取不是长期稳定真源；自建能力必须在项目边界内定义数据源、公式、缓存、失败语义和审计证据 |

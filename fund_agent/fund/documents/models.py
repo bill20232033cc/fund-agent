@@ -12,6 +12,7 @@ from typing import Any, Final, Literal
 # P1-S1 当前只支持年报文档类型，避免在多个模块散落同一个魔法字符串。
 ANNUAL_REPORT_DOCUMENT_KIND: Final[Literal["annual_report"]] = "annual_report"
 AnnualReportSourceName = Literal["eid", "eastmoney"]
+AnnualReportSourceMode = Literal["single_source_only"]
 AnnualReportSourceFailureCategory = Literal[
     "not_found",
     "unavailable",
@@ -42,6 +43,10 @@ class AnnualReportSourceMetadata:
         corrections_num: 来源更正次数。
         fallback_used: 是否为 fallback 来源命中。
         primary_failure_category: 主来源失败后允许 fallback 的失败类别。
+        selected_source: 当前来源策略选中的来源。
+        source_mode: 当前来源策略模式。
+        fallback_enabled: 当前来源策略是否启用 fallback。
+        discovery_contract_version: 来源 discovery 契约版本。
     """
 
     source: AnnualReportSourceName | None = None
@@ -60,6 +65,10 @@ class AnnualReportSourceMetadata:
     corrections_num: int | None = None
     fallback_used: bool = False
     primary_failure_category: AnnualReportSourceFailureCategory | None = None
+    selected_source: AnnualReportSourceName | None = None
+    source_mode: AnnualReportSourceMode | None = None
+    fallback_enabled: bool | None = None
+    discovery_contract_version: str | None = None
 
     def to_dict(self) -> dict[str, object]:
         """把来源元数据序列化为 JSON 兼容字典。
@@ -91,6 +100,10 @@ class AnnualReportSourceMetadata:
             "corrections_num": self.corrections_num,
             "fallback_used": self.fallback_used,
             "primary_failure_category": self.primary_failure_category,
+            "selected_source": self.selected_source,
+            "source_mode": self.source_mode,
+            "fallback_enabled": self.fallback_enabled,
+            "discovery_contract_version": self.discovery_contract_version,
         }
 
     @classmethod
@@ -108,6 +121,8 @@ class AnnualReportSourceMetadata:
         """
 
         source_value = _optional_string(payload.get("source"))
+        selected_source_value = _optional_string(payload.get("selected_source"))
+        source_mode_value = _optional_string(payload.get("source_mode"))
         failure_category_value = _optional_string(payload.get("primary_failure_category"))
         return cls(
             source=_normalize_source_name(source_value),
@@ -126,6 +141,12 @@ class AnnualReportSourceMetadata:
             corrections_num=_optional_int(payload.get("corrections_num")),
             fallback_used=bool(payload.get("fallback_used", False)),
             primary_failure_category=_normalize_failure_category(failure_category_value),
+            selected_source=_normalize_source_name(selected_source_value),
+            source_mode=_normalize_source_mode(source_mode_value),
+            fallback_enabled=_optional_bool(payload.get("fallback_enabled")),
+            discovery_contract_version=_optional_string(
+                payload.get("discovery_contract_version")
+            ),
         )
 
 
@@ -303,6 +324,32 @@ def _optional_int(value: Any) -> int | None:
     return int(normalized)
 
 
+def _optional_bool(value: Any) -> bool | None:
+    """把可选字段规范化为布尔值。
+
+    Args:
+        value: 原始字段值。
+
+    Returns:
+        布尔值；空值返回 ``None``。
+
+    Raises:
+        ValueError: 非空字段无法转换为布尔值时抛出。
+    """
+
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in ("true", "1"):
+            return True
+        if normalized in ("false", "0"):
+            return False
+    raise ValueError(f"布尔字段非法: {value!r}")
+
+
 def _normalize_source_name(source: str | None) -> AnnualReportSourceName | None:
     """校验并规范化年报来源名称。
 
@@ -347,6 +394,26 @@ def _normalize_failure_category(
     ):
         return category
     return None
+
+
+def _normalize_source_mode(mode: str | None) -> AnnualReportSourceMode | None:
+    """校验并规范化年报来源策略模式。
+
+    Args:
+        mode: 原始来源策略模式。
+
+    Returns:
+        合法来源策略模式；空值返回 ``None``。
+
+    Raises:
+        ValueError: 来源策略模式不在闭集内时抛出。
+    """
+
+    if mode is None:
+        return None
+    if mode != "single_source_only":
+        raise ValueError(f"未知年报来源策略模式: {mode}")
+    return mode
 
 
 @dataclass(frozen=True, slots=True)
