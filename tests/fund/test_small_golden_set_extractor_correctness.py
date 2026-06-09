@@ -15,6 +15,7 @@ from typing import Any
 import pytest
 
 from fund_agent.fund.documents.models import DocumentKey, ParsedAnnualReport, ParsedTable, ReportSection
+from fund_agent.fund.extractors.holdings_share_change import extract_holdings_share_change
 from fund_agent.fund.extractors.performance import extract_performance
 from fund_agent.fund.extractors.profile import extract_profile
 
@@ -71,7 +72,34 @@ FORBIDDEN_RETAINED_KEYS = {
     "raw_page_text",
     "raw_pdf_text",
 }
-SAME_SOURCE_UNSUPPORTED_FIELDS = {"manager", "holdings", "risk"}
+SAME_SOURCE_UNSUPPORTED_FIELDS = {"manager", "risk"}
+EQUITY_LIKE_HOLDINGS_ROWS = {
+    "004393": {
+        "oracle_key": "top_stock_table_row",
+        "source": "top_ten",
+        "status": "direct_top_ten",
+    },
+    "004194": {
+        "oracle_key": "top_index_stock_table_row",
+        "source": "all_stock_investment_details",
+        "status": "direct_all_stock_details",
+    },
+    "017641": {
+        "oracle_key": "top_equity_table_row",
+        "source": "all_stock_investment_details",
+        "status": "direct_all_stock_details",
+    },
+}
+UNSUPPORTED_HOLDINGS_ROWS = {
+    "006597": "top_bond_table_row",
+    "110020": "target_etf_holding",
+}
+HOLDINGS_RAW_KEY_ADAPTER = {
+    "code": "股票代码",
+    "name": "股票名称",
+    "fair_value_cny": "公允价值",
+    "net_asset_ratio": "占基金资产净值比例",
+}
 
 
 def _load_json(path: Path) -> dict[str, Any]:
@@ -283,11 +311,100 @@ def _performance_table(row: dict[str, Any]) -> ParsedTable:
     )
 
 
-def _build_report_from_oracle_row(row: dict[str, Any]) -> ParsedAnnualReport:
+def _holdings_expected_row(row: dict[str, Any], oracle_key: str) -> dict[str, str]:
+    """读取 accepted oracle 中单个持仓行。
+
+    参数：
+        row: accepted retained excerpt oracle 行。
+        oracle_key: 持仓 expected 下的行形态 key。
+
+    返回：
+        canonical 持仓字段字典。
+
+    异常：
+        KeyError: holdings 字段或目标行形态缺失。
+    """
+
+    expected_row = _expected(row, "holdings")[oracle_key]
+    return {key: str(value) for key, value in expected_row.items()}
+
+
+def _holdings_table(row: dict[str, Any]) -> ParsedTable:
+    """用 accepted oracle 构造当前 holdings extractor 可消费的最小表格。
+
+    参数：
+        row: accepted retained excerpt oracle 行。
+
+    返回：
+        `ParsedTable`，只包含当前 gate 接受的 equity-like holdings 第一行。
+
+    异常：
+        KeyError: 基金代码不属于当前 gate 的 equity-like holdings 子集。
+    """
+
+    route = EQUITY_LIKE_HOLDINGS_ROWS[str(row["fund_code"])]
+    expected_row = _holdings_expected_row(row, str(route["oracle_key"]))
+    if route["source"] == "top_ten":
+        return ParsedTable(
+            page_number=_page_from_anchor(_field(row, "holdings")["anchor"]),
+            table_index=2,
+            headers=("前十大重仓", "股票代码", "股票名称", "数量", "公允价值", "占基金资产净值比例"),
+            rows=(
+                (
+                    "1",
+                    expected_row["code"],
+                    expected_row["name"],
+                    "",
+                    expected_row["fair_value_cny"],
+                    expected_row["net_asset_ratio"],
+                ),
+            ),
+        )
+    return ParsedTable(
+        page_number=_page_from_anchor(_field(row, "holdings")["anchor"]),
+        table_index=2,
+        headers=("股票代码", "股票名称", "数量", "公允价值", "占基金资产净值比例"),
+        rows=(
+            (
+                expected_row["code"],
+                expected_row["name"],
+                "",
+                expected_row["fair_value_cny"],
+                expected_row["net_asset_ratio"],
+            ),
+        ),
+    )
+
+
+def _adapt_raw_holding_row(raw_row: dict[str, str]) -> dict[str, str]:
+    """把当前 extractor 原始表头行映射为 oracle canonical keys。
+
+    参数：
+        raw_row: `holdings_snapshot.top_holdings` 中的原始表头字典。
+
+    返回：
+        仅用于本测试的 canonical 持仓字段字典。
+
+    异常：
+        KeyError: 当前 extractor 原始表头缺少本 gate 必需字段。
+    """
+
+    return {
+        canonical_key: raw_row[raw_key]
+        for canonical_key, raw_key in HOLDINGS_RAW_KEY_ADAPTER.items()
+    }
+
+
+def _build_report_from_oracle_row(
+    row: dict[str, Any],
+    *,
+    include_holdings: bool = False,
+) -> ParsedAnnualReport:
     """从 accepted oracle 行构造最小 parsed annual report。
 
     参数：
         row: accepted retained excerpt oracle 行。
+        include_holdings: 是否附加当前 gate 接受的 equity-like holdings 表。
 
     返回：
         可供当前 extractor 直接消费的 `ParsedAnnualReport`。
@@ -306,10 +423,16 @@ def _build_report_from_oracle_row(row: dict[str, Any]) -> ParsedAnnualReport:
             f"业绩比较基准：{benchmark}",
             "§3 主要财务指标、基金净值表现",
             "本节表现字段由同源 accepted oracle 表格承载。",
+            "§8 投资组合报告",
+            "本节持仓字段由同源 accepted oracle 表格承载。",
         )
     )
     section_two_start = raw_text.index("§2")
     section_three_start = raw_text.index("§3")
+    section_eight_start = raw_text.index("§8")
+    tables = [_profile_table(row), _performance_table(row)]
+    if include_holdings:
+        tables.append(_holdings_table(row))
     return ParsedAnnualReport(
         key=DocumentKey(
             fund_code=str(row["fund_code"]),
@@ -338,12 +461,20 @@ def _build_report_from_oracle_row(row: dict[str, Any]) -> ParsedAnnualReport:
                 section_id="§3",
                 title="§3 主要财务指标、基金净值表现",
                 start_offset=section_three_start,
+                end_offset=section_eight_start,
+                matched_rule="accepted_retained_excerpt_oracle",
+                confidence=1.0,
+            ),
+            "§8": ReportSection(
+                section_id="§8",
+                title="§8 投资组合报告",
+                start_offset=section_eight_start,
                 end_offset=len(raw_text),
                 matched_rule="accepted_retained_excerpt_oracle",
                 confidence=1.0,
             ),
         },
-        tables=(_profile_table(row), _performance_table(row)),
+        tables=tuple(tables),
     )
 
 
@@ -528,6 +659,39 @@ def test_performance_extractor_matches_same_source_tracking_error_when_present()
     assert performance.tracking_error.anchors
 
 
+@pytest.mark.parametrize("fund_code", sorted(EQUITY_LIKE_HOLDINGS_ROWS))
+def test_holdings_extractor_matches_same_source_equity_like_top_row(
+    fund_code: str,
+) -> None:
+    """验证 holdings extractor 对同源 equity-like 第一持仓行的 correctness。
+
+    参数：
+        fund_code: 当前参数化基金代码。
+
+    返回：
+        无。
+
+    异常：
+        AssertionError: 当前 extractor 未匹配 accepted oracle 中的持仓第一行。
+    """
+
+    row = _oracle_rows_by_fund_code()[fund_code]
+    route = EQUITY_LIKE_HOLDINGS_ROWS[fund_code]
+    report = _build_report_from_oracle_row(row, include_holdings=True)
+    holdings = extract_holdings_share_change(report).holdings_snapshot
+    holdings_expected = _holdings_expected_row(row, str(route["oracle_key"]))
+
+    assert holdings.extraction_mode == "direct"
+    assert holdings.value is not None
+    assert holdings.value["top_holdings_status"] == route["status"]
+    assert holdings.value["top_holdings_source"] == route["source"]
+    top_holdings = holdings.value["top_holdings"]
+    assert isinstance(top_holdings, list)
+    assert top_holdings
+    assert _adapt_raw_holding_row(top_holdings[0]) == holdings_expected
+    assert holdings.anchors
+
+
 @pytest.mark.xfail(strict=True, reason="same-source fields exist, but current extractor has no row-field consumer for this oracle shape")
 @pytest.mark.parametrize("field_name", sorted(SAME_SOURCE_UNSUPPORTED_FIELDS))
 def test_same_source_fields_without_current_row_consumer_are_blocked_gaps(
@@ -552,3 +716,29 @@ def test_same_source_fields_without_current_row_consumer_are_blocked_gaps(
     assert field_group["anchor"]
     assert field_group["excerpt"]
     assert field_name not in SAME_SOURCE_UNSUPPORTED_FIELDS
+
+
+@pytest.mark.xfail(strict=True, reason="same-source holdings row exists, but current gate excludes this row shape")
+@pytest.mark.parametrize("fund_code", sorted(UNSUPPORTED_HOLDINGS_ROWS))
+def test_same_source_holdings_rows_outside_equity_like_subset_remain_blocked(
+    fund_code: str,
+) -> None:
+    """记录 006597 bond holding 与 110020 target ETF holding 仍不进 passing correctness。
+
+    参数：
+        fund_code: 当前参数化基金代码。
+
+    返回：
+        无。
+
+    异常：
+        AssertionError: 当前持仓行形态仍未形成默认 passing correctness assertion。
+    """
+
+    row = _oracle_rows_by_fund_code()[fund_code]
+    holdings_expected = _holdings_expected_row(row, UNSUPPORTED_HOLDINGS_ROWS[fund_code])
+
+    assert holdings_expected
+    assert _field(row, "holdings")["anchor"]
+    assert _field(row, "holdings")["excerpt"]
+    assert fund_code not in UNSUPPORTED_HOLDINGS_ROWS
