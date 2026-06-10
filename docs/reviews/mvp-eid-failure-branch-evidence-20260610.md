@@ -48,6 +48,18 @@ Result:
 35 passed in 0.71s
 ```
 
+Controller retrospective verification also confirmed the pytest collection count:
+
+```bash
+uv run pytest tests/fund/documents/test_annual_report_sources.py --collect-only -q
+```
+
+Result:
+
+```text
+35 tests collected in 0.60s
+```
+
 ```bash
 uv run ruff check tests/fund/documents/test_annual_report_sources.py
 ```
@@ -61,6 +73,10 @@ All checks passed!
 ## Residual Risk
 
 Live EID failure branches remain unproven by design. Proving live outage, schema drift or integrity failures against the real EID endpoint would require a separate live evidence gate and explicit authorization.
+
+The `unavailable` terminal result is a current single-source-mode statement. If a future authorized multi-source source chain is introduced, all-unavailable or mixed source failures may surface as aggregate source failures instead of the current single-source terminal unavailable exception.
+
+Eastmoney/CNINFO/fund-company and other fallback candidates are outside this production no-live EID single-source evidence scope. Their non-`unavailable` failure classifications remain unproven unless a future source/fallback gate explicitly authorizes that scope.
 
 This gate does not authorize fallback invocation, source-policy changes, fixture projection, golden/readiness promotion or downstream integration implementation.
 

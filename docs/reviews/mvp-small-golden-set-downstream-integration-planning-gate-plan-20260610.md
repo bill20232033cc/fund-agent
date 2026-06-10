@@ -154,5 +154,6 @@ Later implementation closeout must report:
 - changed files;
 - exact validation commands and results;
 - downstream surfaces now consuming each field;
+- final `source_field_id` names used for `portfolio_managers` and `risk_characteristic_text`;
 - residual non-goals preserved;
 - next recommended gate.
