@@ -17,6 +17,7 @@ from fund_agent.fund.extractors.models import (
 _SECTION_MANAGER_REPORT: Final[str] = "§4"
 _SECTION_PORTFOLIO: Final[str] = "§8"
 _SECTION_HOLDER: Final[str] = "§9"
+_PORTFOLIO_MANAGER_TENURE_SCHEMA_VERSION: Final[str] = "portfolio_manager_tenure_list.v1"
 _STRATEGY_HEADING_PATTERN: Final[re.Pattern[str]] = re.compile(
     r"^4\.\d+(?:\.\d+)?\s*报告期内基金投资策略和运作分析\s*$"
 )
@@ -29,6 +30,19 @@ _SECTION_HEADING_PATTERN: Final[re.Pattern[str]] = re.compile(
 _EMPLOYEE_HOLDING_TABLE_KEYWORDS: Final[tuple[str, ...]] = ("从业人员", "持有", "份额")
 _MANAGER_HOLDING_TABLE_KEYWORDS: Final[tuple[str, ...]] = ("基金经理", "持有", "基金份额")
 _HOLDER_STRUCTURE_TABLE_KEYWORDS: Final[tuple[str, ...]] = ("持有人户数", "机构投资者", "个人投资者")
+_MANAGER_ROSTER_NAME_HEADER_KEYWORDS: Final[tuple[str, ...]] = ("姓名",)
+_MANAGER_ROSTER_ROLE_HEADER_KEYWORDS: Final[tuple[str, ...]] = ("职务", "职责", "岗位")
+_MANAGER_ROSTER_START_HEADER_KEYWORDS: Final[tuple[str, ...]] = (
+    "任职日期",
+    "任职时间",
+    "起始日期",
+    "聘任日期",
+)
+_MANAGER_ROSTER_END_HEADER_KEYWORDS: Final[tuple[str, ...]] = (
+    "离任日期",
+    "离任时间",
+    "终止日期",
+)
 _RATIO_VALUE_PATTERN: Final[re.Pattern[str]] = re.compile(r"^-?\d+(?:\.\d+)?%?$")
 
 _FIELD_PATTERNS: Final[dict[str, tuple[tuple[str, tuple[str, ...]], ...]]] = {
@@ -424,6 +438,148 @@ def _extract_holder_structure_from_table(
     return None, None
 
 
+def _manager_roster_heading(report: ParsedAnnualReport) -> str | None:
+    """读取 `§4` 中可证明基金经理简介表归属的标题行。
+
+    Args:
+        report: 已解析年报对象。
+
+    Returns:
+        命中 `基金经理` 与 `简介` 的标题行；未命中时返回 `None`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    section_text = report.get_section_text(_SECTION_MANAGER_REPORT)
+    if not section_text:
+        return None
+    for line in section_text.splitlines():
+        normalized_line = _normalize_cell(line)
+        compact_line = _compact_text(normalized_line)
+        if (
+            _SECTION_HEADING_PATTERN.match(normalized_line)
+            and "基金经理" in compact_line
+            and "简介" in compact_line
+        ):
+            return normalized_line
+    return None
+
+
+def _is_manager_roster_table(table: ParsedTable) -> bool:
+    """判断表格是否具备基金经理任期列表的必需表头。
+
+    Args:
+        table: 待检查表格。
+
+    Returns:
+        表头包含姓名、职务和任职日期列时返回 `True`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return (
+        _find_header_index(table.headers, _MANAGER_ROSTER_NAME_HEADER_KEYWORDS) is not None
+        and _find_header_index(table.headers, _MANAGER_ROSTER_ROLE_HEADER_KEYWORDS) is not None
+        and _find_header_index(table.headers, _MANAGER_ROSTER_START_HEADER_KEYWORDS) is not None
+    )
+
+
+def _is_manager_roster_header_repeat(row: tuple[str, ...]) -> bool:
+    """判断数据行是否只是跨页重复表头。
+
+    Args:
+        row: 表格数据行。
+
+    Returns:
+        行内同时出现姓名和任职日期表头语义时返回 `True`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    row_text = _compact_text(" ".join(_normalize_cell(cell) for cell in row))
+    return "姓名" in row_text and any(keyword in row_text for keyword in _MANAGER_ROSTER_START_HEADER_KEYWORDS)
+
+
+def _build_manager_source_anchor(
+    *,
+    table: ParsedTable,
+    section_title: str,
+    manager_name: str,
+) -> dict[str, object]:
+    """构造 `portfolio_manager_tenure_list.v1` 行内来源锚点。
+
+    Args:
+        table: 命中的基金经理简介表。
+        section_title: `§4` 中命中的基金经理简介标题。
+        manager_name: 当前基金经理姓名。
+
+    Returns:
+        可序列化的行内来源锚点。
+
+    Raises:
+        无显式抛出。
+    """
+
+    table_id = f"page-{table.page_number}-table-{table.table_index}"
+    return {
+        "section_id": _SECTION_MANAGER_REPORT,
+        "section_title": section_title,
+        "page_number": table.page_number,
+        "table_id": table_id,
+        "row_locator": f"portfolio_manager:{manager_name}",
+    }
+
+
+def _extract_portfolio_manager_rows(
+    table: ParsedTable,
+    section_title: str,
+) -> tuple[dict[str, object], ...]:
+    """从基金经理简介表中抽取任期列表行。
+
+    Args:
+        table: 具备基金经理任期表头的表格。
+        section_title: `§4` 中命中的基金经理简介标题。
+
+    Returns:
+        基金经理任期行元组。
+
+    Raises:
+        无显式抛出。
+    """
+
+    name_index = _find_header_index(table.headers, _MANAGER_ROSTER_NAME_HEADER_KEYWORDS)
+    role_index = _find_header_index(table.headers, _MANAGER_ROSTER_ROLE_HEADER_KEYWORDS)
+    start_index = _find_header_index(table.headers, _MANAGER_ROSTER_START_HEADER_KEYWORDS)
+    end_index = _find_header_index(table.headers, _MANAGER_ROSTER_END_HEADER_KEYWORDS)
+    entries: list[dict[str, object]] = []
+    for row in table.rows:
+        if not any(_normalize_cell(cell) for cell in row) or _is_manager_roster_header_repeat(row):
+            continue
+        name = _cell_at(row, name_index)
+        role = _cell_at(row, role_index)
+        start_date = _cell_at(row, start_index)
+        if name is None or role is None or start_date is None:
+            continue
+        entry: dict[str, object] = {
+            "name": name,
+            "role": role,
+            "start_date": start_date,
+        }
+        end_date = _cell_at(row, end_index)
+        if end_date:
+            entry["end_date"] = end_date
+        entry["source_anchor"] = _build_manager_source_anchor(
+            table=table,
+            section_title=section_title,
+            manager_name=name,
+        )
+        entries.append(entry)
+    return tuple(entries)
+
+
 def _is_holder_structure_continuation(previous_table: ParsedTable, table: ParsedTable) -> bool:
     """判断当前表是否为跨页持有人结构数据表。
 
@@ -782,14 +938,70 @@ def _build_holder_structure(report: ParsedAnnualReport) -> ExtractedField[dict[s
     )
 
 
-def extract_manager_ownership(report: ParsedAnnualReport) -> ManagerOwnershipExtractionResult:
-    """抽取 `§4/§8/§9` 管理人文本、换手率、持有披露与持有人结构。
+def _build_portfolio_managers(report: ParsedAnnualReport) -> ExtractedField[dict[str, object]]:
+    """构造基金经理任期列表字段，见模板第 3 章“基金经理画像”。
 
     Args:
         report: 已解析年报对象。
 
     Returns:
-        `manager_strategy_text`、`turnover_rate`、`manager_alignment`、`holder_structure` 四类结果。
+        年报 `§4` 披露的基金经理任期列表。
+
+    Raises:
+        无显式抛出。
+    """
+
+    section_title = _manager_roster_heading(report)
+    if section_title is None:
+        return _missing_field("§4 未披露可规则化定位的基金经理简介标题")
+
+    entries: list[dict[str, object]] = []
+    anchors: list[EvidenceAnchor] = []
+    for table in report.tables:
+        if not _is_manager_roster_table(table):
+            continue
+        table_entries = _extract_portfolio_manager_rows(table, section_title)
+        entries.extend(table_entries)
+        for entry in table_entries:
+            source_anchor = entry["source_anchor"]
+            if not isinstance(source_anchor, dict):
+                continue
+            anchors.append(
+                EvidenceAnchor(
+                    source_kind="annual_report",
+                    document_year=report.key.year,
+                    section_id=_SECTION_MANAGER_REPORT,
+                    page_number=table.page_number,
+                    table_id=str(source_anchor["table_id"]),
+                    row_locator=str(source_anchor["row_locator"]),
+                    note=section_title,
+                )
+            )
+
+    if not entries:
+        return _missing_field("§4 未披露可规则化抽取的基金经理任期列表")
+    return ExtractedField(
+        value={
+            "schema_version": _PORTFOLIO_MANAGER_TENURE_SCHEMA_VERSION,
+            "fund_code": report.key.fund_code,
+            "report_year": report.key.year,
+            "portfolio_managers": entries,
+        },
+        anchors=tuple(anchors),
+        extraction_mode="direct",
+        note=None,
+    )
+
+
+def extract_manager_ownership(report: ParsedAnnualReport) -> ManagerOwnershipExtractionResult:
+    """抽取 `§4/§8/§9` 管理人文本、任期列表、换手率、持有披露与持有人结构。
+
+    Args:
+        report: 已解析年报对象。
+
+    Returns:
+        `manager_strategy_text`、`portfolio_managers`、`turnover_rate`、`manager_alignment`、
+        `holder_structure` 五类结果。
 
     Raises:
         无显式抛出。
@@ -797,6 +1009,7 @@ def extract_manager_ownership(report: ParsedAnnualReport) -> ManagerOwnershipExt
 
     return ManagerOwnershipExtractionResult(
         manager_strategy_text=_build_manager_strategy_text(report),
+        portfolio_managers=_build_portfolio_managers(report),
         turnover_rate=_build_turnover_rate(report),
         manager_alignment=_build_manager_alignment(report),
         holder_structure=_build_holder_structure(report),

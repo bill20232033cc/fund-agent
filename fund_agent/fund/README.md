@@ -92,6 +92,7 @@ chapter_lens = resolve_preferred_lens(chapter_id=2, fund_type="active_fund")
 `extract_manager_ownership()` 返回 `ManagerOwnershipExtractionResult`，当前覆盖模板第 2 章“C 成本侵蚀”、第 3 章“基金经理画像与言行一致性”和第 6 章“核心风险与否决项”的最小数据底座：
 
 - `manager_strategy_text`：`§4` 中的策略摘要、后市展望原文；当前支持显式冒号行和“报告期内基金投资策略和运作分析”等编号标题后的正文块
+- `portfolio_managers`：`§4` 中的基金经理任期列表；当前只在 `§4` 存在编号“基金经理简介”标题且表格具备姓名、职务、任职日期表头时输出 `portfolio_manager_tenure_list.v1`
 - `turnover_rate`：`§8` 中的年度换手率与披露口径
 - `manager_alignment`：`§9` 中的基金经理/从业人员持有原始披露，当前支持表格披露且不输出好坏判断
 - `holder_structure`：`§9` 中的机构/个人持有人结构；当前支持持有人结构表跨页组表头
@@ -494,7 +495,7 @@ C2 当前只做确定性 marker / 元数据检查，不调用 LLM，不判断语
 - 当前稳定 extractor 边界是 `§1/§2/§3/§4/§8/§9/§10`。
 - 当前基础画像只覆盖 `basic_identity`、`product_profile`、`benchmark`、`fee_schedule` 四类输出。
 - 当前 `§3` 表现只覆盖 `nav_benchmark_performance` 与 `investor_return` 两类输出。
-- 当前管理人/持有人 extractor 只覆盖 `manager_strategy_text`、`turnover_rate`、`manager_alignment`、`holder_structure` 四类输出。
+- 当前管理人/持有人 extractor 覆盖 `manager_strategy_text`、`portfolio_managers`、`turnover_rate`、`manager_alignment`、`holder_structure` 五类输出；`portfolio_managers` 目前只是 extractor 输出面，尚未接入 `StructuredFundDataBundle`、snapshot、renderer 或 quality gate。
 - 当前持仓/份额 extractor 只覆盖 `holdings_snapshot` 与 `share_change` 两类输出；`share_change` 对多份额列表只显式选择单值列或表头精确基金代码列，无法可靠选择时返回 `missing`，不再按列顺序或 A 类 fallback 默认取值。
 - `data_extractor.py` façade 已接入当前 12 项结构化数据；`structured_data` 当前以 `StructuredFundDataBundle` dataclass 表达，不额外物化 SQLite 表。
 - `report_evidence.py` 当前只投影已有 `StructuredFundDataBundle`，不新增抽取路径、不调用文档仓库、不把 `nav_data` 作为事实，也不改变 renderer / FQ0-FQ6 行为。

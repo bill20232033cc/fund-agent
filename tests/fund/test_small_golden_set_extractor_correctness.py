@@ -744,13 +744,6 @@ def test_performance_extractor_matches_same_source_tracking_error_when_present()
     assert performance.tracking_error.anchors
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "portfolio_manager_tenure_list.v1 is an accepted future contract; "
-        "current manager extractor has no roster surface"
-    ),
-)
 @pytest.mark.parametrize("fund_code", sorted(EXPECTED_ACCEPTED_FUND_CODES))
 def test_manager_extractor_exposes_same_source_portfolio_manager_tenure_list(
     fund_code: str,

@@ -637,16 +637,18 @@ class TrackingErrorValue:
 
 @dataclass(frozen=True, slots=True)
 class ManagerOwnershipExtractionResult:
-    """`§4/§8/§9` 管理人文本、换手率、利益一致性与持有人结构抽取结果。
+    """`§4/§8/§9` 管理人文本、任期列表、换手率、利益一致性与持有人结构抽取结果。
 
     Attributes:
         manager_strategy_text: 管理人报告中的策略与展望原文。
+        portfolio_managers: 年报 `§4` 披露的基金经理任期列表。
         turnover_rate: 年报 `§8` 披露的换手率。
         manager_alignment: 年报 `§9` 披露的基金经理/从业人员持有原始数据。
         holder_structure: 年报 `§9` 披露的机构/个人持有人结构。
     """
 
     manager_strategy_text: ExtractedField[dict[str, object]]
+    portfolio_managers: ExtractedField[dict[str, object]]
     turnover_rate: ExtractedField[dict[str, object]]
     manager_alignment: ExtractedField[dict[str, object]]
     holder_structure: ExtractedField[dict[str, object]]
