@@ -16,10 +16,10 @@ Use `docs/reviews/` and `docs/archive/` only as evidence chain. They do not over
 | Field | State |
 |---|---|
 | Current phase | `MVP typed-template-to-agent report generation stabilization phase` |
-| Current gate | `Controlled live EID helper repair Stage A no-live implementation gate` accepted locally |
-| Current gate classification | `standard` because it changed only a gate-local helper, no-live regression test, test README and review/control artifacts; it did not run live EID/PDF/FDR/network, change source policy/fallback semantics, production metadata, provider/runtime/config, extractor behavior, golden/readiness, quality gate, Service/Host/Agent runtime, release or PR state |
-| Current gate status | Accepted implementation checkpoint `022b409` removes `_safe_report_payload()` reads of non-existent `identity_status` / `integrity_status`, optionally emits existing safe scalar `discovery_contract_version`, adds no-live fake-report regression test `tests/scripts/test_controlled_live_eid_failure_branch_observation.py`, and records DS/MiMo code reviews PASS. No production metadata field was added; `AnnualReportSourceMetadata` remains unchanged. Accepted no-live validation passed: ruff, py_compile, targeted pytest, unstaged/staged diff checks. `tests/README.md` was synced in the follow-up control-doc sync. Stage B controlled live retry is not authorized. No live helper execution, live EID/PDF/FDR/network, fallback, non-EID source, provider/LLM probe, extractor/analyze/checklist, fixture projection, golden/readiness promotion, score-loop, release or PR action occurred |
-| Next entry point | Controlled live EID helper repair Stage B controlled live retry gate, only with separate explicit live authorization. Do not run `uv run python scripts/controlled_live_eid_failure_branch_observation.py` or any PDF/FDR/network/`FundDocumentRepository` live acquisition, fallback, non-EID source, provider/LLM, extractor/analyze/checklist, golden/readiness, score-loop, release, push, PR or merge without that authorization |
+| Current gate | `Controlled live EID helper repair Stage B controlled live retry gate` accepted locally |
+| Current gate classification | `heavy` because it executed one separately authorized live `FundDocumentRepository`/EID/PDF/FDR/network acquisition command, while preserving EID single-source policy and forbidding fallback, non-EID source, provider/LLM, extractor/analyze/checklist, golden/readiness, score-loop, release, push, PR or merge |
+| Current gate status | Accepted evidence checkpoint `f0a1459` records exactly one authorized command, `uv run python scripts/controlled_live_eid_failure_branch_observation.py`, for fixed target `006597 / 2024`. The command exited `0`, emitted one parseable safe JSON line with `status=success`, `source=eid`, `selected_source=eid`, `source_mode=single_source_only`, `fallback_enabled=false`, `fallback_used=false`, `primary_failure_category=null`, and no stderr. DS/MiMo evidence reviews PASS with zero blockers; controller judgment accepts classification `accepted_live_window_no_failure_observed`. This is not all failure-branch live proof; no live `not_found` / `unavailable` / `schema_drift` / `identity_mismatch` / `integrity_error` branch was observed. Checkpoint `ac6bbe9` remains the accepted no-live code-behavior proof for modeled EID failure categories. No retry, additional row, fallback, non-EID source, provider/LLM, extractor/analyze/checklist, fixture projection, golden/readiness promotion, score-loop, release, push, PR or merge occurred |
+| Next entry point | EID source metadata design wording docs-sync planning gate. Scope is no-live/docs-only: reconcile stale `docs/design.md` identity/integrity metadata wording against current code/control truth, without modifying source/tests/runtime behavior or running live EID/PDF/FDR/network, fallback, non-EID source, provider/LLM, extractor/analyze/checklist, golden/readiness, score-loop, release, push, PR or merge |
 | Control truth | `docs/implementation-control.md` |
 | Design truth | `docs/design.md` |
 | Accepted plan commit | `beb6891` |
@@ -41,6 +41,7 @@ Use `docs/reviews/` and `docs/archive/` only as evidence chain. They do not over
 | Accepted controlled live EID failure-branch evidence commit | `ebcd3bf` |
 | Accepted controlled live EID helper repair planning commit | `38d7f9e` |
 | Accepted controlled live EID helper repair implementation commit | `022b409` |
+| Accepted controlled live EID helper retry evidence commit | `f0a1459` |
 | Accepted EID failure-branch evidence planning commit | `4b76b3c` |
 | Accepted EID failure-branch evidence commit | `ac6bbe9` |
 | Accepted retrospective independent review commit | `f590cae` |
@@ -279,6 +280,7 @@ Use `docs/reviews/` and `docs/archive/` only as evidence chain. They do not over
 | Accepted controlled live EID failure-branch evidence checkpoint | `ebcd3bf` |
 | Accepted controlled live EID helper repair planning checkpoint | `38d7f9e` |
 | Accepted controlled live EID helper repair implementation checkpoint | `022b409` |
+| Accepted controlled live EID helper retry evidence checkpoint | `f0a1459` |
 | Accepted EID failure-branch evidence planning checkpoint | `4b76b3c` |
 | Accepted EID failure-branch evidence checkpoint | `ac6bbe9` |
 | Accepted retrospective independent review checkpoint | `f590cae` |
