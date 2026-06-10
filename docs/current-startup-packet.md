@@ -16,10 +16,10 @@ Use `docs/reviews/` and `docs/archive/` only as evidence chain. They do not over
 | Field | State |
 |---|---|
 | Current phase | `MVP typed-template-to-agent report generation stabilization phase` |
-| Current gate | `small golden set downstream integration planning gate` accepted locally |
-| Current gate classification | `standard` because it is planning-only and does not change production code, extractor behavior, source/fallback/golden/readiness/provider/runtime/config/live/PDF/FDR behavior, renderer/checklist/quality semantics, or downstream contracts yet |
-| Current gate status | Accepted planning artifact `docs/reviews/mvp-small-golden-set-downstream-integration-planning-gate-plan-20260610.md` defines later implementation slices for the four passing extractor surfaces. The accepted plan says `portfolio_managers` and `risk_characteristic_text` should become explicit `StructuredFundDataBundle` fields; `bond_top_holdings` and `target_fund_holdings` should remain sub-shapes of `holdings_snapshot` and not be duplicated as top-level bundle fields. Later slices are bundle fan-in, snapshot/report evidence projection, chapter facts/evidence availability, then docs/control sync. No production code changed in this planning gate; no PDF/source/network/FDR/fallback/provider/live LLM ran; no fixture projection, renderer/checklist/quality/score-loop, golden/readiness, Service/Host/Agent runtime, or downstream implementation occurred |
-| Next entry point | Per user ordering, the next planned entry is EID failure-branch evidence planning gate. Do not run additional PDF read, network, `FundDocumentRepository` live acquisition, fallback, live LLM, endpoint/provider probes, provider/default/runtime/budget/config changes, Chapter calibration, Agent runtime expansion, multi-year runtime, score-loop, fixture projection, golden/readiness promotion, downstream implementation, release, merge or mark PR ready without separate authorization |
+| Current gate | `EID failure-branch evidence planning gate` accepted locally |
+| Current gate classification | `standard` because it is planning-only and does not change production code, source policy, source/fallback/golden/readiness/provider/runtime/config/live/PDF/FDR behavior, renderer/checklist/quality semantics, or downstream contracts yet |
+| Current gate status | Accepted planning artifact `docs/reviews/mvp-eid-failure-branch-evidence-planning-gate-plan-20260610.md` defines a no-live evidence matrix for five EID annual-report failure categories: `not_found`, `unavailable`, `schema_drift`, `identity_mismatch`, `integrity_error`. The plan requires future evidence to use fake sources / `httpx.MockTransport` / direct parser-helper tests only, to document that `not_found` and `unavailable` are terminal under current EID single-source mode, and to document that `schema_drift`、`identity_mismatch`、`integrity_error` are fail-closed. No production code changed in this planning gate; no live EID/network/PDF/FDR/repository acquisition/fallback/provider/live LLM ran; no fixture projection, renderer/checklist/quality/score-loop, golden/readiness, downstream implementation, release or PR action occurred |
+| Next entry point | Recommended next entry is no-live EID failure-branch evidence implementation gate. Do not run additional PDF read, network, `FundDocumentRepository` live acquisition, fallback, live LLM, endpoint/provider probes, provider/default/runtime/budget/config changes, Chapter calibration, Agent runtime expansion, multi-year runtime, score-loop, fixture projection, golden/readiness promotion, downstream implementation, release, merge or mark PR ready without separate authorization |
 | Control truth | `docs/implementation-control.md` |
 | Design truth | `docs/design.md` |
 | Accepted plan commit | `beb6891` |
@@ -36,6 +36,7 @@ Use `docs/reviews/` and `docs/archive/` only as evidence chain. They do not over
 | Accepted target fund holding extractor fix plan commit | `fd29754` |
 | Accepted target fund holding extractor fix implementation commit | `7a10dbf` |
 | Accepted downstream integration planning commit | `56b9e42` |
+| Accepted EID failure-branch evidence planning commit | `4b76b3c` |
 | Accepted provider factory commit | `26203d3` |
 | Accepted CLI provider wiring commit | `ab0590a` |
 | Accepted docs/control sync commit | `4d0c19f` |
