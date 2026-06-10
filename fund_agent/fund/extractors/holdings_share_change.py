@@ -46,6 +46,16 @@ _BOND_CODE_HEADER_KEYWORDS: Final[tuple[str, ...]] = ("债券代码",)
 _BOND_NAME_HEADER_KEYWORDS: Final[tuple[str, ...]] = ("债券名称",)
 _BOND_FAIR_VALUE_HEADER_KEYWORDS: Final[tuple[str, ...]] = ("公允价值",)
 _BOND_NET_ASSET_RATIO_HEADER_KEYWORDS: Final[tuple[str, ...]] = ("占基金资产净值比例",)
+_TARGET_FUND_HOLDING_SCHEMA_VERSION: Final[str] = "target_fund_holding_row.v1"
+_TARGET_FUND_HOLDING_TABLE_KEYWORDS: Final[tuple[str, ...]] = (
+    "基金名称",
+    "公允价值",
+    "占基金资产净值比例",
+)
+_TARGET_FUND_HOLDING_SECTION_TITLE: Final[str] = "§8.2 期末投资目标基金明细"
+_TARGET_FUND_NAME_HEADER_KEYWORDS: Final[tuple[str, ...]] = ("基金名称",)
+_TARGET_FUND_FAIR_VALUE_HEADER_KEYWORDS: Final[tuple[str, ...]] = ("公允价值",)
+_TARGET_FUND_NET_ASSET_RATIO_HEADER_KEYWORDS: Final[tuple[str, ...]] = ("占基金资产净值比例",)
 _INDUSTRY_STATUS_DIRECT: Final[str] = "direct"
 _INDUSTRY_STATUS_MISSING: Final[str] = "missing"
 _MAX_TOP_HOLDINGS_ROWS: Final[int] = 10
@@ -680,6 +690,71 @@ def _extract_bond_top_holdings(table: ParsedTable) -> list[dict[str, object]]:
     return rows
 
 
+def _build_target_fund_holding_source_anchor(
+    *,
+    table: ParsedTable,
+    target_fund_name: str,
+) -> dict[str, object]:
+    """构造 `target_fund_holding_row.v1` 行级来源锚点。
+
+    Args:
+        table: 命中的期末投资目标基金明细表。
+        target_fund_name: 目标基金名称。
+
+    Returns:
+        可序列化的行级来源锚点。
+
+    Raises:
+        无显式抛出。
+    """
+
+    table_id = _table_id(table)
+    return {
+        "section_id": _SECTION_PORTFOLIO,
+        "section_title": _TARGET_FUND_HOLDING_SECTION_TITLE,
+        "page_number": table.page_number,
+        "table_id": table_id,
+        "row_locator": f"target_fund_holding:{target_fund_name}",
+    }
+
+
+def _extract_target_fund_holdings(table: ParsedTable) -> list[dict[str, object]]:
+    """从期末投资目标基金明细表抽取目标基金持仓行。
+
+    Args:
+        table: 期末投资目标基金明细表。
+
+    Returns:
+        `target_fund_holding_row.v1` 行数据列表。
+
+    Raises:
+        无显式抛出。
+    """
+
+    name_index = _find_header_index(table.headers, _TARGET_FUND_NAME_HEADER_KEYWORDS)
+    fair_value_index = _find_header_index(table.headers, _TARGET_FUND_FAIR_VALUE_HEADER_KEYWORDS)
+    net_asset_ratio_index = _find_header_index(table.headers, _TARGET_FUND_NET_ASSET_RATIO_HEADER_KEYWORDS)
+    rows: list[dict[str, object]] = []
+    for row in table.rows:
+        name = _cell_at(row, name_index)
+        fair_value = _cell_at(row, fair_value_index)
+        net_asset_ratio = _cell_at(row, net_asset_ratio_index)
+        if name is None or fair_value is None or net_asset_ratio is None:
+            continue
+        rows.append(
+            {
+                "name": name,
+                "fair_value_cny": fair_value,
+                "net_asset_ratio": net_asset_ratio,
+                "source_anchor": _build_target_fund_holding_source_anchor(
+                    table=table,
+                    target_fund_name=name,
+                ),
+            }
+        )
+    return rows
+
+
 def _extract_industry_distribution(table: ParsedTable) -> list[dict[str, str]]:
     """从行业分布表中提取行数据。
 
@@ -1241,7 +1316,17 @@ def _build_holdings_snapshot(report: ParsedAnnualReport) -> ExtractedField[dict[
         _BOND_TOP_HOLDING_TABLE_KEYWORDS,
         "bond_top_holding_row",
     )
-    if holdings_source.match is None and industry_match is None and bond_top_holding_match is None:
+    target_fund_holding_match = _find_table(
+        report,
+        _TARGET_FUND_HOLDING_TABLE_KEYWORDS,
+        "target_fund_holding_row",
+    )
+    if (
+        holdings_source.match is None
+        and industry_match is None
+        and bond_top_holding_match is None
+        and target_fund_holding_match is None
+    ):
         return _missing_field("§8 未披露可规则化抽取的股票持仓明细或行业分布表")
 
     anchors: list[EvidenceAnchor] = []
@@ -1275,6 +1360,19 @@ def _build_holdings_snapshot(report: ParsedAnnualReport) -> ExtractedField[dict[
                 )
             )
 
+    target_fund_holdings: list[dict[str, object]] | None = None
+    if target_fund_holding_match is not None:
+        target_fund_holdings = _extract_target_fund_holdings(target_fund_holding_match.table)
+        if target_fund_holdings:
+            anchors.append(
+                _build_table_anchor(
+                    report,
+                    target_fund_holding_match.table,
+                    _SECTION_PORTFOLIO,
+                    "target_fund_holdings",
+                )
+            )
+
     value: dict[str, object] = {
         "top_holdings": top_holdings,
         "top_holdings_status": holdings_source.status,
@@ -1289,6 +1387,15 @@ def _build_holdings_snapshot(report: ParsedAnnualReport) -> ExtractedField[dict[
                 "fund_code": report.key.fund_code,
                 "report_year": report.key.year,
                 "bond_top_holdings": bond_top_holdings,
+            }
+        )
+    if target_fund_holdings:
+        value.update(
+            {
+                "schema_version": _TARGET_FUND_HOLDING_SCHEMA_VERSION,
+                "fund_code": report.key.fund_code,
+                "report_year": report.key.year,
+                "target_fund_holdings": target_fund_holdings,
             }
         )
 

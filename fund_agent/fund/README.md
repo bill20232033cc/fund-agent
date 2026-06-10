@@ -101,7 +101,7 @@ chapter_lens = resolve_preferred_lens(chapter_id=2, fund_type="active_fund")
 
 `extract_holdings_share_change()` 返回 `HoldingsShareChangeExtractionResult`，当前覆盖模板第 3 章“实际投资行为”和第 4 章“投资者获得感”的最小数据底座：
 
-- `holdings_snapshot`：`§8` 表格中的前十大重仓、`bond_top_holding_row.v1` 前五名债券投资明细，以及已披露的行业分布；债券持仓输出为独立 `bond_top_holdings` 子形态，不复用股票 `top_holdings`
+- `holdings_snapshot`：`§8` 表格中的前十大重仓、`bond_top_holding_row.v1` 前五名债券投资明细、`target_fund_holding_row.v1` 期末投资目标基金明细，以及已披露的行业分布；债券持仓输出为独立 `bond_top_holdings` 子形态，目标基金持仓输出为独立 `target_fund_holdings` 子形态，二者都不复用股票 `top_holdings`
 - `share_change`：`§10` 表格中的期初份额、期末份额、净变动；当前支持申购/赎回拆分表，并在缺少净变动行时用期末减期初计算
 
 `FundDataExtractor.extract()` 返回 `StructuredFundDataBundle`，当前聚合 P1 已接受的 14 项结构化数据，并附带净值数据读取结果。新增 `index_profile` 只承载指数画像上下文，新增 `tracking_error` 只承载年报直接披露或后续已接受计算路径形成的跟踪误差；开发覆盖不写入结构化数据包。它只做 orchestration，不直接读文件、不直接写缓存。年报仓库和 PDF 来源失败仍按来源策略向上抛出；仅 NAV provider / cache / akshare 等外部净值数据失败会降级为 `NavDataResult(unavailable=True, records=[])`，让年报字段抽取和 `analyze` / `checklist` 主路径继续运行。
@@ -497,7 +497,7 @@ C2 当前只做确定性 marker / 元数据检查，不调用 LLM，不判断语
 - 当前基础画像只覆盖 `basic_identity`、`product_profile`、`risk_characteristic_text`、`benchmark`、`fee_schedule` 五类输出。
 - 当前 `§3` 表现只覆盖 `nav_benchmark_performance` 与 `investor_return` 两类输出。
 - 当前管理人/持有人 extractor 覆盖 `manager_strategy_text`、`portfolio_managers`、`turnover_rate`、`manager_alignment`、`holder_structure` 五类输出；`portfolio_managers` 目前只是 extractor 输出面，尚未接入 `StructuredFundDataBundle`、snapshot、renderer 或 quality gate。
-- 当前持仓/份额 extractor 只覆盖 `holdings_snapshot` 与 `share_change` 两类输出；`holdings_snapshot` 当前支持股票 `top_holdings`、债券 `bond_top_holdings` 和行业分布，债券持仓只作为 extractor 输出面，尚未接入 `StructuredFundDataBundle`、snapshot、renderer 或 quality gate；`share_change` 对多份额列表只显式选择单值列或表头精确基金代码列，无法可靠选择时返回 `missing`，不再按列顺序或 A 类 fallback 默认取值。
+- 当前持仓/份额 extractor 只覆盖 `holdings_snapshot` 与 `share_change` 两类输出；`holdings_snapshot` 当前支持股票 `top_holdings`、债券 `bond_top_holdings`、目标基金 `target_fund_holdings` 和行业分布，债券持仓与目标基金持仓只作为 extractor 输出面，尚未接入 `StructuredFundDataBundle`、snapshot、renderer 或 quality gate；`share_change` 对多份额列表只显式选择单值列或表头精确基金代码列，无法可靠选择时返回 `missing`，不再按列顺序或 A 类 fallback 默认取值。
 - `data_extractor.py` façade 已接入当前 12 项结构化数据；`structured_data` 当前以 `StructuredFundDataBundle` dataclass 表达，不额外物化 SQLite 表。
 - `report_evidence.py` 当前只投影已有 `StructuredFundDataBundle`，不新增抽取路径、不调用文档仓库、不把 `nav_data` 作为事实，也不改变 renderer / FQ0-FQ6 行为。
 - `data/nav_repository.py` 当前默认把 CSRC EID 006597 家族 A/C/E/F 分类 `累计净值` 归一化为 accumulated NAV typed series，按份额 fail-closed 验证身份、分页、日期和数值；legacy raw-unit adapter 只能通过 constructor injection 进入兼容分支，并显式标记为非 strong drawdown evidence。`data/nav_metrics.py` 当前基于该 typed series 计算最大回撤；不提供 dividend-adjusted、total-return 或 volatility 指标。

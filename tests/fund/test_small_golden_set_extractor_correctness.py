@@ -1022,15 +1022,8 @@ def test_holdings_extractor_exposes_same_source_bond_top_holding_row() -> None:
     assert holdings.anchors
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "target_fund_holding_row.v1 is accepted future contract; "
-        "current holdings extractor has no dedicated target-fund holding surface"
-    ),
-)
 def test_holdings_extractor_exposes_same_source_target_fund_holding_row() -> None:
-    """记录 `target_fund_holding_row.v1` 尚无专用 extractor 输出面。
+    """验证 holdings extractor 对同源目标基金持仓行的 correctness。
 
     参数：
         无。
