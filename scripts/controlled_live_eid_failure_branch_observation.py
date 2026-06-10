@@ -94,8 +94,9 @@ def _safe_report_payload(report: Any) -> dict[str, object]:
         "fallback_enabled": source_metadata.fallback_enabled if source_metadata else None,
         "fallback_used": source_metadata.fallback_used if source_metadata else None,
         "primary_failure_category": source_metadata.primary_failure_category if source_metadata else None,
-        "identity_status": source_metadata.identity_status if source_metadata else None,
-        "integrity_status": source_metadata.integrity_status if source_metadata else None,
+        "discovery_contract_version": (
+            source_metadata.discovery_contract_version if source_metadata else None
+        ),
         "pdf_cache_hit": cache_metadata.pdf_cache_hit,
         "parsed_cache_hit": cache_metadata.parsed_cache_hit,
         "source_metadata_present": cache_metadata.source_metadata_present,
