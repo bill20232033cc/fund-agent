@@ -76,6 +76,7 @@ FORBIDDEN_RETAINED_KEYS = {
 MANAGER_CONTRACT_VERSION = "portfolio_manager_tenure_list.v1"
 RISK_CONTRACT_VERSION = "risk_characteristic_text.v1"
 BOND_TOP_HOLDING_CONTRACT_VERSION = "bond_top_holding_row.v1"
+TARGET_FUND_HOLDING_CONTRACT_VERSION = "target_fund_holding_row.v1"
 EQUITY_LIKE_HOLDINGS_ROWS = {
     "004393": {
         "oracle_key": "top_stock_table_row",
@@ -92,9 +93,6 @@ EQUITY_LIKE_HOLDINGS_ROWS = {
         "source": "all_stock_investment_details",
         "status": "direct_all_stock_details",
     },
-}
-TARGET_FUND_UNSUPPORTED_HOLDINGS_ROWS = {
-    "110020": "target_etf_holding",
 }
 HOLDINGS_RAW_KEY_ADAPTER = {
     "code": "股票代码",
@@ -410,6 +408,22 @@ def _bond_top_holding_expected_row(row: dict[str, Any]) -> dict[str, str]:
     return _holdings_expected_row(row, "top_bond_table_row")
 
 
+def _target_fund_holding_expected_row(row: dict[str, Any]) -> dict[str, str]:
+    """读取 accepted oracle 中的目标基金持仓行。
+
+    参数：
+        row: accepted retained excerpt oracle 行。
+
+    返回：
+        `target_fund_holding_row.v1` 未来契约的 canonical 目标基金持仓字段。
+
+    异常：
+        KeyError: holdings 字段或 target_etf_holding 缺失。
+    """
+
+    return _holdings_expected_row(row, "target_etf_holding")
+
+
 def _holdings_table(row: dict[str, Any]) -> ParsedTable:
     """用 accepted oracle 构造当前 holdings extractor 可消费的最小表格。
 
@@ -488,6 +502,34 @@ def _bond_top_holding_table(row: dict[str, Any]) -> ParsedTable:
     )
 
 
+def _target_fund_holding_table(row: dict[str, Any]) -> ParsedTable:
+    """用 accepted oracle 构造未来 target-fund holding contract 可消费的最小表格。
+
+    参数：
+        row: accepted retained excerpt oracle 行。
+
+    返回：
+        `ParsedTable`，包含 `§8.2 期末投资目标基金明细` 的目标基金持仓行。
+
+    异常：
+        KeyError: holdings 字段缺少 target_etf_holding 或 anchor。
+    """
+
+    expected_row = _target_fund_holding_expected_row(row)
+    return ParsedTable(
+        page_number=_page_from_anchor(_field(row, "holdings")["anchor"]),
+        table_index=4,
+        headers=("基金名称", "公允价值", "占基金资产净值比例"),
+        rows=(
+            (
+                expected_row["name"],
+                expected_row["fair_value_cny"],
+                expected_row["net_asset_ratio"],
+            ),
+        ),
+    )
+
+
 def _adapt_raw_holding_row(raw_row: dict[str, str]) -> dict[str, str]:
     """把当前 extractor 原始表头行映射为 oracle canonical keys。
 
@@ -513,6 +555,7 @@ def _build_report_from_oracle_row(
     include_manager: bool = False,
     include_holdings: bool = False,
     include_bond_holdings: bool = False,
+    include_target_fund_holding: bool = False,
 ) -> ParsedAnnualReport:
     """从 accepted oracle 行构造最小 parsed annual report。
 
@@ -521,6 +564,7 @@ def _build_report_from_oracle_row(
         include_manager: 是否附加未来 manager roster contract 的 `§4.1.2` 表。
         include_holdings: 是否附加当前 gate 接受的 equity-like holdings 表。
         include_bond_holdings: 是否附加未来 `bond_top_holding_row.v1` 的 `§8.6` 表。
+        include_target_fund_holding: 是否附加未来 `target_fund_holding_row.v1` 的 `§8.2` 表。
 
     返回：
         可供当前 extractor 直接消费的 `ParsedAnnualReport`。
@@ -561,6 +605,13 @@ def _build_report_from_oracle_row(
                 "本节债券持仓字段由同源 accepted oracle 表格承载。",
             )
         )
+    if include_target_fund_holding:
+        raw_parts.extend(
+            (
+                "8.2 期末投资目标基金明细",
+                "本节目标基金持仓字段由同源 accepted oracle 表格承载。",
+            )
+        )
     raw_text = "\n".join(raw_parts)
     section_starts = {
         section_id: raw_text.index(section_id)
@@ -584,6 +635,8 @@ def _build_report_from_oracle_row(
         tables.append(_holdings_table(row))
     if include_bond_holdings:
         tables.append(_bond_top_holding_table(row))
+    if include_target_fund_holding:
+        tables.append(_target_fund_holding_table(row))
     sections = {
         "§1": ReportSection(
             section_id="§1",
@@ -971,28 +1024,46 @@ def test_holdings_extractor_exposes_same_source_bond_top_holding_row() -> None:
 
 @pytest.mark.xfail(
     strict=True,
-    reason="same-source target-fund holding row exists, but current gate excludes this row shape",
+    reason=(
+        "target_fund_holding_row.v1 is accepted future contract; "
+        "current holdings extractor has no dedicated target-fund holding surface"
+    ),
 )
-@pytest.mark.parametrize("fund_code", sorted(TARGET_FUND_UNSUPPORTED_HOLDINGS_ROWS))
-def test_same_source_holdings_rows_outside_equity_like_subset_remain_blocked(
-    fund_code: str,
-) -> None:
-    """记录 110020 target ETF holding 仍不进 passing correctness。
+def test_holdings_extractor_exposes_same_source_target_fund_holding_row() -> None:
+    """记录 `target_fund_holding_row.v1` 尚无专用 extractor 输出面。
 
     参数：
-        fund_code: 当前参数化基金代码。
+        无。
 
     返回：
         无。
 
     异常：
-        AssertionError: 当前持仓行形态仍未形成默认 passing correctness assertion。
+        AssertionError: 未来目标基金持仓输出未匹配 accepted oracle。
     """
 
+    fund_code = "110020"
     row = _oracle_rows_by_fund_code()[fund_code]
-    holdings_expected = _holdings_expected_row(row, TARGET_FUND_UNSUPPORTED_HOLDINGS_ROWS[fund_code])
+    report = _build_report_from_oracle_row(row, include_target_fund_holding=True)
+    holdings = extract_holdings_share_change(report).holdings_snapshot
+    expected_row = _target_fund_holding_expected_row(row)
 
-    assert holdings_expected
-    assert _field(row, "holdings")["anchor"]
-    assert _field(row, "holdings")["excerpt"]
-    assert fund_code not in TARGET_FUND_UNSUPPORTED_HOLDINGS_ROWS
+    assert holdings.extraction_mode == "direct"
+    assert holdings.value is not None
+    assert holdings.value["schema_version"] == TARGET_FUND_HOLDING_CONTRACT_VERSION
+    assert holdings.value["fund_code"] == fund_code
+    assert holdings.value["report_year"] == EXPECTED_REPORT_YEAR
+    target_fund_holdings = holdings.value["target_fund_holdings"]
+    assert isinstance(target_fund_holdings, list)
+    assert target_fund_holdings
+    actual_row = target_fund_holdings[0]
+    assert actual_row["name"] == expected_row["name"]
+    assert actual_row["fair_value_cny"] == expected_row["fair_value_cny"]
+    assert actual_row["net_asset_ratio"] == expected_row["net_asset_ratio"]
+    assert "code" not in actual_row
+    source_anchor = actual_row["source_anchor"]
+    assert source_anchor["section_id"] == "§8"
+    assert "期末投资目标基金明细" in source_anchor["section_title"]
+    assert source_anchor["page_number"] == _page_from_anchor(_field(row, "holdings")["anchor"])
+    assert expected_row["name"] in source_anchor["row_locator"]
+    assert holdings.anchors
