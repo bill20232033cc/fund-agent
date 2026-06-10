@@ -34,6 +34,18 @@ _TOP_HOLDINGS_STATUS_MISSING: Final[str] = "missing"
 _TOP_HOLDINGS_SOURCE_TOP_TEN: Final[str] = "top_ten"
 _TOP_HOLDINGS_SOURCE_ALL_STOCK_DETAILS: Final[str] = "all_stock_investment_details"
 _TOP_HOLDINGS_SOURCE_NONE: Final[str] = "none"
+_BOND_TOP_HOLDING_SCHEMA_VERSION: Final[str] = "bond_top_holding_row.v1"
+_BOND_TOP_HOLDING_TABLE_KEYWORDS: Final[tuple[str, ...]] = (
+    "债券代码",
+    "债券名称",
+    "公允价值",
+    "占基金资产净值比例",
+)
+_BOND_TOP_HOLDING_SECTION_TITLE: Final[str] = "§8.6 前五名债券投资明细"
+_BOND_CODE_HEADER_KEYWORDS: Final[tuple[str, ...]] = ("债券代码",)
+_BOND_NAME_HEADER_KEYWORDS: Final[tuple[str, ...]] = ("债券名称",)
+_BOND_FAIR_VALUE_HEADER_KEYWORDS: Final[tuple[str, ...]] = ("公允价值",)
+_BOND_NET_ASSET_RATIO_HEADER_KEYWORDS: Final[tuple[str, ...]] = ("占基金资产净值比例",)
 _INDUSTRY_STATUS_DIRECT: Final[str] = "direct"
 _INDUSTRY_STATUS_MISSING: Final[str] = "missing"
 _MAX_TOP_HOLDINGS_ROWS: Final[int] = 10
@@ -538,6 +550,47 @@ def _row_to_dict(headers: tuple[str, ...], row: tuple[str, ...]) -> dict[str, st
     }
 
 
+def _find_header_index(headers: tuple[str, ...], keywords: tuple[str, ...]) -> int | None:
+    """按任一关键词查找表头下标。
+
+    Args:
+        headers: 表头元组。
+        keywords: 候选语义关键词。
+
+    Returns:
+        命中时返回下标，否则返回 `None`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    for index, header in enumerate(headers):
+        normalized_header = _compact_text(header)
+        if any(keyword in normalized_header for keyword in keywords):
+            return index
+    return None
+
+
+def _cell_at(row: tuple[str, ...], index: int | None) -> str | None:
+    """安全读取表格单元格。
+
+    Args:
+        row: 表格行。
+        index: 目标下标。
+
+    Returns:
+        下标有效且单元格非空时返回文本，否则返回 `None`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if index is None or index >= len(row):
+        return None
+    value = _normalize_cell(row[index])
+    return value or None
+
+
 def _extract_top_holdings(table: ParsedTable, *, limit_rows: bool = False) -> list[dict[str, str]]:
     """从股票持仓表中提取行数据。
 
@@ -554,6 +607,77 @@ def _extract_top_holdings(table: ParsedTable, *, limit_rows: bool = False) -> li
 
     rows = table.rows[:_MAX_TOP_HOLDINGS_ROWS] if limit_rows else table.rows
     return [_row_to_dict(table.headers, row) for row in rows]
+
+
+def _build_bond_top_holding_source_anchor(
+    *,
+    table: ParsedTable,
+    bond_code: str,
+    bond_name: str,
+) -> dict[str, object]:
+    """构造 `bond_top_holding_row.v1` 行级来源锚点。
+
+    Args:
+        table: 命中的前五名债券投资明细表。
+        bond_code: 债券代码。
+        bond_name: 债券名称。
+
+    Returns:
+        可序列化的行级来源锚点。
+
+    Raises:
+        无显式抛出。
+    """
+
+    table_id = _table_id(table)
+    return {
+        "section_id": _SECTION_PORTFOLIO,
+        "section_title": _BOND_TOP_HOLDING_SECTION_TITLE,
+        "page_number": table.page_number,
+        "table_id": table_id,
+        "row_locator": f"bond_top_holding:{bond_code}:{bond_name}",
+    }
+
+
+def _extract_bond_top_holdings(table: ParsedTable) -> list[dict[str, object]]:
+    """从前五名债券投资明细表抽取债券持仓行。
+
+    Args:
+        table: 前五名债券投资明细表。
+
+    Returns:
+        `bond_top_holding_row.v1` 行数据列表。
+
+    Raises:
+        无显式抛出。
+    """
+
+    code_index = _find_header_index(table.headers, _BOND_CODE_HEADER_KEYWORDS)
+    name_index = _find_header_index(table.headers, _BOND_NAME_HEADER_KEYWORDS)
+    fair_value_index = _find_header_index(table.headers, _BOND_FAIR_VALUE_HEADER_KEYWORDS)
+    net_asset_ratio_index = _find_header_index(table.headers, _BOND_NET_ASSET_RATIO_HEADER_KEYWORDS)
+    rows: list[dict[str, object]] = []
+    for row in table.rows:
+        code = _cell_at(row, code_index)
+        name = _cell_at(row, name_index)
+        fair_value = _cell_at(row, fair_value_index)
+        net_asset_ratio = _cell_at(row, net_asset_ratio_index)
+        if code is None or name is None or fair_value is None or net_asset_ratio is None:
+            continue
+        rows.append(
+            {
+                "code": code,
+                "name": name,
+                "fair_value_cny": fair_value,
+                "net_asset_ratio": net_asset_ratio,
+                "source_anchor": _build_bond_top_holding_source_anchor(
+                    table=table,
+                    bond_code=code,
+                    bond_name=name,
+                ),
+            }
+        )
+    return rows
 
 
 def _extract_industry_distribution(table: ParsedTable) -> list[dict[str, str]]:
@@ -1112,10 +1236,15 @@ def _build_holdings_snapshot(report: ParsedAnnualReport) -> ExtractedField[dict[
 
     holdings_source = _find_holdings_source(report)
     industry_match = _find_table(report, _INDUSTRY_TABLE_KEYWORDS, "industry_distribution")
-    if holdings_source.match is None and industry_match is None:
+    bond_top_holding_match = _find_table(
+        report,
+        _BOND_TOP_HOLDING_TABLE_KEYWORDS,
+        "bond_top_holding_row",
+    )
+    if holdings_source.match is None and industry_match is None and bond_top_holding_match is None:
         return _missing_field("§8 未披露可规则化抽取的股票持仓明细或行业分布表")
 
-    anchors = []
+    anchors: list[EvidenceAnchor] = []
     top_holdings: list[dict[str, str]] | None = None
     if holdings_source.match is not None:
         row_locator = holdings_source.source
@@ -1133,14 +1262,38 @@ def _build_holdings_snapshot(report: ParsedAnnualReport) -> ExtractedField[dict[
             _build_table_anchor(report, industry_match.table, _SECTION_PORTFOLIO, "industry_distribution")
         )
 
+    bond_top_holdings: list[dict[str, object]] | None = None
+    if bond_top_holding_match is not None:
+        bond_top_holdings = _extract_bond_top_holdings(bond_top_holding_match.table)
+        if bond_top_holdings:
+            anchors.append(
+                _build_table_anchor(
+                    report,
+                    bond_top_holding_match.table,
+                    _SECTION_PORTFOLIO,
+                    "bond_top_holdings",
+                )
+            )
+
+    value: dict[str, object] = {
+        "top_holdings": top_holdings,
+        "top_holdings_status": holdings_source.status,
+        "top_holdings_source": holdings_source.source,
+        "industry_distribution": industry_distribution,
+        "industry_distribution_status": industry_status,
+    }
+    if bond_top_holdings:
+        value.update(
+            {
+                "schema_version": _BOND_TOP_HOLDING_SCHEMA_VERSION,
+                "fund_code": report.key.fund_code,
+                "report_year": report.key.year,
+                "bond_top_holdings": bond_top_holdings,
+            }
+        )
+
     return ExtractedField(
-        value={
-            "top_holdings": top_holdings,
-            "top_holdings_status": holdings_source.status,
-            "top_holdings_source": holdings_source.source,
-            "industry_distribution": industry_distribution,
-            "industry_distribution_status": industry_status,
-        },
+        value=value,
         anchors=tuple(anchors),
         extraction_mode="direct",
         note=_holdings_snapshot_note(holdings_source, industry_match),

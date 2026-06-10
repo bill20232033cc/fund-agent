@@ -928,15 +928,8 @@ def test_profile_extractor_exposes_same_source_risk_characteristic_text() -> Non
         assert risk_characteristic.anchors
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "bond_top_holding_row.v1 is accepted future contract; "
-        "current holdings extractor has no dedicated bond top holding surface"
-    ),
-)
 def test_holdings_extractor_exposes_same_source_bond_top_holding_row() -> None:
-    """记录 `bond_top_holding_row.v1` 尚无专用 extractor 输出面。
+    """验证 holdings extractor 对同源债券第一持仓行的 correctness。
 
     参数：
         无。
@@ -945,7 +938,7 @@ def test_holdings_extractor_exposes_same_source_bond_top_holding_row() -> None:
         无。
 
     异常：
-        AssertionError: 未来债券持仓输出未匹配 accepted oracle。
+        AssertionError: 当前债券持仓输出未匹配 accepted oracle。
     """
 
     fund_code = "006597"
