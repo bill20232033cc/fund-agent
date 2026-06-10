@@ -21,6 +21,7 @@ from fund_agent.fund.documents.models import (
     AnnualReportSourceMetadata,
     DocumentKey,
     ParsedAnnualReport,
+    ParsedTable,
     ReportSection,
 )
 from fund_agent.fund.extractors import ExtractedField
@@ -298,6 +299,10 @@ def test_structured_bundle_default_source_provenance_is_not_none() -> None:
     assert bundle.source_provenance.source_provenance_status == "not_applicable"
     assert bundle.bond_risk_evidence.value is None
     assert bundle.bond_risk_evidence.note == "bond_risk_evidence_not_extracted"
+    assert bundle.portfolio_managers.value is None
+    assert bundle.portfolio_managers.note == "portfolio_managers_not_extracted"
+    assert bundle.risk_characteristic_text.value is None
+    assert bundle.risk_characteristic_text.note == "risk_characteristic_text_not_extracted"
 
 
 @pytest.mark.asyncio
@@ -326,6 +331,44 @@ async def test_data_extractor_returns_bundle_with_bond_risk_evidence() -> None:
     assert bundle.bond_risk_evidence.anchors == ()
     assert bundle.bond_risk_evidence.extraction_mode == "missing"
     assert bundle.bond_risk_evidence.note == "not_applicable_non_bond_fund"
+    assert bundle.portfolio_managers.extraction_mode == "direct"
+    assert bundle.portfolio_managers.note is None
+    assert bundle.portfolio_managers.value is not None
+    assert bundle.portfolio_managers.value["schema_version"] == "portfolio_manager_tenure_list.v1"
+    assert bundle.portfolio_managers.value["fund_code"] == "110011"
+    assert bundle.portfolio_managers.value["report_year"] == 2024
+    assert bundle.portfolio_managers.value["portfolio_managers"] == [
+        {
+            "name": "张三",
+            "role": "基金经理",
+            "start_date": "2021-01-01",
+            "source_anchor": {
+                "section_id": "§4",
+                "section_title": "4.1.2 基金经理简介",
+                "page_number": 22,
+                "table_id": "page-22-table-0",
+                "row_locator": "portfolio_manager:张三",
+            },
+        }
+    ]
+    assert {anchor.row_locator for anchor in bundle.portfolio_managers.anchors} == {"portfolio_manager:张三"}
+    assert bundle.risk_characteristic_text.extraction_mode == "direct"
+    assert bundle.risk_characteristic_text.note is None
+    assert bundle.risk_characteristic_text.value == {
+        "schema_version": "risk_characteristic_text.v1",
+        "fund_code": "110011",
+        "report_year": 2024,
+        "risk_characteristic_text": "本基金为混合型基金，风险收益特征高于债券型基金。",
+        "source_anchors": [
+            {
+                "section_id": "§2",
+                "page_number": 5,
+                "table_id": "page-5-table-1",
+                "row_locator": "risk_characteristic_text",
+            }
+        ],
+    }
+    assert {anchor.row_locator for anchor in bundle.risk_characteristic_text.anchors} == {"risk_characteristic_text"}
     assert bundle.source_provenance.fallback_used is False
     assert bundle.source_provenance.fallback_eligibility == "not_applicable"
     assert bundle.source_provenance.source_provenance_status == "not_applicable"
@@ -572,41 +615,135 @@ def _annual_report(
         无显式抛出。
     """
 
-    raw_text = "\n".join(
-        [
+    section_one = "\n".join(
+        (
+            "§1 基金简介",
             "基金名称：测试成长基金",
             "基金代码：110011",
             "基金类别：混合型",
             "管理人：测试基金管理有限公司",
             "托管人：中国银行股份有限公司",
             "基金合同生效日：2020年1月1日",
+        )
+    )
+    section_two = "\n".join(
+        (
+            "§2 基金简介",
             "投资目标：追求长期资本增值",
             "投资范围：主要投资股票和债券",
             "业绩比较基准：沪深300指数收益率",
             "管理费率：1.20%",
             "托管费率：0.20%",
-            "基金净值增长率：10.00%",
-            "业绩比较基准收益率：5.00%",
-            "投资者收益率：12.00%",
+        )
+    )
+    section_four = "\n".join(
+        (
+            "§4 管理人报告",
+            "4.1.2 基金经理简介",
+            "本节基金经理任期字段由表格承载。",
             "4.4 报告期内基金投资策略和运作分析",
             "长期均衡配置消费和制造行业。",
             "4.5 管理人对宏观经济、证券市场及行业走势的简要展望",
             "保持审慎。",
+        )
+    )
+    section_eight = "\n".join(
+        (
+            "§8 投资组合报告",
             "换手率：80.00%",
+            "期初份额：100",
+            "期末份额：110",
+            "净变动：10",
+        )
+    )
+    section_nine = "\n".join(
+        (
+            "§9 基金份额持有人信息",
             "基金经理持有本基金：0份",
             "从业人员持有本基金：100份",
             "机构投资者持有比例：30%",
             "个人投资者持有比例：70%",
-            "期初份额：100",
-            "期末份额：110",
-            "净变动：10",
-        ]
+        )
     )
+    raw_text = "\n".join(
+        (
+            section_one,
+            section_two,
+            section_four,
+            section_eight,
+            section_nine,
+        )
+    )
+    section_one_start = 0
+    section_two_start = len(section_one) + 1
+    section_four_start = section_two_start + len(section_two) + 1
+    section_eight_start = section_four_start + len(section_four) + 1
+    section_nine_start = section_eight_start + len(section_eight) + 1
     return ParsedAnnualReport(
         key=DocumentKey(fund_code="110011", year=2024),
         raw_text=raw_text,
-        sections={},
-        tables=(),
+        sections={
+            "§1": ReportSection(
+                section_id="§1",
+                title="§1 基金简介",
+                start_offset=section_one_start,
+                end_offset=len(section_one),
+                matched_rule="fixture",
+                confidence=1.0,
+            ),
+            "§2": ReportSection(
+                section_id="§2",
+                title="§2 基金简介",
+                start_offset=section_two_start,
+                end_offset=section_four_start,
+                matched_rule="fixture",
+                confidence=1.0,
+            ),
+            "§4": ReportSection(
+                section_id="§4",
+                title="§4 管理人报告",
+                start_offset=section_four_start,
+                end_offset=section_eight_start,
+                matched_rule="fixture",
+                confidence=1.0,
+            ),
+            "§8": ReportSection(
+                section_id="§8",
+                title="§8 投资组合报告",
+                start_offset=section_eight_start,
+                end_offset=section_nine_start,
+                matched_rule="fixture",
+                confidence=1.0,
+            ),
+            "§9": ReportSection(
+                section_id="§9",
+                title="§9 基金份额持有人信息",
+                start_offset=section_nine_start,
+                end_offset=len(raw_text),
+                matched_rule="fixture",
+                confidence=1.0,
+            ),
+        },
+        tables=(
+            ParsedTable(
+                page_number=5,
+                table_index=1,
+                headers=("投资目标", "追求长期资本增值"),
+                rows=(
+                    ("投资范围", "主要投资股票和债券"),
+                    ("风险收益特征", "本基金为混合型基金，风险收益特征高于债券型基金。"),
+                    ("业绩比较基准", "沪深300指数收益率"),
+                    ("管理费率", "1.20%"),
+                    ("托管费率", "0.20%"),
+                ),
+            ),
+            ParsedTable(
+                page_number=22,
+                table_index=0,
+                headers=("姓名", "职务", "任职日期", "离任日期"),
+                rows=(("张三", "基金经理", "2021-01-01", ""),),
+            ),
+        ),
         metadata=AnnualReportMetadata(source=source_metadata),
     )
 

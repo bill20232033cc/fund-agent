@@ -227,6 +227,14 @@ def test_build_snapshot_records_contains_required_schema_and_all_fields() -> Non
     assert records_by_name["classified_fund_type"].comparable_values == {
         "fund_type": "active_fund"
     }
+    assert records_by_name["portfolio_managers"].comparable_values == {
+        "schema_version": "portfolio_manager_tenure_list.v1",
+        "manager_count": "1",
+    }
+    assert records_by_name["risk_characteristic_text"].comparable_values == {
+        "schema_version": "risk_characteristic_text.v1",
+        "risk_characteristic_text": "本基金为混合型基金，风险收益特征高于债券型基金。",
+    }
     assert records_by_name["index_profile"].comparable_values == {}
     assert records_by_name["tracking_error"].comparable_values == {}
     assert records_by_name["product_profile"].comparable_values == {}
@@ -239,7 +247,7 @@ def test_build_snapshot_records_contains_required_schema_and_all_fields() -> Non
     assert "bond_risk_evidence" not in COMPARABLE_SUB_FIELDS_BY_FIELD
     assert (
         list(SNAPSHOT_FIELD_ORDER).index(("risk", "bond_risk_evidence"))
-        == list(SNAPSHOT_FIELD_ORDER).index(("holdings", "holdings_snapshot")) + 1
+        == list(SNAPSHOT_FIELD_ORDER).index(("risk", "risk_characteristic_text")) + 1
     )
 
 
@@ -564,8 +572,10 @@ def test_build_snapshot_records_preserves_unavailable_nav_reason() -> None:
         share_change=bundle.share_change,
         manager_alignment=bundle.manager_alignment,
         manager_strategy_text=bundle.manager_strategy_text,
+        portfolio_managers=bundle.portfolio_managers,
         holdings_snapshot=bundle.holdings_snapshot,
         holder_structure=bundle.holder_structure,
+        risk_characteristic_text=bundle.risk_characteristic_text,
         nav_data=unavailable_nav_data_result(
             "110011",
             reason="RuntimeError: network down",
@@ -980,6 +990,14 @@ def _build_bundle(
         share_change=_field({"beginning_share": "1", "ending_share": "2", "net_change": "1"}, "share_change"),
         manager_alignment=_field(None, "manager_alignment", extraction_mode="missing", note="fixture missing"),
         manager_strategy_text=_field({"strategy_summary": "精选个股"}, "manager_strategy_text"),
+        portfolio_managers=_field(
+            {
+                "schema_version": "portfolio_manager_tenure_list.v1",
+                "manager_count": 1,
+                "portfolio_managers": [{"name": "张三", "role": "基金经理"}],
+            },
+            "portfolio_managers",
+        ),
         holdings_snapshot=_field(
             {
                 "top_holdings": [{"name": "A"}],
@@ -990,6 +1008,13 @@ def _build_bundle(
             "holdings_snapshot",
         ),
         holder_structure=_field({"institutional_holder": "10%", "individual_holder": "90%"}, "holder_structure"),
+        risk_characteristic_text=_field(
+            {
+                "schema_version": "risk_characteristic_text.v1",
+                "risk_characteristic_text": "本基金为混合型基金，风险收益特征高于债券型基金。",
+            },
+            "risk_characteristic_text",
+        ),
         nav_data=NavDataResult(
             fund_code=fund_code,
             records=[{"date": "2024-12-31", "nav": "1.00"}],

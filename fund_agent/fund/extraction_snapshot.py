@@ -38,10 +38,12 @@ SNAPSHOT_FIELD_ORDER: Final[tuple[tuple[str, str], ...]] = (
     ("performance", "investor_return"),
     ("performance", "tracking_error"),
     ("manager", "manager_strategy_text"),
+    ("manager", "portfolio_managers"),
     ("manager", "turnover_rate"),
     ("manager", "manager_alignment"),
     ("holder", "holder_structure"),
     ("holdings", "holdings_snapshot"),
+    ("risk", "risk_characteristic_text"),
     ("risk", "bond_risk_evidence"),
     ("share_change", "share_change"),
     ("nav", "nav_data"),
@@ -80,6 +82,8 @@ COMPARABLE_SUB_FIELDS_BY_FIELD: Final[dict[str, tuple[str, ...]]] = {
         "input_period_complete",
     ),
     "classified_fund_type": ("fund_type",),
+    "portfolio_managers": ("schema_version", "manager_count"),
+    "risk_characteristic_text": ("schema_version", "risk_characteristic_text"),
     "holdings_snapshot": ("top_holdings_status", "top_holdings_source"),
 }
 _EXTRACTION_MODE_DIRECT: Final[str] = "direct"

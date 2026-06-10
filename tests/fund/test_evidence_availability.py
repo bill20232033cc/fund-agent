@@ -138,8 +138,42 @@ def test_ch3_basic_manager_info_required_output_uses_basic_identity_availability
 
     assert basic_manager.status == "available"
     assert basic_manager.chapter_id == 3
-    assert basic_manager.source_field_ids == ("structured.basic_identity",)
-    assert basic_manager.fact_ids == (_fact_id(projection, 3, "basic_identity"),)
+    assert basic_manager.source_field_ids == ("structured.basic_identity", "structured.portfolio_managers")
+    assert basic_manager.fact_ids == (
+        _fact_id(projection, 3, "basic_identity"),
+        _fact_id(projection, 3, "portfolio_managers"),
+    )
+
+
+def test_manager_and_risk_downstream_fields_are_exposed_by_evidence_availability() -> None:
+    """验证新增经理任期和风险收益特征字段进入 evidence availability 派生视图。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当字段未按章节映射暴露时抛出。
+    """
+
+    projection = project_chapter_facts(_bundle(), chapter_ids=(1, 3, 6))
+
+    availability = derive_evidence_availability(projection)
+    ch1_managers = availability.require("ch1.requirement.portfolio_managers_reviewed")
+    ch1_risk = availability.require("ch1.requirement.risk_characteristic_text_reviewed")
+    ch6_risk = availability.require("ch6.requirement.risk_characteristic_text_reviewed")
+
+    assert ch1_managers.status == "available"
+    assert ch1_managers.source_field_ids == ("structured.portfolio_managers",)
+    assert ch1_managers.fact_ids == (_fact_id(projection, 1, "portfolio_managers"),)
+    assert ch1_risk.status == "available"
+    assert ch1_risk.source_field_ids == ("structured.risk_characteristic_text",)
+    assert ch1_risk.fact_ids == (_fact_id(projection, 1, "risk_characteristic_text"),)
+    assert ch6_risk.status == "available"
+    assert ch6_risk.source_field_ids == ("structured.risk_characteristic_text",)
+    assert ch6_risk.fact_ids == (_fact_id(projection, 6, "risk_characteristic_text"),)
 
 
 def test_ch2_subcontract_availability_stays_under_public_chapter_2() -> None:

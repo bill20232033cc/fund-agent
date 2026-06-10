@@ -51,7 +51,9 @@ def test_projects_current_extracted_field_groups_to_report_facts() -> None:
         "share_change",
         "manager_alignment",
         "manager_strategy_text",
+        "portfolio_managers",
         "holdings_snapshot",
+        "risk_characteristic_text",
         "holder_structure",
     } <= fact_paths
     classified_fact = _fact(result, "classified_fund_type")
@@ -713,8 +715,23 @@ def _build_bundle(
         share_change=_field({"beginning_share": "1", "ending_share": "2"}, "share_change"),
         manager_alignment=_field({"manager_holding": "0"}, "manager_alignment"),
         manager_strategy_text=_field({"strategy_summary": "精选个股"}, "manager_strategy_text"),
+        portfolio_managers=_field(
+            {
+                "schema_version": "portfolio_manager_tenure_list.v1",
+                "manager_count": 1,
+                "portfolio_managers": [{"name": "张三", "role": "基金经理"}],
+            },
+            "portfolio_managers",
+        ),
         holdings_snapshot=_field({"top_holdings": [{"name": "A"}]}, "holdings_snapshot"),
         holder_structure=_field({"institutional_holder": "10%"}, "holder_structure"),
+        risk_characteristic_text=_field(
+            {
+                "schema_version": "risk_characteristic_text.v1",
+                "risk_characteristic_text": "本基金为混合型基金，风险收益特征高于债券型基金。",
+            },
+            "risk_characteristic_text",
+        ),
         nav_data=NavDataResult(
             fund_code="004393",
             records=[{"date": "2024-12-31", "nav": "1.00"}],

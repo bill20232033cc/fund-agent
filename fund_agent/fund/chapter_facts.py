@@ -79,8 +79,10 @@ _SOURCE_FIELD_IDS: Final[dict[str, str]] = {
     "share_change": "structured.share_change",
     "manager_alignment": "structured.manager_alignment",
     "manager_strategy_text": "structured.manager_strategy_text",
+    "portfolio_managers": "structured.portfolio_managers",
     "holdings_snapshot": "structured.holdings_snapshot",
     "holder_structure": "structured.holder_structure",
+    "risk_characteristic_text": "structured.risk_characteristic_text",
     "bond_risk_evidence": "structured.bond_risk_evidence",
     "nav_data": "structured.nav_data",
 }
@@ -302,7 +304,19 @@ _CHAPTER_FIELD_SPECS: Final[tuple[_ChapterFieldSpec, ...]] = (
         ("CHAPTER_CONTRACT.chapter_0",),
     ),
     _ChapterFieldSpec(1, "basic_identity", _SOURCE_FIELD_IDS["basic_identity"], ("CHAPTER_CONTRACT.chapter_1",)),
+    _ChapterFieldSpec(
+        1,
+        "portfolio_managers",
+        _SOURCE_FIELD_IDS["portfolio_managers"],
+        ("CHAPTER_CONTRACT.chapter_1",),
+    ),
     _ChapterFieldSpec(1, "product_profile", _SOURCE_FIELD_IDS["product_profile"], ("CHAPTER_CONTRACT.chapter_1",)),
+    _ChapterFieldSpec(
+        1,
+        "risk_characteristic_text",
+        _SOURCE_FIELD_IDS["risk_characteristic_text"],
+        ("CHAPTER_CONTRACT.chapter_1",),
+    ),
     _ChapterFieldSpec(1, "benchmark", _SOURCE_FIELD_IDS["benchmark"], ("CHAPTER_CONTRACT.chapter_1",)),
     _ChapterFieldSpec(
         1,
@@ -334,6 +348,12 @@ _CHAPTER_FIELD_SPECS: Final[tuple[_ChapterFieldSpec, ...]] = (
         3,
         "manager_strategy_text",
         _SOURCE_FIELD_IDS["manager_strategy_text"],
+        ("CHAPTER_CONTRACT.chapter_3",),
+    ),
+    _ChapterFieldSpec(
+        3,
+        "portfolio_managers",
+        _SOURCE_FIELD_IDS["portfolio_managers"],
         ("CHAPTER_CONTRACT.chapter_3",),
     ),
     _ChapterFieldSpec(
@@ -387,6 +407,12 @@ _CHAPTER_FIELD_SPECS: Final[tuple[_ChapterFieldSpec, ...]] = (
         ("CHAPTER_CONTRACT.chapter_5",),
     ),
     _ChapterFieldSpec(6, "basic_identity", _SOURCE_FIELD_IDS["basic_identity"], ("CHAPTER_CONTRACT.chapter_6",)),
+    _ChapterFieldSpec(
+        6,
+        "risk_characteristic_text",
+        _SOURCE_FIELD_IDS["risk_characteristic_text"],
+        ("CHAPTER_CONTRACT.chapter_6",),
+    ),
     _ChapterFieldSpec(6, "fee_schedule", _SOURCE_FIELD_IDS["fee_schedule"], ("CHAPTER_CONTRACT.chapter_6",)),
     _ChapterFieldSpec(6, "tracking_error", _SOURCE_FIELD_IDS["tracking_error"], ("CHAPTER_CONTRACT.chapter_6",)),
     _ChapterFieldSpec(6, "turnover_rate", _SOURCE_FIELD_IDS["turnover_rate"], ("CHAPTER_CONTRACT.chapter_6",)),

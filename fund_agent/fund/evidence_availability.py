@@ -35,6 +35,8 @@ AvailabilityStatus: TypeAlias = Literal[
 ]
 
 EvidenceRequirementId: TypeAlias = Literal[
+    "ch1.requirement.portfolio_managers_reviewed",
+    "ch1.requirement.risk_characteristic_text_reviewed",
     "ch2.must_answer.item_01",
     "ch2.must_answer.item_02",
     "ch2.must_answer.item_03",
@@ -60,6 +62,7 @@ EvidenceRequirementId: TypeAlias = Literal[
     "ch3.required_output.item_04",
     "ch3.required_output.item_05",
     "ch3.required_output.item_06",
+    "ch6.requirement.risk_characteristic_text_reviewed",
 ]
 
 RequirementSourceKind: TypeAlias = Literal["fact", "synthetic_gap", "derived"]
@@ -193,6 +196,21 @@ _CH2_REQUIREMENT_SPECS: Final[tuple[_RequirementSpec, ...]] = (
     _RequirementSpec("ch2.required_output.item_07", 2, ("structured.nav_benchmark_performance", "structured.fee_schedule"), "cost"),
 )
 
+_CH1_REQUIREMENT_SPECS: Final[tuple[_RequirementSpec, ...]] = (
+    _RequirementSpec(
+        "ch1.requirement.portfolio_managers_reviewed",
+        1,
+        ("structured.portfolio_managers",),
+        detail="模板第 1 章基金经理任期列表证据。",
+    ),
+    _RequirementSpec(
+        "ch1.requirement.risk_characteristic_text_reviewed",
+        1,
+        ("structured.risk_characteristic_text",),
+        detail="模板第 1 章风险收益特征文本证据。",
+    ),
+)
+
 _CH3_REQUIREMENT_SPECS: Final[tuple[_RequirementSpec, ...]] = (
     _RequirementSpec(
         "ch3.requirement.manager_strategy_text_reviewed",
@@ -228,7 +246,7 @@ _CH3_REQUIREMENT_SPECS: Final[tuple[_RequirementSpec, ...]] = (
     _RequirementSpec(
         "ch3.required_output.item_01",
         3,
-        ("structured.basic_identity",),
+        ("structured.basic_identity", "structured.portfolio_managers"),
         detail="基金经理基本信息 required output 证据。",
     ),
     _RequirementSpec(
@@ -242,6 +260,15 @@ _CH3_REQUIREMENT_SPECS: Final[tuple[_RequirementSpec, ...]] = (
         3,
         ("structured.manager_alignment",),
         detail="利益一致性 required output 证据。",
+    ),
+)
+
+_CH6_REQUIREMENT_SPECS: Final[tuple[_RequirementSpec, ...]] = (
+    _RequirementSpec(
+        "ch6.requirement.risk_characteristic_text_reviewed",
+        6,
+        ("structured.risk_characteristic_text",),
+        detail="模板第 6 章风险收益特征文本证据。",
     ),
 )
 
@@ -280,7 +307,12 @@ def derive_evidence_availability(
     _validate_projection_chapters(projection)
     base_requirements = tuple(
         _derive_from_spec(projection, spec)
-        for spec in (*_CH2_REQUIREMENT_SPECS, *_CH3_REQUIREMENT_SPECS)
+        for spec in (
+            *_CH1_REQUIREMENT_SPECS,
+            *_CH2_REQUIREMENT_SPECS,
+            *_CH3_REQUIREMENT_SPECS,
+            *_CH6_REQUIREMENT_SPECS,
+        )
     )
     aggregate_requirements = _derive_ch3_actual_behavior_requirements(base_requirements)
     requirements = _assert_unique_requirements((*base_requirements, *aggregate_requirements))

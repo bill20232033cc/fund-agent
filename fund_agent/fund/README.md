@@ -104,7 +104,7 @@ chapter_lens = resolve_preferred_lens(chapter_id=2, fund_type="active_fund")
 - `holdings_snapshot`：`§8` 表格中的前十大重仓、`bond_top_holding_row.v1` 前五名债券投资明细、`target_fund_holding_row.v1` 期末投资目标基金明细，以及已披露的行业分布；债券持仓输出为独立 `bond_top_holdings` 子形态，目标基金持仓输出为独立 `target_fund_holdings` 子形态，二者都不复用股票 `top_holdings`
 - `share_change`：`§10` 表格中的期初份额、期末份额、净变动；当前支持申购/赎回拆分表，并在缺少净变动行时用期末减期初计算
 
-`FundDataExtractor.extract()` 返回 `StructuredFundDataBundle`，当前聚合 P1 已接受的 14 项结构化数据，并附带净值数据读取结果。新增 `index_profile` 只承载指数画像上下文，新增 `tracking_error` 只承载年报直接披露或后续已接受计算路径形成的跟踪误差；开发覆盖不写入结构化数据包。它只做 orchestration，不直接读文件、不直接写缓存。年报仓库和 PDF 来源失败仍按来源策略向上抛出；仅 NAV provider / cache / akshare 等外部净值数据失败会降级为 `NavDataResult(unavailable=True, records=[])`，让年报字段抽取和 `analyze` / `checklist` 主路径继续运行。
+`FundDataExtractor.extract()` 返回 `StructuredFundDataBundle`，当前聚合 P1 已接受的结构化数据，并附带净值数据读取结果。`portfolio_managers` 从 `extract_manager_ownership().portfolio_managers` 透传，`risk_characteristic_text` 从 `extract_profile().risk_characteristic_text` 透传；`bond_top_holdings` 和 `target_fund_holdings` 仍只作为 `holdings_snapshot.value` 的子形态存在，不是 top-level bundle 字段。`index_profile` 只承载指数画像上下文，`tracking_error` 只承载年报直接披露或后续已接受计算路径形成的跟踪误差；开发覆盖不写入结构化数据包。它只做 orchestration，不直接读文件、不直接写缓存。年报仓库和 PDF 来源失败仍按来源策略向上抛出；仅 NAV provider / cache / akshare 等外部净值数据失败会降级为 `NavDataResult(unavailable=True, records=[])`，让年报字段抽取和 `analyze` / `checklist` 主路径继续运行。
 
 `project_chapter_facts()` 和 concrete `ChapterFactProvider.project()` 当前把已存在的 `StructuredFundDataBundle` 投影为 `chapter_fact_projection.v1`：
 
@@ -112,6 +112,9 @@ chapter_lens = resolve_preferred_lens(chapter_id=2, fund_type="active_fund")
 - 输出模板第 0-7 章的 `ChapterFactProjection`、章节 facts、证据锚点、缺失/不可用/不适用语义、分类依据、lens 与 ITEM_RULE 决策
 - `classified_fund_type` 缺失或非法时投影为 `unknown`，并跳过 preferred_lens 与 ITEM_RULE 的有效基金类型路径
 - facet 行为保持确定性：没有 exact structured evidence 时 `facets=()`，候选 catalog 标签只进入 `non_asserted_facets`，不会传给 ITEM_RULE
+- `portfolio_managers` 投影到第 1 章和第 3 章，source field id 为 `structured.portfolio_managers`
+- `risk_characteristic_text` 投影到第 1 章和第 6 章，source field id 为 `structured.risk_characteristic_text`
+- `holdings_snapshot` 继续作为第 3/5/6 章持仓子形态的唯一来源字段
 - `bond_risk_evidence` 的组级 anchors 保留在 value 内部，不展开为普通章节 `ChapterEvidenceAnchor`
 - 该能力不读取文档仓库、PDF、cache、source helper、下载器或 parser，不调用 LLM、Service、Host 或 dayu；它不是 writer、auditor、orchestrator 或 `FundToolService`
 
@@ -132,7 +135,9 @@ chapter_lens = resolve_preferred_lens(chapter_id=2, fund_type="active_fund")
 - `derive_evidence_availability()` 只消费已经存在的 `ChapterFactProjection`、章节 facts、evidence anchor ids、missing reasons 和 typed contract requirement ids
 - 输出 `evidence_availability.v1`，逐 requirement 区分 `available / missing / unavailable / not_applicable / unreviewed`
 - 第 2 章的 availability 使用 typed Ch2 `performance / attribution / cost` 内部子契约 requirement id，但所有记录仍归属公开 `chapter_id=2`，不会形成 Ch2 公开拆章
-- 第 3 章当前覆盖基金经理基本信息、manager strategy text、turnover、holdings snapshot、cross-period style evidence、manager alignment 和 actual behavior 聚合 requirement；当前单年 `ChapterFactProjection` 不加载 prior-year 文档，跨期风格证据保持 `unreviewed` 缺口
+- 第 1 章当前覆盖 `portfolio_managers` 和 `risk_characteristic_text` 的字段级 availability
+- 第 3 章当前覆盖基金经理基本信息、portfolio managers、manager strategy text、turnover、holdings snapshot、cross-period style evidence、manager alignment 和 actual behavior 聚合 requirement；当前单年 `ChapterFactProjection` 不加载 prior-year 文档，跨期风格证据保持 `unreviewed` 缺口
+- 第 6 章当前覆盖 `risk_characteristic_text` 的字段级 availability
 - malformed 或未知 typed requirement id 会 fail-closed；该能力不读取文档仓库、PDF/cache/source helper、Service、Host、provider、retained report、文件系统、环境变量或 dayu，也不替代 `ChapterFactProjection`
 
 template truth-source replacement、typed projection 和 `EvidenceAvailability` 的当前非目标是：不改变 deterministic `analyze/checklist`、renderer、FQ0-FQ6 quality gate、final judgment、provider/runtime defaults、score/golden/readiness，不实现 Ch2 公开拆章、多年证据 runtime、Agent runner/tool-loop、Host 业务理解或 dayu runtime。
@@ -186,8 +191,8 @@ template truth-source replacement、typed projection 和 `EvidenceAvailability` 
 - 输入显式接收 `fund_code`、`report_year`、`source_csv`、`run_id`、输出目录和 `force_refresh`
 - 读取 `docs/code_20260519.csv` 的“基金名称 / 基金代码 / 类别”三列，并校验名称非空、6 位代码、类别非空和重复代码
 - 只通过 `FundDataExtractor.extract(...)` 获取结构化数据包，不直接读取 PDF、cache 或底层解析文件
-- 将 `StructuredFundDataBundle` 拆成 16 个字段级记录：`basic_identity`、`product_profile`、`benchmark`、`index_profile`、`fee_schedule`、`classified_fund_type`、`nav_benchmark_performance`、`investor_return`、`tracking_error`、`manager_strategy_text`、`turnover_rate`、`manager_alignment`、`holder_structure`、`holdings_snapshot`、`share_change`、`nav_data`
-- 每条记录包含 `comparable_values`，只暴露 correctness 可直接比较的白名单子字段；当前覆盖 `basic_identity`、`benchmark`、`index_profile`、`nav_benchmark_performance`、`tracking_error` 和 `classified_fund_type` 的稳定标量子字段
+- 将 `StructuredFundDataBundle` 拆成字段级记录：`basic_identity`、`product_profile`、`benchmark`、`index_profile`、`fee_schedule`、`classified_fund_type`、`nav_benchmark_performance`、`investor_return`、`tracking_error`、`manager_strategy_text`、`portfolio_managers`、`turnover_rate`、`manager_alignment`、`holder_structure`、`holdings_snapshot`、`risk_characteristic_text`、`bond_risk_evidence`、`share_change`、`nav_data`
+- 每条记录包含 `comparable_values`，只暴露 correctness 可直接比较的白名单子字段；当前覆盖 `basic_identity`、`benchmark`、`index_profile`、`nav_benchmark_performance`、`tracking_error`、`classified_fund_type`、`portfolio_managers` 和 `risk_characteristic_text` 的稳定标量子字段
 - 每条记录包含 additive 公共来源 provenance 字段：`source_provenance_schema_version`、`source_strategy`、`resolved_source_name`、`fallback_used`、`primary_failure_category`、`fallback_eligibility`、`source_provenance_status` 和 `source_provenance_reason`；这些字段只来自 `StructuredFundDataBundle.source_provenance` 投影，不改变来源编排或 fallback 资格判定。当前 fallback 成功路径会把主来源 `not_found` / `unavailable` 分类持久化为 `AnnualReportSourceMetadata.primary_failure_category`，旧元数据缺失该字段时继续输出 `unknown_public_metadata_absent`
 - `index_profile` 和 `tracking_error` 对 `index_fund` / `enhanced_index` 作为条件 P1 字段进入 FQ2 coverage、traceability 和单基金缺失分母；非指数基金从这些指数质量字段分母中排除，未知基金类型继续保守计分
 - 输出 `snapshot.jsonl`、`summary.md` 和 `errors.jsonl`；`summary.md` 额外包含独立 `Source Provenance` 表，完全失败且没有 snapshot 记录的基金在 v1 表中省略并保留说明；单只基金失败时继续后续基金并记录错误
@@ -496,10 +501,10 @@ C2 当前只做确定性 marker / 元数据检查，不调用 LLM，不判断语
 - 当前稳定 extractor 边界是 `§1/§2/§3/§4/§8/§9/§10`。
 - 当前基础画像只覆盖 `basic_identity`、`product_profile`、`risk_characteristic_text`、`benchmark`、`fee_schedule` 五类输出。
 - 当前 `§3` 表现只覆盖 `nav_benchmark_performance` 与 `investor_return` 两类输出。
-- 当前管理人/持有人 extractor 覆盖 `manager_strategy_text`、`portfolio_managers`、`turnover_rate`、`manager_alignment`、`holder_structure` 五类输出；`portfolio_managers` 目前只是 extractor 输出面，尚未接入 `StructuredFundDataBundle`、snapshot、renderer 或 quality gate。
-- 当前持仓/份额 extractor 只覆盖 `holdings_snapshot` 与 `share_change` 两类输出；`holdings_snapshot` 当前支持股票 `top_holdings`、债券 `bond_top_holdings`、目标基金 `target_fund_holdings` 和行业分布，债券持仓与目标基金持仓只作为 extractor 输出面，尚未接入 `StructuredFundDataBundle`、snapshot、renderer 或 quality gate；`share_change` 对多份额列表只显式选择单值列或表头精确基金代码列，无法可靠选择时返回 `missing`，不再按列顺序或 A 类 fallback 默认取值。
-- `data_extractor.py` façade 已接入当前 12 项结构化数据；`structured_data` 当前以 `StructuredFundDataBundle` dataclass 表达，不额外物化 SQLite 表。
-- `report_evidence.py` 当前只投影已有 `StructuredFundDataBundle`，不新增抽取路径、不调用文档仓库、不把 `nav_data` 作为事实，也不改变 renderer / FQ0-FQ6 行为。
+- 当前管理人/持有人 extractor 覆盖 `manager_strategy_text`、`portfolio_managers`、`turnover_rate`、`manager_alignment`、`holder_structure` 五类输出；`portfolio_managers` 已接入 `StructuredFundDataBundle`、snapshot、report evidence、chapter facts 和 EvidenceAvailability，但不改变 renderer 或 quality gate。
+- 当前持仓/份额 extractor 只覆盖 `holdings_snapshot` 与 `share_change` 两类输出；`holdings_snapshot` 当前支持股票 `top_holdings`、债券 `bond_top_holdings`、目标基金 `target_fund_holdings` 和行业分布，债券持仓与目标基金持仓只作为 `holdings_snapshot` 子形态接入下游，不新增 top-level bundle 字段；`share_change` 对多份额列表只显式选择单值列或表头精确基金代码列，无法可靠选择时返回 `missing`，不再按列顺序或 A 类 fallback 默认取值。
+- `data_extractor.py` façade 已接入当前结构化数据；`structured_data` 当前以 `StructuredFundDataBundle` dataclass 表达，不额外物化 SQLite 表。
+- `report_evidence.py` 当前只投影已有 `StructuredFundDataBundle`，包括 `portfolio_managers` 与 `risk_characteristic_text`；不新增抽取路径、不调用文档仓库、不把 `nav_data` 作为事实，也不改变 renderer / FQ0-FQ6 行为。
 - `data/nav_repository.py` 当前默认把 CSRC EID 006597 家族 A/C/E/F 分类 `累计净值` 归一化为 accumulated NAV typed series，按份额 fail-closed 验证身份、分页、日期和数值；legacy raw-unit adapter 只能通过 constructor injection 进入兼容分支，并显式标记为非 strong drawdown evidence。`data/nav_metrics.py` 当前基于该 typed series 计算最大回撤；不提供 dividend-adjusted、total-return 或 volatility 指标。
 - `extraction_snapshot.py` 当前记录字段级抽取状态，并通过 `comparable_values` 暴露 correctness 可比子字段白名单；不为特定基金覆盖字段值。
 - `extraction_score.py` 当前计算字段级与单基金 coverage / traceability，对 strict golden answer 中 snapshot 可比字段执行 correctness 比对，并可显式消费 `errors.jsonl` 输出 `failed_funds`；旧 snapshot 仅保留 `classified_fund_type.fund_type` 兼容路径。
