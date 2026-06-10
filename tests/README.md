@@ -68,6 +68,7 @@ CI 当前固定 Python 3.11，使用 `uv sync --extra dev --frozen` 安装锁定
 - `tests/ui/test_cli.py`：Typer CLI 测试，覆盖 `analyze` product mode 最小请求、缺省 `valuation_state=None` 自动估值契约、显式 `--valuation-state unavailable` 手动灰灯 opt-out、developer override 参数门禁、nested override 构造、`analyze --use-llm` missing/invalid config fail-closed、provider construction monkeypatch、configured path 通过 Service-owned typed execution request 调用 `analyze_with_llm_execution()` 且不调用 deterministic `analyze()`、Host 只接收 generic run 参数和 timeout 标量、`--llm-progress` / `--no-llm-progress` stderr-only progress、heartbeat deterministic tick、reporter sink failure no-raise、Host terminal failure 不伪成功、incomplete LLM result fail-closed、`checklist --use-llm` unknown option、gate summary/blocked/info 信息输出、失败非零退出、`checklist` 通过 Service 输出摘要、`thermometer` 默认全 A plain/JSON 输出、help 文案、自建 `--index wind_all_a` 和 `--index 000300` plain/JSON 输出、批量 `--index wind_all_a,000300` / `--index 000300,000905` 输出、malformed index exit 2；LLM/provider 分支使用 fake env、monkeypatch 或测试替身，不访问 live provider
 - `tests/scripts/test_selected_funds_smoke.py`：有知有行精选基金池 smoke 脚本测试，覆盖 CSV 数据质量、分层抽样、指定代码、CLI 命令构造和 `quality_gate_status` 记录；命令显式使用 `--dev-override --quality-gate-policy warn`，测试不触发真实网络
 - `tests/scripts/test_report_quality_eval.py`：report-quality maintainer-only/dev-only 汇总脚本测试，使用 `tmp_path` fake JSONL / bundle 输入覆盖显式输入、summary 输出和 validator issue 汇总；不读取年报、不触发网络、PDF、extractor、Service、renderer 或产品 CLI
+- `tests/scripts/test_controlled_live_eid_failure_branch_observation.py`：controlled live EID observation helper 的 no-live serializer regression 测试，只用 fake in-memory report 调用 `_safe_report_payload()`，验证当前 metadata safe scalar 输出且不触发 helper `main()`、`_run_observation()`、`FundDocumentRepository`、EID/FDR/PDF/network、fallback、provider、LLM、extractor、`analyze`、`checklist`、golden/readiness 或 score-loop
 - `tests/config/test_paths.py`：仓库默认路径迁移守卫测试，覆盖 `fund_agent.config.paths` 默认值、导入隔离、UI 只依赖 Service 且不越过 Service 直连 Agent 层基金能力、旧常量别名、CLI 历史 score fixture 排除和散落 `Path("docs|reports|cache/...")` 默认值扫描
 - `tests/test_repo_hygiene.py`：仓库发布卫生测试，覆盖 MIT License、`pyproject.toml` license、GitHub Actions CI 命令和 `.gitignore` artifact policy
 - `tests/fund/integration/test_p1_sample_matrix.py`：P1 样本矩阵测试，验证 3 只样本基金 12 项结构化数据达到 `36/36`
@@ -128,6 +129,7 @@ pytest tests/services -q
 pytest tests/ui -q
 pytest tests/scripts/test_selected_funds_smoke.py -q
 pytest tests/scripts/test_report_quality_eval.py -q
+pytest tests/scripts/test_controlled_live_eid_failure_branch_observation.py -q
 pytest tests/fund/integration/test_p1_sample_matrix.py -q
 pytest tests/fund/integration/test_p3_cli_e2e_matrix.py -q
 ```
