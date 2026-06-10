@@ -20,15 +20,15 @@ No production code, test code, live EID, network, PDF/FDR, `FundDocumentReposito
 ## Reviewer Inputs
 
 - `AgentDS`: `docs/reviews/mvp-retrospective-independent-review-gate-review-ds-20260610.md`
-- `AgentMiMo`: `docs/reviews/mvp-retrospective-independent-review-gate-review-mimo-20260610.md`
+- `AgentMiMo`: unavailable. The pane failed clear verification and still showed old-task content plus queued `/clear`; no `AgentMiMo` output is accepted as current-task evidence.
 
 ## Controller Disposition
 
 ### M1 - Original gates lacked independent reviewer provenance
 
-Disposition: accepted as a pre-retrospective process blocker; resolved by this retrospective gate.
+Disposition: accepted as a pre-retrospective process blocker; resolved within the available-reviewer boundary by this retrospective gate.
 
-Reasoning: the original accepted gates had review artifacts, but those artifacts did not establish independent reviewer provenance. This retrospective gate now records two independent reviewer outputs and a controller judgment, satisfying the missing provenance without reopening the already accepted content.
+Reasoning: the original accepted gates had review artifacts, but those artifacts did not establish independent reviewer provenance. This retrospective gate now records an independent `AgentDS` review, documents `AgentMiMo` unavailability, and records controller judgment. This satisfies the standard-gate reviewer-unavailability exception without reopening the already accepted content.
 
 ### DS non-blocking documentation fixes
 
