@@ -516,6 +516,7 @@ class ProfileExtractionResult:
     Attributes:
         basic_identity: 基础身份信息。
         product_profile: 产品本质与投资范围摘要。
+        risk_characteristic_text: 风险收益特征文本，见模板第 1 章产品本质和第 6 章核心风险。
         benchmark: 业绩比较基准信息。
         index_profile: 指数画像信息，见模板第 1 章“指数编制规则与成分股”。
         fee_schedule: 费率信息。
@@ -523,6 +524,7 @@ class ProfileExtractionResult:
 
     basic_identity: ExtractedField[dict[str, object]]
     product_profile: ExtractedField[dict[str, object]]
+    risk_characteristic_text: ExtractedField[dict[str, object]]
     benchmark: ExtractedField[dict[str, object]]
     index_profile: ExtractedField["IndexProfileValue"]
     fee_schedule: ExtractedField[dict[str, object]]

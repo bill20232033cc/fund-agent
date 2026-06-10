@@ -52,6 +52,15 @@ _FIELD_PATTERNS: Final[dict[str, tuple[tuple[str, tuple[str, ...]], ...]]] = {
             ),
         ),
     ),
+    "risk_characteristic_text": (
+        (
+            "§2",
+            (
+                r"风险收益特征\s*[：:]\s*(.+)",
+                r"基金风险收益特征\s*[：:]\s*(.+)",
+            ),
+        ),
+    ),
     "benchmark": (("§2", (r"业绩比较基准\s*[：:]\s*(.+)",)),),
     "management_fee": (("§2", (r"管理费(?:率)?\s*[：:]\s*(.+)",)),),
     "custody_fee": (("§2", (r"托管费(?:率)?\s*[：:]\s*(.+)",)),),
@@ -69,6 +78,7 @@ _TABLE_FIELD_LABELS: Final[dict[str, tuple[str, ...]]] = {
     "investment_scope": ("投资范围",),
     "investment_strategy": ("投资策略",),
     "style_positioning": ("风格定位", "风险收益特征", "产品定位"),
+    "risk_characteristic_text": ("风险收益特征", "基金风险收益特征"),
     "benchmark": ("业绩比较基准",),
     "management_fee": ("管理费率", "管理费"),
     "custody_fee": ("托管费率", "托管费"),
@@ -123,6 +133,7 @@ _FEE_FALLBACK_RULES: Final[dict[str, _FeeFallbackRule]] = {
         semantic_labels=("基金托管费", "托管费"),
     ),
 }
+_RISK_CHARACTERISTIC_SCHEMA_VERSION: Final[str] = "risk_characteristic_text.v1"
 
 
 @dataclass(frozen=True, slots=True)
@@ -858,6 +869,61 @@ def _build_product_profile(report: ParsedAnnualReport) -> ExtractedField[dict[st
     )
 
 
+def _anchor_to_source_anchor(anchor: EvidenceAnchor) -> dict[str, object]:
+    """把通用证据锚点投影为 `risk_characteristic_text.v1` 值内来源锚点。
+
+    Args:
+        anchor: 通用年报证据锚点。
+
+    Returns:
+        可序列化的来源锚点字典。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return {
+        "section_id": anchor.section_id,
+        "page_number": anchor.page_number,
+        "table_id": anchor.table_id,
+        "row_locator": anchor.row_locator,
+    }
+
+
+def _build_risk_characteristic_text(report: ParsedAnnualReport) -> ExtractedField[dict[str, object]]:
+    """构造 `risk_characteristic_text.v1` 风险收益特征字段。
+
+    该字段只读取 `§2` 中显式标注的风险收益特征文本，见模板第 1 章产品本质和第 6 章核心风险；
+    不从基金名称、基金类型或 `product_profile.style_positioning` 间接推断。
+
+    Args:
+        report: 已解析年报对象。
+
+    Returns:
+        带 `risk_characteristic_text.v1` 结构化值的抽取字段；缺少显式风险收益特征时返回 missing。
+
+    Raises:
+        无显式抛出。
+    """
+
+    matched_field = _extract_field(report, "risk_characteristic_text")
+    if matched_field is None:
+        return _missing_field("§2 未披露风险收益特征")
+    anchor = _build_anchor(report, matched_field)
+    return ExtractedField(
+        value={
+            "schema_version": _RISK_CHARACTERISTIC_SCHEMA_VERSION,
+            "fund_code": report.key.fund_code,
+            "report_year": report.key.year,
+            "risk_characteristic_text": matched_field.value,
+            "source_anchors": [_anchor_to_source_anchor(anchor)],
+        },
+        anchors=(anchor,),
+        extraction_mode="direct",
+        note=None,
+    )
+
+
 def _derive_style_positioning(objective: _MatchedField | None) -> str | None:
     """从投资目标中提炼产品定位短语。
 
@@ -1138,6 +1204,7 @@ def extract_profile(report: ParsedAnnualReport) -> ProfileExtractionResult:
     return ProfileExtractionResult(
         basic_identity=_build_basic_identity(report, classification),
         product_profile=_build_product_profile(report),
+        risk_characteristic_text=_build_risk_characteristic_text(report),
         benchmark=benchmark,
         index_profile=_build_index_profile(classification, benchmark),
         fee_schedule=_build_fee_schedule(report),

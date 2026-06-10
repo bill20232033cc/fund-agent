@@ -76,6 +76,7 @@ chapter_lens = resolve_preferred_lens(chapter_id=2, fund_type="active_fund")
 
 - `basic_identity`：基金名称、代码、披露类别、规模、基金经理，以及稳定输出 `classified_fund_type` / `classification_basis`
 - `product_profile`：`§2` 中的投资目标、风格定位、投资范围、投资策略
+- `risk_characteristic_text`：`§2` 中显式披露的风险收益特征，输出 `risk_characteristic_text.v1`，不以 `product_profile.style_positioning` 作为替代
 - `benchmark`：`§2` 中的业绩比较基准文本
 - `fee_schedule`：`§2` 中的管理费、托管费
 
@@ -493,7 +494,7 @@ C2 当前只做确定性 marker / 元数据检查，不调用 LLM，不判断语
 
 - 当前只支持 `annual_report`。
 - 当前稳定 extractor 边界是 `§1/§2/§3/§4/§8/§9/§10`。
-- 当前基础画像只覆盖 `basic_identity`、`product_profile`、`benchmark`、`fee_schedule` 四类输出。
+- 当前基础画像只覆盖 `basic_identity`、`product_profile`、`risk_characteristic_text`、`benchmark`、`fee_schedule` 五类输出。
 - 当前 `§3` 表现只覆盖 `nav_benchmark_performance` 与 `investor_return` 两类输出。
 - 当前管理人/持有人 extractor 覆盖 `manager_strategy_text`、`portfolio_managers`、`turnover_rate`、`manager_alignment`、`holder_structure` 五类输出；`portfolio_managers` 目前只是 extractor 输出面，尚未接入 `StructuredFundDataBundle`、snapshot、renderer 或 quality gate。
 - 当前持仓/份额 extractor 只覆盖 `holdings_snapshot` 与 `share_change` 两类输出；`share_change` 对多份额列表只显式选择单值列或表头精确基金代码列，无法可靠选择时返回 `missing`，不再按列顺序或 A 类 fallback 默认取值。

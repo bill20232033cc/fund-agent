@@ -274,6 +274,7 @@ def _profile_table(row: dict[str, Any]) -> ParsedTable:
             ("基金名称", str(identity["fund_name"])),
             ("基金主代码", str(identity["fund_code"])),
             ("基金类型", _risk_category_text(row)),
+            ("风险收益特征", _risk_expected_text(row)),
             ("报告期末基金份额总额", str(scale.get("target_share_units") or scale.get("total_share_units") or "")),
             ("业绩比较基准", str(_expected(row, "benchmark"))),
             ("管理费", str(fee["management_fee_rate"])),
@@ -485,6 +486,7 @@ def _build_report_from_oracle_row(
         "§1 基金简介",
         "§2 基金产品说明",
         f"基金类型：{_risk_category_text(row)}",
+        f"风险收益特征：{_risk_expected_text(row)}",
         f"业绩比较基准：{benchmark}",
         "§3 主要财务指标、基金净值表现",
         "本节表现字段由同源 accepted oracle 表格承载。",
@@ -836,15 +838,8 @@ def test_holdings_extractor_matches_same_source_equity_like_top_row(
     assert holdings.anchors
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "risk_characteristic_text.v1 is accepted future contract; "
-        "current profile extractor has no dedicated risk-characteristic surface"
-    ),
-)
 def test_profile_extractor_exposes_same_source_risk_characteristic_text() -> None:
-    """记录 `risk_characteristic_text.v1` 尚无专用 extractor 输出面。
+    """验证 profile extractor 对同源风险收益特征字段的 correctness。
 
     参数：
         无。
@@ -853,8 +848,7 @@ def test_profile_extractor_exposes_same_source_risk_characteristic_text() -> Non
         无。
 
     异常：
-        AssertionError: 未来风险收益特征输出未匹配 accepted oracle。
-        AttributeError: 当前 profile extractor 尚未暴露专用风险收益特征输出面。
+        AssertionError: 当前风险收益特征输出未匹配 accepted oracle。
     """
 
     rows_by_fund_code = _oracle_rows_by_fund_code()
@@ -862,14 +856,6 @@ def test_profile_extractor_exposes_same_source_risk_characteristic_text() -> Non
         fund_code: extract_profile(_build_report_from_oracle_row(rows_by_fund_code[fund_code]))
         for fund_code in sorted(EXPECTED_ACCEPTED_FUND_CODES)
     }
-    missing_surface_fund_codes = [
-        fund_code
-        for fund_code, profile in profiles.items()
-        if not hasattr(profile, "risk_characteristic_text")
-    ]
-
-    assert not missing_surface_fund_codes
-
     for fund_code, profile in profiles.items():
         expected_text = _risk_expected_text(rows_by_fund_code[fund_code])
         risk_characteristic = profile.risk_characteristic_text
