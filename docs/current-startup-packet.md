@@ -16,10 +16,10 @@ Use `docs/reviews/` and `docs/archive/` only as evidence chain. They do not over
 | Field | State |
 |---|---|
 | Current phase | `MVP typed-template-to-agent report generation stabilization phase` |
-| Current gate | `EID single-source downstream integration implementation gate` accepted locally |
-| Current gate classification | `standard` because it changed deterministic downstream Fund-layer wiring, tests and README only; it did not change source acquisition policy, fallback/golden/readiness/provider/runtime/config/live/PDF/FDR behavior, renderer/checklist/quality semantics, Service/Host/Agent runtime, release or PR state |
-| Current gate status | Accepted downstream integration implementation checkpoint `c3b9061` wires existing extractor outputs `portfolio_managers` and `risk_characteristic_text` through `StructuredFundDataBundle`, extraction snapshot, report evidence, chapter facts and EvidenceAvailability. `bond_top_holdings` and `target_fund_holdings` remain `holdings_snapshot` sub-shapes and were not promoted to top-level bundle fields. Reviewers James and Hypatia found no blocking findings; their shared low finding about `tests/fund/test_data_extractor.py` `hasattr` coverage was fixed with value-level payload and anchor assertions and passed re-review. `AgentDS` and `AgentMiMo` were unavailable for this review because both panes failed `/clear` verification twice with stale `PR #22` context. Deterministic validation passed; no live EID/network/PDF/FDR/repository acquisition/fallback/provider/live LLM ran; no fixture projection, golden/readiness promotion, score-loop, release or PR action occurred |
-| Next entry point | Controlled live EID failure-branch evidence gate, only with separate explicit live authorization. Do not run additional PDF read, network, `FundDocumentRepository` live acquisition, fallback, live LLM, endpoint/provider probes, provider/default/runtime/budget/config changes, Chapter calibration, Agent runtime expansion, multi-year runtime, score-loop, fixture projection, golden/readiness promotion, release, merge or mark PR ready without the specific gate authorization |
+| Current gate | `Controlled live EID failure-branch evidence gate` accepted locally with residual |
+| Current gate classification | `heavy` because it consumed one user-authorized live EID/FDR acquisition through `FundDocumentRepository`; it did not change source code, tests, source policy, fallback semantics, provider/runtime/config, extractor behavior, golden/readiness, quality gate, Service/Host/Agent runtime, release or PR state |
+| Current gate status | Plan checkpoint `7ebd06d` authorized exactly one live command: `uv run python scripts/controlled_live_eid_failure_branch_observation.py`. Evidence checkpoint `ebcd3bf` records that the command was executed exactly once for `006597 / 2024`, exited `1`, emitted empty stdout, and failed after acquisition in the gate-local helper serializer with `AttributeError: 'AnnualReportSourceMetadata' object has no attribute 'identity_status'`. DS review PASS; MiMo review PASS_WITH_FINDINGS with only low/informational findings; controller judgment accepts the blocked evidence record as `blocked_helper_serialization_error_after_acquisition`. This is not accepted live success evidence and not live failure-branch proof. No retry, additional row, fallback, non-EID source, provider/LLM probe, extractor/analyze/checklist, fixture projection, golden/readiness promotion, score-loop, release or PR action occurred |
+| Next entry point | Controlled live EID helper repair and retry planning gate. This is planning/control first: do not run additional PDF read, network, `FundDocumentRepository` live acquisition, fallback, live LLM, endpoint/provider probes, provider/default/runtime/budget/config changes, Chapter calibration, Agent runtime expansion, multi-year runtime, score-loop, fixture projection, golden/readiness promotion, release, merge or mark PR ready without a reviewed plan, controller judgment and separate explicit live authorization |
 | Control truth | `docs/implementation-control.md` |
 | Design truth | `docs/design.md` |
 | Accepted plan commit | `beb6891` |
@@ -37,6 +37,8 @@ Use `docs/reviews/` and `docs/archive/` only as evidence chain. They do not over
 | Accepted target fund holding extractor fix implementation commit | `7a10dbf` |
 | Accepted downstream integration planning commit | `56b9e42` |
 | Accepted downstream integration implementation commit | `c3b9061` |
+| Accepted controlled live EID failure-branch plan commit | `7ebd06d` |
+| Accepted controlled live EID failure-branch evidence commit | `ebcd3bf` |
 | Accepted EID failure-branch evidence planning commit | `4b76b3c` |
 | Accepted EID failure-branch evidence commit | `ac6bbe9` |
 | Accepted retrospective independent review commit | `f590cae` |
@@ -271,6 +273,8 @@ Use `docs/reviews/` and `docs/archive/` only as evidence chain. They do not over
 | Accepted target fund holding extractor fix implementation checkpoint | `7a10dbf` |
 | Accepted downstream integration planning checkpoint | `56b9e42` |
 | Accepted downstream integration implementation checkpoint | `c3b9061` |
+| Accepted controlled live EID failure-branch plan checkpoint | `7ebd06d` |
+| Accepted controlled live EID failure-branch evidence checkpoint | `ebcd3bf` |
 | Accepted EID failure-branch evidence planning checkpoint | `4b76b3c` |
 | Accepted EID failure-branch evidence checkpoint | `ac6bbe9` |
 | Accepted retrospective independent review checkpoint | `f590cae` |
