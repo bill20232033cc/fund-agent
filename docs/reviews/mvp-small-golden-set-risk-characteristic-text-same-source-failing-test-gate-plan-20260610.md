@@ -10,7 +10,7 @@
 
 ## 2. Goal
 
-Replace the generic `risk` unsupported-field xfail with a named, strict, same-source failing test for `risk_characteristic_text.v1` across all five accepted small-golden rows.
+Replace the generic `risk` unsupported-field xfail with a named, strict, same-source failing test for `risk_characteristic_text.v1` that internally checks all five accepted small-golden rows.
 
 The test must prove a precise current gap: accepted same-source risk characteristic text exists in the retained oracle, but the current extractor surface has no dedicated `risk_characteristic_text.v1` output. This gate must not make the test pass.
 
@@ -83,7 +83,8 @@ The test intentionally does not assert that `product_profile.style_positioning` 
 - Add `RISK_CONTRACT_VERSION = "risk_characteristic_text.v1"`.
 - Remove `SAME_SOURCE_UNSUPPORTED_FIELDS = {"risk"}` and the generic unsupported-field xfail test.
 - Add `_risk_expected_text(row)` helper that returns `fields.risk.expected` as text.
-- Add `test_profile_extractor_exposes_same_source_risk_characteristic_text` parameterized over all five accepted fund codes and marked `xfail(strict=True)`.
+- Add `test_profile_extractor_exposes_same_source_risk_characteristic_text` marked `xfail(strict=True)`.
+- The test must iterate over all five accepted fund codes inside one strict xfail case, so retained-row coverage is preserved while the accepted focused test summary remains `21 passed, 3 xfailed`.
 - The test must build the same minimal report from the accepted oracle and call `extract_profile(report)`.
 - The test must access the future dedicated surface `profile.risk_characteristic_text`, then assert schema version, fund code, report year, expected risk text and non-empty anchors.
 

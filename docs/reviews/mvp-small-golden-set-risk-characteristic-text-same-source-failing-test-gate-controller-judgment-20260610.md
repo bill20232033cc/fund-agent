@@ -18,7 +18,7 @@ The plan is accepted for local implementation. This is a test-only `standard` ga
 
 The next-entry condition is satisfied: `risk_characteristic_text.v1` is an accepted future row-shape contract and still lacks a dedicated same-source failing test. The existing generic `risk` unsupported-field xfail does not specify the future output surface and could allow an implementation to conflate risk-characteristic text with `product_profile.style_positioning`.
 
-The accepted plan fixes that by requiring a named strict xfail over all five accepted rows and by asserting a dedicated `profile.risk_characteristic_text` output shape. The test is expected to fail today because current production code does not expose that field.
+The accepted plan fixes that by requiring a named strict xfail that internally checks all five accepted rows and asserts a dedicated `profile.risk_characteristic_text` output shape. The test is expected to fail today because current production code does not expose that field.
 
 ## Boundaries
 

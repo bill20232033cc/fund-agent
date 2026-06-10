@@ -74,7 +74,7 @@ FORBIDDEN_RETAINED_KEYS = {
     "raw_pdf_text",
 }
 MANAGER_CONTRACT_VERSION = "portfolio_manager_tenure_list.v1"
-SAME_SOURCE_UNSUPPORTED_FIELDS = {"risk"}
+RISK_CONTRACT_VERSION = "risk_characteristic_text.v1"
 EQUITY_LIKE_HOLDINGS_ROWS = {
     "004393": {
         "oracle_key": "top_stock_table_row",
@@ -327,6 +327,22 @@ def _manager_expected_entries(row: dict[str, Any]) -> list[dict[str, str]]:
     """
 
     return [{key: str(value) for key, value in entry.items()} for entry in _expected(row, "manager")]
+
+
+def _risk_expected_text(row: dict[str, Any]) -> str:
+    """读取 accepted oracle 中的风险收益特征文本。
+
+    参数：
+        row: accepted retained excerpt oracle 行。
+
+    返回：
+        `risk_characteristic_text.v1` 未来契约应暴露的风险收益特征文本。
+
+    异常：
+        KeyError: risk 字段缺少 expected。
+    """
+
+    return str(_expected(row, "risk"))
 
 
 def _manager_table(row: dict[str, Any]) -> ParsedTable:
@@ -820,30 +836,52 @@ def test_holdings_extractor_matches_same_source_equity_like_top_row(
     assert holdings.anchors
 
 
-@pytest.mark.xfail(strict=True, reason="same-source fields exist, but current extractor has no row-field consumer for this oracle shape")
-@pytest.mark.parametrize("field_name", sorted(SAME_SOURCE_UNSUPPORTED_FIELDS))
-def test_same_source_fields_without_current_row_consumer_are_blocked_gaps(
-    field_name: str,
-) -> None:
-    """记录当前 extractor 尚不能消费的同源 row-field gap。
+@pytest.mark.xfail(
+    strict=True,
+    reason=(
+        "risk_characteristic_text.v1 is accepted future contract; "
+        "current profile extractor has no dedicated risk-characteristic surface"
+    ),
+)
+def test_profile_extractor_exposes_same_source_risk_characteristic_text() -> None:
+    """记录 `risk_characteristic_text.v1` 尚无专用 extractor 输出面。
 
     参数：
-        field_name: 当前被记录为 blocked gap 的字段组名称。
+        无。
 
     返回：
         无。
 
     异常：
-        AssertionError: 当前字段仍未形成默认 passing correctness assertion。
+        AssertionError: 未来风险收益特征输出未匹配 accepted oracle。
+        AttributeError: 当前 profile extractor 尚未暴露专用风险收益特征输出面。
     """
 
-    row = _oracle_rows_by_fund_code()["004393"]
-    field_group = _field(row, field_name)
+    rows_by_fund_code = _oracle_rows_by_fund_code()
+    profiles = {
+        fund_code: extract_profile(_build_report_from_oracle_row(rows_by_fund_code[fund_code]))
+        for fund_code in sorted(EXPECTED_ACCEPTED_FUND_CODES)
+    }
+    missing_surface_fund_codes = [
+        fund_code
+        for fund_code, profile in profiles.items()
+        if not hasattr(profile, "risk_characteristic_text")
+    ]
 
-    assert field_group["expected"]
-    assert field_group["anchor"]
-    assert field_group["excerpt"]
-    assert field_name not in SAME_SOURCE_UNSUPPORTED_FIELDS
+    assert not missing_surface_fund_codes
+
+    for fund_code, profile in profiles.items():
+        expected_text = _risk_expected_text(rows_by_fund_code[fund_code])
+        risk_characteristic = profile.risk_characteristic_text
+
+        assert risk_characteristic.extraction_mode == "direct"
+        assert risk_characteristic.value is not None
+        assert risk_characteristic.value["schema_version"] == RISK_CONTRACT_VERSION
+        assert risk_characteristic.value["fund_code"] == fund_code
+        assert risk_characteristic.value["report_year"] == EXPECTED_REPORT_YEAR
+        assert risk_characteristic.value["risk_characteristic_text"] == expected_text
+        assert risk_characteristic.value["source_anchors"]
+        assert risk_characteristic.anchors
 
 
 @pytest.mark.xfail(strict=True, reason="same-source holdings row exists, but current gate excludes this row shape")
