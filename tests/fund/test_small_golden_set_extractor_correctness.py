@@ -16,6 +16,7 @@ import pytest
 
 from fund_agent.fund.documents.models import DocumentKey, ParsedAnnualReport, ParsedTable, ReportSection
 from fund_agent.fund.extractors.holdings_share_change import extract_holdings_share_change
+from fund_agent.fund.extractors.manager_ownership import extract_manager_ownership
 from fund_agent.fund.extractors.performance import extract_performance
 from fund_agent.fund.extractors.profile import extract_profile
 
@@ -72,7 +73,8 @@ FORBIDDEN_RETAINED_KEYS = {
     "raw_page_text",
     "raw_pdf_text",
 }
-SAME_SOURCE_UNSUPPORTED_FIELDS = {"manager", "risk"}
+MANAGER_CONTRACT_VERSION = "portfolio_manager_tenure_list.v1"
+SAME_SOURCE_UNSUPPORTED_FIELDS = {"risk"}
 EQUITY_LIKE_HOLDINGS_ROWS = {
     "004393": {
         "oracle_key": "top_stock_table_row",
@@ -311,6 +313,52 @@ def _performance_table(row: dict[str, Any]) -> ParsedTable:
     )
 
 
+def _manager_expected_entries(row: dict[str, Any]) -> list[dict[str, str]]:
+    """读取 accepted oracle 中的基金经理任期列表。
+
+    参数：
+        row: accepted retained excerpt oracle 行。
+
+    返回：
+        基金经理任期条目列表。
+
+    异常：
+        KeyError: manager 字段缺少 expected。
+    """
+
+    return [{key: str(value) for key, value in entry.items()} for entry in _expected(row, "manager")]
+
+
+def _manager_table(row: dict[str, Any]) -> ParsedTable:
+    """用 accepted oracle 构造未来 manager roster contract 可消费的最小表格。
+
+    参数：
+        row: accepted retained excerpt oracle 行。
+
+    返回：
+        `ParsedTable`，包含 `§4.1.2 基金经理简介` 的姓名、角色、任职日期和离任日期。
+
+    异常：
+        KeyError: manager 字段缺少 expected 或 anchor。
+    """
+
+    rows = tuple(
+        (
+            entry["name"],
+            entry["role"],
+            entry["start_date"],
+            entry.get("end_date", ""),
+        )
+        for entry in _manager_expected_entries(row)
+    )
+    return ParsedTable(
+        page_number=_page_from_anchor(_field(row, "manager")["anchor"]),
+        table_index=3,
+        headers=("姓名", "职务", "任职日期", "离任日期"),
+        rows=rows,
+    )
+
+
 def _holdings_expected_row(row: dict[str, Any], oracle_key: str) -> dict[str, str]:
     """读取 accepted oracle 中单个持仓行。
 
@@ -398,12 +446,14 @@ def _adapt_raw_holding_row(raw_row: dict[str, str]) -> dict[str, str]:
 def _build_report_from_oracle_row(
     row: dict[str, Any],
     *,
+    include_manager: bool = False,
     include_holdings: bool = False,
 ) -> ParsedAnnualReport:
     """从 accepted oracle 行构造最小 parsed annual report。
 
     参数：
         row: accepted retained excerpt oracle 行。
+        include_manager: 是否附加未来 manager roster contract 的 `§4.1.2` 表。
         include_holdings: 是否附加当前 gate 接受的 equity-like holdings 表。
 
     返回：
@@ -415,24 +465,92 @@ def _build_report_from_oracle_row(
     """
 
     benchmark = str(_expected(row, "benchmark"))
-    raw_text = "\n".join(
+    raw_parts = [
+        "§1 基金简介",
+        "§2 基金产品说明",
+        f"基金类型：{_risk_category_text(row)}",
+        f"业绩比较基准：{benchmark}",
+        "§3 主要财务指标、基金净值表现",
+        "本节表现字段由同源 accepted oracle 表格承载。",
+    ]
+    if include_manager:
+        raw_parts.extend(
+            (
+                "§4 管理人报告",
+                "4.1.2 基金经理简介",
+                "本节基金经理任期字段由同源 accepted oracle 表格承载。",
+            )
+        )
+    raw_parts.extend(
         (
-            "§1 基金简介",
-            "§2 基金产品说明",
-            f"基金类型：{_risk_category_text(row)}",
-            f"业绩比较基准：{benchmark}",
-            "§3 主要财务指标、基金净值表现",
-            "本节表现字段由同源 accepted oracle 表格承载。",
             "§8 投资组合报告",
             "本节持仓字段由同源 accepted oracle 表格承载。",
         )
     )
-    section_two_start = raw_text.index("§2")
-    section_three_start = raw_text.index("§3")
-    section_eight_start = raw_text.index("§8")
+    raw_text = "\n".join(raw_parts)
+    section_starts = {
+        section_id: raw_text.index(section_id)
+        for section_id in ("§1", "§2", "§3", "§8")
+    }
+    if include_manager:
+        section_starts["§4"] = raw_text.index("§4")
+    ordered_sections = sorted(section_starts, key=section_starts.__getitem__)
+    section_ends = {
+        section_id: (
+            section_starts[ordered_sections[index + 1]]
+            if index + 1 < len(ordered_sections)
+            else len(raw_text)
+        )
+        for index, section_id in enumerate(ordered_sections)
+    }
     tables = [_profile_table(row), _performance_table(row)]
+    if include_manager:
+        tables.append(_manager_table(row))
     if include_holdings:
         tables.append(_holdings_table(row))
+    sections = {
+        "§1": ReportSection(
+            section_id="§1",
+            title="§1 基金简介",
+            start_offset=section_starts["§1"],
+            end_offset=section_ends["§1"],
+            matched_rule="accepted_retained_excerpt_oracle",
+            confidence=1.0,
+        ),
+        "§2": ReportSection(
+            section_id="§2",
+            title="§2 基金产品说明",
+            start_offset=section_starts["§2"],
+            end_offset=section_ends["§2"],
+            matched_rule="accepted_retained_excerpt_oracle",
+            confidence=1.0,
+        ),
+        "§3": ReportSection(
+            section_id="§3",
+            title="§3 主要财务指标、基金净值表现",
+            start_offset=section_starts["§3"],
+            end_offset=section_ends["§3"],
+            matched_rule="accepted_retained_excerpt_oracle",
+            confidence=1.0,
+        ),
+        "§8": ReportSection(
+            section_id="§8",
+            title="§8 投资组合报告",
+            start_offset=section_starts["§8"],
+            end_offset=section_ends["§8"],
+            matched_rule="accepted_retained_excerpt_oracle",
+            confidence=1.0,
+        ),
+    }
+    if include_manager:
+        sections["§4"] = ReportSection(
+            section_id="§4",
+            title="§4 管理人报告",
+            start_offset=section_starts["§4"],
+            end_offset=section_ends["§4"],
+            matched_rule="accepted_retained_excerpt_oracle",
+            confidence=1.0,
+        )
     return ParsedAnnualReport(
         key=DocumentKey(
             fund_code=str(row["fund_code"]),
@@ -440,40 +558,7 @@ def _build_report_from_oracle_row(
             document_kind=str(row["document_kind"]),
         ),
         raw_text=raw_text,
-        sections={
-            "§1": ReportSection(
-                section_id="§1",
-                title="§1 基金简介",
-                start_offset=0,
-                end_offset=section_two_start,
-                matched_rule="accepted_retained_excerpt_oracle",
-                confidence=1.0,
-            ),
-            "§2": ReportSection(
-                section_id="§2",
-                title="§2 基金产品说明",
-                start_offset=section_two_start,
-                end_offset=section_three_start,
-                matched_rule="accepted_retained_excerpt_oracle",
-                confidence=1.0,
-            ),
-            "§3": ReportSection(
-                section_id="§3",
-                title="§3 主要财务指标、基金净值表现",
-                start_offset=section_three_start,
-                end_offset=section_eight_start,
-                matched_rule="accepted_retained_excerpt_oracle",
-                confidence=1.0,
-            ),
-            "§8": ReportSection(
-                section_id="§8",
-                title="§8 投资组合报告",
-                start_offset=section_eight_start,
-                end_offset=len(raw_text),
-                matched_rule="accepted_retained_excerpt_oracle",
-                confidence=1.0,
-            ),
-        },
+        sections=sections,
         tables=tuple(tables),
     )
 
@@ -657,6 +742,56 @@ def test_performance_extractor_matches_same_source_tracking_error_when_present()
     assert performance.tracking_error.extraction_mode == "direct"
     assert performance.tracking_error.value.value_text == return_expected["annual_tracking_error"]
     assert performance.tracking_error.anchors
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason=(
+        "portfolio_manager_tenure_list.v1 is an accepted future contract; "
+        "current manager extractor has no roster surface"
+    ),
+)
+@pytest.mark.parametrize("fund_code", sorted(EXPECTED_ACCEPTED_FUND_CODES))
+def test_manager_extractor_exposes_same_source_portfolio_manager_tenure_list(
+    fund_code: str,
+) -> None:
+    """验证未来 manager roster 契约必须匹配同源 retained oracle。
+
+    参数：
+        fund_code: 当前参数化基金代码。
+
+    返回：
+        无。
+
+    异常：
+        AssertionError: 未来 manager roster 输出未匹配 accepted oracle。
+        AttributeError: 当前 extractor 尚未暴露 `portfolio_managers` 输出面。
+    """
+
+    row = _oracle_rows_by_fund_code()[fund_code]
+    report = _build_report_from_oracle_row(row, include_manager=True)
+    manager_result = extract_manager_ownership(report)
+    expected_entries = _manager_expected_entries(row)
+
+    portfolio_managers = manager_result.portfolio_managers
+
+    assert portfolio_managers.extraction_mode == "direct"
+    assert portfolio_managers.value is not None
+    assert portfolio_managers.value["schema_version"] == MANAGER_CONTRACT_VERSION
+    assert portfolio_managers.value["fund_code"] == fund_code
+    assert portfolio_managers.value["report_year"] == EXPECTED_REPORT_YEAR
+    actual_entries = portfolio_managers.value["portfolio_managers"]
+    assert len(actual_entries) == len(expected_entries)
+    for actual_entry, expected_entry in zip(actual_entries, expected_entries, strict=True):
+        assert actual_entry["name"] == expected_entry["name"]
+        assert actual_entry["role"] == expected_entry["role"]
+        assert actual_entry["start_date"] == expected_entry["start_date"]
+        if "end_date" in expected_entry:
+            assert actual_entry["end_date"] == expected_entry["end_date"]
+        assert actual_entry["source_anchor"]["section_id"] == "§4"
+        assert "4.1.2" in actual_entry["source_anchor"]["section_title"]
+        assert expected_entry["name"] in actual_entry["source_anchor"]["row_locator"]
+    assert portfolio_managers.anchors
 
 
 @pytest.mark.parametrize("fund_code", sorted(EQUITY_LIKE_HOLDINGS_ROWS))
