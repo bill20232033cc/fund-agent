@@ -6,7 +6,7 @@
 > **设计真源**: `docs/design.md`
 > **控制真源**: `docs/implementation-control.md`
 > **短启动入口**: `docs/current-startup-packet.md`
-> **当前状态**: `MVP typed-template-to-agent report generation stabilization phase`。`Control-doc compression / artifact hygiene implementation gate` 已在本地 checkpoint `693638b` 接受，controller verdict 为 `ACCEPT_WITH_REVIEW_CHANNEL_RESIDUAL`。`Source-like residue ownership implementation gate for fund_agent/tools` 已在本地 checkpoint `11040bd` 接受，controller verdict 为 `ACCEPT`。`EID source provenance truth alignment gate` 已在本地 checkpoint `2cee618` 接受，controller verdict 为 `ACCEPT_WITH_RESIDUALS`。`LLM execution request validation ordering gate` 已在本地 checkpoint `336081e` 接受，controller verdict 为 `ACCEPT_WITH_RESIDUALS`。`UI-Service-Host boundary reconciliation gate` 已在本地 checkpoint `8ff20ed` 接受，controller verdict 为 `ACCEPT_WITH_RESIDUALS`。`Runtime artifact disposition / ignore-rule gate` 已在本地 checkpoint `6bef193` 接受，controller verdict 为 `ACCEPT_WITH_RESIDUALS`；当前推荐主线入口是 `Release-readiness cleanliness gate`。
+> **当前状态**: `MVP typed-template-to-agent report generation stabilization phase`。`Control-doc compression / artifact hygiene implementation gate` 已在本地 checkpoint `693638b` 接受，controller verdict 为 `ACCEPT_WITH_REVIEW_CHANNEL_RESIDUAL`。`Source-like residue ownership implementation gate for fund_agent/tools` 已在本地 checkpoint `11040bd` 接受，controller verdict 为 `ACCEPT`。`EID source provenance truth alignment gate` 已在本地 checkpoint `2cee618` 接受，controller verdict 为 `ACCEPT_WITH_RESIDUALS`。`LLM execution request validation ordering gate` 已在本地 checkpoint `336081e` 接受，controller verdict 为 `ACCEPT_WITH_RESIDUALS`。`UI-Service-Host boundary reconciliation gate` 已在本地 checkpoint `8ff20ed` 接受，controller verdict 为 `ACCEPT_WITH_RESIDUALS`。`Runtime artifact disposition / ignore-rule gate` 已在本地 checkpoint `6bef193` 接受，controller verdict 为 `ACCEPT_WITH_RESIDUALS`。`Release-readiness cleanliness planning gate` 已在本地 checkpoint `1bbcd19` 接受，controller verdict 为 `ACCEPT_WITH_AMENDMENTS`；当前推荐主线入口是 `Release-readiness cleanliness evidence gate`。
 
 ---
 
@@ -38,12 +38,12 @@
 
 | Field | State |
 |---|---|
-| Active gate | `Release-readiness cleanliness gate` |
+| Active gate | `Release-readiness cleanliness evidence gate` |
 | Classification | `heavy` |
-| Accepted input | Runtime artifact disposition / ignore-rule implementation evidence `docs/reviews/mvp-runtime-artifact-disposition-ignore-rule-implementation-evidence-20260611.md`; MiMo review `docs/reviews/mvp-runtime-artifact-disposition-ignore-rule-implementation-review-mimo-20260611-150616.md`; DS review `docs/reviews/mvp-runtime-artifact-disposition-ignore-rule-implementation-review-ds-20260611-150616.md`; controller judgment `docs/reviews/mvp-runtime-artifact-disposition-ignore-rule-implementation-controller-judgment-20260611-150616.md` verdict `ACCEPT_WITH_RESIDUALS`; checkpoint `6bef193` |
-| Implementation objective | Plan release-readiness cleanliness from current local evidence without claiming readiness, changing PR/release state, running live commands or cleaning residue |
-| Implementation status | Not started |
-| Next entry point | Planning worker for release-readiness cleanliness |
+| Accepted input | Release-readiness cleanliness plan `docs/reviews/mvp-release-readiness-cleanliness-plan-20260611.md`; MiMo review `docs/reviews/mvp-release-readiness-cleanliness-plan-review-mimo-20260611.md`; DS review `docs/reviews/mvp-release-readiness-cleanliness-plan-review-ds-20260611.md`; controller judgment `docs/reviews/mvp-release-readiness-cleanliness-plan-controller-judgment-20260611-152127.md` verdict `ACCEPT_WITH_AMENDMENTS`; checkpoint `1bbcd19` |
+| Implementation objective | Execute accepted local, non-destructive evidence matrix and classify readiness blockers without claiming readiness, changing PR/release state, running live commands or cleaning residue |
+| Implementation status | Plan accepted; evidence not started |
+| Next entry point | Evidence worker for release-readiness cleanliness |
 
 ## Long-run Phaseflow Queue
 
@@ -78,12 +78,12 @@ Deferred entries requiring separate reviewed authorization:
 
 ## Non-goal Reminder
 
-The release-readiness cleanliness planning entry does not authorize:
+The release-readiness cleanliness evidence entry does not authorize:
 
 - source/test/runtime behavior changes
 - `.gitignore` edits
 - `docs/design.md`, README or control-truth changes outside controller status sync
-- reviewer/controller artifact creation or prefill by implementation worker
+- reviewer/controller artifact creation or prefill by evidence worker outside the accepted evidence write set
 - delete, move, archive, clean, ignore, import, stage, promote, commit, push, PR, merge, mark-ready or release-state actions
 - live EID/network/PDF/FDR/FundDocumentRepository/helper/fallback/provider/LLM/extractor/analyze/checklist/golden/readiness/score-loop/release commands
 - provider default changes, runtime budget changes, live provider acceptance, retry/fallback semantics, external PR state, or release-readiness status changes
@@ -119,7 +119,8 @@ The current control surface keeps only gate-family summaries. The evidence-chain
 | LLM execution request validation ordering | accepted; closed for current implementation | Service/LLM execution owner | Closed by `336081e`; LLM path parity with deterministic `_validate_request()` deferred |
 | UI-Service-Host boundary reconciliation | accepted; closed for current implementation | Service/Host boundary owner | Closed by `8ff20ed`; future Host durable and Agent full runtime expansion remain separate |
 | Runtime artifact disposition / ignore-rule planning | accepted; closed for non-destructive disposition | Controller / artifact owners | Closed by `6bef193`; untracked residue remains release/readiness blocker with owners/next gates |
-| Release-readiness cleanliness | active mainline residual | Release owner / controller | Plan readiness checks and blocker classification without claiming readiness |
+| Release-readiness cleanliness planning | accepted locally at `1bbcd19` | Release owner / controller | Evidence gate may proceed under accepted local non-destructive matrix |
+| Release-readiness cleanliness evidence | active mainline residual | Release owner / controller | Execute evidence matrix and report `NOT_READY` unless blockers are resolved or explicitly accepted as residual |
 | Deepreview-derived long-run gates | queued residual | Controller / future gate owners | Use `docs/reviews/mvp-long-run-phaseflow-startup-20260611-115345.md`; follow queue order |
 | Any design/control inconsistency discovered later | potential residual | Design owner/controller | Separate design-truth-sync gate; do not modify `docs/design.md` in this gate |
 
@@ -140,6 +141,7 @@ The current control surface keeps only gate-family summaries. The evidence-chain
 | `UI-Service-Host boundary reconciliation implementation gate` | accepted locally | Implementation evidence, MiMo review, DS review and controller judgment `docs/reviews/mvp-ui-service-host-boundary-reconciliation-implementation-controller-judgment-20260611-144133.md`; verdict `ACCEPT_WITH_RESIDUALS`; checkpoint `8ff20ed` | Runtime artifact disposition / ignore-rule planning gate |
 | `Runtime artifact disposition / ignore-rule planning gate` | accepted locally | Plan, MiMo review, DS review and controller judgment `docs/reviews/mvp-runtime-artifact-disposition-ignore-rule-plan-controller-judgment-20260611-145413.md`; verdict `ACCEPT_WITH_AMENDMENTS`; checkpoint `b4ab635` | Implementation/disposition worker under accepted plan boundaries |
 | `Runtime artifact disposition / ignore-rule implementation/disposition gate` | accepted locally | Implementation evidence, MiMo review, DS review and controller judgment `docs/reviews/mvp-runtime-artifact-disposition-ignore-rule-implementation-controller-judgment-20260611-150616.md`; verdict `ACCEPT_WITH_RESIDUALS`; checkpoint `6bef193` | Release-readiness cleanliness gate |
+| `Release-readiness cleanliness planning gate` | accepted locally | Plan, MiMo review, DS review and controller judgment `docs/reviews/mvp-release-readiness-cleanliness-plan-controller-judgment-20260611-152127.md`; verdict `ACCEPT_WITH_AMENDMENTS`; checkpoint `1bbcd19` | Release-readiness cleanliness evidence gate |
 
 ## Historical Evidence Index
 
@@ -164,4 +166,4 @@ Historical entries cannot override current phase, current gate, next entry point
 2. Read `AGENTS.md`, `docs/current-startup-packet.md` and this file before choosing any next action.
 3. For historical accepted evidence, use the accepted artifact index and historical ledger index.
 4. Do not run live/provider/extractor/golden/readiness/release commands unless a separate reviewed gate explicitly authorizes them.
-5. Current mainline is release-readiness cleanliness planning. Do not claim readiness, push, PR, run live/provider/EID/PDF/FDR/analyze/checklist/golden/release commands, or clean residue without accepted readiness plan.
+5. Current mainline is release-readiness cleanliness evidence under accepted plan `1bbcd19`. Do not claim readiness, push, PR, run live/provider/EID/PDF/FDR/analyze/checklist/golden/release commands, or clean residue.
