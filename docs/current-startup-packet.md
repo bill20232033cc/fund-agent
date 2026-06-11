@@ -20,11 +20,11 @@ Purpose: short resume entry for the `MVP typed-template-to-agent report generati
 | Field | State |
 |---|---|
 | Current phase | `MVP typed-template-to-agent report generation stabilization phase` |
-| Current active gate | Waiting for separately opened `controlled live 2021-2025 annual-period evidence execution gate` |
-| Gate classification | Future controlled-live execution is `heavy` unless controller narrows it before opening |
-| Current accepted checkpoint | Controlled live 2021-2025 annual-period evidence planning accepted locally at `4f8908b` by controller judgment `docs/reviews/mvp-controlled-live-2021-2025-annual-period-evidence-plan-controller-judgment-20260611-225543.md`; release/readiness result remains `NOT_READY` |
-| Implementation status | EID Source Provenance v2 wording is accepted. Multi-year annual analysis productization is implemented as deterministic no-live product capability: Service request/result, Fund annual evidence bundle, Chapter 5 projection and CLI `analyze-annual-period` |
-| Next entry point | Separately opened controlled live 2021-2025 annual-period evidence execution gate. Do not run live commands until that controlled-live gate is explicitly opened |
+| Current active gate | `multi-year annual narrative writer/reporting planning gate` |
+| Gate classification | `standard` unless the accepted plan expands writer/reporting behavior beyond docs/planning |
+| Current accepted checkpoint | Controlled live 2021-2025 annual-period evidence execution accepted locally at `271a052` by controller judgment `docs/reviews/mvp-controlled-live-2021-2025-annual-period-evidence-execution-controller-judgment-20260611-231045.md`; release/readiness result remains `NOT_READY` |
+| Implementation status | EID Source Provenance v2 wording is accepted. Multi-year annual analysis productization is implemented as deterministic product capability: Service request/result, Fund annual evidence bundle, Chapter 5 projection and CLI `analyze-annual-period`. Controlled live evidence for `004393 / 2021-2025` is accepted as a single-sample EID single-source/no-fallback evidence fact |
+| Next entry point | Planning worker for multi-year annual narrative writer/reporting. Do not enter implementation until a reviewed plan is accepted |
 | Control truth | `docs/implementation-control.md` |
 | Design truth | `docs/design.md` |
 | Template truth | `docs/fund-analysis-template-draft.md` canonical `TEMPLATE_CONTRACT_MANIFEST_JSON` |
@@ -37,14 +37,14 @@ Purpose: short resume entry for the `MVP typed-template-to-agent report generati
 
 - Current production default remains deterministic `fund-analysis analyze/checklist`: structured extraction, deterministic analysis, template rendering, programmatic audit and FQ0-FQ6 quality gate.
 - Current `--use-llm` path remains explicit opt-in and fail-closed: `CLI -> Service prepares FundLLMExecutionRequest / ExecutionContract -> Host runner -> Service -> Agent body runner -> fund_agent/fund -> provider HTTP call`.
-- Current `fund-analysis analyze-annual-period` path is deterministic no-live product capability: CLI calls Service `analyze_multi_year_annual()`, Service runs target-year `analyze()` and requests Fund-owned `AnnualEvidenceScopeRequest`, and Fund builds `AnnualEvidenceBundle` by loading optional prior years through `FundDocumentRepository`.
+- Current `fund-analysis analyze-annual-period` path is deterministic product capability: CLI calls Service `analyze_multi_year_annual()`, Service runs target-year `analyze()` and requests Fund-owned `AnnualEvidenceScopeRequest`, and Fund builds `AnnualEvidenceBundle` by loading optional prior years through `FundDocumentRepository`. Controlled live evidence is accepted for the single sample `004393 / 2021-2025`: all five years were available, `cross_year_fact_count=3`, `fallback_year_count=0`, and all five years emitted EID single-source/no-fallback provenance.
 - Current Agent implementation owns no-live body-chapter execution mechanics: contracts, ToolTrace, Fund tool adapters, repair policy, body runner and final assembly readiness.
 - Host remains lifecycle-only and business-opaque. Service owns use-case orchestration, ExecutionContract semantics, provider construction/runtime ceilings and final product fail-closed mapping. Fund owns domain rules, CHAPTER_CONTRACT / preferred_lens / ITEM_RULE semantics, extraction and audit.
 - EID single-source annual-report access is current operational source policy. Eastmoney, fund-company/CDN, CNINFO, fallback invocation, fixture projection, golden/readiness promotion, additional source acquisition, score-loop, release/merge/mark-ready and PR external state are not authorized by this gate.
 
 ## 4. Current Gate Scope
 
-The implementation checkpoint `61ab780` has accepted the no-live formal 2021-2025 annual-report analysis capability from `docs/reviews/mvp-multi-year-annual-analysis-productization-plan-20260611.md`, replacing manual five single-year runs plus manual merge with an explicit typed product path. The follow-up controlled-live planning checkpoint `4f8908b` accepted the command matrix, stop conditions and evidence artifact schema for a future 2021-2025 annual-period live evidence execution gate.
+The implementation checkpoint `61ab780` has accepted the no-live formal 2021-2025 annual-report analysis capability from `docs/reviews/mvp-multi-year-annual-analysis-productization-plan-20260611.md`, replacing manual five single-year runs plus manual merge with an explicit typed product path. The controlled-live execution checkpoint `271a052` accepted `004393 / 2021-2025` as a bounded live EID single-source/no-fallback evidence fact for the current product path.
 
 Accepted implementation scope:
 
@@ -63,7 +63,7 @@ Still explicitly out of scope unless a future reviewed gate authorizes it:
 - source/test/runtime behavior outside the accepted multi-year productization plan
 - reviewer or controller artifacts outside the accepted implementation/review write set
 - delete, move, archive, clean, ignore, import, stage, promote, commit, push, PR or merge actions
-- live EID/network/PDF/FDR/FundDocumentRepository/helper/fallback/provider/LLM/extractor/analyze/checklist/golden/readiness/score-loop/release commands; the accepted planning matrix does not itself authorize execution
+- additional live EID/network/PDF/FDR/FundDocumentRepository/helper/fallback/provider/LLM/extractor/analyze/checklist/golden/readiness/score-loop/release commands beyond the accepted `004393 / 2021-2025` evidence run
 
 ## 5. Current Accepted Artifact Summary
 
@@ -100,8 +100,9 @@ The active startup surface keeps only current-useful accepted facts. Full eviden
 | Review-artifact residual acceptance planning | Controller / artifact owners | Plan accepted at `f87edb5`; evidence gate deferred by user-directed sequencing | Accepted planning checkpoint; release/readiness remains `NOT_READY` |
 | Review-artifact residual acceptance evidence | Controller / artifact owners | Deferred residual acceptance evidence gate | Deferred; not current mainline |
 | EID source provenance implementation closeout | Fund/source provenance owner + controller | Closed by `12f506f`; Source Provenance v2 wording synced in design/README | Accepted closeout checkpoint |
-| Multi-year annual analysis productization | Product/Service/Fund owner + controller | Implementation accepted at `61ab780`; DS review accepted after follow-up, MiMo review accepted | Accepted with residuals; live annual-period evidence and narrative writer/reporting are deferred |
-| Controlled live 2021-2025 annual-period evidence | Controller / future evidence owner | Execution gate using accepted plan `docs/reviews/mvp-controlled-live-2021-2025-annual-period-evidence-plan-20260611.md` | Planning accepted at `4f8908b`; execution still requires separate controlled-live opening |
+| Multi-year annual analysis productization | Product/Service/Fund owner + controller | Implementation accepted at `61ab780`; DS review accepted after follow-up, MiMo review accepted | Accepted with residuals; narrative writer/reporting is deferred |
+| Controlled live 2021-2025 annual-period evidence | Controller / evidence owner | Execution accepted at `271a052`; evidence in `docs/reviews/mvp-controlled-live-2021-2025-annual-period-evidence-execution-evidence-20260611.md` | Accepted for single sample `004393`; additional samples/readiness remain deferred |
+| Multi-year annual narrative writer/reporting | Product/reporting owner | Planning gate | Recommended next mainline |
 | Any discovered design/control inconsistency | Controller/design owner | Separate design-truth-sync gate | Must be recorded as residual; `docs/design.md` remains untouched in this gate |
 | Live EID/provider/extractor/golden/readiness/release work | Corresponding gate owner | Separate reviewed gate with explicit authorization | Not authorized here |
 
@@ -111,4 +112,4 @@ The active startup surface keeps only current-useful accepted facts. Full eviden
 2. Read `docs/implementation-control.md` for current control truth.
 3. Use the accepted artifact and historical ledger indexes for evidence-chain reconstruction.
 4. Do not use arbitrary untracked residue as proof.
-5. Next mainline is the separately opened controlled live 2021-2025 annual-period evidence execution gate after accepted planning checkpoint `4f8908b`. Do not claim readiness, push, PR, run live/provider/EID/PDF/FDR/analyze/checklist/golden/release commands, read report/PDF contents, or clean residue until that controlled-live execution gate is explicitly opened.
+5. Next mainline is multi-year annual narrative writer/reporting planning after accepted live evidence checkpoint `271a052`. Do not claim readiness, push, PR, run additional live/provider/EID/PDF/FDR/analyze/checklist/golden/release commands, read report/PDF contents, or clean residue unless a reviewed follow-up gate explicitly authorizes it.
