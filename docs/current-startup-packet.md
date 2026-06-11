@@ -20,11 +20,11 @@ Purpose: short resume entry for the `MVP typed-template-to-agent report generati
 | Field | State |
 |---|---|
 | Current phase | `MVP typed-template-to-agent report generation stabilization phase` |
-| Current active gate | `Runtime artifact disposition / ignore-rule planning gate` |
-| Gate classification | `standard` |
-| Current accepted checkpoint | Runtime artifact disposition / ignore-rule plan accepted locally at `b4ab635` by controller judgment `docs/reviews/mvp-runtime-artifact-disposition-ignore-rule-plan-controller-judgment-20260611-145413.md` |
-| Implementation status | Plan accepted; implementation/disposition not started. Untracked residue remains unaccepted as proof, release evidence or source truth |
-| Next entry point | Runtime artifact disposition / ignore-rule implementation/disposition gate under accepted plan; do not clean, delete, move, archive, ignore, stage, promote, edit `.gitignore` or treat runtime artifacts as evidence without accepted implementation scope and required authorization |
+| Current active gate | `Release-readiness cleanliness gate` |
+| Gate classification | `heavy` |
+| Current accepted checkpoint | Runtime artifact disposition / ignore-rule implementation accepted locally at `6bef193` by controller judgment `docs/reviews/mvp-runtime-artifact-disposition-ignore-rule-implementation-controller-judgment-20260611-150616.md` |
+| Implementation status | Non-destructive runtime artifact disposition evidence accepted; residue groups have owners/next gates/blocker status, but untracked residue remains visible and unaccepted as release evidence |
+| Next entry point | Plan the `Release-readiness cleanliness gate`; do not claim readiness, push, PR, run live/provider/EID/PDF/FDR/analyze/checklist/golden/release commands, or clean residue without accepted readiness plan |
 | Control truth | `docs/implementation-control.md` |
 | Design truth | `docs/design.md` |
 | Template truth | `docs/fund-analysis-template-draft.md` canonical `TEMPLATE_CONTRACT_MANIFEST_JSON` |
@@ -43,11 +43,11 @@ Purpose: short resume entry for the `MVP typed-template-to-agent report generati
 
 ## 4. Current Gate Scope
 
-The current entry is implementation/disposition planning follow-through for `Runtime artifact disposition / ignore-rule gate` under accepted plan checkpoint `b4ab635`. No cleanup, ignore-rule edit, archive, delete, promotion or release-readiness status change has been performed yet.
+The current entry is planning for `Release-readiness cleanliness gate`. No release/readiness status change, PR action, cleanup, ignore-rule edit, archive, delete or promotion is accepted yet.
 
-Allowed controller writes before implementation acceptance:
+Allowed controller writes before plan acceptance:
 
-- implementation/evidence / review / controller judgment artifacts under `docs/reviews/`
+- planning / review / controller judgment artifacts under `docs/reviews/`
 - this startup packet and `docs/implementation-control.md` only for controller status sync
 
 Still explicitly out of scope unless a future reviewed gate authorizes it:
@@ -86,7 +86,8 @@ The active startup surface keeps only current-useful accepted facts. Full eviden
 | Source provenance design/README wording drift (`mode` vs `source_mode`) | Design/controller owner | Separate design-truth-sync or documentation consistency gate | Does not block accepted EID implementation |
 | LLM execution request validation ordering | Service/LLM execution owner | Closed by `336081e`; LLM path parity with deterministic `_validate_request()` remains separate | Accepted for current implementation |
 | UI-Service-Host boundary reconciliation | Service/Host boundary owner | Closed by `8ff20ed`; residual future Host/Agent expansion remains separate | Accepted for current implementation |
-| Runtime artifact disposition / ignore-rule planning | Controller / artifact owners | Plan accepted at `b4ab635`; implementation/disposition not started | Active mainline gate |
+| Runtime artifact disposition / ignore-rule planning | Controller / artifact owners | Closed by `6bef193`; residue remains visible with owners/next gates | Accepted for current non-destructive disposition |
+| Release-readiness cleanliness | Release owner / controller | Release-readiness cleanliness gate | Next mainline gate |
 | Any discovered design/control inconsistency | Controller/design owner | Separate design-truth-sync gate | Must be recorded as residual; `docs/design.md` remains untouched in this gate |
 | Live EID/provider/extractor/golden/readiness/release work | Corresponding gate owner | Separate reviewed gate with explicit authorization | Not authorized here |
 
@@ -96,4 +97,4 @@ The active startup surface keeps only current-useful accepted facts. Full eviden
 2. Read `docs/implementation-control.md` for current control truth.
 3. Use the accepted artifact and historical ledger indexes for evidence-chain reconstruction.
 4. Do not use arbitrary untracked residue as proof.
-5. Next mainline is runtime artifact disposition / ignore-rule implementation/disposition under accepted plan `b4ab635`. Do not clean, delete, move, archive, ignore, stage, promote, edit `.gitignore` or treat runtime artifacts as accepted release evidence without accepted implementation scope and required authorization.
+5. Next mainline is release-readiness cleanliness planning. Do not claim readiness, push, PR, run live/provider/EID/PDF/FDR/analyze/checklist/golden/release commands, or clean residue without accepted readiness plan.
