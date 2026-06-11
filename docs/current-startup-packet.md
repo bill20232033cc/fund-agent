@@ -20,11 +20,11 @@ Purpose: short resume entry for the `MVP typed-template-to-agent report generati
 | Field | State |
 |---|---|
 | Current phase | `MVP typed-template-to-agent report generation stabilization phase` |
-| Current active gate | `release-readiness residual/artifact disposition planning gate` |
-| Gate classification | `standard`; planning only, non-live, non-destructive, no PR/release external state |
-| Current accepted checkpoint | Multi-year annual narrative writer/reporting implementation accepted locally at `b3254b3` by controller judgment `docs/reviews/mvp-multi-year-annual-narrative-writer-reporting-implementation-controller-judgment-20260612-002524.md`; release/readiness result remains `NOT_READY` |
-| Implementation status | EID Source Provenance v2 wording is accepted. Multi-year annual analysis productization is implemented as deterministic product capability: Service request/result, Fund annual evidence bundle, Chapter 5 projection, CLI `analyze-annual-period` and Fund-owned deterministic annual-period report renderer. Controlled live evidence for `004393 / 2021-2025` is accepted as a single-sample EID single-source/no-fallback evidence fact. Annual-period narrative writer/reporting is implemented and accepted; additional live samples/readiness remain deferred |
-| Next entry point | Planning worker for release-readiness residual/artifact disposition. Controlled live annual-period narrative evidence is a separate explicitly authorized gate |
+| Current active gate | `Review-artifact residual acceptance evidence gate` |
+| Gate classification | `standard`; evidence only, non-live, non-destructive, no PR/release external state |
+| Current accepted checkpoint | Release-readiness residual/artifact disposition planning accepted locally at `1edf06b` by controller judgment `docs/reviews/mvp-release-readiness-residual-artifact-disposition-plan-controller-judgment-20260612-004107.md`; release/readiness result remains `NOT_READY` |
+| Implementation status | EID Source Provenance v2 wording is accepted. Multi-year annual analysis productization is implemented as deterministic product capability: Service request/result, Fund annual evidence bundle, Chapter 5 projection, CLI `analyze-annual-period` and Fund-owned deterministic annual-period report renderer. Controlled live evidence for `004393 / 2021-2025` is accepted as a single-sample EID single-source/no-fallback evidence fact. Annual-period narrative writer/reporting is implemented and accepted. Release-readiness residual/artifact disposition planning is accepted; Stage A evidence is not started |
+| Next entry point | Evidence worker for `Review-artifact residual acceptance evidence gate`. Controlled live annual-period narrative evidence is a separate explicitly authorized gate |
 | Control truth | `docs/implementation-control.md` |
 | Design truth | `docs/design.md` |
 | Template truth | `docs/fund-analysis-template-draft.md` canonical `TEMPLATE_CONTRACT_MANIFEST_JSON` |
@@ -44,7 +44,7 @@ Purpose: short resume entry for the `MVP typed-template-to-agent report generati
 
 ## 4. Current Gate Scope
 
-The implementation checkpoint `61ab780` accepted the no-live formal 2021-2025 annual-report analysis capability from `docs/reviews/mvp-multi-year-annual-analysis-productization-plan-20260611.md`, replacing manual five single-year runs plus manual merge with an explicit typed product path. The controlled-live execution checkpoint `271a052` accepted `004393 / 2021-2025` as a bounded live EID single-source/no-fallback evidence fact for the current product path. The planning checkpoint `8682859` accepted `docs/reviews/mvp-multi-year-annual-narrative-writer-reporting-plan-20260611.md` as the implementation plan for formal deterministic annual-period narrative/reporting. The implementation checkpoint `b3254b3` accepted the formal deterministic annual-period report body and explicit `annual_period_report` result field.
+The implementation checkpoint `61ab780` accepted the no-live formal 2021-2025 annual-report analysis capability from `docs/reviews/mvp-multi-year-annual-analysis-productization-plan-20260611.md`, replacing manual five single-year runs plus manual merge with an explicit typed product path. The controlled-live execution checkpoint `271a052` accepted `004393 / 2021-2025` as a bounded live EID single-source/no-fallback evidence fact for the current product path. The planning checkpoint `8682859` accepted `docs/reviews/mvp-multi-year-annual-narrative-writer-reporting-plan-20260611.md` as the implementation plan for formal deterministic annual-period narrative/reporting. The implementation checkpoint `b3254b3` accepted the formal deterministic annual-period report body and explicit `annual_period_report` result field. The planning checkpoint `1edf06b` accepted the non-live release-readiness residual/artifact disposition plan and routes the mainline to `Review-artifact residual acceptance evidence gate`.
 
 Accepted implementation scope:
 
@@ -58,6 +58,7 @@ Accepted implementation scope:
 - targeted deterministic tests and README updates triggered by actual source changes
 - implementation evidence / review / controller judgment artifacts under `docs/reviews/`
 - this startup packet, `docs/design.md` and `docs/implementation-control.md` for truth-doc sync
+- release-readiness residual/artifact disposition plan, DS/MiMo reviews and controller judgment under `docs/reviews/`
 
 Still explicitly out of scope unless a future reviewed gate authorizes it:
 
@@ -101,7 +102,8 @@ The active startup surface keeps only current-useful accepted facts. Full eviden
 | Release-readiness blocker disposition planning | Release owner / controller | Plan accepted at `e41981a`; routes first evidence gate to review-artifact provenance | Accepted planning checkpoint |
 | Review-artifact provenance disposition evidence | Controller / artifact owners | Evidence accepted at `9e0e540`; no path accepted as current/historical chain; result remains `NOT_READY` | Accepted evidence checkpoint |
 | Review-artifact residual acceptance planning | Controller / artifact owners | Plan accepted at `f87edb5`; evidence gate deferred by user-directed sequencing | Accepted planning checkpoint; release/readiness remains `NOT_READY` |
-| Review-artifact residual acceptance evidence | Controller / artifact owners | Deferred residual acceptance evidence gate | Deferred; not current mainline |
+| Release-readiness residual/artifact disposition planning | Controller / artifact owners | Plan accepted at `1edf06b`; DS/MiMo reviews complete; controller judgment `ACCEPT_WITH_NONBLOCKING_AMENDMENTS` | Accepted planning checkpoint; release/readiness remains `NOT_READY` |
+| Review-artifact residual acceptance evidence | Controller / artifact owners | Evidence gate under accepted plan `docs/reviews/mvp-release-readiness-residual-artifact-disposition-plan-20260612.md` | Current mainline |
 | EID source provenance implementation closeout | Fund/source provenance owner + controller | Closed by `12f506f`; Source Provenance v2 wording synced in design/README | Accepted closeout checkpoint |
 | Multi-year annual analysis productization | Product/Service/Fund owner + controller | Implementation accepted at `61ab780`; DS review accepted after follow-up, MiMo review accepted | Accepted with residuals; formal narrative/reporting implementation accepted separately at `b3254b3` |
 | Controlled live 2021-2025 annual-period evidence | Controller / evidence owner | Execution accepted at `271a052`; evidence in `docs/reviews/mvp-controlled-live-2021-2025-annual-period-evidence-execution-evidence-20260611.md` | Accepted for single sample `004393`; additional samples/readiness remain deferred |
@@ -115,4 +117,4 @@ The active startup surface keeps only current-useful accepted facts. Full eviden
 2. Read `docs/implementation-control.md` for current control truth.
 3. Use the accepted artifact and historical ledger indexes for evidence-chain reconstruction.
 4. Do not use arbitrary untracked residue as proof.
-5. Next mainline is release-readiness residual/artifact disposition planning after accepted implementation checkpoint `b3254b3`. Do not claim readiness, push, PR, run additional live/provider/EID/PDF/FDR/analyze/checklist/golden/release commands, read report/PDF contents, or clean residue unless a reviewed follow-up gate explicitly authorizes it.
+5. Next mainline is `Review-artifact residual acceptance evidence gate` after accepted planning checkpoint `1edf06b`. Do not claim readiness, push, PR, run additional live/provider/EID/PDF/FDR/analyze/checklist/golden/release commands, read report/PDF contents, or clean residue unless a reviewed follow-up gate explicitly authorizes it.
