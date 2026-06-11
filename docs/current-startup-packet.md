@@ -20,11 +20,11 @@ Purpose: short resume entry for the `MVP typed-template-to-agent report generati
 | Field | State |
 |---|---|
 | Current phase | `MVP typed-template-to-agent report generation stabilization phase` |
-| Current active gate | `Review-artifact provenance disposition evidence gate` |
+| Current active gate | `Review-artifact residual acceptance planning gate` |
 | Gate classification | `heavy` |
-| Current accepted checkpoint | Release-readiness blocker disposition plan accepted locally at `e41981a` by controller judgment `docs/reviews/mvp-release-readiness-blocker-disposition-plan-controller-judgment-20260611-155001.md` |
-| Implementation status | Blocker disposition routing plan accepted. Release-readiness cleanliness remains `NOT_READY`; no cleanup, `.gitignore`, archive/delete/move, promotion, user-owned data disposition, PR/release action, live command or readiness claim is accepted |
-| Next entry point | Execute `Review-artifact provenance disposition evidence gate` for currently visible untracked `docs/reviews/*.md` / `*.json` and `docs/audit/`, using metadata/status and accepted-control references only |
+| Current accepted checkpoint | Review-artifact provenance disposition evidence accepted locally at `9e0e540` by controller judgment `docs/reviews/mvp-review-artifact-provenance-disposition-evidence-controller-judgment-20260611-160126.md`; result remains `NOT_READY` |
+| Implementation status | Path-level provenance/disposition evidence accepted for untracked `docs/reviews/*` / `docs/audit/`. No target path was accepted as current or historical chain; blocker narrowed but not resolved |
+| Next entry point | Plan `Review-artifact residual acceptance planning gate`; decide whether rejected/deferred/user-or-controller-decision review/audit paths can be accepted as non-release residuals with owners and next gates |
 | Control truth | `docs/implementation-control.md` |
 | Design truth | `docs/design.md` |
 | Template truth | `docs/fund-analysis-template-draft.md` canonical `TEMPLATE_CONTRACT_MANIFEST_JSON` |
@@ -43,12 +43,11 @@ Purpose: short resume entry for the `MVP typed-template-to-agent report generati
 
 ## 4. Current Gate Scope
 
-The current entry is `Review-artifact provenance disposition evidence gate` under accepted blocker-disposition plan checkpoint `e41981a`. No release/readiness status change, PR action, cleanup, ignore-rule edit, archive, delete or promotion is accepted yet.
+The current entry is planning for `Review-artifact residual acceptance planning gate` after accepted provenance evidence checkpoint `9e0e540`. No release/readiness status change, PR action, cleanup, ignore-rule edit, archive, delete or promotion is accepted yet.
 
-Allowed writes under the accepted plan:
+Allowed controller writes before residual-acceptance plan acceptance:
 
-- provenance/disposition evidence artifact under `docs/reviews/` for untracked `docs/reviews/*` / `docs/audit/`
-- later review / controller judgment artifacts under `docs/reviews/`
+- planning / review / controller judgment artifacts under `docs/reviews/`
 - this startup packet and `docs/implementation-control.md` only for controller status sync
 
 Still explicitly out of scope unless a future reviewed gate authorizes it:
@@ -56,7 +55,7 @@ Still explicitly out of scope unless a future reviewed gate authorizes it:
 - `docs/design.md`
 - `.gitignore`
 - source, tests, runtime behavior, reports, PDF/document corpus
-- reviewer or controller artifacts outside the accepted evidence/review write set
+- reviewer or controller artifacts outside the accepted planning/review write set
 - delete, move, archive, clean, ignore, import, stage, promote, commit, push, PR or merge actions
 - live EID/network/PDF/FDR/FundDocumentRepository/helper/fallback/provider/LLM/extractor/analyze/checklist/golden/readiness/score-loop/release commands
 
@@ -91,7 +90,8 @@ The active startup surface keeps only current-useful accepted facts. Full eviden
 | Release-readiness cleanliness planning | Release owner / controller | Plan accepted at `1bbcd19`; evidence gate not started | Accepted planning checkpoint |
 | Release-readiness cleanliness evidence | Release owner / controller | Evidence accepted at `d0d9672`; result `NOT_READY` | Accepted evidence checkpoint; blocks readiness claim |
 | Release-readiness blocker disposition planning | Release owner / controller | Plan accepted at `e41981a`; routes first evidence gate to review-artifact provenance | Accepted planning checkpoint |
-| Review-artifact provenance disposition evidence | Controller / artifact owners | Review-artifact provenance disposition evidence gate | Active mainline gate |
+| Review-artifact provenance disposition evidence | Controller / artifact owners | Evidence accepted at `9e0e540`; no path accepted as current/historical chain; result remains `NOT_READY` | Accepted evidence checkpoint |
+| Review-artifact residual acceptance planning | Controller / artifact owners | Review-artifact residual acceptance planning gate | Active mainline gate |
 | Any discovered design/control inconsistency | Controller/design owner | Separate design-truth-sync gate | Must be recorded as residual; `docs/design.md` remains untouched in this gate |
 | Live EID/provider/extractor/golden/readiness/release work | Corresponding gate owner | Separate reviewed gate with explicit authorization | Not authorized here |
 
@@ -101,4 +101,4 @@ The active startup surface keeps only current-useful accepted facts. Full eviden
 2. Read `docs/implementation-control.md` for current control truth.
 3. Use the accepted artifact and historical ledger indexes for evidence-chain reconstruction.
 4. Do not use arbitrary untracked residue as proof.
-5. Next mainline is review-artifact provenance disposition evidence under accepted plan `e41981a`. Do not claim readiness, push, PR, run live/provider/EID/PDF/FDR/analyze/checklist/golden/release commands, read report/PDF contents, or clean residue.
+5. Next mainline is review-artifact residual acceptance planning after accepted evidence checkpoint `9e0e540`. Do not claim readiness, push, PR, run live/provider/EID/PDF/FDR/analyze/checklist/golden/release commands, read report/PDF contents, or clean residue.
