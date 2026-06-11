@@ -581,7 +581,8 @@ class AnnualReportSourceOrchestrator:
         """初始化来源编排器。
 
         Args:
-            sources: 按优先级排列的年报来源；未提供时使用 EID 主源与 Eastmoney fallback。
+            sources: 年报来源；未提供时仅使用 EID single-source，Eastmoney 不在
+                当前 production fallback 中。
             config: 来源访问配置。
 
         Returns:

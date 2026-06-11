@@ -522,13 +522,23 @@ async def test_data_extractor_projects_primary_source_metadata() -> None:
 
     repository = _FakeRepository(
         _annual_report(
-            source_metadata=AnnualReportSourceMetadata(source="eid", fallback_used=False)
+            source_metadata=AnnualReportSourceMetadata(
+                source="eid",
+                fallback_used=False,
+                selected_source="eid",
+                source_mode="single_source_only",
+                fallback_enabled=False,
+            )
         )
     )
     extractor = FundDataExtractor(repository=repository, nav_provider=_RecordingNavProvider())
 
     bundle = await extractor.extract("110011", 2024)
 
+    assert bundle.source_provenance.source_strategy == "single_source_only"
+    assert bundle.source_provenance.selected_source == "eid"
+    assert bundle.source_provenance.source_mode == "single_source_only"
+    assert bundle.source_provenance.fallback_enabled is False
     assert bundle.source_provenance.resolved_source_name == "eid"
     assert bundle.source_provenance.fallback_used is False
     assert bundle.source_provenance.fallback_eligibility == "not_applicable"
@@ -558,6 +568,10 @@ async def test_data_extractor_projects_fallback_metadata_as_unknown_when_categor
 
     bundle = await extractor.extract("110011", 2024)
 
+    assert bundle.source_provenance.source_strategy == "legacy_or_unknown"
+    assert bundle.source_provenance.selected_source is None
+    assert bundle.source_provenance.source_mode == "legacy_or_unknown"
+    assert bundle.source_provenance.fallback_enabled is None
     assert bundle.source_provenance.resolved_source_name == "eastmoney"
     assert bundle.source_provenance.fallback_used is True
     assert bundle.source_provenance.primary_failure_category is None
@@ -592,6 +606,10 @@ async def test_data_extractor_projects_metadata_primary_failure_category() -> No
 
     bundle = await extractor.extract("110011", 2024)
 
+    assert bundle.source_provenance.source_strategy == "legacy_or_unknown"
+    assert bundle.source_provenance.selected_source is None
+    assert bundle.source_provenance.source_mode == "legacy_or_unknown"
+    assert bundle.source_provenance.fallback_enabled is None
     assert bundle.source_provenance.resolved_source_name == "eastmoney"
     assert bundle.source_provenance.fallback_used is True
     assert bundle.source_provenance.primary_failure_category == "not_found"

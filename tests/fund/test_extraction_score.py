@@ -55,8 +55,11 @@ _SCORE_JSON_TOP_LEVEL_KEYS = {
     "correctness",
 }
 _PUBLIC_SOURCE_PROVENANCE_PAYLOAD = {
-    "source_provenance_schema_version": "repository_source_provenance.v1",
-    "source_strategy": "primary_then_fallback",
+    "source_provenance_schema_version": "repository_source_provenance.v2",
+    "source_strategy": "legacy_or_unknown",
+    "selected_source": None,
+    "source_mode": "legacy_or_unknown",
+    "fallback_enabled": None,
     "resolved_source_name": "eastmoney",
     "fallback_used": True,
     "primary_failure_category": None,

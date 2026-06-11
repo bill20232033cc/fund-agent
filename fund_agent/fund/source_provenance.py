@@ -11,8 +11,9 @@ from typing import Final, Literal
 
 from fund_agent.fund.documents.models import AnnualReportSourceMetadata
 
-PUBLIC_SOURCE_PROVENANCE_SCHEMA_VERSION: Final[str] = "repository_source_provenance.v1"
-DEFAULT_SOURCE_STRATEGY: Final[str] = "primary_then_fallback"
+PUBLIC_SOURCE_PROVENANCE_SCHEMA_VERSION: Final[str] = "repository_source_provenance.v2"
+CURRENT_SOURCE_STRATEGY: Final[str] = "single_source_only"
+LEGACY_OR_UNKNOWN_SOURCE_STRATEGY: Final[str] = "legacy_or_unknown"
 SOURCE_PROVENANCE_REASON_SOURCE_METADATA_ABSENT: Final[str] = (
     "source_metadata_absent_no_fallback_evidence"
 )
@@ -27,8 +28,10 @@ SOURCE_PROVENANCE_REASON_FALLBACK_FAIL_CLOSED: Final[str] = (
     "fallback_used_primary_failure_category_fail_closed"
 )
 
-SourceStrategy = Literal["primary_then_fallback"]
+SourceStrategy = Literal["single_source_only", "legacy_or_unknown"]
 ResolvedSourceName = Literal["eid", "eastmoney"]
+SelectedSourceName = Literal["eid", "eastmoney"]
+SourceMode = Literal["single_source_only", "legacy_or_unknown"]
 PrimaryFailureCategory = Literal[
     "not_found",
     "unavailable",
@@ -58,7 +61,11 @@ class PublicSourceProvenance:
 
     Attributes:
         source_provenance_schema_version: 公共 provenance schema 版本。
-        source_strategy: 公共来源策略标签；v1 仅描述当前主源后 fallback 策略，不开放策略面。
+        source_strategy: 兼容字段；当前等同于 `source_mode`，不是来源获取策略或
+            fallback 授权。
+        selected_source: 当前来源策略选中的来源；缺失元数据或旧元数据时为 `None`。
+        source_mode: 当前公共来源模式；旧元数据缺失策略字段时为 `legacy_or_unknown`。
+        fallback_enabled: 当前来源策略是否启用 fallback；旧元数据缺失时为 `None`。
         resolved_source_name: 仓库元数据解析出的公开来源名。
         fallback_used: 本次成功年报是否来自 fallback 来源。
         primary_failure_category: 主来源失败分类；只来自仓库元数据或显式测试覆盖。
@@ -69,6 +76,9 @@ class PublicSourceProvenance:
 
     source_provenance_schema_version: str
     source_strategy: SourceStrategy
+    selected_source: SelectedSourceName | None
+    source_mode: SourceMode
+    fallback_enabled: bool | None
     resolved_source_name: ResolvedSourceName | None
     fallback_used: bool
     primary_failure_category: PrimaryFailureCategory | None
@@ -92,7 +102,10 @@ def default_public_source_provenance() -> PublicSourceProvenance:
 
     return PublicSourceProvenance(
         source_provenance_schema_version=PUBLIC_SOURCE_PROVENANCE_SCHEMA_VERSION,
-        source_strategy="primary_then_fallback",
+        source_strategy=LEGACY_OR_UNKNOWN_SOURCE_STRATEGY,
+        selected_source=None,
+        source_mode=LEGACY_OR_UNKNOWN_SOURCE_STRATEGY,
+        fallback_enabled=None,
         resolved_source_name=None,
         fallback_used=False,
         primary_failure_category=None,
@@ -124,10 +137,17 @@ def project_public_source_provenance(
         return default_public_source_provenance()
 
     resolved_source_name = _resolved_source_name(source_metadata.source)
+    selected_source = _selected_source_name(source_metadata.selected_source)
+    source_mode = _source_mode(source_metadata.source_mode)
+    fallback_enabled = _fallback_enabled(source_metadata.fallback_enabled)
+    source_strategy = source_mode
     if not source_metadata.fallback_used:
         return PublicSourceProvenance(
             source_provenance_schema_version=PUBLIC_SOURCE_PROVENANCE_SCHEMA_VERSION,
-            source_strategy="primary_then_fallback",
+            source_strategy=source_strategy,
+            selected_source=selected_source,
+            source_mode=source_mode,
+            fallback_enabled=fallback_enabled,
             resolved_source_name=resolved_source_name,
             fallback_used=False,
             primary_failure_category=None,
@@ -145,7 +165,10 @@ def project_public_source_provenance(
     if effective_category in _ELIGIBLE_FAILURE_CATEGORIES:
         return PublicSourceProvenance(
             source_provenance_schema_version=PUBLIC_SOURCE_PROVENANCE_SCHEMA_VERSION,
-            source_strategy="primary_then_fallback",
+            source_strategy=source_strategy,
+            selected_source=selected_source,
+            source_mode=source_mode,
+            fallback_enabled=fallback_enabled,
             resolved_source_name=resolved_source_name,
             fallback_used=True,
             primary_failure_category=effective_category,
@@ -156,7 +179,10 @@ def project_public_source_provenance(
     if effective_category in _FAIL_CLOSED_FAILURE_CATEGORIES:
         return PublicSourceProvenance(
             source_provenance_schema_version=PUBLIC_SOURCE_PROVENANCE_SCHEMA_VERSION,
-            source_strategy="primary_then_fallback",
+            source_strategy=source_strategy,
+            selected_source=selected_source,
+            source_mode=source_mode,
+            fallback_enabled=fallback_enabled,
             resolved_source_name=resolved_source_name,
             fallback_used=True,
             primary_failure_category=effective_category,
@@ -166,7 +192,10 @@ def project_public_source_provenance(
         )
     return PublicSourceProvenance(
         source_provenance_schema_version=PUBLIC_SOURCE_PROVENANCE_SCHEMA_VERSION,
-        source_strategy="primary_then_fallback",
+        source_strategy=source_strategy,
+        selected_source=selected_source,
+        source_mode=source_mode,
+        fallback_enabled=fallback_enabled,
         resolved_source_name=resolved_source_name,
         fallback_used=True,
         primary_failure_category=None,
@@ -207,4 +236,58 @@ def _resolved_source_name(source_name: object) -> ResolvedSourceName | None:
 
     if source_name in {"eid", "eastmoney"}:
         return source_name  # type: ignore[return-value]
+    return None
+
+
+def _selected_source_name(source_name: object) -> SelectedSourceName | None:
+    """把策略选中来源限制在公共稳定枚举内。
+
+    Args:
+        source_name: 仓库来源元数据中的 `selected_source`。
+
+    Returns:
+        `eid`、`eastmoney` 或 `None`；不会从 resolved source 间接推断。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if source_name in {"eid", "eastmoney"}:
+        return source_name  # type: ignore[return-value]
+    return None
+
+
+def _source_mode(source_mode: object) -> SourceMode:
+    """投影公共来源模式。
+
+    Args:
+        source_mode: 仓库来源元数据中的 `source_mode`。
+
+    Returns:
+        当前 `single_source_only` 或旧元数据的 `legacy_or_unknown`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if source_mode == CURRENT_SOURCE_STRATEGY:
+        return CURRENT_SOURCE_STRATEGY
+    return LEGACY_OR_UNKNOWN_SOURCE_STRATEGY
+
+
+def _fallback_enabled(fallback_enabled: object) -> bool | None:
+    """投影公共 fallback 开关。
+
+    Args:
+        fallback_enabled: 仓库来源元数据中的 `fallback_enabled`。
+
+    Returns:
+        布尔值；旧元数据缺失时为 `None`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if isinstance(fallback_enabled, bool):
+        return fallback_enabled
     return None
