@@ -20,11 +20,11 @@ Purpose: short resume entry for the `MVP typed-template-to-agent report generati
 | Field | State |
 |---|---|
 | Current phase | `MVP typed-template-to-agent report generation stabilization phase` |
-| Current active gate | `multi-year annual narrative writer/reporting planning gate` |
-| Gate classification | `standard` unless the accepted plan expands writer/reporting behavior beyond docs/planning |
-| Current accepted checkpoint | Controlled live 2021-2025 annual-period evidence execution accepted locally at `271a052` by controller judgment `docs/reviews/mvp-controlled-live-2021-2025-annual-period-evidence-execution-controller-judgment-20260611-231045.md`; release/readiness result remains `NOT_READY` |
-| Implementation status | EID Source Provenance v2 wording is accepted. Multi-year annual analysis productization is implemented as deterministic product capability: Service request/result, Fund annual evidence bundle, Chapter 5 projection and CLI `analyze-annual-period`. Controlled live evidence for `004393 / 2021-2025` is accepted as a single-sample EID single-source/no-fallback evidence fact |
-| Next entry point | Planning worker for multi-year annual narrative writer/reporting. Do not enter implementation until a reviewed plan is accepted |
+| Current active gate | `multi-year annual narrative writer/reporting implementation gate` |
+| Gate classification | `heavy` because the accepted plan changes user-facing `analyze-annual-period` report output |
+| Current accepted checkpoint | Multi-year annual narrative writer/reporting planning accepted locally at `8682859` by controller judgment `docs/reviews/mvp-multi-year-annual-narrative-writer-reporting-plan-controller-judgment-20260611-233310.md`; release/readiness result remains `NOT_READY` |
+| Implementation status | EID Source Provenance v2 wording is accepted. Multi-year annual analysis productization is implemented as deterministic product capability: Service request/result, Fund annual evidence bundle, Chapter 5 projection and CLI `analyze-annual-period`. Controlled live evidence for `004393 / 2021-2025` is accepted as a single-sample EID single-source/no-fallback evidence fact. Annual-period narrative writer/reporting is planned and accepted, not yet implemented |
+| Next entry point | Implementation worker for accepted multi-year annual narrative writer/reporting plan. No live/provider/LLM/source-policy/release work is authorized in this gate |
 | Control truth | `docs/implementation-control.md` |
 | Design truth | `docs/design.md` |
 | Template truth | `docs/fund-analysis-template-draft.md` canonical `TEMPLATE_CONTRACT_MANIFEST_JSON` |
@@ -44,7 +44,7 @@ Purpose: short resume entry for the `MVP typed-template-to-agent report generati
 
 ## 4. Current Gate Scope
 
-The implementation checkpoint `61ab780` has accepted the no-live formal 2021-2025 annual-report analysis capability from `docs/reviews/mvp-multi-year-annual-analysis-productization-plan-20260611.md`, replacing manual five single-year runs plus manual merge with an explicit typed product path. The controlled-live execution checkpoint `271a052` accepted `004393 / 2021-2025` as a bounded live EID single-source/no-fallback evidence fact for the current product path.
+The implementation checkpoint `61ab780` has accepted the no-live formal 2021-2025 annual-report analysis capability from `docs/reviews/mvp-multi-year-annual-analysis-productization-plan-20260611.md`, replacing manual five single-year runs plus manual merge with an explicit typed product path. The controlled-live execution checkpoint `271a052` accepted `004393 / 2021-2025` as a bounded live EID single-source/no-fallback evidence fact for the current product path. The planning checkpoint `8682859` accepted `docs/reviews/mvp-multi-year-annual-narrative-writer-reporting-plan-20260611.md` as the implementation plan for formal deterministic annual-period narrative/reporting.
 
 Accepted implementation scope:
 
@@ -60,7 +60,7 @@ Still explicitly out of scope unless a future reviewed gate authorizes it:
 
 - `.gitignore`
 - reports, PDF/document corpus
-- source/test/runtime behavior outside the accepted multi-year productization plan
+- source/test/runtime behavior outside the accepted annual narrative writer/reporting implementation plan
 - reviewer or controller artifacts outside the accepted implementation/review write set
 - delete, move, archive, clean, ignore, import, stage, promote, commit, push, PR or merge actions
 - additional live EID/network/PDF/FDR/FundDocumentRepository/helper/fallback/provider/LLM/extractor/analyze/checklist/golden/readiness/score-loop/release commands beyond the accepted `004393 / 2021-2025` evidence run
@@ -102,7 +102,7 @@ The active startup surface keeps only current-useful accepted facts. Full eviden
 | EID source provenance implementation closeout | Fund/source provenance owner + controller | Closed by `12f506f`; Source Provenance v2 wording synced in design/README | Accepted closeout checkpoint |
 | Multi-year annual analysis productization | Product/Service/Fund owner + controller | Implementation accepted at `61ab780`; DS review accepted after follow-up, MiMo review accepted | Accepted with residuals; narrative writer/reporting is deferred |
 | Controlled live 2021-2025 annual-period evidence | Controller / evidence owner | Execution accepted at `271a052`; evidence in `docs/reviews/mvp-controlled-live-2021-2025-annual-period-evidence-execution-evidence-20260611.md` | Accepted for single sample `004393`; additional samples/readiness remain deferred |
-| Multi-year annual narrative writer/reporting | Product/reporting owner | Planning gate | Recommended next mainline |
+| Multi-year annual narrative writer/reporting | Product/reporting owner | Implementation gate under accepted plan `docs/reviews/mvp-multi-year-annual-narrative-writer-reporting-plan-20260611.md` | Current mainline |
 | Any discovered design/control inconsistency | Controller/design owner | Separate design-truth-sync gate | Must be recorded as residual; `docs/design.md` remains untouched in this gate |
 | Live EID/provider/extractor/golden/readiness/release work | Corresponding gate owner | Separate reviewed gate with explicit authorization | Not authorized here |
 
@@ -112,4 +112,4 @@ The active startup surface keeps only current-useful accepted facts. Full eviden
 2. Read `docs/implementation-control.md` for current control truth.
 3. Use the accepted artifact and historical ledger indexes for evidence-chain reconstruction.
 4. Do not use arbitrary untracked residue as proof.
-5. Next mainline is multi-year annual narrative writer/reporting planning after accepted live evidence checkpoint `271a052`. Do not claim readiness, push, PR, run additional live/provider/EID/PDF/FDR/analyze/checklist/golden/release commands, read report/PDF contents, or clean residue unless a reviewed follow-up gate explicitly authorizes it.
+5. Next mainline is multi-year annual narrative writer/reporting implementation after accepted planning checkpoint `8682859`. Do not claim readiness, push, PR, run additional live/provider/EID/PDF/FDR/analyze/checklist/golden/release commands, read report/PDF contents, or clean residue unless a reviewed follow-up gate explicitly authorizes it.
