@@ -6,7 +6,7 @@
 > **设计真源**: `docs/design.md`
 > **控制真源**: `docs/implementation-control.md`
 > **短启动入口**: `docs/current-startup-packet.md`
-> **当前状态**: `MVP typed-template-to-agent report generation stabilization phase`。`Control-doc compression / artifact hygiene implementation gate` 已在本地 checkpoint `693638b` 接受，controller verdict 为 `ACCEPT_WITH_REVIEW_CHANNEL_RESIDUAL`。`Source-like residue ownership implementation gate for fund_agent/tools` 已在本地 checkpoint `11040bd` 接受，controller verdict 为 `ACCEPT`。`EID source provenance truth alignment gate` 已在本地 checkpoint `2cee618` 接受，controller verdict 为 `ACCEPT_WITH_RESIDUALS`。`LLM execution request validation ordering gate` 已在本地 checkpoint `336081e` 接受，controller verdict 为 `ACCEPT_WITH_RESIDUALS`。`UI-Service-Host boundary reconciliation gate` 已在本地 checkpoint `8ff20ed` 接受，controller verdict 为 `ACCEPT_WITH_RESIDUALS`；当前推荐主线入口是 `Runtime artifact disposition / ignore-rule planning gate`。
+> **当前状态**: `MVP typed-template-to-agent report generation stabilization phase`。`Control-doc compression / artifact hygiene implementation gate` 已在本地 checkpoint `693638b` 接受，controller verdict 为 `ACCEPT_WITH_REVIEW_CHANNEL_RESIDUAL`。`Source-like residue ownership implementation gate for fund_agent/tools` 已在本地 checkpoint `11040bd` 接受，controller verdict 为 `ACCEPT`。`EID source provenance truth alignment gate` 已在本地 checkpoint `2cee618` 接受，controller verdict 为 `ACCEPT_WITH_RESIDUALS`。`LLM execution request validation ordering gate` 已在本地 checkpoint `336081e` 接受，controller verdict 为 `ACCEPT_WITH_RESIDUALS`。`UI-Service-Host boundary reconciliation gate` 已在本地 checkpoint `8ff20ed` 接受，controller verdict 为 `ACCEPT_WITH_RESIDUALS`。`Runtime artifact disposition / ignore-rule planning gate` 已在本地 checkpoint `b4ab635` 接受，controller verdict 为 `ACCEPT_WITH_AMENDMENTS`；当前推荐主线入口是 `Runtime artifact disposition / ignore-rule implementation/disposition gate`。
 
 ---
 
@@ -38,12 +38,12 @@
 
 | Field | State |
 |---|---|
-| Active gate | `Runtime artifact disposition / ignore-rule planning gate` |
+| Active gate | `Runtime artifact disposition / ignore-rule implementation/disposition gate` |
 | Classification | `standard` |
-| Accepted input | UI-Service-Host implementation evidence `docs/reviews/mvp-ui-service-host-boundary-reconciliation-implementation-evidence-20260611.md`; MiMo review `docs/reviews/mvp-ui-service-host-boundary-reconciliation-implementation-review-mimo-20260611-144133.md`; DS review `docs/reviews/mvp-ui-service-host-boundary-reconciliation-implementation-review-ds-20260611-144133.md`; controller judgment `docs/reviews/mvp-ui-service-host-boundary-reconciliation-implementation-controller-judgment-20260611-144133.md` verdict `ACCEPT_WITH_RESIDUALS`; checkpoint `8ff20ed` |
-| Implementation objective | Plan runtime artifact disposition and ignore-rule handling for untracked reports/manual smoke/runtime outputs without treating arbitrary residue as accepted evidence or changing release state |
-| Implementation status | Not started |
-| Next entry point | Planning worker for runtime artifact disposition / ignore-rule planning |
+| Accepted input | Runtime artifact disposition / ignore-rule plan `docs/reviews/mvp-runtime-artifact-disposition-ignore-rule-plan-20260611.md`; MiMo review `docs/reviews/mvp-runtime-artifact-disposition-ignore-rule-plan-review-mimo-20260611-145413.md`; DS review `docs/reviews/mvp-runtime-artifact-disposition-ignore-rule-plan-review-ds-20260611-145413.md`; controller judgment `docs/reviews/mvp-runtime-artifact-disposition-ignore-rule-plan-controller-judgment-20260611-145413.md` verdict `ACCEPT_WITH_AMENDMENTS`; checkpoint `b4ab635` |
+| Implementation objective | Execute accepted disposition plan only where non-destructive and reviewed: classify exact residue, record provenance/residual owners, and defer `.gitignore`, archive, delete, move or promotion unless exact implementation scope and required authorization are accepted |
+| Implementation status | Plan accepted; implementation/disposition not started |
+| Next entry point | Implementation/disposition worker under accepted plan boundaries |
 
 ## Long-run Phaseflow Queue
 
@@ -78,13 +78,13 @@ Deferred entries requiring separate reviewed authorization:
 
 ## Non-goal Reminder
 
-The runtime artifact disposition / ignore-rule planning entry does not authorize:
+The runtime artifact disposition / ignore-rule implementation/disposition entry does not authorize:
 
 - source/test/runtime behavior changes
-- `.gitignore` edits before reviewed disposition plan acceptance
+- `.gitignore` edits before exact implementation scope is accepted
 - `docs/design.md`, README or control-truth changes outside controller status sync
 - reviewer/controller artifact creation or prefill by implementation worker
-- delete, move, archive, clean, ignore, import, stage, promote, commit, push, PR or merge actions
+- delete, move, archive, clean, ignore, import, stage, promote, commit, push, PR or merge actions unless exact action is accepted by the implementation gate and separately authorized where destructive
 - live EID/network/PDF/FDR/FundDocumentRepository/helper/fallback/provider/LLM/extractor/analyze/checklist/golden/readiness/score-loop/release commands
 - provider default changes, runtime budget changes, live provider acceptance, retry/fallback semantics, external PR state, or release-readiness status changes
 - Host durable session/resume/memory/reply outbox, Agent full tool-loop/runtime expansion, UI direct Host/Agent calls, or Service direct source/cache/PDF calls
@@ -118,7 +118,7 @@ The current control surface keeps only gate-family summaries. The evidence-chain
 | Source provenance design/README wording drift (`mode` vs `source_mode`) | accepted residual | Design owner/controller | Separate design-truth-sync or documentation consistency gate; `docs/design.md` was out of scope for EID implementation |
 | LLM execution request validation ordering | accepted; closed for current implementation | Service/LLM execution owner | Closed by `336081e`; LLM path parity with deterministic `_validate_request()` deferred |
 | UI-Service-Host boundary reconciliation | accepted; closed for current implementation | Service/Host boundary owner | Closed by `8ff20ed`; future Host durable and Agent full runtime expansion remain separate |
-| Runtime artifact disposition / ignore-rule planning | active mainline residual | Controller / artifact owners | Plan before any cleanup, ignore-rule edit, archive, delete or release-readiness claim |
+| Runtime artifact disposition / ignore-rule planning | plan accepted at `b4ab635`; implementation/disposition active | Controller / artifact owners | Execute accepted non-destructive disposition scope first; destructive or ignore-rule edits require exact accepted scope and authorization |
 | Deepreview-derived long-run gates | queued residual | Controller / future gate owners | Use `docs/reviews/mvp-long-run-phaseflow-startup-20260611-115345.md`; follow queue order |
 | Any design/control inconsistency discovered later | potential residual | Design owner/controller | Separate design-truth-sync gate; do not modify `docs/design.md` in this gate |
 
@@ -137,6 +137,7 @@ The current control surface keeps only gate-family summaries. The evidence-chain
 | `LLM execution request validation ordering implementation gate` | accepted locally | Implementation evidence, MiMo review, DS review and controller judgment `docs/reviews/mvp-llm-execution-request-validation-ordering-implementation-controller-judgment-20260611-134702.md`; verdict `ACCEPT_WITH_RESIDUALS`; checkpoint `336081e` | UI-Service-Host boundary reconciliation gate |
 | `UI-Service-Host boundary reconciliation planning gate` | accepted locally | Plan, MiMo review, DS review and controller judgment `docs/reviews/mvp-ui-service-host-boundary-reconciliation-plan-controller-judgment-20260611-140916.md`; verdict `ACCEPT_WITH_AMENDMENTS`; checkpoint `d6fe6db` | Implementation worker for accepted write set |
 | `UI-Service-Host boundary reconciliation implementation gate` | accepted locally | Implementation evidence, MiMo review, DS review and controller judgment `docs/reviews/mvp-ui-service-host-boundary-reconciliation-implementation-controller-judgment-20260611-144133.md`; verdict `ACCEPT_WITH_RESIDUALS`; checkpoint `8ff20ed` | Runtime artifact disposition / ignore-rule planning gate |
+| `Runtime artifact disposition / ignore-rule planning gate` | accepted locally | Plan, MiMo review, DS review and controller judgment `docs/reviews/mvp-runtime-artifact-disposition-ignore-rule-plan-controller-judgment-20260611-145413.md`; verdict `ACCEPT_WITH_AMENDMENTS`; checkpoint `b4ab635` | Implementation/disposition worker under accepted plan boundaries |
 
 ## Historical Evidence Index
 
@@ -161,4 +162,4 @@ Historical entries cannot override current phase, current gate, next entry point
 2. Read `AGENTS.md`, `docs/current-startup-packet.md` and this file before choosing any next action.
 3. For historical accepted evidence, use the accepted artifact index and historical ledger index.
 4. Do not run live/provider/extractor/golden/readiness/release commands unless a separate reviewed gate explicitly authorizes them.
-5. Current mainline is runtime artifact disposition / ignore-rule planning. Do not clean, delete, move, archive, ignore, stage, promote, or treat runtime artifacts as accepted release evidence before reviewed disposition plan acceptance.
+5. Current mainline is runtime artifact disposition / ignore-rule implementation/disposition under accepted plan `b4ab635`. Do not clean, delete, move, archive, ignore, stage, promote, edit `.gitignore` or treat runtime artifacts as accepted release evidence without accepted implementation scope and required authorization.
