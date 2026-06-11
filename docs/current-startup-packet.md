@@ -20,17 +20,18 @@ Purpose: short resume entry for the `MVP typed-template-to-agent report generati
 | Field | State |
 |---|---|
 | Current phase | `MVP typed-template-to-agent report generation stabilization phase` |
-| Current active gate | `Source-like residue ownership gate for fund_agent/tools` |
+| Current active gate | `EID source provenance truth alignment gate` |
 | Gate classification | `standard` |
-| Current accepted checkpoint | Control-doc compression / artifact hygiene implementation accepted locally at `693638b` with controller verdict `ACCEPT_WITH_REVIEW_CHANNEL_RESIDUAL` |
-| Implementation status | Control-doc compression / artifact hygiene implementation is accepted; review-channel and worker-channel residuals remain recorded in the controller judgment |
-| Next entry point | Plan the `Source-like residue ownership gate for fund_agent/tools`; do not import, stage, promote, clean or delete the residue without a reviewed gate |
+| Current accepted checkpoint | Source-like residue ownership implementation accepted by controller judgment `docs/reviews/mvp-source-like-residue-ownership-implementation-controller-judgment-20260611-125554.md`; local checkpoint pending |
+| Implementation status | `fund_agent/tools/` source-like residue has been removed from the working tree according to the accepted exact delete set |
+| Next entry point | Plan the `EID source provenance truth alignment gate`; do not change fallback/source acquisition policy, run live EID/PDF/FDR/network commands, or modify source/tests/runtime before reviewed plan acceptance |
 | Control truth | `docs/implementation-control.md` |
 | Design truth | `docs/design.md` |
 | Template truth | `docs/fund-analysis-template-draft.md` canonical `TEMPLATE_CONTRACT_MANIFEST_JSON` |
 | Accepted artifact index | `docs/reviews/mvp-control-doc-compression-accepted-artifact-index-20260611.md` |
 | Historical ledger index | `docs/reviews/mvp-control-doc-compression-historical-ledger-index-20260611.md` |
 | Residue disposition index | `docs/reviews/mvp-control-doc-compression-untracked-residue-disposition-20260611.md` |
+| Long-run phaseflow startup | `docs/reviews/mvp-long-run-phaseflow-startup-20260611-115345.md` |
 
 ## 3. Current Control Truth
 
@@ -80,8 +81,10 @@ The active startup surface keeps only current-useful accepted facts. Full eviden
 |---|---|---|---|
 | Review-channel residual from current gate | Controller / agent setup owner | Re-run init-agents cleanup before next tmux-pane handoff | Does not block accepted checkpoint; affects future handoff reliability |
 | Untracked workspace residue | Controller / artifact owners | Artifact-specific disposition gates listed in residue disposition index | Does not block accepted control-doc compression; blocks release/readiness until accepted disposition |
-| `fund_agent/tools/` source-like residue | Controller + implementation owner | Source-like residue ownership gate | Next mainline gate; blocks release/readiness; not imported/staged/promoted here |
+| `fund_agent/tools/` source-like residue | Controller + implementation owner | Closed; evidence in `docs/reviews/mvp-source-like-residue-ownership-implementation-evidence-20260611.md` | Accepted; no longer blocks release/readiness for this exact residue |
 | Manual smoke reports and PDFs outside accepted evidence chain | User/controller/runtime evidence owner | Runtime/data artifact disposition gates | Blocks release/readiness if unclassified |
+| Deepreview-derived long-run gates | Controller / future gate owners | Phaseflow queue in `docs/reviews/mvp-long-run-phaseflow-startup-20260611-115345.md` | Follow queue order; current active gate is EID source provenance truth alignment |
+| EID public provenance mismatch | Fund/source provenance owner | EID source provenance truth alignment gate | Next mainline gate |
 | Any discovered design/control inconsistency | Controller/design owner | Separate design-truth-sync gate | Must be recorded as residual; `docs/design.md` remains untouched in this gate |
 | Live EID/provider/extractor/golden/readiness/release work | Corresponding gate owner | Separate reviewed gate with explicit authorization | Not authorized here |
 
@@ -91,4 +94,4 @@ The active startup surface keeps only current-useful accepted facts. Full eviden
 2. Read `docs/implementation-control.md` for current control truth.
 3. Use the accepted artifact and historical ledger indexes for evidence-chain reconstruction.
 4. Do not use arbitrary untracked residue as proof.
-5. Do not import, stage, promote, clean or delete `fund_agent/tools/` until the source-like residue ownership gate is reviewed and accepted.
+5. Next mainline is EID source provenance truth alignment planning. Do not reintroduce fallback/source expansion or run live EID/PDF/FDR/network commands in that planning gate.

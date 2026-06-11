@@ -6,7 +6,7 @@
 > **设计真源**: `docs/design.md`
 > **控制真源**: `docs/implementation-control.md`
 > **短启动入口**: `docs/current-startup-packet.md`
-> **当前状态**: `MVP typed-template-to-agent report generation stabilization phase`。`Control-doc compression / artifact hygiene implementation gate` 已在本地 checkpoint `693638b` 接受，controller verdict 为 `ACCEPT_WITH_REVIEW_CHANNEL_RESIDUAL`。当前推荐主线入口是 `Source-like residue ownership gate for fund_agent/tools`。
+> **当前状态**: `MVP typed-template-to-agent report generation stabilization phase`。`Control-doc compression / artifact hygiene implementation gate` 已在本地 checkpoint `693638b` 接受，controller verdict 为 `ACCEPT_WITH_REVIEW_CHANNEL_RESIDUAL`。`Source-like residue ownership implementation gate for fund_agent/tools` 已由 controller judgment `ACCEPT`；当前推荐主线入口是 `EID source provenance truth alignment gate`。
 
 ---
 
@@ -17,6 +17,7 @@
 - Accepted artifact index: `docs/reviews/mvp-control-doc-compression-accepted-artifact-index-20260611.md`
 - Historical ledger index: `docs/reviews/mvp-control-doc-compression-historical-ledger-index-20260611.md`
 - Untracked residue disposition: `docs/reviews/mvp-control-doc-compression-untracked-residue-disposition-20260611.md`
+- Long-run phaseflow startup: `docs/reviews/mvp-long-run-phaseflow-startup-20260611-115345.md`
 
 这些 index 不是设计真源，不覆盖 `AGENTS.md`、`docs/design.md`、`docs/current-startup-packet.md` 或本文档当前控制面。
 
@@ -37,12 +38,34 @@
 
 | Field | State |
 |---|---|
-| Active gate | `Source-like residue ownership gate for fund_agent/tools` |
+| Active gate | `EID source provenance truth alignment gate` |
 | Classification | `standard` |
-| Accepted input | Control-doc compression / artifact hygiene implementation accepted locally at `693638b`; controller judgment `docs/reviews/mvp-control-doc-compression-artifact-hygiene-controller-judgment-20260611.md` verdict `ACCEPT_WITH_REVIEW_CHANNEL_RESIDUAL` |
-| Implementation objective | Plan ownership/disposition for visible source-like residue under `fund_agent/tools/` without import, staging, promotion, cleanup or deletion unless separately accepted |
+| Accepted input | Source-like residue ownership implementation evidence `docs/reviews/mvp-source-like-residue-ownership-implementation-evidence-20260611.md`; MiMo review `docs/reviews/mvp-source-like-residue-ownership-implementation-review-mimo-20260611-125554.md`; DS review `docs/reviews/mvp-source-like-residue-ownership-implementation-review-ds-20260611-125554.md`; controller judgment `docs/reviews/mvp-source-like-residue-ownership-implementation-controller-judgment-20260611-125554.md` verdict `ACCEPT` |
+| Implementation objective | Align public EID source provenance with current EID single-source truth without reintroducing fallback/source expansion or live EID/PDF/FDR/network execution |
 | Implementation status | Not started |
-| Next entry point | Planning worker for source-like residue ownership; read `docs/reviews/mvp-control-doc-compression-untracked-residue-disposition-20260611.md` first |
+| Next entry point | Planning worker for EID source provenance truth alignment |
+
+## Long-run Phaseflow Queue
+
+Controller startup artifact: `docs/reviews/mvp-long-run-phaseflow-startup-20260611-115345.md`.
+
+Recommended mainline order:
+
+1. `Source-like residue ownership gate for fund_agent/tools`
+2. `EID source provenance truth alignment gate`
+3. `LLM execution request validation ordering gate`
+4. `UI-Service-Host boundary reconciliation gate`
+5. `Runtime artifact disposition / ignore-rule planning gate`
+6. `Release-readiness cleanliness gate`
+
+Deferred entries requiring separate reviewed authorization:
+
+- controlled live EID evidence gate
+- live provider / LLM acceptance gate
+- extractor/golden/readiness promotion gates
+- fallback/source expansion design gate
+- full Agent tool-loop/runtime expansion gate
+- durable Host session/resume/memory/outbox gate
 
 ## Accepted Control-doc Compression Write Set
 
@@ -85,9 +108,11 @@ The current control surface keeps only gate-family summaries. The evidence-chain
 | Review-channel residual from accepted control-doc compression gate | accepted residual | Controller / agent setup owner | Re-run init-agents cleanup before next tmux-pane handoff; do not treat old pane content as review output |
 | Worker-channel capacity/transport residual from accepted control-doc compression gate | accepted residual | Controller / worker channel owner | Future handoffs should verify completion channel; accepted artifacts remain valid through independent review |
 | Untracked residue remains in workspace | accepted residual | Controller / artifact owners | Use `docs/reviews/mvp-control-doc-compression-untracked-residue-disposition-20260611.md`; no cleanup in this gate |
-| `fund_agent/tools/` source-like residue | active next mainline residual | Controller + implementation owner | Source-like residue ownership gate |
+| `fund_agent/tools/` source-like residue | accepted; removed from working tree | Controller + implementation owner | Closed for exact residue; no further action unless it reappears |
 | Manual smoke reports and PDFs outside accepted evidence chain | accepted residual | User/controller/runtime evidence owner | Deferred runtime/data residue disposition gate |
 | Release/readiness cleanliness unproven | accepted residual | Release owner | Deferred release-readiness gate after accepted disposition |
+| EID public provenance mismatch | active mainline residual | Fund/source provenance owner | EID source provenance truth alignment gate |
+| Deepreview-derived long-run gates | queued residual | Controller / future gate owners | Use `docs/reviews/mvp-long-run-phaseflow-startup-20260611-115345.md`; follow queue order |
 | Any design/control inconsistency discovered later | potential residual | Design owner/controller | Separate design-truth-sync gate; do not modify `docs/design.md` in this gate |
 
 ## Recent Active Gate Ledger
@@ -96,6 +121,9 @@ The current control surface keeps only gate-family summaries. The evidence-chain
 |---|---|---|---|
 | `Control-doc compression / artifact hygiene planning gate` | accepted locally | Plan `docs/reviews/mvp-control-doc-compression-artifact-hygiene-plan-20260611.md`; DS/MiMo plan reviews; controller judgment `ACCEPT_WITH_AMENDMENTS`; checkpoint `7365e2b` | Implementation accepted at `693638b` |
 | `Control-doc compression / artifact hygiene implementation gate` | accepted locally | Implementation evidence, DS/MiMo reviews, controller judgment `ACCEPT_WITH_REVIEW_CHANNEL_RESIDUAL`; checkpoint `693638b` | Source-like residue ownership gate for `fund_agent/tools/` |
+| `Long-run phaseflow startup` | opened | Controller startup artifact `docs/reviews/mvp-long-run-phaseflow-startup-20260611-115345.md`; review input `docs/reviews/repo-review-20260611-114133.md` | Planning worker for `Source-like residue ownership gate for fund_agent/tools` |
+| `Source-like residue ownership planning gate for fund_agent/tools` | accepted | Plan, MiMo review, DS review and controller judgment `docs/reviews/mvp-source-like-residue-ownership-plan-controller-judgment-20260611-122048.md`; verdict `ACCEPT_WITH_EXPLICIT_DELETE_AUTH_REQUIRED` | User-authorized bounded implementation gate |
+| `Source-like residue ownership implementation gate for fund_agent/tools` | accepted | Implementation evidence, MiMo review, DS review and controller judgment `docs/reviews/mvp-source-like-residue-ownership-implementation-controller-judgment-20260611-125554.md`; verdict `ACCEPT` | EID source provenance truth alignment gate |
 
 ## Historical Evidence Index
 
@@ -120,4 +148,4 @@ Historical entries cannot override current phase, current gate, next entry point
 2. Read `AGENTS.md`, `docs/current-startup-packet.md` and this file before choosing any next action.
 3. For historical accepted evidence, use the accepted artifact index and historical ledger index.
 4. Do not run live/provider/extractor/golden/readiness/release commands unless a separate reviewed gate explicitly authorizes them.
-5. Do not import, stage, promote, clean or delete `fund_agent/tools/` until the source-like residue ownership gate is reviewed and accepted.
+5. Current mainline is EID source provenance truth alignment planning. Do not reintroduce fallback/source expansion or run live EID/PDF/FDR/network commands unless a separate reviewed gate authorizes them.
