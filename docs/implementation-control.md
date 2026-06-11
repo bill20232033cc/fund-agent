@@ -6,7 +6,7 @@
 > **设计真源**: `docs/design.md`
 > **控制真源**: `docs/implementation-control.md`
 > **短启动入口**: `docs/current-startup-packet.md`
-> **当前状态**: `MVP typed-template-to-agent report generation stabilization phase`。`Control-doc compression / artifact hygiene implementation gate` 已在本地 checkpoint `693638b` 接受，controller verdict 为 `ACCEPT_WITH_REVIEW_CHANNEL_RESIDUAL`。`Source-like residue ownership implementation gate for fund_agent/tools` 已由 controller judgment `ACCEPT`；当前推荐主线入口是 `EID source provenance truth alignment gate`。
+> **当前状态**: `MVP typed-template-to-agent report generation stabilization phase`。`Control-doc compression / artifact hygiene implementation gate` 已在本地 checkpoint `693638b` 接受，controller verdict 为 `ACCEPT_WITH_REVIEW_CHANNEL_RESIDUAL`。`Source-like residue ownership implementation gate for fund_agent/tools` 已在本地 checkpoint `11040bd` 接受，controller verdict 为 `ACCEPT`；当前推荐主线入口是 `EID source provenance truth alignment gate`。
 
 ---
 
@@ -123,7 +123,7 @@ The current control surface keeps only gate-family summaries. The evidence-chain
 | `Control-doc compression / artifact hygiene implementation gate` | accepted locally | Implementation evidence, DS/MiMo reviews, controller judgment `ACCEPT_WITH_REVIEW_CHANNEL_RESIDUAL`; checkpoint `693638b` | Source-like residue ownership gate for `fund_agent/tools/` |
 | `Long-run phaseflow startup` | opened | Controller startup artifact `docs/reviews/mvp-long-run-phaseflow-startup-20260611-115345.md`; review input `docs/reviews/repo-review-20260611-114133.md` | Planning worker for `Source-like residue ownership gate for fund_agent/tools` |
 | `Source-like residue ownership planning gate for fund_agent/tools` | accepted | Plan, MiMo review, DS review and controller judgment `docs/reviews/mvp-source-like-residue-ownership-plan-controller-judgment-20260611-122048.md`; verdict `ACCEPT_WITH_EXPLICIT_DELETE_AUTH_REQUIRED` | User-authorized bounded implementation gate |
-| `Source-like residue ownership implementation gate for fund_agent/tools` | accepted | Implementation evidence, MiMo review, DS review and controller judgment `docs/reviews/mvp-source-like-residue-ownership-implementation-controller-judgment-20260611-125554.md`; verdict `ACCEPT` | EID source provenance truth alignment gate |
+| `Source-like residue ownership implementation gate for fund_agent/tools` | accepted locally | Implementation evidence, MiMo review, DS review and controller judgment `docs/reviews/mvp-source-like-residue-ownership-implementation-controller-judgment-20260611-125554.md`; verdict `ACCEPT`; checkpoint `11040bd` | EID source provenance truth alignment gate |
 
 ## Historical Evidence Index
 

@@ -22,7 +22,7 @@ Purpose: short resume entry for the `MVP typed-template-to-agent report generati
 | Current phase | `MVP typed-template-to-agent report generation stabilization phase` |
 | Current active gate | `EID source provenance truth alignment gate` |
 | Gate classification | `standard` |
-| Current accepted checkpoint | Source-like residue ownership implementation accepted by controller judgment `docs/reviews/mvp-source-like-residue-ownership-implementation-controller-judgment-20260611-125554.md`; local checkpoint pending |
+| Current accepted checkpoint | Source-like residue ownership implementation accepted locally at `11040bd` by controller judgment `docs/reviews/mvp-source-like-residue-ownership-implementation-controller-judgment-20260611-125554.md` |
 | Implementation status | `fund_agent/tools/` source-like residue has been removed from the working tree according to the accepted exact delete set |
 | Next entry point | Plan the `EID source provenance truth alignment gate`; do not change fallback/source acquisition policy, run live EID/PDF/FDR/network commands, or modify source/tests/runtime before reviewed plan acceptance |
 | Control truth | `docs/implementation-control.md` |
