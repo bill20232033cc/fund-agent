@@ -20,11 +20,11 @@ Purpose: short resume entry for the `MVP typed-template-to-agent report generati
 | Field | State |
 |---|---|
 | Current phase | `MVP typed-template-to-agent report generation stabilization phase` |
-| Current active gate | `UI-Service-Host boundary reconciliation gate` |
-| Gate classification | `heavy` |
-| Current accepted checkpoint | UI-Service-Host boundary reconciliation plan accepted locally at `d6fe6db` by controller judgment `docs/reviews/mvp-ui-service-host-boundary-reconciliation-plan-controller-judgment-20260611-140916.md` |
-| Implementation status | Plan accepted; implementation not started. Accepted target is moving Host invocation and LLM request building out of UI into a Service-owned hosted LLM use case while preserving Host lifecycle-only semantics |
-| Next entry point | Implement the accepted `UI-Service-Host boundary reconciliation gate` write set; do not change Host/Agent runtime semantics, provider defaults/runtime behavior, run live provider/EID/PDF/FDR/network commands, or edit files outside the accepted implementation write set |
+| Current active gate | `Runtime artifact disposition / ignore-rule planning gate` |
+| Gate classification | `standard` |
+| Current accepted checkpoint | UI-Service-Host boundary reconciliation implementation accepted locally at `8ff20ed` by controller judgment `docs/reviews/mvp-ui-service-host-boundary-reconciliation-implementation-controller-judgment-20260611-144133.md` |
+| Implementation status | UI no longer owns Host invocation for `--use-llm`; Service owns hosted LLM request building and Host runner invocation; Host remains lifecycle-only and business-opaque |
+| Next entry point | Plan the `Runtime artifact disposition / ignore-rule planning gate`; do not clean, delete, move, archive, ignore, stage, promote, or treat runtime artifacts as accepted evidence before reviewed disposition plan acceptance |
 | Control truth | `docs/implementation-control.md` |
 | Design truth | `docs/design.md` |
 | Template truth | `docs/fund-analysis-template-draft.md` canonical `TEMPLATE_CONTRACT_MANIFEST_JSON` |
@@ -43,19 +43,12 @@ Purpose: short resume entry for the `MVP typed-template-to-agent report generati
 
 ## 4. Current Gate Scope
 
-The current entry is implementation for `UI-Service-Host boundary reconciliation gate` under the accepted plan checkpoint `d6fe6db`.
+The current entry is planning for `Runtime artifact disposition / ignore-rule planning gate`. No runtime artifact cleanup, ignore-rule implementation or release-readiness status change is accepted yet.
 
-Accepted implementation write set:
+Allowed controller writes before plan acceptance:
 
-- `fund_agent/services/fund_analysis_service.py`
-- `fund_agent/services/__init__.py`
-- `fund_agent/ui/cli.py`
-- `tests/services/test_fund_analysis_service_llm.py`
-- `tests/ui/test_cli.py`
-- `docs/design.md`
-- `fund_agent/README.md`
-
-`docs/design.md` is authorized only as post-code current-fact synchronization for the UI-Service-Host boundary. `fund_agent/README.md` is authorized only if current wording still describes UI/CLI owning Host invocation.
+- planning / review / controller judgment artifacts under `docs/reviews/`
+- this startup packet and `docs/implementation-control.md` only for controller status sync
 
 Still explicitly out of scope unless a future reviewed gate authorizes it:
 
@@ -92,7 +85,8 @@ The active startup surface keeps only current-useful accepted facts. Full eviden
 | EID public provenance mismatch | Fund/source provenance owner | Closed by `2cee618`; residual design/README wording sync remains separate | Accepted for current implementation |
 | Source provenance design/README wording drift (`mode` vs `source_mode`) | Design/controller owner | Separate design-truth-sync or documentation consistency gate | Does not block accepted EID implementation |
 | LLM execution request validation ordering | Service/LLM execution owner | Closed by `336081e`; LLM path parity with deterministic `_validate_request()` remains separate | Accepted for current implementation |
-| UI-Service-Host boundary reconciliation | Service/Host boundary owner | UI-Service-Host boundary reconciliation implementation gate | Active mainline gate; plan accepted at `d6fe6db` |
+| UI-Service-Host boundary reconciliation | Service/Host boundary owner | Closed by `8ff20ed`; residual future Host/Agent expansion remains separate | Accepted for current implementation |
+| Runtime artifact disposition / ignore-rule planning | Controller / artifact owners | Runtime artifact disposition / ignore-rule planning gate | Next mainline gate |
 | Any discovered design/control inconsistency | Controller/design owner | Separate design-truth-sync gate | Must be recorded as residual; `docs/design.md` remains untouched in this gate |
 | Live EID/provider/extractor/golden/readiness/release work | Corresponding gate owner | Separate reviewed gate with explicit authorization | Not authorized here |
 
@@ -102,4 +96,4 @@ The active startup surface keeps only current-useful accepted facts. Full eviden
 2. Read `docs/implementation-control.md` for current control truth.
 3. Use the accepted artifact and historical ledger indexes for evidence-chain reconstruction.
 4. Do not use arbitrary untracked residue as proof.
-5. Next mainline is UI-Service-Host boundary reconciliation implementation under accepted checkpoint `d6fe6db`. Do not change Host/Agent runtime semantics, provider defaults/runtime behavior or run live provider/EID/PDF/FDR/network commands in that implementation gate.
+5. Next mainline is runtime artifact disposition / ignore-rule planning. Do not clean, delete, move, archive, ignore, stage, promote, or treat runtime artifacts as accepted release evidence before reviewed disposition plan acceptance.
