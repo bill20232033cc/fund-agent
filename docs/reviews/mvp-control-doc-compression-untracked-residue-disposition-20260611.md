@@ -2,7 +2,7 @@
 
 日期：2026-06-11
 
-状态：implementation artifact；disposition record only；pending review/controller acceptance.
+状态：accepted disposition record only；accepted locally at `693638b`.
 
 Scope: classify currently visible untracked residue without deleting, moving, archiving, cleaning, ignoring, staging, importing, promoting, committing, pushing or opening PRs.
 
@@ -39,10 +39,10 @@ No untracked file content, PDF content, runtime report content or source-like re
 
 | Path / group | Category | Evidence | Decision | Owner | Next gate | Blocker? |
 |---|---|---|---|---|---|---|
-| `docs/reviews/mvp-control-doc-compression-accepted-artifact-index-20260611.md` | current-gate artifact | Required allowed write path for this implementation gate | `leave-untracked` until reviewer/controller accepts; do not stage/commit here | implementation worker / controller | Control-doc compression implementation review and judgment | Blocks acceptance only until reviewed |
-| `docs/reviews/mvp-control-doc-compression-historical-ledger-index-20260611.md` | current-gate artifact | Required allowed write path for this implementation gate | `leave-untracked` until reviewer/controller accepts; do not stage/commit here | implementation worker / controller | Control-doc compression implementation review and judgment | Blocks acceptance only until reviewed |
-| `docs/reviews/mvp-control-doc-compression-untracked-residue-disposition-20260611.md` | current-gate artifact | Required allowed write path for this implementation gate | `leave-untracked` until reviewer/controller accepts; do not stage/commit here | implementation worker / controller | Control-doc compression implementation review and judgment | Blocks acceptance only until reviewed |
-| `docs/reviews/mvp-control-doc-compression-artifact-hygiene-implementation-evidence-20260611.md` | current-gate artifact | Required allowed write path for this implementation gate | `leave-untracked` until reviewer/controller accepts; do not stage/commit here | implementation worker / controller | Control-doc compression implementation review and judgment | Blocks acceptance only until reviewed |
+| `docs/reviews/mvp-control-doc-compression-accepted-artifact-index-20260611.md` | accepted current-gate artifact | Required allowed write path for the accepted implementation gate | accepted at checkpoint `693638b` | controller | None for this artifact unless future correction is required | No |
+| `docs/reviews/mvp-control-doc-compression-historical-ledger-index-20260611.md` | accepted current-gate artifact | Required allowed write path for the accepted implementation gate | accepted at checkpoint `693638b` | controller | None for this artifact unless future correction is required | No |
+| `docs/reviews/mvp-control-doc-compression-untracked-residue-disposition-20260611.md` | accepted current-gate artifact | Required allowed write path for the accepted implementation gate | accepted at checkpoint `693638b` | controller | Source-like residue ownership gate for `fund_agent/tools/` | No for this gate; informs next gate |
+| `docs/reviews/mvp-control-doc-compression-artifact-hygiene-implementation-evidence-20260611.md` | accepted current-gate artifact | Required allowed write path for the accepted implementation gate | accepted at checkpoint `693638b` | controller | None for this artifact unless future correction is required | No |
 | Other untracked `docs/reviews/*.md/json` | evidence-chain artifact | `git status --short` lists 34 untracked `docs/reviews` entries before current-gate writes | `leave-untracked`; `promote-through-review` only if controller maps each exact file to accepted gate | controller / artifact owner | Artifact-specific provenance or evidence acceptance gate | Blocks release/readiness until classified; does not block this docs-only implementation |
 | `docs/audit/` | evidence-chain artifact or review artifact | `find docs/audit -maxdepth 2 -type f` lists `docs/audit/fund-agent-repo-deepreview-20260610.md` | `leave-untracked`; possible promotion only through review/provenance gate | controller + reviewer owner | Review-artifact acceptance gate | Blocks release/readiness if unclassified |
 | `docs/learning-roadmap.md` | research input | Listed by `git status --short` | `leave-untracked` | user/controller | Research-doc disposition gate | Non-blocking for this gate |

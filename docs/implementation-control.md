@@ -6,7 +6,7 @@
 > **设计真源**: `docs/design.md`
 > **控制真源**: `docs/implementation-control.md`
 > **短启动入口**: `docs/current-startup-packet.md`
-> **当前状态**: `MVP typed-template-to-agent report generation stabilization phase`。当前 active gate 是 `Control-doc compression / artifact hygiene implementation gate`。该 gate 是 no-live/control-plane/docs-only implementation，基于 planning checkpoint `7365e2b` 和 controller verdict `ACCEPT_WITH_AMENDMENTS` 执行；本 implementation gate 仍待后续 reviewer/controller acceptance。
+> **当前状态**: `MVP typed-template-to-agent report generation stabilization phase`。`Control-doc compression / artifact hygiene implementation gate` 已在本地 checkpoint `693638b` 接受，controller verdict 为 `ACCEPT_WITH_REVIEW_CHANNEL_RESIDUAL`。当前推荐主线入口是 `Source-like residue ownership gate for fund_agent/tools`。
 
 ---
 
@@ -37,14 +37,14 @@
 
 | Field | State |
 |---|---|
-| Active gate | `Control-doc compression / artifact hygiene implementation gate` |
+| Active gate | `Source-like residue ownership gate for fund_agent/tools` |
 | Classification | `standard` |
-| Accepted input | Planning gate accepted locally at `7365e2b`; controller judgment `docs/reviews/mvp-control-doc-compression-artifact-hygiene-plan-controller-judgment-20260611.md` verdict `ACCEPT_WITH_AMENDMENTS` |
-| Implementation objective | Compress active startup/control surface, create accepted artifact index, create historical ledger index, create untracked residue disposition, and write implementation evidence |
-| Implementation status | Pending review/controller acceptance after evidence artifact |
-| Next entry point | Review `docs/reviews/mvp-control-doc-compression-artifact-hygiene-implementation-evidence-20260611.md`, then controller judgment. Implementation worker must not create reviewer/controller artifacts |
+| Accepted input | Control-doc compression / artifact hygiene implementation accepted locally at `693638b`; controller judgment `docs/reviews/mvp-control-doc-compression-artifact-hygiene-controller-judgment-20260611.md` verdict `ACCEPT_WITH_REVIEW_CHANNEL_RESIDUAL` |
+| Implementation objective | Plan ownership/disposition for visible source-like residue under `fund_agent/tools/` without import, staging, promotion, cleanup or deletion unless separately accepted |
+| Implementation status | Not started |
+| Next entry point | Planning worker for source-like residue ownership; read `docs/reviews/mvp-control-doc-compression-untracked-residue-disposition-20260611.md` first |
 
-## Allowed Write Set For Current Gate
+## Accepted Control-doc Compression Write Set
 
 - `docs/implementation-control.md`
 - `docs/current-startup-packet.md`
@@ -55,7 +55,7 @@
 
 ## Non-goal Reminder
 
-This gate does not authorize:
+The accepted control-doc compression gate and the next source-like residue ownership planning entry do not authorize:
 
 - source/test/runtime behavior changes
 - `docs/design.md` or `.gitignore` edits
@@ -70,7 +70,7 @@ The current control surface keeps only gate-family summaries. The evidence-chain
 
 | Gate family | Accepted status | Current relevance | Residual owner / deferred gate |
 |---|---|---|---|
-| Control-doc compression / artifact hygiene | Planning accepted locally at `7365e2b`; implementation in progress | Current gate | Reviewer/controller acceptance pending |
+| Control-doc compression / artifact hygiene | Planning accepted locally at `7365e2b`; implementation accepted locally at `693638b` | Current compressed control surface and index artifacts | Review-channel/worker-channel residuals accepted; no further action unless future handoff reliability gate is requested |
 | EID single-source operational hardening | Accepted locally across failure-branch evidence, helper repair, controlled retry and metadata docs-sync | Current annual-report source policy | Fallback/source expansion and additional acquisition deferred |
 | Small golden / extractor correctness | Accepted locally through current-consumable row-shape and extractor surfaces | Current extractor evidence baseline for named rows/contracts | Fixture projection, promotion and release/readiness deferred |
 | Typed template truth-source replacement | Accepted locally; canonical JSON in template draft is authored truth source | Current template contract truth source | Public chapter id/runtime expansion unchanged |
@@ -82,10 +82,10 @@ The current control surface keeps only gate-family summaries. The evidence-chain
 
 | Residual | Status | Owner | Next handling |
 |---|---|---|---|
-| Current implementation gate still needs review/controller judgment | active | Reviewer/controller | Review implementation evidence, then controller judgment |
-| Active control/startup docs may need further compression after review | accepted residual | Controller | Follow-up compression gate only if reviewer/controller requests it |
+| Review-channel residual from accepted control-doc compression gate | accepted residual | Controller / agent setup owner | Re-run init-agents cleanup before next tmux-pane handoff; do not treat old pane content as review output |
+| Worker-channel capacity/transport residual from accepted control-doc compression gate | accepted residual | Controller / worker channel owner | Future handoffs should verify completion channel; accepted artifacts remain valid through independent review |
 | Untracked residue remains in workspace | accepted residual | Controller / artifact owners | Use `docs/reviews/mvp-control-doc-compression-untracked-residue-disposition-20260611.md`; no cleanup in this gate |
-| `fund_agent/tools/` source-like residue | accepted residual | Controller + implementation owner | Deferred source-like residue ownership gate |
+| `fund_agent/tools/` source-like residue | active next mainline residual | Controller + implementation owner | Source-like residue ownership gate |
 | Manual smoke reports and PDFs outside accepted evidence chain | accepted residual | User/controller/runtime evidence owner | Deferred runtime/data residue disposition gate |
 | Release/readiness cleanliness unproven | accepted residual | Release owner | Deferred release-readiness gate after accepted disposition |
 | Any design/control inconsistency discovered later | potential residual | Design owner/controller | Separate design-truth-sync gate; do not modify `docs/design.md` in this gate |
@@ -94,8 +94,8 @@ The current control surface keeps only gate-family summaries. The evidence-chain
 
 | Gate | Status | Evidence | Next |
 |---|---|---|---|
-| `Control-doc compression / artifact hygiene planning gate` | accepted locally | Plan `docs/reviews/mvp-control-doc-compression-artifact-hygiene-plan-20260611.md`; DS/MiMo plan reviews; controller judgment `ACCEPT_WITH_AMENDMENTS`; checkpoint `7365e2b` | Current implementation gate |
-| `Control-doc compression / artifact hygiene implementation gate` | implementation worker output pending review | Current allowed files plus implementation evidence artifact | Reviewer/controller acceptance |
+| `Control-doc compression / artifact hygiene planning gate` | accepted locally | Plan `docs/reviews/mvp-control-doc-compression-artifact-hygiene-plan-20260611.md`; DS/MiMo plan reviews; controller judgment `ACCEPT_WITH_AMENDMENTS`; checkpoint `7365e2b` | Implementation accepted at `693638b` |
+| `Control-doc compression / artifact hygiene implementation gate` | accepted locally | Implementation evidence, DS/MiMo reviews, controller judgment `ACCEPT_WITH_REVIEW_CHANNEL_RESIDUAL`; checkpoint `693638b` | Source-like residue ownership gate for `fund_agent/tools/` |
 
 ## Historical Evidence Index
 
@@ -120,4 +120,4 @@ Historical entries cannot override current phase, current gate, next entry point
 2. Read `AGENTS.md`, `docs/current-startup-packet.md` and this file before choosing any next action.
 3. For historical accepted evidence, use the accepted artifact index and historical ledger index.
 4. Do not run live/provider/extractor/golden/readiness/release commands unless a separate reviewed gate explicitly authorizes them.
-5. Do not stage, commit, clean, delete, move, archive or promote unrelated residue from this implementation-worker role.
+5. Do not import, stage, promote, clean or delete `fund_agent/tools/` until the source-like residue ownership gate is reviewed and accepted.

@@ -2,7 +2,7 @@
 
 日期：2026-06-11
 
-状态：implementation artifact；historical/evidence-chain index；pending review/controller acceptance.
+状态：accepted historical/evidence-chain index；accepted locally at `693638b`.
 
 Purpose: identify historical or superseded ledger families that should not remain in the active startup/control surface. This file is evidence chain only.
 

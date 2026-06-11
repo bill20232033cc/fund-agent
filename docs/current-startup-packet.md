@@ -20,11 +20,11 @@ Purpose: short resume entry for the `MVP typed-template-to-agent report generati
 | Field | State |
 |---|---|
 | Current phase | `MVP typed-template-to-agent report generation stabilization phase` |
-| Current active gate | `Control-doc compression / artifact hygiene implementation gate` |
+| Current active gate | `Source-like residue ownership gate for fund_agent/tools` |
 | Gate classification | `standard` |
-| Current accepted checkpoint | Planning gate accepted locally at `7365e2b` with controller verdict `ACCEPT_WITH_AMENDMENTS` |
-| Implementation status | This implementation gate is docs-only/no-live and pending review/controller acceptance after the implementation evidence artifact is written |
-| Next entry point | Review `docs/reviews/mvp-control-doc-compression-artifact-hygiene-implementation-evidence-20260611.md`, then controller judgment for whether the implementation is accepted. No reviewer/controller artifact may be created or edited by implementation worker |
+| Current accepted checkpoint | Control-doc compression / artifact hygiene implementation accepted locally at `693638b` with controller verdict `ACCEPT_WITH_REVIEW_CHANNEL_RESIDUAL` |
+| Implementation status | Control-doc compression / artifact hygiene implementation is accepted; review-channel and worker-channel residuals remain recorded in the controller judgment |
+| Next entry point | Plan the `Source-like residue ownership gate for fund_agent/tools`; do not import, stage, promote, clean or delete the residue without a reviewed gate |
 | Control truth | `docs/implementation-control.md` |
 | Design truth | `docs/design.md` |
 | Template truth | `docs/fund-analysis-template-draft.md` canonical `TEMPLATE_CONTRACT_MANIFEST_JSON` |
@@ -42,7 +42,7 @@ Purpose: short resume entry for the `MVP typed-template-to-agent report generati
 
 ## 4. Current Gate Scope
 
-Allowed writes for this implementation gate:
+Allowed writes from the accepted control-doc compression / artifact hygiene implementation gate:
 
 - `docs/implementation-control.md`
 - `docs/current-startup-packet.md`
@@ -51,7 +51,7 @@ Allowed writes for this implementation gate:
 - `docs/reviews/mvp-control-doc-compression-untracked-residue-disposition-20260611.md`
 - `docs/reviews/mvp-control-doc-compression-artifact-hygiene-implementation-evidence-20260611.md`
 
-Explicitly out of scope:
+Still explicitly out of scope unless a future reviewed gate authorizes it:
 
 - `docs/design.md`
 - `.gitignore`
@@ -66,7 +66,7 @@ The active startup surface keeps only current-useful accepted facts. Full eviden
 
 | Gate family | Current relevance |
 |---|---|
-| Control-doc compression / artifact hygiene | Planning gate accepted locally at `7365e2b`; current implementation gate is docs-only/no-live and pending review/controller acceptance |
+| Control-doc compression / artifact hygiene | Planning gate accepted locally at `7365e2b`; implementation accepted locally at `693638b`; controller judgment `ACCEPT_WITH_REVIEW_CHANNEL_RESIDUAL` |
 | EID single-source operational hardening | Current annual-report source policy and helper repair evidence are accepted; fallback/source expansion remains deferred |
 | Small golden / extractor correctness | Current-consumable row-field extractor surfaces are accepted; fixture projection and promotion remain deferred |
 | Typed template truth-source replacement | `docs/fund-analysis-template-draft.md` canonical JSON is accepted authored template contract truth source |
@@ -78,17 +78,17 @@ The active startup surface keeps only current-useful accepted facts. Full eviden
 
 | Residual | Owner | Next gate | Current blocker? |
 |---|---|---|---|
-| Implementation gate review/controller acceptance | Reviewer/controller | Control-doc compression implementation review and judgment | Blocks acceptance of this implementation gate |
-| Untracked workspace residue | Controller / artifact owners | Artifact-specific disposition gates listed in residue disposition index | Does not block this docs-only implementation; blocks release/readiness until accepted disposition |
-| `fund_agent/tools/` source-like residue | Controller + implementation owner | Source-like residue ownership gate | Blocks release/readiness; not imported/staged/promoted here |
+| Review-channel residual from current gate | Controller / agent setup owner | Re-run init-agents cleanup before next tmux-pane handoff | Does not block accepted checkpoint; affects future handoff reliability |
+| Untracked workspace residue | Controller / artifact owners | Artifact-specific disposition gates listed in residue disposition index | Does not block accepted control-doc compression; blocks release/readiness until accepted disposition |
+| `fund_agent/tools/` source-like residue | Controller + implementation owner | Source-like residue ownership gate | Next mainline gate; blocks release/readiness; not imported/staged/promoted here |
 | Manual smoke reports and PDFs outside accepted evidence chain | User/controller/runtime evidence owner | Runtime/data artifact disposition gates | Blocks release/readiness if unclassified |
 | Any discovered design/control inconsistency | Controller/design owner | Separate design-truth-sync gate | Must be recorded as residual; `docs/design.md` remains untouched in this gate |
 | Live EID/provider/extractor/golden/readiness/release work | Corresponding gate owner | Separate reviewed gate with explicit authorization | Not authorized here |
 
 ## 7. Resume Checklist
 
-1. Run only allowed status/metadata checks if resuming this gate.
+1. Run only allowed status/metadata checks if resuming from this checkpoint.
 2. Read `docs/implementation-control.md` for current control truth.
 3. Use the accepted artifact and historical ledger indexes for evidence-chain reconstruction.
 4. Do not use arbitrary untracked residue as proof.
-5. Do not modify or create reviewer/controller artifacts from the implementation-worker role.
+5. Do not import, stage, promote, clean or delete `fund_agent/tools/` until the source-like residue ownership gate is reviewed and accepted.

@@ -4,7 +4,7 @@
 
 角色：implementation worker
 
-状态：implementation evidence；pending review/controller acceptance.
+状态：accepted implementation evidence；accepted locally at `693638b`.
 
 ## Scope
 
@@ -69,13 +69,13 @@ Allowed validation commands run after the implementation write:
 | `git status --branch --short` | Branch `feat/mvp-llm-incomplete-run-artifacts...origin/feat/mvp-llm-incomplete-run-artifacts [ahead 86]`; no staged files |
 | `git diff --check` | PASS; no output |
 | `wc -l docs/implementation-control.md docs/current-startup-packet.md docs/reviews/mvp-control-doc-compression-accepted-artifact-index-20260611.md docs/reviews/mvp-control-doc-compression-historical-ledger-index-20260611.md docs/reviews/mvp-control-doc-compression-untracked-residue-disposition-20260611.md docs/reviews/mvp-control-doc-compression-artifact-hygiene-implementation-evidence-20260611.md` | `123`, `94`, `44`, `58`, `70`, `82` lines after final evidence update |
-| `rg -n "Next entry point|Current gate|Current active gate|Control-doc compression|artifact hygiene|accepted-artifact-index|historical-ledger-index|untracked-residue-disposition|docs/design.md|\\.gitignore|pending review/controller" ...` | PASS; current gate, next entry, index links, prohibited-scope wording and pending-review status are discoverable |
+| `rg -n "Next entry point|Current gate|Current active gate|Control-doc compression|artifact hygiene|accepted-artifact-index|historical-ledger-index|untracked-residue-disposition|docs/design.md|\\.gitignore|pending review/controller" ...` | PASS at implementation-write time; current gate, next entry, index links, prohibited-scope wording and pending-review status were discoverable before controller acceptance |
 
 ## Residuals
 
 | Residual | Owner | Next handling |
 |---|---|---|
-| This implementation is pending review/controller acceptance | reviewer/controller | Review this artifact and modified docs, then controller judgment |
+| This implementation required review/controller acceptance | reviewer/controller | Completed by DS/MiMo reviews and controller judgment; accepted at `693638b` |
 | The active docs are compressed but may still need review-driven tightening | controller | Follow-up compression only if reviewer/controller requests it |
 | Untracked residue remains | controller / artifact owners | Use disposition artifact; no cleanup in this gate |
 | `fund_agent/tools/` source-like residue remains | controller + implementation owner | Source-like residue ownership gate |
