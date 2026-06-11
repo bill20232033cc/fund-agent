@@ -20,11 +20,11 @@ Purpose: short resume entry for the `MVP typed-template-to-agent report generati
 | Field | State |
 |---|---|
 | Current phase | `MVP typed-template-to-agent report generation stabilization phase` |
-| Current active gate | `Release-readiness cleanliness evidence gate` |
+| Current active gate | `Release-readiness blocker disposition planning gate` |
 | Gate classification | `heavy` |
-| Current accepted checkpoint | Release-readiness cleanliness plan accepted locally at `1bbcd19` by controller judgment `docs/reviews/mvp-release-readiness-cleanliness-plan-controller-judgment-20260611-152127.md` |
-| Implementation status | Plan accepted with MiMo/DS review. Evidence gate not started. No release readiness, PR readiness, cleanup, `.gitignore`, external state or residue disposition claim is accepted |
-| Next entry point | Execute `Release-readiness cleanliness evidence gate` under the accepted plan; record local non-destructive evidence only and report `NOT_READY` unless every blocker is resolved or explicitly accepted as residual |
+| Current accepted checkpoint | Release-readiness cleanliness evidence accepted locally at `d0d9672` by controller judgment `docs/reviews/mvp-release-readiness-cleanliness-evidence-controller-judgment-20260611-153309.md`; result `NOT_READY` |
+| Implementation status | Evidence accepted with MiMo/DS review. A6 failed because visible blocker residue remains unresolved or not explicitly accepted as release-readiness residual. No release readiness, PR readiness, cleanup, `.gitignore`, external state or residue disposition claim is accepted |
+| Next entry point | Plan `Release-readiness blocker disposition planning gate`; decide blocker disposition paths without cleanup implementation, `.gitignore` edits, PR/release actions, live commands or readiness claims |
 | Control truth | `docs/implementation-control.md` |
 | Design truth | `docs/design.md` |
 | Template truth | `docs/fund-analysis-template-draft.md` canonical `TEMPLATE_CONTRACT_MANIFEST_JSON` |
@@ -43,11 +43,11 @@ Purpose: short resume entry for the `MVP typed-template-to-agent report generati
 
 ## 4. Current Gate Scope
 
-The current entry is `Release-readiness cleanliness evidence gate` under accepted plan checkpoint `1bbcd19`. No release/readiness status change, PR action, cleanup, ignore-rule edit, archive, delete or promotion is accepted yet.
+The current entry is planning for `Release-readiness blocker disposition planning gate` after accepted `NOT_READY` evidence checkpoint `d0d9672`. No release/readiness status change, PR action, cleanup, ignore-rule edit, archive, delete or promotion is accepted yet.
 
-Allowed writes under the accepted plan:
+Allowed controller writes before blocker-disposition plan acceptance:
 
-- evidence / review / controller judgment artifacts under `docs/reviews/` named by the accepted plan
+- planning / review / controller judgment artifacts under `docs/reviews/`
 - this startup packet and `docs/implementation-control.md` only for controller status sync
 
 Still explicitly out of scope unless a future reviewed gate authorizes it:
@@ -55,7 +55,7 @@ Still explicitly out of scope unless a future reviewed gate authorizes it:
 - `docs/design.md`
 - `.gitignore`
 - source, tests, runtime behavior, reports, PDF/document corpus
-- reviewer or controller artifacts outside the accepted evidence write set
+- reviewer or controller artifacts outside the accepted planning/review write set
 - delete, move, archive, clean, ignore, import, stage, promote, commit, push, PR or merge actions
 - live EID/network/PDF/FDR/FundDocumentRepository/helper/fallback/provider/LLM/extractor/analyze/checklist/golden/readiness/score-loop/release commands
 
@@ -88,7 +88,8 @@ The active startup surface keeps only current-useful accepted facts. Full eviden
 | UI-Service-Host boundary reconciliation | Service/Host boundary owner | Closed by `8ff20ed`; residual future Host/Agent expansion remains separate | Accepted for current implementation |
 | Runtime artifact disposition / ignore-rule planning | Controller / artifact owners | Closed by `6bef193`; residue remains visible with owners/next gates | Accepted for current non-destructive disposition |
 | Release-readiness cleanliness planning | Release owner / controller | Plan accepted at `1bbcd19`; evidence gate not started | Accepted planning checkpoint |
-| Release-readiness cleanliness evidence | Release owner / controller | Release-readiness cleanliness evidence gate | Active mainline gate |
+| Release-readiness cleanliness evidence | Release owner / controller | Evidence accepted at `d0d9672`; result `NOT_READY` | Accepted evidence checkpoint; blocks readiness claim |
+| Release-readiness blocker disposition planning | Release owner / controller | Release-readiness blocker disposition planning gate | Active mainline gate |
 | Any discovered design/control inconsistency | Controller/design owner | Separate design-truth-sync gate | Must be recorded as residual; `docs/design.md` remains untouched in this gate |
 | Live EID/provider/extractor/golden/readiness/release work | Corresponding gate owner | Separate reviewed gate with explicit authorization | Not authorized here |
 
@@ -98,4 +99,4 @@ The active startup surface keeps only current-useful accepted facts. Full eviden
 2. Read `docs/implementation-control.md` for current control truth.
 3. Use the accepted artifact and historical ledger indexes for evidence-chain reconstruction.
 4. Do not use arbitrary untracked residue as proof.
-5. Next mainline is release-readiness cleanliness evidence under accepted plan `1bbcd19`. Do not claim readiness, push, PR, run live/provider/EID/PDF/FDR/analyze/checklist/golden/release commands, or clean residue.
+5. Next mainline is release-readiness blocker disposition planning after `NOT_READY` evidence checkpoint `d0d9672`. Do not claim readiness, push, PR, run live/provider/EID/PDF/FDR/analyze/checklist/golden/release commands, or clean residue.
