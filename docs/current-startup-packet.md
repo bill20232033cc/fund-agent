@@ -21,10 +21,10 @@ Purpose: short resume entry for the `MVP typed-template-to-agent report generati
 |---|---|
 | Current phase | `MVP typed-template-to-agent report generation stabilization phase` |
 | Current active gate | `UI-Service-Host boundary reconciliation gate` |
-| Gate classification | `standard` |
-| Current accepted checkpoint | LLM execution request validation ordering accepted locally at `336081e` by controller judgment `docs/reviews/mvp-llm-execution-request-validation-ordering-implementation-controller-judgment-20260611-134702.md` |
-| Implementation status | `build_fund_llm_execution_request()` now validates business request / contract fields before provider config/client construction; provider clients are constructed after runtime plan |
-| Next entry point | Plan the `UI-Service-Host boundary reconciliation gate`; do not change Host/Agent runtime semantics, provider defaults/runtime behavior, run live provider/EID/PDF/FDR/network commands, or modify source/tests/runtime before reviewed plan acceptance |
+| Gate classification | `heavy` |
+| Current accepted checkpoint | UI-Service-Host boundary reconciliation plan accepted locally at `d6fe6db` by controller judgment `docs/reviews/mvp-ui-service-host-boundary-reconciliation-plan-controller-judgment-20260611-140916.md` |
+| Implementation status | Plan accepted; implementation not started. Accepted target is moving Host invocation and LLM request building out of UI into a Service-owned hosted LLM use case while preserving Host lifecycle-only semantics |
+| Next entry point | Implement the accepted `UI-Service-Host boundary reconciliation gate` write set; do not change Host/Agent runtime semantics, provider defaults/runtime behavior, run live provider/EID/PDF/FDR/network commands, or edit files outside the accepted implementation write set |
 | Control truth | `docs/implementation-control.md` |
 | Design truth | `docs/design.md` |
 | Template truth | `docs/fund-analysis-template-draft.md` canonical `TEMPLATE_CONTRACT_MANIFEST_JSON` |
@@ -43,12 +43,19 @@ Purpose: short resume entry for the `MVP typed-template-to-agent report generati
 
 ## 4. Current Gate Scope
 
-The current entry is planning for `UI-Service-Host boundary reconciliation gate`. No implementation write set is accepted yet.
+The current entry is implementation for `UI-Service-Host boundary reconciliation gate` under the accepted plan checkpoint `d6fe6db`.
 
-Allowed controller writes before plan acceptance:
+Accepted implementation write set:
 
-- planning / review / controller judgment artifacts under `docs/reviews/`
-- this startup packet and `docs/implementation-control.md` only for controller status sync
+- `fund_agent/services/fund_analysis_service.py`
+- `fund_agent/services/__init__.py`
+- `fund_agent/ui/cli.py`
+- `tests/services/test_fund_analysis_service_llm.py`
+- `tests/ui/test_cli.py`
+- `docs/design.md`
+- `fund_agent/README.md`
+
+`docs/design.md` is authorized only as post-code current-fact synchronization for the UI-Service-Host boundary. `fund_agent/README.md` is authorized only if current wording still describes UI/CLI owning Host invocation.
 
 Still explicitly out of scope unless a future reviewed gate authorizes it:
 
@@ -85,7 +92,7 @@ The active startup surface keeps only current-useful accepted facts. Full eviden
 | EID public provenance mismatch | Fund/source provenance owner | Closed by `2cee618`; residual design/README wording sync remains separate | Accepted for current implementation |
 | Source provenance design/README wording drift (`mode` vs `source_mode`) | Design/controller owner | Separate design-truth-sync or documentation consistency gate | Does not block accepted EID implementation |
 | LLM execution request validation ordering | Service/LLM execution owner | Closed by `336081e`; LLM path parity with deterministic `_validate_request()` remains separate | Accepted for current implementation |
-| UI-Service-Host boundary reconciliation | Service/Host boundary owner | UI-Service-Host boundary reconciliation gate | Next mainline gate |
+| UI-Service-Host boundary reconciliation | Service/Host boundary owner | UI-Service-Host boundary reconciliation implementation gate | Active mainline gate; plan accepted at `d6fe6db` |
 | Any discovered design/control inconsistency | Controller/design owner | Separate design-truth-sync gate | Must be recorded as residual; `docs/design.md` remains untouched in this gate |
 | Live EID/provider/extractor/golden/readiness/release work | Corresponding gate owner | Separate reviewed gate with explicit authorization | Not authorized here |
 
@@ -95,4 +102,4 @@ The active startup surface keeps only current-useful accepted facts. Full eviden
 2. Read `docs/implementation-control.md` for current control truth.
 3. Use the accepted artifact and historical ledger indexes for evidence-chain reconstruction.
 4. Do not use arbitrary untracked residue as proof.
-5. Next mainline is UI-Service-Host boundary reconciliation planning. Do not change Host/Agent runtime semantics, provider defaults/runtime behavior or run live provider/EID/PDF/FDR/network commands in that planning gate.
+5. Next mainline is UI-Service-Host boundary reconciliation implementation under accepted checkpoint `d6fe6db`. Do not change Host/Agent runtime semantics, provider defaults/runtime behavior or run live provider/EID/PDF/FDR/network commands in that implementation gate.
