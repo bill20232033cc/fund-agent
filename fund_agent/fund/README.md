@@ -134,6 +134,14 @@ chapter_lens = resolve_preferred_lens(chapter_id=2, fund_type="active_fund")
 - 当可用跨年事实存在时，替换单年投影中的 `cross_period_comparison_missing` 缺口；没有可用跨年事实时保持原有单年缺口语义
 - 该投影只消费内存中的 `AnnualEvidenceBundle`，不读取文档仓库、PDF、cache、source helper、Service、Host、provider 或 dayu
 
+`fund_agent/fund/template/annual_period_renderer.py` 当前为 `analyze-annual-period` 生成正式多年年报 Markdown 报告：
+
+- 输入只包含 `AnnualEvidenceBundle`、当前年份 8 章报告 Markdown 和显式 quality gate 状态
+- 输出包含年度覆盖与来源、跨年关键变化、对当前判断的影响、缺口与降级，并通过稳定 marker 保留当前年份 8 章报告
+- `MultiYearAnnualAnalysisResult.report_markdown` 仍保持当前年份报告语义；正式多年报告位于显式 `annual_period_report.report_markdown`
+- 缺少 quality gate 状态时输出 `quality_gate_status=not_available`，不声明通过、readiness 或 release 状态
+- renderer 不读取文档仓库、PDF、cache、source helper、下载器、provider、LLM、Service、Host、文件系统文档语料或 dayu
+
 `docs/fund-analysis-template-draft.md` canonical `TEMPLATE_CONTRACT_MANIFEST_JSON` 当前是 Fund template contract 的 authored truth source。模板层从同一 JSON 生成 untyped 与 typed 两种投影：
 
 - `fund_agent/fund/template/contracts.py` 解析、投影并验证 untyped `TemplateContractManifest`，继续提供 `load_template_contract_manifest()`、`validate_template_contract_manifest()`、`get_chapter_contract()` 和 `resolve_preferred_lens()`
@@ -496,6 +504,7 @@ C2 当前只做确定性 marker / 元数据检查，不调用 LLM，不判断语
 - `data_extractor.py`：P1 façade，聚合文档仓库、净值适配器和章节 extractor。
 - `report_evidence.py`：报告证据包 typed model / projection，只消费 `StructuredFundDataBundle` 与显式投影上下文，产出事实、锚点、缺口、preferred_lens 和派生 review status。
 - `annual_evidence.py`：多年年报证据作用域、prior 年份加载、年度缺口分类、跨年事实派生和 `AnnualEvidenceBundle` typed model；只通过 `FundDocumentRepository` 加载 prior 年报。
+- `template/annual_period_renderer.py`：多年年报期间报告 renderer，只消费内存中的 `AnnualEvidenceBundle` 和显式当前年份报告，输出正式 annual-period Markdown。
 - `_value_utils.py`：Fund 内部结构化值 helper，把 dict/dataclass 抽取值规范化为子字段映射。
 - `extraction_snapshot.py`：P4-S1 字段级抽取快照能力，消费 `FundDataExtractor` 并写出 JSONL/summary/errors。
 - `extraction_score.py`：P4-S2 字段级评分与最小 golden set 选择能力，只消费 snapshot JSONL 和精选基金池 CSV。

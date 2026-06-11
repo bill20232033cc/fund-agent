@@ -1464,6 +1464,11 @@ async def test_multi_year_annual_analysis_maps_service_request_to_fund_scope() -
     assert current_year_bundle.report_year == 2025
     assert result.used_years == (2025,)
     assert result.gap_years == (2024, 2023, 2022, 2021)
+    assert result.report_markdown == result.current_year_result.report_markdown
+    assert result.annual_period_report.report_markdown != result.report_markdown
+    assert "# 多年年报分析（2021-2025）" in result.annual_period_report.report_markdown
+    assert "quality_gate_status=not_available" in result.annual_period_report.report_markdown
+    assert "impact_status=insufficient_evidence" in result.annual_period_report.report_markdown
 
 
 def _source_csv(tmp_path: Path, fund_code: str) -> Path:

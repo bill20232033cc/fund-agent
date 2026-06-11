@@ -1064,7 +1064,7 @@ def analyze_annual_period(
     _echo_quality_gate_summary(result.current_year_result)
     _echo_multi_year_annual_summary(result)
     typer.echo("")
-    typer.echo(result.report_markdown, nl=False)
+    typer.echo(result.annual_period_report.report_markdown, nl=False)
 
 
 @app.command("thermometer")

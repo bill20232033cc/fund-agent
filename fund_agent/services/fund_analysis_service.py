@@ -62,6 +62,11 @@ from fund_agent.fund.quality_gate import GATE_STATUS_BLOCK, QualityGateResult
 from fund_agent.fund.quality_gate_integration import check_quality_gate_fund_membership, run_quality_gate_for_bundle
 from fund_agent.host import HostRunContext, HostRuntimeRunner
 from fund_agent.fund.template import TemplateRenderInput, TemplateRenderResult, render_template_report
+from fund_agent.fund.template.annual_period_renderer import (
+    AnnualPeriodReportRenderInput,
+    AnnualPeriodReportRenderResult,
+    render_annual_period_report,
+)
 from fund_agent.services.chapter_orchestrator import (
     ChapterOrchestrationPolicy,
     ChapterOrchestrationResult,
@@ -295,6 +300,7 @@ class MultiYearAnnualAnalysisResult:
     Attributes:
         current_year_result: 当前必需年份的既有单年分析结果。
         annual_evidence_bundle: 多年年报证据 bundle。
+        annual_period_report: 多年期间正式报告渲染结果。
         used_years: 已用于跨年证据的可用年份。
         gap_years: 可降级缺口年份。
         fail_closed_years: fail-closed 年份。
@@ -302,6 +308,7 @@ class MultiYearAnnualAnalysisResult:
 
     current_year_result: FundAnalysisResult
     annual_evidence_bundle: AnnualEvidenceBundle
+    annual_period_report: AnnualPeriodReportRenderResult
     used_years: tuple[int, ...]
     gap_years: tuple[int, ...]
     fail_closed_years: tuple[int, ...]
@@ -794,9 +801,22 @@ class FundAnalysisService:
             annual_scope,
             current_year_bundle=current_year_result.structured_data,
         )
+        annual_period_report = render_annual_period_report(
+            AnnualPeriodReportRenderInput(
+                annual_evidence_bundle=annual_bundle,
+                current_year_report_markdown=current_year_result.report_markdown,
+                quality_gate_status=(
+                    current_year_result.quality_gate_result.status
+                    if current_year_result.quality_gate_result is not None
+                    else None
+                ),
+                quality_gate_not_run_reason=current_year_result.quality_gate_not_run_reason,
+            )
+        )
         return MultiYearAnnualAnalysisResult(
             current_year_result=current_year_result,
             annual_evidence_bundle=annual_bundle,
+            annual_period_report=annual_period_report,
             used_years=annual_bundle.available_years,
             gap_years=annual_bundle.gap_years,
             fail_closed_years=annual_bundle.fail_closed_years,

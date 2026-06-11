@@ -201,11 +201,19 @@ class _FakeAnnualEvidenceBundle:
 
 
 @dataclass(frozen=True, slots=True)
+class _FakeAnnualPeriodReport:
+    """CLI 多年年报测试用 annual-period report。"""
+
+    report_markdown: str
+
+
+@dataclass(frozen=True, slots=True)
 class _FakeMultiYearResult:
     """CLI 多年年报测试用 Service 返回值。"""
 
     current_year_result: _FakeResult
     annual_evidence_bundle: _FakeAnnualEvidenceBundle
+    annual_period_report: _FakeAnnualPeriodReport
 
     @property
     def report_markdown(self) -> str:
@@ -346,8 +354,11 @@ class _FakeService:
         type(self).analyze_multi_year_annual_called = True
         type(self).last_multi_year_request = request
         return _FakeMultiYearResult(
-            current_year_result=_FakeResult(report_markdown="# annual period report\n"),
+            current_year_result=_FakeResult(report_markdown="# current year report\n"),
             annual_evidence_bundle=_FakeAnnualEvidenceBundle(),
+            annual_period_report=_FakeAnnualPeriodReport(
+                report_markdown="# annual period report\n"
+            ),
         )
 
     def analyze_with_llm_hosted(  # type: ignore[no-untyped-def]
@@ -1663,6 +1674,7 @@ def test_analyze_annual_period_cli_calls_multi_year_service(monkeypatch) -> None
     assert result.exit_code == 0
     assert "canonical_years: 2025,2024,2023,2022,2021" in result.output
     assert "# annual period report" in result.output
+    assert "# current year report" not in result.output
     assert _FakeService.analyze_called is False
     assert _FakeService.analyze_multi_year_annual_called is True
     assert _FakeService.last_multi_year_request is not None
