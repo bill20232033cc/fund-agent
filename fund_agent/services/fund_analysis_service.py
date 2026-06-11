@@ -936,14 +936,21 @@ def build_fund_llm_execution_request(
         ValueError: 当业务请求或契约字段非法时抛出。
     """
 
-    config = load_llm_provider_config_from_env()
-    llm_clients = build_chapter_llm_clients(config)
     resolved_contract = _resolve_analyze_contract(request)
     analysis_input = normalize_fund_llm_analysis_input(request)
     quality_policy = QualityPolicyDeclaration(
         quality_gate_policy=resolved_contract.quality_gate_policy,
         deterministic_fallback_allowed=False,
     )
+    contract = FundLLMExecutionContract(
+        fund_code=analysis_input.fund_code,
+        report_year=analysis_input.report_year,
+        analysis_input=analysis_input,
+        quality_policy=quality_policy,
+        llm_opt_in_mode=opt_in_mode,
+    )
+
+    config = load_llm_provider_config_from_env()
     chapter_policy = ChapterOrchestrationPolicy(
         max_output_chars=config.max_output_chars,
         prompt_payload_mode="compact",
@@ -978,13 +985,7 @@ def build_fund_llm_execution_request(
             chapter_count=LLM_REPORT_HOST_TIMEOUT_CHAPTER_COUNT,
         ),
     )
-    contract = FundLLMExecutionContract(
-        fund_code=analysis_input.fund_code,
-        report_year=analysis_input.report_year,
-        analysis_input=analysis_input,
-        quality_policy=quality_policy,
-        llm_opt_in_mode=opt_in_mode,
-    )
+    llm_clients = build_chapter_llm_clients(config)
     return FundLLMExecutionRequest(
         contract=contract,
         runtime_plan=runtime_plan,

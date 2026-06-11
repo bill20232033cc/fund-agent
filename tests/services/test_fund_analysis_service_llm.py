@@ -21,6 +21,8 @@ from fund_agent.services import (
     ChapterOrchestrationPolicy,
     ChapterOrchestratorLLMClients,
     FinalAssemblyPolicy,
+    FundAnalysisDeveloperOverrides,
+    FundAnalysisRequest,
     FundLLMExecutionContract,
     FundLLMExecutionRequest,
     FundLLMRuntimePlan,
@@ -322,6 +324,84 @@ def test_build_fund_llm_execution_request_raises_construction_error_before_host_
 
     with pytest.raises(LLMProviderConstructionError, match="fixture-model"):
         build_fund_llm_execution_request(_developer_request())
+
+
+def test_build_fund_llm_execution_request_rejects_product_overrides_before_provider(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """验证非法业务请求在 provider config/client 构造前失败。
+
+    Args:
+        monkeypatch: pytest monkeypatch fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 provider 构造路径被触发或非法请求未失败时抛出。
+    """
+
+    calls = _install_provider_construction_spies(monkeypatch)
+    request = FundAnalysisRequest(
+        fund_code="110011",
+        report_year=2024,
+        mode="product",
+        developer_overrides=FundAnalysisDeveloperOverrides(),
+    )
+
+    with pytest.raises(ValueError, match="product mode"):
+        build_fund_llm_execution_request(request)
+
+    assert calls == []
+
+
+def test_build_fund_llm_execution_request_rejects_invalid_opt_in_before_provider(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """验证非法 LLM opt-in mode 在 provider client 构造前失败。
+
+    Args:
+        monkeypatch: pytest monkeypatch fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 provider 构造路径被触发或非法 opt-in 未失败时抛出。
+    """
+
+    calls = _install_provider_construction_spies(monkeypatch)
+
+    with pytest.raises(ValueError, match="llm_opt_in_mode"):
+        build_fund_llm_execution_request(
+            _developer_request(),
+            opt_in_mode="implicit",  # type: ignore[arg-type]
+        )
+
+    assert calls == []
+
+
+def test_build_fund_llm_execution_request_rejects_invalid_identity_before_provider(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """验证非法基金身份在 provider config/client 构造前失败。
+
+    Args:
+        monkeypatch: pytest monkeypatch fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 provider 构造路径被触发或非法身份未失败时抛出。
+    """
+
+    calls = _install_provider_construction_spies(monkeypatch)
+
+    with pytest.raises(ValueError, match="fund_code"):
+        build_fund_llm_execution_request(_developer_request(fund_code="11001"))
+
+    assert calls == []
 
 
 @pytest.mark.asyncio
@@ -1008,6 +1088,85 @@ def _raise_construction_error(
     """
 
     raise LLMProviderConstructionError(f"fixture construction failure: {config.model}")
+
+
+def _install_provider_construction_spies(monkeypatch: pytest.MonkeyPatch) -> list[str]:
+    """安装 provider config/client 构造 spy。
+
+    Args:
+        monkeypatch: pytest monkeypatch fixture。
+
+    Returns:
+        记录 provider config/client 构造调用顺序的列表。
+
+    Raises:
+        AssertionError: 当被测分支错误触发 provider 构造时由 spy 抛出。
+    """
+
+    spy = _ProviderConstructionSpy()
+
+    monkeypatch.setattr(
+        fund_analysis_service_module,
+        "load_llm_provider_config_from_env",
+        spy.load_config,
+    )
+    monkeypatch.setattr(
+        fund_analysis_service_module,
+        "build_chapter_llm_clients",
+        spy.build_clients,
+    )
+    return spy.calls
+
+
+class _ProviderConstructionSpy:
+    """记录并阻断 provider config/client 构造的测试 spy。"""
+
+    def __init__(self) -> None:
+        """初始化调用记录。
+
+        Args:
+            无。
+
+        Returns:
+            无返回值。
+
+        Raises:
+            无显式抛出。
+        """
+
+        self.calls: list[str] = []
+
+    def load_config(self) -> LLMProviderConfig:
+        """记录并阻断 provider config 加载。
+
+        Args:
+            无。
+
+        Returns:
+            不返回。
+
+        Raises:
+            AssertionError: 始终抛出，表示该分支不应加载 provider config。
+        """
+
+        self.calls.append("load_config")
+        raise AssertionError("provider config should not be loaded")
+
+    def build_clients(self, config: LLMProviderConfig) -> ChapterOrchestratorLLMClients:
+        """记录并阻断 provider client 构造。
+
+        Args:
+            config: provider config；只用于记录模型名。
+
+        Returns:
+            不返回。
+
+        Raises:
+            AssertionError: 始终抛出，表示该分支不应构造 provider clients。
+        """
+
+        self.calls.append(f"build_clients:{config.model}")
+        raise AssertionError("provider clients should not be built")
 
 
 def _valid_markdown_from_request(request: ChapterLLMRequest) -> str:
