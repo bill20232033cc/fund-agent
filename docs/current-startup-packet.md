@@ -20,11 +20,11 @@ Purpose: short resume entry for the `MVP typed-template-to-agent report generati
 | Field | State |
 |---|---|
 | Current phase | `MVP typed-template-to-agent report generation stabilization phase` |
-| Current active gate | `Review-artifact residual acceptance planning gate` |
+| Current active gate | `EID source provenance implementation closeout gate` |
 | Gate classification | `heavy` |
-| Current accepted checkpoint | Review-artifact provenance disposition evidence accepted locally at `9e0e540` by controller judgment `docs/reviews/mvp-review-artifact-provenance-disposition-evidence-controller-judgment-20260611-160126.md`; result remains `NOT_READY` |
-| Implementation status | Path-level provenance/disposition evidence accepted for untracked `docs/reviews/*` / `docs/audit/`. No target path was accepted as current or historical chain; blocker narrowed but not resolved |
-| Next entry point | Plan `Review-artifact residual acceptance planning gate`; decide whether rejected/deferred/user-or-controller-decision review/audit paths can be accepted as non-release residuals with owners and next gates |
+| Current accepted checkpoint | Review-artifact residual acceptance planning accepted locally at `f87edb5` by controller judgment `docs/reviews/mvp-review-artifact-residual-acceptance-plan-controller-judgment-20260611-162326.md`; release/readiness result remains `NOT_READY` |
+| Implementation status | Review-artifact residual acceptance plan accepted as planning only. It does not accept residuals, readiness, release evidence, source truth or PR/release readiness. User-directed next mainline is EID source provenance closeout before multi-year productization |
+| Next entry point | Close current EID source provenance gate: implementation review, controller final judgment, accepted checkpoint, then scoped control/design sync if authorized by that closeout gate |
 | Control truth | `docs/implementation-control.md` |
 | Design truth | `docs/design.md` |
 | Template truth | `docs/fund-analysis-template-draft.md` canonical `TEMPLATE_CONTRACT_MANIFEST_JSON` |
@@ -43,19 +43,18 @@ Purpose: short resume entry for the `MVP typed-template-to-agent report generati
 
 ## 4. Current Gate Scope
 
-The current entry is planning for `Review-artifact residual acceptance planning gate` after accepted provenance evidence checkpoint `9e0e540`. No release/readiness status change, PR action, cleanup, ignore-rule edit, archive, delete or promotion is accepted yet.
+The current entry is `EID source provenance implementation closeout gate` after accepted review-artifact residual acceptance planning checkpoint `f87edb5`. The workspace is understood to already contain EID source provenance implementation and an evidence draft; this gate is for implementation review, controller final judgment, accepted checkpoint, then scoped control/design sync if authorized. No release/readiness status change, PR action, cleanup, ignore-rule edit, archive, delete or promotion is accepted here.
 
-Allowed controller writes before residual-acceptance plan acceptance:
+Allowed controller writes before EID provenance closeout acceptance:
 
-- planning / review / controller judgment artifacts under `docs/reviews/`
-- this startup packet and `docs/implementation-control.md` only for controller status sync
+- implementation review / controller judgment artifacts under `docs/reviews/`
+- `docs/design.md`, this startup packet and `docs/implementation-control.md` only if the closeout judgment explicitly authorizes the exact sync
 
 Still explicitly out of scope unless a future reviewed gate authorizes it:
 
-- `docs/design.md`
 - `.gitignore`
 - source, tests, runtime behavior, reports, PDF/document corpus
-- reviewer or controller artifacts outside the accepted planning/review write set
+- reviewer or controller artifacts outside the accepted closeout/review write set
 - delete, move, archive, clean, ignore, import, stage, promote, commit, push, PR or merge actions
 - live EID/network/PDF/FDR/FundDocumentRepository/helper/fallback/provider/LLM/extractor/analyze/checklist/golden/readiness/score-loop/release commands
 
@@ -91,7 +90,9 @@ The active startup surface keeps only current-useful accepted facts. Full eviden
 | Release-readiness cleanliness evidence | Release owner / controller | Evidence accepted at `d0d9672`; result `NOT_READY` | Accepted evidence checkpoint; blocks readiness claim |
 | Release-readiness blocker disposition planning | Release owner / controller | Plan accepted at `e41981a`; routes first evidence gate to review-artifact provenance | Accepted planning checkpoint |
 | Review-artifact provenance disposition evidence | Controller / artifact owners | Evidence accepted at `9e0e540`; no path accepted as current/historical chain; result remains `NOT_READY` | Accepted evidence checkpoint |
-| Review-artifact residual acceptance planning | Controller / artifact owners | Review-artifact residual acceptance planning gate | Active mainline gate |
+| Review-artifact residual acceptance planning | Controller / artifact owners | Plan accepted at `f87edb5`; evidence gate deferred by user-directed sequencing | Accepted planning checkpoint; release/readiness remains `NOT_READY` |
+| Review-artifact residual acceptance evidence | Controller / artifact owners | Deferred residual acceptance evidence gate | Deferred; not current mainline |
+| EID source provenance implementation closeout | Fund/source provenance owner + controller | Implementation review, controller final judgment, accepted checkpoint, scoped control/design sync if authorized | Active mainline gate |
 | Any discovered design/control inconsistency | Controller/design owner | Separate design-truth-sync gate | Must be recorded as residual; `docs/design.md` remains untouched in this gate |
 | Live EID/provider/extractor/golden/readiness/release work | Corresponding gate owner | Separate reviewed gate with explicit authorization | Not authorized here |
 
@@ -101,4 +102,4 @@ The active startup surface keeps only current-useful accepted facts. Full eviden
 2. Read `docs/implementation-control.md` for current control truth.
 3. Use the accepted artifact and historical ledger indexes for evidence-chain reconstruction.
 4. Do not use arbitrary untracked residue as proof.
-5. Next mainline is review-artifact residual acceptance planning after accepted evidence checkpoint `9e0e540`. Do not claim readiness, push, PR, run live/provider/EID/PDF/FDR/analyze/checklist/golden/release commands, read report/PDF contents, or clean residue.
+5. Next mainline is EID source provenance implementation closeout after accepted planning checkpoint `f87edb5`. Do not claim readiness, push, PR, run live/provider/EID/PDF/FDR/analyze/checklist/golden/release commands, read report/PDF contents, or clean residue.
