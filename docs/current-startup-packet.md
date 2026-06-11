@@ -20,11 +20,11 @@ Purpose: short resume entry for the `MVP typed-template-to-agent report generati
 | Field | State |
 |---|---|
 | Current phase | `MVP typed-template-to-agent report generation stabilization phase` |
-| Current active gate | `LLM execution request validation ordering gate` |
+| Current active gate | `UI-Service-Host boundary reconciliation gate` |
 | Gate classification | `standard` |
-| Current accepted checkpoint | EID source provenance truth alignment accepted locally at `2cee618` by controller judgment `docs/reviews/mvp-eid-source-provenance-truth-alignment-implementation-controller-judgment-20260611-132708.md` |
-| Implementation status | Public source provenance v2 now exposes `selected_source`, `source_mode` and `fallback_enabled`; current EID metadata projects `single_source_only`; legacy/unknown metadata remains `legacy_or_unknown` |
-| Next entry point | Plan the `LLM execution request validation ordering gate`; do not change provider defaults/runtime behavior, run live provider/EID/PDF/FDR/network commands, or modify source/tests/runtime before reviewed plan acceptance |
+| Current accepted checkpoint | LLM execution request validation ordering accepted locally at `336081e` by controller judgment `docs/reviews/mvp-llm-execution-request-validation-ordering-implementation-controller-judgment-20260611-134702.md` |
+| Implementation status | `build_fund_llm_execution_request()` now validates business request / contract fields before provider config/client construction; provider clients are constructed after runtime plan |
+| Next entry point | Plan the `UI-Service-Host boundary reconciliation gate`; do not change Host/Agent runtime semantics, provider defaults/runtime behavior, run live provider/EID/PDF/FDR/network commands, or modify source/tests/runtime before reviewed plan acceptance |
 | Control truth | `docs/implementation-control.md` |
 | Design truth | `docs/design.md` |
 | Template truth | `docs/fund-analysis-template-draft.md` canonical `TEMPLATE_CONTRACT_MANIFEST_JSON` |
@@ -43,7 +43,7 @@ Purpose: short resume entry for the `MVP typed-template-to-agent report generati
 
 ## 4. Current Gate Scope
 
-The current entry is planning for `LLM execution request validation ordering gate`. No implementation write set is accepted yet.
+The current entry is planning for `UI-Service-Host boundary reconciliation gate`. No implementation write set is accepted yet.
 
 Allowed controller writes before plan acceptance:
 
@@ -70,7 +70,7 @@ The active startup surface keeps only current-useful accepted facts. Full eviden
 | Small golden / extractor correctness | Current-consumable row-field extractor surfaces are accepted; fixture projection and promotion remain deferred |
 | Typed template truth-source replacement | `docs/fund-analysis-template-draft.md` canonical JSON is accepted authored template contract truth source |
 | Agent engine / Host governance | Current no-live Agent body runner and process-local Host lifecycle boundary are accepted; full tool-loop/runtime expansion remains future |
-| Provider/runtime/LLM diagnostics | Fail-closed provider path and diagnostics are accepted; live acceptance and runtime default changes remain unproven or deferred |
+| Provider/runtime/LLM diagnostics | Fail-closed provider path, diagnostics and LLM request validation ordering are accepted; live acceptance and runtime default changes remain unproven or deferred |
 | Release/readiness historical evidence | Evidence chain only; does not set current release/PR/readiness state |
 
 ## 6. Open Residuals
@@ -81,10 +81,11 @@ The active startup surface keeps only current-useful accepted facts. Full eviden
 | Untracked workspace residue | Controller / artifact owners | Artifact-specific disposition gates listed in residue disposition index | Does not block accepted control-doc compression; blocks release/readiness until accepted disposition |
 | `fund_agent/tools/` source-like residue | Controller + implementation owner | Closed; evidence in `docs/reviews/mvp-source-like-residue-ownership-implementation-evidence-20260611.md` | Accepted; no longer blocks release/readiness for this exact residue |
 | Manual smoke reports and PDFs outside accepted evidence chain | User/controller/runtime evidence owner | Runtime/data artifact disposition gates | Blocks release/readiness if unclassified |
-| Deepreview-derived long-run gates | Controller / future gate owners | Phaseflow queue in `docs/reviews/mvp-long-run-phaseflow-startup-20260611-115345.md` | Follow queue order; current active gate is LLM execution request validation ordering |
+| Deepreview-derived long-run gates | Controller / future gate owners | Phaseflow queue in `docs/reviews/mvp-long-run-phaseflow-startup-20260611-115345.md` | Follow queue order; current active gate is UI-Service-Host boundary reconciliation |
 | EID public provenance mismatch | Fund/source provenance owner | Closed by `2cee618`; residual design/README wording sync remains separate | Accepted for current implementation |
 | Source provenance design/README wording drift (`mode` vs `source_mode`) | Design/controller owner | Separate design-truth-sync or documentation consistency gate | Does not block accepted EID implementation |
-| LLM execution request validation ordering | Service/LLM execution owner | LLM execution request validation ordering gate | Next mainline gate |
+| LLM execution request validation ordering | Service/LLM execution owner | Closed by `336081e`; LLM path parity with deterministic `_validate_request()` remains separate | Accepted for current implementation |
+| UI-Service-Host boundary reconciliation | Service/Host boundary owner | UI-Service-Host boundary reconciliation gate | Next mainline gate |
 | Any discovered design/control inconsistency | Controller/design owner | Separate design-truth-sync gate | Must be recorded as residual; `docs/design.md` remains untouched in this gate |
 | Live EID/provider/extractor/golden/readiness/release work | Corresponding gate owner | Separate reviewed gate with explicit authorization | Not authorized here |
 
@@ -94,4 +95,4 @@ The active startup surface keeps only current-useful accepted facts. Full eviden
 2. Read `docs/implementation-control.md` for current control truth.
 3. Use the accepted artifact and historical ledger indexes for evidence-chain reconstruction.
 4. Do not use arbitrary untracked residue as proof.
-5. Next mainline is LLM execution request validation ordering planning. Do not change provider defaults/runtime behavior or run live provider/EID/PDF/FDR/network commands in that planning gate.
+5. Next mainline is UI-Service-Host boundary reconciliation planning. Do not change Host/Agent runtime semantics, provider defaults/runtime behavior or run live provider/EID/PDF/FDR/network commands in that planning gate.
