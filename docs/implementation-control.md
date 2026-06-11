@@ -6,7 +6,7 @@
 > **设计真源**: `docs/design.md`
 > **控制真源**: `docs/implementation-control.md`
 > **短启动入口**: `docs/current-startup-packet.md`
-> **当前状态**: `MVP typed-template-to-agent report generation stabilization phase`。`Control-doc compression / artifact hygiene implementation gate` 已在本地 checkpoint `693638b` 接受，controller verdict 为 `ACCEPT_WITH_REVIEW_CHANNEL_RESIDUAL`。`Source-like residue ownership implementation gate for fund_agent/tools` 已在本地 checkpoint `11040bd` 接受，controller verdict 为 `ACCEPT`。`EID source provenance truth alignment gate` 已在本地 checkpoint `2cee618` 接受，controller verdict 为 `ACCEPT_WITH_RESIDUALS`。`LLM execution request validation ordering gate` 已在本地 checkpoint `336081e` 接受，controller verdict 为 `ACCEPT_WITH_RESIDUALS`。`UI-Service-Host boundary reconciliation gate` 已在本地 checkpoint `8ff20ed` 接受，controller verdict 为 `ACCEPT_WITH_RESIDUALS`。`Runtime artifact disposition / ignore-rule gate` 已在本地 checkpoint `6bef193` 接受，controller verdict 为 `ACCEPT_WITH_RESIDUALS`。`Release-readiness cleanliness planning gate` 已在本地 checkpoint `1bbcd19` 接受，controller verdict 为 `ACCEPT_WITH_AMENDMENTS`。`Release-readiness cleanliness evidence gate` 已在本地 checkpoint `d0d9672` 接受，controller verdict 为 `ACCEPT_WITH_RESIDUALS_NOT_READY`。`Release-readiness blocker disposition planning gate` 已在本地 checkpoint `e41981a` 接受，controller verdict 为 `ACCEPT_WITH_RESIDUALS`。`Review-artifact provenance disposition evidence gate` 已在本地 checkpoint `9e0e540` 接受，controller verdict 为 `ACCEPT_WITH_RESIDUALS_NOT_READY`。`Review-artifact residual acceptance planning gate` 已在本地 checkpoint `f87edb5` 接受，controller verdict 为 `ACCEPT_WITH_NONBLOCKING_RESIDUALS`；当前推荐主线入口是用户导向的 `EID source provenance implementation closeout gate`。
+> **当前状态**: `MVP typed-template-to-agent report generation stabilization phase`。`Control-doc compression / artifact hygiene implementation gate` 已在本地 checkpoint `693638b` 接受，controller verdict 为 `ACCEPT_WITH_REVIEW_CHANNEL_RESIDUAL`。`Source-like residue ownership implementation gate for fund_agent/tools` 已在本地 checkpoint `11040bd` 接受，controller verdict 为 `ACCEPT`。`EID source provenance truth alignment gate` 已在本地 checkpoint `2cee618` 接受，controller verdict 为 `ACCEPT_WITH_RESIDUALS`。`LLM execution request validation ordering gate` 已在本地 checkpoint `336081e` 接受，controller verdict 为 `ACCEPT_WITH_RESIDUALS`。`UI-Service-Host boundary reconciliation gate` 已在本地 checkpoint `8ff20ed` 接受，controller verdict 为 `ACCEPT_WITH_RESIDUALS`。`Runtime artifact disposition / ignore-rule gate` 已在本地 checkpoint `6bef193` 接受，controller verdict 为 `ACCEPT_WITH_RESIDUALS`。`Release-readiness cleanliness planning gate` 已在本地 checkpoint `1bbcd19` 接受，controller verdict 为 `ACCEPT_WITH_AMENDMENTS`。`Release-readiness cleanliness evidence gate` 已在本地 checkpoint `d0d9672` 接受，controller verdict 为 `ACCEPT_WITH_RESIDUALS_NOT_READY`。`Release-readiness blocker disposition planning gate` 已在本地 checkpoint `e41981a` 接受，controller verdict 为 `ACCEPT_WITH_RESIDUALS`。`Review-artifact provenance disposition evidence gate` 已在本地 checkpoint `9e0e540` 接受，controller verdict 为 `ACCEPT_WITH_RESIDUALS_NOT_READY`。`Review-artifact residual acceptance planning gate` 已在本地 checkpoint `f87edb5` 接受，controller verdict 为 `ACCEPT_WITH_NONBLOCKING_RESIDUALS`。`EID source provenance implementation closeout gate` 已在本地 checkpoint `12f506f` 接受，controller verdict 为 `ACCEPT`；当前推荐主线入口是用户导向的 `multi-year annual analysis productization planning gate`。
 
 ---
 
@@ -38,12 +38,12 @@
 
 | Field | State |
 |---|---|
-| Active gate | `EID source provenance implementation closeout gate` |
+| Active gate | `multi-year annual analysis productization planning gate` |
 | Classification | `heavy` |
-| Accepted input | Review-artifact residual acceptance plan `docs/reviews/mvp-review-artifact-residual-acceptance-plan-20260611.md`; MiMo review `docs/reviews/mvp-review-artifact-residual-acceptance-plan-review-mimo-20260611.md`; DS review `docs/reviews/mvp-review-artifact-residual-acceptance-plan-review-ds-20260611.md`; controller judgment `docs/reviews/mvp-review-artifact-residual-acceptance-plan-controller-judgment-20260611-162326.md` verdict `ACCEPT_WITH_NONBLOCKING_RESIDUALS`; checkpoint `f87edb5` |
-| Implementation objective | Close current EID source provenance gate: implementation review, controller final judgment, accepted checkpoint, then scoped control/design sync if authorized |
-| Implementation status | Review-artifact residual acceptance planning is accepted as planning only; release/readiness remains `NOT_READY`; residual acceptance evidence is deferred by user-directed sequencing |
-| Next entry point | Implementation review worker for EID source provenance implementation/evidence draft |
+| Accepted input | EID source provenance closeout evidence `docs/reviews/mvp-eid-source-provenance-closeout-evidence-20260611.md`; MiMo review `docs/reviews/mvp-eid-source-provenance-closeout-review-mimo-20260611.md`; DS review `docs/reviews/mvp-eid-source-provenance-closeout-review-ds-20260611.md`; controller judgment `docs/reviews/mvp-eid-source-provenance-closeout-controller-judgment-20260611-163234.md` verdict `ACCEPT`; checkpoint `12f506f` |
+| Implementation objective | Plan productized 2021-2025 annual-report analysis capability, replacing manual five single-year runs plus manual merge |
+| Implementation status | EID Source Provenance v2 wording sync is accepted; multi-year annual analysis runtime/product capability is not implemented yet |
+| Next entry point | Planning worker for multi-year annual analysis productization |
 
 ## Long-run Phaseflow Queue
 
@@ -78,12 +78,12 @@ Deferred entries requiring separate reviewed authorization:
 
 ## Non-goal Reminder
 
-The EID source provenance implementation closeout entry does not authorize:
+The multi-year annual analysis productization planning entry does not authorize:
 
 - source/test/runtime behavior changes
 - `.gitignore` edits
-- `docs/design.md`, README or control-truth changes outside the exact sync authorized by closeout controller judgment
-- reviewer/controller artifact creation outside the accepted closeout/review write set
+- `docs/design.md`, README or control-truth changes outside controller status sync
+- reviewer/controller artifact creation outside the accepted planning/review write set
 - delete, move, archive, clean, ignore, import, stage, promote, commit, push, PR, merge, mark-ready or release-state actions
 - live EID/network/PDF/FDR/FundDocumentRepository/helper/fallback/provider/LLM/extractor/analyze/checklist/golden/readiness/score-loop/release commands
 - provider default changes, runtime budget changes, live provider acceptance, retry/fallback semantics, external PR state, or release-readiness status changes
@@ -97,7 +97,7 @@ The current control surface keeps only gate-family summaries. The evidence-chain
 | Gate family | Accepted status | Current relevance | Residual owner / deferred gate |
 |---|---|---|---|
 | Control-doc compression / artifact hygiene | Planning accepted locally at `7365e2b`; implementation accepted locally at `693638b` | Current compressed control surface and index artifacts | Review-channel/worker-channel residuals accepted; no further action unless future handoff reliability gate is requested |
-| EID single-source operational hardening | Accepted locally across failure-branch evidence, helper repair, controlled retry, metadata docs-sync and Source Provenance v2 truth alignment at `2cee618` | Current annual-report source policy and public provenance projection | Fallback/source expansion and additional acquisition deferred; design/README wording drift tracked separately |
+| EID single-source operational hardening | Accepted locally across failure-branch evidence, helper repair, controlled retry, metadata docs-sync, Source Provenance v2 truth alignment at `2cee618` and wording closeout at `12f506f` | Current annual-report source policy and public provenance projection | Fallback/source expansion and additional acquisition deferred |
 | Small golden / extractor correctness | Accepted locally through current-consumable row-shape and extractor surfaces | Current extractor evidence baseline for named rows/contracts | Fixture projection, promotion and release/readiness deferred |
 | Typed template truth-source replacement | Accepted locally; canonical JSON in template draft is authored truth source | Current template contract truth source | Public chapter id/runtime expansion unchanged |
 | Agent engine / Host governance | Accepted locally for no-live Agent body runner and process-local Host lifecycle boundary | Current `--use-llm` architecture boundary | Full Agent tool-loop/runtime expansion deferred |
@@ -115,7 +115,7 @@ The current control surface keeps only gate-family summaries. The evidence-chain
 | Manual smoke reports and PDFs outside accepted evidence chain | accepted residual | User/controller/runtime evidence owner | Deferred runtime/data residue disposition gate |
 | Release/readiness cleanliness unproven | accepted residual | Release owner | Deferred release-readiness gate after accepted disposition |
 | EID public provenance mismatch | accepted; closed for current implementation | Fund/source provenance owner | Closed by `2cee618`; public v2 projection now exposes `selected_source`, `source_mode`, `fallback_enabled` |
-| Source provenance design/README wording drift (`mode` vs `source_mode`) | accepted residual | Design owner/controller | Separate design-truth-sync or documentation consistency gate; `docs/design.md` was out of scope for EID implementation |
+| Source provenance design/README wording drift (`mode` vs `source_mode`) | accepted; closed at `12f506f` | Design owner/controller | Historical review artifacts may still contain old wording as evidence chain only |
 | LLM execution request validation ordering | accepted; closed for current implementation | Service/LLM execution owner | Closed by `336081e`; LLM path parity with deterministic `_validate_request()` deferred |
 | UI-Service-Host boundary reconciliation | accepted; closed for current implementation | Service/Host boundary owner | Closed by `8ff20ed`; future Host durable and Agent full runtime expansion remain separate |
 | Runtime artifact disposition / ignore-rule planning | accepted; closed for non-destructive disposition | Controller / artifact owners | Closed by `6bef193`; untracked residue remains release/readiness blocker with owners/next gates |
@@ -125,7 +125,8 @@ The current control surface keeps only gate-family summaries. The evidence-chain
 | Review-artifact provenance disposition evidence | accepted locally at `9e0e540`; result `NOT_READY` | Controller / artifact owners | Exact paths classified, but no current/historical chain acceptance; route to residual acceptance planning |
 | Review-artifact residual acceptance planning | accepted locally at `f87edb5`; planning only | Controller / artifact owners | Evidence gate deferred by user-directed sequencing; no residual/readiness accepted |
 | Review-artifact residual acceptance evidence | deferred residual | Controller / artifact owners | Future reviewed evidence gate if user/controller returns to release-readiness residue closure |
-| EID source provenance implementation closeout | active mainline residual | Fund/source provenance owner + controller | Implementation review, controller final judgment, accepted checkpoint, then scoped control/design sync if authorized |
+| EID source provenance implementation closeout | accepted locally at `12f506f` | Fund/source provenance owner + controller | Closed; Source Provenance v2 wording synced in design/README |
+| Multi-year annual analysis productization | active mainline residual | Product/Service/Fund owner + controller | Planning gate for 2021-2025 formal multi-year annual analysis capability |
 | Deepreview-derived long-run gates | queued residual | Controller / future gate owners | Use `docs/reviews/mvp-long-run-phaseflow-startup-20260611-115345.md`; follow queue order |
 | Any design/control inconsistency discovered later | potential residual | Design owner/controller | Separate design-truth-sync gate; do not modify `docs/design.md` in this gate |
 
@@ -151,6 +152,7 @@ The current control surface keeps only gate-family summaries. The evidence-chain
 | `Release-readiness blocker disposition planning gate` | accepted locally | Plan, MiMo review, DS review and controller judgment `docs/reviews/mvp-release-readiness-blocker-disposition-plan-controller-judgment-20260611-155001.md`; verdict `ACCEPT_WITH_RESIDUALS`; checkpoint `e41981a` | Review-artifact provenance disposition evidence gate |
 | `Review-artifact provenance disposition evidence gate` | accepted locally; not ready | Evidence, MiMo review, DS review and controller judgment `docs/reviews/mvp-review-artifact-provenance-disposition-evidence-controller-judgment-20260611-160126.md`; verdict `ACCEPT_WITH_RESIDUALS_NOT_READY`; checkpoint `9e0e540` | Review-artifact residual acceptance planning gate |
 | `Review-artifact residual acceptance planning gate` | accepted locally; planning only | Plan, MiMo review, DS review and controller judgment `docs/reviews/mvp-review-artifact-residual-acceptance-plan-controller-judgment-20260611-162326.md`; verdict `ACCEPT_WITH_NONBLOCKING_RESIDUALS`; checkpoint `f87edb5` | User-directed EID source provenance implementation closeout gate |
+| `EID source provenance implementation closeout gate` | accepted locally | Evidence, MiMo review, DS review and controller judgment `docs/reviews/mvp-eid-source-provenance-closeout-controller-judgment-20260611-163234.md`; verdict `ACCEPT`; checkpoint `12f506f` | Multi-year annual analysis productization planning gate |
 
 ## Historical Evidence Index
 
@@ -175,4 +177,4 @@ Historical entries cannot override current phase, current gate, next entry point
 2. Read `AGENTS.md`, `docs/current-startup-packet.md` and this file before choosing any next action.
 3. For historical accepted evidence, use the accepted artifact index and historical ledger index.
 4. Do not run live/provider/extractor/golden/readiness/release commands unless a separate reviewed gate explicitly authorizes them.
-5. Current mainline is EID source provenance implementation closeout after accepted planning checkpoint `f87edb5`. Do not claim readiness, push, PR, run live/provider/EID/PDF/FDR/analyze/checklist/golden/release commands, read report/PDF contents, or clean residue.
+5. Current mainline is multi-year annual analysis productization planning after accepted EID closeout checkpoint `12f506f`. Do not claim readiness, push, PR, run live/provider/EID/PDF/FDR/analyze/checklist/golden/release commands, read report/PDF contents, or clean residue.
