@@ -7,12 +7,13 @@
 
 from __future__ import annotations
 
+import asyncio
 import time
 from dataclasses import dataclass, replace
 from decimal import Decimal
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Literal, Protocol
+from typing import Callable, Literal, Mapping, Protocol
 
 from fund_agent.config.paths import DEFAULT_GOLDEN_ANSWER_JSON
 from fund_agent.fund.analysis import (
@@ -52,7 +53,7 @@ from fund_agent.config.paths import DEFAULT_SELECTED_FUNDS_CSV
 from fund_agent.fund.fund_type import FundType
 from fund_agent.fund.quality_gate import GATE_STATUS_BLOCK, QualityGateResult
 from fund_agent.fund.quality_gate_integration import check_quality_gate_fund_membership, run_quality_gate_for_bundle
-from fund_agent.host import HostRunContext
+from fund_agent.host import HostRunContext, HostRuntimeRunner
 from fund_agent.fund.template import TemplateRenderInput, TemplateRenderResult, render_template_report
 from fund_agent.services.chapter_orchestrator import (
     ChapterOrchestrationPolicy,
@@ -353,6 +354,33 @@ class FundLLMAnalysisResult:
 
 
 @dataclass(frozen=True, slots=True)
+class FundLLMHostedRunResult:
+    """Service 投影给 UI 的 Host 托管 LLM run 安全结果，见模板第 0-7 章。
+
+    Attributes:
+        analysis_result: LLM 分析结果；Host 未产出业务结果时为空。
+        host_status: Host 终态字符串。
+        host_run_id: Host run ID。
+        host_elapsed_ms: Host run 耗时毫秒。
+        host_timeout_classification: Host timeout 分类字符串。
+        host_safe_diagnostics: Host 安全诊断。
+        host_event_count: Host 事件数量。
+        host_completed_at_iso: Host 完成时间 ISO 字符串。
+        host_operation_result_present: Host operation result 是否存在。
+    """
+
+    analysis_result: FundLLMAnalysisResult | None
+    host_status: str
+    host_run_id: str
+    host_elapsed_ms: int | None
+    host_timeout_classification: str | None
+    host_safe_diagnostics: Mapping[str, object]
+    host_event_count: int
+    host_completed_at_iso: str | None
+    host_operation_result_present: bool
+
+
+@dataclass(frozen=True, slots=True)
 class FundChecklistResult:
     """基金检查清单 Service 结果。
 
@@ -482,6 +510,10 @@ class QualityGateNotRunBlockedError(ValueError):
         self.reason = reason
         self.policy: QualityGatePolicy = "block"
         super().__init__(f"质量 gate 未运行：{reason}")
+
+
+class _LLMIncompleteHostRunError(RuntimeError):
+    """LLM 分析未完成时用于让 Host runner 形成 failed 终态的内部异常。"""
 
 
 class FundAnalysisService:
@@ -721,6 +753,78 @@ class FundAnalysisService:
             assembly_policy=execution_request.runtime_plan.assembly_policy,
             host_context=host_context,
         )
+
+    def analyze_with_llm_hosted(
+        self,
+        request: FundAnalysisRequest,
+        *,
+        event_sink: Callable[[object], None] | None = None,
+    ) -> FundLLMHostedRunResult:
+        """通过 Service-owned Host run 执行显式 LLM 分析。
+
+        该方法是 UI `--use-llm` 的唯一 hosted LLM 用例入口。Service 先构造
+        `FundLLMExecutionRequest` 和 provider clients，再把同步 operation、
+        operation name、Host timeout 标量和可选 event sink 交给 Host runner。
+        Host 只接收通用 lifecycle 字段，不接收基金代码、章节策略或 provider
+        runtime 业务字段。
+
+        Args:
+            request: CLI/UI 构造的显式分析请求。
+            event_sink: 可选 Host 通用事件 sink，用于 UI stderr progress。
+
+        Returns:
+            Service 投影后的 hosted run 安全结果。
+
+        Raises:
+            LLMProviderConfigError: 当 provider 配置缺失或非法时抛出。
+            LLMProviderConstructionError: 当 provider clients 构造失败时抛出。
+            QualityGateBlockedError: 当 quality gate 在 block 策略下阻断报告时抛出。
+            QualityGateNotRunBlockedError: 当 quality gate 在 block 策略下未运行时抛出。
+            ValueError: 当请求或执行契约非法时抛出。
+        """
+
+        execution_request = build_fund_llm_execution_request(
+            request,
+            opt_in_mode="explicit_cli_flag",
+        )
+        quality_gate_exception: QualityGateBlockedError | QualityGateNotRunBlockedError | None = None
+        incomplete_result: FundLLMAnalysisResult | None = None
+
+        def operation(host_context: HostRunContext) -> FundLLMAnalysisResult:
+            """Service-owned async bridge，Host runner 不管理 event loop。"""
+
+            nonlocal incomplete_result, quality_gate_exception
+            try:
+                result = asyncio.run(
+                    self.analyze_with_llm_execution(
+                        execution_request,
+                        host_context=host_context,
+                    )
+                )
+                if result.final_assembly_result.report_markdown is None:
+                    incomplete_result = result
+                    host_context.record_diagnostic(
+                        final_assembly_status=result.final_assembly_result.status,
+                        error_type=_LLMIncompleteHostRunError.__name__,
+                    )
+                    raise _LLMIncompleteHostRunError("llm_result_incomplete")
+                return result
+            except (QualityGateBlockedError, QualityGateNotRunBlockedError) as exc:
+                quality_gate_exception = exc
+                host_context.record_diagnostic(error_type=type(exc).__name__)
+                raise
+
+        host_result = HostRuntimeRunner().run_sync(
+            operation_name="fund_analysis_llm_report",
+            operation=operation,
+            timeout_seconds=execution_request.runtime_plan.host_timeout_seconds,
+            event_sink=event_sink,
+        )
+        if quality_gate_exception is not None:
+            raise quality_gate_exception
+        if incomplete_result is not None:
+            host_result = replace(host_result, operation_result=incomplete_result)
+        return _project_hosted_llm_run_result(host_result)
 
     async def _resolve_valuation_state(
         self,
@@ -1022,6 +1126,64 @@ def _fund_analysis_request_from_llm_input(
         developer_overrides=analysis_input.developer_overrides,
         command_source="analyze",
     )
+
+
+def _project_hosted_llm_run_result(host_result: object) -> FundLLMHostedRunResult:
+    """把 HostRunResult 投影成 Service-owned 安全返回形状。
+
+    Args:
+        host_result: Host runner 返回的通用 run result。
+
+    Returns:
+        只包含 UI 安全消费字段的 hosted LLM run result。
+
+    Raises:
+        AttributeError: 当传入对象不具备 HostRunResult 必要字段时自然抛出。
+    """
+
+    operation_result = getattr(host_result, "operation_result")
+    status = getattr(host_result, "status")
+    timeout_classification = getattr(host_result, "timeout_classification")
+    completed_at = getattr(host_result, "completed_at")
+    analysis_result = (
+        operation_result if isinstance(operation_result, FundLLMAnalysisResult) else None
+    )
+    return FundLLMHostedRunResult(
+        analysis_result=analysis_result,
+        host_status=_enum_value_or_str(status),
+        host_run_id=str(getattr(host_result, "run_id")),
+        host_elapsed_ms=getattr(host_result, "elapsed_ms"),
+        host_timeout_classification=(
+            None
+            if timeout_classification is None
+            else _enum_value_or_str(timeout_classification)
+        ),
+        host_safe_diagnostics=dict(getattr(host_result, "safe_diagnostics")),
+        host_event_count=len(getattr(host_result, "events")),
+        host_completed_at_iso=(
+            None if completed_at is None else completed_at.isoformat()
+        ),
+        host_operation_result_present=operation_result is not None,
+    )
+
+
+def _enum_value_or_str(value: object) -> str:
+    """返回 enum-like 对象的 value，否则返回字符串形式。
+
+    Args:
+        value: enum-like 对象或普通标量。
+
+    Returns:
+        可安全展示的字符串。
+
+    Raises:
+        无显式抛出。
+    """
+
+    enum_value = getattr(value, "value", None)
+    if enum_value is not None:
+        return str(enum_value)
+    return str(value)
 
 
 def _validate_llm_execution_fail_closed_policy(

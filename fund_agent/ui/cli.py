@@ -8,13 +8,12 @@ UI 层只负责解析用户输入和输出报告，不承载基金分析逻辑�
 from __future__ import annotations
 
 import asyncio
-from dataclasses import replace
 import json
 from pathlib import Path
 import sys
 import threading
 import time
-from typing import Annotated
+from typing import Annotated, Callable, Mapping
 
 import typer
 
@@ -25,14 +24,6 @@ from fund_agent.config.paths import (
     DEFAULT_GOLDEN_REVIEWED_MARKDOWN,
     DEFAULT_GOLDEN_TEMPLATE_PATH,
     DEFAULT_SELECTED_FUNDS_CSV,
-)
-from fund_agent.host import (
-    HostRunEvent,
-    HostRunEventSink,
-    HostRunEventType,
-    HostRunResult,
-    HostRunStatus,
-    HostRuntimeRunner,
 )
 from fund_agent.services import (
     ExtractionScoreRequest,
@@ -62,9 +53,8 @@ from fund_agent.services import (
     ThermometerRequest,
     ThermometerService,
     ValuationState,
-    FundLLMExecutionRequest,
-    build_fund_llm_execution_request,
     FundLLMAnalysisResult,
+    FundLLMHostedRunResult,
 )
 from fund_agent.services.llm_run_artifacts import (
     LLMRunArtifactWriteResult,
@@ -89,6 +79,13 @@ _LLM_PROGRESS_HEARTBEAT_INTERVAL_SECONDS = 30.0
 _LLM_PROGRESS_THREAD_JOIN_SECONDS = 2.0
 _LLM_PROGRESS_THREAD_POLL_SECONDS = 1.0
 _LLM_PROGRESS_SAFE_VALUE_MAX_LENGTH = 80
+_HOST_EVENT_RUN_STARTED = "run_started"
+_HOST_EVENT_PHASE_STARTED = "phase_started"
+_HOST_EVENT_PHASE_COMPLETED = "phase_completed"
+_HOST_STATUS_SUCCEEDED = "succeeded"
+_HOST_STATUS_FAILED = "failed"
+_HOST_STATUS_CANCELLED = "cancelled"
+_HOST_STATUS_DEADLINE_EXCEEDED = "deadline_exceeded"
 _LLM_PROGRESS_FORBIDDEN_VALUE_PARTS = (
     "api_key",
     "authorization",
@@ -218,14 +215,14 @@ class _LLMProgressReporter:
         self._thread: threading.Thread | None = None
 
     @property
-    def event_sink(self) -> HostRunEventSink:
-        """返回传给 Host 的 no-raise event sink。
+    def event_sink(self) -> Callable[[object], None]:
+        """返回传给 Service hosted LLM 用例的 no-raise event sink。
 
         Args:
             无。
 
         Returns:
-            Host 通用事件接收函数。
+            通用事件接收函数。
 
         Raises:
             无显式抛出；内部异常会被 sink wrapper 捕获。
@@ -294,11 +291,11 @@ class _LLMProgressReporter:
         if thread is not None and thread.is_alive():
             thread.join(timeout=_LLM_PROGRESS_THREAD_JOIN_SECONDS)
 
-    def handle_event(self, event: HostRunEvent) -> None:
-        """处理 Host 通用事件并输出即时 progress。
+    def handle_event(self, event: object) -> None:
+        """处理通用事件并输出即时 progress。
 
         Args:
-            event: Host 已提交的安全事件。
+            event: Service/Host 已提交的安全事件。
 
         Returns:
             无返回值。
@@ -314,11 +311,11 @@ class _LLMProgressReporter:
         except Exception:  # noqa: BLE001 - progress 失败不能影响 Host/CLI 主流程。
             self._mark_sink_failed()
 
-    def emit_terminal(self, host_result: HostRunResult) -> None:
+    def emit_terminal(self, hosted_result: FundLLMHostedRunResult) -> None:
         """在 Host run 返回后输出 terminal progress 行。
 
         Args:
-            host_result: Host run 终态结果。
+            hosted_result: Service 投影后的 Host run 终态结果。
 
         Returns:
             无返回值。
@@ -330,7 +327,7 @@ class _LLMProgressReporter:
         if not self.enabled:
             return
         try:
-            event_name = _terminal_progress_event_name(host_result)
+            event_name = _terminal_progress_event_name(hosted_result)
             if event_name is None:
                 return
             with self._lock:
@@ -346,9 +343,9 @@ class _LLMProgressReporter:
             self._safe_echo(
                 (
                     f"{_LLM_PROGRESS_PREFIX} run_terminal "
-                    f"run_id={_progress_scalar(host_result.run_id)} "
+                    f"run_id={_progress_scalar(hosted_result.host_run_id)} "
                     f"event={event_name} "
-                    f"elapsed_ms={_progress_scalar(host_result.elapsed_ms)}"
+                    f"elapsed_ms={_progress_scalar(hosted_result.host_elapsed_ms)}"
                 )
             )
         except Exception:  # noqa: BLE001 - terminal progress 失败不能覆盖原终态。
@@ -405,11 +402,11 @@ class _LLMProgressReporter:
             self._mark_sink_failed()
             return False
 
-    def _handle_event(self, event: HostRunEvent) -> None:
-        """处理单个 Host 事件的状态转移。
+    def _handle_event(self, event: object) -> None:
+        """处理单个通用事件的状态转移。
 
         Args:
-            event: Host 已提交事件。
+            event: Service/Host 已提交事件。
 
         Returns:
             无返回值。
@@ -418,26 +415,27 @@ class _LLMProgressReporter:
             ValueError: progress 值不满足安全输出契约时抛出。
         """
 
-        if event.event_type == HostRunEventType.RUN_STARTED:
+        event_type = _host_event_type_name(event)
+        if event_type == _HOST_EVENT_RUN_STARTED:
             self._safe_echo(
                 (
                     f"{_LLM_PROGRESS_PREFIX} run_started "
-                    f"run_id={_progress_scalar(event.run_id)} "
-                    f"timeout_seconds={_progress_scalar(event.diagnostics.get('timeout_seconds'))}"
+                    f"run_id={_progress_scalar(getattr(event, 'run_id', None))} "
+                    f"timeout_seconds={_progress_scalar(_event_value(event, 'timeout_seconds'))}"
                 )
             )
             return
-        if event.event_type == HostRunEventType.PHASE_STARTED:
+        if event_type == _HOST_EVENT_PHASE_STARTED:
             self._handle_phase_started(event)
             return
-        if event.event_type == HostRunEventType.PHASE_COMPLETED:
+        if event_type == _HOST_EVENT_PHASE_COMPLETED:
             self._handle_phase_completed(event)
 
-    def _handle_phase_started(self, event: HostRunEvent) -> None:
+    def _handle_phase_started(self, event: object) -> None:
         """记录 phase started 状态并输出 progress 行。
 
         Args:
-            event: Host phase started 事件。
+            event: Service/Host phase started 事件。
 
         Returns:
             无返回值。
@@ -446,9 +444,9 @@ class _LLMProgressReporter:
             ValueError: progress 值不满足安全输出契约时抛出。
         """
 
-        phase = event.diagnostics.get("phase")
-        chapter_id = event.diagnostics.get("chapter_id")
-        attempt = event.diagnostics.get("attempt")
+        phase = _event_value(event, "phase")
+        chapter_id = _event_value(event, "chapter_id")
+        attempt = _event_value(event, "attempt")
         with self._lock:
             if self._sink_failed or self._terminal_emitted:
                 return
@@ -466,11 +464,11 @@ class _LLMProgressReporter:
             )
         )
 
-    def _handle_phase_completed(self, event: HostRunEvent) -> None:
+    def _handle_phase_completed(self, event: object) -> None:
         """记录 phase completed 状态并输出 progress 行。
 
         Args:
-            event: Host phase completed 事件。
+            event: Service/Host phase completed 事件。
 
         Returns:
             无返回值。
@@ -479,10 +477,10 @@ class _LLMProgressReporter:
             ValueError: progress 值不满足安全输出契约时抛出。
         """
 
-        phase = event.diagnostics.get("phase")
-        chapter_id = event.diagnostics.get("chapter_id")
-        attempt = event.diagnostics.get("attempt")
-        elapsed_ms = event.diagnostics.get("elapsed_ms")
+        phase = _event_value(event, "phase")
+        chapter_id = _event_value(event, "chapter_id")
+        attempt = _event_value(event, "attempt")
+        elapsed_ms = _event_value(event, "elapsed_ms")
         with self._lock:
             if self._sink_failed or self._terminal_emitted:
                 return
@@ -576,11 +574,56 @@ def _optional_int(value: object) -> int | None:
     return int(value)
 
 
-def _terminal_progress_event_name(host_result: HostRunResult) -> str | None:
+def _host_event_type_name(event: object) -> str:
+    """读取通用事件类型名称。
+
+    Args:
+        event: 任意 duck-typed event 对象。
+
+    Returns:
+        event_type 的 value 或字符串形式；缺失时返回空字符串。
+
+    Raises:
+        无显式抛出。
+    """
+
+    event_type = getattr(event, "event_type", None)
+    if event_type is None:
+        return ""
+    event_type_value = getattr(event_type, "value", None)
+    if event_type_value is not None:
+        return str(event_type_value)
+    return str(event_type)
+
+
+def _event_value(event: object, name: str) -> object:
+    """从 duck-typed event 属性或 diagnostics 中读取 progress 字段。
+
+    Args:
+        event: 任意 duck-typed event 对象。
+        name: 字段名。
+
+    Returns:
+        字段值；缺失时返回 `None`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    direct_value = getattr(event, name, None)
+    if direct_value is not None:
+        return direct_value
+    diagnostics = getattr(event, "diagnostics", None)
+    if isinstance(diagnostics, Mapping):
+        return diagnostics.get(name)
+    return None
+
+
+def _terminal_progress_event_name(hosted_result: FundLLMHostedRunResult) -> str | None:
     """把 Host 终态映射为 progress terminal event 名称。
 
     Args:
-        host_result: Host run 结果。
+        hosted_result: Service 投影后的 Host run 结果。
 
     Returns:
         `run_completed` / `run_failed` / `run_cancelled`；非可展示终态返回 `None`。
@@ -589,13 +632,13 @@ def _terminal_progress_event_name(host_result: HostRunResult) -> str | None:
         无显式抛出。
     """
 
-    if host_result.status == HostRunStatus.SUCCEEDED:
+    if hosted_result.host_status == _HOST_STATUS_SUCCEEDED:
         return "run_completed"
-    if host_result.status == HostRunStatus.FAILED:
+    if hosted_result.host_status == _HOST_STATUS_FAILED:
         return "run_failed"
-    if host_result.status in {
-        HostRunStatus.CANCELLED,
-        HostRunStatus.DEADLINE_EXCEEDED,
+    if hosted_result.host_status in {
+        _HOST_STATUS_CANCELLED,
+        _HOST_STATUS_DEADLINE_EXCEEDED,
     }:
         return "run_cancelled"
     return None
@@ -780,35 +823,41 @@ def analyze(
     )
     try:
         if use_llm:
-            execution_request = _build_llm_execution_request_or_fail(request)
             progress_enabled = _resolve_llm_progress_enabled(llm_progress)
             reporter = _LLMProgressReporter(enabled=progress_enabled)
-            host_result: HostRunResult | None = None
+            hosted_result: FundLLMHostedRunResult | None = None
             try:
                 reporter.start()
-                host_result = _run_llm_analysis_in_host(
-                    execution_request,
+                hosted_result = FundAnalysisService().analyze_with_llm_hosted(
+                    request,
                     event_sink=reporter.event_sink,
                 )
             finally:
                 reporter.stop()
-            if host_result is None:
+            if hosted_result is None:
                 raise RuntimeError("LLM Host run did not return a result")
-            reporter.emit_terminal(host_result)
-            if host_result.status != HostRunStatus.SUCCEEDED or host_result.operation_result is None:
-                if host_result.operation_result is not None:
+            reporter.emit_terminal(hosted_result)
+            if (
+                hosted_result.host_status != _HOST_STATUS_SUCCEEDED
+                or hosted_result.analysis_result is None
+                or not hosted_result.host_operation_result_present
+            ):
+                if hosted_result.analysis_result is not None:
                     _write_incomplete_llm_artifacts_for_cli(
-                        host_result.operation_result,
-                        host_run_id=host_result.run_id,
+                        hosted_result.analysis_result,
+                        host_run_id=hosted_result.host_run_id,
                     )
                     typer.echo(
-                        _hosted_llm_incomplete_message(host_result.operation_result, host_result),
+                        _hosted_llm_incomplete_message(
+                            hosted_result.analysis_result,
+                            hosted_result,
+                        ),
                         err=True,
                     )
                     raise typer.Exit(code=1)
-                typer.echo(_host_run_failed_message(host_result), err=True)
+                typer.echo(_host_run_failed_message(hosted_result), err=True)
                 raise typer.Exit(code=1)
-            result = host_result.operation_result
+            result = hosted_result.analysis_result
         else:
             result = asyncio.run(FundAnalysisService().analyze(request))
     except LLMProviderConfigError as exc:
@@ -1344,99 +1393,12 @@ def _valuation_state(value: str | None) -> ValuationState | None:
     return value  # type: ignore[return-value]
 
 
-def _build_llm_execution_request_or_fail(
-    request: FundAnalysisRequest,
-) -> FundLLMExecutionRequest:
-    """委托 Service 构造 LLM typed execution request，见模板第 0-7 章。
-
-    Args:
-        request: CLI 构造的显式分析请求。
-
-    Returns:
-        Service-owned LLM 执行请求。
-
-    Raises:
-        LLMProviderConfigError: 当环境变量配置缺失或非法时抛出。
-        LLMProviderConstructionError: 当 provider clients 构造失败时抛出。
-        ValueError: 当 Service 执行契约字段非法时抛出。
-    """
-
-    return build_fund_llm_execution_request(
-        request,
-        opt_in_mode="explicit_cli_flag",
-    )
-
-
-class _LLMIncompleteHostRunError(RuntimeError):
-    """LLM 分析未完成时用于让 Host runner 形成 failed 终态的内部异常。"""
-
-
-def _run_llm_analysis_in_host(
-    execution_request: FundLLMExecutionRequest,
-    *,
-    event_sink: HostRunEventSink | None = None,
-) -> HostRunResult:
-    """通过本地 Host runtime governance 托管 LLM 分析。
-
-    Args:
-        execution_request: Service-owned typed LLM 执行请求。
-        event_sink: 可选 Host 通用事件 sink，用于 CLI stderr progress。
-
-    Returns:
-        Host run 终态结果。
-
-    Raises:
-        无显式抛出；Service 异常由 Host runner 收敛为 fail-closed 终态。
-    """
-
-    service = FundAnalysisService()
-    quality_gate_exception: QualityGateBlockedError | QualityGateNotRunBlockedError | None = None
-    incomplete_result = None
-    timeout_seconds = execution_request.runtime_plan.host_timeout_seconds
-
-    def operation(host_context):  # type: ignore[no-untyped-def]
-        """CLI-owned async bridge，Host runner 不管理 event loop。"""
-
-        nonlocal incomplete_result, quality_gate_exception
-        try:
-            result = asyncio.run(
-                service.analyze_with_llm_execution(
-                    execution_request,
-                    host_context=host_context,
-                )
-            )
-            if result.final_assembly_result.report_markdown is None:
-                incomplete_result = result
-                host_context.record_diagnostic(
-                    final_assembly_status=result.final_assembly_result.status,
-                    error_type=_LLMIncompleteHostRunError.__name__,
-                )
-                raise _LLMIncompleteHostRunError("llm_result_incomplete")
-            return result
-        except (QualityGateBlockedError, QualityGateNotRunBlockedError) as exc:
-            quality_gate_exception = exc
-            host_context.record_diagnostic(error_type=type(exc).__name__)
-            raise
-
-    host_result = HostRuntimeRunner().run_sync(
-        operation_name="fund_analysis_llm_report",
-        operation=operation,
-        timeout_seconds=timeout_seconds,
-        event_sink=event_sink,
-    )
-    if quality_gate_exception is not None:
-        raise quality_gate_exception
-    if incomplete_result is not None:
-        host_result = replace(host_result, operation_result=incomplete_result)
-    return host_result
-
-
-def _hosted_llm_incomplete_message(result, host_result: HostRunResult) -> str:  # type: ignore[no-untyped-def]
+def _hosted_llm_incomplete_message(result, hosted_result: FundLLMHostedRunResult) -> str:  # type: ignore[no-untyped-def]
     """生成带 Host run 摘要的 LLM incomplete 安全错误消息。
 
     Args:
         result: Service 返回的 typed LLM 分析结果。
-        host_result: Host 托管 run 的终态结果。
+        hosted_result: Service 投影后的 Host 托管 run 终态结果。
 
     Returns:
         LLM incomplete 摘要和 Host run 安全摘要。
@@ -1445,7 +1407,7 @@ def _hosted_llm_incomplete_message(result, host_result: HostRunResult) -> str:  
         无显式抛出。
     """
 
-    return f"{_llm_incomplete_message(result)}; {_host_run_failed_message(host_result)}"
+    return f"{_llm_incomplete_message(result)}; {_host_run_failed_message(hosted_result)}"
 
 
 def _write_incomplete_llm_artifacts_for_cli(
@@ -1488,11 +1450,11 @@ def _write_incomplete_llm_artifacts_for_cli(
     return artifact_result
 
 
-def _host_run_failed_message(host_result: HostRunResult) -> str:
+def _host_run_failed_message(hosted_result: FundLLMHostedRunResult) -> str:
     """生成 Host run fail-closed 安全错误消息。
 
     Args:
-        host_result: Host run 终态结果。
+        hosted_result: Service 投影后的 Host run 终态结果。
 
     Returns:
         仅包含 run state、安全分类和错误类型的 stderr 消息。
@@ -1501,22 +1463,18 @@ def _host_run_failed_message(host_result: HostRunResult) -> str:
         无显式抛出。
     """
 
-    timeout_classification = (
-        host_result.timeout_classification.value
-        if host_result.timeout_classification is not None
-        else "none"
-    )
-    diagnostics = host_result.safe_diagnostics
+    timeout_classification = hosted_result.host_timeout_classification or "none"
+    diagnostics = hosted_result.host_safe_diagnostics
     error_type = diagnostics.get("error_type", "none")
     cancel_reason = diagnostics.get("cancel_reason", "none")
     return (
         "LLM Host run 未完成："
-        f"run_id={host_result.run_id}; "
-        f"status={host_result.status.value}; "
+        f"run_id={hosted_result.host_run_id}; "
+        f"status={hosted_result.host_status}; "
         f"timeout_classification={timeout_classification}; "
         f"cancel_reason={cancel_reason}; "
         f"error_type={error_type}; "
-        f"elapsed_ms={host_result.elapsed_ms}"
+        f"elapsed_ms={hosted_result.host_elapsed_ms}"
     )
 
 

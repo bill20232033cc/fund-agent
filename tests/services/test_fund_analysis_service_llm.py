@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import ast
 import asyncio
+from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
@@ -27,6 +29,7 @@ from fund_agent.services import (
     FundLLMExecutionRequest,
     FundLLMRuntimePlan,
     FundLLMAnalysisResult,
+    FundLLMHostedRunResult,
     LLMProviderConstructionError,
     ProviderRuntimeBudget,
     QualityFailClosedPolicy,
@@ -171,6 +174,167 @@ class _Chapter6BlockingWriterLLMClient(_FakeChapterLLMClient):
             model_name="fake-writer",
             finish_reason="stop",
         )
+
+
+@dataclass(slots=True)
+class _FakeHostedRunContext:
+    """Service hosted wrapper 测试用 Host context。"""
+
+    run_id: str = "host_run_fake"
+    timeout_seconds: int | None = None
+    diagnostics: list[dict[str, object]] | None = None
+    cancellation_token: object | None = None
+
+    def __post_init__(self) -> None:
+        """补齐 Host bridge 需要的 cancellation token。"""
+
+        if self.cancellation_token is None:
+            self.cancellation_token = _FakeCancellationToken()
+
+    def cancel_if_deadline_exceeded(self) -> bool:
+        """模拟 deadline 未超时。"""
+
+        return False
+
+    def raise_if_cancelled_or_deadline_exceeded(self) -> None:
+        """模拟未取消且未超时的 Host lifecycle 检查。"""
+
+    def record_phase_started(
+        self,
+        *,
+        phase: str,
+        chapter_id: int | None = None,
+        attempt: int | None = None,
+        provider_attempt: int | None = None,
+    ) -> None:
+        """记录 fake phase_started 诊断。"""
+
+        self.record_diagnostic(
+            event_type="phase_started",
+            phase=phase,
+            chapter_id=chapter_id,
+            attempt=attempt,
+            provider_attempt=provider_attempt,
+        )
+
+    def record_phase_completed(
+        self,
+        *,
+        phase: str,
+        chapter_id: int | None = None,
+        attempt: int | None = None,
+        provider_attempt: int | None = None,
+        elapsed_ms: int | None = None,
+    ) -> None:
+        """记录 fake phase_completed 诊断。"""
+
+        self.record_diagnostic(
+            event_type="phase_completed",
+            phase=phase,
+            chapter_id=chapter_id,
+            attempt=attempt,
+            provider_attempt=provider_attempt,
+            elapsed_ms=elapsed_ms,
+        )
+
+    def record_diagnostic(self, **diagnostics: object) -> None:
+        """记录 fake Host 安全诊断。"""
+
+        if self.diagnostics is None:
+            self.diagnostics = []
+        self.diagnostics.append(diagnostics)
+
+
+class _FakeCancellationToken:
+    """Service hosted wrapper 测试用取消令牌。"""
+
+    reason = None
+
+    def is_cancelled(self) -> bool:
+        """模拟未取消。"""
+
+        return False
+
+
+@dataclass(frozen=True, slots=True)
+class _FakeHostedRunResult:
+    """Service hosted wrapper 测试用 Host run result。"""
+
+    run_id: str
+    status: str
+    completed_at: datetime
+    elapsed_ms: int
+    operation_result: object | None
+    timeout_classification: str | None
+    safe_diagnostics: dict[str, object]
+    events: tuple[object, ...]
+
+
+class _RecordingHostRuntimeRunner:
+    """记录 Service 传给 Host runner 的 generic lifecycle 参数。"""
+
+    run_called = False
+    last_operation_name: str | None = None
+    last_timeout_seconds: int | None = None
+    last_session_id: str | None = None
+    last_event_sink = None
+    forbidden_kwargs: dict[str, object] = {}
+
+    def run_sync(  # type: ignore[no-untyped-def]
+        self,
+        *,
+        operation_name,
+        operation,
+        timeout_seconds=None,
+        session_id=None,
+        event_sink=None,
+        **kwargs,
+    ):
+        """执行 fake Host run 并记录 Service 传入的参数。"""
+
+        assert kwargs == {}
+        type(self).run_called = True
+        type(self).last_operation_name = operation_name
+        type(self).last_timeout_seconds = timeout_seconds
+        type(self).last_session_id = session_id
+        type(self).last_event_sink = event_sink
+        type(self).forbidden_kwargs = kwargs
+        context = _FakeHostedRunContext(timeout_seconds=timeout_seconds)
+        operation_result = operation(context)
+        return _FakeHostedRunResult(
+            run_id=context.run_id,
+            status="succeeded",
+            completed_at=datetime.now(timezone.utc),
+            elapsed_ms=42,
+            operation_result=operation_result,
+            timeout_classification=None,
+            safe_diagnostics={},
+            events=tuple(context.diagnostics or ()),
+        )
+
+
+class _RaisingHostRuntimeRunner:
+    """用于证明某些错误在 Host run 前传播。"""
+
+    run_called = False
+
+    def run_sync(self, **kwargs):  # type: ignore[no-untyped-def]
+        """记录调用并失败。"""
+
+        type(self).run_called = True
+        raise AssertionError("HostRuntimeRunner.run_sync must not be called")
+
+
+def _reset_recording_host_runner() -> None:
+    """重置 fake Host runner 状态。"""
+
+    _RecordingHostRuntimeRunner.run_called = False
+    _RecordingHostRuntimeRunner.last_operation_name = None
+    _RecordingHostRuntimeRunner.last_timeout_seconds = None
+    _RecordingHostRuntimeRunner.last_session_id = None
+    _RecordingHostRuntimeRunner.last_event_sink = None
+    _RecordingHostRuntimeRunner.forbidden_kwargs = {}
+    _RaisingHostRuntimeRunner.run_called = False
 
 
 @pytest.mark.asyncio
@@ -549,6 +713,211 @@ def test_host_runner_records_llm_service_phase_events() -> None:
         "provider_attempt": None,
     }
     assert phase_events[2].diagnostics["chapter_id"] == 1
+
+
+def test_analyze_with_llm_hosted_invokes_host_with_generic_lifecycle_fields(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """验证 Service hosted 用例只向 Host 传通用 lifecycle 参数。"""
+
+    writer = _FakeChapterLLMClient()
+    auditor = _FakeAuditLLMClient()
+    event_sink = object()
+    service = FundAnalysisService(extractor=_FakeExtractor(_bundle()))
+    builder_calls: list[str] = []
+
+    def fake_builder(  # type: ignore[no-untyped-def]
+        request,
+        *,
+        opt_in_mode="explicit_cli_flag",
+    ):
+        builder_calls.append(opt_in_mode)
+        return _execution_request(
+            request,
+            writer=writer,
+            auditor=auditor,
+            chapter_policy=ChapterOrchestrationPolicy(run_programmatic_audit=False),
+        )
+
+    monkeypatch.setattr(
+        fund_analysis_service_module,
+        "build_fund_llm_execution_request",
+        fake_builder,
+    )
+    monkeypatch.setattr(
+        fund_analysis_service_module,
+        "HostRuntimeRunner",
+        _RecordingHostRuntimeRunner,
+    )
+    _reset_recording_host_runner()
+
+    result = service.analyze_with_llm_hosted(
+        _developer_request(force_refresh=True),
+        event_sink=event_sink,  # type: ignore[arg-type]
+    )
+
+    assert isinstance(result, FundLLMHostedRunResult)
+    assert result.analysis_result is not None
+    assert result.host_status == "succeeded"
+    assert result.host_run_id == "host_run_fake"
+    assert result.host_elapsed_ms == 42
+    assert result.host_operation_result_present is True
+    assert _RecordingHostRuntimeRunner.run_called is True
+    assert _RecordingHostRuntimeRunner.last_operation_name == "fund_analysis_llm_report"
+    assert _RecordingHostRuntimeRunner.last_timeout_seconds == (7 + 11 + 13) * 2 * 6
+    assert _RecordingHostRuntimeRunner.last_session_id is None
+    assert _RecordingHostRuntimeRunner.last_event_sink is event_sink
+    assert _RecordingHostRuntimeRunner.forbidden_kwargs == {}
+    assert builder_calls == ["explicit_cli_flag"]
+    assert len(writer.requests) == 6
+    assert len(auditor.requests) == 6
+
+
+def test_analyze_with_llm_hosted_raises_config_error_before_host_run(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """验证 hosted 用例在 LLM 配置错误时不启动 Host。"""
+
+    service = FundAnalysisService(extractor=_FakeExtractor(_bundle()))
+    monkeypatch.setattr(
+        fund_analysis_service_module,
+        "load_llm_provider_config_from_env",
+        _raise_config_error,
+    )
+    monkeypatch.setattr(
+        fund_analysis_service_module,
+        "HostRuntimeRunner",
+        _RaisingHostRuntimeRunner,
+    )
+    _reset_recording_host_runner()
+
+    with pytest.raises(LLMProviderConfigError, match="missing fixture config"):
+        service.analyze_with_llm_hosted(_developer_request())
+
+    assert _RaisingHostRuntimeRunner.run_called is False
+
+
+def test_analyze_with_llm_hosted_raises_construction_error_before_host_run(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """验证 hosted 用例在 provider 构造错误时不启动 Host。"""
+
+    service = FundAnalysisService(extractor=_FakeExtractor(_bundle()))
+    monkeypatch.setattr(
+        fund_analysis_service_module,
+        "load_llm_provider_config_from_env",
+        lambda: _provider_config(model="fixture-model"),
+    )
+    monkeypatch.setattr(
+        fund_analysis_service_module,
+        "build_chapter_llm_clients",
+        _raise_construction_error,
+    )
+    monkeypatch.setattr(
+        fund_analysis_service_module,
+        "HostRuntimeRunner",
+        _RaisingHostRuntimeRunner,
+    )
+    _reset_recording_host_runner()
+
+    with pytest.raises(LLMProviderConstructionError, match="fixture-model"):
+        service.analyze_with_llm_hosted(_developer_request())
+
+    assert _RaisingHostRuntimeRunner.run_called is False
+
+
+def test_analyze_with_llm_hosted_preserves_incomplete_fail_closed_result(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """验证 hosted 用例对 incomplete final assembly 保持 fail-closed 投影。"""
+
+    service = FundAnalysisService(extractor=_FakeExtractor(_bundle()))
+    monkeypatch.setattr(
+        fund_analysis_service_module,
+        "load_llm_provider_config_from_env",
+        lambda: _provider_config(),
+    )
+    monkeypatch.setattr(
+        fund_analysis_service_module,
+        "build_chapter_llm_clients",
+        lambda config: ChapterOrchestratorLLMClients(
+            writer=_FakeChapterLLMClient(),
+            auditor=None,
+        ),
+    )
+
+    result = service.analyze_with_llm_hosted(_developer_request())
+
+    assert result.host_status == "failed"
+    assert result.host_operation_result_present is True
+    assert result.analysis_result is not None
+    assert result.analysis_result.final_assembly_result.report_markdown is None
+    assert result.host_safe_diagnostics["error_type"] == "_LLMIncompleteHostRunError"
+
+
+def test_analyze_with_llm_hosted_propagates_quality_gate_block(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """验证 hosted 用例继续传播 quality gate block 异常。"""
+
+    service = FundAnalysisService(extractor=_FakeExtractor(_low_quality_bundle()))
+    monkeypatch.setattr(
+        fund_analysis_service_module,
+        "load_llm_provider_config_from_env",
+        lambda: _provider_config(),
+    )
+    monkeypatch.setattr(
+        fund_analysis_service_module,
+        "build_chapter_llm_clients",
+        lambda config: _clients(),
+    )
+
+    with pytest.raises(QualityGateBlockedError) as exc_info:
+        service.analyze_with_llm_hosted(
+            _developer_request(
+                fund_code="004393",
+                quality_gate_policy="block",
+                quality_gate_source_csv=Path("docs/code_20260519.csv"),
+                quality_gate_output_dir=tmp_path / "gate",
+                quality_gate_run_id="fixture-run",
+                quality_gate_golden_answer_path=None,
+            )
+        )
+
+    assert exc_info.value.quality_gate_result.status == "block"
+
+
+def test_analyze_with_llm_hosted_propagates_quality_gate_not_run(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """验证 hosted 用例继续传播 quality gate not-run 异常。"""
+
+    service = FundAnalysisService(extractor=_FakeExtractor(_bundle()))
+    monkeypatch.setattr(
+        fund_analysis_service_module,
+        "load_llm_provider_config_from_env",
+        lambda: _provider_config(),
+    )
+    monkeypatch.setattr(
+        fund_analysis_service_module,
+        "build_chapter_llm_clients",
+        lambda config: _clients(),
+    )
+
+    with pytest.raises(QualityGateNotRunBlockedError) as exc_info:
+        service.analyze_with_llm_hosted(
+            _developer_request(
+                fund_code="110011",
+                quality_gate_policy="block",
+                quality_gate_source_csv=_source_csv(tmp_path, "004393"),
+                quality_gate_run_id="fixture-run",
+                quality_gate_golden_answer_path=None,
+            )
+        )
+
+    assert exc_info.value.reason == "fund_code `110011` not found in quality gate source csv"
 
 
 @pytest.mark.asyncio
