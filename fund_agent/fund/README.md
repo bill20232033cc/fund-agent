@@ -118,6 +118,22 @@ chapter_lens = resolve_preferred_lens(chapter_id=2, fund_type="active_fund")
 - `bond_risk_evidence` 的组级 anchors 保留在 value 内部，不展开为普通章节 `ChapterEvidenceAnchor`
 - 该能力不读取文档仓库、PDF、cache、source helper、下载器或 parser，不调用 LLM、Service、Host 或 dayu；它不是 writer、auditor、orchestrator 或 `FundToolService`
 
+`AnnualEvidenceScopeRequest`、`AnnualEvidenceLoader` 和 `AnnualEvidenceBundle` 位于 `fund_agent/fund/annual_evidence.py`，当前为 `analyze-annual-period` 提供多年年报证据作用域和年度摘要：
+
+- MVP 作用域要求 `required_years=(target_year,)`，prior 年份只能作为连续 optional 年份，最多 5 年
+- 当前年份直接复用 Service 已取得的 `StructuredFundDataBundle`；prior 年份只能通过 `FundDocumentRepository.load_annual_report(...)` 加载
+- prior 年份只调用 `extract_profile()`、`extract_manager_ownership()` 和 `extract_holdings_share_change()` 的窄字段抽取，不调用完整 `FundDataExtractor.extract()`
+- `not_found` / `unavailable` prior 年份记录为 `gap`；`schema_drift` / `identity_mismatch` / `integrity_error` prior 年份记录为 `failed_closed`
+- 可用年度会派生 `fee_schedule_trend`、`turnover_rate_trend`、`share_change_trend`、`holdings_snapshot_trend` 和 `manager_continuity` 等低风险跨年事实，并保留年度 anchor 和 source provenance
+- 该能力不新增来源、不启用 fallback、不调用 LLM/provider/Host/dayu，不执行 golden/readiness/score-loop，也不删除或改写缓存
+
+`ChapterFactProvider.project_annual_evidence()` 当前在已有单年 `ChapterFactProjection` 基础上投影 `AnnualEvidenceBundle`：
+
+- 公开章节 id 仍严格为 `0-7`
+- 跨年事实只进入模板第 5 章“当前阶段与关键变化”
+- 当可用跨年事实存在时，替换单年投影中的 `cross_period_comparison_missing` 缺口；没有可用跨年事实时保持原有单年缺口语义
+- 该投影只消费内存中的 `AnnualEvidenceBundle`，不读取文档仓库、PDF、cache、source helper、Service、Host、provider 或 dayu
+
 `docs/fund-analysis-template-draft.md` canonical `TEMPLATE_CONTRACT_MANIFEST_JSON` 当前是 Fund template contract 的 authored truth source。模板层从同一 JSON 生成 untyped 与 typed 两种投影：
 
 - `fund_agent/fund/template/contracts.py` 解析、投影并验证 untyped `TemplateContractManifest`，继续提供 `load_template_contract_manifest()`、`validate_template_contract_manifest()`、`get_chapter_contract()` 和 `resolve_preferred_lens()`
@@ -479,6 +495,7 @@ C2 当前只做确定性 marker / 元数据检查，不调用 LLM，不判断语
 - `extractors/`：章节级结构化提取能力。当前已落地基础画像、`§3` 表现、管理人/持有人、持仓/份额 extractor。
 - `data_extractor.py`：P1 façade，聚合文档仓库、净值适配器和章节 extractor。
 - `report_evidence.py`：报告证据包 typed model / projection，只消费 `StructuredFundDataBundle` 与显式投影上下文，产出事实、锚点、缺口、preferred_lens 和派生 review status。
+- `annual_evidence.py`：多年年报证据作用域、prior 年份加载、年度缺口分类、跨年事实派生和 `AnnualEvidenceBundle` typed model；只通过 `FundDocumentRepository` 加载 prior 年报。
 - `_value_utils.py`：Fund 内部结构化值 helper，把 dict/dataclass 抽取值规范化为子字段映射。
 - `extraction_snapshot.py`：P4-S1 字段级抽取快照能力，消费 `FundDataExtractor` 并写出 JSONL/summary/errors。
 - `extraction_score.py`：P4-S2 字段级评分与最小 golden set 选择能力，只消费 snapshot JSONL 和精选基金池 CSV。

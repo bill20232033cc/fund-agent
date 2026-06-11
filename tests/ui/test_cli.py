@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from decimal import Decimal
 from pathlib import Path
 
@@ -184,6 +184,47 @@ class _FakeResult:
 
 
 @dataclass(frozen=True, slots=True)
+class _FakeAnnualEvidenceBundle:
+    """CLI 多年年报测试用 bundle。"""
+
+    fund_code: str = "110011"
+    target_year: int = 2025
+    canonical_years: tuple[int, ...] = (2025, 2024, 2023, 2022, 2021)
+    available_years: tuple[int, ...] = (2025,)
+    gap_years: tuple[int, ...] = (2024, 2023, 2022, 2021)
+    fail_closed_years: tuple[int, ...] = ()
+    cross_year_facts: tuple[object, ...] = ()
+    fallback_summary: dict[str, object] = field(
+        default_factory=lambda: {"fallback_year_count": 0}
+    )
+    source_provenance_by_year: dict[int, object] = field(default_factory=dict)
+
+
+@dataclass(frozen=True, slots=True)
+class _FakeMultiYearResult:
+    """CLI 多年年报测试用 Service 返回值。"""
+
+    current_year_result: _FakeResult
+    annual_evidence_bundle: _FakeAnnualEvidenceBundle
+
+    @property
+    def report_markdown(self) -> str:
+        """返回 fake 当前年份报告。
+
+        Args:
+            无。
+
+        Returns:
+            fake Markdown。
+
+        Raises:
+            无显式抛出。
+        """
+
+        return self.current_year_result.report_markdown
+
+
+@dataclass(frozen=True, slots=True)
 class _FakeLLMFinalAssemblyResult:
     """CLI LLM 测试用 final assembly 结果。"""
 
@@ -266,8 +307,10 @@ class _FakeService:
 
     last_request = None
     last_hosted_request = None
+    last_multi_year_request = None
     last_event_sink = None
     analyze_called = False
+    analyze_multi_year_annual_called = False
     analyze_with_llm_hosted_called = False
 
     async def analyze(self, request):  # type: ignore[no-untyped-def]
@@ -286,6 +329,26 @@ class _FakeService:
         type(self).analyze_called = True
         type(self).last_request = request
         return _FakeResult(report_markdown="# 0. 投资要点概览\n\n# 7. 是否值得持有——最终判断\n")
+
+    async def analyze_multi_year_annual(self, request):  # type: ignore[no-untyped-def]
+        """记录多年年报请求并返回固定 Markdown。
+
+        Args:
+            request: CLI 构造的多年年报 Service 请求。
+
+        Returns:
+            fake 多年年报 Service 返回值。
+
+        Raises:
+            无显式抛出。
+        """
+
+        type(self).analyze_multi_year_annual_called = True
+        type(self).last_multi_year_request = request
+        return _FakeMultiYearResult(
+            current_year_result=_FakeResult(report_markdown="# annual period report\n"),
+            annual_evidence_bundle=_FakeAnnualEvidenceBundle(),
+        )
 
     def analyze_with_llm_hosted(  # type: ignore[no-untyped-def]
         self,
@@ -1561,6 +1624,53 @@ def test_analyze_cli_calls_service_and_prints_report(monkeypatch) -> None:  # ty
     assert _FakeService.last_request.developer_overrides.quality_gate_golden_answer_path == Path(
         "reports/golden-answers/golden-answer.json"
     )
+
+
+def test_analyze_annual_period_cli_calls_multi_year_service(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    """验证多年年报 CLI 投影显式 Service 请求。
+
+    Args:
+        monkeypatch: pytest monkeypatch fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: CLI 未按契约调用 Service 时抛出。
+    """
+
+    _FakeService.analyze_called = False
+    _FakeService.analyze_multi_year_annual_called = False
+    _FakeService.last_multi_year_request = None
+    monkeypatch.setattr(cli, "FundAnalysisService", _FakeService)
+
+    result = CliRunner().invoke(
+        cli.app,
+        [
+            "analyze-annual-period",
+            "110011",
+            "--target-year",
+            "2025",
+            "--start-year",
+            "2021",
+            "--valuation-state",
+            "unavailable",
+            "--quality-gate-policy",
+            "off",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert "canonical_years: 2025,2024,2023,2022,2021" in result.output
+    assert "# annual period report" in result.output
+    assert _FakeService.analyze_called is False
+    assert _FakeService.analyze_multi_year_annual_called is True
+    assert _FakeService.last_multi_year_request is not None
+    assert _FakeService.last_multi_year_request.fund_code == "110011"
+    assert _FakeService.last_multi_year_request.target_year == 2025
+    assert _FakeService.last_multi_year_request.start_year == 2021
+    assert _FakeService.last_multi_year_request.valuation_state == "unavailable"
+    assert _FakeService.last_multi_year_request.quality_gate_policy == "off"
 
 
 def test_analyze_cli_use_llm_missing_config_fails_before_service(

@@ -43,6 +43,8 @@ from fund_agent.services import (
     GoldenReadinessPreflightRequest,
     GoldenReadinessPreflightService,
     MoneyHorizon,
+    MultiYearAnnualAnalysisRequest,
+    MultiYearAnnualAnalysisResult,
     LLMProviderConstructionError,
     QualityGateBlockedError,
     QualityGateNotRunBlockedError,
@@ -961,6 +963,108 @@ def checklist(
         raise typer.Exit(code=1) from exc
     _echo_quality_gate_summary(result)
     _echo_checklist_result(result)
+
+
+@app.command("analyze-annual-period")
+def analyze_annual_period(
+    fund_code: Annotated[str, typer.Argument(help="基金代码，如 110011")],
+    target_year: Annotated[
+        int,
+        typer.Option(
+            "--target-year",
+            help="必需当前年报年份；例如 2025 表示当前报告年",
+        ),
+    ] = 2025,
+    start_year: Annotated[
+        int,
+        typer.Option(
+            "--start-year",
+            help="最早 optional prior 年报年份；例如 2021 与 --target-year 2025 构成 2021-2025",
+        ),
+    ] = 2021,
+    investment_amount: Annotated[
+        str,
+        typer.Option("--investment-amount", help="压力测试投入金额，CLI 显式默认 10000 元"),
+    ] = "10000",
+    max_tolerable_loss_rate: Annotated[
+        str | None,
+        typer.Option("--max-tolerable-loss-rate", help="最大可承受亏损比例，如 40%"),
+    ] = None,
+    valuation_state: Annotated[
+        str | None,
+        typer.Option(
+            "--valuation-state",
+            help=(
+                "估值状态：low/fair/high/unavailable；不传则沿用单年 analyze 自动估值行为"
+            ),
+        ),
+    ] = None,
+    thermometer_cache_dir: Annotated[
+        Path | None,
+        typer.Option("--thermometer-cache-dir", help="自动估值使用的自建温度计缓存目录"),
+    ] = None,
+    user_money_horizon_years: Annotated[
+        str | None, typer.Option("--user-money-horizon-years", help="用户资金不用年限")
+    ] = None,
+    force_refresh: Annotated[
+        bool, typer.Option("--force-refresh", help="统一强制刷新所有请求年份")
+    ] = False,
+    quality_gate_policy: Annotated[
+        str,
+        typer.Option("--quality-gate-policy", help="质量 gate 策略 off/warn/block"),
+    ] = "block",
+) -> None:
+    """对指定基金执行 2021-2025 等有界多年年报分析。
+
+    Args:
+        fund_code: 基金代码。
+        target_year: 当前必需年报年份。
+        start_year: 最早 optional prior 年报年份。
+        investment_amount: 压力测试投入金额。
+        max_tolerable_loss_rate: 最大可承受亏损比例。
+        valuation_state: 估值状态。
+        thermometer_cache_dir: 自动温度计缓存目录。
+        user_money_horizon_years: 用户资金不用年限。
+        force_refresh: 是否统一强制刷新。
+        quality_gate_policy: quality gate 策略。
+
+    Returns:
+        无返回值，当前年份报告和多年证据摘要写入 stdout。
+
+    Raises:
+        typer.Exit: 分析失败时以非零状态退出。
+    """
+
+    try:
+        request = MultiYearAnnualAnalysisRequest(
+            fund_code=fund_code,
+            target_year=target_year,
+            start_year=start_year,
+            investment_amount=investment_amount,
+            max_tolerable_loss_rate=max_tolerable_loss_rate,
+            valuation_state=_valuation_state(valuation_state),
+            thermometer_cache_dir=thermometer_cache_dir,
+            user_money_horizon_years=user_money_horizon_years,
+            force_refresh=force_refresh,
+            quality_gate_policy=_quality_gate_policy(quality_gate_policy),
+        )
+        result = asyncio.run(FundAnalysisService().analyze_multi_year_annual(request))
+    except QualityGateNotRunBlockedError as exc:
+        _echo_quality_gate_not_run_blocked(exc)
+        raise typer.Exit(code=2) from exc
+    except QualityGateBlockedError as exc:
+        _echo_quality_gate_blocked(exc)
+        raise typer.Exit(code=2) from exc
+    except typer.BadParameter as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(code=2) from exc
+    except Exception as exc:
+        typer.echo(f"多年年报分析失败：{exc}", err=True)
+        raise typer.Exit(code=1) from exc
+    _echo_quality_gate_summary(result.current_year_result)
+    _echo_multi_year_annual_summary(result)
+    typer.echo("")
+    typer.echo(result.report_markdown, nl=False)
 
 
 @app.command("thermometer")
@@ -2312,6 +2416,44 @@ def _echo_checklist_result(result: FundChecklistResult) -> None:
         typer.echo(f"  reason: {item.reason}")
         if item.anchors:
             typer.echo(f"  evidence_count: {len(item.anchors)}")
+
+
+def _echo_multi_year_annual_summary(result: MultiYearAnnualAnalysisResult) -> None:
+    """输出多年年报证据摘要。
+
+    Args:
+        result: 多年年报分析结果。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        无显式抛出。
+    """
+
+    bundle = result.annual_evidence_bundle
+    typer.echo(f"fund_code: {bundle.fund_code}")
+    typer.echo(f"target_year: {bundle.target_year}")
+    typer.echo(f"canonical_years: {_format_cli_value(bundle.canonical_years)}")
+    typer.echo(f"available_years: {_format_cli_value(bundle.available_years)}")
+    typer.echo(f"gap_years: {_format_cli_value(bundle.gap_years)}")
+    typer.echo(f"fail_closed_years: {_format_cli_value(bundle.fail_closed_years)}")
+    typer.echo(f"cross_year_fact_count: {len(bundle.cross_year_facts)}")
+    typer.echo(
+        "fallback_year_count: "
+        f"{_format_cli_value(bundle.fallback_summary.get('fallback_year_count'))}"
+    )
+    for year in bundle.canonical_years:
+        provenance = bundle.source_provenance_by_year.get(year)
+        if provenance is None:
+            typer.echo(f"source[{year}]: unavailable")
+            continue
+        typer.echo(
+            f"source[{year}]: selected_source={provenance.selected_source} "
+            f"source_mode={provenance.source_mode} "
+            f"fallback_enabled={_format_cli_value(provenance.fallback_enabled)} "
+            f"fallback_used={_format_cli_value(provenance.fallback_used)}"
+        )
 
 
 def _echo_quality_gate_blocked(error: QualityGateBlockedError) -> None:

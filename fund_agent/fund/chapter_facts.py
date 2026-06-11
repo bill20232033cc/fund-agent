@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Final, Literal, TypeGuard, get_args
 
 from fund_agent.fund.extractors.models import EvidenceAnchor, ExtractedField
@@ -28,6 +28,7 @@ from fund_agent.fund.template.item_rules import (
 )
 
 if TYPE_CHECKING:
+    from fund_agent.fund.annual_evidence import AnnualEvidenceAnchor, AnnualEvidenceBundle
     from fund_agent.fund.data.nav_data import NavDataResult
     from fund_agent.fund.data_extractor import StructuredFundDataBundle
 
@@ -482,6 +483,27 @@ class ChapterFactProvider:
 
         return project_chapter_facts(bundle, chapter_ids=chapter_ids)
 
+    def project_annual_evidence(
+        self,
+        bundle: AnnualEvidenceBundle,
+        *,
+        chapter_ids: tuple[int, ...] = DEFAULT_CHAPTER_FACT_IDS,
+    ) -> ChapterFactProjection:
+        """把多年年报证据 bundle 投影为章节事实输入。
+
+        Args:
+            bundle: 已加载并投影的多年年报证据 bundle。
+            chapter_ids: 需要投影的模板章节编号，必须非空、唯一且落在 0-7。
+
+        Returns:
+            可供后续章节写作和审计消费的 `ChapterFactProjection`。
+
+        Raises:
+            ValueError: 当章节编号为空、重复或越界时抛出。
+        """
+
+        return project_annual_evidence_chapter_facts(bundle, chapter_ids=chapter_ids)
+
 
 def project_chapter_facts(
     bundle: StructuredFundDataBundle,
@@ -528,6 +550,164 @@ def project_chapter_facts(
         chapters=chapters,
         global_missing_reasons=global_missing_reasons,
     )
+
+
+def project_annual_evidence_chapter_facts(
+    bundle: AnnualEvidenceBundle,
+    *,
+    chapter_ids: tuple[int, ...] = DEFAULT_CHAPTER_FACT_IDS,
+) -> ChapterFactProjection:
+    """把多年年报证据 bundle 投影为模板第 0-7 章 typed facts。
+
+    Args:
+        bundle: 多年年报证据 bundle。
+        chapter_ids: 需要投影的模板章节编号，必须非空、唯一且落在 0-7。
+
+    Returns:
+        保持 `chapter_fact_projection.v1` schema 的章节事实投影。
+
+    Raises:
+        ValueError: 当章节编号为空、重复或越界时抛出。
+    """
+
+    projection = project_chapter_facts(bundle.current_year_bundle, chapter_ids=chapter_ids)
+    if 5 not in chapter_ids or not bundle.cross_year_facts:
+        return projection
+    updated_chapters = tuple(
+        _append_annual_evidence_chapter5_facts(chapter, bundle)
+        if chapter.chapter_id == 5
+        else chapter
+        for chapter in projection.chapters
+    )
+    global_missing_reasons = _unique_reasons(
+        tuple(reason for chapter in updated_chapters for reason in chapter.missing_reasons)
+    )
+    return replace(
+        projection,
+        chapters=updated_chapters,
+        global_missing_reasons=global_missing_reasons,
+    )
+
+
+def _append_annual_evidence_chapter5_facts(
+    chapter: ChapterFactInput,
+    bundle: AnnualEvidenceBundle,
+) -> ChapterFactInput:
+    """向第 5 章追加多年年报跨期事实。
+
+    Args:
+        chapter: 当前第 5 章事实输入。
+        bundle: 多年年报证据 bundle。
+
+    Returns:
+        追加跨年事实后的第 5 章事实输入。
+
+    Raises:
+        无显式抛出。
+    """
+
+    annual_facts = tuple(_cross_year_chapter_fact(fact) for fact in bundle.cross_year_facts)
+    annual_anchor_ids = tuple(
+        anchor_id for fact in bundle.cross_year_facts for anchor_id in fact.source_year_anchor_ids
+    )
+    annual_anchors = tuple(
+        _chapter_anchor_from_annual_anchor(anchor)
+        for anchor_id in annual_anchor_ids
+        for anchor in (bundle.anchor_by_id(anchor_id),)
+        if anchor is not None
+    )
+    existing_facts = tuple(
+        fact
+        for fact in chapter.facts
+        if fact.source_field_id != _CROSS_PERIOD_COMPARISON_SOURCE_FIELD_ID
+    )
+    missing_reasons = tuple(
+        reason
+        for reason in chapter.missing_reasons
+        if reason != "cross_period_comparison_missing"
+    )
+    source_field_ids = _unique_strings(
+        (*chapter.source_field_ids, *(fact.source_field_id for fact in annual_facts))
+    )
+    return replace(
+        chapter,
+        facts=(*existing_facts, *annual_facts),
+        evidence_anchors=(*chapter.evidence_anchors, *annual_anchors),
+        missing_reasons=missing_reasons,
+        source_field_ids=source_field_ids,
+    )
+
+
+def _cross_year_chapter_fact(fact: object) -> ChapterFactEntry:
+    """把跨年派生事实投影为章节事实条目。
+
+    Args:
+        fact: `CrossYearDerivedFact` duck-typed 对象。
+
+    Returns:
+        第 5 章事实条目。
+
+    Raises:
+        AttributeError: 当传入对象缺少必需字段时自然抛出。
+    """
+
+    return ChapterFactEntry(
+        fact_id=str(getattr(fact, "fact_id")),
+        chapter_id=5,
+        field_path=f"annual_evidence.cross_year_facts.{getattr(fact, 'fact_type')}",
+        source_field_id=str(getattr(fact, "source_field_id")),
+        source_field_name=str(getattr(fact, "fact_type")),
+        status="available",
+        value=fact.to_fact_value(),
+        extraction_mode="derived",
+        evidence_anchor_ids=tuple(getattr(fact, "source_year_anchor_ids")),
+        missing_reason=None,
+        missing_detail=None,
+        required_by=tuple(getattr(fact, "dependency_requirements")),
+    )
+
+
+def _chapter_anchor_from_annual_anchor(anchor: AnnualEvidenceAnchor) -> ChapterEvidenceAnchor:
+    """把年度锚点投影为章节锚点。
+
+    Args:
+        anchor: 年度证据锚点。
+
+    Returns:
+        章节事实锚点。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return ChapterEvidenceAnchor(
+        anchor_id=anchor.anchor_id,
+        source_kind=_chapter_anchor_source_kind(anchor.source_kind),
+        document_year=anchor.source_year,
+        section_id=anchor.section_id,
+        page_number=anchor.page_number,
+        table_id=anchor.table_id,
+        row_locator=anchor.row_locator,
+        note=anchor.note,
+    )
+
+
+def _chapter_anchor_source_kind(source_kind: str) -> ChapterEvidenceSourceKind:
+    """规范化年度锚点来源类型。
+
+    Args:
+        source_kind: 年度锚点来源类型。
+
+    Returns:
+        章节锚点来源类型。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if source_kind in _SUPPORTED_ANCHOR_SOURCE_KINDS:
+        return source_kind  # type: ignore[return-value]
+    return "unknown"
 
 
 def _validate_chapter_ids(chapter_ids: tuple[int, ...]) -> tuple[int, ...]:

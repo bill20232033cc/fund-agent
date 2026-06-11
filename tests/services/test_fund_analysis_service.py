@@ -14,6 +14,11 @@ from fund_agent.fund.data.nav_data import NavDataResult
 from fund_agent.fund.data.thermometer import ThermometerSnapshot
 from fund_agent.fund.data.thermometer_types import ThermometerBatchResult, ThermometerReading
 from fund_agent.fund.data_extractor import StructuredFundDataBundle
+from fund_agent.fund.annual_evidence import (
+    ANNUAL_EVIDENCE_BUNDLE_SCHEMA_VERSION,
+    AnnualEvidenceBundle,
+    AnnualEvidenceScopeRequest,
+)
 from fund_agent.fund.extractors.models import (
     EvidenceAnchor,
     ExtractedField,
@@ -24,6 +29,7 @@ from fund_agent.services import (
     FundAnalysisDeveloperOverrides,
     FundAnalysisRequest,
     FundAnalysisService,
+    MultiYearAnnualAnalysisRequest,
     QualityGateBlockedError,
     QualityGateNotRunBlockedError,
 )
@@ -290,6 +296,65 @@ class _FakeExtractor:
 
         self.calls.append((fund_code, report_year, force_refresh))
         return replace(self.bundle, fund_code=fund_code, report_year=report_year)
+
+
+class _FakeAnnualEvidenceLoader:
+    """Service 多年年报测试用 fake loader。"""
+
+    def __init__(self) -> None:
+        """初始化 fake loader。
+
+        Args:
+            无。
+
+        Returns:
+            无返回值。
+
+        Raises:
+            无显式抛出。
+        """
+
+        self.calls: list[tuple[AnnualEvidenceScopeRequest, StructuredFundDataBundle]] = []
+
+    async def load(
+        self,
+        scope: AnnualEvidenceScopeRequest,
+        *,
+        current_year_bundle: StructuredFundDataBundle,
+    ) -> AnnualEvidenceBundle:
+        """记录调用并返回最小多年证据 bundle。
+
+        Args:
+            scope: Fund 层年度证据 scope。
+            current_year_bundle: 当前年份结构化数据包。
+
+        Returns:
+            最小多年证据 bundle。
+
+        Raises:
+            无显式抛出。
+        """
+
+        self.calls.append((scope, current_year_bundle))
+        return AnnualEvidenceBundle(
+            schema_version=ANNUAL_EVIDENCE_BUNDLE_SCHEMA_VERSION,
+            fund_code=scope.fund_code,
+            target_year=scope.target_year,
+            canonical_years=scope.canonical_years,
+            current_year_bundle=current_year_bundle,
+            year_records=(),
+            available_years=(scope.target_year,),
+            gap_years=scope.optional_years,
+            fail_closed_years=(),
+            source_provenance_by_year={},
+            source_documents_by_year={},
+            anchors_by_year={},
+            data_gaps=(),
+            requirement_availability={},
+            cross_year_facts=(),
+            degradation_summary={"cross_year_claims_allowed": False},
+            fallback_summary={"fallback_year_count": 0},
+        )
 
 
 class _FakeThermometerService:
@@ -1359,6 +1424,46 @@ async def test_fund_analysis_service_pre_2026_missing_turnover_is_warn_not_stand
         for issue in result.quality_gate_result.issues
     )
     assert not any(issue.rule_code == "FQ4" for issue in result.quality_gate_result.issues)
+
+
+@pytest.mark.asyncio
+async def test_multi_year_annual_analysis_maps_service_request_to_fund_scope() -> None:
+    """验证 Service 多年请求显式翻译为 Fund 年度证据 scope。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: scope 映射不符合 accepted plan 时抛出。
+    """
+
+    bundle = _bundle()
+    annual_loader = _FakeAnnualEvidenceLoader()
+    service = FundAnalysisService(
+        extractor=_FakeExtractor(bundle),
+        annual_evidence_loader=annual_loader,
+    )
+
+    result = await service.analyze_multi_year_annual(
+        MultiYearAnnualAnalysisRequest(
+            fund_code="110011",
+            target_year=2025,
+            start_year=2021,
+            valuation_state="unavailable",
+            quality_gate_policy="off",
+        )
+    )
+
+    scope, current_year_bundle = annual_loader.calls[0]
+    assert scope.required_years == (2025,)
+    assert scope.optional_years == (2024, 2023, 2022, 2021)
+    assert scope.canonical_years == (2025, 2024, 2023, 2022, 2021)
+    assert current_year_bundle.report_year == 2025
+    assert result.used_years == (2025,)
+    assert result.gap_years == (2024, 2023, 2022, 2021)
 
 
 def _source_csv(tmp_path: Path, fund_code: str) -> Path:

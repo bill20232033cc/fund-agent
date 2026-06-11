@@ -45,6 +45,13 @@ from fund_agent.fund.analysis import (
     ValuationStateResolution,
 )
 from fund_agent.fund.analysis.thermometer_calculator import ThermometerCalculationError
+from fund_agent.fund.annual_evidence import (
+    AnnualEvidenceBundle,
+    AnnualEvidenceLoader,
+    AnnualEvidenceScopeRequest,
+    CURRENT_YEAR_REQUIRED_PRIOR_YEARS_OPTIONAL,
+    MAX_ANNUAL_EVIDENCE_YEARS,
+)
 from fund_agent.fund.audit import ProgrammaticAuditResult, run_programmatic_audit
 from fund_agent.fund.data.thermometer import ThermometerSnapshot
 from fund_agent.fund.data.thermometer_types import ThermometerBatchResult, ThermometerReading
@@ -147,6 +154,33 @@ class _ThermometerService(Protocol):
         """
 
 
+class _AnnualEvidenceLoader(Protocol):
+    """多年年报证据 loader 协议。
+
+    该协议用于 Service 层注入 fake loader。Service 只传递显式 scope 和当前年份
+    结构化数据包，不直接读取年报 repository、PDF cache 或来源 helper。
+    """
+
+    async def load(
+        self,
+        scope: AnnualEvidenceScopeRequest,
+        *,
+        current_year_bundle: StructuredFundDataBundle,
+    ) -> AnnualEvidenceBundle:
+        """加载多年年报证据。
+
+        Args:
+            scope: Fund 层年度证据作用域。
+            current_year_bundle: 当前年份结构化数据包。
+
+        Returns:
+            多年年报证据 bundle。
+
+        Raises:
+            Exception: 允许 Fund 层 loader 传播异常。
+        """
+
+
 @dataclass(frozen=True, slots=True)
 class FundAnalysisDeveloperOverrides:
     """开发覆盖参数，只能在 developer override mode 使用。
@@ -213,6 +247,80 @@ class FundAnalysisRequest:
     mode: AnalyzeMode = "product"
     developer_overrides: FundAnalysisDeveloperOverrides | None = None
     command_source: AnalyzeCommandSource = "analyze"
+
+
+@dataclass(frozen=True, slots=True)
+class MultiYearAnnualAnalysisRequest:
+    """多年年报分析 Service 请求，见模板第 5 章“当前阶段”。
+
+    Attributes:
+        fund_code: 基金代码。
+        target_year: 当前必需年报年份。
+        start_year: 最早 optional prior 年报年份。
+        max_years: 年报证据硬上限，MVP 为 1..5。
+        investment_amount: 压力测试投入金额。
+        max_tolerable_loss_rate: 最大可承受亏损比例。
+        valuation_state: 估值状态；`None` 表示沿用单年分析自动估值行为。
+        thermometer_cache_dir: 自动温度计缓存目录。
+        user_money_horizon_years: 用户资金不用年限。
+        force_refresh: 是否统一强制刷新。
+        quality_gate_policy: quality gate 策略。
+        quality_gate_source_csv: quality gate 精选基金池 CSV 路径。
+        quality_gate_output_dir: quality gate 输出目录。
+        quality_gate_run_id: quality gate 运行 ID。
+        quality_gate_golden_answer_path: strict golden answer JSON 路径。
+    """
+
+    fund_code: str
+    target_year: int = 2025
+    start_year: int = 2021
+    max_years: int = MAX_ANNUAL_EVIDENCE_YEARS
+    investment_amount: Decimal | str | int | float = Decimal("10000")
+    max_tolerable_loss_rate: Decimal | str | int | float | None = None
+    valuation_state: ValuationState | None = None
+    thermometer_cache_dir: Path | None = None
+    user_money_horizon_years: Decimal | str | int | float | None = None
+    force_refresh: bool = False
+    quality_gate_policy: QualityGatePolicy = "block"
+    quality_gate_source_csv: Path | None = None
+    quality_gate_output_dir: Path | None = None
+    quality_gate_run_id: str | None = None
+    quality_gate_golden_answer_path: Path | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class MultiYearAnnualAnalysisResult:
+    """多年年报分析 Service 结果。
+
+    Attributes:
+        current_year_result: 当前必需年份的既有单年分析结果。
+        annual_evidence_bundle: 多年年报证据 bundle。
+        used_years: 已用于跨年证据的可用年份。
+        gap_years: 可降级缺口年份。
+        fail_closed_years: fail-closed 年份。
+    """
+
+    current_year_result: FundAnalysisResult
+    annual_evidence_bundle: AnnualEvidenceBundle
+    used_years: tuple[int, ...]
+    gap_years: tuple[int, ...]
+    fail_closed_years: tuple[int, ...]
+
+    @property
+    def report_markdown(self) -> str:
+        """返回当前年份报告 Markdown。
+
+        Args:
+            无。
+
+        Returns:
+            当前必需年份的 8 章 Markdown 报告。
+
+        Raises:
+            无显式抛出。
+        """
+
+        return self.current_year_result.report_markdown
 
 
 @dataclass(frozen=True, slots=True)
@@ -527,12 +635,14 @@ class FundAnalysisService:
         self,
         extractor: _FundDataExtractor | None = None,
         thermometer_service: _ThermometerService | None = None,
+        annual_evidence_loader: _AnnualEvidenceLoader | None = None,
     ) -> None:
         """初始化基金分析 Service。
 
         Args:
             extractor: P1 结构化抽取器；未提供时使用默认 `FundDataExtractor`。
             thermometer_service: 自建温度计 Service；未提供时使用默认实现。
+            annual_evidence_loader: 多年年报证据 loader；未提供时使用默认实现。
 
         Returns:
             无返回值。
@@ -543,6 +653,7 @@ class FundAnalysisService:
 
         self._extractor = extractor or FundDataExtractor()
         self._thermometer_service = thermometer_service or IndexThermometerService()
+        self._annual_evidence_loader = annual_evidence_loader or AnnualEvidenceLoader()
 
     async def analyze(self, request: FundAnalysisRequest) -> FundAnalysisResult:
         """执行单只基金完整分析并生成 8 章报告。
@@ -629,6 +740,66 @@ class FundAnalysisService:
             final_judgment_decision=core_result.final_judgment_decision,
             quality_gate_result=core_result.quality_gate_result,
             quality_gate_not_run_reason=core_result.quality_gate_not_run_reason,
+        )
+
+    async def analyze_multi_year_annual(
+        self,
+        request: MultiYearAnnualAnalysisRequest,
+    ) -> MultiYearAnnualAnalysisResult:
+        """执行多年年报分析产品用例。
+
+        Args:
+            request: 多年年报分析显式请求。
+
+        Returns:
+            当前年份分析结果和多年年报证据 bundle。
+
+        Raises:
+            ValueError: 当请求契约非法时抛出。
+            Exception: 允许单年分析或 Fund 层多年证据 loader 传播异常。
+        """
+
+        normalized_fund_code = _normalize_fund_code(request.fund_code)
+        prior_years = _prior_years_from_range(
+            target_year=request.target_year,
+            start_year=request.start_year,
+            max_years=request.max_years,
+        )
+        annual_scope = AnnualEvidenceScopeRequest(
+            fund_code=normalized_fund_code,
+            target_year=request.target_year,
+            required_years=(request.target_year,),
+            optional_years=prior_years,
+            max_years=request.max_years,
+            force_refresh=request.force_refresh,
+            degradation_policy=CURRENT_YEAR_REQUIRED_PRIOR_YEARS_OPTIONAL,
+        )
+        developer_overrides = _multi_year_developer_overrides(request)
+        current_year_result = await self.analyze(
+            FundAnalysisRequest(
+                fund_code=normalized_fund_code,
+                report_year=request.target_year,
+                investment_amount=request.investment_amount,
+                max_tolerable_loss_rate=request.max_tolerable_loss_rate,
+                valuation_state=request.valuation_state,
+                thermometer_cache_dir=request.thermometer_cache_dir,
+                user_money_horizon_years=request.user_money_horizon_years,
+                force_refresh=request.force_refresh,
+                mode="developer_override" if developer_overrides is not None else "product",
+                developer_overrides=developer_overrides,
+                command_source="analyze",
+            )
+        )
+        annual_bundle = await self._annual_evidence_loader.load(
+            annual_scope,
+            current_year_bundle=current_year_result.structured_data,
+        )
+        return MultiYearAnnualAnalysisResult(
+            current_year_result=current_year_result,
+            annual_evidence_bundle=annual_bundle,
+            used_years=annual_bundle.available_years,
+            gap_years=annual_bundle.gap_years,
+            fail_closed_years=annual_bundle.fail_closed_years,
         )
 
     async def analyze_with_llm(
@@ -1300,11 +1471,7 @@ def _validate_request(
         ValueError: 当基金代码或年报年份非法时抛出。
     """
 
-    normalized_fund_code = request.fund_code.strip()
-    if not normalized_fund_code:
-        raise ValueError("fund_code 不能为空")
-    if len(normalized_fund_code) != 6 or not normalized_fund_code.isdigit():
-        raise ValueError("fund_code 必须是 6 位数字")
+    normalized_fund_code = _normalize_fund_code(request.fund_code)
     if request.report_year <= 0:
         raise ValueError("report_year 必须为正整数")
     if request.command_source not in {"analyze", "checklist"}:
@@ -1323,6 +1490,95 @@ def _validate_request(
     ):
         raise ValueError("quality_gate_output_dir 必须是目录")
     return _ValidatedRequest(fund_code=normalized_fund_code)
+
+
+def _normalize_fund_code(fund_code: str) -> str:
+    """规范化基金代码。
+
+    Args:
+        fund_code: 原始基金代码。
+
+    Returns:
+        6 位数字基金代码。
+
+    Raises:
+        ValueError: 基金代码为空或格式非法时抛出。
+    """
+
+    normalized_fund_code = fund_code.strip()
+    if not normalized_fund_code:
+        raise ValueError("fund_code 不能为空")
+    if len(normalized_fund_code) != 6 or not normalized_fund_code.isdigit():
+        raise ValueError("fund_code 必须是 6 位数字")
+    return normalized_fund_code
+
+
+def _prior_years_from_range(
+    *,
+    target_year: int,
+    start_year: int,
+    max_years: int,
+) -> tuple[int, ...]:
+    """从用户范围参数派生 optional prior years。
+
+    Args:
+        target_year: 当前必需年报年份。
+        start_year: 最早 optional prior 年份。
+        max_years: 年报证据硬上限。
+
+    Returns:
+        降序排列的 optional prior 年份。
+
+    Raises:
+        ValueError: 年份范围或上限非法时抛出。
+    """
+
+    if target_year <= 0:
+        raise ValueError("target_year 必须为正整数")
+    if start_year <= 0:
+        raise ValueError("start_year 必须为正整数")
+    if max_years < 1 or max_years > MAX_ANNUAL_EVIDENCE_YEARS:
+        raise ValueError("max_years 必须在 1..5 范围内")
+    if start_year > target_year:
+        raise ValueError("start_year 不能晚于 target_year")
+    requested_year_count = target_year - start_year + 1
+    if requested_year_count > max_years:
+        raise ValueError("target_year 到 start_year 的闭区间不能超过 max_years")
+    if requested_year_count < 1:
+        raise ValueError("年报年份范围不能为空")
+    return tuple(range(target_year - 1, start_year - 1, -1))
+
+
+def _multi_year_developer_overrides(
+    request: MultiYearAnnualAnalysisRequest,
+) -> FundAnalysisDeveloperOverrides | None:
+    """按现有单年 analyze 契约构造必要的开发覆盖参数。
+
+    Args:
+        request: 多年年报分析请求。
+
+    Returns:
+        需要 developer override mode 时返回覆盖参数；默认 product 契约返回 `None`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if (
+        request.quality_gate_policy == "block"
+        and request.quality_gate_source_csv is None
+        and request.quality_gate_output_dir is None
+        and request.quality_gate_run_id is None
+        and request.quality_gate_golden_answer_path is None
+    ):
+        return None
+    return FundAnalysisDeveloperOverrides(
+        quality_gate_policy=request.quality_gate_policy,
+        quality_gate_source_csv=request.quality_gate_source_csv,
+        quality_gate_output_dir=request.quality_gate_output_dir,
+        quality_gate_run_id=request.quality_gate_run_id,
+        quality_gate_golden_answer_path=request.quality_gate_golden_answer_path,
+    )
 
 
 def _check_pool_membership_before_extraction(

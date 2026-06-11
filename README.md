@@ -36,6 +36,9 @@ fund-analysis --help
 # 查看 analyze 参数
 fund-analysis analyze --help
 
+# 运行 2021-2025 多年年报分析入口
+fund-analysis analyze-annual-period 004393 --target-year 2025 --start-year 2021
+
 # 强制刷新底层数据
 fund-analysis analyze 004393 --report-year 2024 --force-refresh
 
@@ -101,8 +104,11 @@ fund-analysis checklist 004393 --report-year 2024
 | `--force-refresh` | 强制刷新底层数据 |
 | `--use-llm` | 仅 `analyze` 支持；显式启用 Route C LLM 分章写作路径。该路径必须先配置 LLM provider 环境变量；缺失、非法或运行不完整都会失败关闭，不回退默认确定性报告 |
 | `--llm-progress` / `--no-llm-progress` | 仅 `analyze --use-llm` 生效；progress 只写 stderr，默认仅交互式 TTY 启用，非 TTY 可用 `--llm-progress` 强制开启 |
+| `--target-year` / `--start-year` | 仅 `analyze-annual-period` 使用；`target_year` 是当前必需年报，`start_year` 是最早 optional prior 年报 |
 
 `analyze` 默认是 product mode：最终判断由 Agent 层基金能力根据检查清单、否决项、压力测试和 quality gate 派生；R=A+B-C 股票仓位、言行一致性实际风格、经理任期、同类费率、跟踪误差、当前阶段、最终判断覆盖和 quality gate `warn/off` 等夹具参数仅供开发验证使用，必须显式传 `--dev-override`。
+
+`fund-analysis analyze-annual-period FUND_CODE --target-year 2025 --start-year 2021` 是当前确定性多年年报分析入口。Service 先运行目标年份单年 `analyze`，再请求 Fund 层 `AnnualEvidenceLoader` 通过 `FundDocumentRepository` 加载 prior 年报；目标年份必需，prior 年份遇到 `not_found` / `unavailable` 会记录为可降级缺口，`schema_drift` / `identity_mismatch` / `integrity_error` 会记录为 fail-closed 年度。CLI 会在 stderr 输出多年证据摘要，stdout 仍输出目标年份 8 章 Markdown 报告。
 
 `fund-analysis analyze --use-llm` 是显式 opt-in 路径；不传该参数时，`analyze` 默认仍走确定性结构化抽取、确定性分析、模板渲染、程序审计和 quality gate。LLM 路径当前使用 `openai_compatible` HTTP chat-completions provider，基于现有 `httpx` 调用 Service 的 `analyze_with_llm()`；Fund writer/auditor 只接收 Protocol client，不读取 env、HTTP 或 provider 细节。
 
@@ -146,6 +152,7 @@ fund-analysis checklist 004393 --report-year 2024
 已实现：
 
 - `fund-analysis analyze FUND_CODE` CLI 分析入口
+- `fund-analysis analyze-annual-period FUND_CODE` 多年年报分析入口；当前目标年报必需，prior 年报可降级，并把可用跨年事实投影给第 5 章证据
 - `fund-analysis analyze FUND_CODE --use-llm` 显式 LLM opt-in 入口；配置完整时通过 Service `analyze_with_llm()` 运行 provider-backed 分章写作/审计路径，缺失配置或不完整结果失败关闭，退出码为 `1`
 - `fund-analysis checklist FUND_CODE` 独立买入前检查清单入口
 - 统一年报仓库入口：`FundDocumentRepository.load_annual_report(...)`
