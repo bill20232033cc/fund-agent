@@ -55,8 +55,8 @@ Allowed validation commands run exactly:
 
 | Command | Result | Summary |
 |---|---|---|
-| `git status --short` | exit 0 | Only untracked `??` residue is status-visible. No staged/tracked modified source/test/runtime/README/design/control entries were visible. Visible families: `docs/audit/`, research/planning docs, `docs/reviews/` residue, `reports/live-evidence/`, `reports/manual-llm-smoke/`, top-level `reviews/`, `scripts/claude_mimo_simple.py`, `基金年报/`, `定性分析模板.md`. This artifact is the only current-gate write and is expected to appear as untracked `docs/reviews/mvp-release-readiness-cleanliness-re-evidence-20260612.md` after write. |
-| `git status --branch --short` | exit 0 | Branch context: `feat/mvp-llm-incomplete-run-artifacts...origin/feat/mvp-llm-incomplete-run-artifacts [ahead 150]`; dirty/untracked workspace remains; no external state inference is made. |
+| `git status --short` | exit 0 | Final post-write status shows target artifact as `M docs/reviews/mvp-release-readiness-cleanliness-re-evidence-20260612.md` plus untracked `??` residue. No staged/tracked modified source/test/runtime/README/design/control entries were visible. Visible families: target evidence artifact, `docs/audit/`, research/planning docs, `docs/reviews/` residue, `reports/live-evidence/`, `reports/manual-llm-smoke/`, top-level `reviews/`, `scripts/claude_mimo_simple.py`, `基金年报/`, `定性分析模板.md`. |
+| `git status --branch --short` | exit 0 | Branch context: `feat/mvp-llm-incomplete-run-artifacts...origin/feat/mvp-llm-incomplete-run-artifacts [ahead 151]`; dirty workspace remains; no external state inference is made. |
 | `git diff --check` | exit 0 | No whitespace errors reported. |
 
 No pipes, filters, redirects, substitutions, command chains, live commands, cleanup commands, staging, commit, push, PR, merge, mark-ready or release commands were used for evidence.
@@ -72,7 +72,7 @@ Legend:
 | status_path_or_family | git_status_marker | blocker_family | ownership_row | classification | primary_owner | next_gate | body_read | not_source_truth | not_design_truth | not_control_truth | not_release_evidence | not_readiness_proof |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
 | tracked source/test/runtime/README/design/control mutations | none visible | tracked behavior/control mutation | not applicable | `CLEAN` | Release owner / controller | no action in this gate | false | true | true | true | true | true |
-| `docs/reviews/mvp-release-readiness-cleanliness-re-evidence-20260612.md` | `??` after write | current gate evidence artifact | Accepted plan target evidence artifact appearance | `ACCEPTED_EXCEPTION` | Release owner / controller | DS/MiMo review then controller judgment | false | true | true | true | true | true |
+| `docs/reviews/mvp-release-readiness-cleanliness-re-evidence-20260612.md` | `M` | current gate evidence artifact | Accepted plan target evidence artifact appearance | `ACCEPTED_EXCEPTION` | Release owner / controller | DS/MiMo review then controller judgment | false | true | true | true | true | true |
 | `docs/audit/` | `??` | `docs/audit/` visible audit root / audit input | `docs/audit/` visible audit root / audit input | `ACCEPTED_EXCEPTION` | Controller | Audit residue disposition or provenance mapping gate | false | true | true | true | true | true |
 | `docs/learning-roadmap.md` | `??` | Research and planning docs | Research and planning docs | `ACCEPTED_EXCEPTION` | Controller | Research/spec/tooling ownership gate | false | true | true | true | true | true |
 | `docs/next-development-phaseflow.md` | `??` | Research and planning docs | Research and planning docs | `ACCEPTED_EXCEPTION` | Controller | Research/spec/tooling ownership gate | false | true | true | true | true | true |
