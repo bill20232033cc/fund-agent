@@ -2,135 +2,155 @@
 
 Date: 2026-06-14
 
+Role: AgentController / evidence owner
+
+Gate: `Provider/LLM Chapter 2 L1 Post-fix Bounded Live Re-evidence Gate`
+
+Verdict: `LIVE_FAIL_CLOSED_CHAPTER2_L1_STILL_REPRODUCES_NOT_READY`
+
 ## Scope
 
-Gate: `Provider/LLM Chapter 2 L1 Post-fix Bounded Live Re-evidence Gate`.
+This artifact records one controlled live/provider sample after the accepted no-live Chapter 2 L1 prompt-contract strengthening at checkpoint `ee65f69`.
 
-Role: AgentController evidence collector.
+The gate only asks whether the strengthened Chapter 2 prompt avoids the previously observed live Chapter 2 L1 repair-budget exhaustion for exact sample `004393 / 2025`.
 
-This artifact records one controlled post-fix Route C live command for exact `004393 / 2025` after the Chapter 2 L1 no-live fix accepted at `842362d`.
+This artifact does not claim release readiness, MVP readiness, LLM path readiness, general live acceptance or content correctness.
 
-This gate does not change source/tests/runtime behavior, source policy, provider defaults, repair budget, readiness/release/PR state or fallback policy. It does not claim release-ready, MVP-ready or LLM-path-ready.
+Release/readiness remains `NOT_READY`.
 
-Release/readiness remains `NOT_READY`. Annual-report access remains EID single-source/no-fallback.
+EID annual-report acquisition remains single-source/no-fallback. This gate does not authorize Eastmoney, fund-company/CDN, CNINFO or other fallback routes.
 
 ## Command
 
-```text
+Executed command:
+
+```bash
 FUND_AGENT_LLM_TIMEOUT_SECONDS=60 FUND_AGENT_LLM_WRITER_TIMEOUT_SECONDS=60 FUND_AGENT_LLM_AUDITOR_TIMEOUT_SECONDS=60 FUND_AGENT_LLM_REPAIR_TIMEOUT_SECONDS=60 FUND_AGENT_LLM_TIMEOUT_MAX_ATTEMPTS=1 FUND_AGENT_LLM_TIMEOUT_BACKOFF_SECONDS=0 FUND_AGENT_LLM_MAX_OUTPUT_CHARS=12000 uv run fund-analysis analyze 004393 --report-year 2025 --use-llm --dev-override --quality-gate-policy warn --valuation-state unavailable --no-llm-progress
 ```
 
 Result:
 
-- Exit code: `1`
-- Runtime artifact: `reports/llm-runs/004393-2025-20260613T201900Z-host_run_4a531cbe94604e4/manifest.json`
-- Stdout excerpt: none accepted as report output.
-- Stderr/control output reported incomplete LLM run and first failed chapter 3.
+- Exit code: `1`.
+- Stdout: empty.
+- Stderr reported incomplete diagnostic artifacts at `reports/llm-runs/004393-2025-20260613T221455Z-host_run_9dbb1b5be0e54cd/manifest.json`.
+- Host run id from manifest/summary: `host_run_9dbb1b5be0e54cdb`.
+- Host elapsed: `234223 ms`.
 
-## Safe Metadata Read
+## Evidence Read Boundary
 
-Only safe metadata files were read:
+Read:
 
-- `reports/llm-runs/004393-2025-20260613T201900Z-host_run_4a531cbe94604e4/manifest.json`
-- `reports/llm-runs/004393-2025-20260613T201900Z-host_run_4a531cbe94604e4/summary.json`
-- `reports/llm-runs/004393-2025-20260613T201900Z-host_run_4a531cbe94604e4/chapters/chapter-02.json`
-- `reports/llm-runs/004393-2025-20260613T201900Z-host_run_4a531cbe94604e4/chapters/chapter-03.json`
+- `reports/llm-runs/004393-2025-20260613T221455Z-host_run_9dbb1b5be0e54cd/manifest.json`
+- `reports/llm-runs/004393-2025-20260613T221455Z-host_run_9dbb1b5be0e54cd/summary.json`
+- `reports/llm-runs/004393-2025-20260613T221455Z-host_run_9dbb1b5be0e54cd/chapters/chapter-02.json`
+- `reports/llm-runs/004393-2025-20260613T221455Z-host_run_9dbb1b5be0e54cd/chapters/chapter-03.json`
+- `reports/llm-runs/004393-2025-20260613T221455Z-host_run_9dbb1b5be0e54cd/chapters/chapter-05.json`
 
 Not read:
 
-- writer draft Markdown
-- repair Markdown
-- auditor feedback Markdown
+- writer Markdown bodies
+- auditor feedback Markdown bodies
+- repair Markdown bodies
 - raw prompts
-- provider payloads or provider responses
-- source/cache/PDF bodies
+- provider request/response payloads
+- source/PDF/cache body
 - final report body
 
-## Accepted Runtime Facts
+## Accepted Live Metadata Facts
 
-Manifest safe metadata:
+Overall run:
 
-- `schema_version=llm_incomplete_run_artifact_manifest.v1`
-- `run_id=host_run_4a531cbe94604e47`
-- `fund_code=004393`
-- `report_year=2025`
 - `orchestration_status=partial`
 - `final_assembly_status=incomplete`
-
-Summary safe metadata:
-
-- `schema_version=llm_incomplete_run_summary.v1`
-- `fund_code=004393`
-- `report_year=2025`
-- `orchestration_status=partial`
-- `final_assembly_status=incomplete`
-- `first_failed.chapter_id=3`
-- `first_failed.status=blocked`
-- `first_failed.stop_reason=missing_required_facts`
-- `first_failed.failure_category=fact_gap`
-- `first_failed.failure_subcategory=null`
-- `first_failed.attempt_count=1`
+- first failed chapter: `2`
+- first failed status: `failed`
+- first failed stop reason: `repair_budget_exhausted`
+- first failed category: `prompt_contract`
+- first failed subcategory: `l1_numerical_closure`
+- first failed runtime operation: `auditor`
+- first failed provider attempt count from runtime summary: `0`
 
 Chapter matrix:
 
 | Chapter | Status | Stop reason | Failure category | Failure subcategory | Attempt count |
-| --- | --- | --- | --- | --- | --- |
-| 1 | accepted | none | null | null | 1 |
-| 2 | accepted | none | null | l1_numerical_closure | 2 |
-| 3 | blocked | missing_required_facts | fact_gap | null | 1 |
-| 4 | accepted | none | null | null | 1 |
-| 5 | accepted | none | null | null | 1 |
-| 6 | accepted | none | null | null | 1 |
+|---|---|---|---|---|---|
+| 1 | `accepted` | `none` | null | null | 1 |
+| 2 | `failed` | `repair_budget_exhausted` | `prompt_contract` | `l1_numerical_closure` | 2 |
+| 3 | `blocked` | `missing_required_output_marker` | `prompt_contract` | `missing_required_marker` | 1 |
+| 4 | `accepted` | `none` | null | null | 1 |
+| 5 | `accepted` | `none` | null | null | 1 |
+| 6 | `accepted` | `none` | null | null | 1 |
 
-Chapter 2 safe metadata:
+Chapter 2 prompt-contract diagnostic phases:
 
-- `status=accepted`
-- `stop_reason=none`
-- `failure_category=null`
-- `failure_subcategory=l1_numerical_closure`
-- `diagnostic_consistency_status=consistent`
-- `issues_count=0`
-- Prompt-contract diagnostics still record an earlier `phase=programmatic_audit` row with `issue_id_prefix_counts["programmatic:L1"]=1` and `l1_numerical_closure_count=1`, but the final chapter status is accepted.
-- Runtime diagnostics are safe scalar/null fields only; provider attempt index/max-attempt fields are null.
+| Attempt | Phase | Issue prefix counts | L1 count | Required output missing | Response chars |
+|---|---|---|---|---|---|
+| 0 | `programmatic_audit` | `programmatic:L1=1` | 1 | 0 | 22 |
+| 1 | `programmatic_audit` | `programmatic:L1=2` | 2 | 0 | 22 |
 
-Chapter 3 safe metadata:
+Chapter 3 prompt-contract diagnostic:
 
-- `status=blocked`
-- `stop_reason=missing_required_facts`
-- `failure_category=fact_gap`
-- `failure_subcategory=null`
-- `diagnostic_consistency_status=consistent`
-- `provider_attempt_count=null`
-- `issues_safe=["3:missing_required_facts:writer:required_output_block:ch3.required_output.item_01"]`
-- Runtime operation is `writer`; provider attempt index/max-attempt fields are null.
+- status: `blocked`
+- stop reason: `missing_required_output_marker`
+- category/subcategory: `prompt_contract` / `missing_required_marker`
+- issue prefix: `writer:required_output_gap_missing=1`
+- reason count: `missing_required_output_marker=1`
+- `max_output_chars=12000`
+
+Chapter 5:
+
+- status: `accepted`
+- stop reason: `none`
+- category/subcategory: null
+
+## Comparison To Previous Accepted Evidence
+
+Compared with the accepted Chapter 3 policy post-fix bounded live evidence at checkpoint `2f8dce9`:
+
+- Chapter 2 remained the first failed chapter with the same terminal classification: `repair_budget_exhausted` / `prompt_contract` / `l1_numerical_closure`.
+- The strengthened Chapter 2 prompt contract did not resolve the live sample.
+- Chapter 5 moved from a previous residual blocker to `accepted` in this sample, but this is single-sample live metadata only and not a readiness claim.
+- Chapter 3 no longer shows the previous accepted state in this sample; it is now blocked on `missing_required_output_marker`. Because Chapter 2 is still first failed, Chapter 3 must be handled as a separate residual after Chapter 2 disposition, not as proof against the Chapter 2 result.
 
 ## Disposition
 
-| Item | Decision | Basis |
-| --- | --- | --- |
-| Chapter 2 L1 post-fix behavior | ACCEPT_AS_LIVE_IMPROVEMENT_EVIDENCE | Chapter 2 status is now `accepted` after two attempts; no terminal Chapter 2 `repair_budget_exhausted` blocker remains in this run. |
-| Chapter 2 full content correctness | NOT_CLAIMED | This gate read only safe metadata, not accepted draft/report body. |
-| Chapter 3 item 01 fact-gap blocker | ACCEPT_AS_CURRENT_NEXT_BLOCKER | First failed chapter is now Chapter 3 `missing_required_facts` / `fact_gap`, matching the previous known fact-gap residual. |
-| Provider/LLM full completion | REJECT_AS_NOT_PROVEN | Command exit is `1`; final assembly is incomplete. |
-| Release/readiness | NOT_READY | Single live evidence does not prove readiness. |
+The post-fix bounded live sample is valid fail-closed evidence.
+
+It does not accept the Chapter 2 L1 fix as live-confirmed. Instead, it proves that the exact `004393 / 2025` live sample still reproduces Chapter 2 L1 repair-budget exhaustion after the no-live prompt-contract strengthening.
+
+Accepted classification:
+
+`CHAPTER2_L1_LIVE_PERSISTENT_FAILURE_AFTER_PROMPT_STRENGTHENING`
+
+This should route to a no-code disposition/root-cause planning gate before any further implementation. The next gate should decide whether the residual points to:
+
+- live model noncompliance with prompt contract;
+- insufficient structured facts/anchors for the desired numeric closure;
+- auditor/repair instruction mismatch still not captured by current no-live tests;
+- current one-repair budget being insufficient for live output;
+- or a product decision to render a deterministic gap/minimum-verification path rather than repeatedly trying to produce concrete Chapter 2 numeric closure.
 
 ## Residuals
 
-- Full Route C LLM report completion remains unproven.
-- Chapter 3 item 01 remains a fact-gap blocker.
-- Live provider adherence is only proven for this single sample and this metadata-level outcome.
-- H4/H5 diagnostic serialization/projection residuals remain future scope.
-- Chapter repair budget calibration remains future scope.
-- Release/readiness remains `NOT_READY`.
+| Residual | Status | Next handling |
+|---|---|---|
+| Chapter 2 L1 still fails live after prompt strengthening | Blocking for LLM completion | No-code disposition/root-cause planning gate |
+| Chapter 3 missing required marker in this sample | Residual | Separate disposition after Chapter 2 route is chosen |
+| Chapter 5 prior forbidden-phrase blocker | Not reproduced in this sample | Keep as residual until explicitly dispositioned |
+| Live content quality | Unproven | Deferred |
+| Release/readiness | `NOT_READY` | Preserved |
 
-## Next Gate Recommendation
+## Recommended Next Gate
 
-Proceed to:
+`Provider/LLM Chapter 2 L1 Live-persistent Failure Disposition Gate`
 
-`Provider/LLM Chapter 3 Item 01 Fact-gap Disposition Gate`
+Purpose:
 
-That next gate should decide whether Chapter 3 item 01 fact-gap remains an accepted residual, needs no-live data/projection diagnostics, or requires a narrow template/required-output policy adjustment. It must not reintroduce provider/source fallback or claim readiness.
+- Do not implement immediately.
+- Reconcile no-live implementation acceptance with live persistent failure.
+- Decide whether the next action is additional no-live diagnostic evidence, deterministic gap rendering, repair budget calibration planning, or a narrower code fix plan.
+- Preserve `NOT_READY`.
 
 ## Final Verdict
 
-VERDICT: ACCEPT_LIVE_CHAPTER2_L1_FIX_CONFIRMED_CHAPTER3_FACT_GAP_NOT_READY
+`VERDICT: LIVE_FAIL_CLOSED_CHAPTER2_L1_STILL_REPRODUCES_NOT_READY`
