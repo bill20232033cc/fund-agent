@@ -483,11 +483,12 @@ def test_writer_prompt_contains_l1_numerical_closure_anchor_rule() -> None:
 
     prompt = build_chapter_prompt(input_data)
 
-    assert "第2章 R=A+B-C 数字闭环" in prompt.user_prompt
+    assert "第2章 L1 数字闭环安全输出契约" in prompt.user_prompt
     assert "同句或上下2行" in prompt.user_prompt
-    assert "`### 结论要点` 不要重复未带 anchor 的 R/A/B/C/A-C 具体百分比" in prompt.user_prompt
-    assert "`### 证据与出处` 只列来源标签或带 anchor 的事实句" in prompt.user_prompt
-    assert "不得编造 R、A、B、C 或 A-C 数值" in prompt.user_prompt
+    assert "不写具体百分比，改写为数据不足/下一步最小验证问题" in prompt.user_prompt
+    assert "`### 结论要点` 和 `### 证据与出处` 不得重复无邻近 anchor" in prompt.user_prompt
+    assert "来源标签、年报章节名或出处列表不能替代" in prompt.user_prompt
+    assert "不得近似或编造" in prompt.user_prompt
 
 
 def test_non_ch2_writer_prompt_omits_l1_numerical_closure_anchor_rule() -> None:
@@ -507,8 +508,8 @@ def test_non_ch2_writer_prompt_omits_l1_numerical_closure_anchor_rule() -> None:
 
     prompt = build_chapter_prompt(input_data)
 
-    assert "第2章 R=A+B-C 数字闭环" not in prompt.user_prompt
-    assert "`### 结论要点` 不要重复未带 anchor 的 R/A/B/C/A-C 具体百分比" not in prompt.user_prompt
+    assert "第2章 L1 数字闭环安全输出契约" not in prompt.user_prompt
+    assert "`### 结论要点` 和 `### 证据与出处` 不得重复无邻近 anchor" not in prompt.user_prompt
 
 
 def test_compact_prompt_payload_preserves_fact_and_anchor_contract() -> None:
@@ -552,7 +553,8 @@ def test_compact_prompt_payload_preserves_fact_and_anchor_contract() -> None:
     assert "section_id" in compact_prompt.user_prompt
     assert "table_id" in compact_prompt.user_prompt
     assert "row_locator" in compact_prompt.user_prompt
-    assert "第2章 R=A+B-C 数字闭环" in compact_prompt.user_prompt
+    assert "第2章 L1 数字闭环安全输出契约" in compact_prompt.user_prompt
+    assert "不写具体百分比，改写为数据不足/下一步最小验证问题" in compact_prompt.user_prompt
     assert "<!-- required_output:<exact required output item> -->" in compact_prompt.user_prompt
     assert "候选 facet 禁止断言形式" in compact_prompt.user_prompt
 
@@ -1195,14 +1197,14 @@ def test_ch2_l1_repair_context_renders_local_anchor_placement_checklist() -> Non
 
     prompt = build_chapter_prompt(input_data)
 
-    assert "第2章 L1 数字闭环 repair checklist" in prompt.user_prompt
+    assert "第2章 L1 repair 必须改写规则" in prompt.user_prompt
+    assert "先删除上一轮无邻近 anchor 的具体数字闭环断言" in prompt.user_prompt
+    assert "只有确认 allowed `<!-- anchor:<anchor_id> -->` 支撑该具体数值时" in prompt.user_prompt
     assert "同一句或上下2行" in prompt.user_prompt
     assert "R/A/B/C/A-C" in prompt.user_prompt
-    assert "百分比闭合断言" in prompt.user_prompt
-    assert "删除具体数字闭环断言" in prompt.user_prompt
-    assert "数据不足/下一步最小验证问题" in prompt.user_prompt
-    assert "不要只把 anchor 放在脱离断言的 ### 证据与出处 来源列表" in prompt.user_prompt
-    assert "不要编造 anchor" in prompt.user_prompt
+    assert "不确定时写数据不足或下一步最小验证问题，且不写具体百分比" in prompt.user_prompt
+    assert "输出前逐行自查 R/A/B/C/A-C/Alpha/Beta/Cost/%" in prompt.user_prompt
+    assert "缺少邻近 allowed anchor 的行必须改写为缺口或验证问题" in prompt.user_prompt
     assert "extra_payload" not in ChapterLLMRequest.__dataclass_fields__
 
 
@@ -1250,9 +1252,9 @@ def test_ch2_l1_repair_checklist_absent_outside_ch2_l1_repair_context() -> None:
         )
     )
 
-    assert "第2章 L1 数字闭环 repair checklist" not in initial_ch2.user_prompt
-    assert "第2章 L1 数字闭环 repair checklist" not in ch1_l1_repair.user_prompt
-    assert "第2章 L1 数字闭环 repair checklist" not in ch2_non_l1_repair.user_prompt
+    assert "第2章 L1 repair 必须改写规则" not in initial_ch2.user_prompt
+    assert "第2章 L1 repair 必须改写规则" not in ch1_l1_repair.user_prompt
+    assert "第2章 L1 repair 必须改写规则" not in ch2_non_l1_repair.user_prompt
 
 
 def test_llm_request_carries_typed_repair_context() -> None:

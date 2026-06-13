@@ -866,6 +866,31 @@ def test_programmatic_audit_allows_l1_formula_framework_without_concrete_percent
     assert not any(issue.rule_code == "L1" for issue in result.issues)
 
 
+def test_programmatic_audit_allows_l1_gap_minimum_verification_without_concrete_percentage() -> None:
+    """验证无具体百分比的安全缺口/最小验证问题不触发 L1，见模板第 2 章 R=A+B-C。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当安全缺口改写被误判为 L1 时抛出。
+    """
+
+    input_data = _audit_input(
+        markdown_suffix=(
+            "\n数据不足，不能完成具体 R=A+B-C 百分比闭环。"
+            "下一步最小验证问题：复核年报中基金收益、基准收益和费用口径是否同源可比。"
+        )
+    )
+
+    result = audit_chapter_programmatic(input_data)
+
+    assert not any(issue.rule_code == "L1" for issue in result.issues)
+
+
 def test_programmatic_audit_blocks_ch2_source_section_unanchored_numeric_closure() -> None:
     """验证第 2 章出处段无锚点复述公式百分比时仍触发 L1。
 

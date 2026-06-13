@@ -1258,10 +1258,13 @@ def _ch2_numerical_closure_contract_prompt(chapter: ChapterFactInput) -> str:
     if chapter.chapter_id != 2:
         return ""
     return (
-        "第2章 R=A+B-C 数字闭环：若写公式/百分比闭合断言，必须让 allowed anchor marker 与该断言同句或上下2行；"
-        "`### 结论要点` 不要重复未带 anchor 的 R/A/B/C/A-C 具体百分比；"
-        "`### 证据与出处` 只列来源标签或带 anchor 的事实句，不要无锚点复述公式百分比；"
-        "缺同源事实时写未披露/数据不足/下一步最小验证问题，不得编造 R、A、B、C 或 A-C 数值。"
+        "第2章 L1 数字闭环安全输出契约：若写 R/A/B/C/A-C、Alpha/Beta/Cost 或百分比闭合断言，"
+        "allowed anchor marker 必须与该具体断言同句或上下2行；"
+        "只能二选一：1. 有邻近 allowed anchor 的具体数字闭环；"
+        "2. 不写具体百分比，改写为数据不足/下一步最小验证问题。"
+        "`### 结论要点` 和 `### 证据与出处` 不得重复无邻近 anchor 的 R/A/B/C/A-C 具体百分比；"
+        "来源标签、年报章节名或出处列表不能替代 `<!-- anchor:<anchor_id> -->`；"
+        "缺同源事实或不确定 anchor 是否支撑精确数值时，省略 R、A、B、C、A-C 或 Alpha/Beta/Cost 百分比，不得近似或编造。"
     )
 
 
@@ -1304,14 +1307,13 @@ def _ch2_l1_repair_guidance_prompt(
         return ""
     return "\n".join(
         (
-            "第2章 L1 数字闭环 repair checklist：",
-            "1. 输出前逐段检查 `### 结论要点`、`### 详细情况` 和 `### 证据与出处`。",
-            "2. 每个具体 R/A/B/C/A-C 公式、A-C、Alpha/Beta/Cost 或百分比闭合断言，只能二选一：",
-            "   a. 使用现有 allowed `<!-- anchor:<anchor_id> -->` marker，并放在同一句或上下2行内；",
-            "   b. 若没有已知同源 anchor，删除具体数字闭环断言，改写为数据不足/下一步最小验证问题，且不写具体百分比。",
-            "3. 不要只把 anchor 放在脱离断言的 ### 证据与出处 来源列表；具体闭合断言附近必须有 anchor。",
-            "4. 不要在结论或来源段落重复无邻近 anchor 的 R/A/B/C/A-C 具体百分比。",
-            "5. 不确定哪个 allowed anchor 支撑闭合关系时，省略具体百分比；不要编造 anchor 或数值。",
+            "第2章 L1 repair 必须改写规则：",
+            "1. 先删除上一轮无邻近 anchor 的具体数字闭环断言。",
+            "2. 只有确认 allowed `<!-- anchor:<anchor_id> -->` 支撑该具体数值时，才重新写入百分比，"
+            "且 anchor 必须在同一句或上下2行内。",
+            "3. 不确定时写数据不足或下一步最小验证问题，且不写具体百分比。",
+            "4. `### 结论要点` 和 `### 证据与出处` 不得无邻近 anchor 复述 R/A/B/C/A-C/Alpha/Beta/Cost 百分比。",
+            "5. 输出前逐行自查 R/A/B/C/A-C/Alpha/Beta/Cost/%；命中这些词且缺少邻近 allowed anchor 的行必须改写为缺口或验证问题。",
         )
     )
 
