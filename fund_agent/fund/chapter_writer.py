@@ -734,7 +734,14 @@ def _chapter_prompt_fragments(
         facts="允许 facts：" + _json_text(_prompt_fact_payload(chapter.facts, mode=input_data.prompt_payload_mode)),
         anchors="允许 anchors："
         + _json_text(_prompt_anchor_payload(chapter.evidence_anchors, mode=input_data.prompt_payload_mode)),
-        repair_context=_repair_context_prompt(input_data.repair_context),
+        repair_context="\n".join(
+            fragment
+            for fragment in (
+                _repair_context_prompt(input_data.repair_context),
+                _ch2_l1_repair_guidance_prompt(chapter, input_data.repair_context),
+            )
+            if fragment
+        ),
     )
 
 
@@ -1255,6 +1262,57 @@ def _ch2_numerical_closure_contract_prompt(chapter: ChapterFactInput) -> str:
         "`### 结论要点` 不要重复未带 anchor 的 R/A/B/C/A-C 具体百分比；"
         "`### 证据与出处` 只列来源标签或带 anchor 的事实句，不要无锚点复述公式百分比；"
         "缺同源事实时写未披露/数据不足/下一步最小验证问题，不得编造 R、A、B、C 或 A-C 数值。"
+    )
+
+
+def _has_l1_numerical_closure_repair_issue(repair_context: ChapterRepairContext | None) -> bool:
+    """判断 repair context 是否包含 L1 数字闭环问题，见模板第 2 章 R=A+B-C。
+
+    Args:
+        repair_context: 可选章节重写上下文。
+
+    Returns:
+        当上一轮 issue id 以 `programmatic:L1` 开头时返回 `True`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if repair_context is None:
+        return False
+    return any(issue_id.startswith("programmatic:L1") for issue_id in repair_context.previous_issue_ids)
+
+
+def _ch2_l1_repair_guidance_prompt(
+    chapter: ChapterFactInput,
+    repair_context: ChapterRepairContext | None,
+) -> str:
+    """构造第 2 章 L1 repair 局部锚点放置清单，见模板第 2 章 R=A+B-C。
+
+    Args:
+        chapter: 单章事实输入。
+        repair_context: 可选章节重写上下文。
+
+    Returns:
+        命中第 2 章且上一轮存在 `programmatic:L1` 时返回 checklist，否则返回空字符串。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if chapter.chapter_id != 2 or not _has_l1_numerical_closure_repair_issue(repair_context):
+        return ""
+    return "\n".join(
+        (
+            "第2章 L1 数字闭环 repair checklist：",
+            "1. 输出前逐段检查 `### 结论要点`、`### 详细情况` 和 `### 证据与出处`。",
+            "2. 每个具体 R/A/B/C/A-C 公式、A-C、Alpha/Beta/Cost 或百分比闭合断言，只能二选一：",
+            "   a. 使用现有 allowed `<!-- anchor:<anchor_id> -->` marker，并放在同一句或上下2行内；",
+            "   b. 若没有已知同源 anchor，删除具体数字闭环断言，改写为数据不足/下一步最小验证问题，且不写具体百分比。",
+            "3. 不要只把 anchor 放在脱离断言的 ### 证据与出处 来源列表；具体闭合断言附近必须有 anchor。",
+            "4. 不要在结论或来源段落重复无邻近 anchor 的 R/A/B/C/A-C 具体百分比。",
+            "5. 不确定哪个 allowed anchor 支撑闭合关系时，省略具体百分比；不要编造 anchor 或数值。",
+        )
     )
 
 

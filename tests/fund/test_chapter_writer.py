@@ -1168,6 +1168,93 @@ def test_repair_context_is_rendered_into_writer_prompt_without_extra_payload() -
     assert "extra_payload" not in ChapterLLMRequest.__dataclass_fields__
 
 
+def test_ch2_l1_repair_context_renders_local_anchor_placement_checklist() -> None:
+    """验证第 2 章 L1 repair attempt 渲染局部锚点放置清单，见模板第 2 章 R=A+B-C。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 prompt 未渲染 L1 专用清单时抛出。
+    """
+
+    repair_context = ChapterRepairContext(
+        attempt_index=1,
+        previous_issue_ids=("programmatic:L1:line:10:fixture",),
+        previous_messages=("R=A+B-C 数字闭环缺少邻近 anchor marker。",),
+        required_corrections=("修复第2章 R=A+B-C 数字闭环。",),
+    )
+    input_data = build_chapter_writer_input(
+        project_chapter_facts(_bundle(), chapter_ids=(2,)),
+        chapter_id=2,
+        repair_context=repair_context,
+    )
+
+    prompt = build_chapter_prompt(input_data)
+
+    assert "第2章 L1 数字闭环 repair checklist" in prompt.user_prompt
+    assert "同一句或上下2行" in prompt.user_prompt
+    assert "R/A/B/C/A-C" in prompt.user_prompt
+    assert "百分比闭合断言" in prompt.user_prompt
+    assert "删除具体数字闭环断言" in prompt.user_prompt
+    assert "数据不足/下一步最小验证问题" in prompt.user_prompt
+    assert "不要只把 anchor 放在脱离断言的 ### 证据与出处 来源列表" in prompt.user_prompt
+    assert "不要编造 anchor" in prompt.user_prompt
+    assert "extra_payload" not in ChapterLLMRequest.__dataclass_fields__
+
+
+def test_ch2_l1_repair_checklist_absent_outside_ch2_l1_repair_context() -> None:
+    """验证第 2 章 L1 repair checklist 不泄漏到初始 attempt、其他章节或非 L1 repair。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 checklist 在非目标场景泄漏时抛出。
+    """
+
+    l1_repair_context = ChapterRepairContext(
+        attempt_index=1,
+        previous_issue_ids=("programmatic:L1:line:10:fixture",),
+        previous_messages=("R=A+B-C 数字闭环缺少邻近 anchor marker。",),
+        required_corrections=("修复第2章 R=A+B-C 数字闭环。",),
+    )
+    non_l1_repair_context = ChapterRepairContext(
+        attempt_index=1,
+        previous_issue_ids=("programmatic:C2:item",),
+        previous_messages=("缺少 required output marker。",),
+        required_corrections=("补齐 required output marker。",),
+    )
+
+    initial_ch2 = build_chapter_prompt(
+        build_chapter_writer_input(project_chapter_facts(_bundle(), chapter_ids=(2,)), chapter_id=2)
+    )
+    ch1_l1_repair = build_chapter_prompt(
+        build_chapter_writer_input(
+            project_chapter_facts(_bundle(), chapter_ids=(1,)),
+            chapter_id=1,
+            repair_context=l1_repair_context,
+        )
+    )
+    ch2_non_l1_repair = build_chapter_prompt(
+        build_chapter_writer_input(
+            project_chapter_facts(_bundle(), chapter_ids=(2,)),
+            chapter_id=2,
+            repair_context=non_l1_repair_context,
+        )
+    )
+
+    assert "第2章 L1 数字闭环 repair checklist" not in initial_ch2.user_prompt
+    assert "第2章 L1 数字闭环 repair checklist" not in ch1_l1_repair.user_prompt
+    assert "第2章 L1 数字闭环 repair checklist" not in ch2_non_l1_repair.user_prompt
+
+
 def test_llm_request_carries_typed_repair_context() -> None:
     """验证 LLM request 携带 typed repair context。
 

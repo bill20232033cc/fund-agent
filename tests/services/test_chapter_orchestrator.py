@@ -1538,6 +1538,9 @@ def test_l1_repair_context_guides_anchored_correction_and_accepts_after_repair()
     assert any("第2章 R=A+B-C 数字闭环" in item for item in repair_context.required_corrections)
     assert any("### 结论要点 与 ### 证据与出处" in item for item in repair_context.required_corrections)
     assert any("不得在这些段落无锚点复述 R/A/B/C/A-C 具体百分比" in item for item in repair_context.required_corrections)
+    assert "第2章 L1 数字闭环 repair checklist" in writer.requests[1].user_prompt
+    assert "同一句或上下2行" in writer.requests[1].user_prompt
+    assert "不要只把 anchor 放在脱离断言的 ### 证据与出处 来源列表" in writer.requests[1].user_prompt
     assert "extra_payload" not in writer.requests[1].user_prompt
 
 
