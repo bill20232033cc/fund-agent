@@ -45,6 +45,26 @@
 
 ---
 
+## 004393 安信企业价值优选混合A（国内股票类）
+
+```golden-answer-metadata
+report_year: 2025
+```
+
+Source-body verification provenance: docs/reviews/mvp-004393-2025-controlled-live-eid-source-body-verification-evidence-20260613.md; EID single-source/no-fallback; source=eid; selected_source=eid; source_mode=single_source_only; fallback_enabled=false; fallback_used=false; report_code=FB010010; upload_info_id=1447922; upload_info_detail_id=1494773; parsed_cache_hit=true; long text rows preserve normalized expected values from the accepted verification artifact.
+
+| field | sub_field | expected_value | confidence | source |
+|---|---|---|---|---|
+| basic_identity | fund_name | 安信企业价值优选混合型证券投资基金 | high | 年报2025 §2 page-5 page-5-table-0 fund_name |
+| basic_identity | fund_code | 004393 | high | 年报2025 §2 page-5 page-5-table-0 fund_code |
+| basic_identity | management_company | 安信基金管理有限责任公司 | high | 年报2025 §2 page-5 page-5-table-0 management_company |
+| basic_identity | custodian | 中国银行股份有限公司 | high | 年报2025 §2 page-5 page-5-table-0 custodian |
+| basic_identity | inception_date | 2022年8月8日 | high | 年报2025 §2 page-5 page-5-table-0 inception_date |
+| product_profile | investment_objective | 本基金在有效控制组合风险并保持基金资产流动性的前提下，力争实现基金资产的长期稳健增值。 | medium | 年报2025 §2 page-5 page-5-table-1 investment_objective |
+| benchmark | benchmark_name | 沪深300指数收益率×60%+恒生指数收益率（经汇率调整后）×20%+中债综合（全价）指数收益率×20% | high | 年报2025 §2 page-5 page-5-table-1 benchmark |
+
+---
+
 ## 000216 华安黄金ETF联接A（黄金类）
 
 | field | sub_field | expected_value | confidence | source |
