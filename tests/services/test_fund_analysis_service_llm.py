@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import ast
 import asyncio
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -19,6 +19,7 @@ from fund_agent.fund.chapter_writer import (
     ChapterLLMRequest,
     ChapterLLMResponse,
 )
+from fund_agent.fund.extractors.models import ExtractedField
 from fund_agent.services import (
     ChapterOrchestrationPolicy,
     ChapterOrchestratorLLMClients,
@@ -187,6 +188,46 @@ class _Chapter3ValueErrorWriterLLMClient(_FakeChapterLLMClient):
             raise ValueError("Authorization Bearer sk-secret prompt raw")
         return ChapterLLMResponse(
             text=_valid_markdown_from_request(request),
+            model_name="fake-writer",
+            finish_reason="stop",
+        )
+
+
+class _Chapter3Item01GapWriterLLMClient(_FakeChapterLLMClient):
+    """测试用 writer，第 3 章 item 01 用 approved evidence-gap wording 降级。"""
+
+    def generate_chapter(self, request: ChapterLLMRequest) -> ChapterLLMResponse:
+        """第 3 章 item 01 输出证据缺口，其他章节返回合法 Markdown。"""
+
+        self.requests.append(request)
+        text = _valid_markdown_from_request(request)
+        if request.chapter_id == 3:
+            text = text.replace(
+                "<!-- required_output:ch3.required_output.item_01 -->",
+                "<!-- required_output:ch3.required_output.item_01 -->\n"
+                "- 基金经理基本信息证据不足，不能据此判断基金经理基本信息。",
+                1,
+            )
+        return ChapterLLMResponse(
+            text=text,
+            model_name="fake-writer",
+            finish_reason="stop",
+        )
+
+
+class _Chapter3Item01UnsafeWriterLLMClient(_FakeChapterLLMClient):
+    """测试用 writer，第 3 章 item 01 保留 marker 但缺少 approved gap wording。"""
+
+    def generate_chapter(self, request: ChapterLLMRequest) -> ChapterLLMResponse:
+        """第 3 章返回 unsafe item 01 输出，其他章节返回合法 Markdown。"""
+
+        self.requests.append(request)
+        if request.chapter_id != 3:
+            text = _valid_markdown_from_request(request)
+        else:
+            text = _chapter_3_markdown_without_item01_gap(request)
+        return ChapterLLMResponse(
+            text=text,
             model_name="fake-writer",
             finish_reason="stop",
         )
@@ -387,6 +428,41 @@ async def test_analyze_with_llm_returns_accepted_final_assembly_and_report_markd
     assert result.final_assembly_result.assembled_chapter_ids == (0, 1, 2, 3, 4, 5, 6, 7)
     assert "## 第 0 章：投资要点概览" in result.report_markdown
     assert "## 第 7 章：是否值得持有--最终判断" in result.report_markdown
+    assert result.quality_gate_result is None
+    assert result.quality_gate_not_run_reason == "policy=off"
+
+
+@pytest.mark.asyncio
+async def test_analyze_with_llm_accepts_final_assembly_when_ch3_item01_degrades_to_gap() -> None:
+    """验证第 3 章 item 01 证据缺口合规降级后可参与完整总装。"""
+
+    extractor = _FakeExtractor(_bundle_with_missing_portfolio_managers())
+    writer = _Chapter3Item01GapWriterLLMClient()
+    auditor = _FakeAuditLLMClient()
+    service = FundAnalysisService(extractor=extractor)
+
+    result = await service.analyze_with_llm(
+        _developer_request(force_refresh=True),
+        llm_clients=_clients(writer=writer, auditor=auditor),
+        chapter_policy=ChapterOrchestrationPolicy(
+            run_programmatic_audit=False,
+            typed_template_path="typed_template_contract",
+        ),
+    )
+
+    chapter_3 = next(
+        chapter_result
+        for chapter_result in result.llm_orchestration_result.chapter_results
+        if chapter_result.chapter_id == 3
+    )
+    assert extractor.calls == [("110011", 2024, True)]
+    assert [request.chapter_id for request in writer.requests] == [1, 2, 3, 4, 5, 6]
+    assert len(auditor.requests) == 6
+    assert result.llm_orchestration_result.status == "accepted"
+    assert chapter_3.status == "accepted"
+    assert result.final_assembly_result.status == "accepted"
+    assert result.final_assembly_result.assembled_chapter_ids == (0, 1, 2, 3, 4, 5, 6, 7)
+    assert result.final_assembly_result.report_markdown is not None
     assert result.quality_gate_result is None
     assert result.quality_gate_not_run_reason == "policy=off"
 
@@ -1067,7 +1143,7 @@ async def test_analyze_with_llm_execution_projects_chapter_3_value_error_as_code
 
 @pytest.mark.asyncio
 async def test_partial_llm_result_does_not_fallback_to_deterministic_after_typed_readiness() -> None:
-    """验证 typed readiness incomplete 后仍 fail-closed，不回退确定性报告。
+    """验证第 3 章 item 01 unsafe 缺口输出阻断总装且不回退确定性报告。
 
     Args:
         无。
@@ -1079,18 +1155,41 @@ async def test_partial_llm_result_does_not_fallback_to_deterministic_after_typed
         AssertionError: 当 partial LLM 结果被 deterministic markdown 掩盖时抛出。
     """
 
-    service = FundAnalysisService(extractor=_FakeExtractor(_bundle()))
+    writer = _Chapter3Item01UnsafeWriterLLMClient()
+    auditor = _FakeAuditLLMClient()
+    service = FundAnalysisService(extractor=_FakeExtractor(_bundle_with_missing_portfolio_managers()))
 
     result = await service.analyze_with_llm(
         _developer_request(),
         llm_clients=ChapterOrchestratorLLMClients(
-            writer=_Chapter6BlockingWriterLLMClient(),
-            auditor=_FakeAuditLLMClient(),
+            writer=writer,
+            auditor=auditor,
         ),
-        chapter_policy=ChapterOrchestrationPolicy(run_programmatic_audit=False),
+        chapter_policy=ChapterOrchestrationPolicy(
+            run_programmatic_audit=False,
+            typed_template_path="typed_template_contract",
+        ),
     )
 
+    chapter_3 = next(
+        chapter_result
+        for chapter_result in result.llm_orchestration_result.chapter_results
+        if chapter_result.chapter_id == 3
+    )
     assert result.llm_orchestration_result.status == "partial"
+    assert [request.chapter_id for request in writer.requests] == [1, 2, 3, 4, 5, 6]
+    assert chapter_3.status == "blocked"
+    assert chapter_3.stop_reason == "missing_required_output_marker"
+    assert chapter_3.failure_category == "prompt_contract"
+    assert chapter_3.failure_subcategory == "missing_required_marker"
+    assert any(
+        "writer:required_output_gap_missing:ch3.required_output.item_01" in issue
+        for issue in chapter_3.issues
+    )
+    assert all(
+        "required_output_block:ch3.required_output.item_01" not in issue
+        for issue in chapter_3.issues
+    )
     assert result.final_assembly_result.status == "incomplete"
     assert result.final_assembly_result.report_markdown is None
     assert result.final_assembly_result.chapter7_markdown is None
@@ -1384,6 +1483,18 @@ def _execution_request(
     )
 
 
+def _bundle_with_missing_portfolio_managers() -> object:
+    """构造第 3 章基金经理基本信息缺少已复核证据的抽取结果。"""
+
+    missing_portfolio_managers = ExtractedField(
+        value=None,
+        anchors=(),
+        extraction_mode="missing",
+        note="no-live missing portfolio managers",
+    )
+    return replace(_bundle(), portfolio_managers=missing_portfolio_managers)
+
+
 def _quality_policy_from_request(request) -> QualityPolicyDeclaration:
     """从测试请求提取 quality gate 策略。
 
@@ -1625,6 +1736,25 @@ def _valid_markdown_from_request(request: ChapterLLMRequest) -> str:
     )
 
 
+def _chapter_3_markdown_without_item01_gap(request: ChapterLLMRequest) -> str:
+    """构造第 3 章 item 01 缺少 approved gap wording 的 Markdown。"""
+
+    anchor_id = request.required_anchor_ids[0]
+    required_items = tuple(
+        _required_item_id_from_prompt_payload(item)
+        for item in _required_items_from_request(request)
+    )
+    return (
+        "### 结论要点\n"
+        f"{_chapter_3_unsafe_required_lines(required_items)}\n"
+        "### 详细情况\n"
+        "本章只使用已断言事实，并把候选 facet 写成未断言。\n"
+        "### 证据与出处\n"
+        f"<!-- anchor:{anchor_id} -->\n"
+        "> 📎 证据：年报2024§§2表None行fixture（fixture）\n"
+    )
+
+
 def _required_items_from_request(request: ChapterLLMRequest) -> tuple[str, ...]:
     """从 writer prompt 文本中解析 required output items。
 
@@ -1643,6 +1773,31 @@ def _required_items_from_request(request: ChapterLLMRequest) -> tuple[str, ...]:
         if line.startswith(marker):
             return tuple(ast.literal_eval(line.removeprefix(marker)))
     raise ValueError("writer request 缺少必须输出项")
+
+
+def _required_item_id_from_prompt_payload(item: str) -> str:
+    """从 typed prompt payload 中提取 required output item id。"""
+
+    first_line = item.splitlines()[0] if item else ""
+    if first_line.startswith("<!-- required_output:") and first_line.endswith(" -->"):
+        return first_line.removeprefix("<!-- required_output:").removesuffix(" -->")
+    return item
+
+
+def _chapter_3_unsafe_required_lines(required_items: tuple[str, ...]) -> str:
+    """构造第 3 章 item 01 unsafe、其它缺证项安全降级的 required output 行。"""
+
+    return "\n".join(_chapter_3_unsafe_required_line(item) for item in required_items)
+
+
+def _chapter_3_unsafe_required_line(item: str) -> str:
+    """构造单个第 3 章 required output 行。"""
+
+    if item == "ch3.required_output.item_01":
+        return f"<!-- required_output:{item} -->\n- 基金经理基本信息：已根据结构化事实说明。"
+    if item.startswith("ch3.required_output."):
+        return f"<!-- required_output:{item} -->\n- {item}: 证据不足，下一步最小验证问题是复核同源年报披露。"
+    return f"<!-- required_output:{item} -->\n- {item}: 已根据结构化事实说明。"
 
 
 def _required_lines(required_items: tuple[str, ...]) -> str:

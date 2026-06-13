@@ -57,7 +57,12 @@ class _FakeWriter:
         action = self.actions.get(request.chapter_id)
         if isinstance(action, Exception):
             raise action
-        text = action if isinstance(action, str) else _valid_agent_markdown_from_request(request)
+        if callable(action):
+            text = action(request)
+        elif isinstance(action, str):
+            text = action
+        else:
+            text = _valid_agent_markdown_from_request(request)
         return ChapterLLMResponse(text=text, model_name="fake-writer", finish_reason="stop")
 
 
@@ -300,20 +305,11 @@ def test_chapter_3_missing_typed_availability_blocks_before_provider(
     )
 
 
-def test_chapter_3_missing_basic_manager_info_blocks_before_provider() -> None:
-    """验证第 3 章基金经理基本信息缺证时阻断而不是 provider 前 ValueError。"""
+def test_chapter_3_missing_basic_manager_info_renders_evidence_gap_and_accepts() -> None:
+    """验证第 3 章基金经理基本信息缺证时用证据缺口安全降级。"""
 
-    missing_portfolio_managers = ExtractedField(
-        value=None,
-        anchors=(),
-        extraction_mode="missing",
-        note="no-live missing portfolio managers",
-    )
-    projection = project_chapter_facts(
-        replace(_bundle(), portfolio_managers=missing_portfolio_managers),
-        chapter_ids=(3,),
-    )
-    writer = _FakeWriter()
+    projection = _projection_with_missing_portfolio_managers()
+    writer = _FakeWriter(actions={3: _chapter_3_markdown_with_item01_gap})
 
     run = run_agent_body_chapters(
         projection,
@@ -326,26 +322,61 @@ def test_chapter_3_missing_basic_manager_info_blocks_before_provider() -> None:
     )
 
     task = run.tasks[0]
-    assert writer.requests == []
-    assert run.status == "blocked"
+    assert [request.chapter_id for request in writer.requests] == [3]
+    assert run.status == "accepted"
     assert task.chapter_id == 3
-    assert task.status == "blocked"
-    assert task.terminal_state == "blocked_fact_gap"
-    assert task.stop_reason == "missing_required_facts"
-    assert task.failure_category == "fact_gap"
+    assert task.status == "accepted"
+    assert task.accepted_draft is not None
+    assert task.accepted_conclusion is not None
+    assert run.final_assembly_readiness is not None
+    assert run.final_assembly_readiness.ready is True
+    assert run.final_assembly_readiness.accepted_source_chapter_ids == (3,)
     assert len(task.attempts) == 1
     writer_result = task.attempts[0].writer_result
     assert writer_result is not None
-    assert writer_result.status == "blocked"
-    assert writer_result.prompt.required_output_evidence_plan
+    assert writer_result.status == "drafted"
     item_01 = next(
         plan
         for plan in writer_result.prompt.required_output_evidence_plan
         if plan.item_id == "ch3.required_output.item_01"
     )
     assert item_01.availability_status == "missing"
-    assert item_01.action == "block"
+    assert item_01.action == "render_evidence_gap"
     assert item_01.requirement_fact_ids
+
+
+def test_chapter_3_missing_basic_manager_info_without_gap_phrase_blocks_after_writer() -> None:
+    """验证第 3 章基金经理基本信息缺证但未写缺口时在 writer 输出校验后阻断。"""
+
+    projection = _projection_with_missing_portfolio_managers()
+    writer = _FakeWriter(actions={3: _chapter_3_markdown_without_item01_gap})
+
+    run = run_agent_body_chapters(
+        projection,
+        llm_clients=AgentLLMClients(writer=writer, auditor=_FakeAuditor()),
+        policy=AgentRunPolicy(
+            target_chapter_ids=(3,),
+            max_output_chars=12000,
+            typed_template_path="typed_template_contract",
+        ),
+    )
+
+    task = run.tasks[0]
+    assert [request.chapter_id for request in writer.requests] == [3]
+    assert run.status == "blocked"
+    assert task.chapter_id == 3
+    assert task.status == "blocked"
+    assert task.terminal_state == "blocked_prompt_contract"
+    assert task.stop_reason == "missing_required_output_marker"
+    assert task.failure_category == "prompt_contract"
+    assert task.failure_subcategory == "missing_required_marker"
+    assert len(task.attempts) == 1
+    writer_result = task.attempts[0].writer_result
+    assert writer_result is not None
+    assert writer_result.status == "blocked"
+    rendered = repr(task.blocked_reasons)
+    assert "writer:required_output_gap_missing:ch3.required_output.item_01" in rendered
+    assert "required_output_block:ch3.required_output.item_01" not in rendered
 
 
 def test_chapter_3_missing_evidence_availability_envelope_remains_value_error(
@@ -588,6 +619,52 @@ def _projection(chapter_ids: tuple[int, ...]) -> object:
     """构造测试 projection。"""
 
     return project_chapter_facts(_bundle(), chapter_ids=chapter_ids)
+
+
+def _projection_with_missing_portfolio_managers() -> object:
+    """构造第 3 章基金经理基本信息缺少已复核证据的 projection。"""
+
+    missing_portfolio_managers = ExtractedField(
+        value=None,
+        anchors=(),
+        extraction_mode="missing",
+        note="no-live missing portfolio managers",
+    )
+    return project_chapter_facts(
+        replace(_bundle(), portfolio_managers=missing_portfolio_managers),
+        chapter_ids=(3,),
+    )
+
+
+def _chapter_3_markdown_with_item01_gap(request: ChapterLLMRequest) -> str:
+    """构造 item 01 使用 approved gap wording 的第 3 章 Markdown。"""
+
+    markdown = _valid_agent_markdown_from_request(request)
+    return markdown.replace(
+        "<!-- required_output:ch3.required_output.item_01 -->",
+        "<!-- required_output:ch3.required_output.item_01 -->\n"
+        "- 基金经理基本信息证据不足，不能据此判断基金经理基本信息。",
+        1,
+    )
+
+
+def _chapter_3_markdown_without_item01_gap(request: ChapterLLMRequest) -> str:
+    """构造 item 01 保留 marker 但缺少 approved gap wording 的第 3 章 Markdown。"""
+
+    marker = "<!-- required_output:ch3.required_output.item_01 -->"
+    markdown = _valid_agent_markdown_from_request(request)
+    start = markdown.find(marker)
+    if start < 0:
+        raise AssertionError("第 3 章测试 Markdown 缺少 item 01 marker")
+    segment_start = start + len(marker)
+    next_start = markdown.find("<!-- required_output:", segment_start)
+    if next_start < 0:
+        raise AssertionError("第 3 章测试 Markdown 缺少 item 01 后续 marker")
+    return (
+        markdown[:segment_start]
+        + "\n- 基金经理基本信息：已根据结构化事实说明。\n"
+        + markdown[next_start:]
+    )
 
 
 def _valid_agent_markdown_from_request(request: ChapterLLMRequest) -> str:
