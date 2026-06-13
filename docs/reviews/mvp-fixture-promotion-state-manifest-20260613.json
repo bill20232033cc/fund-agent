@@ -1,0 +1,28 @@
+{
+  "schema_version": "fund-agent.fixture-promotion-state.year-aware.v1",
+  "accepted_as_of": "2026-06-13",
+  "source_artifacts": [
+    "reports/golden-answers/golden-answer-prefill-reviewed.md",
+    "reports/golden-answers/golden-answer.json",
+    "docs/reviews/mvp-004393-2025-tracked-golden-content-write-implementation-controller-judgment-20260613.md",
+    "docs/reviews/mvp-004393-2025-fixture-promotion-strict-golden-coverage-evidence-controller-judgment-20260613.md",
+    "docs/reviews/mvp-fixture-promotion-state-year-aware-schema-parser-implementation-controller-judgment-20260613.md",
+    "docs/reviews/mvp-fixture-promotion-year-aware-parser-downstream-evidence-controller-judgment-20260613.md",
+    "docs/reviews/mvp-fixture-promotion-content-manifest-plan-controller-judgment-20260613.md"
+  ],
+  "entries": [
+    {
+      "fund_code": "004393",
+      "report_year": 2025,
+      "promotion_state": "promoted_fixture",
+      "promotion_identity": "fund_year",
+      "evidence_artifacts": [
+        "docs/reviews/mvp-004393-2025-tracked-golden-content-write-implementation-controller-judgment-20260613.md",
+        "docs/reviews/mvp-004393-2025-fixture-promotion-strict-golden-coverage-evidence-controller-judgment-20260613.md",
+        "docs/reviews/mvp-fixture-promotion-state-year-aware-schema-parser-implementation-controller-judgment-20260613.md",
+        "docs/reviews/mvp-fixture-promotion-year-aware-parser-downstream-evidence-controller-judgment-20260613.md",
+        "docs/reviews/mvp-fixture-promotion-content-manifest-plan-controller-judgment-20260613.md"
+      ]
+    }
+  ]
+}
