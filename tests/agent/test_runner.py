@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ast
 import inspect
+from dataclasses import replace
 
 import pytest
 
@@ -18,6 +19,7 @@ from fund_agent.agent import (
 from fund_agent.fund.chapter_auditor import ChapterAuditLLMRequest, ChapterAuditLLMResponse
 from fund_agent.fund.chapter_facts import project_chapter_facts
 from fund_agent.fund.evidence_availability import EvidenceAvailability
+from fund_agent.fund.extractors.models import ExtractedField
 from fund_agent.fund.chapter_writer import (
     ChapterLLMRequest,
     ChapterLLMResponse,
@@ -296,6 +298,54 @@ def test_chapter_3_missing_typed_availability_blocks_before_provider(
         plan.item_id == "ch3.required_output.item_03" and plan.action == "block"
         for plan in writer_result.prompt.required_output_evidence_plan
     )
+
+
+def test_chapter_3_missing_basic_manager_info_blocks_before_provider() -> None:
+    """验证第 3 章基金经理基本信息缺证时阻断而不是 provider 前 ValueError。"""
+
+    missing_portfolio_managers = ExtractedField(
+        value=None,
+        anchors=(),
+        extraction_mode="missing",
+        note="no-live missing portfolio managers",
+    )
+    projection = project_chapter_facts(
+        replace(_bundle(), portfolio_managers=missing_portfolio_managers),
+        chapter_ids=(3,),
+    )
+    writer = _FakeWriter()
+
+    run = run_agent_body_chapters(
+        projection,
+        llm_clients=AgentLLMClients(writer=writer, auditor=_FakeAuditor()),
+        policy=AgentRunPolicy(
+            target_chapter_ids=(3,),
+            max_output_chars=12000,
+            typed_template_path="typed_template_contract",
+        ),
+    )
+
+    task = run.tasks[0]
+    assert writer.requests == []
+    assert run.status == "blocked"
+    assert task.chapter_id == 3
+    assert task.status == "blocked"
+    assert task.terminal_state == "blocked_fact_gap"
+    assert task.stop_reason == "missing_required_facts"
+    assert task.failure_category == "fact_gap"
+    assert len(task.attempts) == 1
+    writer_result = task.attempts[0].writer_result
+    assert writer_result is not None
+    assert writer_result.status == "blocked"
+    assert writer_result.prompt.required_output_evidence_plan
+    item_01 = next(
+        plan
+        for plan in writer_result.prompt.required_output_evidence_plan
+        if plan.item_id == "ch3.required_output.item_01"
+    )
+    assert item_01.availability_status == "missing"
+    assert item_01.action == "block"
+    assert item_01.requirement_fact_ids
 
 
 def test_chapter_3_missing_evidence_availability_envelope_remains_value_error(

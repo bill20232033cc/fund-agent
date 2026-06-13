@@ -664,8 +664,8 @@ TEMPLATE_CONTRACT_MANIFEST_JSON
         {
           "id": "ch3.required_output.item_01",
           "text": "基金经理基本信息",
-          "when_evidence_missing": null,
-          "missing_evidence_reason": null
+          "when_evidence_missing": "block",
+          "missing_evidence_reason": "第 3 章基金经理基本信息缺少已复核证据时不能进入基金经理画像写作。"
         },
         {
           "id": "ch3.required_output.item_02",

@@ -138,6 +138,18 @@ def test_current_typed_projection_matches_template_json_exact_fields() -> None:
     assert typed_ch3_predicate.description == raw_ch3_predicate["description"]
 
 
+def test_chapter_3_basic_manager_info_missing_behavior_blocks() -> None:
+    """验证第 3 章基金经理基本信息缺证时显式阻断，见模板第 3 章。"""
+
+    manifest = load_typed_template_contract_manifest()
+    chapter_3 = next(chapter for chapter in manifest.chapters if chapter.chapter_id == 3)
+    item = next(item for item in chapter_3.required_output_items if item.item_id == "ch3.required_output.item_01")
+
+    assert item.text == "基金经理基本信息"
+    assert item.when_evidence_missing == "block"
+    assert item.missing_evidence_reason == "第 3 章基金经理基本信息缺少已复核证据时不能进入基金经理画像写作。"
+
+
 def test_stale_source_manifest_raises_value_error() -> None:
     """验证 source_manifest 只做 compatibility validation，stale 输入 fail-closed。
 
