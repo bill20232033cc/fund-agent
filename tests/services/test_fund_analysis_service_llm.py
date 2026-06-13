@@ -176,6 +176,22 @@ class _Chapter6BlockingWriterLLMClient(_FakeChapterLLMClient):
         )
 
 
+class _Chapter3ValueErrorWriterLLMClient(_FakeChapterLLMClient):
+    """测试用 writer，第 3 章抛出 pre-provider ValueError。"""
+
+    def generate_chapter(self, request: ChapterLLMRequest) -> ChapterLLMResponse:
+        """第 3 章抛出异常，其他章节返回合法 Markdown。"""
+
+        self.requests.append(request)
+        if request.chapter_id == 3:
+            raise ValueError("Authorization Bearer sk-secret prompt raw")
+        return ChapterLLMResponse(
+            text=_valid_markdown_from_request(request),
+            model_name="fake-writer",
+            finish_reason="stop",
+        )
+
+
 @dataclass(slots=True)
 class _FakeHostedRunContext:
     """Service hosted wrapper 测试用 Host context。"""
@@ -1006,6 +1022,50 @@ async def test_missing_writer_or_auditor_blocks_without_deterministic_fallback()
 
 
 @pytest.mark.asyncio
+async def test_analyze_with_llm_execution_projects_chapter_3_value_error_as_code_bug_safe_diagnostic() -> None:
+    """验证 execution path 将第 3 章 pre-provider 异常投影为安全 code_bug。"""
+
+    writer = _Chapter3ValueErrorWriterLLMClient()
+    service = FundAnalysisService(extractor=_FakeExtractor(_bundle()))
+    chapter_policy = ChapterOrchestrationPolicy(
+        target_chapter_ids=(3,),
+        max_repair_attempts=0,
+        max_output_chars=12000,
+        prompt_payload_mode="compact",
+        run_programmatic_audit=False,
+    )
+    execution_request = _execution_request(
+        _developer_request(force_refresh=True),
+        writer=writer,
+        auditor=_FakeAuditLLMClient(),
+        chapter_policy=chapter_policy,
+    )
+
+    result = await service.analyze_with_llm_execution(execution_request)
+
+    chapter = result.llm_orchestration_result.chapter_results[-1]
+    diagnostic = chapter.runtime_diagnostics[0]
+    assert [request.chapter_id for request in writer.requests] == [3]
+    assert result.llm_orchestration_result.status == "blocked"
+    assert result.final_assembly_result.status == "incomplete"
+    assert result.final_assembly_result.report_markdown is None
+    assert chapter.chapter_id == 3
+    assert chapter.status == "failed"
+    assert chapter.stop_reason == "llm_exception"
+    assert chapter.failure_category == "code_bug"
+    assert diagnostic.error_type == "ValueError"
+    assert diagnostic.provider_runtime_category is None
+    assert diagnostic.max_output_chars == 12000
+    serialized = repr(result)
+    assert "Authorization" not in serialized
+    assert "Bearer" not in serialized
+    assert "sk-secret" not in serialized
+    assert "prompt raw" not in serialized
+    with pytest.raises(ValueError, match="LLM 分析报告尚未完成"):
+        _ = result.report_markdown
+
+
+@pytest.mark.asyncio
 async def test_partial_llm_result_does_not_fallback_to_deterministic_after_typed_readiness() -> None:
     """验证 typed readiness incomplete 后仍 fail-closed，不回退确定性报告。
 
@@ -1313,12 +1373,14 @@ def _execution_request(
             provider_runtime_budget=runtime_plan.provider_runtime_budget,
             quality_fail_closed_policy=runtime_plan.quality_fail_closed_policy,
             safe_diagnostic_policy=runtime_plan.safe_diagnostic_policy,
+            typed_template_path=chapter_policy.typed_template_path,
             host_timeout_seconds=runtime_plan.host_timeout_seconds,
         )
     return FundLLMExecutionRequest(
         contract=contract,
         runtime_plan=runtime_plan,
         llm_clients=_clients(writer=writer, auditor=auditor),
+        typed_template_path=runtime_plan.typed_template_path,
     )
 
 

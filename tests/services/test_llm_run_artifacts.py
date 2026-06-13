@@ -172,6 +172,54 @@ def test_artifact_records_terminal_runtime_lineage_at_chapter_and_attempt_levels
     assert "secret-model" not in json.dumps(chapter_payload, ensure_ascii=False)
 
 
+def test_artifact_records_chapter_3_pre_provider_code_bug_runtime_lineage(
+    tmp_path: Path,
+) -> None:
+    """验证 artifact summary 保留第 3 章 pre-provider code_bug runtime lineage。"""
+
+    result = _incomplete_code_bug_pre_provider_result()
+
+    written = write_llm_incomplete_run_artifacts(
+        result,
+        host_run_id="host_run_fixture",
+        output_root=tmp_path,
+        clock=_fixed_clock,
+    )
+
+    summary = _read_json(written.summary_path)
+    runtime_summary = summary["runtime_diagnostics"]
+    first_failed = runtime_summary["first_failed"]
+    row = runtime_summary["chapter_runtime_matrix"][1]
+    chapter_payload = _read_json(written.artifact_dir / "chapters/chapter-03.json")
+    diagnostics = chapter_payload["chapter_runtime_diagnostics"]
+
+    assert first_failed["chapter_id"] == 3
+    assert first_failed["stop_reason"] == "llm_exception"
+    assert first_failed["category"] == "code_bug"
+    assert first_failed["provider_attempt_count"] == 0
+    assert first_failed["provider_max_attempts"] is None
+    assert first_failed["provider_runtime_categories"] == []
+    assert first_failed["max_output_chars"] == 12000
+    assert first_failed["terminal_runtime_diagnostic_present"] is True
+    assert first_failed["diagnostic_consistency_status"] == "consistent"
+    assert row["chapter_id"] == 3
+    assert row["terminal_runtime_diagnostic_present"] is True
+    assert diagnostics[0]["chapter_failure_category"] == "code_bug"
+    assert diagnostics[0]["provider_runtime_category"] is None
+    assert diagnostics[0]["error_type"] == "ValueError"
+    assert diagnostics[0]["max_output_chars"] == 12000
+    artifact_text = "\n".join(
+        path.read_text(encoding="utf-8") for path in written.written_files
+    )
+    assert "SYSTEM_PROMPT_CANARY" not in artifact_text
+    assert "USER_PROMPT_CANARY" not in artifact_text
+    assert "RAW_AUDITOR_RESPONSE_CANARY" not in artifact_text
+    assert "raw_response" not in artifact_text
+    assert "Authorization" not in artifact_text
+    assert "Bearer" not in artifact_text
+    assert "sk-" not in artifact_text
+
+
 def test_artifact_redacts_secret_canaries(tmp_path: Path) -> None:
     """验证 writer/auditor 文本中的 secret canary 会被脱敏并记录。
 
@@ -448,6 +496,75 @@ def _incomplete_timeout_result() -> FundLLMAnalysisResult:
                     reason="chapter_not_accepted",
                     message="第 2 章未 accepted。",
                     chapter_ids=(2,),
+                ),
+            ),
+        ),
+    )
+
+
+def _incomplete_code_bug_pre_provider_result() -> FundLLMAnalysisResult:
+    """构造第 3 章 pre-provider code_bug incomplete LLM 结果。"""
+
+    projection = project_chapter_facts(_bundle(), chapter_ids=(1, 3))
+    accepted_run = _accepted_chapter_run(projection)
+    diagnostic = ChapterLLMRuntimeDiagnostic(
+        operation="writer",
+        chapter_id=3,
+        fund_code="110011",
+        report_year=2024,
+        repair_attempt_index=0,
+        provider_attempt_index=None,
+        provider_max_attempts=None,
+        provider_runtime_category=None,
+        chapter_failure_category="code_bug",
+        elapsed_ms=None,
+        status_code=None,
+        request_id=None,
+        model_name=None,
+        finish_reason=None,
+        response_chars=None,
+        error_type="ValueError",
+        max_output_chars=12000,
+    )
+    failed_run = ChapterRunResult(
+        chapter_id=3,
+        title="第 3 章",
+        status="failed",
+        stop_reason="llm_exception",
+        accepted_draft=None,
+        accepted_conclusion=None,
+        attempts=(),
+        issues=("LLM client exception category=code_bug: ValueError",),
+        failure_category="code_bug",
+        failure_subcategory=None,
+        runtime_diagnostics=(diagnostic,),
+    )
+    orchestration_result = _projection_orchestration_result(
+        projection,
+        chapter_results=(accepted_run, failed_run),
+    )
+    return FundLLMAnalysisResult(
+        structured_data=_bundle(),
+        final_judgment_decision=_final_judgment_decision(),
+        llm_orchestration_result=orchestration_result,
+        final_assembly_result=FinalChapterAssemblyResult(
+            status="incomplete",
+            fund_code="110011",
+            report_year=2024,
+            report_markdown=None,
+            chapter0_markdown=None,
+            chapter7_markdown=None,
+            chapter7_summary=None,
+            assembled_chapter_ids=(1,),
+            source_accepted_chapter_ids=(1,),
+            final_judgment_selected="needs_attention",
+            issues=(
+                FinalAssemblyIssue(
+                    issue_id="final:chapter_not_accepted:3",
+                    severity="blocking",
+                    reason="chapter_not_accepted",
+                    message="第 3 章未 accepted。",
+                    chapter_ids=(3,),
                 ),
             ),
         ),

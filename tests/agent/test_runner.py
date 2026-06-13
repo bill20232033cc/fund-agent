@@ -164,6 +164,36 @@ def test_unknown_exception_is_code_bug_not_provider_runtime() -> None:
     assert "prompt raw" not in rendered
 
 
+def test_chapter_3_value_error_is_internal_code_bug_without_provider_runtime() -> None:
+    """验证第 3 章 pre-provider ValueError 保持内部 code_bug。"""
+
+    writer = _FakeWriter(actions={3: ValueError("Authorization Bearer sk-secret prompt raw")})
+
+    run = run_agent_body_chapters(
+        _projection((3,)),
+        llm_clients=AgentLLMClients(writer=writer, auditor=_FakeAuditor()),
+        policy=AgentRunPolicy(
+            target_chapter_ids=(3,),
+            max_output_chars=12000,
+            typed_template_path="typed_template_contract",
+        ),
+    )
+
+    task = run.tasks[0]
+    assert [request.chapter_id for request in writer.requests] == [3]
+    assert run.status in {"blocked", "failed"}
+    assert task.status == "failed"
+    assert task.terminal_state == "blocked_internal_code_bug"
+    assert task.failure_category == "code_bug"
+    assert task.stop_reason == "llm_exception"
+    assert task.attempts == ()
+    rendered = repr(task.blocked_reasons)
+    assert "Authorization" not in rendered
+    assert "Bearer" not in rendered
+    assert "sk-secret" not in rendered
+    assert "prompt raw" not in rendered
+
+
 def test_needs_more_facts_stops_without_source_probe_or_regenerate() -> None:
     """验证 needs_more_facts 终止且不重写、不 source probe。"""
 

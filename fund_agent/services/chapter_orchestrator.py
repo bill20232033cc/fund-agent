@@ -1047,6 +1047,7 @@ def _exception_runtime_diagnostics(
     operation: ProviderOperation,
     attempt_index: int,
     exc: Exception,
+    max_output_chars: int | None = None,
 ) -> tuple[ChapterLLMRuntimeDiagnostic, ...]:
     """从 provider 或未知异常构造章节级安全诊断。
 
@@ -1056,6 +1057,8 @@ def _exception_runtime_diagnostics(
         operation: writer 或 auditor。
         attempt_index: 章节 attempt 序号。
         exc: 捕获到的异常。
+        max_output_chars: pre-provider writer 输出字符上限；provider diagnostics
+            已有自身 cap 时不覆盖。
 
     Returns:
         已补齐章节 identity 和 failure category 的安全诊断。
@@ -1093,6 +1096,7 @@ def _exception_runtime_diagnostics(
             finish_reason=None,
             response_chars=None,
             error_type=type(exc).__name__,
+            max_output_chars=max_output_chars,
             message=_safe_exception_message(exc),
         ),
     )
@@ -2609,6 +2613,9 @@ def _terminal_runtime_diagnostic(
     expected_category = _RUNTIME_STOP_REASON_CATEGORY.get(result.stop_reason)
     if expected_category is None:
         for diagnostic in diagnostics:
+            if _is_code_bug_runtime_diagnostic(result, diagnostic):
+                return diagnostic
+        for diagnostic in diagnostics:
             if diagnostic.provider_runtime_category is not None:
                 return diagnostic
         return None
@@ -2675,8 +2682,36 @@ def _diagnostic_matches_terminal(
         return _is_timeout_runtime_diagnostic(diagnostic)
     expected_category = _RUNTIME_STOP_REASON_CATEGORY.get(result.stop_reason)
     if expected_category is None:
+        if _is_code_bug_runtime_diagnostic(result, diagnostic):
+            return True
         return diagnostic.provider_runtime_category is not None
     return diagnostic.provider_runtime_category == expected_category
+
+
+def _is_code_bug_runtime_diagnostic(
+    result: ChapterRunResult,
+    diagnostic: ChapterLLMRuntimeDiagnostic,
+) -> bool:
+    """判断 diagnostic 是否是 pre-provider code-bug terminal 诊断。
+
+    Args:
+        result: 单章运行结果。
+        diagnostic: 候选 runtime diagnostic。
+
+    Returns:
+        仅当 Service 终态和 diagnostic 都指向非 provider code_bug 时返回
+        `True`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return (
+        result.stop_reason == "llm_exception"
+        and result.failure_category == "code_bug"
+        and diagnostic.chapter_failure_category == "code_bug"
+        and diagnostic.provider_runtime_category is None
+    )
 
 
 def _diagnostic_consistency_status(

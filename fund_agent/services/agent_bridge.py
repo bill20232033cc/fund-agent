@@ -70,7 +70,12 @@ def run_agent_chapter_orchestration_bridge(
         phase_recorder=_phase_recorder(host_context),
     )
     chapter_results = tuple(
-        _service_chapter_result_from_task(task, projection=projection) for task in agent_run.tasks
+        _service_chapter_result_from_task(
+            task,
+            projection=projection,
+            max_output_chars=input_data.policy.max_output_chars,
+        )
+        for task in agent_run.tasks
     )
     accepted_conclusions = tuple(
         result.accepted_conclusion
@@ -311,12 +316,18 @@ class _HostInterruptionChecker:
         )
 
 
-def _service_chapter_result_from_task(task: ChapterTask, *, projection: ChapterFactProjection):
+def _service_chapter_result_from_task(
+    task: ChapterTask,
+    *,
+    projection: ChapterFactProjection,
+    max_output_chars: int | None,
+):
     """把 Agent task 投影为 Service ChapterRunResult。
 
     Args:
         task: Agent 正文章节 task。
         projection: 同源章节事实投影。
+        max_output_chars: Service policy 中的 writer 输出字符上限。
 
     Returns:
         Service `ChapterRunResult`。
@@ -340,14 +351,23 @@ def _service_chapter_result_from_task(task: ChapterTask, *, projection: ChapterF
         accepted_draft=task.accepted_draft,  # type: ignore[arg-type]
         accepted_conclusion=accepted_conclusion,
         attempts=tuple(
-            _service_attempt_from_agent(attempt, task=task, projection=projection)
+            _service_attempt_from_agent(
+                attempt,
+                task=task,
+                projection=projection,
+                max_output_chars=max_output_chars,
+            )
             for attempt in task.attempts
         ),
         issues=task.blocked_reasons,
         failure_category=_failure_category_from_task(task),  # type: ignore[arg-type]
         failure_subcategory=_failure_subcategory_from_task(task),  # type: ignore[arg-type]
         prompt_contract_diagnostics=_prompt_contract_diagnostics_from_task(task),
-        runtime_diagnostics=_runtime_diagnostics_from_task(task, projection=projection),
+        runtime_diagnostics=_runtime_diagnostics_from_task(
+            task,
+            projection=projection,
+            max_output_chars=max_output_chars,
+        ),
     )
 
 
@@ -356,6 +376,7 @@ def _service_attempt_from_agent(
     *,
     task: ChapterTask,
     projection: ChapterFactProjection,
+    max_output_chars: int | None,
 ):
     """把 Agent attempt 投影为 Service attempt record。
 
@@ -363,6 +384,7 @@ def _service_attempt_from_agent(
         attempt: Agent attempt。
         task: Agent task。
         projection: 同源章节事实投影。
+        max_output_chars: Service policy 中的 writer 输出字符上限。
 
     Returns:
         Service `ChapterAttemptRecord`。
@@ -384,7 +406,12 @@ def _service_attempt_from_agent(
         writer_result=writer_result,  # type: ignore[arg-type]
         audit_result=audit_result,
         repair_decision=_service_repair_decision_from_agent(attempt.repair_decision),
-        runtime_diagnostics=_attempt_runtime_diagnostics(attempt, task=task, projection=projection),
+        runtime_diagnostics=_attempt_runtime_diagnostics(
+            attempt,
+            task=task,
+            projection=projection,
+            max_output_chars=max_output_chars,
+        ),
     )
 
 
@@ -552,6 +579,7 @@ def _attempt_runtime_diagnostics(
     *,
     task: ChapterTask,
     projection: ChapterFactProjection,
+    max_output_chars: int | None,
 ) -> tuple[object, ...]:
     """从 Agent attempt 生成 Service attempt-level runtime diagnostics。
 
@@ -559,6 +587,7 @@ def _attempt_runtime_diagnostics(
         attempt: Agent attempt。
         task: Agent task。
         projection: 同源章节事实投影。
+        max_output_chars: Service policy 中的 writer 输出字符上限。
 
     Returns:
         runtime diagnostics。
@@ -584,6 +613,7 @@ def _attempt_runtime_diagnostics(
             operation="auditor",
             attempt_index=attempt.attempt_index,
             exc=task.exception,
+            max_output_chars=max_output_chars,
         )
     if isinstance(attempt.writer_result, ChapterWriteResult) and attempt.writer_result.status == "blocked":
         return (
@@ -630,12 +660,14 @@ def _runtime_diagnostics_from_task(
     task: ChapterTask,
     *,
     projection: ChapterFactProjection,
+    max_output_chars: int | None,
 ) -> tuple[object, ...]:
     """从 Agent task 生成 Service chapter-level runtime diagnostics。
 
     Args:
         task: Agent task。
         projection: 同源章节事实投影。
+        max_output_chars: Service policy 中的 writer 输出字符上限。
 
     Returns:
         runtime diagnostics。
@@ -660,6 +692,7 @@ def _runtime_diagnostics_from_task(
         operation="writer",
         attempt_index=task.exception_attempt_index or 0,
         exc=task.exception,
+        max_output_chars=max_output_chars,
     )
 
 
