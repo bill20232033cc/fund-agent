@@ -35,4 +35,3 @@ None. No material correction required.
 ## Residuals
 
 - Low severity: the plan does not explicitly state what happens if a future reviewer rejects the residual acceptance evidence. Existing gate discipline and controller judgment already cover review rejection, so this is non-blocking.
-

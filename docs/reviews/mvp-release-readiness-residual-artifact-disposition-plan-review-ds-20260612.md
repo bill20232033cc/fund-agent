@@ -130,7 +130,7 @@ Evidence worker 拿到 handoff 后可直接执行，不需 redesign classificati
 
 ### 4. Allowed read/write sets and forbidden actions
 
-**Pass with N2/N5 remarks。** 
+**Pass with N2/N5 remarks。**
 
 - Stage A allowed read：8 个文件，均为 truth docs + prior residue/provenance/acceptance evidence + controller judgments。不含 source/test/runtime/README/design-truth 写入权限。
 - Stage A allowed write：`docs/reviews/mvp-review-artifact-residual-acceptance-evidence-20260612.md` + reviews + controller judgment。不含实现文件或 truth doc。

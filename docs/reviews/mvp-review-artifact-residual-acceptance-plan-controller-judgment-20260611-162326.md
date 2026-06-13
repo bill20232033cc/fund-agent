@@ -64,4 +64,3 @@ To be run by controller after artifact creation:
 - `git status --short`
 - `git status --branch --short`
 - `git diff --check`
-

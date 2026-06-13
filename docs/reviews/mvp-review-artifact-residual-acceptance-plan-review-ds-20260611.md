@@ -36,4 +36,3 @@ None. No blocking or material finding.
 
 - Minor clarity: future control sync target is implicit rather than explicitly limited to `docs/implementation-control.md` and `docs/current-startup-packet.md`.
 - Minor context: the PR #22 footer/context residue note is correct but not self-explanatory for readers without session context.
-

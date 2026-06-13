@@ -89,4 +89,3 @@ Observed result:
 After this closeout checkpoint and control sync, the next mainline entry is:
 
 `multi-year annual analysis productization gate`
-

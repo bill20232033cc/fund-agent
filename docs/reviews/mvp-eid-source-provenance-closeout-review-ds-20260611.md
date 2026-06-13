@@ -31,4 +31,3 @@ None. No blocking finding.
 
 - Historical review artifacts may still contain old `mode=single_source_only` wording. They are evidence-chain artifacts and do not override current truth docs.
 - Controlled live EID evidence and multi-year productization are independent future gates.
-

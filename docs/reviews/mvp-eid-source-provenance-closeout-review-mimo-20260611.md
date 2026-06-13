@@ -29,4 +29,3 @@ None. No blocking finding.
 
 - MiMo noted a non-blocking wording ambiguity in the evidence sentence `source code under fund_agent/`, because `fund_agent/fund/README.md` is inside `fund_agent/`. Controller resolved this by changing the evidence wording to `production Python source code under fund_agent/`.
 - Historical review artifacts may still contain old `mode=single_source_only` wording; those artifacts remain evidence chain only and do not override current design truth.
-
