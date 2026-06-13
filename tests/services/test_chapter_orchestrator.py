@@ -51,6 +51,7 @@ from fund_agent.services.chapter_orchestrator import (
     serialize_chapter_prompt_contract_diagnostics,
     serialize_chapter_runtime_diagnostics,
 )
+from fund_agent.fund.extractors.models import ExtractedField
 from fund_agent.services.llm_provider import (
     LLMProviderMalformedResponseError,
     LLMProviderNetworkError,
@@ -222,7 +223,12 @@ class _ChapterPlanWriterClient:
         action = self.actions.get(request.chapter_id)
         if isinstance(action, Exception):
             raise action
-        text = action if isinstance(action, str) else _valid_markdown_from_request(request)
+        if callable(action):
+            text = action(request)
+        elif isinstance(action, str):
+            text = action
+        else:
+            text = _valid_markdown_from_request(request)
         return ChapterLLMResponse(text=text, model_name="fake-writer", finish_reason="stop")
 
 
@@ -2329,6 +2335,89 @@ def test_typed_contract_path_repair_keeps_typed_required_output_items() -> None:
     )
 
 
+def test_chapter_2_typed_missing_evidence_gap_path_accepts_without_repair() -> None:
+    """验证第 2 章 typed 非 available 证据可渲染缺口并保持一次 writer 调用。"""
+
+    projection = project_chapter_facts(
+        replace(
+            _bundle(),
+            nav_benchmark_performance=ExtractedField(
+                value=None,
+                anchors=(),
+                extraction_mode="missing",
+                note="fixture missing",
+            ),
+            fee_schedule=ExtractedField(
+                value=None,
+                anchors=(),
+                extraction_mode="missing",
+                note="fixture missing",
+            ),
+        ),
+        chapter_ids=(2,),
+    )
+    policy = ChapterOrchestrationPolicy(
+        target_chapter_ids=(2,),
+        max_repair_attempts=1,
+        typed_template_path="typed_template_contract",
+    )
+    input_data = build_chapter_orchestration_input(
+        fund_code="110011",
+        report_year=2024,
+        chapter_projection=projection,
+        policy=policy,
+    )
+    writer = _ChapterPlanWriterClient({2: _chapter_2_gap_markdown_from_request})
+
+    result = orchestrate_chapters(
+        input_data,
+        llm_clients=ChapterOrchestratorLLMClients(writer=writer, auditor=_FakeAuditLLMClient()),
+    )
+
+    run = result.chapter_results[0]
+    plan_by_id = {
+        plan.item_id: plan
+        for plan in run.attempts[0].writer_result.prompt.required_output_evidence_plan
+    }
+    assert result.status == "accepted"
+    assert run.status == "accepted"
+    assert run.stop_reason == "none"
+    assert len(writer.requests) == 1
+    assert policy.max_repair_attempts == 1
+    assert plan_by_id["ch2.required_output.item_01"].action == "render_evidence_gap"
+    assert plan_by_id["ch2.required_output.item_01"].availability_status == "missing"
+    assert plan_by_id["ch2.required_output.item_07"].action == "render_minimum_verification_question"
+    assert plan_by_id["ch2.required_output.item_07"].availability_status == "missing"
+
+
+def test_chapter_2_typed_available_facts_still_fail_l1_after_one_repair() -> None:
+    """验证第 2 章 available facts 被忽略时仍按 L1 fail-closed 且只 repair 一次。"""
+
+    writer = _ChapterPlanWriterClient({2: _chapter_2_unanchored_closure_from_request})
+
+    result = _orchestrate(
+        writer=writer,
+        auditor=_FakeAuditLLMClient(),
+        policy=ChapterOrchestrationPolicy(
+            target_chapter_ids=(2,),
+            max_repair_attempts=1,
+            typed_template_path="typed_template_contract",
+        ),
+    )
+
+    run = result.chapter_results[0]
+    assert run.status == "failed"
+    assert run.stop_reason == "repair_budget_exhausted"
+    assert run.failure_category == "prompt_contract"
+    assert run.failure_subcategory == "l1_numerical_closure"
+    assert len(writer.requests) == 2
+    assert len(run.attempts) == 2
+    assert all(
+        plan.action == "render"
+        for plan in run.attempts[0].writer_result.prompt.required_output_evidence_plan
+    )
+
+
 def test_typed_contract_path_ch1_accepts_typed_required_output_markers() -> None:
     """验证 typed 第 1 章不会因使用 stable required-output marker 被程序审计误阻断。
 
@@ -3012,6 +3101,33 @@ def _valid_markdown_from_request(request: ChapterLLMRequest) -> str:
 
     anchor_id = request.required_anchor_ids[0]
     return _valid_markdown_from_parts(anchor_id, _required_items_from_request(request))
+
+
+def _chapter_2_gap_markdown_from_request(request: ChapterLLMRequest) -> str:
+    """构造第 2 章非 available required output 的安全缺口/最小验证 Markdown。"""
+
+    anchor_id = request.required_anchor_ids[0]
+    required_lines = "\n".join(
+        f"<!-- required_output:{item} -->\n"
+        "- 证据不足，不能完成具体 R=A+B-C 数字闭环。"
+        "下一步最小验证问题：复核同源年报中的基金收益、基准收益和费用口径。"
+        for item in _required_items_from_request(request)
+    )
+    return (
+        "### 结论要点\n"
+        f"{required_lines}\n"
+        "### 详细情况\n"
+        "本章只记录当前同源已复核证据不足的项目，不输出具体百分比闭环。\n"
+        "### 证据与出处\n"
+        f"<!-- anchor:{anchor_id} -->\n"
+        "> 📎 证据：年报2024§§2表None行fixture（fixture）\n"
+    )
+
+
+def _chapter_2_unanchored_closure_from_request(request: ChapterLLMRequest) -> str:
+    """构造第 2 章 typed marker 完整但含无锚点数字闭环的 Markdown。"""
+
+    return _valid_markdown_from_request(request) + "\nA=R-B，因此 Alpha 为 2.10%。"
 
 
 def _valid_markdown_from_projection(projection: object) -> str:

@@ -379,6 +379,69 @@ def test_chapter_3_missing_basic_manager_info_without_gap_phrase_blocks_after_wr
     assert "required_output_block:ch3.required_output.item_01" not in rendered
 
 
+def test_chapter_2_missing_evidence_gap_renders_and_builds_readiness() -> None:
+    """验证 Agent runner 接受第 2 章非 available 证据缺口输出。"""
+
+    projection = _projection_with_missing_chapter_2_evidence()
+    writer = _FakeWriter(actions={2: _chapter_2_markdown_with_gap})
+
+    run = run_agent_body_chapters(
+        projection,
+        llm_clients=AgentLLMClients(writer=writer, auditor=_FakeAuditor()),
+        policy=AgentRunPolicy(
+            target_chapter_ids=(2,),
+            max_output_chars=12000,
+            typed_template_path="typed_template_contract",
+        ),
+    )
+
+    task = run.tasks[0]
+    writer_result = task.attempts[0].writer_result
+    assert run.status == "accepted"
+    assert task.chapter_id == 2
+    assert task.status == "accepted"
+    assert task.accepted_draft is not None
+    assert run.final_assembly_readiness is not None
+    assert run.final_assembly_readiness.ready is True
+    assert len(writer.requests) == 1
+    assert writer_result is not None
+    plan_by_id = {plan.item_id: plan for plan in writer_result.prompt.required_output_evidence_plan}
+    assert plan_by_id["ch2.required_output.item_01"].action == "render_evidence_gap"
+    assert plan_by_id["ch2.required_output.item_01"].availability_status == "missing"
+    assert plan_by_id["ch2.required_output.item_07"].action == "render_minimum_verification_question"
+
+
+def test_chapter_2_missing_evidence_without_gap_phrase_blocks_before_readiness() -> None:
+    """验证 Agent runner 对第 2 章 unsafe 缺口输出仍 fail-closed。"""
+
+    projection = _projection_with_missing_chapter_2_evidence()
+    writer = _FakeWriter(actions={2: _chapter_2_markdown_without_gap_phrase})
+
+    run = run_agent_body_chapters(
+        projection,
+        llm_clients=AgentLLMClients(writer=writer, auditor=_FakeAuditor()),
+        policy=AgentRunPolicy(
+            target_chapter_ids=(2,),
+            max_output_chars=12000,
+            typed_template_path="typed_template_contract",
+        ),
+    )
+
+    task = run.tasks[0]
+    assert run.status == "blocked"
+    assert task.chapter_id == 2
+    assert task.status == "blocked"
+    assert task.terminal_state == "blocked_prompt_contract"
+    assert task.stop_reason == "missing_required_output_marker"
+    assert task.failure_category == "prompt_contract"
+    assert task.failure_subcategory == "missing_required_marker"
+    assert run.final_assembly_readiness is not None
+    assert run.final_assembly_readiness.ready is False
+    rendered = repr(task.blocked_reasons)
+    assert "writer:required_output_gap_missing:ch2.required_output.item_01" in rendered
+    assert "required_output_block:ch2.required_output.item_01" not in rendered
+
+
 def test_chapter_3_missing_evidence_availability_envelope_remains_value_error(
 ) -> None:
     """验证第 3 章 typed availability 完全未提供时仍 fail-closed 为 ValueError。"""
@@ -634,6 +697,83 @@ def _projection_with_missing_portfolio_managers() -> object:
         replace(_bundle(), portfolio_managers=missing_portfolio_managers),
         chapter_ids=(3,),
     )
+
+
+def _projection_with_missing_chapter_2_evidence() -> object:
+    """构造第 2 章收益与成本证据缺少已复核证据的 projection。"""
+
+    missing_nav = ExtractedField(
+        value=None,
+        anchors=(),
+        extraction_mode="missing",
+        note="no-live missing nav benchmark performance",
+    )
+    missing_fee = ExtractedField(
+        value=None,
+        anchors=(),
+        extraction_mode="missing",
+        note="no-live missing fee schedule",
+    )
+    return project_chapter_facts(
+        replace(
+            _bundle(),
+            nav_benchmark_performance=missing_nav,
+            fee_schedule=missing_fee,
+        ),
+        chapter_ids=(2,),
+    )
+
+
+def _required_items_from_request(request: ChapterLLMRequest) -> tuple[str, ...]:
+    """从 writer prompt 中提取 required output stable ids。"""
+
+    marker = "必须输出项："
+    for line in request.user_prompt.splitlines():
+        if line.startswith(marker):
+            parsed = ast.literal_eval(line.removeprefix(marker))
+            return tuple(_required_item_from_prompt_payload(item) for item in parsed)
+    raise ValueError("writer request 缺少 required output items")
+
+
+def _required_item_from_prompt_payload(item: str) -> str:
+    """从 typed prompt payload 中提取 required output stable id。"""
+
+    first_line = item.splitlines()[0] if item else ""
+    if first_line.startswith("<!-- required_output:") and first_line.endswith(" -->"):
+        return first_line.removeprefix("<!-- required_output:").removesuffix(" -->")
+    return item
+
+
+def _chapter_2_markdown_with_gap(request: ChapterLLMRequest) -> str:
+    """构造第 2 章 approved gap/minimum-verification Markdown。"""
+
+    marker_text = "\n".join(
+        f"<!-- required_output:{item} -->\n"
+        "- 证据不足，不能完成具体 R=A+B-C 数字闭环。"
+        "下一步最小验证问题：复核同源年报中的基金收益、基准收益和费用口径。"
+        for item in _required_items_from_request(request)
+    )
+    markdown = _valid_agent_markdown_from_request(request)
+    start = markdown.find("<!-- required_output:")
+    end = markdown.find("### 详细情况")
+    if start < 0 or end < 0:
+        raise AssertionError("第 2 章测试 Markdown 缺少 required output 区段")
+    return markdown[:start] + marker_text + "\n" + markdown[end:]
+
+
+def _chapter_2_markdown_without_gap_phrase(request: ChapterLLMRequest) -> str:
+    """构造第 2 章缺少 approved gap wording 的 Markdown。"""
+
+    marker_text = "\n".join(
+        f"<!-- required_output:{item} -->\n- {item}: 已根据结构化事实说明。"
+        for item in _required_items_from_request(request)
+    )
+    markdown = _valid_agent_markdown_from_request(request)
+    start = markdown.find("<!-- required_output:")
+    end = markdown.find("### 详细情况")
+    if start < 0 or end < 0:
+        raise AssertionError("第 2 章测试 Markdown 缺少 required output 区段")
+    return markdown[:start] + marker_text + "\n" + markdown[end:]
 
 
 def _chapter_3_markdown_with_item01_gap(request: ChapterLLMRequest) -> str:

@@ -24,6 +24,23 @@ from fund_agent.fund.template.typed_contracts import (
     TemplateLensRule,
 )
 
+CH2_PERFORMANCE_REASON = (
+    "第 2 章同源已复核净值增长率与业绩基准证据不足时只能输出证据缺口，"
+    "不得编造近 1/3/5 年收益数值。"
+)
+CH2_ATTRIBUTION_REASON = (
+    "第 2 章同源已复核 R 与 B 证据不足时只能输出下一步最小验证问题，"
+    "不得给出 Alpha 或稳定性结论。"
+)
+CH2_COST_REASON = (
+    "第 2 章同源已复核费用与成本证据不足时只能输出证据缺口，"
+    "不得编造费率、交易成本或成本合理性判断。"
+)
+CH2_SYNTHESIS_REASON = (
+    "第 2 章同源已复核 R、B 与 C 证据不足时只能输出下一步最小验证问题，"
+    "不得输出具体 R=A+B-C 数字闭环。"
+)
+
 
 def test_typed_manifest_preserves_public_chapter_ids_0_to_7() -> None:
     """验证 typed manifest 保持模板第 0-7 章公开编号。
@@ -150,6 +167,73 @@ def test_chapter_3_basic_manager_info_missing_behavior_renders_evidence_gap() ->
     assert item.missing_evidence_reason is not None
     assert "缺少已复核证据" in item.missing_evidence_reason
     assert "只能输出证据缺口" in item.missing_evidence_reason
+
+
+def test_chapter_2_missing_behavior_preserves_structure_and_exact_reasons() -> None:
+    """验证第 2 章七个 required output 只改变缺证行为和精确原因。"""
+
+    manifest = load_typed_template_contract_manifest()
+    chapter_2 = next(chapter for chapter in manifest.chapters if chapter.chapter_id == 2)
+
+    observed = tuple(
+        (
+            item.item_id,
+            item.text,
+            item.when_evidence_missing,
+            item.missing_evidence_reason,
+        )
+        for item in chapter_2.required_output_items
+    )
+
+    assert observed == (
+        (
+            "ch2.required_output.item_01",
+            "近 1/3/5 年净值增长率",
+            "render_evidence_gap",
+            CH2_PERFORMANCE_REASON,
+        ),
+        (
+            "ch2.required_output.item_02",
+            "近 1/3/5 年业绩基准收益率",
+            "render_evidence_gap",
+            CH2_PERFORMANCE_REASON,
+        ),
+        (
+            "ch2.required_output.item_03",
+            "超额收益（A = R - B）及稳定性",
+            "render_minimum_verification_question",
+            CH2_ATTRIBUTION_REASON,
+        ),
+        (
+            "ch2.required_output.item_04",
+            "超额收益性质判断（结构性 vs 阶段性）",
+            "render_minimum_verification_question",
+            CH2_ATTRIBUTION_REASON,
+        ),
+        (
+            "ch2.required_output.item_05",
+            "成本拆解（管理费、托管费、交易成本）",
+            "render_evidence_gap",
+            CH2_COST_REASON,
+        ),
+        (
+            "ch2.required_output.item_06",
+            "成本合理性判断（同类对比）",
+            "render_evidence_gap",
+            CH2_COST_REASON,
+        ),
+        (
+            "ch2.required_output.item_07",
+            "R=A+B-C 综合评估",
+            "render_minimum_verification_question",
+            CH2_SYNTHESIS_REASON,
+        ),
+    )
+    assert tuple(sub.subcontract_id for sub in chapter_2.internal_subcontracts) == (
+        "performance",
+        "attribution",
+        "cost",
+    )
 
 
 def test_stale_source_manifest_raises_value_error() -> None:

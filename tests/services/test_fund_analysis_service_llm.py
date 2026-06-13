@@ -233,6 +233,40 @@ class _Chapter3Item01UnsafeWriterLLMClient(_FakeChapterLLMClient):
         )
 
 
+class _Chapter2GapWriterLLMClient(_FakeChapterLLMClient):
+    """测试用 writer，第 2 章输出 approved evidence-gap / minimum-verification wording。"""
+
+    def generate_chapter(self, request: ChapterLLMRequest) -> ChapterLLMResponse:
+        """第 2 章返回安全缺口输出，其他章节返回合法 Markdown。"""
+
+        self.requests.append(request)
+        text = _chapter_2_markdown_with_gap(request) if request.chapter_id == 2 else _valid_markdown_from_request(request)
+        return ChapterLLMResponse(
+            text=text,
+            model_name="fake-writer",
+            finish_reason="stop",
+        )
+
+
+class _Chapter2UnsafeGapWriterLLMClient(_FakeChapterLLMClient):
+    """测试用 writer，第 2 章保留 marker 但缺少 approved gap wording。"""
+
+    def generate_chapter(self, request: ChapterLLMRequest) -> ChapterLLMResponse:
+        """第 2 章返回 unsafe 缺口输出，其他章节返回合法 Markdown。"""
+
+        self.requests.append(request)
+        text = (
+            _chapter_2_markdown_without_gap_phrase(request)
+            if request.chapter_id == 2
+            else _valid_markdown_from_request(request)
+        )
+        return ChapterLLMResponse(
+            text=text,
+            model_name="fake-writer",
+            finish_reason="stop",
+        )
+
+
 @dataclass(slots=True)
 class _FakeHostedRunContext:
     """Service hosted wrapper 测试用 Host context。"""
@@ -465,6 +499,85 @@ async def test_analyze_with_llm_accepts_final_assembly_when_ch3_item01_degrades_
     assert result.final_assembly_result.report_markdown is not None
     assert result.quality_gate_result is None
     assert result.quality_gate_not_run_reason == "policy=off"
+
+
+@pytest.mark.asyncio
+async def test_analyze_with_llm_accepts_final_assembly_when_ch2_degrades_to_gap() -> None:
+    """验证第 2 章非 available 证据缺口合规降级后可参与完整总装。"""
+
+    extractor = _FakeExtractor(_bundle_with_missing_chapter_2_evidence())
+    writer = _Chapter2GapWriterLLMClient()
+    auditor = _FakeAuditLLMClient()
+    service = FundAnalysisService(extractor=extractor)
+
+    result = await service.analyze_with_llm(
+        _developer_request(force_refresh=True),
+        llm_clients=_clients(writer=writer, auditor=auditor),
+        chapter_policy=ChapterOrchestrationPolicy(
+            run_programmatic_audit=False,
+            typed_template_path="typed_template_contract",
+        ),
+    )
+
+    chapter_2 = next(
+        chapter_result
+        for chapter_result in result.llm_orchestration_result.chapter_results
+        if chapter_result.chapter_id == 2
+    )
+    assert extractor.calls == [("110011", 2024, True)]
+    assert [request.chapter_id for request in writer.requests] == [1, 2, 3, 4, 5, 6]
+    assert result.llm_orchestration_result.status == "accepted"
+    assert chapter_2.status == "accepted"
+    assert "证据不足" in (chapter_2.accepted_draft.markdown if chapter_2.accepted_draft else "")
+    assert "下一步最小验证问题" in (
+        chapter_2.accepted_draft.markdown if chapter_2.accepted_draft else ""
+    )
+    assert result.final_assembly_result.status == "accepted"
+    assert result.final_assembly_result.assembled_chapter_ids == (0, 1, 2, 3, 4, 5, 6, 7)
+    assert result.final_assembly_result.report_markdown is not None
+
+
+@pytest.mark.asyncio
+async def test_partial_llm_result_does_not_fallback_when_ch2_gap_output_is_unsafe() -> None:
+    """验证第 2 章缺证但 unsafe 输出阻断总装且不回退确定性报告。"""
+
+    extractor = _FakeExtractor(_bundle_with_missing_chapter_2_evidence())
+    writer = _Chapter2UnsafeGapWriterLLMClient()
+    auditor = _FakeAuditLLMClient()
+    service = FundAnalysisService(extractor=extractor)
+
+    result = await service.analyze_with_llm(
+        _developer_request(),
+        llm_clients=_clients(writer=writer, auditor=auditor),
+        chapter_policy=ChapterOrchestrationPolicy(
+            run_programmatic_audit=False,
+            typed_template_path="typed_template_contract",
+        ),
+    )
+
+    chapter_2 = next(
+        chapter_result
+        for chapter_result in result.llm_orchestration_result.chapter_results
+        if chapter_result.chapter_id == 2
+    )
+    assert result.llm_orchestration_result.status == "partial"
+    assert [request.chapter_id for request in writer.requests] == [1, 2, 3, 4, 5, 6]
+    assert chapter_2.status == "blocked"
+    assert chapter_2.stop_reason == "missing_required_output_marker"
+    assert chapter_2.failure_category == "prompt_contract"
+    assert chapter_2.failure_subcategory == "missing_required_marker"
+    assert any(
+        "writer:required_output_gap_missing:ch2.required_output.item_01" in issue
+        for issue in chapter_2.issues
+    )
+    assert all(
+        "required_output_block:ch2.required_output.item_01" not in issue
+        for issue in chapter_2.issues
+    )
+    assert result.final_assembly_result.status == "incomplete"
+    assert result.final_assembly_result.report_markdown is None
+    with pytest.raises(ValueError, match="LLM 分析报告尚未完成"):
+        _ = result.report_markdown
 
 
 def test_build_fund_llm_execution_request_prepares_contract_and_runtime_plan(
@@ -1495,6 +1608,28 @@ def _bundle_with_missing_portfolio_managers() -> object:
     return replace(_bundle(), portfolio_managers=missing_portfolio_managers)
 
 
+def _bundle_with_missing_chapter_2_evidence() -> object:
+    """构造第 2 章收益与成本证据缺少已复核证据的抽取结果。"""
+
+    missing_nav = ExtractedField(
+        value=None,
+        anchors=(),
+        extraction_mode="missing",
+        note="no-live missing nav benchmark performance",
+    )
+    missing_fee = ExtractedField(
+        value=None,
+        anchors=(),
+        extraction_mode="missing",
+        note="no-live missing fee schedule",
+    )
+    return replace(
+        _bundle(),
+        nav_benchmark_performance=missing_nav,
+        fee_schedule=missing_fee,
+    )
+
+
 def _quality_policy_from_request(request) -> QualityPolicyDeclaration:
     """从测试请求提取 quality gate 策略。
 
@@ -1734,6 +1869,39 @@ def _valid_markdown_from_request(request: ChapterLLMRequest) -> str:
         f"<!-- anchor:{anchor_id} -->\n"
         "> 📎 证据：年报2024§§2表None行fixture（fixture）\n"
     )
+
+
+def _chapter_2_markdown_with_gap(request: ChapterLLMRequest) -> str:
+    """构造第 2 章 approved gap/minimum-verification Markdown。"""
+
+    required_lines = "\n".join(
+        f"<!-- required_output:{_required_item_id_from_prompt_payload(item)} -->\n"
+        "- 证据不足，不能完成具体 R=A+B-C 数字闭环。"
+        "下一步最小验证问题：复核同源年报中的基金收益、基准收益和费用口径。"
+        for item in _required_items_from_request(request)
+    )
+    markdown = _valid_markdown_from_request(request)
+    start = markdown.find("<!-- required_output:")
+    end = markdown.find("### 详细情况")
+    if start < 0 or end < 0:
+        raise AssertionError("第 2 章测试 Markdown 缺少 required output 区段")
+    return markdown[:start] + required_lines + "\n" + markdown[end:]
+
+
+def _chapter_2_markdown_without_gap_phrase(request: ChapterLLMRequest) -> str:
+    """构造第 2 章缺少 approved gap wording 的 Markdown。"""
+
+    required_lines = "\n".join(
+        f"<!-- required_output:{_required_item_id_from_prompt_payload(item)} -->\n"
+        f"- {_required_item_id_from_prompt_payload(item)}: 已根据结构化事实说明。"
+        for item in _required_items_from_request(request)
+    )
+    markdown = _valid_markdown_from_request(request)
+    start = markdown.find("<!-- required_output:")
+    end = markdown.find("### 详细情况")
+    if start < 0 or end < 0:
+        raise AssertionError("第 2 章测试 Markdown 缺少 required output 区段")
+    return markdown[:start] + required_lines + "\n" + markdown[end:]
 
 
 def _chapter_3_markdown_without_item01_gap(request: ChapterLLMRequest) -> str:

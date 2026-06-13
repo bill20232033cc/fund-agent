@@ -481,44 +481,44 @@ TEMPLATE_CONTRACT_MANIFEST_JSON
         {
           "id": "ch2.required_output.item_01",
           "text": "近 1/3/5 年净值增长率",
-          "when_evidence_missing": "block",
-          "missing_evidence_reason": "第 2 章 R=A+B-C 数值与成本判断缺少同源证据时不得生成替代结论。"
+          "when_evidence_missing": "render_evidence_gap",
+          "missing_evidence_reason": "第 2 章同源已复核净值增长率与业绩基准证据不足时只能输出证据缺口，不得编造近 1/3/5 年收益数值。"
         },
         {
           "id": "ch2.required_output.item_02",
           "text": "近 1/3/5 年业绩基准收益率",
-          "when_evidence_missing": "block",
-          "missing_evidence_reason": "第 2 章 R=A+B-C 数值与成本判断缺少同源证据时不得生成替代结论。"
+          "when_evidence_missing": "render_evidence_gap",
+          "missing_evidence_reason": "第 2 章同源已复核净值增长率与业绩基准证据不足时只能输出证据缺口，不得编造近 1/3/5 年收益数值。"
         },
         {
           "id": "ch2.required_output.item_03",
           "text": "超额收益（A = R - B）及稳定性",
-          "when_evidence_missing": "block",
-          "missing_evidence_reason": "第 2 章 R=A+B-C 数值与成本判断缺少同源证据时不得生成替代结论。"
+          "when_evidence_missing": "render_minimum_verification_question",
+          "missing_evidence_reason": "第 2 章同源已复核 R 与 B 证据不足时只能输出下一步最小验证问题，不得给出 Alpha 或稳定性结论。"
         },
         {
           "id": "ch2.required_output.item_04",
           "text": "超额收益性质判断（结构性 vs 阶段性）",
-          "when_evidence_missing": "block",
-          "missing_evidence_reason": "第 2 章 R=A+B-C 数值与成本判断缺少同源证据时不得生成替代结论。"
+          "when_evidence_missing": "render_minimum_verification_question",
+          "missing_evidence_reason": "第 2 章同源已复核 R 与 B 证据不足时只能输出下一步最小验证问题，不得给出 Alpha 或稳定性结论。"
         },
         {
           "id": "ch2.required_output.item_05",
           "text": "成本拆解（管理费、托管费、交易成本）",
-          "when_evidence_missing": "block",
-          "missing_evidence_reason": "第 2 章 R=A+B-C 数值与成本判断缺少同源证据时不得生成替代结论。"
+          "when_evidence_missing": "render_evidence_gap",
+          "missing_evidence_reason": "第 2 章同源已复核费用与成本证据不足时只能输出证据缺口，不得编造费率、交易成本或成本合理性判断。"
         },
         {
           "id": "ch2.required_output.item_06",
           "text": "成本合理性判断（同类对比）",
-          "when_evidence_missing": "block",
-          "missing_evidence_reason": "第 2 章 R=A+B-C 数值与成本判断缺少同源证据时不得生成替代结论。"
+          "when_evidence_missing": "render_evidence_gap",
+          "missing_evidence_reason": "第 2 章同源已复核费用与成本证据不足时只能输出证据缺口，不得编造费率、交易成本或成本合理性判断。"
         },
         {
           "id": "ch2.required_output.item_07",
           "text": "R=A+B-C 综合评估",
-          "when_evidence_missing": "block",
-          "missing_evidence_reason": "第 2 章 R=A+B-C 数值与成本判断缺少同源证据时不得生成替代结论。"
+          "when_evidence_missing": "render_minimum_verification_question",
+          "missing_evidence_reason": "第 2 章同源已复核 R、B 与 C 证据不足时只能输出下一步最小验证问题，不得输出具体 R=A+B-C 数字闭环。"
         }
       ],
       "preferred_lens": {
