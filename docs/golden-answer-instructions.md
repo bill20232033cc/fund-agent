@@ -17,14 +17,14 @@
 
 ## 数据源
 
-- **主源**：2024 年年度报告 PDF（extractor 解析的就是 PDF 原文）
-- **辅源**：天天基金网 / 基金官网（交叉验证数值型字段）
+- **主源**：`report_year` 对应年份的年度报告原文（extractor 解析的就是年报原文）
+- **辅源**：仅用于人工交叉验证数值型字段；不能替代年报原文作为 `source`
 
 ## 填写步骤
 
 ### Step 1: 准备年报 PDF
 
-从巨潮资讯网 (cninfo.com.cn) 或基金公司官网下载每只基金的 2024 年年度报告 PDF。
+准备每只基金 `report_year` 对应年份的年度报告原文。
 
 ### Step 2: 打开模板
 
@@ -32,7 +32,19 @@
 
 每只基金一张表，共 6 张表。
 
-### Step 3: 逐行填写
+### Step 3: 确认 report_year
+
+每个基金标题下必须先确认基金级 metadata：
+
+````markdown
+```golden-answer-metadata
+report_year: 2024
+```
+````
+
+`report_year` 是 strict golden answer 身份键的一部分。同一基金不同年份可并存，但不能把其他年份的行复用为当前年份 correctness 证据。历史 reviewed Markdown 如果缺少 metadata，只按 legacy 2024 兼容解析。
+
+### Step 4: 逐行填写
 
 每行有 5 列：
 
@@ -42,15 +54,15 @@
 | sub_field | 子字段名 | nav_growth_rate |
 | expected_value | PDF 原文中的精确值 | 17.32% |
 | confidence | 把握程度 | high / medium / low |
-| source | 数据来源页码 | 年报§3 page-8 |
+| source | 数据来源页码 | 年报2024 §3 page-8 |
 
-### Step 4: 标注 confidence
+### Step 5: 标注 confidence
 
 - `high`：PDF 原文明确，无歧义
 - `medium`：需要判断（如多列选哪一列、文本截取范围）
 - `low`：PDF 披露模糊或格式异常
 
-### Step 5: 标记跳过行
+### Step 6: 标记跳过行
 
 当前 slice 未实现的字段已标 `—`，跳过即可：
 - fee_schedule（费率）
@@ -58,7 +70,7 @@
 - turnover_rate（换手率）
 - holdings_snapshot（持仓快照）
 
-### Step 6: 交付
+### Step 7: 交付
 
 填完后告诉我，我来：
 1. 转成 golden set JSON

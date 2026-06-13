@@ -40,10 +40,21 @@ ELIGIBLE_FALLBACK_FAILURE_CATEGORIES = frozenset({"not_found", "unavailable"})
 INELIGIBLE_FALLBACK_FAILURE_CATEGORIES = frozenset(
     {"schema_drift", "identity_mismatch", "integrity_error"}
 )
-RESERVED_STRICT_GOLDEN_CODES = frozenset(
-    {"strict_golden_year_not_covered", "strict_golden_partial_coverage"}
-)
+RESERVED_STRICT_GOLDEN_CODES = frozenset({"strict_golden_partial_coverage"})
 DEFAULT_REPORT_YEAR = 2024
+
+
+@dataclass(frozen=True, slots=True)
+class StrictGoldenCoverage:
+    """strict golden answer v1 的基金与年份覆盖索引。
+
+    Attributes:
+        fund_codes: strict golden answer 覆盖的基金代码集合。
+        fund_years: strict golden answer 覆盖的 `(fund_code, report_year)` 集合。
+    """
+
+    fund_codes: frozenset[str]
+    fund_years: frozenset[tuple[str, int]]
 
 
 @dataclass(frozen=True, slots=True)
@@ -562,14 +573,14 @@ def run_golden_readiness_preflight(
         golden_answer_path=request.golden_answer_path,
         fixture_promotion_state_path=request.fixture_promotion_state_path,
     )
-    golden_covered_funds = _load_strict_golden_covered_funds(request.golden_answer_path)
+    golden_coverage = _load_strict_golden_coverage(request.golden_answer_path)
     fixture_states = _load_fixture_promotion_states(request.fixture_promotion_state_path)
     rows = tuple(
         _build_readiness_row(
             artifact,
             manifest=manifest,
             golden_answer_path=request.golden_answer_path,
-            golden_covered_funds=golden_covered_funds,
+            golden_coverage=golden_coverage,
             fixture_promotion_state_path=request.fixture_promotion_state_path,
             fixture_states=fixture_states,
         )
@@ -1167,14 +1178,14 @@ def _derive_global_blockers(
     return tuple(blockers)
 
 
-def _load_strict_golden_covered_funds(path: Path | None) -> set[str] | None:
-    """读取 strict golden answer v1 已覆盖基金代码。
+def _load_strict_golden_coverage(path: Path | None) -> StrictGoldenCoverage | None:
+    """读取 strict golden answer v1 已覆盖基金代码和年份。
 
     Args:
         path: strict golden answer JSON 路径。
 
     Returns:
-        已覆盖基金代码集合；未配置或缺失时返回 None。
+        已覆盖基金代码与 `(fund_code, report_year)` 集合；未配置或缺失时返回 None。
 
     Raises:
         ValueError: JSON 非 object 或 `funds` 结构非法时抛出。
@@ -1187,17 +1198,25 @@ def _load_strict_golden_covered_funds(path: Path | None) -> set[str] | None:
     if not isinstance(funds, list):
         raise ValueError("strict golden answer funds 必须是数组")
     covered_funds: set[str] = set()
+    covered_fund_years: set[tuple[str, int]] = set()
     for fund in funds:
         if not isinstance(fund, dict):
             raise ValueError("strict golden answer funds 每项必须是 object")
         fund_code = fund.get("fund_code")
         if not isinstance(fund_code, str):
             raise ValueError("strict golden answer funds[].fund_code 必须是字符串")
+        report_year = fund.get("report_year", DEFAULT_REPORT_YEAR)
+        if not isinstance(report_year, int):
+            raise ValueError("strict golden answer funds[].report_year 必须是整数")
         records = fund.get("records", [])
         if not isinstance(records, list):
             raise ValueError("strict golden answer funds[].records 必须是数组")
         covered_funds.add(fund_code)
-    return covered_funds
+        covered_fund_years.add((fund_code, report_year))
+    return StrictGoldenCoverage(
+        fund_codes=frozenset(covered_funds),
+        fund_years=frozenset(covered_fund_years),
+    )
 
 
 def _load_fixture_promotion_states(path: Path | None) -> dict[str, PromotionState] | None:
@@ -1245,7 +1264,7 @@ def _build_readiness_row(
     *,
     manifest: CoverageDispositionManifest,
     golden_answer_path: Path | None,
-    golden_covered_funds: set[str] | None,
+    golden_coverage: StrictGoldenCoverage | None,
     fixture_promotion_state_path: Path | None,
     fixture_states: dict[str, PromotionState] | None,
 ) -> FundReadinessRow:
@@ -1255,7 +1274,7 @@ def _build_readiness_row(
         artifact: 单基金或 slot artifact 输入。
         manifest: coverage disposition manifest。
         golden_answer_path: strict golden answer JSON 路径。
-        golden_covered_funds: strict golden v1 已覆盖基金集合。
+        golden_coverage: strict golden v1 已覆盖基金与年份集合。
         fixture_promotion_state_path: fixture promotion state JSON 路径。
         fixture_states: fixture promotion 状态映射。
 
@@ -1303,7 +1322,7 @@ def _build_readiness_row(
         warnings.extend(quality_warnings)
     strict_golden_coverage, strict_blockers = _derive_strict_golden_coverage(
         artifact=artifact,
-        golden_covered_funds=golden_covered_funds,
+        golden_coverage=golden_coverage,
         golden_answer_path=golden_answer_path,
     )
     blockers.extend(strict_blockers)
@@ -1721,14 +1740,14 @@ def _derive_quality_blockers(
 def _derive_strict_golden_coverage(
     *,
     artifact: FundArtifactInput,
-    golden_covered_funds: set[str] | None,
+    golden_coverage: StrictGoldenCoverage | None,
     golden_answer_path: Path | None,
 ) -> tuple[str, tuple[ReadinessBlocker, ...]]:
-    """派生 strict golden v1 fund-level 覆盖状态。
+    """派生 strict golden v1 年份感知覆盖状态。
 
     Args:
         artifact: 单基金 artifact 输入。
-        golden_covered_funds: strict golden v1 已覆盖基金集合。
+        golden_coverage: strict golden v1 已覆盖基金与年份集合。
         golden_answer_path: strict golden answer JSON 路径。
 
     Returns:
@@ -1740,7 +1759,7 @@ def _derive_strict_golden_coverage(
 
     if not artifact.fund_code.isdigit():
         return "not_applicable", ()
-    if golden_answer_path is None or golden_covered_funds is None:
+    if golden_answer_path is None or golden_coverage is None:
         return (
             "not_configured",
             (
@@ -1755,7 +1774,7 @@ def _derive_strict_golden_coverage(
                 ),
             ),
         )
-    if artifact.fund_code not in golden_covered_funds:
+    if artifact.fund_code not in golden_coverage.fund_codes:
         return (
             "fund_not_covered",
             (
@@ -1764,6 +1783,24 @@ def _derive_strict_golden_coverage(
                     "fund",
                     artifact.fund_code,
                     f"{artifact.fund_code} 不在 strict golden answer v1 fund-level coverage 中。",
+                    artifact.coverage_owner,
+                    artifact.next_gate,
+                    artifact.evidence_artifacts,
+                ),
+            ),
+        )
+    if (artifact.fund_code, artifact.report_year) not in golden_coverage.fund_years:
+        return (
+            "year_not_covered",
+            (
+                _blocker(
+                    "strict_golden_year_not_covered",
+                    "fund",
+                    artifact.fund_code,
+                    (
+                        f"{artifact.fund_code} / {artifact.report_year} 不在 strict golden "
+                        "answer v1 year-aware coverage 中。"
+                    ),
                     artifact.coverage_owner,
                     artifact.next_gate,
                     artifact.evidence_artifacts,
@@ -2514,7 +2551,7 @@ def _markdown_payload(result: GoldenReadinessPreflightResult) -> str:
         f"- run_id: `{result.run_id}`",
         f"- source_csv: `{result.source_csv}`",
         f"- golden_answer_path: `{result.golden_answer_path}`",
-        "- strict golden answer v1 仅执行 fund-level coverage；year/partial coverage codes 保留不触发。",
+        "- strict golden answer v1 执行 fund/year coverage；partial coverage code 保留不触发。",
         "- 本 preflight 只读，不执行 fixture promotion、golden promotion、release 或 QDII probing。",
         "",
         "## Overall Verdict",

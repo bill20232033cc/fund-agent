@@ -246,9 +246,12 @@ template truth-source replacement、typed projection 和 `EvidenceAvailability` 
 `build_golden_answer_json()` 返回 `GoldenAnswerBuildResult`，当前用于把人工审核后的 Markdown 转成 strict JSON：
 
 - 只消费 Markdown，不读取 PDF、cache 或底层解析文件
+- 支持在每个基金标题下用 fenced `golden-answer-metadata` 代码块声明基金级 `report_year`；历史 Markdown 缺少 metadata 时仅按已复核 legacy 2024 corpus 兼容解析为 `2024`
 - 校验有效行必须包含 `expected_value`、`confidence`、`source`
 - `confidence` 只允许 `high / medium / low`
 - `source` 必须是可复核来源，不能保留 `manual_required`
+- `source` 文本只作为人工证据描述，不参与机器身份键推断
+- 构建阶段允许同一基金代码跨年份并存；同一 `fund_code + report_year` 基金区块或同一 `fund_code + report_year + field_name + sub_field` 记录重复时 fail-fast
 - 输出 `fund-agent.golden-answer.v1` JSON，包含基金级和记录级 `report_year`，供 correctness 自动比对使用
 - `load_golden_answer_json()` 读取同一 strict JSON schema，供 Fund 内部比对复用，不重新解析 Markdown；legacy JSON 缺少 `report_year` 时按当前已复核 2024 golden corpus 加载为 `2024`
 
@@ -289,7 +292,7 @@ template truth-source replacement、typed projection 和 `EvidenceAvailability` 
 
 - 只消费显式传入的 `source_csv`、snapshot JSONL、score JSON、quality gate JSON、strict `golden-answer.json`、fixture promotion state manifest 和 accepted coverage disposition manifest
 - 没有 tracked coverage disposition manifest 时使用代码内 static current accepted disposition manifest，并在输出 JSON 原样写入 `schema_version`、`accepted_as_of`、`source_artifacts`、`entries` 和 lifecycle semantics
-- strict golden answer v1 只做 fund-level coverage 检查；`strict_golden_year_not_covered` 和 `strict_golden_partial_coverage` 保留为未来 schema/gate，不在当前 preflight 触发
+- strict golden answer v1 做 fund/year coverage 检查；同一基金已有 golden 但当前 `report_year` 未覆盖时输出 `strict_golden_year_not_covered` blocker；`strict_golden_partial_coverage` 仍保留为未来 schema/gate，不在当前 preflight 触发
 - fixture promotion state manifest 缺省时输出 `fixture_promotion_absent` blocker，而不是 IO failure；eligible fallback 只解除 source provenance blocker，不证明 ready
 - 006597 当前 bond `bond_risk_evidence_missing` 以 `blocker_resolved` / `original_blocker_code=bond_risk_evidence_missing` 输出为 resolved item，不列为 blocker
 - 输出 `golden_readiness_preflight.json` 与 `.md`，只表达 readiness/blocker/owner/next gate，不修改 score policy、quality gate severity、golden answer、golden fixture 或 promotion state

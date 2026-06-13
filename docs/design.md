@@ -877,7 +877,7 @@ Golden Answer pipeline 由预填底稿、人工复核、strict JSON 构建和 co
 
 流程：`GoldenPrefillService`（自动预填）→ 人工复核 → `GoldenAnswerService`（转 JSON）→ `extraction_score`（correctness 比对）
 
-strict golden answer 的可比身份键同样使用 `fund_code + report_year + field_name + sub_field`。构建阶段允许同一基金代码跨年份并存，但同一身份键重复会 fail-fast；读取阶段只为旧版缺少年份的当前 2024 corpus 提供兼容默认值，不表示跨年份可复用。
+strict golden answer 的可比身份键同样使用 `fund_code + report_year + field_name + sub_field`。构建阶段允许同一基金代码跨年份并存，但同一身份键重复会 fail-fast；读取阶段只为旧版缺少年份的当前 2024 corpus 提供兼容默认值，不表示跨年份可复用。当前 reviewed Markdown 构建路径使用基金标题下的 fenced `golden-answer-metadata` 代码块表达基金级 `report_year`，例如 `report_year: 2025`；缺少该 metadata 时仅按 legacy 2024 兼容解析。`source` 文本中的年份只作为人工证据描述，不能反推机器身份键。
 
 ---
 

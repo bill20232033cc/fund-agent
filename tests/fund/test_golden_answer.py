@@ -173,6 +173,260 @@ def test_build_golden_answer_json_writes_machine_readable_payload(tmp_path) -> N
     ]
 
 
+def test_build_golden_answer_json_writes_explicit_metadata_report_year(
+    tmp_path: Path,
+) -> None:
+    """验证 build 端到端输出 metadata 指定的 report_year。
+
+    Args:
+        tmp_path: pytest 临时目录 fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 fund 或 record 年份未写入 JSON 时抛出。
+    """
+
+    input_path = tmp_path / "reviewed-2025.md"
+    output_path = tmp_path / "golden-answer-2025.json"
+    input_path.write_text(
+        "\n".join(
+            (
+                "## 004393 测试基金（国内股票类）",
+                "",
+                "```golden-answer-metadata",
+                "report_year: 2025",
+                "```",
+                "",
+                "| field | sub_field | expected_value | confidence | source |",
+                "|---|---|---|---|---|",
+                "| classified_fund_type | fund_type | active_fund | high | 年报2025 §2 page-5 |",
+            )
+        ),
+        encoding="utf-8",
+    )
+
+    result = build_golden_answer_json(input_path=input_path, output_path=output_path)
+
+    payload = json.loads(output_path.read_text(encoding="utf-8"))
+    assert result.record_count == 1
+    assert payload["funds"][0]["report_year"] == 2025
+    assert payload["funds"][0]["records"][0]["report_year"] == 2025
+    assert payload["records"][0]["report_year"] == 2025
+
+
+def test_parse_golden_answer_markdown_accepts_explicit_report_year_metadata() -> None:
+    """验证基金级 metadata 会写入 fund 和 record 的 report_year。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 metadata 年份未生效时抛出。
+    """
+
+    markdown = "\n".join(
+        (
+            "## 004393 测试基金（国内股票类）",
+            "",
+            "```golden-answer-metadata",
+            "report_year: 2025",
+            "```",
+            "",
+            "| field | sub_field | expected_value | confidence | source |",
+            "|---|---|---|---|---|",
+            "| classified_fund_type | fund_type | active_fund | high | 年报2025 §2 page-5 |",
+        )
+    )
+
+    funds = parse_golden_answer_markdown(markdown)
+
+    assert funds[0].report_year == 2025
+    assert funds[0].records[0].report_year == 2025
+    assert funds[0].records[0].source == "年报2025 §2 page-5"
+
+
+def test_parse_golden_answer_markdown_allows_same_fund_across_years() -> None:
+    """验证同一基金跨年份可复用同一字段 identity 的非年份部分。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当跨年份同基金被误拒时抛出。
+    """
+
+    markdown = "\n".join(
+        (
+            "## 004393 测试基金（国内股票类）",
+            "",
+            "| field | sub_field | expected_value | confidence | source |",
+            "|---|---|---|---|---|",
+            "| classified_fund_type | fund_type | active_fund | high | 年报2024 §2 page-5 |",
+            "",
+            "## 004393 测试基金（国内股票类）",
+            "",
+            "```golden-answer-metadata",
+            "report_year: 2025",
+            "```",
+            "",
+            "| field | sub_field | expected_value | confidence | source |",
+            "|---|---|---|---|---|",
+            "| classified_fund_type | fund_type | enhanced_index | high | 年报2025 §2 page-5 |",
+        )
+    )
+
+    funds = parse_golden_answer_markdown(markdown)
+
+    assert [(fund.fund_code, fund.report_year) for fund in funds] == [
+        ("004393", 2024),
+        ("004393", 2025),
+    ]
+    assert [fund.records[0].expected_value for fund in funds] == [
+        "active_fund",
+        "enhanced_index",
+    ]
+
+
+def test_parse_golden_answer_markdown_rejects_duplicate_fund_year_blocks() -> None:
+    """验证同一基金同一年份不能拆成多个 Markdown 区块。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当重复基金年份区块未被拒绝时抛出。
+    """
+
+    markdown = "\n".join(
+        (
+            "## 004393 测试基金（国内股票类）",
+            "",
+            "```golden-answer-metadata",
+            "report_year: 2025",
+            "```",
+            "",
+            "| field | sub_field | expected_value | confidence | source |",
+            "|---|---|---|---|---|",
+            "| basic_identity | fund_name | 测试基金 | high | 年报2025 §2 page-5 |",
+            "",
+            "## 004393 测试基金（国内股票类）",
+            "",
+            "```golden-answer-metadata",
+            "report_year: 2025",
+            "```",
+            "",
+            "| field | sub_field | expected_value | confidence | source |",
+            "|---|---|---|---|---|",
+            "| classified_fund_type | fund_type | active_fund | high | 年报2025 §2 page-5 |",
+        )
+    )
+
+    with pytest.raises(GoldenAnswerValidationError) as exc_info:
+        parse_golden_answer_markdown(markdown)
+
+    assert "fund 004393 2025: 重复 golden answer 基金区块" in str(exc_info.value)
+
+
+@pytest.mark.parametrize(
+    ("metadata_block", "expected_error"),
+    (
+        ("foo: 2025", "未知 metadata key foo"),
+        ("report_year: 2025\nreport_year: 2026", "metadata key report_year 重复"),
+        ("report_year: abc", "report_year 必须是整数"),
+        ("", "golden-answer-metadata 必须包含 report_year"),
+    ),
+)
+def test_parse_golden_answer_markdown_rejects_invalid_metadata(
+    metadata_block: str,
+    expected_error: str,
+) -> None:
+    """验证非法 metadata 会 fail-fast 并保留错误上下文。
+
+    Args:
+        metadata_block: metadata 代码块正文。
+        expected_error: 预期错误片段。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当非法 metadata 未被拒绝时抛出。
+    """
+
+    markdown = "\n".join(
+        (
+            "## 004393 测试基金（国内股票类）",
+            "",
+            "```golden-answer-metadata",
+            metadata_block,
+            "```",
+            "",
+            "| field | sub_field | expected_value | confidence | source |",
+            "|---|---|---|---|---|",
+            "| classified_fund_type | fund_type | active_fund | high | 年报2025 §2 page-5 |",
+        )
+    )
+
+    with pytest.raises(GoldenAnswerValidationError) as exc_info:
+        parse_golden_answer_markdown(markdown)
+
+    assert expected_error in str(exc_info.value)
+
+
+def test_parse_golden_answer_markdown_rejects_late_or_unclosed_metadata() -> None:
+    """验证 metadata 不能出现在表格之后，且必须闭合代码块。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 metadata 位置或闭合校验缺失时抛出。
+    """
+
+    late_markdown = "\n".join(
+        (
+            "## 004393 测试基金（国内股票类）",
+            "",
+            "| field | sub_field | expected_value | confidence | source |",
+            "|---|---|---|---|---|",
+            "| classified_fund_type | fund_type | active_fund | high | 年报2025 §2 page-5 |",
+            "```golden-answer-metadata",
+            "report_year: 2025",
+            "```",
+        )
+    )
+    unclosed_markdown = "\n".join(
+        (
+            "## 004393 测试基金（国内股票类）",
+            "",
+            "```golden-answer-metadata",
+            "report_year: 2025",
+        )
+    )
+
+    with pytest.raises(GoldenAnswerValidationError) as late_exc_info:
+        parse_golden_answer_markdown(late_markdown)
+    with pytest.raises(GoldenAnswerValidationError) as unclosed_exc_info:
+        parse_golden_answer_markdown(unclosed_markdown)
+
+    assert "golden-answer-metadata 必须出现在第一张表格之前" in str(late_exc_info.value)
+    assert "golden-answer-metadata 代码块未关闭" in str(unclosed_exc_info.value)
+
+
 def test_load_golden_answer_json_reuses_strict_schema(tmp_path) -> None:
     """验证 strict golden answer JSON 可被复用为 correctness 输入。
 

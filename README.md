@@ -270,6 +270,8 @@ fund-analysis golden-build \
 
 `golden-build` 会校验每条有效行必须填写 `expected_value`、`confidence` 和 `source`，其中 `confidence` 只能是 `high / medium / low`，`source` 不能是 `manual_required`。校验通过后输出机器可读 JSON；该 JSON 是 correctness 自动比对的数据源。
 
+Reviewed Markdown 可以在每个基金标题下用 `golden-answer-metadata` 代码块声明基金级 `report_year`。缺少 metadata 的历史 Markdown 仅按 legacy 2024 兼容解析；strict identity 使用 `fund_code + report_year + field_name + sub_field`，`source` 文本中的年份不参与机器身份键推断。
+
 基于 `score.json` 生成报告质量 gate：
 
 ```bash

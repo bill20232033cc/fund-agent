@@ -38,6 +38,7 @@ from fund_agent.fund.template.item_rules import (
     load_template_item_rule_manifest,
 )
 
+TURNOVER_RATE_FIELD_NAME: Final[str] = "turnover_rate"
 FIELD_PRIORITY_BY_NAME: Final[dict[str, str]] = {
     "basic_identity": "P0",
     "classified_fund_type": "P0",
@@ -48,7 +49,7 @@ FIELD_PRIORITY_BY_NAME: Final[dict[str, str]] = {
     "product_profile": "P1",
     "index_profile": "P1",
     "tracking_error": "P1",
-    "turnover_rate": "P1",
+    TURNOVER_RATE_FIELD_NAME: "P1",
     "holder_structure": "P1",
     "manager_alignment": "P1",
     "holdings_snapshot": "P1",
@@ -120,11 +121,40 @@ BOND_RISK_CONTRACT_STATUS_SATISFIED: Final[str] = "satisfied"
 BOND_RISK_CONTRACT_STATUS_PARTIAL: Final[str] = "partial"
 BOND_RISK_CONTRACT_STATUS_MISSING: Final[str] = "missing"
 APPLICABILITY_STATUS_NOT_APPLICABLE_REPLACED: Final[str] = "not_applicable_replaced"
+APPLICABILITY_STATUS_NOT_APPLICABLE_EXCLUDED: Final[str] = "not_applicable_excluded"
 APPLICABILITY_STATUS_UNKNOWN_FAIL_CLOSED: Final[str] = "unknown_fail_closed"
 DENOMINATOR_EFFECT_EXCLUDED_WITH_REPLACEMENT_ISSUE: Final[str] = (
     "excluded_with_replacement_issue"
 )
+DENOMINATOR_EFFECT_EXCLUDED_NO_REPLACEMENT_ISSUE: Final[str] = (
+    "excluded_no_replacement_issue"
+)
 DENOMINATOR_EFFECT_INCLUDED_FAIL_CLOSED: Final[str] = "included_fail_closed"
+TURNOVER_RATE_DISCLOSURE_EFFECTIVE_REPORT_YEAR: Final[int] = 2026
+TURNOVER_RATE_APPLICABILITY_CONTRACT_ID: Final[str] = (
+    "turnover_rate_disclosure_applicability.v1"
+)
+TURNOVER_RATE_PRE_EFFECTIVE_REASON: Final[str] = "turnover_rate_pre_effective_report_year"
+TURNOVER_RATE_NON_ANNUAL_REASON: Final[str] = "turnover_rate_non_annual_report"
+TURNOVER_RATE_ROW_REPORT_KIND_KEYS: Final[tuple[str, ...]] = (
+    "document_kind",
+    "report_type",
+    "report_kind",
+    "source_kind",
+)
+TURNOVER_RATE_NON_ANNUAL_REPORT_KINDS: Final[frozenset[str]] = frozenset(
+    {
+        "quarterly",
+        "quarterly_report",
+        "q1_report",
+        "q2_report",
+        "q3_report",
+        "interim",
+        "interim_report",
+        "semiannual",
+        "semiannual_report",
+    }
+)
 BENCHMARK_FIELD_NAME: Final[str] = "benchmark"
 BENCHMARK_NORMALIZED_SUB_FIELDS: Final[tuple[str, ...]] = ("benchmark_name", "benchmark_text")
 INTRA_CHINESE_VISUAL_WHITESPACE_PATTERN: Final[re.Pattern[str]] = re.compile(
@@ -1372,6 +1402,30 @@ def _required_snapshot_int(record: Mapping[str, object], key: str) -> int:
     raise ValueError(f"snapshot 记录字段必须是整数：{key}")
 
 
+def _optional_snapshot_int(record: Mapping[str, object], key: str) -> int | None:
+    """保守读取可选整数字段。
+
+    Args:
+        record: 单条 snapshot 记录。
+        key: 字段名。
+
+    Returns:
+        缺失或非法时返回 `None`；整数或数字字符串返回整数。
+
+    Raises:
+        无显式抛出。
+    """
+
+    value = record.get(key)
+    if value is None or isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str) and value.strip().isdigit():
+        return int(value.strip())
+    return None
+
+
 def _truthy_bool(value: object) -> bool:
     """把 snapshot 布尔字段转换为布尔值。
 
@@ -1662,9 +1716,6 @@ def _fund_field_applicability_decisions(
 
     classified_fund_type, _fund_type_reason = _unique_optional_text(records, "classified_fund_type")
     decisions: list[FieldApplicabilityDecision] = []
-    if not any(_required_text(record, "field_name") == HOLDINGS_SNAPSHOT_FIELD_NAME for record in records):
-        return ()
-
     raw_records = _records_after_index_applicability(
         records,
         classified_fund_type=classified_fund_type,
@@ -1680,60 +1731,90 @@ def _fund_field_applicability_decisions(
     applicable_missing_field_count = sum(
         1 for record in applicable_records if not _record_is_covered(record)
     )
-    report_year = _fund_report_year_text(records)
-    if classified_fund_type == BOND_FUND_TYPE:
-        bond_risk_record = _bond_risk_evidence_record_for_fund(
-            records,
-            report_year=report_year,
-        )
-        missing_groups = _bond_risk_unsatisfied_groups(bond_risk_record)
-        replacement_issue_ids = ()
-        if missing_groups:
-            replacement_issue_ids = (
-                _score_applicability_issue_id(
+    has_holdings_snapshot = any(
+        _required_text(record, "field_name") == HOLDINGS_SNAPSHOT_FIELD_NAME for record in records
+    )
+    if has_holdings_snapshot:
+        report_year = _fund_report_year_text(records)
+        if classified_fund_type == BOND_FUND_TYPE:
+            bond_risk_record = _bond_risk_evidence_record_for_fund(
+                records,
+                report_year=report_year,
+            )
+            missing_groups = _bond_risk_unsatisfied_groups(bond_risk_record)
+            replacement_issue_ids = ()
+            if missing_groups:
+                replacement_issue_ids = (
+                    _score_applicability_issue_id(
+                        fund_code=fund_code,
+                        report_year=report_year,
+                        field_name=HOLDINGS_SNAPSHOT_FIELD_NAME,
+                        issue_code=BOND_RISK_EVIDENCE_MISSING_ISSUE_CODE,
+                        contract_id=BOND_RISK_EVIDENCE_CONTRACT_ID,
+                    ),
+                )
+            decisions.append(
+                FieldApplicabilityDecision(
                     fund_code=fund_code,
                     report_year=report_year,
                     field_name=HOLDINGS_SNAPSHOT_FIELD_NAME,
-                    issue_code=BOND_RISK_EVIDENCE_MISSING_ISSUE_CODE,
+                    classified_fund_type=classified_fund_type,
+                    applicability_status=APPLICABILITY_STATUS_NOT_APPLICABLE_REPLACED,
+                    reason_code=BOND_HOLDINGS_NOT_APPLICABLE_REASON,
+                    replacement_field_name=BOND_RISK_REPLACEMENT_FIELD_NAME,
                     contract_id=BOND_RISK_EVIDENCE_CONTRACT_ID,
-                ),
+                    denominator_effect=DENOMINATOR_EFFECT_EXCLUDED_WITH_REPLACEMENT_ISSUE,
+                    raw_total_field_count=raw_total_field_count,
+                    raw_missing_field_count=raw_missing_field_count,
+                    raw_missing_field_rate=_rate(raw_missing_field_count, raw_total_field_count),
+                    applicable_total_field_count=len(applicable_records),
+                    applicable_missing_field_count=applicable_missing_field_count,
+                    applicable_missing_field_rate=_rate(
+                        applicable_missing_field_count,
+                        len(applicable_records),
+                    ),
+                    excluded_non_applicable_fields=(HOLDINGS_SNAPSHOT_FIELD_NAME,),
+                    replacement_issue_ids=replacement_issue_ids,
+                )
             )
+        elif classified_fund_type is None:
+            decisions.append(
+                FieldApplicabilityDecision(
+                    fund_code=fund_code,
+                    report_year=report_year,
+                    field_name=HOLDINGS_SNAPSHOT_FIELD_NAME,
+                    classified_fund_type=None,
+                    applicability_status=APPLICABILITY_STATUS_UNKNOWN_FAIL_CLOSED,
+                    reason_code="unknown_fund_type_fail_closed",
+                    replacement_field_name=None,
+                    contract_id=None,
+                    denominator_effect=DENOMINATOR_EFFECT_INCLUDED_FAIL_CLOSED,
+                    raw_total_field_count=raw_total_field_count,
+                    raw_missing_field_count=raw_missing_field_count,
+                    raw_missing_field_rate=_rate(raw_missing_field_count, raw_total_field_count),
+                    applicable_total_field_count=len(applicable_records),
+                    applicable_missing_field_count=applicable_missing_field_count,
+                    applicable_missing_field_rate=_rate(
+                        applicable_missing_field_count,
+                        len(applicable_records),
+                    ),
+                    excluded_non_applicable_fields=(),
+                    replacement_issue_ids=(),
+                )
+            )
+    turnover_reason = _turnover_rate_non_applicable_reason_for_records(records)
+    if turnover_reason is not None:
         decisions.append(
             FieldApplicabilityDecision(
                 fund_code=fund_code,
-                report_year=report_year,
-                field_name=HOLDINGS_SNAPSHOT_FIELD_NAME,
+                report_year=_fund_report_year_text(records),
+                field_name=TURNOVER_RATE_FIELD_NAME,
                 classified_fund_type=classified_fund_type,
-                applicability_status=APPLICABILITY_STATUS_NOT_APPLICABLE_REPLACED,
-                reason_code=BOND_HOLDINGS_NOT_APPLICABLE_REASON,
-                replacement_field_name=BOND_RISK_REPLACEMENT_FIELD_NAME,
-                contract_id=BOND_RISK_EVIDENCE_CONTRACT_ID,
-                denominator_effect=DENOMINATOR_EFFECT_EXCLUDED_WITH_REPLACEMENT_ISSUE,
-                raw_total_field_count=raw_total_field_count,
-                raw_missing_field_count=raw_missing_field_count,
-                raw_missing_field_rate=_rate(raw_missing_field_count, raw_total_field_count),
-                applicable_total_field_count=len(applicable_records),
-                applicable_missing_field_count=applicable_missing_field_count,
-                applicable_missing_field_rate=_rate(
-                    applicable_missing_field_count,
-                    len(applicable_records),
-                ),
-                excluded_non_applicable_fields=(HOLDINGS_SNAPSHOT_FIELD_NAME,),
-                replacement_issue_ids=replacement_issue_ids,
-            )
-        )
-    elif classified_fund_type is None:
-        decisions.append(
-            FieldApplicabilityDecision(
-                fund_code=fund_code,
-                report_year=report_year,
-                field_name=HOLDINGS_SNAPSHOT_FIELD_NAME,
-                classified_fund_type=None,
-                applicability_status=APPLICABILITY_STATUS_UNKNOWN_FAIL_CLOSED,
-                reason_code="unknown_fund_type_fail_closed",
+                applicability_status=APPLICABILITY_STATUS_NOT_APPLICABLE_EXCLUDED,
+                reason_code=turnover_reason,
                 replacement_field_name=None,
-                contract_id=None,
-                denominator_effect=DENOMINATOR_EFFECT_INCLUDED_FAIL_CLOSED,
+                contract_id=TURNOVER_RATE_APPLICABILITY_CONTRACT_ID,
+                denominator_effect=DENOMINATOR_EFFECT_EXCLUDED_NO_REPLACEMENT_ISSUE,
                 raw_total_field_count=raw_total_field_count,
                 raw_missing_field_count=raw_missing_field_count,
                 raw_missing_field_rate=_rate(raw_missing_field_count, raw_total_field_count),
@@ -1743,7 +1824,7 @@ def _fund_field_applicability_decisions(
                     applicable_missing_field_count,
                     len(applicable_records),
                 ),
-                excluded_non_applicable_fields=(),
+                excluded_non_applicable_fields=(TURNOVER_RATE_FIELD_NAME,),
                 replacement_issue_ids=(),
             )
         )
@@ -2238,7 +2319,104 @@ def _scorable_records(
             classified_fund_type=classified_fund_type,
             use_record_fund_type=use_record_fund_type,
         )
+        and not _is_non_applicable_turnover_rate_record(record)
     )
+
+
+def _is_non_applicable_turnover_rate_record(record: Mapping[str, object]) -> bool:
+    """判断换手率记录是否不应进入当前评分分母。
+
+    换手率披露从 2026 年度报告开始适用；2025 及以前年度报告、显式
+    非年报记录不参与 P1 coverage/traceability 评分。见模板第 2 章
+    R=A+B-C 中换手成本分析的披露前提。
+
+    Args:
+        record: snapshot 字段记录。
+
+    Returns:
+        记录为非适用换手率时返回 `True`。
+
+    Raises:
+        ValueError: 记录缺少 `field_name` 时抛出。
+    """
+
+    return _turnover_rate_non_applicable_reason(record) is not None
+
+
+def _turnover_rate_non_applicable_reason_for_records(
+    records: Sequence[Mapping[str, object]],
+) -> str | None:
+    """汇总单基金换手率非适用原因。
+
+    Args:
+        records: 单基金 snapshot 记录。
+
+    Returns:
+        单基金存在非适用换手率行时返回稳定 reason code；否则返回 `None`。
+
+    Raises:
+        ValueError: 记录缺少 `field_name` 时抛出。
+    """
+
+    reasons = sorted(
+        {
+            reason
+            for record in records
+            if (reason := _turnover_rate_non_applicable_reason(record)) is not None
+        }
+    )
+    if not reasons:
+        return None
+    return reasons[0]
+
+
+def _turnover_rate_non_applicable_reason(record: Mapping[str, object]) -> str | None:
+    """派生单条换手率记录的非适用原因。
+
+    Args:
+        record: snapshot 字段记录。
+
+    Returns:
+        非适用原因；适用或无法证明非适用时返回 `None`。
+
+    Raises:
+        ValueError: 记录缺少 `field_name` 时抛出。
+    """
+
+    if _required_text(record, "field_name") != TURNOVER_RATE_FIELD_NAME:
+        return None
+    if _turnover_rate_row_is_explicit_non_annual(record):
+        return TURNOVER_RATE_NON_ANNUAL_REASON
+    report_year = _optional_snapshot_int(record, "report_year")
+    if (
+        report_year is not None
+        and report_year < TURNOVER_RATE_DISCLOSURE_EFFECTIVE_REPORT_YEAR
+    ):
+        return TURNOVER_RATE_PRE_EFFECTIVE_REASON
+    return None
+
+
+def _turnover_rate_row_is_explicit_non_annual(record: Mapping[str, object]) -> bool:
+    """判断 snapshot 行是否显式标注为非年报。
+
+    Args:
+        record: snapshot 字段记录。
+
+    Returns:
+        行级 report kind 属于已知非年报集合时返回 `True`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    for key in TURNOVER_RATE_ROW_REPORT_KIND_KEYS:
+        value = record.get(key)
+        if value is None:
+            continue
+        text = str(value).strip().lower()
+        if text in TURNOVER_RATE_NON_ANNUAL_REPORT_KINDS:
+            return True
+    return False
 
 
 def _is_bond_holdings_replacement_record_for_type(

@@ -24,6 +24,9 @@ LEGACY_GOLDEN_ANSWER_REPORT_YEAR: Final[int] = 2024
 _FUND_HEADING_PATTERN: Final[re.Pattern[str]] = re.compile(
     r"^##\s+(?P<code>\d{6})\s+(?P<title>.+?)\s*$"
 )
+_METADATA_FENCE_START: Final[str] = "```golden-answer-metadata"
+_METADATA_FENCE_END: Final[str] = "```"
+_METADATA_REPORT_YEAR_KEY: Final[str] = "report_year"
 _ALLOWED_CONFIDENCE: Final[frozenset[str]] = frozenset({"high", "medium", "low"})
 _SKIPPED_CELL: Final[str] = "—"
 
@@ -220,19 +223,34 @@ def parse_golden_answer_markdown(markdown_text: str) -> tuple[GoldenAnswerFund, 
     """
 
     parsed_funds: list[_ParsedFund] = []
+    errors: list[str] = []
     current_code: str | None = None
     current_title = ""
+    current_report_year = LEGACY_GOLDEN_ANSWER_REPORT_YEAR
     current_records: list[GoldenAnswerRecord] = []
     current_skipped: list[str] = []
     current_errors: list[str] = []
-    seen_keys: set[tuple[str, int, str, str]] = set()
+    current_metadata_seen = False
+    current_table_seen = False
+    metadata_allowed = False
+    metadata_start_line: int | None = None
+    metadata_lines: list[str] = []
+    seen_record_keys: set[tuple[str, int, str, str]] = set()
 
     for line_number, line in enumerate(markdown_text.splitlines(), start=1):
         heading_match = _FUND_HEADING_PATTERN.match(line)
         if heading_match is not None:
+            if metadata_start_line is not None:
+                current_errors.append(
+                    f"line {metadata_start_line} fund {current_code}: "
+                    "golden-answer-metadata 代码块未关闭"
+                )
+                metadata_start_line = None
+                metadata_lines = []
             _append_current_fund(
                 parsed_funds,
                 current_code,
+                current_report_year,
                 current_title,
                 current_records,
                 current_skipped,
@@ -240,16 +258,60 @@ def parse_golden_answer_markdown(markdown_text: str) -> tuple[GoldenAnswerFund, 
             )
             current_code = heading_match.group("code")
             current_title = heading_match.group("title")
+            current_report_year = LEGACY_GOLDEN_ANSWER_REPORT_YEAR
             current_records = []
             current_skipped = []
             current_errors = []
-            seen_keys = set()
+            current_metadata_seen = False
+            current_table_seen = False
+            continue
+        if metadata_start_line is not None:
+            if line.strip() == _METADATA_FENCE_END:
+                if metadata_allowed:
+                    parsed_year, metadata_errors = _parse_golden_answer_metadata(
+                        tuple(metadata_lines),
+                        f"line {metadata_start_line} fund {current_code}",
+                    )
+                    current_errors.extend(metadata_errors)
+                    if parsed_year is not None and not metadata_errors:
+                        current_report_year = parsed_year
+                metadata_start_line = None
+                metadata_lines = []
+                metadata_allowed = False
+            else:
+                metadata_lines.append(line)
+            continue
+        if line.strip() == _METADATA_FENCE_START:
+            if current_code is None:
+                errors.append(
+                    f"line {line_number}: golden-answer-metadata 必须出现在基金标题之后"
+                )
+                metadata_allowed = False
+            elif current_table_seen:
+                current_errors.append(
+                    f"line {line_number} fund {current_code}: "
+                    "golden-answer-metadata 必须出现在第一张表格之前"
+                )
+                metadata_allowed = False
+            elif current_metadata_seen:
+                current_errors.append(
+                    f"line {line_number} fund {current_code}: "
+                    "golden-answer-metadata 只能出现一次"
+                )
+                metadata_allowed = False
+            else:
+                metadata_allowed = True
+            if current_code is not None:
+                current_metadata_seen = True
+            metadata_start_line = line_number
+            metadata_lines = []
             continue
         if current_code is None or not line.startswith("|"):
             continue
         row = _parse_table_row(line)
         if row is None:
             continue
+        current_table_seen = True
         if len(row) != 5:
             current_errors.append(
                 f"line {line_number} fund {current_code}: Markdown 表格必须为 5 列"
@@ -261,12 +323,12 @@ def parse_golden_answer_markdown(markdown_text: str) -> tuple[GoldenAnswerFund, 
         if _is_skipped_row(sub_field, expected_value):
             current_skipped.append(_skipped_field_label(field, sub_field))
             continue
-        key = (current_code, LEGACY_GOLDEN_ANSWER_REPORT_YEAR, field, sub_field)
+        key = (current_code, current_report_year, field, sub_field)
         row_context = f"line {line_number} fund {current_code} {field}.{sub_field}"
-        if key in seen_keys:
+        if key in seen_record_keys:
             current_errors.append(f"{row_context}: 重复 golden answer 行")
             continue
-        seen_keys.add(key)
+        seen_record_keys.add(key)
         row_errors = _validate_active_row(
             row_context, field, sub_field, expected_value, confidence, source
         )
@@ -276,7 +338,7 @@ def parse_golden_answer_markdown(markdown_text: str) -> tuple[GoldenAnswerFund, 
         current_records.append(
             GoldenAnswerRecord(
                 fund_code=current_code,
-                report_year=LEGACY_GOLDEN_ANSWER_REPORT_YEAR,
+                report_year=current_report_year,
                 field_name=field,
                 sub_field=sub_field,
                 expected_value=_unescape_markdown_cell(expected_value),
@@ -288,18 +350,29 @@ def parse_golden_answer_markdown(markdown_text: str) -> tuple[GoldenAnswerFund, 
     _append_current_fund(
         parsed_funds,
         current_code,
+        current_report_year,
         current_title,
         current_records,
         current_skipped,
         current_errors,
     )
+    if metadata_start_line is not None:
+        errors.append(f"line {metadata_start_line}: golden-answer-metadata 代码块未关闭")
     if not parsed_funds:
-        raise GoldenAnswerValidationError(("未找到任何 `## 000000 基金名称` 格式的基金标题",))
+        errors.append("未找到任何 `## 000000 基金名称` 格式的基金标题")
 
-    errors: list[str] = []
     funds: list[GoldenAnswerFund] = []
+    seen_fund_keys: set[tuple[str, int]] = set()
     for parsed_fund in parsed_funds:
         errors.extend(parsed_fund.errors)
+        fund_key = (parsed_fund.fund_code, parsed_fund.report_year)
+        if fund_key in seen_fund_keys:
+            errors.append(
+                f"fund {parsed_fund.fund_code} {parsed_fund.report_year}: "
+                "重复 golden answer 基金区块"
+            )
+        else:
+            seen_fund_keys.add(fund_key)
         if not parsed_fund.records:
             errors.append(f"fund {parsed_fund.fund_code}: 至少需要 1 条有效 golden answer 行")
         funds.append(
@@ -504,6 +577,7 @@ def _json_optional_report_year(
 def _append_current_fund(
     parsed_funds: list[_ParsedFund],
     fund_code: str | None,
+    report_year: int,
     title: str,
     records: list[GoldenAnswerRecord],
     skipped_fields: list[str],
@@ -514,6 +588,7 @@ def _append_current_fund(
     Args:
         parsed_funds: 结果列表。
         fund_code: 当前基金代码。
+        report_year: 当前基金年报年份。
         title: 当前基金标题。
         records: 有效记录列表。
         skipped_fields: 跳过字段列表。
@@ -531,13 +606,61 @@ def _append_current_fund(
     parsed_funds.append(
         _ParsedFund(
             fund_code=fund_code,
-            report_year=LEGACY_GOLDEN_ANSWER_REPORT_YEAR,
+            report_year=report_year,
             title=title,
             records=tuple(records),
             skipped_fields=tuple(skipped_fields),
             errors=tuple(errors),
         )
     )
+
+
+def _parse_golden_answer_metadata(
+    metadata_lines: tuple[str, ...],
+    context: str,
+) -> tuple[int | None, tuple[str, ...]]:
+    """解析基金级 golden answer Markdown metadata。
+
+    Args:
+        metadata_lines: fenced metadata 代码块内的原始行。
+        context: 错误上下文。
+
+    Returns:
+        解析出的年报年份；校验失败时返回 `None` 和错误列表。
+
+    Raises:
+        无显式抛出。
+    """
+
+    errors: list[str] = []
+    report_year: int | None = None
+    seen_keys: set[str] = set()
+    for offset, raw_line in enumerate(metadata_lines, start=1):
+        line = raw_line.strip()
+        if not line:
+            continue
+        line_context = f"{context} metadata line {offset}"
+        if ":" not in line:
+            errors.append(f"{line_context}: metadata 必须使用 key: value 格式")
+            continue
+        key, raw_value = (part.strip() for part in line.split(":", 1))
+        if not key:
+            errors.append(f"{line_context}: metadata key 不能为空")
+            continue
+        if key in seen_keys:
+            errors.append(f"{line_context}: metadata key {key} 重复")
+            continue
+        seen_keys.add(key)
+        if key != _METADATA_REPORT_YEAR_KEY:
+            errors.append(f"{line_context}: 未知 metadata key {key}")
+            continue
+        if not raw_value.isdigit():
+            errors.append(f"{line_context}: report_year 必须是整数")
+            continue
+        report_year = int(raw_value)
+    if report_year is None:
+        errors.append(f"{context}: golden-answer-metadata 必须包含 report_year")
+    return report_year, tuple(errors)
 
 
 def _parse_table_row(line: str) -> tuple[str, ...] | None:

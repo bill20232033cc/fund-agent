@@ -88,8 +88,20 @@ def test_score_snapshot_records_computes_coverage_traceability_status_and_priori
         _snapshot_record("profile", "basic_identity", value_present=True, anchor_present=False),
         _snapshot_record("profile", "product_profile", value_present=True, anchor_present=True),
         _snapshot_record("profile", "product_profile", value_present=False, anchor_present=True),
-        _snapshot_record("manager", "turnover_rate", value_present=True, anchor_present=False),
-        _snapshot_record("manager", "turnover_rate", value_present=False, anchor_present=False),
+        _snapshot_record(
+            "manager",
+            "turnover_rate",
+            report_year=2026,
+            value_present=True,
+            anchor_present=False,
+        ),
+        _snapshot_record(
+            "manager",
+            "turnover_rate",
+            report_year=2026,
+            value_present=False,
+            anchor_present=False,
+        ),
         _snapshot_record("nav", "nav_data", value_present=True, anchor_present=False),
         _snapshot_record("nav", "nav_data", value_present=False, anchor_present=False),
     ]
@@ -259,11 +271,176 @@ def test_derive_fund_quality_records_outputs_category_lens_and_missing_rate() ->
     assert row.item_rule_template_id == "fund-analysis-template-v1"
     assert len(row.preferred_lens_chapters) == 8
     assert row.preferred_lens_unresolved_chapter_ids == ()
-    assert row.missing_field_count == 2
-    assert row.total_field_count == 4
-    assert row.missing_field_rate == 0.5
+    assert row.missing_field_count == 1
+    assert row.total_field_count == 3
+    assert row.missing_field_rate == 1 / 3
     assert row.missing_p0_fields == ("benchmark",)
-    assert row.missing_p1_fields == ("turnover_rate",)
+    assert row.missing_p1_fields == ()
+
+
+def test_pre_2026_turnover_rate_is_excluded_from_p1_scoring_with_decision() -> None:
+    """验证 2026 前换手率缺失不进入 P1 分母并输出适用性决策。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 2026 前换手率仍触发 P1 失败时抛出。
+    """
+
+    records = [
+        _snapshot_record("profile", "basic_identity", value_present=True, anchor_present=True),
+        _snapshot_record("profile", "benchmark", value_present=False, anchor_present=False),
+        _snapshot_record("profile", "product_profile", value_present=False, anchor_present=False),
+        _snapshot_record("manager", "turnover_rate", value_present=False, anchor_present=False),
+    ]
+
+    field_rows = {row.field_name: row for row in score_snapshot_records(records)}
+    fund_row = score_fund_records(records)[0]
+    quality_row = derive_fund_quality_records(records)[0]
+    decisions = derive_field_applicability_decisions(records)
+    issues = derive_score_applicability_issues(records)
+
+    assert "turnover_rate" not in field_rows
+    assert field_rows["product_profile"].priority == "P1"
+    assert field_rows["product_profile"].status == STATUS_FAIL
+    assert fund_row.p0_failed_fields == ("benchmark",)
+    assert fund_row.p1_failed_fields == ("product_profile",)
+    assert quality_row.missing_p0_fields == ("benchmark",)
+    assert quality_row.missing_p1_fields == ("product_profile",)
+    assert len(decisions) == 1
+    assert decisions[0].field_name == "turnover_rate"
+    assert decisions[0].applicability_status == "not_applicable_excluded"
+    assert decisions[0].reason_code == "turnover_rate_pre_effective_report_year"
+    assert decisions[0].denominator_effect == "excluded_no_replacement_issue"
+    assert decisions[0].excluded_non_applicable_fields == ("turnover_rate",)
+    assert decisions[0].replacement_issue_ids == ()
+    assert issues == ()
+
+
+def test_2026_turnover_rate_missing_still_fails_p1_scoring() -> None:
+    """验证 2026 及以后换手率缺失仍按 P1 失败处理。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 2026 换手率缺失被错误排除时抛出。
+    """
+
+    records = [
+        _snapshot_record(
+            "profile",
+            "basic_identity",
+            report_year=2026,
+            value_present=True,
+            anchor_present=True,
+        ),
+        _snapshot_record(
+            "manager",
+            "turnover_rate",
+            report_year=2026,
+            value_present=False,
+            anchor_present=False,
+        ),
+    ]
+
+    field_rows = {row.field_name: row for row in score_snapshot_records(records)}
+    fund_row = score_fund_records(records)[0]
+    decisions = derive_field_applicability_decisions(records)
+
+    assert field_rows["turnover_rate"].priority == "P1"
+    assert field_rows["turnover_rate"].status == STATUS_FAIL
+    assert fund_row.p1_failed_fields == ("turnover_rate",)
+    assert decisions == ()
+
+
+def test_explicit_non_annual_turnover_rate_is_excluded_even_after_2026() -> None:
+    """验证显式非年报换手率记录不进入 P1 分母。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当非年报换手率记录被纳入评分时抛出。
+    """
+
+    records = [
+        _snapshot_record(
+            "profile",
+            "basic_identity",
+            report_year=2026,
+            value_present=True,
+            anchor_present=True,
+        ),
+        _snapshot_record(
+            "manager",
+            "turnover_rate",
+            report_year=2026,
+            value_present=False,
+            anchor_present=False,
+            extra_fields={"source_kind": "quarterly_report"},
+        ),
+    ]
+
+    field_rows = {row.field_name: row for row in score_snapshot_records(records)}
+    fund_row = score_fund_records(records)[0]
+    decisions = derive_field_applicability_decisions(records)
+
+    assert "turnover_rate" not in field_rows
+    assert fund_row.p1_failed_fields == ()
+    assert len(decisions) == 1
+    assert decisions[0].field_name == "turnover_rate"
+    assert decisions[0].reason_code == "turnover_rate_non_annual_report"
+
+
+def test_unknown_report_year_turnover_rate_fails_closed() -> None:
+    """验证年份非法的换手率记录不被静默排除。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当非法年份换手率记录被排除时抛出。
+    """
+
+    records = [
+        _snapshot_record(
+            "profile",
+            "basic_identity",
+            value_present=True,
+            anchor_present=True,
+            extra_fields={"report_year": "unknown"},
+        ),
+        _snapshot_record(
+            "manager",
+            "turnover_rate",
+            value_present=False,
+            anchor_present=False,
+            extra_fields={"report_year": "unknown"},
+        ),
+    ]
+
+    field_rows = {row.field_name: row for row in score_snapshot_records(records)}
+    fund_row = score_fund_records(records)[0]
+    decisions = derive_field_applicability_decisions(records)
+
+    assert field_rows["turnover_rate"].priority == "P1"
+    assert field_rows["turnover_rate"].status == STATUS_FAIL
+    assert fund_row.p1_failed_fields == ("turnover_rate",)
+    assert decisions == ()
 
 
 def test_index_quality_fields_are_p1_only_for_applicable_fund_types() -> None:
@@ -2583,6 +2760,7 @@ def _snapshot_record(
     classified_fund_type: str = "active_fund",
     comparable_values: dict[str, str] | None = None,
     include_source_provenance: bool = False,
+    extra_fields: dict[str, object] | None = None,
 ) -> dict[str, object]:
     """构造测试用 snapshot 记录。
 
@@ -2597,6 +2775,7 @@ def _snapshot_record(
         classified_fund_type: 系统识别基金类型。
         comparable_values: correctness 可比子字段；为空时模拟旧 snapshot。
         include_source_provenance: 是否追加 additive 公共来源 provenance 字段。
+        extra_fields: 测试专用额外行级字段。
 
     Returns:
         符合评分最小输入契约的字典。
@@ -2620,6 +2799,8 @@ def _snapshot_record(
         record["comparable_values"] = comparable_values
     if include_source_provenance:
         record.update(_PUBLIC_SOURCE_PROVENANCE_PAYLOAD)
+    if extra_fields is not None:
+        record.update(extra_fields)
     return record
 
 

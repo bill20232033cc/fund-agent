@@ -1372,10 +1372,10 @@ async def test_fund_analysis_service_explicit_gate_run_id_remains_authoritative(
 
 
 @pytest.mark.asyncio
-async def test_fund_analysis_service_pre_2026_missing_turnover_is_warn_not_standalone_block(
+async def test_fund_analysis_service_pre_2026_missing_turnover_is_not_quality_warn(
     tmp_path: Path,
 ) -> None:
-    """验证 2026 前缺失换手率是数据不足 warning，不是独立 hard blocker。
+    """验证 2026 前缺失换手率不再投影为 quality warning。
 
     Args:
         tmp_path: pytest 临时目录 fixture。
@@ -1384,7 +1384,7 @@ async def test_fund_analysis_service_pre_2026_missing_turnover_is_warn_not_stand
         无返回值。
 
     Raises:
-        AssertionError: 当缺失换手率单独阻断或触发 FQ4 时抛出。
+        AssertionError: 当 2026 前缺失换手率仍触发 FQ2/FQ2F/FQ4 时抛出。
     """
 
     bundle = _bundle()
@@ -1410,17 +1410,15 @@ async def test_fund_analysis_service_pre_2026_missing_turnover_is_warn_not_stand
     assert result.rabc_attribution.note is not None
     assert "缺少 §8 换手率" in result.rabc_attribution.note
     assert result.quality_gate_result is not None
-    assert result.quality_gate_result.status == "warn"
-    assert any(
+    assert not any(
         issue.rule_code == "FQ2"
-        and issue.severity == "warn"
         and issue.field_name == "turnover_rate"
         for issue in result.quality_gate_result.issues
     )
-    assert any(
+    assert not any(
         issue.rule_code == "FQ2F"
-        and issue.severity == "warn"
         and issue.priority == "P1"
+        and "turnover_rate" in issue.message
         for issue in result.quality_gate_result.issues
     )
     assert not any(issue.rule_code == "FQ4" for issue in result.quality_gate_result.issues)

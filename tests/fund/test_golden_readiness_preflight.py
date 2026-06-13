@@ -339,7 +339,7 @@ def test_preflight_preserves_110020_raw_disposition_and_blocks_not_promoted(
 
 
 def test_preflight_blocks_strict_golden_absence_and_fund_miss(tmp_path: Path) -> None:
-    """strict golden 缺失或 fund-level 未覆盖必须阻断。
+    """strict golden 缺失、fund-level 或 year-level 未覆盖必须阻断。
 
     Args:
         tmp_path: pytest 临时目录 fixture。
@@ -354,13 +354,26 @@ def test_preflight_blocks_strict_golden_absence_and_fund_miss(tmp_path: Path) ->
     absent = _run_single_artifact(tmp_path / "absent", fund_code="000001", golden_path=None)
     miss_golden = _write_golden(tmp_path / "golden.json", ("000002",))
     miss = _run_single_artifact(tmp_path / "miss", fund_code="000001", golden_path=miss_golden)
+    year_miss_golden = _write_golden(
+        tmp_path / "golden-year-miss.json", ("000001",), report_year=2024
+    )
+    year_miss = _run_single_artifact(
+        tmp_path / "year-miss",
+        fund_code="000001",
+        report_year=2025,
+        golden_path=year_miss_golden,
+    )
 
     assert "strict_golden_not_configured" in _all_blocker_codes(absent)
     assert "strict_golden_fund_not_covered" in _row_blocker_codes(miss.rows[0])
+    assert year_miss.rows[0].strict_golden_coverage == "year_not_covered"
+    assert "strict_golden_year_not_covered" in _row_blocker_codes(year_miss.rows[0])
 
 
-def test_preflight_reserves_strict_golden_year_and_partial_coverage_codes(tmp_path: Path) -> None:
-    """v1 不触发 strict_golden_year_not_covered / partial coverage reserved codes。
+def test_preflight_accepts_strict_golden_matching_year_and_reserves_partial_code(
+    tmp_path: Path,
+) -> None:
+    """strict golden 覆盖当前年份时通过 coverage，partial coverage code 保留。
 
     Args:
         tmp_path: pytest 临时目录 fixture。
@@ -369,11 +382,18 @@ def test_preflight_reserves_strict_golden_year_and_partial_coverage_codes(tmp_pa
         无返回值。
 
     Raises:
-        AssertionError: 当 reserved codes 被触发时抛出。
+        AssertionError: 当 coverage 状态或 reserved code 回归时抛出。
     """
 
-    result = _run_single_artifact(tmp_path, fund_code="000001")
+    golden = _write_golden(tmp_path / "golden.json", ("000001",), report_year=2025)
+    result = _run_single_artifact(
+        tmp_path,
+        fund_code="000001",
+        report_year=2025,
+        golden_path=golden,
+    )
 
+    assert result.rows[0].strict_golden_coverage == "covered"
     assert "strict_golden_year_not_covered" not in _all_blocker_codes(result)
     assert "strict_golden_partial_coverage" not in _all_blocker_codes(result)
 
@@ -489,6 +509,7 @@ def _run_single_artifact(
     tmp_path: Path,
     *,
     fund_code: str,
+    report_year: int = 2024,
     snapshot_extra: dict[str, object] | None = None,
     score_extra: dict[str, object] | None = None,
     quality_status: str = "pass",
@@ -499,6 +520,7 @@ def _run_single_artifact(
     Args:
         tmp_path: 临时目录。
         fund_code: 基金代码。
+        report_year: 年报年份。
         snapshot_extra: snapshot 额外字段。
         score_extra: score 额外字段。
         quality_status: quality gate 状态。
@@ -517,8 +539,10 @@ def _run_single_artifact(
         actual_golden_path = _write_golden(tmp_path / "golden.json", (fund_code,))
     else:
         actual_golden_path = golden_path
+    resolved_snapshot_extra = {"report_year": report_year}
+    resolved_snapshot_extra.update(snapshot_extra or {})
     snapshot = _write_snapshot(
-        tmp_path / "snapshot.jsonl", fund_code=fund_code, extra=snapshot_extra or {}
+        tmp_path / "snapshot.jsonl", fund_code=fund_code, extra=resolved_snapshot_extra
     )
     score = _write_score(tmp_path / "score.json", fund_code=fund_code, extra=score_extra or {})
     quality = _write_quality(tmp_path / "quality.json", fund_code=fund_code, status=quality_status)
@@ -529,7 +553,7 @@ def _run_single_artifact(
         fund_artifacts=(
             FundArtifactInput(
                 fund_code=fund_code,
-                report_year=2024,
+                report_year=report_year,
                 snapshot_path=snapshot,
                 score_path=score,
                 quality_gate_path=quality,
@@ -628,12 +652,13 @@ def _write_quality(path: Path, *, fund_code: str, status: str) -> Path:
     return _write_json(path, {"status": status, "issues": [], "rule_results": [], "fund_code": fund_code})
 
 
-def _write_golden(path: Path, fund_codes: tuple[str, ...]) -> Path:
+def _write_golden(path: Path, fund_codes: tuple[str, ...], *, report_year: int | None = None) -> Path:
     """写入最小 strict golden answer v1 JSON。
 
     Args:
         path: 输出路径。
         fund_codes: 覆盖基金代码。
+        report_year: 可选覆盖年份；为空时保留 legacy 缺失年份形态。
 
     Returns:
         输出路径。
@@ -642,17 +667,20 @@ def _write_golden(path: Path, fund_codes: tuple[str, ...]) -> Path:
         OSError: 写入失败时抛出。
     """
 
+    funds: list[dict[str, object]] = []
+    for fund_code in fund_codes:
+        fund: dict[str, object] = {
+            "fund_code": fund_code,
+            "records": [{"fund_code": fund_code, "field_name": "basic_identity"}],
+        }
+        if report_year is not None:
+            fund["report_year"] = report_year
+        funds.append(fund)
     return _write_json(
         path,
         {
             "schema_version": "fund-agent.golden-answer.v1",
-            "funds": [
-                {
-                    "fund_code": fund_code,
-                    "records": [{"fund_code": fund_code, "field_name": "basic_identity"}],
-                }
-                for fund_code in fund_codes
-            ],
+            "funds": funds,
         },
     )
 
