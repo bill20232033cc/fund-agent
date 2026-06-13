@@ -17,7 +17,14 @@ from fund_agent.agent import (
 )
 from fund_agent.fund.chapter_auditor import ChapterAuditLLMRequest, ChapterAuditLLMResponse
 from fund_agent.fund.chapter_facts import project_chapter_facts
-from fund_agent.fund.chapter_writer import ChapterLLMRequest, ChapterLLMResponse
+from fund_agent.fund.evidence_availability import EvidenceAvailability
+from fund_agent.fund.chapter_writer import (
+    ChapterLLMRequest,
+    ChapterLLMResponse,
+    build_chapter_writer_input,
+    write_chapter,
+)
+from fund_agent.fund.template.typed_contracts import load_typed_template_contract_manifest
 from tests.fund.test_chapter_facts import _bundle
 from tests.services.test_chapter_orchestrator import _valid_markdown_from_request
 
@@ -241,6 +248,74 @@ def test_chapter_3_writer_input_value_error_is_internal_code_bug_before_writer_t
     assert "Bearer" not in rendered
     assert "sk-secret" not in rendered
     assert "prompt raw" not in rendered
+
+
+def test_chapter_3_missing_typed_availability_blocks_before_provider(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """验证第 3 章 covered typed availability 缺项转为 fact_gap 且不调 provider。"""
+
+    def _empty_availability(_: object) -> EvidenceAvailability:
+        """返回同 identity 但缺 required_output requirement 的 availability。"""
+
+        return EvidenceAvailability(
+            schema_version="evidence_availability.v1",
+            source_schema_version="chapter_fact_projection.v1",
+            fund_code="110011",
+            report_year=2024,
+            requirements=(),
+        )
+
+    monkeypatch.setattr(runner_module, "derive_evidence_availability", _empty_availability)
+    writer = _FakeWriter()
+
+    run = run_agent_body_chapters(
+        _projection((3,)),
+        llm_clients=AgentLLMClients(writer=writer, auditor=_FakeAuditor()),
+        policy=AgentRunPolicy(
+            target_chapter_ids=(3,),
+            max_output_chars=12000,
+            typed_template_path="typed_template_contract",
+        ),
+    )
+
+    task = run.tasks[0]
+    assert writer.requests == []
+    assert run.status == "blocked"
+    assert task.chapter_id == 3
+    assert task.status == "blocked"
+    assert task.terminal_state == "blocked_fact_gap"
+    assert task.stop_reason == "missing_required_facts"
+    assert task.failure_category == "fact_gap"
+    assert len(task.attempts) == 1
+    writer_result = task.attempts[0].writer_result
+    assert writer_result is not None
+    assert writer_result.status == "blocked"
+    assert writer_result.prompt.required_output_evidence_plan
+    assert any(
+        plan.item_id == "ch3.required_output.item_03" and plan.action == "block"
+        for plan in writer_result.prompt.required_output_evidence_plan
+    )
+
+
+def test_chapter_3_missing_evidence_availability_envelope_remains_value_error(
+) -> None:
+    """验证第 3 章 typed availability 完全未提供时仍 fail-closed 为 ValueError。"""
+
+    writer = _FakeWriter()
+    manifest = load_typed_template_contract_manifest()
+    chapter3 = next(chapter for chapter in manifest.chapters if chapter.chapter_id == 3)
+    input_data = build_chapter_writer_input(
+        _projection((3,)),
+        chapter_id=3,
+        max_output_chars=12000,
+        typed_required_output_items=chapter3.required_output_items,
+        evidence_availability=None,
+    )
+
+    with pytest.raises(ValueError, match="EvidenceAvailability"):
+        write_chapter(input_data, llm_client=writer)
+    assert writer.requests == []
 
 
 def test_needs_more_facts_stops_without_source_probe_or_regenerate() -> None:

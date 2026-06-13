@@ -912,7 +912,7 @@ def _required_output_evidence_plan(input_data: ChapterWriterInput) -> tuple[Requ
         typed required output 缺证计划；未启用 typed 路径时为空。
 
     Raises:
-        ValueError: typed 条目启用但缺少 availability，或 typed 条目不属于当前章节时抛出。
+        ValueError: typed 条目启用但完全缺少 availability，或 typed 条目不属于当前章节时抛出。
     """
 
     typed_items = input_data.typed_required_output_items
@@ -952,7 +952,8 @@ def _required_output_plan_item(
     requirement = _availability_for_required_output(item, evidence_availability)
     status = requirement.status if requirement is not None else None
     missing = status in _MISSING_EVIDENCE_STATUSES
-    action = _required_output_action(item, status)
+    missing_availability = requirement is None and item.when_evidence_missing is not None
+    action = "block" if missing_availability else _required_output_action(item, status)
     return RequiredOutputEvidencePlan(
         item_id=item.item_id,
         text=item.text,
@@ -978,18 +979,16 @@ def _availability_for_required_output(
         evidence_availability: 同源证据可用性。
 
     Returns:
-        匹配的 availability；无缺证行为且未映射时返回 `None`。
+        匹配的 availability；availability 对象缺少当前 item mapping 时返回 `None`。
 
     Raises:
-        ValueError: item 需要缺证行为但 availability 中没有对应 requirement 时抛出。
+        无显式抛出。
     """
 
     try:
         return evidence_availability.require(cast(EvidenceRequirementId, item.item_id))
-    except ValueError as exc:
-        if item.when_evidence_missing is None:
-            return None
-        raise ValueError(f"typed required output 缺少 EvidenceAvailability requirement：{item.item_id}") from exc
+    except ValueError:
+        return None
 
 
 def _required_output_action(
