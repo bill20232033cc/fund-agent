@@ -2,139 +2,80 @@
 
 Date: 2026-06-14
 
-Role: AgentController
-
-Gate: `Provider/LLM Chapter 2 L1 Post-fix Bounded Live Re-evidence Gate`
-
-Verdict: `ACCEPT_LIVE_FAIL_CLOSED_CHAPTER2_L1_STILL_REPRODUCES_NOT_READY`
-
 ## Scope
 
-This judgment closes the post-fix bounded live re-evidence gate after no-live Chapter 2 L1 prompt-contract strengthening was accepted at checkpoint `ee65f69`.
+Gate: `Provider/LLM Chapter 2 L1 Post-fix Bounded Live Re-evidence Gate`.
 
-The gate ran one controlled live/provider sample for exact `004393 / 2025`.
+This judgment reviews one controlled post-fix live evidence artifact for exact `004393 / 2025`. It does not claim release-ready, MVP-ready or LLM-path-ready, and does not change source policy, provider defaults, repair budget, readiness/release/PR state or fallback policy.
 
-This judgment does not accept release readiness, MVP readiness, LLM path readiness, general live acceptance, provider default changes, repair budget changes, source policy changes, fallback, PR, push or merge state.
-
-Release/readiness remains `NOT_READY`.
-
-EID annual-report access remains single-source/no-fallback.
+Release/readiness remains `NOT_READY`. Annual-report access remains EID single-source/no-fallback.
 
 ## Evidence Reviewed
 
-| Evidence | Use |
-|---|---|
-| `AGENTS.md` | Execution truth, source policy and fail-closed constraints |
-| `docs/design.md` | Route C and EID single-source design truth |
-| `docs/current-startup-packet.md` | Current gate and accepted checkpoints |
-| `docs/implementation-control.md` | Control truth and live gate scope |
-| `docs/reviews/provider-llm-chapter2-l1-narrow-no-live-fix-implementation-controller-judgment-20260614.md` | Prior accepted implementation and live re-evidence routing |
-| `docs/reviews/provider-llm-chapter2-l1-post-fix-bounded-live-re-evidence-20260614.md` | Live evidence target |
-| `docs/reviews/provider-llm-chapter2-l1-post-fix-bounded-live-re-evidence-review-ds-20260614.md` | DS evidence review |
-| `docs/reviews/provider-llm-chapter2-l1-post-fix-bounded-live-re-evidence-review-mimo-20260614.md` | MiMo evidence review |
-| Safe metadata JSON for run `004393-2025-20260613T221455Z-host_run_9dbb1b5be0e54cd` | Direct evidence cross-check |
+- Live evidence: `docs/reviews/provider-llm-chapter2-l1-post-fix-bounded-live-re-evidence-20260614.md`
+- DS review: `docs/reviews/provider-llm-chapter2-l1-post-fix-bounded-live-re-evidence-review-ds-20260614.md`
+- MiMo review: `docs/reviews/provider-llm-chapter2-l1-post-fix-bounded-live-re-evidence-review-mimo-20260614.md`
+- Safe runtime metadata from:
+  - `reports/llm-runs/004393-2025-20260613T201900Z-host_run_4a531cbe94604e4/manifest.json`
+  - `reports/llm-runs/004393-2025-20260613T201900Z-host_run_4a531cbe94604e4/summary.json`
+  - `reports/llm-runs/004393-2025-20260613T201900Z-host_run_4a531cbe94604e4/chapters/chapter-02.json`
+  - `reports/llm-runs/004393-2025-20260613T201900Z-host_run_4a531cbe94604e4/chapters/chapter-03.json`
 
-No writer/auditor/repair Markdown bodies, raw prompts, provider payloads, source/PDF/cache body or final report body were read for this judgment.
+Forbidden body/payload reads were not used for this judgment.
 
-## Live Command Result
+## Accepted Current Facts
 
-Command:
+- The bounded live command exited `1`.
+- Runtime artifact path: `reports/llm-runs/004393-2025-20260613T201900Z-host_run_4a531cbe94604e4/manifest.json`.
+- `orchestration_status=partial` and `final_assembly_status=incomplete`.
+- Chapter 2 is now accepted in this live run:
+  - `status=accepted`
+  - `stop_reason=none`
+  - `failure_category=null`
+  - `failure_subcategory=l1_numerical_closure`
+  - `attempt_count=2` in summary matrix
+  - `issues_count=0` in chapter safe metadata
+- The first failed chapter is now Chapter 3:
+  - `chapter_id=3`
+  - `status=blocked`
+  - `stop_reason=missing_required_facts`
+  - `failure_category=fact_gap`
+  - issue string `3:missing_required_facts:writer:required_output_block:ch3.required_output.item_01`
+- Provider/LLM full completion is not proven.
+- Chapter 2 content correctness is not claimed because this gate read safe metadata only.
 
-```bash
-FUND_AGENT_LLM_TIMEOUT_SECONDS=60 FUND_AGENT_LLM_WRITER_TIMEOUT_SECONDS=60 FUND_AGENT_LLM_AUDITOR_TIMEOUT_SECONDS=60 FUND_AGENT_LLM_REPAIR_TIMEOUT_SECONDS=60 FUND_AGENT_LLM_TIMEOUT_MAX_ATTEMPTS=1 FUND_AGENT_LLM_TIMEOUT_BACKOFF_SECONDS=0 FUND_AGENT_LLM_MAX_OUTPUT_CHARS=12000 uv run fund-analysis analyze 004393 --report-year 2025 --use-llm --dev-override --quality-gate-policy warn --valuation-state unavailable --no-llm-progress
-```
+## Review Finding Disposition
 
-Result:
+| Finding | Source | Disposition | Controller rationale |
+| --- | --- | --- | --- |
+| Live command, exit code and runtime artifact were accurately reported. | DS, MiMo | ACCEPT | Exit code is a command observation; safe metadata consistently records incomplete final assembly. |
+| Chapter 2 accepted in this run. | DS, MiMo | ACCEPT | Summary and chapter safe metadata both support accepted status and absence of current blocking issues. |
+| Evidence does not claim Chapter 2 content correctness or readiness. | DS, MiMo | ACCEPT | Evidence explicitly marks content correctness as not claimed and readiness as `NOT_READY`. |
+| First failed chapter is Chapter 3 fact-gap/missing-required-facts. | DS, MiMo | ACCEPT | Summary `first_failed` and Chapter 3 safe metadata match. |
+| EID single-source/no-fallback and `NOT_READY` preserved. | DS, MiMo | ACCEPT | No source policy or readiness/release state changes were made or claimed. |
+| Forbidden body/provider-payload reads avoided. | DS, MiMo | ACCEPT | Evidence and reviews read only manifest/summary/chapter JSON safe metadata. |
+| Evidence description conflated `programmatic:L1` issue prefix with diagnostic phase. | MiMo F1 | ACCEPT_WITH_AMENDMENT_APPLIED | Evidence was amended to state `phase=programmatic_audit` with `issue_id_prefix_counts["programmatic:L1"]=1`. |
+| Provider attempt field wording could be read broadly. | MiMo F2 | ACCEPT_WITH_AMENDMENT_APPLIED | Evidence was amended to specify provider attempt index/max-attempt fields. |
+| Next gate recommendation is reasonable. | DS, MiMo | ACCEPT | Chapter 3 item 01 fact-gap is now the direct next blocker and the recommendation forbids fallback/readiness overreach. |
 
-- Exit code: `1`.
-- Output: empty stdout.
-- Diagnostic artifact root: `reports/llm-runs/004393-2025-20260613T221455Z-host_run_9dbb1b5be0e54cd/`.
-- Host run id: `host_run_9dbb1b5be0e54cdb`.
-- Final assembly: `incomplete`.
-- Orchestration: `partial`.
+## Accepted / Rejected / Residual Table
 
-## Accepted Live Metadata Facts
-
-Chapter matrix:
-
-| Chapter | Status | Stop reason | Category | Subcategory | Attempts |
-|---|---|---|---|---|---|
-| 1 | `accepted` | `none` | null | null | 1 |
-| 2 | `failed` | `repair_budget_exhausted` | `prompt_contract` | `l1_numerical_closure` | 2 |
-| 3 | `blocked` | `missing_required_output_marker` | `prompt_contract` | `missing_required_marker` | 1 |
-| 4 | `accepted` | `none` | null | null | 1 |
-| 5 | `accepted` | `none` | null | null | 1 |
-| 6 | `accepted` | `none` | null | null | 1 |
-
-First failed:
-
-- chapter: `2`
-- status: `failed`
-- stop reason: `repair_budget_exhausted`
-- category: `prompt_contract`
-- subcategory: `l1_numerical_closure`
-- runtime operation: `auditor`
-- provider attempt count: `0`
-
-Chapter 2 attempt-level diagnostics:
-
-| Attempt | Phase | Issue prefix | L1 count | Required output missing | Response chars |
-|---|---|---|---|---|---|
-| 0 | `programmatic_audit` | `programmatic:L1=1` | 1 | 0 | 22 |
-| 1 | `programmatic_audit` | `programmatic:L1=2` | 2 | 0 | 22 |
-
-## Review Disposition
-
-| Review | Verdict | Controller disposition |
-|---|---|---|
-| DS | `PASS` | Accepted. DS verified all material metadata claims against the `T221455Z` run and found no substantive issue. |
-| MiMo | `PASS` | Accepted. MiMo verified the same current run facts and accepted the no-code disposition routing. |
-
-The first attempted review pass had stale-run contamination from old `T201900Z` evidence and was not accepted. The final DS/MiMo review artifacts now point to the correct `T221455Z` run and are accepted.
-
-## Controller Judgment
-
-The bounded live re-evidence is valid fail-closed evidence.
-
-The no-live Chapter 2 L1 prompt-contract strengthening accepted at `ee65f69` did not resolve the exact `004393 / 2025` live sample. Chapter 2 remains first failed with `repair_budget_exhausted` / `prompt_contract` / `l1_numerical_closure`, and the repair attempt worsened L1 count from 1 to 2.
-
-Accepted classification:
-
-`CHAPTER2_L1_LIVE_PERSISTENT_FAILURE_AFTER_PROMPT_STRENGTHENING`
-
-This is not an implementation acceptance failure for the no-live prompt contract. It is live evidence that the product path needs a no-code disposition/root-cause decision before any further code fix.
-
-## Residuals
-
-| Residual | Status | Owner / next handling |
-|---|---|---|
-| Chapter 2 L1 still fails live after prompt strengthening | Blocking for LLM completion | Next no-code disposition/root-cause planning gate |
-| Chapter 3 `missing_required_output_marker` in this run | Residual | Separate after Chapter 2 route is chosen |
-| Chapter 5 prior forbidden-phrase blocker | Not reproduced in this sample | Keep residual until explicitly dispositioned |
-| Host elapsed `234223 ms` | Non-material | Observed from stderr, not safe JSON; does not affect verdict |
-| Live content quality | Unproven | Deferred |
-| Release/readiness | `NOT_READY` | Preserved |
+| Item | Decision | Basis | Next handling |
+| --- | --- | --- | --- |
+| Chapter 2 L1 live re-evidence | ACCEPT | Chapter 2 accepted in post-fix live metadata; no terminal Chapter 2 L1 blocker remains in this run | Treat no-live fix as live-confirmed for this single sample |
+| Chapter 2 content correctness | NOT_CLAIMED | No body/report content read | Requires separate content-quality gate if needed |
+| Chapter 3 item 01 fact-gap | ACCEPT_CURRENT_BLOCKER | First failed chapter is Chapter 3 `missing_required_facts` / `fact_gap` | Proceed to Chapter 3 item 01 fact-gap disposition gate |
+| Provider/LLM full completion | REJECT_AS_NOT_PROVEN | Exit `1`, partial orchestration, incomplete final assembly | Remains residual |
+| Release/readiness | ACCEPTED_RESIDUAL_NOT_READY | Single live evidence is not readiness proof | Remains `NOT_READY` |
 
 ## Next Gate Recommendation
 
-`Provider/LLM Chapter 2 L1 Live-persistent Failure Disposition Gate`
+Proceed to:
 
-Required characteristics:
+`Provider/LLM Chapter 3 Item 01 Fact-gap Disposition Gate`
 
-- Planning/disposition only.
-- No source/test/runtime implementation.
-- No additional live command by default.
-- Reconcile no-live implementation acceptance with live persistent failure.
-- Decide whether next action is additional no-live diagnostic evidence, deterministic gap rendering, repair budget calibration planning, or a narrower code fix plan.
-- Preserve EID single-source/no-fallback and `NOT_READY`.
-
-Deferred entries:
-
-- Chapter 3 missing required marker disposition.
-- Chapter 5 forbidden phrase residual disposition if it reappears.
-- Repair budget calibration.
-- Release-readiness rollup.
+The next gate should decide whether the Chapter 3 item 01 fact-gap is an accepted residual, needs no-live data/projection diagnostics, or requires a narrow template/required-output policy adjustment. It must not reintroduce provider/source fallback, change EID single-source policy, or claim readiness.
 
 ## Final Verdict
 
-`VERDICT: ACCEPT_LIVE_FAIL_CLOSED_CHAPTER2_L1_STILL_REPRODUCES_NOT_READY`
+VERDICT: ACCEPT_LIVE_CHAPTER2_L1_FIX_CONFIRMED_CHAPTER3_FACT_GAP_NOT_READY
