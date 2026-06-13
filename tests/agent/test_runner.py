@@ -194,6 +194,55 @@ def test_chapter_3_value_error_is_internal_code_bug_without_provider_runtime() -
     assert "prompt raw" not in rendered
 
 
+def test_chapter_3_writer_input_value_error_is_internal_code_bug_before_writer_tool(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """验证第 3 章 writer input 构造异常被归类为内部 code_bug。"""
+
+    def _raise_typed_required_output_items(
+        chapter_id: int,
+        *,
+        policy: object,
+    ) -> tuple[object, ...]:
+        """在第 3 章 writer request 构造前注入 ValueError。"""
+
+        if chapter_id == 3:
+            raise ValueError("Authorization Bearer sk-secret prompt raw")
+        return ()
+
+    monkeypatch.setattr(
+        runner_module,
+        "_typed_required_output_items",
+        _raise_typed_required_output_items,
+    )
+    writer = _FakeWriter()
+
+    run = run_agent_body_chapters(
+        _projection((3,)),
+        llm_clients=AgentLLMClients(writer=writer, auditor=_FakeAuditor()),
+        policy=AgentRunPolicy(
+            target_chapter_ids=(3,),
+            max_output_chars=12000,
+            typed_template_path="typed_template_contract",
+        ),
+    )
+
+    task = run.tasks[0]
+    assert writer.requests == []
+    assert run.status in {"blocked", "failed"}
+    assert task.chapter_id == 3
+    assert task.status == "failed"
+    assert task.terminal_state == "blocked_internal_code_bug"
+    assert task.stop_reason == "llm_exception"
+    assert task.failure_category == "code_bug"
+    assert task.attempts == ()
+    rendered = repr(task.blocked_reasons)
+    assert "Authorization" not in rendered
+    assert "Bearer" not in rendered
+    assert "sk-secret" not in rendered
+    assert "prompt raw" not in rendered
+
+
 def test_needs_more_facts_stops_without_source_probe_or_regenerate() -> None:
     """验证 needs_more_facts 终止且不重写、不 source probe。"""
 

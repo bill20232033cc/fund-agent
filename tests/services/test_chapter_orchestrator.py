@@ -1646,6 +1646,68 @@ def test_chapter_3_pre_provider_value_error_serializes_safe_runtime_cap() -> Non
     assert "prompt raw" not in text
 
 
+def test_chapter_3_writer_input_value_error_serializes_safe_runtime_cap_before_writer_tool(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """验证第 3 章 writer input 构造异常投影为安全运行时诊断。"""
+
+    def _raise_typed_required_output_items(
+        chapter_id: int,
+        *,
+        policy: object,
+    ) -> tuple[object, ...]:
+        """在第 3 章 writer request 构造前注入 ValueError。"""
+
+        if chapter_id == 3:
+            raise ValueError("Authorization Bearer sk-secret prompt raw")
+        return ()
+
+    monkeypatch.setattr(
+        "fund_agent.agent.runner._typed_required_output_items",
+        _raise_typed_required_output_items,
+    )
+    writer = _FakeChapterLLMClient()
+
+    result = _orchestrate(
+        writer=writer,
+        auditor=_FakeAuditLLMClient(),
+        policy=ChapterOrchestrationPolicy(
+            target_chapter_ids=(3,),
+            max_output_chars=12000,
+            typed_template_path="typed_template_contract",
+        ),
+    )
+
+    run = result.chapter_results[0]
+    payload = serialize_chapter_runtime_diagnostics(result)
+    first_failed = payload["first_failed"]  # type: ignore[index]
+    row = payload["chapter_runtime_matrix"][0]  # type: ignore[index]
+    diagnostics = row["runtime_diagnostics"]  # type: ignore[index]
+
+    assert writer.requests == []
+    assert result.status == "blocked"
+    assert run.chapter_id == 3
+    assert run.status == "failed"
+    assert run.stop_reason == "llm_exception"
+    assert run.failure_category == "code_bug"
+    assert first_failed["chapter_id"] == 3  # type: ignore[index]
+    assert first_failed["stop_reason"] == "llm_exception"  # type: ignore[index]
+    assert first_failed["category"] == "code_bug"  # type: ignore[index]
+    assert first_failed["provider_attempt_count"] == 0  # type: ignore[index]
+    assert first_failed["provider_runtime_categories"] == ()  # type: ignore[index]
+    assert first_failed["max_output_chars"] == 12000  # type: ignore[index]
+    assert first_failed["terminal_runtime_diagnostic_present"] is True  # type: ignore[index]
+    assert first_failed["diagnostic_consistency_status"] == "consistent"  # type: ignore[index]
+    assert diagnostics[0]["error_type"] == "ValueError"  # type: ignore[index]
+    assert diagnostics[0]["max_output_chars"] == 12000  # type: ignore[index]
+    assert diagnostics[0]["provider_runtime_category"] is None  # type: ignore[index]
+    text = str(payload)
+    assert "Authorization" not in text
+    assert "Bearer" not in text
+    assert "sk-secret" not in text
+    assert "prompt raw" not in text
+
+
 def test_unknown_fund_type_returns_global_blocked_without_writer_calls() -> None:
     """验证基金类型 unknown 时全局阻断且不调用 writer。
 

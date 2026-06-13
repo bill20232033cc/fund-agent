@@ -304,14 +304,24 @@ def _run_single_chapter(
 
     title = _chapter_title(projection, chapter_id)
     attempts: list[ChapterAttempt] = []
-    writer_input = _writer_input(
-        projection,
-        chapter_id=chapter_id,
-        policy=policy,
-        evidence_availability=evidence_availability,
-        repair_context=None,
-    )
     attempt_index = 0
+    try:
+        writer_input = _writer_input(
+            projection,
+            chapter_id=chapter_id,
+            policy=policy,
+            evidence_availability=evidence_availability,
+            repair_context=None,
+        )
+    except Exception as exc:
+        return _exception_task(
+            title,
+            chapter_id=chapter_id,
+            attempt_index=attempt_index,
+            traces=(),
+            exception=exc,
+            previous_attempts=tuple(attempts),
+        )
     while True:
         interruption = _check_interruption(
             interruption_checker,
@@ -926,7 +936,7 @@ def _exception_task(
     category = _failure_category_from_exception(exception)
     current_attempts = (
         previous_attempts
-        if len(traces) == 1 and traces[0].request.tool_name == "fund.write_chapter"
+        if len(traces) == 0 or (len(traces) == 1 and traces[0].request.tool_name == "fund.write_chapter")
         else (
             *previous_attempts,
             ChapterAttempt(
