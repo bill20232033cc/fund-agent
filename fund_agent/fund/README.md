@@ -293,7 +293,7 @@ template truth-source replacement、typed projection 和 `EvidenceAvailability` 
 - 只消费显式传入的 `source_csv`、snapshot JSONL、score JSON、quality gate JSON、strict `golden-answer.json`、fixture promotion state manifest 和 accepted coverage disposition manifest
 - 没有 tracked coverage disposition manifest 时使用代码内 static current accepted disposition manifest，并在输出 JSON 原样写入 `schema_version`、`accepted_as_of`、`source_artifacts`、`entries` 和 lifecycle semantics
 - strict golden answer v1 做 fund/year coverage 检查；同一基金已有 golden 但当前 `report_year` 未覆盖时输出 `strict_golden_year_not_covered` blocker；`strict_golden_partial_coverage` 仍保留为未来 schema/gate，不在当前 preflight 触发
-- fixture promotion state manifest 缺省时输出 `fixture_promotion_absent` blocker，而不是 IO failure；eligible fallback 只解除 source provenance blocker，不证明 ready
+- fixture promotion state manifest 缺省时输出 `fixture_promotion_absent` blocker，而不是 IO failure；year-aware manifest 使用 `(fund_code, report_year)` 作为 promotion proof 身份，legacy fund-code-only manifest 只作为诊断输入并输出 `fixture_promotion_legacy_fund_only` blocker，不会被当成特定年份 promotion proof；eligible fallback 只解除 source provenance blocker，不证明 ready
 - 006597 当前 bond `bond_risk_evidence_missing` 以 `blocker_resolved` / `original_blocker_code=bond_risk_evidence_missing` 输出为 resolved item，不列为 blocker
 - 输出 `golden_readiness_preflight.json` 与 `.md`，只表达 readiness/blocker/owner/next gate，不修改 score policy、quality gate severity、golden answer、golden fixture 或 promotion state
 

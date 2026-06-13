@@ -35,6 +35,7 @@ PreflightDisposition = Literal[
 INPUT_SCHEMA_VERSION = "fund-agent.golden-readiness-preflight.input.v1"
 OUTPUT_SCHEMA_VERSION = "fund-agent.golden-readiness-preflight.v1"
 STATIC_DISPOSITION_SCHEMA_VERSION = "fund-agent.coverage-disposition.static-current.v1"
+FIXTURE_PROMOTION_STATE_SCHEMA_VERSION = "fund-agent.fixture-promotion-state.year-aware.v1"
 STATIC_DISPOSITION_ACCEPTED_AS_OF = "2026-05-29"
 ELIGIBLE_FALLBACK_FAILURE_CATEGORIES = frozenset({"not_found", "unavailable"})
 INELIGIBLE_FALLBACK_FAILURE_CATEGORIES = frozenset(
@@ -55,6 +56,19 @@ class StrictGoldenCoverage:
 
     fund_codes: frozenset[str]
     fund_years: frozenset[tuple[str, int]]
+
+
+@dataclass(frozen=True, slots=True)
+class FixturePromotionStates:
+    """fixture promotion state 的显式身份索引。
+
+    Attributes:
+        fund_year_states: 按 `(fund_code, report_year)` 记录的 year-aware 状态。
+        legacy_fund_states: 按 fund_code 记录的旧 fund-code-only 诊断状态。
+    """
+
+    fund_year_states: Mapping[tuple[str, int], PromotionState]
+    legacy_fund_states: Mapping[str, PromotionState]
 
 
 @dataclass(frozen=True, slots=True)
@@ -1219,14 +1233,14 @@ def _load_strict_golden_coverage(path: Path | None) -> StrictGoldenCoverage | No
     )
 
 
-def _load_fixture_promotion_states(path: Path | None) -> dict[str, PromotionState] | None:
+def _load_fixture_promotion_states(path: Path | None) -> FixturePromotionStates | None:
     """读取 fixture promotion state manifest。
 
     Args:
         path: fixture promotion state JSON 路径。
 
     Returns:
-        fund_code 到 promotion state 的映射；未提供时返回 None。
+        year-aware 和 legacy promotion state 索引；未提供时返回 None。
 
     Raises:
         ValueError: JSON 结构非法时抛出。
@@ -1235,6 +1249,9 @@ def _load_fixture_promotion_states(path: Path | None) -> dict[str, PromotionStat
     if path is None or not path.exists():
         return None
     payload = _load_json_object(path)
+    schema_version = payload.get("schema_version")
+    if schema_version == FIXTURE_PROMOTION_STATE_SCHEMA_VERSION:
+        return _load_year_aware_fixture_promotion_states(payload)
     entries = payload.get("entries")
     if isinstance(entries, list):
         states: dict[str, PromotionState] = {}
@@ -1250,13 +1267,91 @@ def _load_fixture_promotion_states(path: Path | None) -> dict[str, PromotionStat
             }:
                 raise ValueError("fixture promotion entry fund_code/promotion_state 非法")
             states[fund_code] = cast(PromotionState, promotion_state)
-        return states
+        return FixturePromotionStates(fund_year_states={}, legacy_fund_states=states)
     if all(
         isinstance(key, str) and value in {"not_promoted", "promoted_fixture", "unknown"}
         for key, value in payload.items()
     ):
-        return {key: cast(PromotionState, value) for key, value in payload.items()}
+        return FixturePromotionStates(
+            fund_year_states={},
+            legacy_fund_states={
+                key: cast(PromotionState, value) for key, value in payload.items()
+            },
+        )
     raise ValueError("fixture promotion state manifest 必须包含 entries 或 fund_code->state 映射")
+
+
+def _load_year_aware_fixture_promotion_states(
+    payload: Mapping[str, object],
+) -> FixturePromotionStates:
+    """读取 year-aware fixture promotion state manifest。
+
+    Args:
+        payload: manifest JSON object。
+
+    Returns:
+        显式 `(fund_code, report_year)` promotion state 索引。
+
+    Raises:
+        ValueError: schema、字段或重复身份非法时抛出。
+    """
+
+    _reject_unknown_keys(
+        payload,
+        {"schema_version", "accepted_as_of", "source_artifacts", "entries"},
+        "fixture promotion state manifest",
+    )
+    accepted_as_of = payload.get("accepted_as_of")
+    source_artifacts = payload.get("source_artifacts")
+    entries = payload.get("entries")
+    if not isinstance(accepted_as_of, str):
+        raise ValueError("fixture promotion state manifest accepted_as_of 必须是字符串")
+    if not isinstance(source_artifacts, list) or not all(
+        isinstance(value, str) for value in source_artifacts
+    ):
+        raise ValueError("fixture promotion state manifest source_artifacts 必须是字符串数组")
+    if not isinstance(entries, list):
+        raise ValueError("fixture promotion state manifest entries 必须是数组")
+
+    states: dict[tuple[str, int], PromotionState] = {}
+    for entry in entries:
+        if not isinstance(entry, dict):
+            raise ValueError("fixture promotion entries 每项必须是 object")
+        _reject_unknown_keys(
+            entry,
+            {
+                "fund_code",
+                "report_year",
+                "promotion_state",
+                "promotion_identity",
+                "evidence_artifacts",
+            },
+            "fixture promotion entry",
+        )
+        fund_code = entry.get("fund_code")
+        report_year = entry.get("report_year")
+        promotion_state = entry.get("promotion_state")
+        promotion_identity = entry.get("promotion_identity")
+        evidence_artifacts = entry.get("evidence_artifacts")
+        if not isinstance(fund_code, str):
+            raise ValueError("fixture promotion entry fund_code 必须是字符串")
+        if not isinstance(report_year, int):
+            raise ValueError("fixture promotion entry report_year 必须是整数")
+        if promotion_state not in {"not_promoted", "promoted_fixture", "unknown"}:
+            raise ValueError("fixture promotion entry promotion_state 非法")
+        if promotion_identity != "fund_year":
+            raise ValueError("fixture promotion entry promotion_identity 必须是 fund_year")
+        if not isinstance(evidence_artifacts, list) or not all(
+            isinstance(value, str) for value in evidence_artifacts
+        ):
+            raise ValueError("fixture promotion entry evidence_artifacts 必须是字符串数组")
+        key = (fund_code, report_year)
+        if key in states:
+            raise ValueError(
+                f"fixture promotion entry duplicate identity: {fund_code}/{report_year}"
+            )
+        states[key] = cast(PromotionState, promotion_state)
+    return FixturePromotionStates(fund_year_states=states, legacy_fund_states={})
 
 
 def _build_readiness_row(
@@ -1266,7 +1361,7 @@ def _build_readiness_row(
     golden_answer_path: Path | None,
     golden_coverage: StrictGoldenCoverage | None,
     fixture_promotion_state_path: Path | None,
-    fixture_states: dict[str, PromotionState] | None,
+    fixture_states: FixturePromotionStates | None,
 ) -> FundReadinessRow:
     """构造单基金或 slot readiness 行。
 
@@ -1814,14 +1909,14 @@ def _derive_fixture_promotion_state(
     *,
     artifact: FundArtifactInput,
     fixture_promotion_state_path: Path | None,
-    fixture_states: dict[str, PromotionState] | None,
+    fixture_states: FixturePromotionStates | None,
 ) -> _PromotionStateSummary:
     """派生 fixture promotion 状态。
 
     Args:
         artifact: 单基金 artifact 输入。
         fixture_promotion_state_path: fixture promotion state JSON 路径。
-        fixture_states: fixture promotion 状态映射。
+        fixture_states: fixture promotion 状态索引。
 
     Returns:
         promotion state summary。
@@ -1848,8 +1943,26 @@ def _derive_fixture_promotion_state(
                 ),
             ),
         )
-    promotion_state = fixture_states.get(artifact.fund_code)
-    if promotion_state is None or promotion_state == "unknown":
+    promotion_state = fixture_states.fund_year_states.get((artifact.fund_code, artifact.report_year))
+    if promotion_state == "promoted_fixture":
+        return _PromotionStateSummary("promoted_fixture", "promoted_fixture")
+    if promotion_state == "not_promoted":
+        return _PromotionStateSummary(
+            "not_promoted",
+            "not_promoted",
+            blockers=(
+                _blocker(
+                    "fixture_promotion_absent",
+                    "fund",
+                    artifact.fund_code,
+                    f"{artifact.fund_code} 尚未 accepted fixture promotion。",
+                    artifact.coverage_owner,
+                    artifact.next_gate,
+                    artifact.evidence_artifacts,
+                ),
+            ),
+        )
+    if promotion_state == "unknown":
         return _PromotionStateSummary(
             "unknown",
             "unknown",
@@ -1865,23 +1978,39 @@ def _derive_fixture_promotion_state(
                 ),
             ),
         )
-    if promotion_state != "promoted_fixture":
+    legacy_state = fixture_states.legacy_fund_states.get(artifact.fund_code)
+    if legacy_state is not None:
         return _PromotionStateSummary(
-            promotion_state,
-            promotion_state,
+            "legacy_fund_only",
+            "unknown",
             blockers=(
                 _blocker(
-                    "fixture_promotion_absent",
+                    "fixture_promotion_legacy_fund_only",
                     "fund",
                     artifact.fund_code,
-                    f"{artifact.fund_code} 尚未 accepted fixture promotion。",
+                    f"{artifact.fund_code} fixture promotion state 是 fund-code-only，"
+                    f"不能证明 {artifact.fund_code} / {artifact.report_year} promotion。",
                     artifact.coverage_owner,
                     artifact.next_gate,
                     artifact.evidence_artifacts,
                 ),
             ),
         )
-    return _PromotionStateSummary("promoted_fixture", "promoted_fixture")
+    return _PromotionStateSummary(
+        "unknown",
+        "unknown",
+        blockers=(
+            _blocker(
+                "fixture_promotion_unknown",
+                "fund",
+                artifact.fund_code,
+                f"{artifact.fund_code} fixture promotion state 缺失或 unknown。",
+                artifact.coverage_owner,
+                artifact.next_gate,
+                artifact.evidence_artifacts,
+            ),
+        ),
+    )
 
 
 def _derive_coverage_disposition_blockers(
