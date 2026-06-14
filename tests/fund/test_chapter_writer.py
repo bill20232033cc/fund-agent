@@ -1293,6 +1293,86 @@ def test_repair_context_is_rendered_into_writer_prompt_without_extra_payload() -
     assert "extra_payload" not in ChapterLLMRequest.__dataclass_fields__
 
 
+def test_ch5_forbidden_phrase_repair_guidance_renders_on_repair_attempt() -> None:
+    """验证第 5 章 repair attempt 渲染 forbidden phrase 局部清单，见模板第 5 章当前阶段。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 prompt 未渲染第 5 章 forbidden phrase repair 清单时抛出。
+    """
+
+    repair_context = ChapterRepairContext(
+        attempt_index=1,
+        previous_issue_ids=("llm:parse_failure",),
+        previous_messages=("auditor 行协议解析失败。",),
+        required_corrections=("修复 auditor line protocol 输出。",),
+    )
+    input_data = build_chapter_writer_input(
+        project_chapter_facts(_bundle(), chapter_ids=(5,)),
+        chapter_id=5,
+        repair_context=repair_context,
+    )
+
+    prompt = build_chapter_prompt(input_data)
+
+    assert "第5章 forbidden phrase repair 必须改写规则" in prompt.user_prompt
+    assert "交易动作建议" in prompt.user_prompt
+    assert "仓位动作" in prompt.user_prompt
+    assert "收益预测" in prompt.user_prompt
+    assert "基金经理动机推断" in prompt.user_prompt
+    assert "值得持有 / 需要关注 / 建议替换" in prompt.user_prompt
+    assert "下一步最小验证问题" in prompt.user_prompt
+    assert "extra_payload" not in ChapterLLMRequest.__dataclass_fields__
+
+
+def test_ch5_forbidden_phrase_repair_guidance_absent_outside_ch5_repair() -> None:
+    """验证第 5 章 forbidden phrase repair 清单不泄漏到初始 attempt 或其他章节。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当第 5 章 repair 清单在非目标场景泄漏时抛出。
+    """
+
+    repair_context = ChapterRepairContext(
+        attempt_index=1,
+        previous_issue_ids=("llm:parse_failure",),
+        previous_messages=("auditor 行协议解析失败。",),
+        required_corrections=("修复 auditor line protocol 输出。",),
+    )
+
+    initial_ch5 = build_chapter_prompt(
+        build_chapter_writer_input(project_chapter_facts(_bundle(), chapter_ids=(5,)), chapter_id=5)
+    )
+    ch1_repair = build_chapter_prompt(
+        build_chapter_writer_input(
+            project_chapter_facts(_bundle(), chapter_ids=(1,)),
+            chapter_id=1,
+            repair_context=repair_context,
+        )
+    )
+    ch6_repair = build_chapter_prompt(
+        build_chapter_writer_input(
+            project_chapter_facts(_bundle(), chapter_ids=(6,)),
+            chapter_id=6,
+            repair_context=repair_context,
+        )
+    )
+
+    assert "第5章 forbidden phrase repair 必须改写规则" not in initial_ch5.user_prompt
+    assert "第5章 forbidden phrase repair 必须改写规则" not in ch1_repair.user_prompt
+    assert "第5章 forbidden phrase repair 必须改写规则" not in ch6_repair.user_prompt
+
+
 def test_invalid_anchor_repair_context_renders_exact_marker_correction() -> None:
     """验证 invalid anchor repair context 渲染精确 marker 修正文本。"""
 

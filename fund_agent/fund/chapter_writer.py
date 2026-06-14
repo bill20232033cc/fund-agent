@@ -739,6 +739,10 @@ def _chapter_prompt_fragments(
             for fragment in (
                 _repair_context_prompt(input_data.repair_context),
                 _ch2_l1_repair_guidance_prompt(chapter, input_data.repair_context),
+                _ch5_forbidden_phrase_repair_guidance_prompt(
+                    chapter,
+                    input_data.repair_context,
+                ),
             )
             if fragment
         ),
@@ -1314,6 +1318,36 @@ def _ch2_l1_repair_guidance_prompt(
             "3. 不确定时写数据不足或下一步最小验证问题，且不写具体百分比。",
             "4. `### 结论要点` 和 `### 证据与出处` 不得无邻近 anchor 复述 R/A/B/C/A-C/Alpha/Beta/Cost 百分比。",
             "5. 输出前逐行自查 R/A/B/C/A-C/Alpha/Beta/Cost/%；命中这些词且缺少邻近 allowed anchor 的行必须改写为缺口或验证问题。",
+        )
+    )
+
+
+def _ch5_forbidden_phrase_repair_guidance_prompt(
+    chapter: ChapterFactInput,
+    repair_context: ChapterRepairContext | None,
+) -> str:
+    """构造第 5 章 forbidden phrase repair 局部改写清单，见模板第 5 章当前阶段。
+
+    Args:
+        chapter: 单章事实输入。
+        repair_context: 可选章节重写上下文。
+
+    Returns:
+        命中第 5 章 repair attempt 时返回 checklist，否则返回空字符串。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if chapter.chapter_id != 5 or repair_context is None:
+        return ""
+    return "\n".join(
+        (
+            "第5章 forbidden phrase repair 必须改写规则：",
+            "1. 输出前逐句删除交易动作建议、仓位动作、收益预测、目标价和基金经理动机推断。",
+            "2. 只使用“值得持有 / 需要关注 / 建议替换”边界表达；不得写买入、卖出、加仓、减仓、清仓或仓位比例。",
+            "3. 事实不足或锚点不足时，只写数据不足或下一步最小验证问题，不用行动指令补足。",
+            "4. 输出前逐句自查；命中交易动作、仓位动作、收益预测或经理动机推断的句子必须删除或改写为边界表达。",
         )
     )
 

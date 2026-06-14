@@ -513,6 +513,31 @@ def test_repair_budget_exhausted_records_each_regenerate_attempt() -> None:
     assert [attempt.attempt_index for attempt in task.attempts] == [0, 1]
 
 
+def test_chapter5_audit_parse_repair_attempt_carries_forbidden_phrase_guidance() -> None:
+    """验证第 5 章 audit parse repair attempt 携带 forbidden phrase 改写清单。"""
+
+    writer = _FakeWriter()
+    auditor = _FakeAuditor(("这不是合法行协议", "PASS|chapter|no issues"))
+
+    run = run_agent_body_chapters(
+        _projection((5,)),
+        llm_clients=AgentLLMClients(writer=writer, auditor=auditor),
+        policy=AgentRunPolicy(
+            target_chapter_ids=(5,),
+            repair_policy=AgentRepairPolicy(max_content_repair_attempts=1),
+        ),
+    )
+
+    assert run.status == "accepted"
+    assert [request.chapter_id for request in writer.requests] == [5, 5]
+    assert writer.requests[0].repair_context is None
+    repair_context = writer.requests[1].repair_context
+    assert repair_context is not None
+    assert "llm:parse_failure" in repair_context.previous_issue_ids
+    assert "第5章 forbidden phrase repair 必须改写规则" in writer.requests[1].user_prompt
+    assert "值得持有 / 需要关注 / 建议替换" in writer.requests[1].user_prompt
+
+
 def test_chapter_6_invalid_anchor_marker_retries_once_and_accepts() -> None:
     """验证第 6 章 invalid anchor marker 可消耗既有预算重写并接受。"""
 
