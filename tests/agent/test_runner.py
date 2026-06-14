@@ -513,6 +513,115 @@ def test_repair_budget_exhausted_records_each_regenerate_attempt() -> None:
     assert [attempt.attempt_index for attempt in task.attempts] == [0, 1]
 
 
+def test_chapter_6_invalid_anchor_marker_retries_once_and_accepts() -> None:
+    """验证第 6 章 invalid anchor marker 可消耗既有预算重写并接受。"""
+
+    def _first_invalid_then_valid(request: ChapterLLMRequest) -> str:
+        if request.repair_context is None:
+            return _invalid_anchor_markdown_from_request(request)
+        return _valid_agent_markdown_from_request(request)
+
+    writer = _FakeWriter(actions={6: _first_invalid_then_valid})
+
+    run = run_agent_body_chapters(
+        _projection((6,)),
+        llm_clients=AgentLLMClients(writer=writer, auditor=_FakeAuditor()),
+        policy=AgentRunPolicy(
+            target_chapter_ids=(6,),
+            repair_policy=AgentRepairPolicy(max_content_repair_attempts=1),
+        ),
+    )
+
+    task = run.tasks[0]
+    assert run.status == "accepted"
+    assert task.status == "accepted"
+    assert [request.chapter_id for request in writer.requests] == [6, 6]
+    assert [attempt.attempt_index for attempt in task.attempts] == [0, 1]
+    repair_context = writer.requests[1].repair_context
+    assert repair_context is not None
+    assert repair_context.attempt_index == 1
+    assert any(
+        issue_id.startswith("writer:invalid_anchor_marker")
+        for issue_id in repair_context.previous_issue_ids
+    )
+    assert any(
+        "<!-- anchor:<anchor_id> -->" in correction
+        for correction in repair_context.required_corrections
+    )
+
+
+def test_chapter_6_invalid_anchor_marker_twice_fails_closed_after_one_retry() -> None:
+    """验证第 6 章 invalid anchor marker 第二次仍失败时无隐藏第三次重试。"""
+
+    writer = _FakeWriter(actions={6: _invalid_anchor_markdown_from_request})
+
+    run = run_agent_body_chapters(
+        _projection((6,)),
+        llm_clients=AgentLLMClients(writer=writer, auditor=_FakeAuditor()),
+        policy=AgentRunPolicy(
+            target_chapter_ids=(6,),
+            repair_policy=AgentRepairPolicy(max_content_repair_attempts=1),
+        ),
+    )
+
+    task = run.tasks[0]
+    assert run.status == "blocked"
+    assert task.status == "blocked"
+    assert task.terminal_state == "blocked_prompt_contract"
+    assert task.stop_reason == "llm_contract_violation"
+    assert task.failure_category == "prompt_contract"
+    assert [request.chapter_id for request in writer.requests] == [6, 6]
+    assert [attempt.attempt_index for attempt in task.attempts] == [0, 1]
+    assert writer.requests[0].repair_context is None
+    assert writer.requests[1].repair_context is not None
+
+
+def test_chapter_6_invalid_anchor_marker_budget_zero_does_not_retry() -> None:
+    """回归守卫：第 6 章预算为 0 时 invalid anchor marker 不重试。"""
+
+    writer = _FakeWriter(actions={6: _invalid_anchor_markdown_from_request})
+
+    run = run_agent_body_chapters(
+        _projection((6,)),
+        llm_clients=AgentLLMClients(writer=writer, auditor=_FakeAuditor()),
+        policy=AgentRunPolicy(
+            target_chapter_ids=(6,),
+            repair_policy=AgentRepairPolicy(max_content_repair_attempts=0),
+        ),
+    )
+
+    task = run.tasks[0]
+    assert run.status == "blocked"
+    assert task.status == "blocked"
+    assert task.stop_reason == "llm_contract_violation"
+    assert len(writer.requests) == 1
+    assert writer.requests[0].repair_context is None
+    assert [attempt.attempt_index for attempt in task.attempts] == [0]
+
+
+def test_non_chapter_6_invalid_anchor_marker_does_not_retry() -> None:
+    """回归守卫：非第 6 章 invalid anchor marker 保持一次 writer 后 fail-closed。"""
+
+    writer = _FakeWriter(actions={5: _invalid_anchor_markdown_from_request})
+
+    run = run_agent_body_chapters(
+        _projection((5,)),
+        llm_clients=AgentLLMClients(writer=writer, auditor=_FakeAuditor()),
+        policy=AgentRunPolicy(
+            target_chapter_ids=(5,),
+            repair_policy=AgentRepairPolicy(max_content_repair_attempts=1),
+        ),
+    )
+
+    task = run.tasks[0]
+    assert run.status == "blocked"
+    assert task.status == "blocked"
+    assert task.stop_reason == "llm_contract_violation"
+    assert len(writer.requests) == 1
+    assert writer.requests[0].repair_context is None
+    assert [attempt.attempt_index for attempt in task.attempts] == [0]
+
+
 def test_cancel_before_first_chapter_fails_closed_without_generation() -> None:
     """验证首章前取消不生成正文。"""
 
@@ -827,3 +936,9 @@ def _valid_agent_markdown_from_request(request: ChapterLLMRequest) -> str:
             )
         )
     return markdown
+
+
+def _invalid_anchor_markdown_from_request(request: ChapterLLMRequest) -> str:
+    """构造非法 anchor marker 章节 Markdown。"""
+
+    return _valid_agent_markdown_from_request(request).replace("<!-- anchor:", "<!-- ANCHOR:", 1)

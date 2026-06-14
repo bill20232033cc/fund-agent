@@ -1293,6 +1293,36 @@ def test_repair_context_is_rendered_into_writer_prompt_without_extra_payload() -
     assert "extra_payload" not in ChapterLLMRequest.__dataclass_fields__
 
 
+def test_invalid_anchor_repair_context_renders_exact_marker_correction() -> None:
+    """验证 invalid anchor repair context 渲染精确 marker 修正文本。"""
+
+    repair_context = ChapterRepairContext(
+        attempt_index=1,
+        previous_issue_ids=("writer:invalid_anchor_marker:17",),
+        previous_messages=("anchor marker 格式非法。",),
+        required_corrections=(
+            "使用精确 anchor marker 语法 `<!-- anchor:<anchor_id> -->`；"
+            "只使用 allowed anchor IDs；删除 malformed 或 synthesized anchor comments；"
+            "bond_risk_evidence 内部/组级 anchors 未列入 allowed anchors 时不得引用。",
+        ),
+    )
+    input_data = build_chapter_writer_input(
+        project_chapter_facts(_bundle(), chapter_ids=(6,)),
+        chapter_id=6,
+        repair_context=repair_context,
+    )
+
+    prompt = build_chapter_prompt(input_data)
+
+    assert "attempt_index=1" in prompt.user_prompt
+    assert "writer:invalid_anchor_marker:17" in prompt.user_prompt
+    assert "`<!-- anchor:<anchor_id> -->`" in prompt.user_prompt
+    assert "allowed anchor IDs" in prompt.user_prompt
+    assert "malformed 或 synthesized anchor comments" in prompt.user_prompt
+    assert "bond_risk_evidence" in prompt.user_prompt
+    assert "extra_payload" not in ChapterLLMRequest.__dataclass_fields__
+
+
 def test_ch2_l1_repair_context_renders_local_anchor_placement_checklist() -> None:
     """验证第 2 章 L1 repair attempt 渲染局部锚点放置清单，见模板第 2 章 R=A+B-C。
 

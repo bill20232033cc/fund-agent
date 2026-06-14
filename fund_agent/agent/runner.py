@@ -21,7 +21,12 @@ from fund_agent.agent.contracts import (
     FinalAssemblyReadiness,
     ToolTrace,
 )
-from fund_agent.agent.repair import AgentRepairDecision, decide_repair, repair_context_from_audit
+from fund_agent.agent.repair import (
+    AgentRepairDecision,
+    decide_repair,
+    repair_context_from_audit,
+    repair_context_from_writer_invalid_marker,
+)
 from fund_agent.agent.tools import (
     audit_chapter_llm_tool,
     audit_chapter_programmatic_tool,
@@ -381,6 +386,27 @@ def _run_single_chapter(
                     writer_result=writer_result,
                 )
             )
+            if _should_retry_writer_invalid_marker(
+                chapter_id=chapter_id,
+                writer_result=writer_result,
+                remaining_budget=policy.repair_policy.max_content_repair_attempts - attempt_index,
+            ):
+                _record_phase_started(phase_recorder, "repair", chapter_id, attempt_index)
+                _record_phase_completed(phase_recorder, "repair", chapter_id, attempt_index, 0)
+                # Writer-block retry consumes the same content repair budget that audit repair would use.
+                # With default budget 1, a successful retry does not leave an extra audit repair attempt.
+                attempt_index += 1
+                writer_input = _writer_input(
+                    projection,
+                    chapter_id=chapter_id,
+                    policy=policy,
+                    evidence_availability=evidence_availability,
+                    repair_context=repair_context_from_writer_invalid_marker(
+                        writer_result,
+                        attempt_index=attempt_index,
+                    ),
+                )
+                continue
             return ChapterTask(
                 chapter_id=chapter_id,
                 title=title,
@@ -626,6 +652,40 @@ def _writer_input(
         evidence_availability=evidence_availability
         if policy.typed_template_path == "typed_template_contract"
         else None,  # type: ignore[arg-type]
+    )
+
+
+def _should_retry_writer_invalid_marker(
+    *,
+    chapter_id: int,
+    writer_result: ChapterWriteResult,
+    remaining_budget: int,
+) -> bool:
+    """判断 writer invalid anchor marker 是否可消耗内容预算重试。
+
+    Args:
+        chapter_id: 模板章节编号。
+        writer_result: Fund writer 结果。
+        remaining_budget: 当前 attempt 后剩余内容修复预算。
+
+    Returns:
+        仅第 6 章、writer blocked、契约违规、invalid anchor issue 且预算大于 0 时返回 `True`。
+
+    Raises:
+        无。
+    """
+
+    if chapter_id != 6:
+        return False
+    if writer_result.status != "blocked":
+        return False
+    if writer_result.stop_reason != "llm_contract_violation":
+        return False
+    if remaining_budget <= 0:
+        return False
+    return any(
+        issue.issue_id.startswith("writer:invalid_anchor_marker")
+        for issue in writer_result.issues
     )
 
 

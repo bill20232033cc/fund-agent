@@ -1553,6 +1553,52 @@ def test_l1_repair_context_guides_anchored_correction_and_accepts_after_repair()
     assert "extra_payload" not in writer.requests[1].user_prompt
 
 
+def test_chapter_6_invalid_anchor_marker_retries_and_accepts() -> None:
+    """验证 Service 编排第 6 章 invalid anchor marker 可预算内重写通过。"""
+
+    def _first_invalid_then_valid(request: ChapterLLMRequest) -> str:
+        if request.repair_context is None:
+            return _invalid_anchor_markdown_from_request(request)
+        return _valid_markdown_from_request(request)
+
+    writer = _ChapterPlanWriterClient({6: _first_invalid_then_valid})
+
+    result = _orchestrate(
+        policy=ChapterOrchestrationPolicy(target_chapter_ids=(6,), max_repair_attempts=1),
+        writer=writer,
+        auditor=_FakeAuditLLMClient(),
+    )
+
+    run = result.chapter_results[0]
+    assert result.status == "accepted"
+    assert run.status == "accepted"
+    assert [request.chapter_id for request in writer.requests] == [6, 6]
+    assert writer.requests[0].repair_context is None
+    assert writer.requests[1].repair_context is not None
+    assert writer.requests[1].repair_context.attempt_index == 1
+    assert len(run.attempts) == 2
+
+
+def test_chapter_6_invalid_anchor_marker_budget_zero_does_not_retry() -> None:
+    """回归守卫：Service 编排第 6 章预算为 0 时 invalid marker 不重试。"""
+
+    writer = _ChapterPlanWriterClient({6: _invalid_anchor_markdown_from_request})
+
+    result = _orchestrate(
+        policy=ChapterOrchestrationPolicy(target_chapter_ids=(6,), max_repair_attempts=0),
+        writer=writer,
+        auditor=_FakeAuditLLMClient(),
+    )
+
+    run = result.chapter_results[0]
+    assert result.status == "blocked"
+    assert run.status == "blocked"
+    assert run.stop_reason == "llm_contract_violation"
+    assert len(writer.requests) == 1
+    assert writer.requests[0].repair_context is None
+    assert len(run.attempts) == 1
+
+
 def test_l1_failure_after_repair_budget_exhausted_keeps_l1_subcategory() -> None:
     """验证 repair 后仍无锚点数字闭环时 fail-closed 且保留 L1 子类。"""
 
@@ -3101,6 +3147,12 @@ def _valid_markdown_from_request(request: ChapterLLMRequest) -> str:
 
     anchor_id = request.required_anchor_ids[0]
     return _valid_markdown_from_parts(anchor_id, _required_items_from_request(request))
+
+
+def _invalid_anchor_markdown_from_request(request: ChapterLLMRequest) -> str:
+    """按 writer request 构造非法 anchor marker 章节 Markdown。"""
+
+    return _valid_markdown_from_request(request).replace("<!-- anchor:", "<!-- ANCHOR:", 1)
 
 
 def _chapter_2_gap_markdown_from_request(request: ChapterLLMRequest) -> str:

@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import re
 from typing import Literal
 
 from fund_agent.fund.chapter_auditor import (
@@ -14,7 +15,7 @@ from fund_agent.fund.chapter_auditor import (
     ChapterAuditRepairHint,
     ChapterAuditResult,
 )
-from fund_agent.fund.chapter_writer import ChapterRepairContext
+from fund_agent.fund.chapter_writer import ChapterRepairContext, ChapterWriteResult
 
 AgentRepairAction = Literal["none", "regenerate", "needs_more_facts", "stop"]
 AgentRepairStopReason = Literal[
@@ -25,6 +26,12 @@ AgentRepairStopReason = Literal[
     "repair_budget_exhausted",
     "needs_more_facts",
 ]
+_COMMENT_RE: re.Pattern[str] = re.compile(r"<!--.*?-->")
+_WRITER_INVALID_ANCHOR_CORRECTION: str = (
+    "使用精确 anchor marker 语法 `<!-- anchor:<anchor_id> -->`；"
+    "只使用 allowed anchor IDs；删除 malformed、extra-space、synthesized 或 free-form anchor comments；"
+    "bond_risk_evidence 内部/组级 anchors 未列入 allowed ChapterEvidenceAnchor IDs 时不得引用。"
+)
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -165,6 +172,39 @@ def repair_context_from_audit(
         previous_issue_ids=tuple(issue.issue_id for issue in issues),
         previous_messages=tuple(_sanitize_text(issue.message) for issue in issues),
         required_corrections=_required_corrections_from_issues(issues),
+    )
+
+
+def repair_context_from_writer_invalid_marker(
+    writer_result: ChapterWriteResult,
+    *,
+    attempt_index: int,
+) -> ChapterRepairContext:
+    """从 writer invalid-anchor 阻断结果构造章节重写上下文。
+
+    Args:
+        writer_result: Fund writer 阻断结果。
+        attempt_index: 即将执行的重写 attempt 序号。
+
+    Returns:
+        只包含安全 issue id、脱敏消息和精确 anchor marker 修正项的重写上下文。
+
+    Raises:
+        无显式抛出。
+    """
+
+    issues = tuple(
+        issue
+        for issue in writer_result.issues
+        if issue.issue_id.startswith("writer:invalid_anchor_marker")
+    )
+    return ChapterRepairContext(
+        attempt_index=attempt_index,
+        previous_issue_ids=tuple(issue.issue_id for issue in issues),
+        previous_messages=tuple(
+            _sanitize_writer_issue_message(issue.message) for issue in issues
+        ),
+        required_corrections=(_WRITER_INVALID_ANCHOR_CORRECTION,),
     )
 
 
@@ -356,3 +396,20 @@ def _sanitize_text(text: str, *, max_chars: int = 180) -> str:
     if len(redacted) <= max_chars:
         return redacted
     return redacted[:max_chars].rstrip() + "..."
+
+
+def _sanitize_writer_issue_message(text: str) -> str:
+    """清理 writer issue 消息，额外移除原始 HTML marker 片段。
+
+    Args:
+        text: 原始 writer issue 消息。
+
+    Returns:
+        不含原始 marker 片段的安全单行消息。
+
+    Raises:
+        无。
+    """
+
+    without_markers = _COMMENT_RE.sub("[redacted-marker]", text)
+    return _sanitize_text(without_markers)
