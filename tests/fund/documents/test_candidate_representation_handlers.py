@@ -262,6 +262,98 @@ def test_docling_handler_uses_fake_converter_and_keeps_candidate_status(tmp_path
     assert payload["tables"][0]["locator_strategy"] == "table_id+cell_index+row_index+column_index"
 
 
+def test_docling_handler_maps_exported_text_labels_and_nested_table_cells(tmp_path: Path) -> None:
+    """验证 Docling exported dict 的真实 text/table 结构被映射。
+
+    Args:
+        tmp_path: pytest 临时目录。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: section/header 或 nested table cells 未被映射时抛出。
+    """
+
+    entry = _entry(tmp_path, CandidateRepresentationRoute.DOCLING_PDF)
+    (tmp_path / "cache/docling-artifacts").mkdir(parents=True)
+
+    class _ExportDictConverter:
+        """测试用贴近 Docling export_to_dict 的 fake converter。"""
+
+        def convert(self, _path: Path) -> dict[str, Any]:
+            """返回 fake Docling export_to_dict shape。
+
+            Args:
+                _path: PDF 路径。
+
+            Returns:
+                fake exported dict。
+
+            Raises:
+                无显式抛出。
+            """
+
+            return {
+                "pages": {"1": {"page_no": 1}},
+                "texts": [
+                    {
+                        "self_ref": "#/texts/0",
+                        "label": "section_header",
+                        "text": "§2 基金简介",
+                        "prov": [{"page_no": 5, "bbox": {"l": 1, "t": 2, "r": 3, "b": 4}}],
+                    }
+                ],
+                "tables": [
+                    {
+                        "self_ref": "#/tables/0",
+                        "label": "table",
+                        "prov": [{"page_no": 5, "bbox": {"l": 0, "t": 0, "r": 10, "b": 10}}],
+                        "data": {
+                            "table_cells": [
+                                {
+                                    "start_row_offset_idx": 0,
+                                    "end_row_offset_idx": 1,
+                                    "start_col_offset_idx": 0,
+                                    "end_col_offset_idx": 1,
+                                    "row_span": 1,
+                                    "col_span": 1,
+                                    "text": "基金名称",
+                                    "bbox": {"l": 1, "t": 1, "r": 2, "b": 2},
+                                    "row_header": True,
+                                },
+                                {
+                                    "start_row_offset_idx": 0,
+                                    "end_row_offset_idx": 1,
+                                    "start_col_offset_idx": 1,
+                                    "end_col_offset_idx": 2,
+                                    "row_span": 1,
+                                    "col_span": 1,
+                                    "text": "测试基金",
+                                    "bbox": {"l": 2, "t": 1, "r": 3, "b": 2},
+                                },
+                            ]
+                        },
+                    }
+                ],
+            }
+
+    payload = build_docling_candidate_representation(
+        entry,
+        config=CandidateHandlerConfig(workspace_root=tmp_path),
+        converter_factory=lambda _config: _ExportDictConverter(),
+    )
+
+    assert payload["summary_metrics"]["section_count"] == 1
+    assert payload["summary_metrics"]["heading_count"] == 1
+    assert payload["summary_metrics"]["table_cell_count"] == 2
+    assert payload["sections"][0]["heading_text"] == "§2 基金简介"
+    assert payload["tables"][0]["page_number"] == 5
+    assert payload["tables"][0]["row_count"] == 1
+    assert payload["tables"][0]["column_count"] == 2
+    assert payload["tables"][0]["cells"][0]["row_header"] is True
+
+
 def test_docling_handler_maps_socket_error_to_blocked(tmp_path: Path) -> None:
     """验证 Docling socket 访问错误映射为 blocked failure。
 

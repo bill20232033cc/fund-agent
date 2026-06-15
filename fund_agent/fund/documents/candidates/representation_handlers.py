@@ -509,7 +509,9 @@ def _docling_sections(payload: Mapping[str, Any]) -> list[dict[str, Any]]:
                 "heading_text": text,
                 "content_hash": _hash_text(text),
             })
-    return sections
+    if sections:
+        return sections
+    return _sections_from_docling_texts(payload)
 
 
 def _docling_headings(payload: Mapping[str, Any], sections: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -540,7 +542,8 @@ def _docling_headings(payload: Mapping[str, Any], sections: list[dict[str, Any]]
                 "content_hash": _hash_text(text),
             })
         return headings
-    return _headings_from_sections(sections)
+    text_headings = _headings_from_docling_texts(payload)
+    return text_headings if text_headings else _headings_from_sections(sections)
 
 
 def _docling_paragraphs(payload: Mapping[str, Any]) -> list[dict[str, Any]]:
@@ -564,6 +567,9 @@ def _docling_paragraphs(payload: Mapping[str, Any]) -> list[dict[str, Any]]:
             paragraphs.append({
                 "paragraph_index": index,
                 "text": text,
+                "label": paragraph.get("label") if isinstance(paragraph, Mapping) else None,
+                "page_number": _first_prov_page_number(paragraph) if isinstance(paragraph, Mapping) else None,
+                "bbox": _first_prov_bbox(paragraph) if isinstance(paragraph, Mapping) else None,
                 "content_hash": _hash_text(text),
             })
     return paragraphs
@@ -589,20 +595,21 @@ def _docling_tables(payload: Mapping[str, Any]) -> list[dict[str, Any]]:
     for index, table in enumerate(raw_tables):
         if not isinstance(table, Mapping):
             continue
-        cells = table.get("cells", ())
-        if not isinstance(cells, list):
-            cells = table.get("table_cells", ())
+        cells = _docling_table_cells(table)
         cell_count = len(cells) if isinstance(cells, list) else 0
         tables.append({
             "table_id": str(table.get("table_id") or f"docling_table_{index}"),
-            "page_number": table.get("page_number"),
+            "self_ref": table.get("self_ref"),
+            "page_number": table.get("page_number") or _first_prov_page_number(table),
+            "bbox": _first_prov_bbox(table),
+            "label": table.get("label"),
             "table_index": index,
             "caption": table.get("caption"),
-            "row_count": int(table.get("row_count", 0) or 0),
-            "column_count": int(table.get("column_count", 0) or 0),
+            "row_count": _docling_table_row_count(cells),
+            "column_count": _docling_table_column_count(cells),
             "cell_count": cell_count,
             "locator_strategy": "table_id+cell_index+row_index+column_index",
-            "cells": cells if isinstance(cells, list) else [],
+            "cells": _docling_cell_locators(cells) if isinstance(cells, list) else [],
         })
     return tables
 
@@ -673,6 +680,217 @@ def _docling_has_bbox(payload: Mapping[str, Any]) -> bool:
     """
 
     return "bbox" in str(payload)
+
+
+def _sections_from_docling_texts(payload: Mapping[str, Any]) -> list[dict[str, Any]]:
+    """从 Docling texts 派生 section 候选。
+
+    Args:
+        payload: Docling exported dict。
+
+    Returns:
+        section 字典列表。
+
+    Raises:
+        无显式抛出。
+    """
+
+    headings = _headings_from_docling_texts(payload)
+    return [
+        {
+            "section_id": heading["heading_id"],
+            "heading_text": heading["heading_text"],
+            "page_number": heading["page_number"],
+            "bbox": heading["bbox"],
+            "content_hash": heading["content_hash"],
+        }
+        for heading in headings
+    ]
+
+
+def _headings_from_docling_texts(payload: Mapping[str, Any]) -> list[dict[str, Any]]:
+    """从 Docling texts 中提取 heading 候选。
+
+    Args:
+        payload: Docling exported dict。
+
+    Returns:
+        heading 字典列表。
+
+    Raises:
+        无显式抛出。
+    """
+
+    raw_texts = payload.get("texts", ())
+    if not isinstance(raw_texts, list):
+        return []
+    headings: list[dict[str, Any]] = []
+    heading_labels = {"section_header", "title"}
+    for index, item in enumerate(raw_texts):
+        if not isinstance(item, Mapping):
+            continue
+        label = str(item.get("label", ""))
+        text = str(item.get("text") or item.get("orig") or "")
+        if label not in heading_labels and not _looks_like_annual_report_heading(text):
+            continue
+        headings.append({
+            "heading_id": str(item.get("self_ref") or f"docling_heading_{index}"),
+            "heading_text": text,
+            "label": label,
+            "page_number": _first_prov_page_number(item),
+            "bbox": _first_prov_bbox(item),
+            "content_hash": _hash_text(text),
+        })
+    return headings
+
+
+def _looks_like_annual_report_heading(text: str) -> bool:
+    """判断文本是否像基金年报章节标题。
+
+    Args:
+        text: Docling text item 文本。
+
+    Returns:
+        像章节标题时返回 ``True``。
+
+    Raises:
+        无显式抛出。
+    """
+
+    stripped = text.strip()
+    return stripped.startswith("§") or stripped.startswith("第") and "章" in stripped[:8]
+
+
+def _docling_table_cells(table: Mapping[str, Any]) -> list[Mapping[str, Any]]:
+    """读取 Docling table cells。
+
+    Args:
+        table: Docling table dict。
+
+    Returns:
+        table cell 列表。
+
+    Raises:
+        无显式抛出。
+    """
+
+    direct_cells = table.get("cells")
+    if isinstance(direct_cells, list):
+        return [cell for cell in direct_cells if isinstance(cell, Mapping)]
+    direct_table_cells = table.get("table_cells")
+    if isinstance(direct_table_cells, list):
+        return [cell for cell in direct_table_cells if isinstance(cell, Mapping)]
+    data = table.get("data")
+    if isinstance(data, Mapping):
+        nested_cells = data.get("table_cells")
+        if isinstance(nested_cells, list):
+            return [cell for cell in nested_cells if isinstance(cell, Mapping)]
+    return []
+
+
+def _docling_table_row_count(cells: list[Mapping[str, Any]]) -> int:
+    """从 Docling cells 计算行数。
+
+    Args:
+        cells: table cell 列表。
+
+    Returns:
+        行数。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return max((int(cell.get("end_row_offset_idx", 0) or 0) for cell in cells), default=0)
+
+
+def _docling_table_column_count(cells: list[Mapping[str, Any]]) -> int:
+    """从 Docling cells 计算列数。
+
+    Args:
+        cells: table cell 列表。
+
+    Returns:
+        列数。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return max((int(cell.get("end_col_offset_idx", 0) or 0) for cell in cells), default=0)
+
+
+def _docling_cell_locators(cells: list[Mapping[str, Any]]) -> list[dict[str, Any]]:
+    """把 Docling cells 映射为候选 locator cells。
+
+    Args:
+        cells: table cell 列表。
+
+    Returns:
+        cell locator 字典列表。
+
+    Raises:
+        无显式抛出。
+    """
+
+    locators: list[dict[str, Any]] = []
+    for index, cell in enumerate(cells):
+        text = str(cell.get("text") or "")
+        locators.append({
+            "cell_index": index,
+            "row_start": cell.get("start_row_offset_idx"),
+            "row_end": cell.get("end_row_offset_idx"),
+            "column_start": cell.get("start_col_offset_idx"),
+            "column_end": cell.get("end_col_offset_idx"),
+            "row_span": cell.get("row_span"),
+            "column_span": cell.get("col_span"),
+            "text": text,
+            "bbox": cell.get("bbox"),
+            "column_header": bool(cell.get("column_header", False)),
+            "row_header": bool(cell.get("row_header", False)),
+            "content_hash": _hash_text(text),
+        })
+    return locators
+
+
+def _first_prov_page_number(item: Mapping[str, Any]) -> int | None:
+    """读取第一个 provenance 页码。
+
+    Args:
+        item: Docling item。
+
+    Returns:
+        页码；缺失时返回 ``None``。
+
+    Raises:
+        无显式抛出。
+    """
+
+    prov = item.get("prov")
+    if not isinstance(prov, list) or not prov or not isinstance(prov[0], Mapping):
+        return None
+    page_number = prov[0].get("page_no")
+    return int(page_number) if isinstance(page_number, int) else None
+
+
+def _first_prov_bbox(item: Mapping[str, Any]) -> Mapping[str, Any] | None:
+    """读取第一个 provenance bbox。
+
+    Args:
+        item: Docling item。
+
+    Returns:
+        bbox mapping；缺失时返回 ``None``。
+
+    Raises:
+        无显式抛出。
+    """
+
+    prov = item.get("prov")
+    if not isinstance(prov, list) or not prov or not isinstance(prov[0], Mapping):
+        return None
+    bbox = prov[0].get("bbox")
+    return bbox if isinstance(bbox, Mapping) else None
 
 
 def _hash_text(text: str) -> str:
