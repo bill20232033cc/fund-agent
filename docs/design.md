@@ -659,11 +659,11 @@ Route C 不删除当前 deterministic rendering，也不降低 release-maintenan
 
 当前生产 parser 仍是 `pdfplumber -> raw_text / tables -> locate_sections -> ParsedAnnualReport -> 自研 extractor -> EvidenceAnchor / CHAPTER_CONTRACT / 审计 / 报告生成`。`ParsedAnnualReport` 是面向已定义基金分析字段的抽取输入，不是整份年报的完整语义文档对象；当前 extractor 只承诺抽取已接受字段和可审计证据锚点，不承诺把整份年报转换为可遍历、可检索、适合 Agent 全面阅读的统一文档表示。
 
-当前设计缺口是 annual-report document representation，而不是单个字段 extractor 规则。未来候选中间层可暂称为 `FundDisclosureDocument`：它应在 Fund documents 层内部表达 section hierarchy、page spans、paragraph/table blocks、跨页表、表头/合并单元格、bbox/provenance、source identity、parser failure taxonomy、field candidates 和 EvidenceAnchor 映射候选。该对象若被接受，也只能作为 extractor / projection 的输入层；不得跳过自研 extractor、章节事实投影、EvidenceAnchor 校验或 fail-closed 分类直接喂给 Service、Host、renderer、quality gate 或 LLM prompt。
+当前设计缺口是 annual-report document representation，而不是单个字段 extractor 规则。候选中间层暂称为 `FundDisclosureDocument`：它应在 Fund documents 层内部表达 section hierarchy、page spans、paragraph/table blocks、跨页表、表头/合并单元格、bbox/provenance、source identity、parser failure taxonomy、field candidates 和 EvidenceAnchor 映射候选。该对象即使被接受，也只能作为 extractor / projection 的输入层；不得跳过自研 extractor、章节事实投影、EvidenceAnchor 校验或 fail-closed 分类直接喂给 Service、Host、renderer、quality gate 或 LLM prompt。
 
-`docs/reviews/annual-report-docling-parser-discussion-summary-20260613.md` 是 discussion summary，不是 accepted design、implementation plan 或 readiness 结论。该讨论只支持以下候选方向：当前 5 份本地 2024 年报样本没有证明 OCR 是主要瓶颈；主要瓶颈是章节标题与边界、跨页表、多层表头、合并单元格、同名字段 disambiguation、字段到 `EvidenceAnchor` 的稳定映射。Docling 可作为 future parallel parser benchmark / next-generation annual-report document representation candidate，用来比较章节层级、表格结构、provenance/bbox 到 `EvidenceAnchor` 的映射、失败分类、性能和 cache 复用性；不得写成当前 production parser。
+`docs/reviews/annual-report-docling-parser-discussion-summary-20260613.md` 是 discussion summary，不是 accepted design、implementation plan 或 readiness 结论。该讨论只支持以下候选方向：当前 5 份本地 2024 年报样本没有证明 OCR 是主要瓶颈；主要瓶颈是章节标题与边界、跨页表、多层表头、合并单元格、同名字段 disambiguation、字段到 `EvidenceAnchor` 的稳定映射。后续 accepted gates 已把 Docling 推进到 candidate-layer baseline qualification：`fund_agent/fund/documents/candidates` 中的候选表示模型和 projection helper 是当前 no-live candidate internals；`004393 / 2025` current-envelope evidence 接受 Docling 作为候选层 structural locator baseline，并在 21 个选定字段事实上通过 same-source repository-loaded PDF bbox excerpt pilot。该结论仍只适用于候选层和该 bounded pilot，不是 production parser 替换、source truth、full field correctness、readiness 或 release 结论。
 
-Docling 或其它文档中间层即使进入 future gate，也必须封装在 `FundDocumentRepository` / Fund documents 层内部。Service、UI、Host、renderer、quality gate 不得直接调用 Docling、PDF 文件、parser cache 或下载 helper。Docling Markdown、raw text、OCR 文本、HTML 或 JSON 只能作为 extractor 输入或 benchmark artifact，不得直接作为基金事实真源；基金事实仍必须经自研 extractor / 章节事实投影 / `EvidenceAnchor` / fail-closed 分类后才能进入 CHAPTER_CONTRACT、审计和报告生成。
+Docling 或其它文档中间层必须封装在 `FundDocumentRepository` / Fund documents 层内部。Service、UI、Host、renderer、quality gate 不得直接调用 Docling、PDF 文件、parser cache 或下载 helper。Docling Markdown、raw text、OCR 文本、HTML 或 JSON 只能作为 extractor 输入或 benchmark artifact，不得直接作为基金事实真源；基金事实仍必须经自研 extractor / 章节事实投影 / `EvidenceAnchor` / fail-closed 分类后才能进入 CHAPTER_CONTRACT、审计和报告生成。
 
 **候选/研究输入：CSRC EID XBRL HTML render artifact**：
 
@@ -1134,7 +1134,7 @@ Host / Agent 通用执行包是目标边界。当前已创建 `fund_agent/host` 
 | 输出格式 | 8 章定性模板 | 一页纸报告 | 信息更完整，覆盖全链路 |
 | 超额收益判断 | 区分结构性 vs 阶段性 | 仅计算 A=R-B | 第一性原理：可持续能力 vs 运气 |
 | 检查清单位置 | 嵌入报告第 7 章 + 独立 checklist 模块 | 仅嵌入报告 | checklist 独立模块可复用，报告内通过 checklist_result 渲染 |
-| PDF 解析 | 当前 production parser 是 `pdfplumber + locate_sections + 自研 extractor`；Docling 仅是 future parallel benchmark / next-generation document representation candidate | 直接替换为 Docling、把 Docling Markdown 当事实真源，或让 Service/UI/Host/quality gate 直接调用 parser | 当前样本无 OCR 刚需；先验证章节层级、跨页表结构、provenance 到 EvidenceAnchor 的映射、失败分类、性能与 cache |
+| PDF 解析 | 当前 production parser 是 `pdfplumber + locate_sections + 自研 extractor`；Docling 已接受为 candidate-layer structural locator baseline 和 `004393 / 2025` 选定字段族 bounded pilot pass，但仍不是 production parser | 直接替换为 Docling、把 Docling Markdown 当事实真源，或让 Service/UI/Host/quality gate 直接调用 parser | 当前样本无 OCR 刚需；Docling 当前价值在候选文档表示、章节/表格结构、bbox/provenance 到 EvidenceAnchor 候选映射；生产集成和更广样本正确性仍需后续 gate |
 | EID XBRL HTML render 候选 | 作为 `eid_xbrl_html_render_candidate` 先评估 section/table/provenance 到 `FundDisclosureDocument` / `EvidenceAnchor` 的投影能力 | 把 HTML render 当 raw XML/XBRL instance、直接替换 PDF parser、或跳过 extractor/EvidenceAnchor 进入报告 | 官方 HTML render 可达性已足以启动评估，但 raw XML 下载、字段正确和 taxonomy 跨年兼容仍未证明 |
 | 文档存取 | 统一仓库（FundDocumentRepository） | 直接文件操作 | 隔离 PDF/缓存细节，支持 Protocol 注入测试 |
 | 数据缓存 | PDF 文件缓存 + parsed report JSON 缓存 | 仅文件缓存 | 避免重复解析，schema 版本控制支持缓存失效 |
