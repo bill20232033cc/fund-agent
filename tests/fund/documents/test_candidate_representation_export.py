@@ -16,6 +16,7 @@ from fund_agent.fund.documents.candidates.representation_export import (
     build_representation_envelope,
     compute_sha256,
     export_manifest,
+    main,
     parse_manifest,
     validate_entry,
 )
@@ -194,6 +195,37 @@ def test_validate_entry_accepts_reference_existing_json(tmp_path: Path) -> None:
     validate_entry(entry, workspace_root=tmp_path)
 
 
+def test_validate_entry_rejects_reference_existing_json_output_mismatch(tmp_path: Path) -> None:
+    """验证 reference_existing_json 不能声明不同输出路径。
+
+    Args:
+        tmp_path: pytest 临时目录。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: output_path 不一致未被拒绝时抛出。
+    """
+
+    input_path = Path("reports/representation-json/004393_2025_docling_full.json")
+    _write_file(tmp_path / input_path, b"{\"schema_version\":\"test\"}\n")
+    entry = CandidateRepresentationExportEntry(
+        sample_id="S1",
+        fund_code="004393",
+        document_year=2025,
+        route=CandidateRepresentationRoute.DOCLING_PDF,
+        mode=CandidateExportMode.REFERENCE_EXISTING_JSON,
+        input_artifact_path=input_path,
+        accepted_input_sha256=None,
+        provenance_judgment_path=Path("docs/reviews/accepted.md"),
+        output_path=Path("reports/representation-json/004393_2025_other.json"),
+    )
+
+    with pytest.raises(ValueError, match="output_path must equal"):
+        validate_entry(entry, workspace_root=tmp_path)
+
+
 def test_validate_entry_rejects_output_path_traversal(tmp_path: Path) -> None:
     """验证输出路径不能用 parent traversal 逃逸允许目录。
 
@@ -292,6 +324,197 @@ def test_export_manifest_writes_blocked_candidate_json(tmp_path: Path) -> None:
     )
 
 
+def test_export_manifest_skips_reference_existing_json_without_rewrite(tmp_path: Path) -> None:
+    """验证 reference_existing_json 只读校验且不会重写既有 JSON。
+
+    Args:
+        tmp_path: pytest 临时目录。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: reference JSON 被写入时抛出。
+    """
+
+    input_path = Path("reports/representation-json/004393_2025_docling_full.json")
+    original = b"{\"schema_version\":\"candidate_annual_report_representation.v1\"}\n"
+    accepted_hash = _write_file(tmp_path / input_path, original)
+    entry = CandidateRepresentationExportEntry(
+        sample_id="S1",
+        fund_code="004393",
+        document_year=2025,
+        route=CandidateRepresentationRoute.DOCLING_PDF,
+        mode=CandidateExportMode.REFERENCE_EXISTING_JSON,
+        input_artifact_path=input_path,
+        accepted_input_sha256=accepted_hash,
+        provenance_judgment_path=Path("docs/reviews/accepted.md"),
+        output_path=input_path,
+    )
+
+    written = export_manifest(CandidateRepresentationExportManifest(entries=(entry,)), workspace_root=tmp_path)
+
+    assert written == ()
+    assert (tmp_path / input_path).read_bytes() == original
+
+
+def test_export_manifest_rejects_existing_write_target_by_default(tmp_path: Path) -> None:
+    """验证 handled/blocked 输出默认 no-clobber。
+
+    Args:
+        tmp_path: pytest 临时目录。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 既有输出被默认覆盖时抛出。
+    """
+
+    entry = _entry(tmp_path, mode=CandidateExportMode.BLOCKED)
+    output_path = tmp_path / entry.output_path
+    _write_file(output_path, b"{\"old\":true}\n")
+
+    with pytest.raises(ValueError, match="already exists"):
+        export_manifest(CandidateRepresentationExportManifest(entries=(entry,)), workspace_root=tmp_path)
+
+    assert output_path.read_bytes() == b"{\"old\":true}\n"
+
+
+def test_export_manifest_mixed_manifest_fails_before_partial_write(tmp_path: Path) -> None:
+    """验证 mixed manifest 遇到既有 write target 时不会部分写入。
+
+    Args:
+        tmp_path: pytest 临时目录。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: preflight 未阻断或发生部分写入时抛出。
+    """
+
+    first_entry = CandidateRepresentationExportEntry(
+        sample_id="S5",
+        fund_code="017641",
+        document_year=2024,
+        route=CandidateRepresentationRoute.EID_HTML_RENDER,
+        mode=CandidateExportMode.BLOCKED,
+        input_artifact_path=None,
+        accepted_input_sha256=None,
+        provenance_judgment_path=Path("docs/reviews/accepted.md"),
+        output_path=Path("reports/representation-json/017641_2024_eid_html_render_blocked.json"),
+    )
+    existing_entry = CandidateRepresentationExportEntry(
+        sample_id="S6",
+        fund_code="110020",
+        document_year=2024,
+        route=CandidateRepresentationRoute.EID_HTML_RENDER,
+        mode=CandidateExportMode.BLOCKED,
+        input_artifact_path=None,
+        accepted_input_sha256=None,
+        provenance_judgment_path=Path("docs/reviews/accepted.md"),
+        output_path=Path("reports/representation-json/110020_2024_eid_html_render_blocked.json"),
+    )
+    _write_file(tmp_path / existing_entry.output_path, b"{\"old\":true}\n")
+
+    with pytest.raises(ValueError, match="already exists"):
+        export_manifest(
+            CandidateRepresentationExportManifest(entries=(first_entry, existing_entry)),
+            workspace_root=tmp_path,
+        )
+
+    assert not (tmp_path / first_entry.output_path).exists()
+
+
+def test_export_manifest_missing_handler_fails_before_partial_write(tmp_path: Path) -> None:
+    """验证缺少 handled route handler 时会在写入前失败。
+
+    Args:
+        tmp_path: pytest 临时目录。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 缺 handler 时发生部分写入时抛出。
+    """
+
+    first_entry = CandidateRepresentationExportEntry(
+        sample_id="S5",
+        fund_code="017641",
+        document_year=2024,
+        route=CandidateRepresentationRoute.EID_HTML_RENDER,
+        mode=CandidateExportMode.BLOCKED,
+        input_artifact_path=None,
+        accepted_input_sha256=None,
+        provenance_judgment_path=Path("docs/reviews/accepted.md"),
+        output_path=Path("reports/representation-json/017641_2024_eid_html_render_blocked.json"),
+    )
+    handled_entry = _entry(tmp_path, mode=CandidateExportMode.HANDLED)
+
+    with pytest.raises(ValueError, match="missing route handler"):
+        export_manifest(
+            CandidateRepresentationExportManifest(entries=(first_entry, handled_entry)),
+            workspace_root=tmp_path,
+        )
+
+    assert not (tmp_path / first_entry.output_path).exists()
+    assert not (tmp_path / handled_entry.output_path).exists()
+
+
+def test_export_manifest_allow_overwrite_applies_only_to_write_entries(tmp_path: Path) -> None:
+    """验证 allow_overwrite 只覆盖 write-producing entries，不重写 reference。
+
+    Args:
+        tmp_path: pytest 临时目录。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: reference 被重写或 write entry 未覆盖时抛出。
+    """
+
+    reference_path = Path("reports/representation-json/004393_2025_docling_full.json")
+    reference_bytes = b"{\"schema_version\":\"candidate_annual_report_representation.v1\"}\n"
+    reference_hash = _write_file(tmp_path / reference_path, reference_bytes)
+    reference_entry = CandidateRepresentationExportEntry(
+        sample_id="S1",
+        fund_code="004393",
+        document_year=2025,
+        route=CandidateRepresentationRoute.DOCLING_PDF,
+        mode=CandidateExportMode.REFERENCE_EXISTING_JSON,
+        input_artifact_path=reference_path,
+        accepted_input_sha256=reference_hash,
+        provenance_judgment_path=Path("docs/reviews/accepted.md"),
+        output_path=reference_path,
+    )
+    write_entry = CandidateRepresentationExportEntry(
+        sample_id="S5",
+        fund_code="017641",
+        document_year=2024,
+        route=CandidateRepresentationRoute.EID_HTML_RENDER,
+        mode=CandidateExportMode.BLOCKED,
+        input_artifact_path=None,
+        accepted_input_sha256=None,
+        provenance_judgment_path=Path("docs/reviews/accepted.md"),
+        output_path=Path("reports/representation-json/017641_2024_eid_html_render_blocked.json"),
+    )
+    _write_file(tmp_path / write_entry.output_path, b"{\"old\":true}\n")
+
+    written = export_manifest(
+        CandidateRepresentationExportManifest(entries=(reference_entry, write_entry)),
+        workspace_root=tmp_path,
+        allow_overwrite=True,
+    )
+
+    assert written == (write_entry.output_path,)
+    assert (tmp_path / reference_path).read_bytes() == reference_bytes
+    payload = json.loads((tmp_path / write_entry.output_path).read_text(encoding="utf-8"))
+    assert payload["source_kind"] == "eid_xbrl_html_render_candidate"
+
+
 def test_export_manifest_accepts_fake_handler_but_rejects_truth_claim(tmp_path: Path) -> None:
     """验证 fake handler 可写候选 JSON，但 truth claim 会被拒绝。
 
@@ -356,3 +579,23 @@ def test_candidate_internals_are_not_public_document_exports() -> None:
 
     assert "CandidateRepresentationExportEntry" not in documents_public_exports
     assert "CandidateRepresentationRoute" not in documents_public_exports
+
+
+def test_main_rejects_conflicting_write_modes(tmp_path: Path) -> None:
+    """验证 CLI 拒绝同时启用 blocked 写入和内置 handler。
+
+    Args:
+        tmp_path: pytest 临时目录。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 冲突参数未被 argparse 拒绝时抛出。
+    """
+
+    manifest_path = tmp_path / "manifest.json"
+    manifest_path.write_text("{\"schema_version\":\"candidate_representation_export_manifest.v1\",\"entries\":[]}\n")
+
+    with pytest.raises(SystemExit):
+        main(["--manifest", str(manifest_path), "--write-blocked", "--run-built-in-handlers"])

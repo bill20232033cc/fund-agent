@@ -198,6 +198,12 @@ def validate_entry(
     _ensure_not_production_cache(entry.input_artifact_path)
     if entry.mode == CandidateExportMode.REFERENCE_EXISTING_JSON:
         _ensure_reference_json_path(entry.input_artifact_path)
+        if entry.output_path != entry.input_artifact_path:
+            raise ValueError("reference_existing_json output_path must equal input_artifact_path")
+        _ensure_existing_reference_json(
+            workspace_root / entry.input_artifact_path,
+            accepted_sha256=entry.accepted_input_sha256,
+        )
         return
     if entry.route in (
         CandidateRepresentationRoute.DOCLING_PDF,
@@ -320,6 +326,7 @@ def export_manifest(
     route_handlers: Mapping[CandidateRepresentationRoute, RouteHandler] | None = None,
     workspace_root: Path = Path("."),
     output_root: Path = DEFAULT_OUTPUT_ROOT,
+    allow_overwrite: bool = False,
 ) -> tuple[Path, ...]:
     """按 manifest 导出候选表示 JSON。
 
@@ -328,6 +335,7 @@ def export_manifest(
         route_handlers: 路线 handler；测试和未来 evidence gate 可注入。
         workspace_root: 工作区根目录。
         output_root: 允许输出目录。
+        allow_overwrite: 是否允许覆盖 write-producing entry 的既有输出。
 
     Returns:
         已写入的输出路径元组。
@@ -338,8 +346,16 @@ def export_manifest(
 
     validate_manifest(manifest, workspace_root=workspace_root, output_root=output_root)
     handlers = route_handlers or {}
+    _ensure_write_entries_supported(manifest, handlers=handlers)
+    _ensure_write_targets_available(
+        manifest,
+        workspace_root=workspace_root,
+        allow_overwrite=allow_overwrite,
+    )
     written: list[Path] = []
     for entry in manifest.entries:
+        if entry.mode == CandidateExportMode.REFERENCE_EXISTING_JSON:
+            continue
         payload = _payload_for_entry(entry, handlers)
         _validate_candidate_non_proof_payload(payload)
         output_path = workspace_root / entry.output_path
@@ -390,14 +406,41 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--workspace-root", default=Path("."), type=Path)
     parser.add_argument("--output-root", default=DEFAULT_OUTPUT_ROOT, type=Path)
     parser.add_argument("--write-blocked", action="store_true")
+    parser.add_argument("--run-built-in-handlers", action="store_true")
+    parser.add_argument("--docling-artifacts-path", default=Path("cache/docling-artifacts"), type=Path)
+    parser.add_argument("--docling-no-socket-block", action="store_true")
+    parser.add_argument("--allow-overwrite", action="store_true")
     args = parser.parse_args(argv)
 
+    if args.write_blocked and args.run_built_in_handlers:
+        parser.error("--write-blocked and --run-built-in-handlers are mutually exclusive")
+
     manifest = load_manifest(args.manifest)
-    if args.write_blocked:
+    if args.run_built_in_handlers:
+        from fund_agent.fund.documents.candidates.representation_handlers import (
+            CandidateHandlerConfig,
+            built_in_route_handlers,
+        )
+
+        config = CandidateHandlerConfig(
+            workspace_root=args.workspace_root,
+            docling_artifacts_path=args.docling_artifacts_path,
+            docling_socket_block=not args.docling_no_socket_block,
+            allow_overwrite=args.allow_overwrite,
+        )
+        export_manifest(
+            manifest,
+            route_handlers=built_in_route_handlers(config),
+            workspace_root=args.workspace_root,
+            output_root=args.output_root,
+            allow_overwrite=args.allow_overwrite,
+        )
+    elif args.write_blocked:
         export_manifest(
             manifest,
             workspace_root=args.workspace_root,
             output_root=args.output_root,
+            allow_overwrite=args.allow_overwrite,
         )
     else:
         validate_manifest(
@@ -573,6 +616,90 @@ def _ensure_reference_json_path(path: Path) -> None:
         raise ValueError("reference_existing_json input must be a JSON file")
     if not path.is_relative_to(DEFAULT_OUTPUT_ROOT):
         raise ValueError("reference_existing_json input must stay under reports/representation-json")
+
+
+def _ensure_existing_reference_json(path: Path, *, accepted_sha256: str | None) -> None:
+    """校验既有 reference JSON 存在且可解析。
+
+    Args:
+        path: 工作区内既有 representation JSON 路径。
+        accepted_sha256: 可选的已接受 JSON hash。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        ValueError: 文件不存在、不是文件、JSON 不可解析或 hash 不匹配时抛出。
+    """
+
+    if not path.is_file():
+        raise ValueError("reference_existing_json input must exist")
+    try:
+        json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise ValueError("reference_existing_json input must be valid JSON") from exc
+    if accepted_sha256 is not None and compute_sha256(path) != accepted_sha256:
+        raise ValueError("reference_existing_json sha256 mismatch")
+
+
+def _ensure_write_targets_available(
+    manifest: CandidateRepresentationExportManifest,
+    *,
+    workspace_root: Path,
+    allow_overwrite: bool,
+) -> None:
+    """在写入前一次性校验 write-producing 输出是否可写。
+
+    Args:
+        manifest: 候选导出 manifest。
+        workspace_root: 工作区根目录。
+        allow_overwrite: 是否允许覆盖已有输出。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        ValueError: 默认 no-clobber 下存在 write-producing 输出时抛出。
+    """
+
+    if allow_overwrite:
+        return
+    existing_outputs: list[str] = []
+    for entry in manifest.entries:
+        if entry.mode == CandidateExportMode.REFERENCE_EXISTING_JSON:
+            continue
+        output_path = workspace_root / entry.output_path
+        if output_path.exists():
+            existing_outputs.append(str(entry.output_path))
+    if existing_outputs:
+        raise ValueError(f"candidate representation output already exists: {existing_outputs}")
+
+
+def _ensure_write_entries_supported(
+    manifest: CandidateRepresentationExportManifest,
+    *,
+    handlers: Mapping[CandidateRepresentationRoute, RouteHandler],
+) -> None:
+    """在写入前校验当前执行模式能处理所有 write-producing entries。
+
+    Args:
+        manifest: 候选导出 manifest。
+        handlers: 当前可用 route handlers。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        ValueError: handled entry 缺少 route handler 时抛出。
+    """
+
+    missing_handlers = [
+        entry.route.value
+        for entry in manifest.entries
+        if entry.mode == CandidateExportMode.HANDLED and entry.route not in handlers
+    ]
+    if missing_handlers:
+        raise ValueError(f"missing route handler for write-producing entries: {missing_handlers}")
 
 
 def _validate_summary_metrics(summary_metrics: Mapping[str, Any]) -> None:
