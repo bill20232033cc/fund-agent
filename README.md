@@ -108,7 +108,7 @@ fund-analysis checklist 004393 --report-year 2024
 
 `analyze` 默认是 product mode：最终判断由 Agent 层基金能力根据检查清单、否决项、压力测试和 quality gate 派生；R=A+B-C 股票仓位、言行一致性实际风格、经理任期、同类费率、跟踪误差、当前阶段、最终判断覆盖和 quality gate `warn/off` 等夹具参数仅供开发验证使用，必须显式传 `--dev-override`。
 
-`fund-analysis analyze-annual-period FUND_CODE --target-year 2025 --start-year 2021` 是当前确定性多年年报分析入口。Service 先运行目标年份单年 `analyze`，再请求 Fund 层 `AnnualEvidenceLoader` 通过 `FundDocumentRepository` 加载 prior 年报；目标年份必需，prior 年份遇到 `not_found` / `unavailable` 会记录为可降级缺口，`schema_drift` / `identity_mismatch` / `integrity_error` 会记录为 fail-closed 年度。CLI 会先在 stdout 输出可解析的多年证据 metadata header，再输出正式多年年报 Markdown 报告；报告正文包含年度覆盖与来源、跨年关键变化、对当前判断的影响、缺口与降级，并在末尾保留目标年份 8 章报告。
+`fund-analysis analyze-annual-period FUND_CODE --target-year 2025 --start-year 2021` 是当前确定性多年年报分析入口。Service 先运行目标年份单年 `analyze`，再请求 Fund 层 `AnnualEvidenceLoader` 通过 `FundDocumentRepository` 加载 prior 年报；目标年份必需，prior 年份遇到 `not_found` / `unavailable` 会记录为可降级缺口，`schema_drift` / `identity_mismatch` / `integrity_error` 会记录为 fail-closed 年度。CLI 会先在 stdout 输出可解析的多年证据 metadata header，再输出正式多年年报 Markdown 报告；报告正文包含年度覆盖与来源、跨年关键变化、对当前判断的影响、缺口与降级，并在末尾保留目标年份 8 章报告。当前 `analyze-annual-period` 不接受 `--use-llm`，也不调用 Route C LLM 分章写作路径；基于 5 年年报的 LLM 分章报告仍属于后续 annual-period LLM route design gate。
 
 `fund-analysis analyze --use-llm` 是显式 opt-in 路径；不传该参数时，`analyze` 默认仍走确定性结构化抽取、确定性分析、模板渲染、程序审计和 quality gate。LLM 路径当前使用 `openai_compatible` HTTP chat-completions provider，基于现有 `httpx` 调用 Service 的 `analyze_with_llm()`；Fund writer/auditor 只接收 Protocol client，不读取 env、HTTP 或 provider 细节。
 
