@@ -276,6 +276,195 @@ async def test_cache_persists_pdf_metadata_and_parsed_report(tmp_path: Path) -> 
 
 
 @pytest.mark.asyncio
+async def test_cache_returns_reference_metadata_without_body_or_path_access(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """验证引用元数据查询不会读取正文或 PDF 路径。
+
+    Args:
+        tmp_path: pytest 提供的临时目录。
+        monkeypatch: pytest 提供的 monkeypatch 工具。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当查询触发正文/PDF 路径访问或泄漏禁用字段时抛出。
+    """
+
+    cache = AnnualReportDocumentCache(tmp_path / "documents-cache")
+    document_key = DocumentKey(fund_code="110011", year=2024)
+    await cache.record_pdf_path(
+        document_key,
+        tmp_path / "missing.pdf",
+        source_metadata=_eid_metadata(),
+    )
+
+    monkeypatch.setattr(
+        cache,
+        "_load_parsed_report_sync",
+        lambda key: pytest.fail("reference metadata must not read parsed payload"),
+    )
+    monkeypatch.setattr(
+        cache,
+        "_get_pdf_entry_sync",
+        lambda key: pytest.fail("reference metadata must not read PDF entry"),
+    )
+
+    result = await cache.get_reference_metadata(document_key)
+
+    assert result.status == "available"
+    assert result.reason is None
+    assert result.metadata is not None
+    payload = result.metadata.to_dict()
+    assert payload == {
+        "fund_code": "110011",
+        "document_year": 2024,
+        "report_type": "annual_report",
+        "source": "eid",
+        "selected_source": "eid",
+        "source_mode": "single_source_only",
+        "fallback_enabled": False,
+        "fallback_used": False,
+        "primary_failure_category": None,
+        "metadata_identity_hash": result.metadata.metadata_identity_hash,
+    }
+    assert result.metadata.metadata_identity_hash is not None
+    assert len(result.metadata.metadata_identity_hash) == 64
+    forbidden_keys = {
+        "pdf_path",
+        "payload_path",
+        "source_url",
+        "report_name",
+        "report_code",
+        "report_desp",
+        "upload_info_id",
+        "updated_at",
+    }
+    assert forbidden_keys.isdisjoint(payload)
+
+
+@pytest.mark.asyncio
+async def test_cache_reference_metadata_reports_missing_without_pdf_probe(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """验证缺失引用元数据时不会回退到 PDF 路径探测。
+
+    Args:
+        tmp_path: pytest 提供的临时目录。
+        monkeypatch: pytest 提供的 monkeypatch 工具。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当缺失查询触发 PDF 条目读取时抛出。
+    """
+
+    cache = AnnualReportDocumentCache(tmp_path / "documents-cache")
+    document_key = DocumentKey(fund_code="110011", year=2024)
+    monkeypatch.setattr(
+        cache,
+        "_get_pdf_entry_sync",
+        lambda key: pytest.fail("missing metadata must not probe PDF entry"),
+    )
+
+    result = await cache.get_reference_metadata(document_key)
+
+    assert result.status == "missing"
+    assert result.metadata is None
+    assert result.reason == "metadata_row_missing"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("metadata", "reason"),
+    (
+        (
+            AnnualReportSourceMetadata(
+                source="eastmoney",
+                fund_code="110011",
+                report_year=2024,
+                fallback_used=True,
+            ),
+            "source_not_eid",
+        ),
+        (
+            AnnualReportSourceMetadata(
+                source="eid",
+                fund_code="110011",
+                report_year=2024,
+                selected_source="eid",
+                source_mode="single_source_only",
+                fallback_enabled=True,
+                fallback_used=False,
+            ),
+            "fallback_enabled_not_false",
+        ),
+        (
+            AnnualReportSourceMetadata(
+                source="eid",
+                fund_code="110011",
+                report_year=2024,
+                selected_source="eid",
+                source_mode="single_source_only",
+                fallback_enabled=False,
+                fallback_used=False,
+                primary_failure_category="schema_drift",
+            ),
+            "primary_failure_category_present",
+        ),
+        (
+            AnnualReportSourceMetadata(
+                source="eid",
+                fund_code="004393",
+                report_year=2024,
+                selected_source="eid",
+                source_mode="single_source_only",
+                fallback_enabled=False,
+                fallback_used=False,
+            ),
+            "source_metadata_fund_code_mismatch",
+        ),
+    ),
+)
+async def test_cache_reference_metadata_rejects_unsafe_metadata(
+    tmp_path: Path,
+    metadata: AnnualReportSourceMetadata,
+    reason: str,
+) -> None:
+    """验证非 EID single-source 元数据被标记为不安全。
+
+    Args:
+        tmp_path: pytest 提供的临时目录。
+        metadata: 待写入的来源元数据。
+        reason: 预期失败原因。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当不安全元数据被错误接受时抛出。
+    """
+
+    cache = AnnualReportDocumentCache(tmp_path / "documents-cache")
+    document_key = DocumentKey(fund_code="110011", year=2024)
+    await cache.record_pdf_path(
+        document_key,
+        tmp_path / "missing.pdf",
+        source_metadata=metadata,
+    )
+
+    result = await cache.get_reference_metadata(document_key)
+
+    assert result.status == "unsafe_metadata"
+    assert result.metadata is None
+    assert result.reason == reason
+
+
+@pytest.mark.asyncio
 async def test_cache_persists_pdf_source_metadata(tmp_path: Path) -> None:
     """验证 documents 表会持久化 PDF 来源元数据。
 

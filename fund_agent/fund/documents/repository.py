@@ -17,6 +17,7 @@ from fund_agent.fund.documents.models import (
     AnnualReportCacheProvenance,
     AnnualReportMetadata,
     AnnualReportPdfFetchResult,
+    AnnualReportReferenceMetadataResult,
     AnnualReportSourceMetadata,
     DocumentKey,
     ParsedAnnualReport,
@@ -416,6 +417,34 @@ class FundDocumentRepository:
             source_metadata=source_metadata,
         )
         return parsed_report
+
+    async def get_annual_report_reference_metadata(
+        self,
+        fund_code: str,
+        year: int,
+    ) -> AnnualReportReferenceMetadataResult:
+        """读取不含正文和路径的年报同源引用元数据。
+
+        该方法用于模板第 1-6 章后续证据准入前的 metadata-only 检查，只查询
+        documents 表中的身份与来源策略元数据，不调用 ``load_annual_report()``、
+        下载器、解析器或 source adapter。
+
+        Args:
+            fund_code: 基金代码。
+            year: 年报年份。
+
+        Returns:
+            不包含 PDF 路径、正文、表格、章节和来源 URL 的引用元数据结果。
+
+        Raises:
+            ValueError: 输入参数非法时抛出。
+            sqlite3.Error: 底层缓存查询 SQLite 失败时抛出。
+        """
+
+        normalized_fund_code = _validate_fund_code(fund_code)
+        normalized_year = _validate_year(year)
+        document_key = self._build_document_key(normalized_fund_code, normalized_year)
+        return await self._cache.get_reference_metadata(document_key)
 
     def _build_document_key(self, fund_code: str, year: int) -> DocumentKey:
         """构造当前仓库使用的文档主键。

@@ -5,6 +5,8 @@
 
 from fund_agent.fund.documents.models import (
     ANNUAL_REPORT_DOCUMENT_KIND,
+    AnnualReportReferenceMetadata,
+    AnnualReportReferenceMetadataResult,
     DocumentKey,
     ParsedAnnualReport,
     ParsedTable,
@@ -14,6 +16,8 @@ from fund_agent.fund.documents.repository import FundDocumentRepository
 
 __all__ = [
     "ANNUAL_REPORT_DOCUMENT_KIND",
+    "AnnualReportReferenceMetadata",
+    "AnnualReportReferenceMetadataResult",
     "DocumentKey",
     "ParsedAnnualReport",
     "ParsedTable",

@@ -221,6 +221,93 @@ def _eastmoney_fallback_metadata(
     )
 
 
+@pytest.mark.asyncio
+async def test_repository_reference_metadata_facade_uses_cache_metadata_only(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """验证仓库引用元数据 facade 不触发年报加载或 PDF 路径读取。
+
+    Args:
+        tmp_path: pytest 提供的临时目录。
+        monkeypatch: pytest 提供的 monkeypatch 工具。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 facade 触发 loader、正文或 PDF 路径访问时抛出。
+    """
+
+    loader = Mock()
+    loader.fetch_pdf = AsyncMock(side_effect=AssertionError("must not fetch pdf"))
+    loader.fetch_pdf_path = AsyncMock(side_effect=AssertionError("must not fetch pdf path"))
+    loader.parse_pdf = AsyncMock(side_effect=AssertionError("must not parse pdf"))
+    repository = FundDocumentRepository(loader)
+    repository._cache = AnnualReportDocumentCache(tmp_path / "documents-cache")
+    document_key = DocumentKey(fund_code="110011", year=2024)
+    await repository._cache.record_pdf_path(
+        document_key,
+        tmp_path / "missing.pdf",
+        source_metadata=_eid_metadata(),
+    )
+    monkeypatch.setattr(
+        repository._cache,
+        "_load_parsed_report_sync",
+        lambda key: pytest.fail("reference metadata facade must not read parsed payload"),
+    )
+    monkeypatch.setattr(
+        repository._cache,
+        "_get_pdf_entry_sync",
+        lambda key: pytest.fail("reference metadata facade must not read PDF entry"),
+    )
+
+    result = await repository.get_annual_report_reference_metadata("110011", 2024)
+
+    assert result.status == "available"
+    assert result.metadata is not None
+    assert result.metadata.fund_code == "110011"
+    assert result.metadata.document_year == 2024
+    assert result.metadata.source == "eid"
+    assert result.metadata.selected_source == "eid"
+    assert result.metadata.source_mode == "single_source_only"
+    assert result.metadata.fallback_enabled is False
+    assert result.metadata.fallback_used is False
+    assert result.metadata.primary_failure_category is None
+    payload = result.to_dict()
+    assert "pdf_path" not in str(payload)
+    assert "missing.pdf" not in str(payload)
+    loader.fetch_pdf.assert_not_called()
+    loader.fetch_pdf_path.assert_not_called()
+    loader.parse_pdf.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_repository_reference_metadata_preserves_validation(
+    tmp_path: Path,
+) -> None:
+    """验证仓库引用元数据 facade 复用输入校验并 fail closed。
+
+    Args:
+        tmp_path: pytest 提供的临时目录。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当非法输入未被拒绝时抛出。
+    """
+
+    repository = FundDocumentRepository(Mock())
+    repository._cache = AnnualReportDocumentCache(tmp_path / "documents-cache")
+
+    with pytest.raises(ValueError, match="fund_code"):
+        await repository.get_annual_report_reference_metadata(" ", 2024)
+
+    with pytest.raises(ValueError, match="year"):
+        await repository.get_annual_report_reference_metadata("110011", 0)
+
+
 def _assert_same_report_content(
     actual: ParsedAnnualReport,
     expected: ParsedAnnualReport,

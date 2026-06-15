@@ -5,7 +5,9 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+import hashlib
+import json
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, Final, Literal
 
@@ -20,6 +22,7 @@ AnnualReportSourceFailureCategory = Literal[
     "identity_mismatch",
     "integrity_error",
 ]
+AnnualReportReferenceMetadataStatus = Literal["available", "missing", "unsafe_metadata"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -284,6 +287,137 @@ class AnnualReportPdfFetchResult:
 
     pdf_path: Path
     source_metadata: AnnualReportSourceMetadata | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class AnnualReportReferenceMetadata:
+    """年报同源引用可用性元数据。
+
+    该模型只承载模板第 1-6 章后续证据准入所需的来源身份字段，不包含
+    PDF 路径、缓存路径、正文、表格、章节、来源 URL 或公告详情字段。
+
+    Attributes:
+        fund_code: 基金代码。
+        document_year: 报告年份。
+        report_type: 报告类型，当前只支持年报。
+        source: 来源名称。
+        selected_source: 来源策略选中的来源。
+        source_mode: 来源策略模式。
+        fallback_enabled: 来源策略是否启用 fallback。
+        fallback_used: 是否实际使用 fallback。
+        primary_failure_category: 主来源失败类别。
+        metadata_identity_hash: 只覆盖本模型允许字段的稳定摘要。
+    """
+
+    fund_code: str
+    document_year: int
+    report_type: Literal["annual_report"] = ANNUAL_REPORT_DOCUMENT_KIND
+    source: AnnualReportSourceName | None = None
+    selected_source: AnnualReportSourceName | None = None
+    source_mode: AnnualReportSourceMode | None = None
+    fallback_enabled: bool | None = None
+    fallback_used: bool = False
+    primary_failure_category: AnnualReportSourceFailureCategory | None = None
+    metadata_identity_hash: str | None = None
+
+    def with_identity_hash(self) -> "AnnualReportReferenceMetadata":
+        """返回带稳定身份摘要的元数据副本。
+
+        Args:
+            无。
+
+        Returns:
+            ``metadata_identity_hash`` 已填充的元数据。
+
+        Raises:
+            无显式抛出。
+        """
+
+        return replace(self, metadata_identity_hash=self.compute_identity_hash())
+
+    def compute_identity_hash(self) -> str:
+        """计算只覆盖允许字段的稳定 SHA-256 摘要。
+
+        Args:
+            无。
+
+        Returns:
+            十六进制 SHA-256 摘要。
+
+        Raises:
+            无显式抛出。
+        """
+
+        payload = self.to_dict(include_hash=False)
+        encoded = json.dumps(
+            payload,
+            ensure_ascii=False,
+            separators=(",", ":"),
+            sort_keys=True,
+        ).encode("utf-8")
+        return hashlib.sha256(encoded).hexdigest()
+
+    def to_dict(self, *, include_hash: bool = True) -> dict[str, object]:
+        """把元数据序列化为 JSON 兼容字典。
+
+        Args:
+            include_hash: 是否包含 ``metadata_identity_hash`` 字段。
+
+        Returns:
+            只含允许字段的字典结构。
+
+        Raises:
+            无显式抛出。
+        """
+
+        payload: dict[str, object] = {
+            "fund_code": self.fund_code,
+            "document_year": self.document_year,
+            "report_type": self.report_type,
+            "source": self.source,
+            "selected_source": self.selected_source,
+            "source_mode": self.source_mode,
+            "fallback_enabled": self.fallback_enabled,
+            "fallback_used": self.fallback_used,
+            "primary_failure_category": self.primary_failure_category,
+        }
+        if include_hash:
+            payload["metadata_identity_hash"] = self.metadata_identity_hash
+        return payload
+
+
+@dataclass(frozen=True, slots=True)
+class AnnualReportReferenceMetadataResult:
+    """年报同源引用元数据查询结果。
+
+    Attributes:
+        status: 查询状态。
+        metadata: 状态为 ``available`` 时返回的元数据。
+        reason: ``missing`` 或 ``unsafe_metadata`` 的稳定原因。
+    """
+
+    status: AnnualReportReferenceMetadataStatus
+    metadata: AnnualReportReferenceMetadata | None = None
+    reason: str | None = None
+
+    def to_dict(self) -> dict[str, object]:
+        """把查询结果序列化为 JSON 兼容字典。
+
+        Args:
+            无。
+
+        Returns:
+            查询结果字典。
+
+        Raises:
+            无显式抛出。
+        """
+
+        return {
+            "status": self.status,
+            "metadata": self.metadata.to_dict() if self.metadata is not None else None,
+            "reason": self.reason,
+        }
 
 
 def _optional_string(value: Any) -> str | None:

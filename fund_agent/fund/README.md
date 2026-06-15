@@ -466,9 +466,9 @@ C2 当前只做确定性 marker / 元数据检查，不调用 LLM，不判断语
 
 仓库层位于 `fund_agent/fund/documents/`：
 
-- `models.py`：`DocumentKey`、`ParsedAnnualReport`、`ReportSection`、`ParsedTable`
-- `repository.py`：对外唯一公开读取入口 `FundDocumentRepository`
-- `cache.py`：raw PDF 元信息缓存与 parsed report 物化缓存；parsed report 命中前会检查最小正文长度和关键章节集合，避免历史低质量解析物被当作真实年报复用；parsed report JSON 使用同目录临时文件加原子替换写入，替换失败会清理临时 payload 且不写入 SQLite 行；损坏的来源元数据只降级为空元数据，不阻断 PDF 路径缓存读取；同一缓存实例内 parsed report 读写串行执行，避免同进程并发读写同一 SQLite/JSON 物化状态
+- `models.py`：`DocumentKey`、`ParsedAnnualReport`、`ReportSection`、`ParsedTable`、`AnnualReportReferenceMetadataResult`
+- `repository.py`：对外唯一公开读取入口 `FundDocumentRepository`；`load_annual_report()` 返回解析年报，`get_annual_report_reference_metadata()` 只返回不含正文和路径的来源身份元数据
+- `cache.py`：raw PDF 元信息缓存、parsed report 物化缓存与 bodyless reference metadata 查询；parsed report 命中前会检查最小正文长度和关键章节集合，避免历史低质量解析物被当作真实年报复用；parsed report JSON 使用同目录临时文件加原子替换写入，替换失败会清理临时 payload 且不写入 SQLite 行；损坏的来源元数据只降级为空元数据，不阻断 PDF 路径缓存读取；同一缓存实例内 parsed report 读写串行执行，避免同进程并发读写同一 SQLite/JSON 物化状态
 - `adapters/annual_report_pdf.py`：把底层 PDF helper 适配为统一仓库返回值
 
 基础画像 extractor 位于 `fund_agent/fund/extractors/`：
@@ -492,7 +492,7 @@ C2 当前只做确定性 marker / 元数据检查，不调用 LLM，不判断语
 
 当前边界要求：
 
-- 业务调用方只通过 `FundDocumentRepository.load_annual_report(...)` 读取年报。
+- 业务调用方只通过 `FundDocumentRepository.load_annual_report(...)` 读取年报；只需要确认同源引用元数据时使用 `FundDocumentRepository.get_annual_report_reference_metadata(...)`，该接口不返回 PDF 路径、正文、章节、表格或来源 URL。
 - 业务调用方若需要基础画像，只消费 `extract_profile(report)` 的结构化结果，不直接复用正则规则。
 - `fund_agent/fund/pdf/*` 只作为仓库内部 helper / adapter，允许返回本地 `Path`，但这不是上层公共契约。
 - `ParsedAnnualReport` 是后续各章节 extractor 的统一输入；当前稳定 extractor 已扩展到 `§1/§2/§3/§4/§8/§9/§10`。
