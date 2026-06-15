@@ -1,6 +1,7 @@
 """文档仓库测试。"""
 
 import asyncio
+import inspect
 from dataclasses import replace
 from pathlib import Path
 from unittest.mock import AsyncMock, Mock
@@ -1161,3 +1162,25 @@ async def test_repository_concurrent_loads_do_not_cross_attach_source_metadata(
     assert entry_b is not None
     assert entry_a.source_metadata == metadata_a
     assert entry_b.source_metadata == metadata_b
+
+
+def test_repository_load_annual_report_has_no_candidate_route() -> None:
+    """验证生产仓库入口未引入 Docling candidate 路由。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当仓库公开 candidate 入口或 load path 引用 candidate 时抛出。
+    """
+
+    repository = FundDocumentRepository()
+    source = inspect.getsource(FundDocumentRepository.load_annual_report)
+
+    assert not hasattr(repository, "load_candidate_document")
+    assert not hasattr(repository, "load_fund_disclosure_document")
+    assert "documents.candidates" not in source
+    assert "docling_pdf_candidate" not in source

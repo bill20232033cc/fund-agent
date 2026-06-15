@@ -1,0 +1,768 @@
+{
+  "metadata": {
+    "fixture_schema_version": "docling_route_a_excerpt.v1",
+    "fixture_source_kind": "docling_pdf_candidate_excerpt",
+    "fund_code": "004393",
+    "fund_name": "安信企业价值优选混合A",
+    "report_year": 2025,
+    "report_type": "annual_report",
+    "route_a_json_sha256": "b7a664c31a11db332815884b5632451ed6e64c8d246254ed23f55f409364c933",
+    "route_a_markdown_sha256": "e9644cceebc82a9d9a4a3a1af692e5c7a8fa99edc0ceec0a824e4f246dc87596",
+    "excerpt_hash_sha256": "minimal-excerpt-hash-not-source-truth",
+    "source_artifact_path": "reports/docling-route-a/004393_2025_docling.json",
+    "full_json_committed": false,
+    "source_truth_status": "not_proven",
+    "field_correctness_status": "not_proven",
+    "taxonomy_compatibility_status": "not_proven",
+    "production_parser_replacement_status": "not_authorized",
+    "notes": "Minimal no-live excerpt derived from Route A JSON. It is not source truth, field correctness proof, taxonomy proof, parser replacement, or readiness evidence."
+  },
+  "origin_excerpt": {
+    "filename": "安信企业价值优选混合型证券投资基金2025年年度报告.pdf",
+    "mimetype": "application/pdf",
+    "binary_hash": "5376474238001181446"
+  },
+  "text_excerpts": [
+    {
+      "case_id": "section-heading-s8",
+      "self_ref": "#/texts/520",
+      "label": "section_header",
+      "level": 1,
+      "text": "§8 投资组合报告",
+      "prov": [
+        {
+          "page_no": 51,
+          "bbox": {
+            "l": 241.44,
+            "t": 486.16617441406254,
+            "r": 353.8888,
+            "b": 475.0060418762278,
+            "coord_origin": "BOTTOMLEFT"
+          },
+          "charspan": [0, 9]
+        }
+      ]
+    },
+    {
+      "case_id": "section-heading-stock-detail",
+      "self_ref": "#/texts/533",
+      "label": "section_header",
+      "level": 1,
+      "text": "8.3 期末按公允价值占基金资产净值比例大小排序的所有股票投资明细",
+      "prov": [
+        {
+          "page_no": 53,
+          "bbox": {
+            "l": 76.559,
+            "t": 732.4460244140624,
+            "r": 449.99505000000005,
+            "b": 722.9142386166236,
+            "coord_origin": "BOTTOMLEFT"
+          },
+          "charspan": [0, 33]
+        }
+      ]
+    }
+  ],
+  "table_excerpts": [
+    {
+      "case_id": "toc-table-0",
+      "source_table_index": 0,
+      "self_ref": "#/tables/0",
+      "label": "document_index",
+      "page_no": 3,
+      "num_rows": 37,
+      "num_cols": 3,
+      "prov": [
+        {
+          "page_no": 3,
+          "bbox": {
+            "l": 77.43270111083984,
+            "t": 733.316520690918,
+            "r": 519.4072265625,
+            "b": 62.19586181640625,
+            "coord_origin": "BOTTOMLEFT"
+          },
+          "charspan": [0, 0]
+        }
+      ],
+      "table_cells": [
+        {
+          "bbox": {"l": 76.559, "t": 110.51265000000001, "r": 518.705, "b": 118.81324679860302, "coord_origin": "TOPLEFT"},
+          "row_span": 1,
+          "col_span": 3,
+          "start_row_offset_idx": 0,
+          "end_row_offset_idx": 1,
+          "start_col_offset_idx": 0,
+          "end_col_offset_idx": 3,
+          "text": "§1 重要提示及目录................................................................ 1",
+          "column_header": false,
+          "row_header": true,
+          "row_section": false,
+          "fillable": false
+        },
+        {
+          "bbox": {"l": 87.0, "t": 190.91264999999999, "r": 102.7844, "b": 199.2132467986031, "coord_origin": "TOPLEFT"},
+          "row_span": 1,
+          "col_span": 1,
+          "start_row_offset_idx": 4,
+          "end_row_offset_idx": 5,
+          "start_col_offset_idx": 0,
+          "end_col_offset_idx": 1,
+          "text": "2.1",
+          "column_header": false,
+          "row_header": false,
+          "row_section": false,
+          "fillable": false
+        },
+        {
+          "bbox": {"l": 108.0, "t": 190.91264999999999, "r": 509.615, "b": 199.2132467986031, "coord_origin": "TOPLEFT"},
+          "row_span": 1,
+          "col_span": 1,
+          "start_row_offset_idx": 4,
+          "end_row_offset_idx": 5,
+          "start_col_offset_idx": 1,
+          "end_col_offset_idx": 2,
+          "text": "基金基本情况................................................................",
+          "column_header": false,
+          "row_header": false,
+          "row_section": false,
+          "fillable": false
+        }
+      ]
+    },
+    {
+      "case_id": "manager-table-14",
+      "source_table_index": 14,
+      "self_ref": "#/tables/14",
+      "label": "table",
+      "page_no": 11,
+      "num_rows": 3,
+      "num_cols": 6,
+      "prov": [
+        {
+          "page_no": 11,
+          "bbox": {
+            "l": 70.03239440917969,
+            "t": 380.23126220703125,
+            "r": 524.4705200195312,
+            "b": 64.3912353515625,
+            "coord_origin": "BOTTOMLEFT"
+          },
+          "charspan": [0, 0]
+        }
+      ],
+      "table_cells": [
+        {
+          "bbox": {"l": 80.64, "t": 483.47164999999995, "r": 101.52985, "b": 491.772246798603, "coord_origin": "TOPLEFT"},
+          "row_span": 2,
+          "col_span": 1,
+          "start_row_offset_idx": 0,
+          "end_row_offset_idx": 2,
+          "start_col_offset_idx": 0,
+          "end_col_offset_idx": 1,
+          "text": "姓名",
+          "column_header": true,
+          "row_header": false,
+          "row_section": false,
+          "fillable": false
+        },
+        {
+          "bbox": {"l": 284.52, "t": 476.75264999999996, "r": 315.96924999999993, "b": 498.61324679860303, "coord_origin": "TOPLEFT"},
+          "row_span": 2,
+          "col_span": 1,
+          "start_row_offset_idx": 0,
+          "end_row_offset_idx": 2,
+          "start_col_offset_idx": 4,
+          "end_col_offset_idx": 5,
+          "text": "证券从 业年限",
+          "column_header": true,
+          "row_header": false,
+          "row_section": false,
+          "fillable": false
+        },
+        {
+          "bbox": {"l": 80.64, "t": 640.79265, "r": 101.52985, "b": 649.093246798603, "coord_origin": "TOPLEFT"},
+          "row_span": 1,
+          "col_span": 1,
+          "start_row_offset_idx": 2,
+          "end_row_offset_idx": 3,
+          "start_col_offset_idx": 0,
+          "end_col_offset_idx": 1,
+          "text": "张明",
+          "column_header": false,
+          "row_header": false,
+          "row_section": false,
+          "fillable": false
+        },
+        {
+          "bbox": {"l": 116.52, "t": 609.59265, "r": 162.6091, "b": 680.293246798603, "coord_origin": "TOPLEFT"},
+          "row_span": 1,
+          "col_span": 1,
+          "start_row_offset_idx": 2,
+          "end_row_offset_idx": 3,
+          "start_col_offset_idx": 1,
+          "end_col_offset_idx": 2,
+          "text": "本基金的 基 金 经 理，价值 投资部副 总经理",
+          "column_header": false,
+          "row_header": false,
+          "row_section": false,
+          "fillable": false
+        },
+        {
+          "bbox": {"l": 173.4, "t": 632.99265, "r": 215.345, "b": 656.8932467986031, "coord_origin": "TOPLEFT"},
+          "row_span": 1,
+          "col_span": 1,
+          "start_row_offset_idx": 2,
+          "end_row_offset_idx": 3,
+          "start_col_offset_idx": 2,
+          "end_col_offset_idx": 3,
+          "text": "2022年8 月8日",
+          "column_header": false,
+          "row_header": false,
+          "row_section": false,
+          "fillable": false
+        }
+      ]
+    },
+    {
+      "case_id": "industry-table-72",
+      "source_table_index": 72,
+      "self_ref": "#/tables/72",
+      "label": "table",
+      "page_no": 52,
+      "num_rows": 21,
+      "num_cols": 4,
+      "prov": [
+        {
+          "page_no": 52,
+          "bbox": {
+            "l": 70.20702362060547,
+            "t": 699.5812377929688,
+            "r": 524.8569946289062,
+            "b": 309.1495361328125,
+            "coord_origin": "BOTTOMLEFT"
+          },
+          "charspan": [0, 0]
+        }
+      ],
+      "table_cells": [
+        {
+          "bbox": {"l": 78.84, "t": 150.59264999999994, "r": 99.72985000000001, "b": 158.89324679860306, "coord_origin": "TOPLEFT"},
+          "row_span": 1,
+          "col_span": 1,
+          "start_row_offset_idx": 0,
+          "end_row_offset_idx": 1,
+          "start_col_offset_idx": 0,
+          "end_col_offset_idx": 1,
+          "text": "代码",
+          "column_header": true,
+          "row_header": false,
+          "row_section": false,
+          "fillable": false
+        },
+        {
+          "bbox": {"l": 159.0, "t": 150.59264999999994, "r": 200.8891, "b": 158.89324679860306, "coord_origin": "TOPLEFT"},
+          "row_span": 1,
+          "col_span": 1,
+          "start_row_offset_idx": 0,
+          "end_row_offset_idx": 1,
+          "start_col_offset_idx": 1,
+          "end_col_offset_idx": 2,
+          "text": "行业类别",
+          "column_header": true,
+          "row_header": false,
+          "row_section": false,
+          "fillable": false
+        },
+        {
+          "bbox": {"l": 288.24, "t": 150.59264999999994, "r": 361.6877499999999, "b": 158.89324679860306, "coord_origin": "TOPLEFT"},
+          "row_span": 1,
+          "col_span": 1,
+          "start_row_offset_idx": 0,
+          "end_row_offset_idx": 1,
+          "start_col_offset_idx": 2,
+          "end_col_offset_idx": 3,
+          "text": "公允价值（元）",
+          "column_header": true,
+          "row_header": false,
+          "row_section": false,
+          "fillable": false
+        },
+        {
+          "bbox": {"l": 86.759, "t": 169.43264999999997, "r": 91.984, "b": 177.7332467986031, "coord_origin": "TOPLEFT"},
+          "row_span": 1,
+          "col_span": 1,
+          "start_row_offset_idx": 1,
+          "end_row_offset_idx": 2,
+          "start_col_offset_idx": 0,
+          "end_col_offset_idx": 1,
+          "text": "A",
+          "column_header": false,
+          "row_header": false,
+          "row_section": false,
+          "fillable": false
+        },
+        {
+          "bbox": {"l": 108.359, "t": 169.43264999999997, "r": 192.24660000000003, "b": 177.7332467986031, "coord_origin": "TOPLEFT"},
+          "row_span": 1,
+          "col_span": 1,
+          "start_row_offset_idx": 1,
+          "end_row_offset_idx": 2,
+          "start_col_offset_idx": 1,
+          "end_col_offset_idx": 2,
+          "text": "农、林、牧、渔业",
+          "column_header": false,
+          "row_header": false,
+          "row_section": false,
+          "fillable": false
+        },
+        {
+          "bbox": {"l": 339.48, "t": 169.43264999999997, "r": 391.9817, "b": 177.7332467986031, "coord_origin": "TOPLEFT"},
+          "row_span": 1,
+          "col_span": 1,
+          "start_row_offset_idx": 1,
+          "end_row_offset_idx": 2,
+          "start_col_offset_idx": 2,
+          "end_col_offset_idx": 3,
+          "text": "859,860.00",
+          "column_header": false,
+          "row_header": false,
+          "row_section": false,
+          "fillable": false
+        }
+      ]
+    },
+    {
+      "case_id": "stock-holding-table-74",
+      "source_table_index": 74,
+      "self_ref": "#/tables/74",
+      "label": "table",
+      "page_no": 53,
+      "num_rows": 38,
+      "num_cols": 6,
+      "prov": [
+        {
+          "page_no": 53,
+          "bbox": {
+            "l": 70.17845153808594,
+            "t": 695.708251953125,
+            "r": 524.583740234375,
+            "b": 66.9818115234375,
+            "coord_origin": "BOTTOMLEFT"
+          },
+          "charspan": [0, 0]
+        }
+      ],
+      "table_cells": [
+        {
+          "bbox": {"l": 80.52, "t": 151.79264999999998, "r": 101.40984999999999, "b": 160.093246798603, "coord_origin": "TOPLEFT"},
+          "row_span": 1,
+          "col_span": 1,
+          "start_row_offset_idx": 0,
+          "end_row_offset_idx": 1,
+          "start_col_offset_idx": 0,
+          "end_col_offset_idx": 1,
+          "text": "序号",
+          "column_header": true,
+          "row_header": false,
+          "row_section": false,
+          "fillable": false
+        },
+        {
+          "bbox": {"l": 116.4, "t": 151.79264999999998, "r": 158.28910000000002, "b": 160.093246798603, "coord_origin": "TOPLEFT"},
+          "row_span": 1,
+          "col_span": 1,
+          "start_row_offset_idx": 0,
+          "end_row_offset_idx": 1,
+          "start_col_offset_idx": 1,
+          "end_col_offset_idx": 2,
+          "text": "股票代码",
+          "column_header": true,
+          "row_header": false,
+          "row_section": false,
+          "fillable": false
+        },
+        {
+          "bbox": {"l": 181.8, "t": 151.79264999999998, "r": 223.68910000000002, "b": 160.093246798603, "coord_origin": "TOPLEFT"},
+          "row_span": 1,
+          "col_span": 1,
+          "start_row_offset_idx": 0,
+          "end_row_offset_idx": 1,
+          "start_col_offset_idx": 2,
+          "end_col_offset_idx": 3,
+          "text": "股票名称",
+          "column_header": true,
+          "row_header": false,
+          "row_section": false,
+          "fillable": false
+        },
+        {
+          "bbox": {"l": 247.32, "t": 151.79264999999998, "r": 299.77, "b": 160.093246798603, "coord_origin": "TOPLEFT"},
+          "row_span": 1,
+          "col_span": 1,
+          "start_row_offset_idx": 0,
+          "end_row_offset_idx": 1,
+          "start_col_offset_idx": 3,
+          "end_col_offset_idx": 4,
+          "text": "数量（股）",
+          "column_header": true,
+          "row_header": false,
+          "row_section": false,
+          "fillable": false
+        },
+        {
+          "bbox": {"l": 312.48, "t": 151.79264999999998, "r": 385.9277499999999, "b": 160.093246798603, "coord_origin": "TOPLEFT"},
+          "row_span": 1,
+          "col_span": 1,
+          "start_row_offset_idx": 0,
+          "end_row_offset_idx": 1,
+          "start_col_offset_idx": 4,
+          "end_col_offset_idx": 5,
+          "text": "公允价值（元）",
+          "column_header": true,
+          "row_header": false,
+          "row_section": false,
+          "fillable": false
+        },
+        {
+          "bbox": {"l": 401.4, "t": 151.79264999999998, "r": 522.13, "b": 160.093246798603, "coord_origin": "TOPLEFT"},
+          "row_span": 1,
+          "col_span": 1,
+          "start_row_offset_idx": 0,
+          "end_row_offset_idx": 1,
+          "start_col_offset_idx": 5,
+          "end_col_offset_idx": 6,
+          "text": "占基金资产净值比例（%）",
+          "column_header": true,
+          "row_header": false,
+          "row_section": false,
+          "fillable": false
+        },
+        {
+          "bbox": {"l": 88.44, "t": 167.99265000000003, "r": 93.66499999999999, "b": 176.29324679860304, "coord_origin": "TOPLEFT"},
+          "row_span": 1,
+          "col_span": 1,
+          "start_row_offset_idx": 1,
+          "end_row_offset_idx": 2,
+          "start_col_offset_idx": 0,
+          "end_col_offset_idx": 1,
+          "text": "1",
+          "column_header": false,
+          "row_header": false,
+          "row_section": false,
+          "fillable": false
+        },
+        {
+          "bbox": {"l": 124.2, "t": 167.99265000000003, "r": 150.4235, "b": 176.29324679860304, "coord_origin": "TOPLEFT"},
+          "row_span": 1,
+          "col_span": 1,
+          "start_row_offset_idx": 1,
+          "end_row_offset_idx": 2,
+          "start_col_offset_idx": 1,
+          "end_col_offset_idx": 2,
+          "text": "00939",
+          "column_header": false,
+          "row_header": false,
+          "row_section": false,
+          "fillable": false
+        },
+        {
+          "bbox": {"l": 181.8, "t": 167.99265000000003, "r": 223.68910000000002, "b": 176.29324679860304, "coord_origin": "TOPLEFT"},
+          "row_span": 1,
+          "col_span": 1,
+          "start_row_offset_idx": 1,
+          "end_row_offset_idx": 2,
+          "start_col_offset_idx": 2,
+          "end_col_offset_idx": 3,
+          "text": "建设银行",
+          "column_header": false,
+          "row_header": false,
+          "row_section": false,
+          "fillable": false
+        }
+      ]
+    },
+    {
+      "case_id": "manager-holding-table-86",
+      "source_table_index": 86,
+      "self_ref": "#/tables/86",
+      "label": "table",
+      "page_no": 60,
+      "num_rows": 7,
+      "num_cols": 3,
+      "prov": [
+        {
+          "page_no": 60,
+          "bbox": {
+            "l": 70.07147216796875,
+            "t": 750.0890808105469,
+            "r": 524.7566528320312,
+            "b": 584.5192260742188,
+            "coord_origin": "BOTTOMLEFT"
+          },
+          "charspan": [0, 0]
+        }
+      ],
+      "table_cells": [
+        {
+          "bbox": {"l": 117.84, "t": 97.19264999999996, "r": 138.72985, "b": 105.49324679860308, "coord_origin": "TOPLEFT"},
+          "row_span": 1,
+          "col_span": 1,
+          "start_row_offset_idx": 0,
+          "end_row_offset_idx": 1,
+          "start_col_offset_idx": 0,
+          "end_col_offset_idx": 1,
+          "text": "项目",
+          "column_header": true,
+          "row_header": false,
+          "row_section": false,
+          "fillable": false
+        },
+        {
+          "bbox": {"l": 233.28, "t": 97.19264999999996, "r": 275.1691, "b": 105.49324679860308, "coord_origin": "TOPLEFT"},
+          "row_span": 1,
+          "col_span": 1,
+          "start_row_offset_idx": 0,
+          "end_row_offset_idx": 1,
+          "start_col_offset_idx": 1,
+          "end_col_offset_idx": 2,
+          "text": "份额级别",
+          "column_header": true,
+          "row_header": false,
+          "row_section": false,
+          "fillable": false
+        },
+        {
+          "bbox": {"l": 334.32, "t": 97.19264999999996, "r": 512.7639999999997, "b": 105.49324679860308, "coord_origin": "TOPLEFT"},
+          "row_span": 1,
+          "col_span": 1,
+          "start_row_offset_idx": 0,
+          "end_row_offset_idx": 1,
+          "start_col_offset_idx": 2,
+          "end_col_offset_idx": 3,
+          "text": "持有基金份额总量的数量区间（万份）",
+          "column_header": true,
+          "row_header": false,
+          "row_section": false,
+          "fillable": false
+        },
+        {
+          "bbox": {"l": 76.559, "t": 203.03265, "r": 171.006, "b": 226.93324679860302, "coord_origin": "TOPLEFT"},
+          "row_span": 3,
+          "col_span": 1,
+          "start_row_offset_idx": 4,
+          "end_row_offset_idx": 7,
+          "start_col_offset_idx": 0,
+          "end_col_offset_idx": 1,
+          "text": "本基金基金经理持有 本开放式基金",
+          "column_header": false,
+          "row_header": false,
+          "row_section": false,
+          "fillable": false
+        },
+        {
+          "bbox": {"l": 191.04, "t": 200.15265, "r": 303.90500000000003, "b": 208.453246798603, "coord_origin": "TOPLEFT"},
+          "row_span": 1,
+          "col_span": 1,
+          "start_row_offset_idx": 4,
+          "end_row_offset_idx": 5,
+          "start_col_offset_idx": 1,
+          "end_col_offset_idx": 2,
+          "text": "安信企业价值优选混合A",
+          "column_header": false,
+          "row_header": false,
+          "row_section": false,
+          "fillable": false
+        },
+        {
+          "bbox": {"l": 487.2, "t": 200.15265, "r": 518.7032, "b": 208.453246798603, "coord_origin": "TOPLEFT"},
+          "row_span": 1,
+          "col_span": 1,
+          "start_row_offset_idx": 4,
+          "end_row_offset_idx": 5,
+          "start_col_offset_idx": 2,
+          "end_col_offset_idx": 3,
+          "text": "50~100",
+          "column_header": false,
+          "row_header": false,
+          "row_section": false,
+          "fillable": false
+        }
+      ]
+    },
+    {
+      "case_id": "financial-continuation-61",
+      "source_table_index": 61,
+      "self_ref": "#/tables/61",
+      "label": "table",
+      "page_no": 46,
+      "num_rows": 9,
+      "num_cols": 5,
+      "prov": [
+        {
+          "page_no": 46,
+          "bbox": {
+            "l": 69.9179458618164,
+            "t": 356.4858093261719,
+            "r": 515.6646728515625,
+            "b": 61.1595458984375,
+            "coord_origin": "BOTTOMLEFT"
+          },
+          "charspan": [0, 0]
+        }
+      ],
+      "table_cells": [
+        {
+          "bbox": {"l": 103.92, "t": 523.1926500000001, "r": 124.80985, "b": 531.4932467986031, "coord_origin": "TOPLEFT"},
+          "row_span": 1,
+          "col_span": 1,
+          "start_row_offset_idx": 1,
+          "end_row_offset_idx": 2,
+          "start_col_offset_idx": 0,
+          "end_col_offset_idx": 1,
+          "text": "项目",
+          "column_header": true,
+          "row_header": false,
+          "row_section": false,
+          "fillable": false
+        },
+        {
+          "bbox": {"l": 287.88, "t": 491.75264999999996, "r": 374.409, "b": 515.653246798603, "coord_origin": "TOPLEFT"},
+          "row_span": 1,
+          "col_span": 4,
+          "start_row_offset_idx": 0,
+          "end_row_offset_idx": 1,
+          "start_col_offset_idx": 1,
+          "end_col_offset_idx": 5,
+          "text": "本期末 2025年12月31日",
+          "column_header": true,
+          "row_header": false,
+          "row_section": false,
+          "fillable": false
+        },
+        {
+          "bbox": {"l": 76.559, "t": 602.39265, "r": 139.44734999999997, "b": 626.293246798603, "coord_origin": "TOPLEFT"},
+          "row_span": 1,
+          "col_span": 1,
+          "start_row_offset_idx": 3,
+          "end_row_offset_idx": 4,
+          "start_col_offset_idx": 0,
+          "end_col_offset_idx": 1,
+          "text": "交易性金融资 产",
+          "column_header": false,
+          "row_header": false,
+          "row_section": false,
+          "fillable": false
+        },
+        {
+          "bbox": {"l": 223.92, "t": 610.1926500000001, "r": 292.1405, "b": 618.4932467986031, "coord_origin": "TOPLEFT"},
+          "row_span": 1,
+          "col_span": 1,
+          "start_row_offset_idx": 3,
+          "end_row_offset_idx": 4,
+          "start_col_offset_idx": 2,
+          "end_col_offset_idx": 3,
+          "text": "61,860,002.32",
+          "column_header": false,
+          "row_header": false,
+          "row_section": false,
+          "fillable": false
+        }
+      ]
+    },
+    {
+      "case_id": "financial-continuation-62",
+      "source_table_index": 62,
+      "self_ref": "#/tables/62",
+      "label": "table",
+      "page_no": 47,
+      "num_rows": 9,
+      "num_cols": 5,
+      "prov": [
+        {
+          "page_no": 47,
+          "bbox": {
+            "l": 69.9230728149414,
+            "t": 770.6628341674805,
+            "r": 515.4260864257812,
+            "b": 482.875732421875,
+            "coord_origin": "BOTTOMLEFT"
+          },
+          "charspan": [0, 0]
+        }
+      ],
+      "table_cells": [
+        {
+          "bbox": {"l": 98.64, "t": 108.35265000000004, "r": 119.52985, "b": 116.65324679860305, "coord_origin": "TOPLEFT"},
+          "row_span": 1,
+          "col_span": 1,
+          "start_row_offset_idx": 1,
+          "end_row_offset_idx": 2,
+          "start_col_offset_idx": 0,
+          "end_col_offset_idx": 1,
+          "text": "项目",
+          "column_header": true,
+          "row_header": false,
+          "row_section": false,
+          "fillable": false
+        },
+        {
+          "bbox": {"l": 287.88, "t": 76.91264999999999, "r": 374.409, "b": 100.81324679860302, "coord_origin": "TOPLEFT"},
+          "row_span": 1,
+          "col_span": 4,
+          "start_row_offset_idx": 0,
+          "end_row_offset_idx": 1,
+          "start_col_offset_idx": 1,
+          "end_col_offset_idx": 5,
+          "text": "上年度末 2024年12月31日",
+          "column_header": true,
+          "row_header": false,
+          "row_section": false,
+          "fillable": false
+        },
+        {
+          "bbox": {"l": 76.559, "t": 187.55264999999997, "r": 139.44734999999997, "b": 211.453246798603, "coord_origin": "TOPLEFT"},
+          "row_span": 1,
+          "col_span": 1,
+          "start_row_offset_idx": 3,
+          "end_row_offset_idx": 4,
+          "start_col_offset_idx": 0,
+          "end_col_offset_idx": 1,
+          "text": "交易性金融资 产",
+          "column_header": false,
+          "row_header": false,
+          "row_section": false,
+          "fillable": false
+        },
+        {
+          "bbox": {"l": 218.64, "t": 195.35265000000004, "r": 292.14019999999994, "b": 203.65324679860305, "coord_origin": "TOPLEFT"},
+          "row_span": 1,
+          "col_span": 1,
+          "start_row_offset_idx": 3,
+          "end_row_offset_idx": 4,
+          "start_col_offset_idx": 2,
+          "end_col_offset_idx": 3,
+          "text": "115,502,525.39",
+          "column_header": false,
+          "row_header": false,
+          "row_section": false,
+          "fillable": false
+        }
+      ]
+    }
+  ],
+  "normalization_cases": [
+    {"case_id": "numeric-punctuation-dot", "raw": "33,984,439 .75", "expected": "33,984,439.75"},
+    {"case_id": "numeric-punctuation-group", "raw": "154,973,70 4.60", "expected": "154,973,704.60"},
+    {"case_id": "numeric-whitespace-100000", "raw": "100 000", "expected": "100000"},
+    {"case_id": "numeric-whitespace-1234567", "raw": "1 234 567", "expected": "1234567"},
+    {"case_id": "numeric-whitespace-ambiguous", "raw": "1 23 456", "failure_code": "numeric_repair_ambiguous"},
+    {"case_id": "numeric-whitespace-range-like", "raw": "50 100", "failure_code": "numeric_repair_ambiguous"}
+  ],
+  "failure_cases": [
+    {"case_id": "missing-table-cells", "candidate_failure_code": "table_cells_missing", "canonical": "schema_drift"},
+    {"case_id": "identity-mismatch", "candidate_failure_code": "candidate_identity_mismatch", "canonical": "identity_mismatch"},
+    {"case_id": "hash-mismatch", "candidate_failure_code": "candidate_artifact_hash_mismatch", "canonical": "integrity_error"}
+  ]
+}
