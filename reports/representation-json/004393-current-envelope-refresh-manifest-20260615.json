@@ -1,0 +1,25 @@
+{
+  "entries": [
+    {
+      "output": "reports/representation-json/004393_2025_docling_current_envelope.json",
+      "sha256": "f4ea5e1fa028a364c2286a9244e7d482c4851afbcefb506c5b5b08db4ff02d28",
+      "source": "reports/representation-json/004393_2025_docling_full.json"
+    },
+    {
+      "output": "reports/representation-json/004393_2025_pdfplumber_current_envelope.json",
+      "sha256": "c0fa747e157098efe6ca5c2ca4d68e47f64e22b2e63a7aeedb4d5aa547393794",
+      "source": "reports/representation-json/004393_2025_pdfplumber_full.json"
+    },
+    {
+      "output": "reports/representation-json/004393_2025_eid_html_render_blocked_current_envelope.json",
+      "sha256": "6f0f6f52da5cad5ba14a5b1c7ebcbf87e8085c83ca7f42552f5a1770553a7d42",
+      "source": "reports/representation-json/004393_2025_eid_html_render_full.json",
+      "status": "blocked_current_envelope"
+    }
+  ],
+  "field_correctness_status": "not_proven",
+  "mode": "path_a_no_conversion_wrapper",
+  "production_parser_replacement_status": "not_authorized",
+  "schema_version": "004393_current_envelope_refresh_manifest.v1",
+  "source_truth_status": "not_proven"
+}
