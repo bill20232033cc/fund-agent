@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
+
+import pytest
 
 from fund_agent.fund.documents.candidates.evidence_anchor_mapping import (
     CandidateEvidenceAnchorMapping,
@@ -544,3 +547,434 @@ def test_non_docling_candidate_is_blocked() -> None:
 
     assert result.mapped == ()
     assert result.blocked[0].reason_code == "unsupported_source_kind"
+
+
+@pytest.mark.parametrize(
+    ("heading", "expected_section"),
+    [
+        ("2.1 基金基本情况", "§2"),
+        ("§ 2 基金简介", "§2"),
+        ("２．１ 基金基本情况", "§2"),
+        ("8.4 报告期末按行业分类的股票投资组合", "§8"),
+    ],
+)
+def test_numeric_heading_positive_examples_map_with_closed_family(
+    heading: str,
+    expected_section: str,
+) -> None:
+    """验证数字标题 positive case 只在闭合标题族命中时映射。
+
+    Args:
+        heading: 合成标题。
+        expected_section: 期望年报章节。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 标题映射不符合预期时抛出。
+    """
+
+    paragraph = {**_paragraph(section_id=""), "heading_path": [heading]}
+    document = project_candidate_representation(_payload(sections=(), text_blocks=(paragraph,), tables=()))
+
+    result = map_candidate_document_anchor_candidates(document, schema_family="S1_full")
+
+    assert result.blocked == ()
+    assert result.mapped[0].fields.section_id == expected_section
+
+
+@pytest.mark.parametrize(
+    "heading",
+    [
+        "8.3 任意无关文本",
+        "11.1 任意文本",
+        "二、基金简介",
+        "（二）基金基本情况",
+        "第八节 基金投资组合报告",
+        "2、基金简介",
+    ],
+)
+def test_unsupported_numeric_heading_patterns_block_as_unsupported_heading_number(heading: str) -> None:
+    """验证未授权数字/中文编号标题统一 fail-closed。
+
+    Args:
+        heading: 合成标题。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 未授权编号标题未阻断时抛出。
+    """
+
+    paragraph = {**_paragraph(section_id=""), "heading_path": [heading]}
+    document = project_candidate_representation(_payload(sections=(), text_blocks=(paragraph,), tables=()))
+
+    result = map_candidate_document_anchor_candidates(document, schema_family="S1_full")
+
+    assert result.mapped == ()
+    assert result.blocked[0].reason_code == "unsupported_heading_number"
+
+
+def test_toc_section_node_is_excluded_from_body_span_seed() -> None:
+    """验证确定性目录节点不作为正文 span 起点。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 目录页被误用为正文起点时抛出。
+    """
+
+    sections = (
+        _section(section_id="toc_sec_2", heading_text="目录 §2 基金简介", page_number=2),
+        _section(section_id="body_sec_2", heading_text="§2 基金简介", page_number=5),
+    )
+    table = {**_table_with_cell(section_id="", page_number=5, cells=[]), "heading_path": []}
+    document = project_candidate_representation(_payload(sections=sections, text_blocks=(), tables=(table,)))
+
+    result = map_candidate_document_anchor_candidates(document, schema_family="S1_full")
+
+    table_mapping = next(item for item in result.mapped if item.block_type == "table")
+    assert table_mapping.fields.section_id == "§2"
+    assert table_mapping.fields.page_number == 5
+
+
+def test_unsafe_toc_body_ambiguity_blocks_as_duplicate_section_heading() -> None:
+    """验证无法区分 TOC/body 的重复章节 fail-closed。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 不安全重复章节未阻断时抛出。
+    """
+
+    sections = (
+        _section(section_id="sec_2_a", heading_text="§2 基金简介", page_number=2),
+        _section(section_id="sec_2_b", heading_text="§2 基金简介", page_number=5),
+    )
+    table = {**_table_with_cell(section_id="", page_number=5, cells=[]), "heading_path": []}
+    document = project_candidate_representation(_payload(sections=sections, text_blocks=(), tables=(table,)))
+
+    result = map_candidate_document_anchor_candidates(document, schema_family="S1_full")
+
+    assert any(block.reason_code == "duplicate_section_heading" for block in result.blocked)
+    assert not any(item.block_type == "table" for item in result.mapped)
+
+
+def test_duplicate_body_heading_blocks_page_based_propagation() -> None:
+    """验证重复正文章节标题阻断受影响 span 内表格映射。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 重复正文标题未阻断时抛出。
+    """
+
+    sections = (
+        _section(section_id="sec_8_a", heading_text="§8 投资组合报告", page_number=60),
+        _section(section_id="sec_8_b", heading_text="§8 投资组合报告", page_number=70),
+    )
+    table = {**_table_with_cell(section_id="", page_number=62, cells=[]), "heading_path": []}
+    document = project_candidate_representation(_payload(sections=sections, text_blocks=(), tables=(table,)))
+
+    result = map_candidate_document_anchor_candidates(document, schema_family="S1_full")
+
+    assert any(block.reason_code == "duplicate_section_heading" for block in result.blocked)
+    assert not any(item.block_type == "table" for item in result.mapped)
+
+
+def test_duplicate_same_page_top_level_body_heading_blocks_page_based_propagation() -> None:
+    """验证同页 distinct 顶层章节节点重复时 fail-closed。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 同页重复顶层章节未阻断时抛出。
+    """
+
+    sections = (
+        _section(section_id="sec_8_a", heading_text="§8 投资组合报告", page_number=60),
+        _section(section_id="sec_8_b", heading_text="§8 投资组合报告", page_number=60),
+    )
+    table = {**_table_with_cell(section_id="", page_number=60, cells=[]), "heading_path": []}
+    document = project_candidate_representation(_payload(sections=sections, text_blocks=(), tables=(table,)))
+
+    result = map_candidate_document_anchor_candidates(document, schema_family="S1_full")
+
+    assert any(block.reason_code == "duplicate_section_heading" for block in result.blocked)
+    assert not any(item.block_type == "table" for item in result.mapped)
+
+
+def test_inter_section_monotonic_violation_blocks_affected_span() -> None:
+    """验证跨顶层章节起始页倒序时阻断 page propagation。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 倒序章节未阻断时抛出。
+    """
+
+    sections = (
+        _section(section_id="sec_3", heading_text="§3 主要财务指标", page_number=10),
+        _section(section_id="sec_8", heading_text="§8 投资组合报告", page_number=5),
+    )
+    table = {**_table_with_cell(section_id="", page_number=6, cells=[]), "heading_path": []}
+    document = project_candidate_representation(_payload(sections=sections, text_blocks=(), tables=(table,)))
+
+    result = map_candidate_document_anchor_candidates(document, schema_family="S1_full")
+
+    assert any(block.reason_code == "section_order_not_monotonic" for block in result.blocked)
+    assert not any(item.block_type == "table" for item in result.mapped)
+
+
+def test_same_section_child_nodes_do_not_break_monotonic_ordering() -> None:
+    """验证同一章节子标题不独立触发跨章节倒序。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 同章节子标题误触发倒序时抛出。
+    """
+
+    sections = (
+        _section(section_id="sec_3", heading_text="§3 主要财务指标", page_number=10),
+        _section(section_id="sec_8_child", heading_text="8.4 报告期末按行业分类的股票投资组合", page_number=58),
+        _section(section_id="sec_8", heading_text="§8 投资组合报告", page_number=60),
+    )
+    table = {**_table_with_cell(section_id="", page_number=59, cells=[]), "heading_path": []}
+    document = project_candidate_representation(_payload(sections=sections, text_blocks=(), tables=(table,)))
+
+    result = map_candidate_document_anchor_candidates(document, schema_family="S1_full")
+
+    table_mapping = next(item for item in result.mapped if item.block_type == "table")
+    assert table_mapping.fields.section_id == "§8"
+    assert not any(block.reason_code == "section_order_not_monotonic" for block in result.blocked)
+
+
+def test_page_based_table_inherits_stable_section_span() -> None:
+    """验证无显式章节的 table 可从稳定页码 span 继承章节。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: page-based 章节继承失败时抛出。
+    """
+
+    sections = (
+        _section(section_id="sec_3", heading_text="§3 主要财务指标", page_number=10),
+        _section(section_id="sec_8", heading_text="§8 投资组合报告", page_number=60),
+    )
+    table = {**_table_with_cell(section_id="", page_number=62, cells=[]), "heading_path": []}
+    document = project_candidate_representation(_payload(sections=sections, text_blocks=(), tables=(table,)))
+
+    result = map_candidate_document_anchor_candidates(document, schema_family="S1_full")
+
+    table_mapping = next(item for item in result.mapped if item.block_type == "table")
+    assert table_mapping.fields.section_id == "§8"
+
+
+def test_half_open_section_span_boundary_belongs_to_next_section() -> None:
+    """验证页码等于 next_start 时归入下一章节。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 半开区间边界归属错误时抛出。
+    """
+
+    sections = (
+        _section(section_id="sec_3", heading_text="§3 主要财务指标", page_number=10),
+        _section(section_id="sec_8", heading_text="§8 投资组合报告", page_number=60),
+    )
+    table = {**_table_with_cell(section_id="", page_number=60, cells=[]), "heading_path": []}
+    document = project_candidate_representation(_payload(sections=sections, text_blocks=(), tables=(table,)))
+
+    result = map_candidate_document_anchor_candidates(document, schema_family="S1_full")
+
+    table_mapping = next(item for item in result.mapped if item.block_type == "table")
+    assert table_mapping.fields.section_id == "§8"
+
+
+def test_unsupported_section_node_closes_previous_stable_section_span() -> None:
+    """验证后续不支持 section node 会截断上一稳定章节 span。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 不支持 section node 未作为 span 上界时抛出。
+    """
+
+    sections = (
+        _section(section_id="sec_8", heading_text="§8 投资组合报告", page_number=60),
+        _section(section_id="appendix", heading_text="附录", page_number=80),
+    )
+    inside_table = {**_table_with_cell(table_id="tbl_inside", section_id="", page_number=62, cells=[]), "heading_path": []}
+    outside_table = {**_table_with_cell(table_id="tbl_outside", section_id="", page_number=81, cells=[]), "heading_path": []}
+    document = project_candidate_representation(
+        _payload(sections=sections, text_blocks=(), tables=(inside_table, outside_table))
+    )
+
+    inside_result = map_candidate_locator_to_anchor_candidate(document, document.tables[0], schema_family="S1_full")
+    outside_result = map_candidate_locator_to_anchor_candidate(document, document.tables[1], schema_family="S1_full")
+
+    assert inside_result.blocked == ()
+    assert inside_result.mapped[0].fields.section_id == "§8"
+    assert outside_result.mapped == ()
+    assert outside_result.blocked[0].reason_code == "missing_section_context"
+
+
+def test_missing_page_without_explicit_section_blocks_as_missing_section_context() -> None:
+    """验证无法传播章节且缺页码时返回 missing_section_context。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 缺页码传播未按章节上下文缺失阻断时抛出。
+    """
+
+    table = {**_table_with_cell(section_id="", cells=[]), "heading_path": []}
+    table.pop("page_number")
+    document = project_candidate_representation(_payload(sections=(), text_blocks=(), tables=(table,)))
+
+    result = map_candidate_document_anchor_candidates(document, schema_family="S1_full")
+
+    assert result.mapped == ()
+    assert result.blocked[0].reason_code == "missing_section_context"
+
+
+def test_cross_section_multi_page_table_blocks_before_page_number_selection() -> None:
+    """验证跨两个稳定 section span 的多页表格 fail-closed。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 跨章节表格未阻断时抛出。
+    """
+
+    sections = (
+        _section(section_id="sec_3", heading_text="§3 主要财务指标", page_number=10),
+        _section(section_id="sec_8", heading_text="§8 投资组合报告", page_number=60),
+    )
+    table_payload = {**_table_with_cell(section_id="", cells=[]), "heading_path": []}
+    table_payload.pop("page_number")
+    document = project_candidate_representation(_payload(sections=sections, text_blocks=(), tables=(table_payload,)))
+    table = replace(document.tables[0], page_numbers=(58, 62))
+    document = replace(document, tables=(table,))
+
+    result = map_candidate_document_anchor_candidates(document, schema_family="S1_full")
+
+    assert not any(item.block_type == "table" for item in result.mapped)
+    assert any(block.reason_code == "section_span_crosses_multiple_sections" for block in result.blocked)
+
+
+def test_cell_inherits_parent_table_section_without_row_or_column_label_inference() -> None:
+    """验证 cell 只继承父表章节，不从行列标签推断章节。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: cell 被行列标签章节覆盖时抛出。
+    """
+
+    cell = {
+        **_cell(),
+        "row_label_path": ["§2 基金基本情况"],
+        "column_header_path": ["§9 期末基金份额持有人户数及持有人结构"],
+    }
+    table = _table_with_cell(cells=[cell])
+    document = project_candidate_representation(_payload(tables=(table,)))
+
+    result = map_candidate_document_anchor_candidates(document, schema_family="S1_full")
+
+    cell_mapping = next(item for item in result.mapped if item.block_type == "cell")
+    assert cell_mapping.fields.section_id == "§8"
+
+
+def test_cover_report_title_heading_without_section_context_is_blocked() -> None:
+    """验证封面/报告标题不生成章节上下文。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 封面标题被误映射为章节时抛出。
+    """
+
+    paragraph = {**_paragraph(section_id="", page_number=1), "heading_path": ["某某基金2025年年度报告"]}
+    document = project_candidate_representation(_payload(sections=(), text_blocks=(paragraph,), tables=()))
+
+    result = map_candidate_document_anchor_candidates(document, schema_family="S1_full")
+
+    assert result.mapped == ()
+    assert result.blocked[0].reason_code == "missing_section_context"
+
+
+def test_s1_full_json_schema_mismatch_remains_rejected() -> None:
+    """验证 S1 full JSON 仍不被当前 envelope helper 静默接受。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: schema mismatch 未保持阻断时抛出。
+    """
+
+    payload = {**_payload(), "schema_version": "s1.full.json"}
+
+    with pytest.raises(ValueError, match="unsupported candidate representation schema_version"):
+        project_candidate_representation(payload)
