@@ -12,8 +12,8 @@ from __future__ import annotations
 import re
 from collections import Counter
 from collections.abc import Mapping
-from dataclasses import dataclass
-from typing import Literal
+from dataclasses import dataclass, replace
+from typing import Literal, TypeVar
 
 from fund_agent.fund.documents.candidates.normalization import normalize_text
 from fund_agent.fund.documents.candidates.representation_models import (
@@ -53,9 +53,118 @@ ReferenceOrigin = Literal[
     "fund_document_repository_section_text",
 ]
 ReferenceGenerationStatus = Literal["available", "blocked_reference_unavailable"]
+_LiteralT = TypeVar("_LiteralT", bound=str)
+TableFamily = Literal[
+    "unknown",
+    "expense_fee_table",
+    "manager_holding_table",
+    "portfolio_asset_composition_table",
+    "fair_value_hierarchy_table",
+    "financial_statement_table",
+    "holding_detail_table",
+    "fund_profile_table",
+    "benchmark_context_table",
+    "other",
+]
+RowHierarchyRole = Literal["unknown", "standalone", "aggregate", "child"]
+ShareClassContext = Literal["unknown", "not_applicable", "A", "C"]
+ShareClassContextSource = Literal[
+    "unknown",
+    "not_applicable",
+    "column_header",
+    "header_band",
+    "row_label",
+    "table_context",
+]
+PeriodContext = Literal[
+    "unknown",
+    "not_applicable",
+    "current_period",
+    "prior_period",
+    "period_end",
+]
+PeriodContextSource = Literal[
+    "unknown",
+    "not_applicable",
+    "column_header",
+    "header_band",
+    "table_context",
+]
+TextSemanticContext = Literal[
+    "unknown",
+    "benchmark",
+    "investment_objective",
+    "fund_profile",
+    "other",
+]
+ReferenceEnrichmentStatus = Literal["not_enriched", "partially_enriched", "enriched"]
 
 _SCHEMA_VERSION = "docling_source_truth_residual_closure.v1"
 _ANNUAL_REPORT_EVIDENCE_SOURCE_KIND = "annual_report"
+_REFERENCE_BUNDLE_SCHEMA_VERSION = "repository_reference_bundle.v2"
+_LEGACY_REFERENCE_BUNDLE_SCHEMA_VERSION = "repository_reference_bundle.v1"
+_TABLE_FAMILY_VALUES: tuple[TableFamily, ...] = (
+    "unknown",
+    "expense_fee_table",
+    "manager_holding_table",
+    "portfolio_asset_composition_table",
+    "fair_value_hierarchy_table",
+    "financial_statement_table",
+    "holding_detail_table",
+    "fund_profile_table",
+    "benchmark_context_table",
+    "other",
+)
+_ROW_HIERARCHY_ROLE_VALUES: tuple[RowHierarchyRole, ...] = (
+    "unknown",
+    "standalone",
+    "aggregate",
+    "child",
+)
+_SHARE_CLASS_CONTEXT_VALUES: tuple[ShareClassContext, ...] = (
+    "unknown",
+    "not_applicable",
+    "A",
+    "C",
+)
+_SHARE_CLASS_CONTEXT_SOURCE_VALUES: tuple[ShareClassContextSource, ...] = (
+    "unknown",
+    "not_applicable",
+    "column_header",
+    "header_band",
+    "row_label",
+    "table_context",
+)
+_PERIOD_CONTEXT_VALUES: tuple[PeriodContext, ...] = (
+    "unknown",
+    "not_applicable",
+    "current_period",
+    "prior_period",
+    "period_end",
+)
+_PERIOD_CONTEXT_SOURCE_VALUES: tuple[PeriodContextSource, ...] = (
+    "unknown",
+    "not_applicable",
+    "column_header",
+    "header_band",
+    "table_context",
+)
+_TEXT_SEMANTIC_CONTEXT_VALUES: tuple[TextSemanticContext, ...] = (
+    "unknown",
+    "benchmark",
+    "investment_objective",
+    "fund_profile",
+    "other",
+)
+_REFERENCE_ENRICHMENT_STATUS_VALUES: tuple[ReferenceEnrichmentStatus, ...] = (
+    "not_enriched",
+    "partially_enriched",
+    "enriched",
+)
+_REFERENCE_GENERATION_STATUS_VALUES: tuple[ReferenceGenerationStatus, ...] = (
+    "available",
+    "blocked_reference_unavailable",
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -72,6 +181,16 @@ class ResidualClosureRule:
         share_class_context: 份额类别上下文。
         allow_semantic_equivalent_duplicate: 是否允许同语义重复保持 residual。
         semantic_guard: 额外语义 guard 标签。
+        allowed_table_families: 允许的表族。
+        rejected_table_families: 拒绝的表族。
+        required_parent_row_label_any: 任一必须出现的父行标签。
+        rejected_parent_row_label_any: 任一出现即拒绝的父行标签。
+        required_row_hierarchy_role: 必须匹配的行层级角色。
+        rejected_row_hierarchy_roles: 拒绝的行层级角色。
+        required_period_context: 必须匹配的期间上下文。
+        rejected_period_contexts: 拒绝的期间上下文。
+        allowed_share_class_context_sources: 允许的份额类别证明来源。
+        required_text_semantic_context: 必须匹配的文本语义上下文。
     """
 
     field_name: str
@@ -80,9 +199,19 @@ class ResidualClosureRule:
     rejected_row_label_any: tuple[str, ...] = ()
     required_table_family_any: tuple[str, ...] = ()
     required_column_header_any: tuple[str, ...] = ()
-    share_class_context: str | None = None
+    share_class_context: ShareClassContext | None = None
     allow_semantic_equivalent_duplicate: bool = False
     semantic_guard: str | None = None
+    allowed_table_families: tuple[TableFamily, ...] = ()
+    rejected_table_families: tuple[TableFamily, ...] = ()
+    required_parent_row_label_any: tuple[str, ...] = ()
+    rejected_parent_row_label_any: tuple[str, ...] = ()
+    required_row_hierarchy_role: RowHierarchyRole | None = None
+    rejected_row_hierarchy_roles: tuple[RowHierarchyRole, ...] = ()
+    required_period_context: PeriodContext | None = None
+    rejected_period_contexts: tuple[PeriodContext, ...] = ()
+    allowed_share_class_context_sources: tuple[ShareClassContextSource, ...] = ()
+    required_text_semantic_context: TextSemanticContext | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -106,6 +235,18 @@ class RepositoryReferenceCell:
         normalized_text: 归一化单元格文本。
         table_context: 表格上下文。
         reference_origin: 引用来源。
+        table_title_path: 表格标题路径。
+        heading_path: 表格所在章节标题路径。
+        column_header_band_path: 多层表头 band 路径。
+        table_family: 表族分类。
+        row_parent_label_path: 已证明父行标签路径。
+        row_hierarchy_path: 已证明父行加当前行路径。
+        row_hierarchy_role: 行层级角色。
+        bounded_neighbor_row_labels: 有界邻近行诊断标签。
+        share_class_context: 规范份额类别上下文。
+        share_class_context_source: 份额类别证明来源。
+        period_context: 规范期间上下文。
+        period_context_source: 期间证明来源。
     """
 
     fund_code: str
@@ -124,6 +265,18 @@ class RepositoryReferenceCell:
     normalized_text: str
     table_context: tuple[str, ...]
     reference_origin: ReferenceOrigin = "fund_document_repository_parsed_table"
+    table_title_path: tuple[str, ...] = ()
+    heading_path: tuple[str, ...] = ()
+    column_header_band_path: tuple[str, ...] = ()
+    table_family: TableFamily = "unknown"
+    row_parent_label_path: tuple[str, ...] = ()
+    row_hierarchy_path: tuple[str, ...] = ()
+    row_hierarchy_role: RowHierarchyRole = "unknown"
+    bounded_neighbor_row_labels: tuple[str, ...] = ()
+    share_class_context: ShareClassContext = "unknown"
+    share_class_context_source: ShareClassContextSource = "unknown"
+    period_context: PeriodContext = "unknown"
+    period_context_source: PeriodContextSource = "unknown"
 
     def to_dict(self) -> dict[str, object]:
         """序列化为 JSON 兼容字典。
@@ -155,6 +308,18 @@ class RepositoryReferenceCell:
             "normalized_text": self.normalized_text,
             "table_context": list(self.table_context),
             "reference_origin": self.reference_origin,
+            "table_title_path": list(self.table_title_path),
+            "heading_path": list(self.heading_path),
+            "column_header_band_path": list(self.column_header_band_path),
+            "table_family": self.table_family,
+            "row_parent_label_path": list(self.row_parent_label_path),
+            "row_hierarchy_path": list(self.row_hierarchy_path),
+            "row_hierarchy_role": self.row_hierarchy_role,
+            "bounded_neighbor_row_labels": list(self.bounded_neighbor_row_labels),
+            "share_class_context": self.share_class_context,
+            "share_class_context_source": self.share_class_context_source,
+            "period_context": self.period_context,
+            "period_context_source": self.period_context_source,
         }
 
 
@@ -174,6 +339,8 @@ class RepositoryReferenceTextSpan:
         normalized_text: 归一化文本。
         context_label: 文本上下文标签。
         reference_origin: 引用来源。
+        heading_path: 文本所在标题路径。
+        semantic_context_label: 规范文本语义上下文。
     """
 
     fund_code: str
@@ -187,6 +354,8 @@ class RepositoryReferenceTextSpan:
     normalized_text: str
     context_label: str
     reference_origin: ReferenceOrigin = "fund_document_repository_section_text"
+    heading_path: tuple[str, ...] = ()
+    semantic_context_label: TextSemanticContext = "unknown"
 
     def to_dict(self) -> dict[str, object]:
         """序列化为 JSON 兼容字典。
@@ -213,6 +382,8 @@ class RepositoryReferenceTextSpan:
             "normalized_text": self.normalized_text,
             "context_label": self.context_label,
             "reference_origin": self.reference_origin,
+            "heading_path": list(self.heading_path),
+            "semantic_context_label": self.semantic_context_label,
         }
 
 
@@ -229,6 +400,9 @@ class RepositoryReferenceBundle:
         cells: 表格单元格引用。
         text_spans: 章节文本引用。
         reference_generation_status: 引用生成状态。
+        reference_bundle_schema_version: 引用 bundle schema 版本。
+        enrichment_status: 富化状态。
+        enrichment_notes: 非证明性富化备注。
     """
 
     sample_id: str
@@ -239,6 +413,9 @@ class RepositoryReferenceBundle:
     cells: tuple[RepositoryReferenceCell, ...] = ()
     text_spans: tuple[RepositoryReferenceTextSpan, ...] = ()
     reference_generation_status: ReferenceGenerationStatus = "available"
+    reference_bundle_schema_version: str = _REFERENCE_BUNDLE_SCHEMA_VERSION
+    enrichment_status: ReferenceEnrichmentStatus = "not_enriched"
+    enrichment_notes: tuple[str, ...] = ()
 
     def to_dict(self) -> dict[str, object]:
         """序列化为 JSON 兼容字典。
@@ -262,6 +439,9 @@ class RepositoryReferenceBundle:
             "cells": [cell.to_dict() for cell in self.cells],
             "text_spans": [span.to_dict() for span in self.text_spans],
             "reference_generation_status": self.reference_generation_status,
+            "reference_bundle_schema_version": self.reference_bundle_schema_version,
+            "enrichment_status": self.enrichment_status,
+            "enrichment_notes": list(self.enrichment_notes),
         }
 
 
@@ -445,6 +625,14 @@ FIELD_RULES: dict[str, ResidualClosureRule] = {
         required_row_label_any=("固定收益投资",),
         rejected_row_label_any=("第二层次", "合计"),
         required_table_family_any=("投资组合", "资产组合", "基金资产组合"),
+        allowed_table_families=("portfolio_asset_composition_table",),
+        rejected_table_families=(
+            "fair_value_hierarchy_table",
+            "financial_statement_table",
+            "holding_detail_table",
+            "unknown",
+            "other",
+        ),
     ),
     "equity_investment_amount": ResidualClosureRule(
         field_name="equity_investment_amount",
@@ -452,30 +640,65 @@ FIELD_RULES: dict[str, ResidualClosureRule] = {
         required_row_label_any=("权益投资",),
         rejected_row_label_any=("其中：股票", "其中:股票", "普通股", "美国"),
         required_table_family_any=("投资组合", "资产组合", "基金资产组合"),
+        allowed_table_families=("portfolio_asset_composition_table",),
+        rejected_table_families=(
+            "fair_value_hierarchy_table",
+            "financial_statement_table",
+            "holding_detail_table",
+            "unknown",
+            "other",
+        ),
+        rejected_row_hierarchy_roles=("child", "unknown"),
     ),
     "stock_investment_amount": ResidualClosureRule(
         field_name="stock_investment_amount",
         expected_section_id="§8",
         required_row_label_any=("其中：股票", "其中:股票", "股票"),
-        rejected_row_label_any=("权益投资",),
         required_table_family_any=("投资组合", "资产组合", "基金资产组合"),
+        allowed_table_families=("portfolio_asset_composition_table",),
+        rejected_table_families=(
+            "fair_value_hierarchy_table",
+            "financial_statement_table",
+            "holding_detail_table",
+            "unknown",
+            "other",
+        ),
+        required_parent_row_label_any=("权益投资",),
+        required_row_hierarchy_role="child",
     ),
     "manager_holding_range_A": ResidualClosureRule(
         field_name="manager_holding_range_A",
         expected_section_id="§10",
         required_row_label_any=("本基金基金经理持有本开放式基金", "基金经理持有"),
-        rejected_row_label_any=("合计",),
+        rejected_row_label_any=("合计", "员工", "高级管理人员", "从业人员", "持有人户数"),
         required_table_family_any=("基金经理持有", "管理人持有"),
         share_class_context="A",
+        allowed_table_families=("manager_holding_table",),
+        rejected_table_families=("unknown", "other"),
+        allowed_share_class_context_sources=(
+            "column_header",
+            "header_band",
+            "row_label",
+            "table_context",
+        ),
     ),
     "sales_service_fee_C_current_year": ResidualClosureRule(
         field_name="sales_service_fee_C_current_year",
         expected_section_id="§7",
         required_row_label_any=("销售服务费",),
         required_table_family_any=("销售服务费",),
-        required_column_header_any=("本期", "本报告期", "当前"),
         share_class_context="C",
         allow_semantic_equivalent_duplicate=True,
+        allowed_table_families=("expense_fee_table",),
+        rejected_table_families=("unknown", "other"),
+        required_period_context="current_period",
+        rejected_period_contexts=("prior_period", "unknown"),
+        allowed_share_class_context_sources=(
+            "column_header",
+            "header_band",
+            "row_label",
+            "table_context",
+        ),
     ),
     "investment_objective": ResidualClosureRule(
         field_name="investment_objective",
@@ -486,9 +709,8 @@ FIELD_RULES: dict[str, ResidualClosureRule] = {
     "benchmark": ResidualClosureRule(
         field_name="benchmark",
         expected_section_id="§2",
-        required_row_label_any=("业绩比较基准",),
         rejected_row_label_any=("投资目标",),
-        semantic_guard="业绩比较基准",
+        required_text_semantic_context="benchmark",
     ),
 }
 
@@ -517,6 +739,10 @@ def close_source_truth_residuals(
     # 保留 accepted plan API；当前 no-live slice 不读取候选文档正文。
     _ = candidate_documents
     bundles = _coerce_reference_bundles(repository_reference_rows)
+    bundles = {
+        key: _enrich_reference_bundle_contexts(bundle)
+        for key, bundle in bundles.items()
+    }
     input_artifacts = tuple(
         dict(item)
         for item in _sequence(source_truth_matrix.get("input_artifacts"))
@@ -733,29 +959,83 @@ def _match_satisfies_rule(match: _ReferenceMatch, rule: ResidualClosureRule) -> 
     column_headers = _column_headers(match)
     table_context = _table_context(match)
     section_id = _section_id(match)
+    cell = match.cell
+    span = match.text_span
     if section_id != rule.expected_section_id:
         return False
+    if rule.rejected_table_families and (
+        cell is None or cell.table_family in rule.rejected_table_families
+    ):
+        return False
+    if rule.allowed_table_families and (
+        cell is None or cell.table_family not in rule.allowed_table_families
+    ):
+        return False
+    if rule.required_text_semantic_context:
+        if span is not None:
+            if span.semantic_context_label != rule.required_text_semantic_context:
+                return False
+        elif not _cell_has_required_text_semantic_context(
+            cell,
+            rule.required_text_semantic_context,
+        ):
+            return False
     if rule.rejected_row_label_any and _contains_any(row_labels, rule.rejected_row_label_any):
         return False
     if rule.required_row_label_any and not _contains_any(row_labels, rule.required_row_label_any):
+        return False
+    parent_labels = _parent_row_labels(cell)
+    if rule.rejected_parent_row_label_any and _contains_any(
+        parent_labels,
+        rule.rejected_parent_row_label_any,
+    ):
+        return False
+    if rule.required_parent_row_label_any and not _contains_any(
+        parent_labels,
+        rule.required_parent_row_label_any,
+    ):
+        return False
+    if rule.rejected_row_hierarchy_roles and (
+        cell is None or cell.row_hierarchy_role in rule.rejected_row_hierarchy_roles
+    ):
+        return False
+    if rule.required_row_hierarchy_role is not None and (
+        cell is None or cell.row_hierarchy_role != rule.required_row_hierarchy_role
+    ):
         return False
     if rule.required_column_header_any and not _contains_any(
         column_headers,
         rule.required_column_header_any,
     ):
         return False
-    if rule.share_class_context and not _has_share_class_context(
-        column_headers,
+    if rule.share_class_context and not _has_canonical_share_class_context(
+        cell,
         rule.share_class_context,
+        rule.allowed_share_class_context_sources,
     ):
         return False
-    if rule.required_table_family_any and not _contains_any(
-        table_context,
-        rule.required_table_family_any,
+    if rule.required_period_context is not None and (
+        cell is None or cell.period_context != rule.required_period_context
+    ):
+        return False
+    if rule.rejected_period_contexts and (
+        cell is None or cell.period_context in rule.rejected_period_contexts
+    ):
+        return False
+    has_new_table_family_predicate = bool(
+        rule.allowed_table_families or rule.rejected_table_families
+    )
+    if (
+        not has_new_table_family_predicate
+        and rule.required_table_family_any
+        and not _contains_any(
+            table_context,
+            rule.required_table_family_any,
+        )
     ):
         return False
     if rule.semantic_guard and not _contains_any(
-        row_labels + table_context,
+        _semantic_context_values(match),
         (rule.semantic_guard,),
     ):
         return False
@@ -896,9 +1176,20 @@ def _coerce_bundle(value: object) -> RepositoryReferenceBundle:
         text_spans=tuple(
             _coerce_text_span(item) for item in _sequence(value.get("text_spans"))
         ),
-        reference_generation_status=str(  # type: ignore[arg-type]
-            value.get("reference_generation_status", "available")
+        reference_generation_status=_coerce_literal(
+            value.get("reference_generation_status"),
+            _REFERENCE_GENERATION_STATUS_VALUES,
+            "available",
         ),
+        reference_bundle_schema_version=str(
+            value.get("reference_bundle_schema_version", _LEGACY_REFERENCE_BUNDLE_SCHEMA_VERSION)
+        ),
+        enrichment_status=_coerce_literal(
+            value.get("enrichment_status"),
+            _REFERENCE_ENRICHMENT_STATUS_VALUES,
+            "not_enriched",
+        ),
+        enrichment_notes=_string_tuple(value.get("enrichment_notes")),
     )
 
 
@@ -919,6 +1210,15 @@ def _coerce_cell(value: object) -> RepositoryReferenceCell:
         return value
     if not isinstance(value, Mapping):
         raise ValueError("repository reference cell must be a mapping")
+    row_label_path = _string_tuple(value.get("row_label_path"))
+    row_hierarchy_role = _coerce_literal(
+        value.get("row_hierarchy_role"),
+        _ROW_HIERARCHY_ROLE_VALUES,
+        "unknown",
+    )
+    row_hierarchy_path = _string_tuple(value.get("row_hierarchy_path"))
+    if row_hierarchy_role == "standalone" and not row_hierarchy_path:
+        row_hierarchy_path = row_label_path
     return RepositoryReferenceCell(
         fund_code=str(value["fund_code"]),
         document_year=int(value["document_year"]),
@@ -930,13 +1230,45 @@ def _coerce_cell(value: object) -> RepositoryReferenceCell:
         table_id=str(value["table_id"]),
         row_index=int(value["row_index"]),
         column_index=int(value["column_index"]),
-        row_label_path=_string_tuple(value.get("row_label_path")),
+        row_label_path=row_label_path,
         column_header_path=_string_tuple(value.get("column_header_path")),
         raw_text=str(value.get("raw_text", "")),
         normalized_text=str(value.get("normalized_text", value.get("raw_text", ""))),
         table_context=_string_tuple(value.get("table_context")),
         reference_origin=str(  # type: ignore[arg-type]
             value.get("reference_origin", "fund_document_repository_parsed_table")
+        ),
+        table_title_path=_string_tuple(value.get("table_title_path")),
+        heading_path=_string_tuple(value.get("heading_path")),
+        column_header_band_path=_string_tuple(value.get("column_header_band_path")),
+        table_family=_coerce_literal(
+            value.get("table_family"),
+            _TABLE_FAMILY_VALUES,
+            "unknown",
+        ),
+        row_parent_label_path=_string_tuple(value.get("row_parent_label_path")),
+        row_hierarchy_path=row_hierarchy_path,
+        row_hierarchy_role=row_hierarchy_role,
+        bounded_neighbor_row_labels=_string_tuple(value.get("bounded_neighbor_row_labels")),
+        share_class_context=_coerce_literal(
+            value.get("share_class_context"),
+            _SHARE_CLASS_CONTEXT_VALUES,
+            "unknown",
+        ),
+        share_class_context_source=_coerce_literal(
+            value.get("share_class_context_source"),
+            _SHARE_CLASS_CONTEXT_SOURCE_VALUES,
+            "unknown",
+        ),
+        period_context=_coerce_literal(
+            value.get("period_context"),
+            _PERIOD_CONTEXT_VALUES,
+            "unknown",
+        ),
+        period_context_source=_coerce_literal(
+            value.get("period_context_source"),
+            _PERIOD_CONTEXT_SOURCE_VALUES,
+            "unknown",
         ),
     )
 
@@ -971,6 +1303,12 @@ def _coerce_text_span(value: object) -> RepositoryReferenceTextSpan:
         context_label=str(value.get("context_label", "")),
         reference_origin=str(  # type: ignore[arg-type]
             value.get("reference_origin", "fund_document_repository_section_text")
+        ),
+        heading_path=_string_tuple(value.get("heading_path")),
+        semantic_context_label=_coerce_literal(
+            value.get("semantic_context_label"),
+            _TEXT_SEMANTIC_CONTEXT_VALUES,
+            "unknown",
         ),
     )
 
@@ -1226,6 +1564,84 @@ def _table_context(match: _ReferenceMatch | None) -> tuple[str, ...]:
     return ()
 
 
+def _parent_row_labels(cell: RepositoryReferenceCell | None) -> tuple[str, ...]:
+    """返回已证明的父行标签。
+
+    Args:
+        cell: 单元格引用。
+
+    Returns:
+        父行标签 tuple。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if cell is None:
+        return ()
+    if cell.row_parent_label_path:
+        return cell.row_parent_label_path
+    if len(cell.row_hierarchy_path) > 1:
+        return cell.row_hierarchy_path[:-1]
+    return ()
+
+
+def _semantic_context_values(match: _ReferenceMatch) -> tuple[str, ...]:
+    """返回用于语义 guard 的已加载上下文。
+
+    Args:
+        match: 引用命中。
+
+    Returns:
+        语义上下文 tuple。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if match.cell is not None:
+        cell = match.cell
+        return (
+            cell.row_label_path
+            + cell.table_context
+            + cell.table_title_path
+            + cell.heading_path
+        )
+    if match.text_span is not None:
+        span = match.text_span
+        return (span.context_label,) + span.heading_path
+    return ()
+
+
+def _cell_has_required_text_semantic_context(
+    cell: RepositoryReferenceCell | None,
+    required_context: TextSemanticContext,
+) -> bool:
+    """判断表格单元格是否具备等价文本语义上下文。
+
+    Args:
+        cell: 单元格引用。
+        required_context: 必须满足的文本语义上下文。
+
+    Returns:
+        满足时返回 ``True``。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if cell is None:
+        return False
+    if required_context == "benchmark":
+        if _contains_any(_semantic_context_values(_ReferenceMatch(cell=cell)), ("投资目标",)):
+            return False
+        return _contains_any(
+            cell.row_label_path + cell.table_context + cell.heading_path + cell.table_title_path,
+            ("业绩比较基准",),
+        )
+    return False
+
+
 def _section_id(match: _ReferenceMatch) -> str:
     """返回命中引用的章节 ID。
 
@@ -1262,6 +1678,421 @@ def _contains_any(values: tuple[str, ...], needles: tuple[str, ...]) -> bool:
 
     haystack = _normalize_for_label(" ".join(values))
     return any(_normalize_for_label(needle) in haystack for needle in needles)
+
+
+def _has_canonical_share_class_context(
+    cell: RepositoryReferenceCell | None,
+    share_class: ShareClassContext,
+    allowed_sources: tuple[ShareClassContextSource, ...],
+) -> bool:
+    """判断单元格是否具备规范份额类别上下文。
+
+    Args:
+        cell: 单元格引用。
+        share_class: 规则要求的份额类别。
+        allowed_sources: 允许的证明来源；空 tuple 表示任一已证明来源。
+
+    Returns:
+        满足时返回 ``True``。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if cell is None or share_class in ("unknown", "not_applicable"):
+        return False
+    if cell.share_class_context != share_class:
+        return False
+    if cell.share_class_context_source in ("unknown", "not_applicable"):
+        return False
+    return not allowed_sources or cell.share_class_context_source in allowed_sources
+
+
+def _derive_share_class_context(
+    cell: RepositoryReferenceCell,
+) -> tuple[ShareClassContext, ShareClassContextSource]:
+    """从已加载的表头/行/表上下文派生规范份额类别。
+
+    Args:
+        cell: 单元格引用。
+
+    Returns:
+        ``(share_class_context, share_class_context_source)``。
+
+    Raises:
+        无显式抛出。
+    """
+
+    sources: tuple[tuple[ShareClassContextSource, tuple[str, ...]], ...] = (
+        ("column_header", cell.column_header_path),
+        ("header_band", cell.column_header_band_path),
+        ("row_label", cell.row_label_path),
+        ("table_context", cell.table_context),
+    )
+    selected: ShareClassContext = "unknown"
+    selected_source: ShareClassContextSource = "unknown"
+    for source, values in sources:
+        matched = _share_classes_in_values(values)
+        if len(matched) > 1:
+            return "unknown", "unknown"
+        if len(matched) == 0:
+            continue
+        current = matched[0]
+        if selected == "unknown":
+            selected = current
+            selected_source = source
+            continue
+        if selected != current:
+            return "unknown", "unknown"
+    return selected, selected_source
+
+
+def _share_classes_in_values(values: tuple[str, ...]) -> tuple[ShareClassContext, ...]:
+    """返回文本集合中明确出现的份额类别。
+
+    Args:
+        values: 待检查文本。
+
+    Returns:
+        去重后的份额类别。
+
+    Raises:
+        无显式抛出。
+    """
+
+    matched: list[ShareClassContext] = []
+    for share_class in ("A", "C"):
+        if _has_share_class_context(values, share_class):
+            matched.append(share_class)
+    return tuple(matched)
+
+
+def _derive_period_context(
+    cell: RepositoryReferenceCell,
+) -> tuple[PeriodContext, PeriodContextSource]:
+    """从已加载的表头/header band/表上下文派生规范期间。
+
+    Args:
+        cell: 单元格引用。
+
+    Returns:
+        ``(period_context, period_context_source)``。
+
+    Raises:
+        无显式抛出。
+    """
+
+    sources: tuple[tuple[PeriodContextSource, tuple[str, ...]], ...] = (
+        ("column_header", cell.column_header_path),
+        ("header_band", cell.column_header_band_path),
+        ("table_context", cell.table_context),
+    )
+    selected: PeriodContext = "unknown"
+    selected_source: PeriodContextSource = "unknown"
+    for source, values in sources:
+        matched = _period_contexts_in_values(values)
+        if len(matched) > 1:
+            return "unknown", "unknown"
+        if len(matched) == 0:
+            continue
+        current = matched[0]
+        if selected == "unknown":
+            selected = current
+            selected_source = source
+            continue
+        if selected != current:
+            return "unknown", "unknown"
+    return selected, selected_source
+
+
+def _period_contexts_in_values(values: tuple[str, ...]) -> tuple[PeriodContext, ...]:
+    """返回文本集合中明确出现的期间上下文。
+
+    Args:
+        values: 待检查文本。
+
+    Returns:
+        去重后的期间上下文。
+
+    Raises:
+        无显式抛出。
+    """
+
+    contexts: list[PeriodContext] = []
+    for value in values:
+        context = _period_context_from_text(value)
+        if context != "unknown" and context not in contexts:
+            contexts.append(context)
+    return tuple(contexts)
+
+
+def _period_context_from_text(value: str) -> PeriodContext:
+    """从单段文本识别规范期间。
+
+    Args:
+        value: 原始文本。
+
+    Returns:
+        期间上下文。
+
+    Raises:
+        无显式抛出。
+    """
+
+    normalized = _normalize_for_label(value)
+    if any(term in normalized for term in ("报告期末", "期末余额", "期末公允价值", "期末")):
+        return "period_end"
+    if any(
+        term in normalized
+        for term in ("上年度可比期间", "上年同期", "上年度", "上期")
+    ):
+        return "prior_period"
+    if any(
+        term in normalized
+        for term in ("本期发生额", "本报告期", "报告期", "本期", "本年", "当前")
+    ):
+        return "current_period"
+    return "unknown"
+
+
+def _classify_bundle_tables(bundle: RepositoryReferenceBundle) -> RepositoryReferenceBundle:
+    """按 table identity 对 bundle 内单元格做候选表族分类。
+
+    Args:
+        bundle: 引用 bundle。
+
+    Returns:
+        已广播表族分类的引用 bundle。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if not bundle.cells:
+        return bundle
+    grouped: dict[tuple[str, int, str, str, str], list[RepositoryReferenceCell]] = {}
+    for cell in bundle.cells:
+        key = (
+            cell.fund_code,
+            cell.document_year,
+            cell.repository_source_name,
+            cell.section_id,
+            cell.table_id,
+        )
+        grouped.setdefault(key, []).append(cell)
+    family_by_key = {
+        key: _classify_table_family(tuple(cells)) for key, cells in grouped.items()
+    }
+    cells = tuple(
+        replace(
+            cell,
+            table_family=family_by_key[
+                (
+                    cell.fund_code,
+                    cell.document_year,
+                    cell.repository_source_name,
+                    cell.section_id,
+                    cell.table_id,
+                )
+            ],
+        )
+        for cell in bundle.cells
+    )
+    return replace(bundle, cells=cells)
+
+
+def _enrich_reference_bundle_contexts(
+    bundle: RepositoryReferenceBundle,
+) -> RepositoryReferenceBundle:
+    """为 legacy/raw bundle 派生表族、份额类别和期间上下文。
+
+    Args:
+        bundle: 引用 bundle。
+
+    Returns:
+        legacy/raw bundle 返回带派生 cell context 的引用 bundle；v2 bundle 原样返回。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if bundle.reference_bundle_schema_version != _LEGACY_REFERENCE_BUNDLE_SCHEMA_VERSION:
+        return bundle
+    classified = _classify_bundle_tables(bundle)
+    cells: list[RepositoryReferenceCell] = []
+    for cell in classified.cells:
+        share_context, share_source = _derive_share_class_context(cell)
+        period_context, period_source = _derive_period_context(cell)
+        cells.append(
+            replace(
+                cell,
+                share_class_context=share_context,
+                share_class_context_source=share_source,
+                period_context=period_context,
+                period_context_source=period_source,
+            )
+        )
+    return replace(classified, cells=tuple(cells))
+
+
+def _classify_table_family(cells: tuple[RepositoryReferenceCell, ...]) -> TableFamily:
+    """按已加载表格上下文确定候选表族。
+
+    Args:
+        cells: 同一 table identity 下的单元格。
+
+    Returns:
+        表族标签。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if not cells:
+        return "unknown"
+    section_ids = tuple(sorted({cell.section_id for cell in cells}))
+    priority_signals = (
+        _signal_text(section_ids),
+        _signal_text(tuple(item for cell in cells for item in cell.table_title_path)),
+        _signal_text(tuple(item for cell in cells for item in cell.heading_path)),
+        _signal_text(tuple(item for cell in cells for item in cell.table_context)),
+        _signal_text(
+            tuple(
+                item
+                for cell in cells
+                for item in cell.row_label_path + cell.row_hierarchy_path
+            )
+        ),
+        _signal_text(
+            tuple(
+                item
+                for cell in cells
+                for item in cell.column_header_path + cell.column_header_band_path
+            )
+        ),
+    )
+    for signal in priority_signals:
+        families = _families_for_signal(section_ids, signal)
+        selected = _resolve_table_family_conflict(families, signal)
+        if selected != "unknown":
+            return selected
+    return "unknown"
+
+
+def _signal_text(values: tuple[str, ...]) -> str:
+    """把多个标签归一化成单段分类信号。
+
+    Args:
+        values: 原始标签。
+
+    Returns:
+        归一化信号。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return _normalize_for_label(" ".join(values))
+
+
+def _families_for_signal(
+    section_ids: tuple[str, ...],
+    signal: str,
+) -> tuple[TableFamily, ...]:
+    """返回单个优先级信号支持的表族。
+
+    Args:
+        section_ids: 表格章节集合。
+        signal: 归一化信号文本。
+
+    Returns:
+        表族 tuple。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if not signal:
+        return ()
+    families: list[TableFamily] = []
+    if _signal_has_any(signal, ("公允价值层次", "第一层次", "第二层次", "第三层次")):
+        families.append("fair_value_hierarchy_table")
+    if "§7" in section_ids and _signal_has_any(
+        signal,
+        ("销售服务费", "管理人报酬", "托管费", "费用"),
+    ):
+        families.append("expense_fee_table")
+    if "§10" in section_ids and _signal_has_any(
+        signal,
+        ("基金经理持有", "管理人持有", "本基金基金经理持有本开放式基金"),
+    ):
+        families.append("manager_holding_table")
+    if "§8" in section_ids and _signal_has_any(
+        signal,
+        ("基金资产组合", "期末基金资产组合", "报告期末基金资产组合", "固定收益投资", "权益投资", "其中:股票", "其中：股票"),
+    ):
+        families.append("portfolio_asset_composition_table")
+    if _signal_has_any(signal, ("资产负债表", "利润表", "所有者权益", "现金流量表")):
+        families.append("financial_statement_table")
+    if _signal_has_any(
+        signal,
+        ("前十名", "明细", "行业分类", "地区", "国家", "券种", "股票投资明细"),
+    ):
+        families.append("holding_detail_table")
+    if "§2" in section_ids and _signal_has_any(signal, ("基金概况", "基金简介", "基本信息")):
+        families.append("fund_profile_table")
+    if _signal_has_any(signal, ("业绩比较基准",)):
+        families.append("benchmark_context_table")
+    return tuple(families)
+
+
+def _resolve_table_family_conflict(
+    families: tuple[TableFamily, ...],
+    signal: str,
+) -> TableFamily:
+    """解析同优先级表族冲突。
+
+    Args:
+        families: 候选表族。
+        signal: 归一化信号。
+
+    Returns:
+        表族标签。
+
+    Raises:
+        无显式抛出。
+    """
+
+    unique = tuple(dict.fromkeys(families))
+    if not unique:
+        return "unknown"
+    if "fair_value_hierarchy_table" in unique:
+        return "fair_value_hierarchy_table"
+    if len(unique) == 1:
+        return unique[0]
+    if "portfolio_asset_composition_table" in unique and _signal_has_any(
+        signal,
+        ("报告期末基金资产组合", "期末基金资产组合", "基金资产组合"),
+    ):
+        return "portfolio_asset_composition_table"
+    return "unknown"
+
+
+def _signal_has_any(signal: str, needles: tuple[str, ...]) -> bool:
+    """判断归一化信号是否包含任一片段。
+
+    Args:
+        signal: 已归一化信号。
+        needles: 原始片段。
+
+    Returns:
+        包含时返回 ``True``。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return any(_normalize_for_label(needle) in signal for needle in needles)
 
 
 def _has_share_class_context(values: tuple[str, ...], share_class: str) -> bool:
@@ -1377,6 +2208,34 @@ def _string_tuple(value: object) -> tuple[str, ...]:
     """
 
     return tuple(str(item) for item in _sequence(value))
+
+
+def _coerce_literal(
+    value: object,
+    allowed_values: tuple[_LiteralT, ...],
+    default: _LiteralT,
+) -> _LiteralT:
+    """把 JSON-like 值转换为受限 literal。
+
+    Args:
+        value: 原始值。
+        allowed_values: 允许值集合。
+        default: 缺失或非法时的默认值。
+
+    Returns:
+        受限 literal 值。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if value is None:
+        return default
+    candidate = str(value)
+    for allowed in allowed_values:
+        if candidate == allowed:
+            return allowed
+    return default
 
 
 def _sequence(value: object) -> tuple[object, ...]:

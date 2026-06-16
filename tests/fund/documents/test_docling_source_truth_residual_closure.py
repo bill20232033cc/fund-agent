@@ -10,6 +10,7 @@ from fund_agent.fund.documents.candidates import source_truth_residual_closure a
 from fund_agent.fund.documents.candidates.source_truth_residual_closure import (
     RepositoryReferenceBundle,
     RepositoryReferenceCell,
+    RepositoryReferenceTextSpan,
     close_source_truth_residuals,
 )
 
@@ -112,6 +113,18 @@ def _cell(
     table_context: tuple[str, ...] = ("基金概况",),
     table_id: str = "source_table_1",
     repository_source_name: str = "eid",
+    table_title_path: tuple[str, ...] = (),
+    heading_path: tuple[str, ...] = (),
+    column_header_band_path: tuple[str, ...] = (),
+    table_family: closure.TableFamily = "unknown",
+    row_parent_label_path: tuple[str, ...] = (),
+    row_hierarchy_path: tuple[str, ...] = (),
+    row_hierarchy_role: closure.RowHierarchyRole = "unknown",
+    bounded_neighbor_row_labels: tuple[str, ...] = (),
+    share_class_context: closure.ShareClassContext = "unknown",
+    share_class_context_source: closure.ShareClassContextSource = "unknown",
+    period_context: closure.PeriodContext = "unknown",
+    period_context_source: closure.PeriodContextSource = "unknown",
 ) -> RepositoryReferenceCell:
     """构造 repository-mediated reference cell fixture。
 
@@ -123,6 +136,18 @@ def _cell(
         table_context: 表格上下文。
         table_id: 表格 ID。
         repository_source_name: 仓库来源名。
+        table_title_path: 表格标题路径。
+        heading_path: 标题路径。
+        column_header_band_path: 多层表头路径。
+        table_family: 表族分类。
+        row_parent_label_path: 父行标签。
+        row_hierarchy_path: 行层级路径。
+        row_hierarchy_role: 行层级角色。
+        bounded_neighbor_row_labels: 邻近行诊断标签。
+        share_class_context: 规范份额类别。
+        share_class_context_source: 份额类别证明来源。
+        period_context: 规范期间。
+        period_context_source: 期间证明来源。
 
     Returns:
         仓库引用单元格。
@@ -147,15 +172,72 @@ def _cell(
         raw_text=value,
         normalized_text=value,
         table_context=table_context,
+        table_title_path=table_title_path,
+        heading_path=heading_path,
+        column_header_band_path=column_header_band_path,
+        table_family=table_family,
+        row_parent_label_path=row_parent_label_path,
+        row_hierarchy_path=row_hierarchy_path,
+        row_hierarchy_role=row_hierarchy_role,
+        bounded_neighbor_row_labels=bounded_neighbor_row_labels,
+        share_class_context=share_class_context,
+        share_class_context_source=share_class_context_source,
+        period_context=period_context,
+        period_context_source=period_context_source,
     )
 
 
-def _bundle(*cells: RepositoryReferenceCell, metadata_ok: bool = True) -> RepositoryReferenceBundle:
+def _span(
+    *,
+    value: str,
+    context_label: str,
+    semantic_context_label: closure.TextSemanticContext = "unknown",
+    section_id: str = "§2",
+    heading_path: tuple[str, ...] = (),
+) -> RepositoryReferenceTextSpan:
+    """构造 repository-mediated text span fixture。
+
+    Args:
+        value: 文本值。
+        context_label: 原始上下文标签。
+        semantic_context_label: 规范语义上下文。
+        section_id: 年报章节。
+        heading_path: 标题路径。
+
+    Returns:
+        仓库引用文本。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return RepositoryReferenceTextSpan(
+        fund_code="004393",
+        document_year=2025,
+        repository_source_name="eid",
+        source_mode="single_source_only",
+        fallback_used=False,
+        section_id=section_id,
+        page_number=5,
+        raw_text=value,
+        normalized_text=value,
+        context_label=context_label,
+        semantic_context_label=semantic_context_label,
+        heading_path=heading_path,
+    )
+
+
+def _bundle(
+    *cells: RepositoryReferenceCell,
+    metadata_ok: bool = True,
+    text_spans: tuple[RepositoryReferenceTextSpan, ...] = (),
+) -> RepositoryReferenceBundle:
     """构造 repository reference bundle fixture。
 
     Args:
         *cells: 仓库引用单元格。
         metadata_ok: metadata guard 是否通过。
+        text_spans: 仓库引用文本。
 
     Returns:
         仓库引用 bundle。
@@ -171,6 +253,7 @@ def _bundle(*cells: RepositoryReferenceCell, metadata_ok: bool = True) -> Reposi
         metadata_ok=metadata_ok,
         metadata_reason=None if metadata_ok else "unsafe metadata",
         cells=cells,
+        text_spans=text_spans,
     )
 
 
@@ -210,6 +293,400 @@ def _close_one(row: dict[str, object], bundle: RepositoryReferenceBundle) -> dic
     ).to_dict()
     assert result["summary"]["rows_total"] == 1
     return result["rows"][0]
+
+
+def test_reference_bundle_serialization_emits_new_default_fields() -> None:
+    """验证 reference bundle v2 新字段按默认值序列化。"""
+
+    bundle = _bundle(
+        _cell(value="004393", row_label_path=("基金主代码",)),
+        text_spans=(_span(value="基准", context_label="业绩比较基准"),),
+    ).to_dict()
+
+    cell = bundle["cells"][0]
+    span = bundle["text_spans"][0]
+    assert bundle["reference_bundle_schema_version"] == "repository_reference_bundle.v2"
+    assert bundle["enrichment_status"] == "not_enriched"
+    assert bundle["enrichment_notes"] == []
+    assert cell["table_title_path"] == []
+    assert cell["heading_path"] == []
+    assert cell["column_header_band_path"] == []
+    assert cell["table_family"] == "unknown"
+    assert cell["row_parent_label_path"] == []
+    assert cell["row_hierarchy_path"] == []
+    assert cell["row_hierarchy_role"] == "unknown"
+    assert cell["bounded_neighbor_row_labels"] == []
+    assert cell["share_class_context"] == "unknown"
+    assert cell["share_class_context_source"] == "unknown"
+    assert cell["period_context"] == "unknown"
+    assert cell["period_context_source"] == "unknown"
+    assert span["heading_path"] == []
+    assert span["semantic_context_label"] == "unknown"
+
+
+def test_legacy_reference_bundle_payload_deserializes_with_unknown_defaults() -> None:
+    """验证 legacy payload 缺失 enriched 字段时落到 v1/unknown/default。"""
+
+    bundle = closure._coerce_bundle(
+        {
+            "sample_id": "S1",
+            "fund_code": "004393",
+            "document_year": 2025,
+            "metadata_ok": True,
+            "metadata_reason": None,
+            "cells": [
+                {
+                    "fund_code": "004393",
+                    "document_year": 2025,
+                    "repository_source_name": "eid",
+                    "source_mode": "single_source_only",
+                    "section_id": "§8",
+                    "page_number": 5,
+                    "table_id": "t1",
+                    "row_index": 0,
+                    "column_index": 1,
+                    "row_label_path": ["权益投资"],
+                    "column_header_path": ["金额"],
+                    "raw_text": "1",
+                    "normalized_text": "1",
+                    "table_context": ["基金资产组合"],
+                }
+            ],
+            "text_spans": [
+                {
+                    "fund_code": "004393",
+                    "document_year": 2025,
+                    "repository_source_name": "eid",
+                    "source_mode": "single_source_only",
+                    "section_id": "§2",
+                    "page_number": 5,
+                    "raw_text": "基准",
+                    "normalized_text": "基准",
+                    "context_label": "页内文本",
+                }
+            ],
+            "reference_generation_status": "available",
+        }
+    )
+
+    assert bundle.reference_bundle_schema_version == "repository_reference_bundle.v1"
+    assert bundle.enrichment_status == "not_enriched"
+    assert bundle.cells[0].table_family == "unknown"
+    assert bundle.cells[0].row_hierarchy_path == ()
+    assert bundle.cells[0].row_hierarchy_role == "unknown"
+    assert bundle.cells[0].share_class_context == "unknown"
+    assert bundle.cells[0].period_context == "unknown"
+    assert bundle.text_spans[0].semantic_context_label == "unknown"
+
+
+@pytest.mark.parametrize(
+    ("status_value", "expected"),
+    [
+        (None, "disambiguated_source_body_match"),
+        ("typo", "disambiguated_source_body_match"),
+        ("blocked_reference_unavailable", "blocked_reference_unavailable"),
+    ],
+)
+def test_reference_generation_status_coerces_invalid_to_available_but_preserves_blocked(
+    status_value: object,
+    expected: str,
+) -> None:
+    """验证 reference_generation_status 只接受 literal，非法/缺失默认 available。"""
+
+    row = _row(fact_id="F002", field_name="fund_code", value="004393", section_id="§2")
+    payload = _bundle(_cell(value="004393", row_label_path=("基金主代码",))).to_dict()
+    if status_value is None:
+        payload.pop("reference_generation_status")
+    else:
+        payload["reference_generation_status"] = status_value
+
+    coerced = closure._coerce_bundle(payload)
+    result = close_source_truth_residuals(
+        source_truth_matrix=_matrix(row),
+        repository_reference_rows={"S1": payload},
+    ).to_dict()["rows"][0]
+    expected_status = (
+        "blocked_reference_unavailable"
+        if status_value == "blocked_reference_unavailable"
+        else "available"
+    )
+
+    assert coerced.reference_generation_status == expected_status
+    assert result["closure_disposition"] == expected
+
+
+def test_coerce_cell_sets_standalone_hierarchy_only_when_role_proven() -> None:
+    """验证 standalone 角色才把 row_label_path 作为 hierarchy 默认值。"""
+
+    standalone = closure._coerce_cell(
+        {
+            "fund_code": "004393",
+            "document_year": 2025,
+            "repository_source_name": "eid",
+            "source_mode": "single_source_only",
+            "section_id": "§8",
+            "page_number": 5,
+            "table_id": "t1",
+            "row_index": 0,
+            "column_index": 1,
+            "row_label_path": ["权益投资"],
+            "column_header_path": ["金额"],
+            "raw_text": "1",
+            "normalized_text": "1",
+            "table_context": ["基金资产组合"],
+            "row_hierarchy_role": "standalone",
+        }
+    )
+    unproven = closure._coerce_cell(
+        {
+            "fund_code": "004393",
+            "document_year": 2025,
+            "repository_source_name": "eid",
+            "source_mode": "single_source_only",
+            "section_id": "§8",
+            "page_number": 5,
+            "table_id": "t1",
+            "row_index": 0,
+            "column_index": 1,
+            "row_label_path": ["权益投资"],
+            "column_header_path": ["金额"],
+            "raw_text": "1",
+            "normalized_text": "1",
+            "table_context": ["基金资产组合"],
+        }
+    )
+
+    assert standalone.row_hierarchy_path == ("权益投资",)
+    assert standalone.row_hierarchy_role == "standalone"
+    assert unproven.row_hierarchy_path == ()
+    assert unproven.row_hierarchy_role == "unknown"
+
+
+def test_invalid_literals_become_unknown_and_fail_target_predicates() -> None:
+    """验证非法 literal 被降级为 unknown，不能被 raw context 反向闭合。"""
+
+    row = _row(
+        fact_id="F015",
+        field_name="sales_service_fee_C_current_year",
+        value="75815.59",
+        section_id="§7",
+    )
+    payload = _bundle(
+        _cell(
+            value="75815.59",
+            row_label_path=("销售服务费",),
+            section_id="§7",
+            column_header_path=("C类", "本期"),
+            table_context=("销售服务费",),
+        )
+    ).to_dict()
+    payload["cells"][0]["table_family"] = "expense_fee_typo"
+    payload["cells"][0]["share_class_context"] = "Z"
+    payload["cells"][0]["period_context"] = "this_period"
+    result = close_source_truth_residuals(
+        source_truth_matrix=_matrix(row),
+        repository_reference_rows={"S1": payload},
+    ).to_dict()["rows"][0]
+    coerced = closure._coerce_bundle(payload)
+
+    assert coerced.cells[0].table_family == "unknown"
+    assert coerced.cells[0].share_class_context == "unknown"
+    assert coerced.cells[0].period_context == "unknown"
+    assert result["closure_disposition"] == "semantic_assignment_residual"
+
+
+def test_raw_legacy_bundle_entrypoint_enriches_before_closure_and_still_rejects_prior() -> None:
+    """验证 raw legacy bundle 经入口 enrichment 后按派生谓词闭合或保留 residual。"""
+
+    row = _row(
+        fact_id="F015",
+        field_name="sales_service_fee_C_current_year",
+        value="75815.59",
+        section_id="§7",
+    )
+    current_payload = {
+        "sample_id": "S1",
+        "fund_code": "004393",
+        "document_year": 2025,
+        "metadata_ok": True,
+        "metadata_reason": None,
+        "cells": [
+            {
+                "fund_code": "004393",
+                "document_year": 2025,
+                "repository_source_name": "eid",
+                "source_mode": "single_source_only",
+                "fallback_used": False,
+                "section_id": "§7",
+                "page_number": 5,
+                "table_id": "fee_table",
+                "row_index": 0,
+                "column_index": 1,
+                "row_label_path": ["销售服务费"],
+                "column_header_path": ["C类", "本期"],
+                "raw_text": "75815.59",
+                "normalized_text": "75815.59",
+                "table_context": ["销售服务费"],
+            }
+        ],
+        "text_spans": [],
+    }
+    prior_payload = {
+        **current_payload,
+        "cells": [
+            {
+                **current_payload["cells"][0],
+                "column_header_path": ["C类", "上年度"],
+            }
+        ],
+    }
+
+    current = close_source_truth_residuals(
+        source_truth_matrix=_matrix(row),
+        repository_reference_rows={"S1": current_payload},
+    ).to_dict()["rows"][0]
+    prior = close_source_truth_residuals(
+        source_truth_matrix=_matrix(row),
+        repository_reference_rows={"S1": prior_payload},
+    ).to_dict()["rows"][0]
+
+    assert closure._coerce_bundle(current_payload).reference_bundle_schema_version == (
+        "repository_reference_bundle.v1"
+    )
+    assert current["closure_disposition"] == "disambiguated_source_body_match"
+    assert prior["closure_disposition"] == "semantic_assignment_residual"
+
+
+@pytest.mark.parametrize(
+    ("cell", "expected"),
+    [
+        (
+            _cell(
+                value="1",
+                row_label_path=("销售服务费",),
+                section_id="§7",
+                table_context=("销售服务费",),
+            ),
+            "expense_fee_table",
+        ),
+        (
+            _cell(
+                value="1",
+                row_label_path=("本基金基金经理持有本开放式基金",),
+                section_id="§10",
+                table_context=("基金经理持有",),
+            ),
+            "manager_holding_table",
+        ),
+        (
+            _cell(
+                value="1",
+                row_label_path=("固定收益投资",),
+                section_id="§8",
+                table_context=("报告期末基金资产组合",),
+            ),
+            "portfolio_asset_composition_table",
+        ),
+        (
+            _cell(
+                value="1",
+                row_label_path=("第二层次",),
+                section_id="§8",
+                table_context=("公允价值层次", "基金资产组合"),
+            ),
+            "fair_value_hierarchy_table",
+        ),
+        (
+            _cell(
+                value="1",
+                row_label_path=("资产",),
+                section_id="§8",
+                table_context=("资产负债表",),
+            ),
+            "financial_statement_table",
+        ),
+        (
+            _cell(
+                value="1",
+                row_label_path=("股票",),
+                section_id="§8",
+                table_context=("股票投资明细",),
+            ),
+            "holding_detail_table",
+        ),
+        (
+            _cell(
+                value="1",
+                row_label_path=("未知",),
+                section_id="§8",
+                table_context=(),
+            ),
+            "unknown",
+        ),
+    ],
+)
+def test_table_family_classifier_labels_target_families(
+    cell: RepositoryReferenceCell,
+    expected: closure.TableFamily,
+) -> None:
+    """验证 deterministic table-family classifier 覆盖目标表族。"""
+
+    assert closure._classify_table_family((cell,)) == expected
+
+
+def test_table_family_classifier_resolves_conflicts_fail_closed_or_by_precedence() -> None:
+    """验证同优先级冲突按 accepted precedence 或 unknown 处理。"""
+
+    fair_value = _cell(
+        value="1",
+        row_label_path=("固定收益投资",),
+        section_id="§8",
+        table_context=("基金资产组合", "公允价值层次"),
+    )
+    explicit_portfolio = _cell(
+        value="1",
+        row_label_path=("资产",),
+        section_id="§8",
+        table_context=("报告期末基金资产组合", "资产负债表"),
+    )
+    ambiguous = _cell(
+        value="1",
+        row_label_path=("基准",),
+        section_id="§2",
+        table_context=("基金概况", "业绩比较基准"),
+    )
+
+    assert closure._classify_table_family((fair_value,)) == "fair_value_hierarchy_table"
+    assert closure._classify_table_family((explicit_portfolio,)) == (
+        "portfolio_asset_composition_table"
+    )
+    assert closure._classify_table_family((ambiguous,)) == "unknown"
+
+
+def test_header_band_participates_in_share_and_period_derivation() -> None:
+    """验证 column_header_band_path 参与 canonical share/period 派生并冲突 fail closed。"""
+
+    cell = _cell(
+        value="75815.59",
+        row_label_path=("销售服务费",),
+        section_id="§7",
+        column_header_path=("本期",),
+        column_header_band_path=("C类",),
+        table_context=("销售服务费",),
+    )
+    conflict = _cell(
+        value="75815.59",
+        row_label_path=("销售服务费",),
+        section_id="§7",
+        column_header_path=("A类", "本期"),
+        column_header_band_path=("C类", "上期"),
+        table_context=("销售服务费",),
+    )
+
+    assert closure._derive_share_class_context(cell) == ("C", "header_band")
+    assert closure._derive_period_context(cell) == ("current_period", "column_header")
+    assert closure._derive_share_class_context(conflict) == ("unknown", "unknown")
+    assert closure._derive_period_context(conflict) == ("unknown", "unknown")
 
 
 def test_identity_code_disambiguates_main_code_from_trading_code() -> None:
@@ -280,8 +757,8 @@ def test_manager_and_custodian_close_on_labeled_profile_rows() -> None:
     assert rows["custodian"]["matched_row_label_path"] == ["基金托管人名称"]
 
 
-def test_portfolio_parent_child_split_uses_row_label_not_value_only() -> None:
-    """验证权益投资与股票子项同值时按行标签分流。"""
+def test_identical_portfolio_values_remain_residual_without_proven_hierarchy() -> None:
+    """验证权益与股票同值时不能只靠 flat row label 闭合。"""
 
     equity = _row(
         fact_id="S6-F049",
@@ -316,8 +793,12 @@ def test_portfolio_parent_child_split_uses_row_label_not_value_only() -> None:
     ).to_dict()
 
     rows = {item["field_name"]: item for item in matrix["rows"]}
-    assert rows["equity_investment_amount"]["matched_row_label_path"] == ["权益投资"]
-    assert rows["stock_investment_amount"]["matched_row_label_path"] == ["其中：股票"]
+    assert rows["equity_investment_amount"]["closure_disposition"] == (
+        "semantic_assignment_residual"
+    )
+    assert rows["stock_investment_amount"]["closure_disposition"] == (
+        "semantic_assignment_residual"
+    )
 
 
 def test_fixed_income_rejects_fair_value_hierarchy_and_accepts_portfolio_row() -> None:
@@ -337,18 +818,45 @@ def test_fixed_income_rejects_fair_value_hierarchy_and_accepts_portfolio_row() -
                 row_label_path=("第二层次",),
                 section_id="§8",
                 table_context=("公允价值层级",),
+                table_family="fair_value_hierarchy_table",
             ),
             _cell(
                 value="12106715596.39",
                 row_label_path=("固定收益投资",),
                 section_id="§8",
                 table_context=("基金资产组合",),
+                table_family="portfolio_asset_composition_table",
             ),
         ),
     )
 
     assert result["closure_disposition"] == "disambiguated_source_body_match"
     assert result["matched_row_label_path"] == ["固定收益投资"]
+
+
+def test_new_table_family_rejection_overrides_legacy_raw_context_match() -> None:
+    """验证新表族拒绝字段优先于 legacy required_table_family_any。"""
+
+    row = _row(
+        fact_id="S4-F015",
+        field_name="fixed_income_investment_amount",
+        value="12106715596.39",
+        section_id="§8",
+    )
+    result = _close_one(
+        row,
+        _bundle(
+            _cell(
+                value="12106715596.39",
+                row_label_path=("固定收益投资",),
+                section_id="§8",
+                table_context=("基金资产组合",),
+                table_family="fair_value_hierarchy_table",
+            )
+        ),
+    )
+
+    assert result["closure_disposition"] == "semantic_assignment_residual"
 
 
 def test_benchmark_guard_keeps_investment_objective_context_residual() -> None:
@@ -374,6 +882,70 @@ def test_benchmark_guard_keeps_investment_objective_context_residual() -> None:
 
     assert result["closure_disposition"] == "semantic_assignment_residual"
     assert result["fund_layer_status"] == "semantic_rule_rejected"
+
+
+def test_benchmark_closes_only_with_benchmark_semantic_label() -> None:
+    """验证 S6-F041 只由 benchmark semantic text context 闭合。"""
+
+    row = _row(
+        fact_id="S6-F041",
+        field_name="benchmark",
+        value="沪深300指数收益率",
+        section_id="§2",
+        row_disposition="semantic_assignment_residual",
+    )
+    investment_objective = _close_one(
+        row,
+        _bundle(
+            text_spans=(
+                _span(
+                    value="沪深300指数收益率",
+                    context_label="投资目标",
+                    semantic_context_label="investment_objective",
+                ),
+            )
+        ),
+    )
+    benchmark = _close_one(
+        row,
+        _bundle(
+            text_spans=(
+                _span(
+                    value="沪深300指数收益率",
+                    context_label="业绩比较基准",
+                    semantic_context_label="benchmark",
+                ),
+            )
+        ),
+    )
+
+    assert investment_objective["closure_disposition"] == "semantic_assignment_residual"
+    assert benchmark["closure_disposition"] == "disambiguated_source_body_match"
+
+
+def test_neighbor_row_labels_do_not_prove_positive_hierarchy() -> None:
+    """验证 bounded_neighbor_row_labels 不作为正向层级证明。"""
+
+    row = _row(
+        fact_id="S6-F050",
+        field_name="stock_investment_amount",
+        value="149698325.51",
+        section_id="§8",
+    )
+    result = _close_one(
+        row,
+        _bundle(
+            _cell(
+                value="149698325.51",
+                row_label_path=("其中：股票",),
+                section_id="§8",
+                table_family="portfolio_asset_composition_table",
+                bounded_neighbor_row_labels=("权益投资",),
+            )
+        ),
+    )
+
+    assert result["closure_disposition"] == "semantic_assignment_residual"
 
 
 def test_investment_objective_without_same_source_body_stays_mismatch() -> None:
@@ -411,6 +983,11 @@ def test_unresolved_expense_duplicate_remains_semantic_equivalent_residual() -> 
                 column_header_path=("C类", "本期"),
                 table_context=("销售服务费",),
                 table_id="fee_1",
+                table_family="expense_fee_table",
+                share_class_context="C",
+                share_class_context_source="column_header",
+                period_context="current_period",
+                period_context_source="column_header",
             ),
             _cell(
                 value="75815.59",
@@ -419,12 +996,60 @@ def test_unresolved_expense_duplicate_remains_semantic_equivalent_residual() -> 
                 column_header_path=("C类", "本报告期"),
                 table_context=("销售服务费",),
                 table_id="fee_2",
+                table_family="expense_fee_table",
+                share_class_context="C",
+                share_class_context_source="column_header",
+                period_context="current_period",
+                period_context_source="column_header",
             ),
         ),
     )
 
     assert result["closure_disposition"] == "semantic_equivalent_duplicate_residual"
     assert result["fund_layer_status"] == "semantic_rule_unresolved"
+
+
+@pytest.mark.parametrize(
+    ("share_class", "period", "table_family", "expected"),
+    [
+        ("C", "current_period", "expense_fee_table", "disambiguated_source_body_match"),
+        ("A", "current_period", "expense_fee_table", "semantic_assignment_residual"),
+        ("C", "prior_period", "expense_fee_table", "semantic_assignment_residual"),
+        ("C", "unknown", "expense_fee_table", "semantic_assignment_residual"),
+        ("C", "current_period", "unknown", "semantic_assignment_residual"),
+    ],
+)
+def test_f015_closes_only_with_c_current_expense_fee_context(
+    share_class: closure.ShareClassContext,
+    period: closure.PeriodContext,
+    table_family: closure.TableFamily,
+    expected: str,
+) -> None:
+    """验证 F015 只由 C 类、本期、费用表闭合。"""
+
+    row = _row(
+        fact_id="F015",
+        field_name="sales_service_fee_C_current_year",
+        value="75815.59",
+        section_id="§7",
+    )
+    result = _close_one(
+        row,
+        _bundle(
+            _cell(
+                value="75815.59",
+                row_label_path=("销售服务费",),
+                section_id="§7",
+                table_family=table_family,
+                share_class_context=share_class,
+                share_class_context_source="column_header",
+                period_context=period,
+                period_context_source="column_header",
+            )
+        ),
+    )
+
+    assert result["closure_disposition"] == expected
 
 
 def test_manager_holding_range_a_requires_fund_share_class_label() -> None:
@@ -446,6 +1071,8 @@ def test_manager_holding_range_a_requires_fund_share_class_label() -> None:
                 column_header_path=("beta",),
                 table_context=("基金经理持有",),
                 table_id="manager_holding_1",
+                table_family="manager_holding_table",
+                share_class_context="unknown",
             ),
             _cell(
                 value="10万份至50万份",
@@ -454,12 +1081,161 @@ def test_manager_holding_range_a_requires_fund_share_class_label() -> None:
                 column_header_path=("混合A",),
                 table_context=("基金经理持有",),
                 table_id="manager_holding_2",
+                table_family="manager_holding_table",
+                share_class_context="A",
+                share_class_context_source="column_header",
             ),
         ),
     )
 
     assert result["closure_disposition"] == "disambiguated_source_body_match"
     assert result["matched_column_header_path"] == ["混合A"]
+
+
+@pytest.mark.parametrize(
+    ("share_class", "table_family", "row_label", "expected"),
+    [
+        (
+            "A",
+            "manager_holding_table",
+            "本基金基金经理持有本开放式基金",
+            "disambiguated_source_body_match",
+        ),
+        (
+            "C",
+            "manager_holding_table",
+            "本基金基金经理持有本开放式基金",
+            "semantic_assignment_residual",
+        ),
+        ("A", "unknown", "本基金基金经理持有本开放式基金", "semantic_assignment_residual"),
+        ("A", "manager_holding_table", "员工持有本基金", "semantic_assignment_residual"),
+    ],
+)
+def test_f020_closes_only_with_a_share_manager_holding_table(
+    share_class: closure.ShareClassContext,
+    table_family: closure.TableFamily,
+    row_label: str,
+    expected: str,
+) -> None:
+    """验证 F020 只由 A 类基金经理持有表闭合。"""
+
+    row = _row(
+        fact_id="F020",
+        field_name="manager_holding_range_A",
+        value="10万份至50万份",
+        section_id="§10",
+    )
+    result = _close_one(
+        row,
+        _bundle(
+            _cell(
+                value="10万份至50万份",
+                row_label_path=(row_label,),
+                section_id="§10",
+                table_family=table_family,
+                share_class_context=share_class,
+                share_class_context_source="column_header",
+            )
+        ),
+    )
+
+    assert result["closure_disposition"] == expected
+
+
+def test_equity_amount_closes_only_aggregate_row_not_stock_child_or_detail() -> None:
+    """验证 S5-F032/S6-F049 只接受组合表权益投资 aggregate 行。"""
+
+    row = _row(
+        fact_id="S6-F049",
+        field_name="equity_investment_amount",
+        value="149698325.51",
+        section_id="§8",
+    )
+    aggregate = _close_one(
+        row,
+        _bundle(
+            _cell(
+                value="149698325.51",
+                row_label_path=("权益投资",),
+                section_id="§8",
+                table_family="portfolio_asset_composition_table",
+                row_hierarchy_path=("权益投资",),
+                row_hierarchy_role="aggregate",
+            )
+        ),
+    )
+    stock_child = _close_one(
+        row,
+        _bundle(
+            _cell(
+                value="149698325.51",
+                row_label_path=("其中：股票",),
+                section_id="§8",
+                table_family="portfolio_asset_composition_table",
+                row_parent_label_path=("权益投资",),
+                row_hierarchy_path=("权益投资", "其中：股票"),
+                row_hierarchy_role="child",
+            )
+        ),
+    )
+    detail = _close_one(
+        row,
+        _bundle(
+            _cell(
+                value="149698325.51",
+                row_label_path=("权益投资",),
+                section_id="§8",
+                table_family="holding_detail_table",
+                row_hierarchy_path=("权益投资",),
+                row_hierarchy_role="aggregate",
+            )
+        ),
+    )
+
+    assert aggregate["closure_disposition"] == "disambiguated_source_body_match"
+    assert stock_child["closure_disposition"] == "semantic_assignment_residual"
+    assert detail["closure_disposition"] == "semantic_assignment_residual"
+
+
+def test_stock_amount_closes_only_child_stock_row_under_equity_parent() -> None:
+    """验证 S6-F050 只接受权益投资父行下的股票 child 行。"""
+
+    row = _row(
+        fact_id="S6-F050",
+        field_name="stock_investment_amount",
+        value="149698325.51",
+        section_id="§8",
+    )
+    child = _close_one(
+        row,
+        _bundle(
+            _cell(
+                value="149698325.51",
+                row_label_path=("其中：股票",),
+                section_id="§8",
+                table_family="portfolio_asset_composition_table",
+                row_parent_label_path=("权益投资",),
+                row_hierarchy_path=("权益投资", "其中：股票"),
+                row_hierarchy_role="child",
+            )
+        ),
+    )
+    aggregate = _close_one(
+        row,
+        _bundle(
+            _cell(
+                value="149698325.51",
+                row_label_path=("股票",),
+                section_id="§8",
+                table_family="portfolio_asset_composition_table",
+                row_hierarchy_path=("股票",),
+                row_hierarchy_role="aggregate",
+            )
+        ),
+    )
+
+    assert child["closure_disposition"] == "disambiguated_source_body_match"
+    assert aggregate["closure_disposition"] == "semantic_assignment_residual"
 
 
 @pytest.mark.parametrize(
