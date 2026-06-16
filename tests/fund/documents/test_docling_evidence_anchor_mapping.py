@@ -670,8 +670,8 @@ def test_unsafe_toc_body_ambiguity_blocks_as_duplicate_section_heading() -> None
     assert not any(item.block_type == "table" for item in result.mapped)
 
 
-def test_duplicate_body_heading_blocks_page_based_propagation() -> None:
-    """验证重复正文章节标题阻断受影响 span 内表格映射。
+def test_later_duplicate_body_heading_maps_page_based_propagation() -> None:
+    """验证后续重复正文标题不再自动阻断稳定 span 内表格映射。
 
     Args:
         无。
@@ -680,7 +680,7 @@ def test_duplicate_body_heading_blocks_page_based_propagation() -> None:
         无返回值。
 
     Raises:
-        AssertionError: 重复正文标题未阻断时抛出。
+        AssertionError: 后续重复正文标题仍阻断稳定映射时抛出。
     """
 
     sections = (
@@ -692,8 +692,9 @@ def test_duplicate_body_heading_blocks_page_based_propagation() -> None:
 
     result = map_candidate_document_anchor_candidates(document, schema_family="S1_full")
 
-    assert any(block.reason_code == "duplicate_section_heading" for block in result.blocked)
-    assert not any(item.block_type == "table" for item in result.mapped)
+    table_mapping = next(item for item in result.mapped if item.block_type == "table")
+    assert table_mapping.fields.section_id == "§8"
+    assert not any(block.reason_code == "duplicate_section_heading" for block in result.blocked)
 
 
 def test_duplicate_same_page_top_level_body_heading_blocks_page_based_propagation() -> None:
@@ -800,6 +801,33 @@ def test_page_based_table_inherits_stable_section_span() -> None:
 
     table_mapping = next(item for item in result.mapped if item.block_type == "table")
     assert table_mapping.fields.section_id == "§8"
+
+
+def test_soft_unindexed_internal_boundary_does_not_close_stable_span() -> None:
+    """验证稳定 section 起点优先于中间不可解析边界。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 中间不可解析边界仍截断稳定 span 时抛出。
+    """
+
+    sections = (
+        _section(section_id="sec_7", heading_text="§7 年度财务报表", page_number=17),
+        _section(section_id="note", heading_text="财务报表附注", page_number=23),
+        _section(section_id="sec_8", heading_text="§8 投资组合报告", page_number=51),
+    )
+    table = {**_table_with_cell(section_id="", page_number=37, cells=[]), "heading_path": []}
+    document = project_candidate_representation(_payload(sections=sections, text_blocks=(), tables=(table,)))
+
+    result = map_candidate_document_anchor_candidates(document, schema_family="S1_full")
+
+    table_mapping = next(item for item in result.mapped if item.block_type == "table")
+    assert table_mapping.fields.section_id == "§7"
 
 
 def test_half_open_section_span_boundary_belongs_to_next_section() -> None:

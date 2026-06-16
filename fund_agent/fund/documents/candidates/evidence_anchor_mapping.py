@@ -39,6 +39,7 @@ _UNSUPPORTED_HEADING_NUMBER_PATTERNS = (
     re.compile(r"^第\s*[一二三四五六七八九十]+\s*[章节]"),
 )
 _SUPPORTED_SECTION_PREFIXES = frozenset(f"§{index}" for index in range(1, 11))
+_FRONT_MATTER_AMBIGUOUS_MAX_PAGE = 3
 _SECTION_KEYWORD_FAMILIES: dict[str, tuple[str, ...]] = {
     "§1": ("重要提示", "目录"),
     "§2": ("基金简介", "基金概况", "基金产品概况", "基金基本情况"),
@@ -947,11 +948,59 @@ def _duplicate_sections(grouped: dict[str, tuple[_SectionIndexEntry, ...]]) -> s
     """
 
     duplicate_sections: set[str] = set()
+    selected_page_to_sections = _selected_page_to_sections(grouped)
     for section_id, entries in grouped.items():
-        top_level_node_ids = {entry.node_id for entry in entries if not entry.is_child_heading}
-        if len(top_level_node_ids) > 1:
+        top_level_entries = tuple(entry for entry in entries if not entry.is_child_heading)
+        if len(top_level_entries) <= 1:
+            continue
+        selected_page = min(entry.page for entry in entries)
+        top_level_pages = tuple(entry.page for entry in top_level_entries)
+        if _has_duplicate_page(top_level_pages):
+            duplicate_sections.add(section_id)
+            continue
+        if selected_page <= _FRONT_MATTER_AMBIGUOUS_MAX_PAGE:
+            duplicate_sections.add(section_id)
+            continue
+        if len(selected_page_to_sections.get(selected_page, ())) > 1:
             duplicate_sections.add(section_id)
     return duplicate_sections
+
+
+def _selected_page_to_sections(grouped: dict[str, tuple[_SectionIndexEntry, ...]]) -> dict[int, tuple[str, ...]]:
+    """构造正文起始页到年报章节的反向索引。
+
+    Args:
+        grouped: 章节归组条目。
+
+    Returns:
+        正文起始页到章节编号 tuple 的映射。
+
+    Raises:
+        无显式抛出。
+    """
+
+    by_page: dict[int, list[str]] = {}
+    for section_id, entries in grouped.items():
+        if not entries:
+            continue
+        by_page.setdefault(min(entry.page for entry in entries), []).append(section_id)
+    return {page: tuple(sorted(section_ids, key=_section_number)) for page, section_ids in by_page.items()}
+
+
+def _has_duplicate_page(pages: tuple[int, ...]) -> bool:
+    """判断页码 tuple 是否存在重复页。
+
+    Args:
+        pages: 页码 tuple。
+
+    Returns:
+        存在重复页时返回 ``True``。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return len(set(pages)) != len(pages)
 
 
 def _non_monotonic_sections(selected_pages: dict[str, int]) -> set[str]:
@@ -1020,31 +1069,12 @@ def _section_spans(selected_pages: dict[str, int], boundary_pages: frozenset[int
     spans: list[_SectionSpan] = []
     for index, (section_id, start_page) in enumerate(ordered):
         next_stable_start = ordered[index + 1][1] if index + 1 < len(ordered) else None
-        next_boundary = min((page for page in boundary_pages if page > start_page), default=None)
-        next_start = _minimum_positive_page(next_stable_start, next_boundary)
+        if next_stable_start is None:
+            next_start = min((page for page in boundary_pages if page > start_page), default=None)
+        else:
+            next_start = next_stable_start
         spans.append(_SectionSpan(section_id=section_id, start_page=start_page, end_page=next_start))
     return tuple(spans)
-
-
-def _minimum_positive_page(left: int | None, right: int | None) -> int | None:
-    """返回两个可选正页码中较小者。
-
-    Args:
-        left: 第一个候选页码。
-        right: 第二个候选页码。
-
-    Returns:
-        较小正页码；两者都不存在时返回 ``None``。
-
-    Raises:
-        无显式抛出。
-    """
-
-    if left is None:
-        return right
-    if right is None:
-        return left
-    return min(left, right)
 
 
 def _positive_pages_for_block(block: CandidateAnchorBlock) -> tuple[int, ...]:
