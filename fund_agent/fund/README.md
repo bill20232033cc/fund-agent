@@ -74,6 +74,8 @@ chapter_lens = resolve_preferred_lens(chapter_id=2, fund_type="active_fund")
 
 `fund_agent/fund/documents/candidates/` 当前承载 Docling / pdfplumber / EID HTML render 候选年报表示的内部 evidence harness。`representation_export.py` 定义 candidate-only manifest、输出 envelope、路径/hash 校验、默认 no-clobber 写入策略、blocked-result 和显式 opt-in 内置 handler 入口；`representation_handlers.py` 提供候选内部 route handlers：Docling handler 仅在调用时 lazy import 并保持本地 artifact / socket-block 约束，pdfplumber handler 只用于候选表示导出，EID HTML render 在未有独立 accepted artifact 前保持 blocked；`representation_models.py` 和 `representation_projection.py` 只把已生成的候选 JSON 投影为 Fund documents 内部 route-neutral dataclass 与 candidate anchor note，不修改公共 `EvidenceAnchor` schema。它们不改变 `FundDocumentRepository` 行为，不写 `cache/pdf`，不从 `fund_agent.fund.documents` 公共入口导出，也不证明 source truth、字段正确性、taxonomy compatibility、parser replacement 或 readiness。显式 staged PDF path 仅能作为已接受 gate evidence 链中的 Fund documents candidate-harness 输入，不能成为 Service、UI、Host、renderer、quality gate 或生产 repository 的文档访问模式。
 
+Docling 架构重定位后，candidate harness 只保留为转换中间态和研究证据入口；它不是结构化基金事实提取层。当前 `fund_agent/fund/processors/` 已落地 S1 no-live Processor/Extractor 契约、`FundProcessorRegistry` 和 `ActiveFundAnnualProcessor`：只支持 `active_fund + annual_report + parsed_annual_report.v1`，消费已加载的 `ParsedAnnualReport`，包装现有窄 extractor，输出模板第 1-6 章字段族、公共 `EvidenceAnchor`、source provenance 和 fail-closed 缺口。该 processor 尚未接入 `FundDataExtractor.extract()` 默认生产 facade，不能从候选 JSON 直接外推出 CHAPTER_CONTRACT、renderer、quality gate 或 LLM prompt 输入，也不证明 source truth、字段正确性、parser replacement、golden/readiness 或 release 状态。
+
 `extract_profile()` 返回 `ProfileExtractionResult`，当前只覆盖模板第 1 章“这只基金到底是什么产品”的最小数据底座：
 
 - `basic_identity`：基金名称、代码、披露类别、规模、基金经理，以及稳定输出 `classified_fund_type` / `classification_basis`
