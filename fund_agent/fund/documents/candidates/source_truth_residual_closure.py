@@ -9,6 +9,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 import re
 from collections import Counter
 from collections.abc import Mapping
@@ -53,6 +55,7 @@ ReferenceOrigin = Literal[
     "fund_document_repository_section_text",
 ]
 ReferenceGenerationStatus = Literal["available", "blocked_reference_unavailable"]
+ProducerInputMode = Literal["raw_legacy_v1", "pre_enriched_v2"]
 _LiteralT = TypeVar("_LiteralT", bound=str)
 TableFamily = Literal[
     "unknown",
@@ -100,9 +103,12 @@ TextSemanticContext = Literal[
 ReferenceEnrichmentStatus = Literal["not_enriched", "partially_enriched", "enriched"]
 
 _SCHEMA_VERSION = "docling_source_truth_residual_closure.v1"
+PRODUCER_CONTRACT_VERSION = "docling_reference_bundle_producer_contract.v1"
 _ANNUAL_REPORT_EVIDENCE_SOURCE_KIND = "annual_report"
 _REFERENCE_BUNDLE_SCHEMA_VERSION = "repository_reference_bundle.v2"
 _LEGACY_REFERENCE_BUNDLE_SCHEMA_VERSION = "repository_reference_bundle.v1"
+_RAW_TEXT_EXCERPT_CODEPOINT_LIMIT = 200
+_ROW_DIAGNOSTIC_CANDIDATE_LIMIT = 20
 _TABLE_FAMILY_VALUES: tuple[TableFamily, ...] = (
     "unknown",
     "expense_fee_table",
@@ -430,6 +436,7 @@ class RepositoryReferenceBundle:
             无显式抛出。
         """
 
+        diagnostics = _bundle_diagnostic_summary(self)
         return {
             "sample_id": self.sample_id,
             "fund_code": self.fund_code,
@@ -442,6 +449,7 @@ class RepositoryReferenceBundle:
             "reference_bundle_schema_version": self.reference_bundle_schema_version,
             "enrichment_status": self.enrichment_status,
             "enrichment_notes": list(self.enrichment_notes),
+            **diagnostics,
         }
 
 
@@ -485,6 +493,7 @@ class ResidualClosureResultRow:
     candidate_only: bool = True
     source_truth_status: Literal["not_proven"] = "not_proven"
     evidence_anchor_source_kind: Literal["annual_report"] = _ANNUAL_REPORT_EVIDENCE_SOURCE_KIND
+    diagnostic_payload: Mapping[str, object] | None = None
 
     def to_dict(self) -> dict[str, object]:
         """序列化为 JSON 兼容字典。
@@ -499,6 +508,7 @@ class ResidualClosureResultRow:
             无显式抛出。
         """
 
+        diagnostic_payload_available = self.diagnostic_payload is not None
         return {
             "sample_id": self.sample_id,
             "fact_id": self.fact_id,
@@ -521,6 +531,10 @@ class ResidualClosureResultRow:
             "candidate_only": self.candidate_only,
             "source_truth_status": self.source_truth_status,
             "evidence_anchor_source_kind": self.evidence_anchor_source_kind,
+            "diagnostic_payload_available": diagnostic_payload_available,
+            "diagnostic_payload": dict(self.diagnostic_payload)
+            if self.diagnostic_payload is not None
+            else None,
         }
 
 
@@ -823,6 +837,7 @@ def _close_row(
             "same_source_text_absent",
             processed_status,
             "semantic_rule_unresolved",
+            diagnostic_payload=_source_absent_diagnostic_payload(row, bundle),
         )
     if processed_status != "locator_context_available":
         return _result(
@@ -842,6 +857,11 @@ def _close_row(
             "same_source_reference_loaded",
             processed_status,
             semantic.status,
+            diagnostic_payload=_semantic_residual_diagnostic_payload(
+                row,
+                rule,
+                source_matches,
+            ),
         )
     if rule.allow_semantic_equivalent_duplicate and len(semantic.matched) > 1:
         first_match = semantic.matched[0]
@@ -853,6 +873,7 @@ def _close_row(
             processed_status,
             "semantic_rule_unresolved",
             first_match,
+            _selected_match_diagnostic_payload(row, first_match),
         )
     return _result(
         row,
@@ -862,6 +883,7 @@ def _close_row(
         processed_status,
         "semantic_rule_satisfied",
         semantic.matched[0],
+        _selected_match_diagnostic_payload(row, semantic.matched[0]),
     )
 
 
@@ -1068,6 +1090,887 @@ def _source_matches(
         if _reference_matches(candidate, span.normalized_text, span.raw_text):
             matches.append(_ReferenceMatch(text_span=span))
     return tuple(matches)
+
+
+def _bundle_diagnostic_summary(bundle: RepositoryReferenceBundle) -> dict[str, object]:
+    """生成 reference bundle producer candidate-only 诊断摘要。
+
+    Args:
+        bundle: 仓库引用 bundle。
+
+    Returns:
+        只用于 drift/comparability 调试的 JSON 兼容诊断字段。
+
+    Raises:
+        无显式抛出。
+    """
+
+    diagnostic_payload_available = bundle.reference_generation_status == "available"
+    producer_input_mode = _producer_input_mode(bundle)
+    cell_diagnostics = _sorted_cell_diagnostics(bundle)
+    text_span_diagnostics = _sorted_text_span_diagnostics(bundle)
+    table_count = _table_count(bundle)
+    section_count = _section_count(bundle)
+    table_family_counts = _sorted_counter(
+        Counter(cell.table_family for cell in bundle.cells)
+    )
+    section_inference_counts = _sorted_counter(
+        Counter(
+            _diagnostic_section_id(section_id)
+            for section_id in tuple(cell.section_id for cell in bundle.cells)
+            + tuple(span.section_id for span in bundle.text_spans)
+        )
+    )
+    section_inference_reason_counts = _section_inference_reason_counts(bundle)
+    row_hierarchy_role_counts = _sorted_counter(
+        Counter(cell.row_hierarchy_role for cell in bundle.cells)
+    )
+    text_semantic_context_counts = _sorted_counter(
+        Counter(span.semantic_context_label for span in bundle.text_spans)
+    )
+    fingerprint_payload = {
+        "producer_input_mode": producer_input_mode,
+        "cell_count": len(bundle.cells),
+        "text_span_count": len(bundle.text_spans),
+        "table_count": table_count,
+        "section_count": section_count,
+        "table_family_counts": table_family_counts,
+        "section_inference_counts": section_inference_counts,
+        "section_inference_reason_counts": section_inference_reason_counts,
+        "row_hierarchy_role_counts": row_hierarchy_role_counts,
+        "text_semantic_context_counts": text_semantic_context_counts,
+        "cell_normalized_text_hashes": [
+            diagnostic["normalized_text_hash"] for diagnostic in cell_diagnostics
+        ],
+        "text_span_normalized_text_hashes": [
+            diagnostic["normalized_text_hash"] for diagnostic in text_span_diagnostics
+        ],
+    }
+    return {
+        "producer_contract_version": PRODUCER_CONTRACT_VERSION,
+        "producer_input_mode": producer_input_mode,
+        "cell_count": len(bundle.cells),
+        "text_span_count": len(bundle.text_spans),
+        "table_count": table_count,
+        "section_count": section_count,
+        "table_family_counts": table_family_counts,
+        "section_inference_counts": section_inference_counts,
+        "section_inference_reason_counts": section_inference_reason_counts,
+        "row_hierarchy_role_counts": row_hierarchy_role_counts,
+        "text_semantic_context_counts": text_semantic_context_counts,
+        "bundle_content_fingerprint": _bundle_content_fingerprint(fingerprint_payload)
+        if diagnostic_payload_available
+        else None,
+        "diagnostic_payload_available": diagnostic_payload_available,
+    }
+
+
+def _selected_match_diagnostic_payload(
+    row: ResidualClosureInputRow,
+    match: _ReferenceMatch,
+) -> dict[str, object]:
+    """生成闭合行选中 match 的诊断 payload。
+
+    Args:
+        row: residual 输入行。
+        match: 已选中引用命中。
+
+    Returns:
+        JSON 兼容诊断 payload。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return {
+        "diagnostic_kind": "selected_reference_match",
+        "normalized_candidate_hash": _normalized_text_hash(row.normalized_candidate),
+        "selected_reference_diagnostic": _match_diagnostic(row.sample_id, match),
+    }
+
+
+def _source_absent_diagnostic_payload(
+    row: ResidualClosureInputRow,
+    bundle: RepositoryReferenceBundle,
+) -> dict[str, object]:
+    """生成 source body absent 行的有界搜索诊断。
+
+    Args:
+        row: residual 输入行。
+        bundle: 已加载的仓库引用 bundle。
+
+    Returns:
+        JSON 兼容诊断 payload。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return {
+        "diagnostic_kind": "candidate_search_no_source_match",
+        "normalized_candidate_hash": _normalized_text_hash(row.normalized_candidate),
+        "searched_cell_count": len(bundle.cells),
+        "searched_text_span_count": len(bundle.text_spans),
+        "candidate_search_diagnostics": _bounded_reference_diagnostics(row.sample_id, bundle),
+    }
+
+
+def _semantic_residual_diagnostic_payload(
+    row: ResidualClosureInputRow,
+    rule: ResidualClosureRule,
+    source_matches: tuple[_ReferenceMatch, ...],
+) -> dict[str, object]:
+    """生成 fund semantic residual 行的候选拒绝诊断。
+
+    Args:
+        row: residual 输入行。
+        rule: 字段闭合规则。
+        source_matches: 已确认同源文本命中的候选引用。
+
+    Returns:
+        JSON 兼容诊断 payload。
+
+    Raises:
+        无显式抛出。
+    """
+
+    sorted_matches = sorted(
+        source_matches,
+        key=lambda match: _match_sort_key(row.sample_id, match),
+    )
+    considered = []
+    for match in sorted_matches[:_ROW_DIAGNOSTIC_CANDIDATE_LIMIT]:
+        considered.append(
+            {
+                "reference_diagnostic": _match_diagnostic(row.sample_id, match),
+                "rejection_categories": _semantic_rejection_categories(match, rule),
+            }
+        )
+    return {
+        "diagnostic_kind": "semantic_assignment_considered_matches",
+        "normalized_candidate_hash": _normalized_text_hash(row.normalized_candidate),
+        "considered_match_count": len(source_matches),
+        "considered_match_diagnostics": considered,
+    }
+
+
+def _bounded_reference_diagnostics(
+    sample_id: str,
+    bundle: RepositoryReferenceBundle,
+) -> dict[str, object]:
+    """生成 bundle 内有界候选引用诊断。
+
+    Args:
+        sample_id: 样本 ID。
+        bundle: 已加载的仓库引用 bundle。
+
+    Returns:
+        JSON 兼容候选引用诊断。
+
+    Raises:
+        无显式抛出。
+    """
+
+    cell_matches = (
+        _ReferenceMatch(cell=cell) for cell in _sorted_cells(bundle)
+    )
+    span_matches = (
+        _ReferenceMatch(text_span=span) for span in _sorted_text_spans(bundle)
+    )
+    return {
+        "cells": [
+            _match_diagnostic(sample_id, match)
+            for match in tuple(cell_matches)[:_ROW_DIAGNOSTIC_CANDIDATE_LIMIT]
+        ],
+        "text_spans": [
+            _match_diagnostic(sample_id, match)
+            for match in tuple(span_matches)[:_ROW_DIAGNOSTIC_CANDIDATE_LIMIT]
+        ],
+        "diagnostic_limit": _ROW_DIAGNOSTIC_CANDIDATE_LIMIT,
+    }
+
+
+def _semantic_rejection_categories(
+    match: _ReferenceMatch,
+    rule: ResidualClosureRule,
+) -> tuple[dict[str, object], ...]:
+    """返回 match 不满足 fund 规则的诊断分类。
+
+    Args:
+        match: 引用命中。
+        rule: 字段闭合规则。
+
+    Returns:
+        拒绝分类 tuple；满足规则时为空 tuple。
+
+    Raises:
+        无显式抛出。
+    """
+
+    categories: list[dict[str, object]] = []
+    row_labels = _row_labels(match)
+    column_headers = _column_headers(match)
+    table_context = _table_context(match)
+    section_id = _section_id(match)
+    cell = match.cell
+    span = match.text_span
+    if section_id != rule.expected_section_id:
+        categories.append(
+            {
+                "category": "section_id_mismatch",
+                "expected_section_id": rule.expected_section_id,
+                "actual_section_id": section_id,
+            }
+        )
+    if rule.rejected_table_families and (
+        cell is None or cell.table_family in rule.rejected_table_families
+    ):
+        categories.append(
+            {
+                "category": "rejected_table_family",
+                "rejected_table_families": list(rule.rejected_table_families),
+                "actual_table_family": cell.table_family if cell is not None else None,
+            }
+        )
+    if rule.allowed_table_families and (
+        cell is None or cell.table_family not in rule.allowed_table_families
+    ):
+        categories.append(
+            {
+                "category": "table_family_not_allowed",
+                "allowed_table_families": list(rule.allowed_table_families),
+                "actual_table_family": cell.table_family if cell is not None else None,
+            }
+        )
+    if rule.required_text_semantic_context and not _match_has_required_text_context(
+        match,
+        rule.required_text_semantic_context,
+    ):
+        categories.append(
+            {
+                "category": "required_text_semantic_context_absent",
+                "required_text_semantic_context": rule.required_text_semantic_context,
+                "actual_text_semantic_context": span.semantic_context_label
+                if span is not None
+                else None,
+            }
+        )
+    if rule.rejected_row_label_any and _contains_any(row_labels, rule.rejected_row_label_any):
+        categories.append(
+            {
+                "category": "rejected_row_label",
+                "rejected_row_label_any": list(rule.rejected_row_label_any),
+                "actual_row_label_path": list(row_labels),
+            }
+        )
+    if rule.required_row_label_any and not _contains_any(row_labels, rule.required_row_label_any):
+        categories.append(
+            {
+                "category": "required_row_label_absent",
+                "required_row_label_any": list(rule.required_row_label_any),
+                "actual_row_label_path": list(row_labels),
+            }
+        )
+    parent_labels = _parent_row_labels(cell)
+    if rule.rejected_parent_row_label_any and _contains_any(
+        parent_labels,
+        rule.rejected_parent_row_label_any,
+    ):
+        categories.append(
+            {
+                "category": "rejected_parent_row_label",
+                "rejected_parent_row_label_any": list(rule.rejected_parent_row_label_any),
+                "actual_parent_row_label_path": list(parent_labels),
+            }
+        )
+    if rule.required_parent_row_label_any and not _contains_any(
+        parent_labels,
+        rule.required_parent_row_label_any,
+    ):
+        categories.append(
+            {
+                "category": "required_parent_row_label_absent",
+                "required_parent_row_label_any": list(rule.required_parent_row_label_any),
+                "actual_parent_row_label_path": list(parent_labels),
+            }
+        )
+    if rule.rejected_row_hierarchy_roles and (
+        cell is None or cell.row_hierarchy_role in rule.rejected_row_hierarchy_roles
+    ):
+        categories.append(
+            {
+                "category": "rejected_row_hierarchy_role",
+                "rejected_row_hierarchy_roles": list(rule.rejected_row_hierarchy_roles),
+                "actual_row_hierarchy_role": cell.row_hierarchy_role
+                if cell is not None
+                else None,
+            }
+        )
+    if rule.required_row_hierarchy_role is not None and (
+        cell is None or cell.row_hierarchy_role != rule.required_row_hierarchy_role
+    ):
+        categories.append(
+            {
+                "category": "required_row_hierarchy_role_absent",
+                "required_row_hierarchy_role": rule.required_row_hierarchy_role,
+                "actual_row_hierarchy_role": cell.row_hierarchy_role
+                if cell is not None
+                else None,
+            }
+        )
+    if rule.required_column_header_any and not _contains_any(
+        column_headers,
+        rule.required_column_header_any,
+    ):
+        categories.append(
+            {
+                "category": "required_column_header_absent",
+                "required_column_header_any": list(rule.required_column_header_any),
+                "actual_column_header_path": list(column_headers),
+            }
+        )
+    if rule.share_class_context and not _has_canonical_share_class_context(
+        cell,
+        rule.share_class_context,
+        rule.allowed_share_class_context_sources,
+    ):
+        categories.append(
+            {
+                "category": "share_class_context_mismatch",
+                "required_share_class_context": rule.share_class_context,
+                "actual_share_class_context": cell.share_class_context
+                if cell is not None
+                else None,
+                "actual_share_class_context_source": cell.share_class_context_source
+                if cell is not None
+                else None,
+            }
+        )
+    if rule.required_period_context is not None and (
+        cell is None or cell.period_context != rule.required_period_context
+    ):
+        categories.append(
+            {
+                "category": "period_context_mismatch",
+                "required_period_context": rule.required_period_context,
+                "actual_period_context": cell.period_context if cell is not None else None,
+            }
+        )
+    if rule.rejected_period_contexts and (
+        cell is None or cell.period_context in rule.rejected_period_contexts
+    ):
+        categories.append(
+            {
+                "category": "rejected_period_context",
+                "rejected_period_contexts": list(rule.rejected_period_contexts),
+                "actual_period_context": cell.period_context if cell is not None else None,
+            }
+        )
+    has_new_table_family_predicate = bool(
+        rule.allowed_table_families or rule.rejected_table_families
+    )
+    if (
+        not has_new_table_family_predicate
+        and rule.required_table_family_any
+        and not _contains_any(table_context, rule.required_table_family_any)
+    ):
+        categories.append(
+            {
+                "category": "required_table_family_text_absent",
+                "required_table_family_any": list(rule.required_table_family_any),
+                "actual_table_context": list(table_context),
+            }
+        )
+    if rule.semantic_guard and not _contains_any(
+        _semantic_context_values(match),
+        (rule.semantic_guard,),
+    ):
+        categories.append(
+            {
+                "category": "semantic_guard_absent",
+                "semantic_guard": rule.semantic_guard,
+            }
+        )
+    return tuple(categories)
+
+
+def _match_has_required_text_context(
+    match: _ReferenceMatch,
+    required_context: TextSemanticContext,
+) -> bool:
+    """判断 match 是否满足文本语义上下文要求。
+
+    Args:
+        match: 引用命中。
+        required_context: 必须的文本语义上下文。
+
+    Returns:
+        满足时返回 ``True``。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if match.text_span is not None:
+        return match.text_span.semantic_context_label == required_context
+    return _cell_has_required_text_semantic_context(match.cell, required_context)
+
+
+def _match_diagnostic(sample_id: str, match: _ReferenceMatch) -> dict[str, object]:
+    """生成单个引用 match 的有界诊断。
+
+    Args:
+        sample_id: 样本 ID。
+        match: 引用命中。
+
+    Returns:
+        JSON 兼容引用诊断。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if match.cell is not None:
+        return _cell_diagnostic_payload(sample_id, match.cell)
+    if match.text_span is not None:
+        return _text_span_diagnostic_payload(sample_id, match.text_span)
+    return {"sample_id": sample_id, "reference_kind": "unknown"}
+
+
+def _cell_diagnostic_payload(
+    sample_id: str,
+    cell: RepositoryReferenceCell,
+) -> dict[str, object]:
+    """生成单元格引用诊断 payload。
+
+    Args:
+        sample_id: 样本 ID。
+        cell: 单元格引用。
+
+    Returns:
+        JSON 兼容单元格诊断。
+
+    Raises:
+        无显式抛出。
+    """
+
+    normalized_text = _diagnostic_normalized_text(cell.normalized_text)
+    return {
+        "reference_kind": "cell",
+        "sample_id": sample_id,
+        "table_id": cell.table_id,
+        "row_index": cell.row_index,
+        "column_index": cell.column_index,
+        "section_id": cell.section_id,
+        "page_number": cell.page_number,
+        "row_label_path": list(cell.row_label_path),
+        "column_header_path": list(cell.column_header_path),
+        "table_context": list(cell.table_context),
+        "table_family": cell.table_family,
+        "row_parent_label_path": list(cell.row_parent_label_path),
+        "row_hierarchy_path": list(cell.row_hierarchy_path),
+        "row_hierarchy_role": cell.row_hierarchy_role,
+        "share_class_context": cell.share_class_context,
+        "share_class_context_source": cell.share_class_context_source,
+        "period_context": cell.period_context,
+        "period_context_source": cell.period_context_source,
+        "normalized_text_hash": _normalized_text_hash(normalized_text),
+        "raw_text_excerpt": _raw_text_excerpt(normalized_text),
+    }
+
+
+def _text_span_diagnostic_payload(
+    sample_id: str,
+    span: RepositoryReferenceTextSpan,
+) -> dict[str, object]:
+    """生成文本 span 引用诊断 payload。
+
+    Args:
+        sample_id: 样本 ID。
+        span: 文本引用。
+
+    Returns:
+        JSON 兼容文本 span 诊断。
+
+    Raises:
+        无显式抛出。
+    """
+
+    normalized_text = _diagnostic_normalized_text(span.normalized_text)
+    return {
+        "reference_kind": "text_span",
+        "sample_id": sample_id,
+        "section_id": span.section_id,
+        "page_number": span.page_number,
+        "context_label": span.context_label,
+        "heading_path": list(span.heading_path),
+        "semantic_context_label": span.semantic_context_label,
+        "normalized_text_hash": _normalized_text_hash(normalized_text),
+        "raw_text_excerpt": _raw_text_excerpt(normalized_text),
+    }
+
+
+def _sorted_cell_diagnostics(
+    bundle: RepositoryReferenceBundle,
+) -> tuple[dict[str, object], ...]:
+    """按生产者契约顺序返回 cell 诊断。
+
+    Args:
+        bundle: 仓库引用 bundle。
+
+    Returns:
+        已排序 cell 诊断 tuple。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return tuple(
+        _cell_diagnostic_payload(bundle.sample_id, cell)
+        for cell in _sorted_cells(bundle)
+    )
+
+
+def _sorted_text_span_diagnostics(
+    bundle: RepositoryReferenceBundle,
+) -> tuple[dict[str, object], ...]:
+    """按生产者契约顺序返回 text span 诊断。
+
+    Args:
+        bundle: 仓库引用 bundle。
+
+    Returns:
+        已排序 text span 诊断 tuple。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return tuple(
+        _text_span_diagnostic_payload(bundle.sample_id, span)
+        for span in _sorted_text_spans(bundle)
+    )
+
+
+def _sorted_cells(
+    bundle: RepositoryReferenceBundle,
+) -> tuple[RepositoryReferenceCell, ...]:
+    """按生产者契约排序 cell。
+
+    Args:
+        bundle: 仓库引用 bundle。
+
+    Returns:
+        已排序 cell tuple。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return tuple(sorted(bundle.cells, key=lambda cell: _cell_sort_key(bundle.sample_id, cell)))
+
+
+def _sorted_text_spans(
+    bundle: RepositoryReferenceBundle,
+) -> tuple[RepositoryReferenceTextSpan, ...]:
+    """按生产者契约排序 text span。
+
+    Args:
+        bundle: 仓库引用 bundle。
+
+    Returns:
+        已排序 text span tuple。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return tuple(
+        sorted(
+            bundle.text_spans,
+            key=lambda span: _text_span_sort_key(bundle.sample_id, span),
+        )
+    )
+
+
+def _match_sort_key(
+    sample_id: str,
+    match: _ReferenceMatch,
+) -> tuple[object, ...]:
+    """返回 match 诊断排序 key。
+
+    Args:
+        sample_id: 样本 ID。
+        match: 引用命中。
+
+    Returns:
+        可排序 key。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if match.cell is not None:
+        return ("cell", *_cell_sort_key(sample_id, match.cell))
+    if match.text_span is not None:
+        return ("text_span", *_text_span_sort_key(sample_id, match.text_span))
+    return ("unknown", sample_id)
+
+
+def _cell_sort_key(
+    sample_id: str,
+    cell: RepositoryReferenceCell,
+) -> tuple[object, ...]:
+    """返回 deterministic cell sort key。
+
+    Args:
+        sample_id: 样本 ID。
+        cell: 单元格引用。
+
+    Returns:
+        生产者契约排序 key。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return (
+        sample_id,
+        cell.fund_code,
+        cell.document_year,
+        cell.page_number,
+        cell.table_id,
+        cell.row_index,
+        cell.column_index,
+        _normalized_text_hash(cell.normalized_text),
+    )
+
+
+def _text_span_sort_key(
+    sample_id: str,
+    span: RepositoryReferenceTextSpan,
+) -> tuple[object, ...]:
+    """返回 deterministic text span sort key。
+
+    Args:
+        sample_id: 样本 ID。
+        span: 文本引用。
+
+    Returns:
+        生产者契约排序 key。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return (
+        sample_id,
+        span.fund_code,
+        span.document_year,
+        span.page_number,
+        span.section_id,
+        span.context_label,
+        _normalized_text_hash(span.normalized_text),
+    )
+
+
+def _producer_input_mode(bundle: RepositoryReferenceBundle) -> ProducerInputMode:
+    """返回 producer input mode。
+
+    Args:
+        bundle: 仓库引用 bundle。
+
+    Returns:
+        raw v1 或 pre-enriched v2。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if bundle.reference_bundle_schema_version == _LEGACY_REFERENCE_BUNDLE_SCHEMA_VERSION:
+        return "raw_legacy_v1"
+    return "pre_enriched_v2"
+
+
+def _table_count(bundle: RepositoryReferenceBundle) -> int:
+    """返回 bundle 内唯一 table identity 数量。
+
+    Args:
+        bundle: 仓库引用 bundle。
+
+    Returns:
+        table 数量。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return len(
+        {
+            (
+                cell.fund_code,
+                cell.document_year,
+                cell.repository_source_name,
+                cell.section_id,
+                cell.table_id,
+            )
+            for cell in bundle.cells
+        }
+    )
+
+
+def _section_count(bundle: RepositoryReferenceBundle) -> int:
+    """返回 bundle 内唯一 section id 数量。
+
+    Args:
+        bundle: 仓库引用 bundle。
+
+    Returns:
+        section 数量。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return len(
+        {
+            _diagnostic_section_id(section_id)
+            for section_id in tuple(cell.section_id for cell in bundle.cells)
+            + tuple(span.section_id for span in bundle.text_spans)
+        }
+    )
+
+
+def _section_inference_reason_counts(
+    bundle: RepositoryReferenceBundle,
+) -> dict[str, int]:
+    """返回 section 诊断原因计数。
+
+    Args:
+        bundle: 仓库引用 bundle。
+
+    Returns:
+        section reason 计数字典。
+
+    Raises:
+        无显式抛出。
+    """
+
+    reasons = Counter(
+        "explicit_section_id"
+        if _diagnostic_section_id(section_id) != "unknown"
+        else "missing_section_id"
+        for section_id in tuple(cell.section_id for cell in bundle.cells)
+        + tuple(span.section_id for span in bundle.text_spans)
+    )
+    return _sorted_counter(reasons)
+
+
+def _diagnostic_section_id(section_id: object) -> str:
+    """返回诊断用 section id。
+
+    Args:
+        section_id: 原始 section id。
+
+    Returns:
+        空值时返回 ``unknown``。
+
+    Raises:
+        无显式抛出。
+    """
+
+    normalized = _diagnostic_normalized_text(section_id)
+    return normalized if normalized else "unknown"
+
+
+def _bundle_content_fingerprint(fingerprint_payload: Mapping[str, object]) -> str:
+    """按生产者契约计算 bundle content fingerprint。
+
+    Args:
+        fingerprint_payload: 只包含 hash-participating content 的 payload。
+
+    Returns:
+        SHA256 hex digest。
+
+    Raises:
+        无显式抛出。
+    """
+
+    serialized = json.dumps(
+        fingerprint_payload,
+        sort_keys=True,
+        ensure_ascii=False,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return hashlib.sha256(serialized).hexdigest()
+
+
+def _normalized_text_hash(value: object) -> str:
+    """按生产者契约计算 normalized_text_hash。
+
+    Args:
+        value: 原始文本。
+
+    Returns:
+        SHA256 hex digest。
+
+    Raises:
+        无显式抛出。
+    """
+
+    normalized_text = _diagnostic_normalized_text(value)
+    return hashlib.sha256(normalized_text.encode("utf-8")).hexdigest()
+
+
+def _diagnostic_normalized_text(value: object) -> str:
+    """按生产者契约归一化诊断文本。
+
+    Args:
+        value: 原始文本；``None`` 视为 ``""``。
+
+    Returns:
+        Unicode whitespace 折叠后的文本。
+
+    Raises:
+        无显式抛出。
+    """
+
+    text = "" if value is None else str(value)
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def _raw_text_excerpt(normalized_text: str) -> str:
+    """返回有界 raw text excerpt。
+
+    Args:
+        normalized_text: 已按诊断契约归一化的文本。
+
+    Returns:
+        最多 203 code points 的 excerpt。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if len(normalized_text) <= _RAW_TEXT_EXCERPT_CODEPOINT_LIMIT:
+        return normalized_text
+    return f"{normalized_text[:_RAW_TEXT_EXCERPT_CODEPOINT_LIMIT]}..."
+
+
+def _sorted_counter(counter: Counter[str]) -> dict[str, int]:
+    """把 Counter 转成 key 排序的普通字典。
+
+    Args:
+        counter: 字符串计数器。
+
+    Returns:
+        key 排序字典。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return {key: counter[key] for key in sorted(counter)}
 
 
 def _reference_matches(candidate: str, normalized_text: str, raw_text: str) -> bool:
@@ -1344,6 +2247,7 @@ def _result(
     processed_status: ProcessedLayerStatus,
     fund_status: FundLayerStatus,
     match: _ReferenceMatch | None = None,
+    diagnostic_payload: Mapping[str, object] | None = None,
 ) -> ResidualClosureResultRow:
     """构造单行输出。
 
@@ -1355,6 +2259,7 @@ def _result(
         processed_status: processed 层状态。
         fund_status: fund 层状态。
         match: 可选命中引用。
+        diagnostic_payload: 可选 candidate-only 诊断 payload。
 
     Returns:
         输出行。
@@ -1384,6 +2289,7 @@ def _result(
         matched_source_mode=_source_mode(match) if match is not None else None,
         matched_reference_origin=_reference_origin(match) if match is not None else None,
         candidate_processor_source_kind=_candidate_processor_source_kind(row),
+        diagnostic_payload=diagnostic_payload,
     )
 
 

@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import builtins
+import hashlib
+import json
 
 import pytest
 
@@ -302,6 +304,34 @@ def _close_one(row: dict[str, object], bundle: RepositoryReferenceBundle) -> dic
     return result["rows"][0]
 
 
+def _diagnostic_categories(result: dict[str, object]) -> set[str]:
+    """提取行级 semantic diagnostic rejection category。
+
+    Args:
+        result: helper 输出行。
+
+    Returns:
+        rejection category 集合。
+
+    Raises:
+        AssertionError: diagnostic payload 结构不符合预期时抛出。
+    """
+
+    payload = result["diagnostic_payload"]
+    assert isinstance(payload, dict)
+    diagnostics = payload["considered_match_diagnostics"]
+    assert isinstance(diagnostics, list)
+    categories: set[str] = set()
+    for diagnostic in diagnostics:
+        assert isinstance(diagnostic, dict)
+        rejection_categories = diagnostic["rejection_categories"]
+        assert isinstance(rejection_categories, (tuple, list))
+        for item in rejection_categories:
+            assert isinstance(item, dict)
+            categories.add(str(item["category"]))
+    return categories
+
+
 def test_reference_bundle_serialization_emits_new_default_fields() -> None:
     """验证 reference bundle v2 新字段按默认值序列化。"""
 
@@ -329,6 +359,191 @@ def test_reference_bundle_serialization_emits_new_default_fields() -> None:
     assert cell["period_context_source"] == "unknown"
     assert span["heading_path"] == []
     assert span["semantic_context_label"] == "unknown"
+
+
+def test_reference_bundle_serialization_emits_producer_diagnostics() -> None:
+    """验证 bundle 序列化输出 producer contract 诊断字段。"""
+
+    bundle = _bundle(
+        _cell(
+            value="004393",
+            row_label_path=("基金主代码",),
+            table_family="fund_profile_table",
+            row_hierarchy_role="standalone",
+        ),
+        text_spans=(
+            _span(
+                value="沪深300指数收益率",
+                context_label="业绩比较基准",
+                semantic_context_label="benchmark",
+            ),
+        ),
+    ).to_dict()
+    fingerprint_payload = {
+        "producer_input_mode": "pre_enriched_v2",
+        "cell_count": 1,
+        "text_span_count": 1,
+        "table_count": 1,
+        "section_count": 1,
+        "table_family_counts": {"fund_profile_table": 1},
+        "section_inference_counts": {"§2": 2},
+        "section_inference_reason_counts": {"explicit_section_id": 2},
+        "row_hierarchy_role_counts": {"standalone": 1},
+        "text_semantic_context_counts": {"benchmark": 1},
+        "cell_normalized_text_hashes": [
+            hashlib.sha256("004393".encode("utf-8")).hexdigest()
+        ],
+        "text_span_normalized_text_hashes": [
+            hashlib.sha256("沪深300指数收益率".encode("utf-8")).hexdigest()
+        ],
+    }
+    expected_fingerprint = hashlib.sha256(
+        json.dumps(
+            fingerprint_payload,
+            sort_keys=True,
+            ensure_ascii=False,
+            separators=(",", ":"),
+        ).encode("utf-8")
+    ).hexdigest()
+
+    assert bundle["producer_contract_version"] == (
+        "docling_reference_bundle_producer_contract.v1"
+    )
+    assert bundle["producer_input_mode"] == "pre_enriched_v2"
+    assert bundle["cell_count"] == 1
+    assert bundle["text_span_count"] == 1
+    assert bundle["table_count"] == 1
+    assert bundle["section_count"] == 1
+    assert bundle["table_family_counts"] == {"fund_profile_table": 1}
+    assert bundle["section_inference_counts"] == {"§2": 2}
+    assert bundle["section_inference_reason_counts"] == {"explicit_section_id": 2}
+    assert bundle["row_hierarchy_role_counts"] == {"standalone": 1}
+    assert bundle["text_semantic_context_counts"] == {"benchmark": 1}
+    assert bundle["bundle_content_fingerprint"] == expected_fingerprint
+    assert bundle["diagnostic_payload_available"] is True
+
+
+def test_bundle_content_fingerprint_is_stable_under_reference_order_variation() -> None:
+    """验证不同输入顺序下诊断摘要和 fingerprint 稳定。"""
+
+    first = _bundle(
+        _cell(
+            value="B",
+            row_label_path=("第二行",),
+            table_id="t2",
+            row_index=1,
+            column_index=2,
+            table_family="fund_profile_table",
+        ),
+        _cell(
+            value="A",
+            row_label_path=("第一行",),
+            table_id="t1",
+            row_index=0,
+            column_index=1,
+            table_family="fund_profile_table",
+        ),
+        text_spans=(
+            _span(value="span b", context_label="b", semantic_context_label="other"),
+            _span(value="span a", context_label="a", semantic_context_label="other"),
+        ),
+    ).to_dict()
+    second = _bundle(
+        _cell(
+            value="A",
+            row_label_path=("第一行",),
+            table_id="t1",
+            row_index=0,
+            column_index=1,
+            table_family="fund_profile_table",
+        ),
+        _cell(
+            value="B",
+            row_label_path=("第二行",),
+            table_id="t2",
+            row_index=1,
+            column_index=2,
+            table_family="fund_profile_table",
+        ),
+        text_spans=(
+            _span(value="span a", context_label="a", semantic_context_label="other"),
+            _span(value="span b", context_label="b", semantic_context_label="other"),
+        ),
+    ).to_dict()
+
+    assert first["bundle_content_fingerprint"] == second["bundle_content_fingerprint"]
+    assert first["table_family_counts"] == second["table_family_counts"]
+    assert first["section_inference_counts"] == second["section_inference_counts"]
+
+
+def test_bundle_content_fingerprint_changes_when_hash_participating_content_changes() -> None:
+    """验证 hash 参与内容变化会改变 fingerprint。"""
+
+    base = _bundle(
+        _cell(
+            value="004393",
+            row_label_path=("基金主代码",),
+            table_family="fund_profile_table",
+        )
+    ).to_dict()
+    mutated = _bundle(
+        _cell(
+            value="004394",
+            row_label_path=("基金主代码",),
+            table_family="fund_profile_table",
+        )
+    ).to_dict()
+    companion_only = _bundle(
+        _cell(
+            value="004393",
+            row_label_path=("基金主代码",),
+            table_family="fund_profile_table",
+        ),
+        reference_bundle_schema_version="repository_reference_bundle.v2",
+    ).to_dict()
+    companion_only["producer_contract_version"] = "different-companion-metadata"
+
+    assert base["bundle_content_fingerprint"] != mutated["bundle_content_fingerprint"]
+    assert base["bundle_content_fingerprint"] == companion_only["bundle_content_fingerprint"]
+
+
+def test_diagnostic_text_normalization_hash_and_excerpt_are_contract_bounded() -> None:
+    """验证诊断文本归一化、hash 和 excerpt 上限。"""
+
+    normalized = closure._diagnostic_normalized_text("  甲\t乙\n丙  ")
+    long_normalized = "长" * 201
+    cell_diagnostic = closure._cell_diagnostic_payload(
+        "S1",
+        _cell(value=long_normalized, row_label_path=("长文本",)),
+    )
+
+    assert normalized == "甲 乙 丙"
+    assert closure._normalized_text_hash("甲\t乙\n丙") == hashlib.sha256(
+        "甲 乙 丙".encode("utf-8")
+    ).hexdigest()
+    assert len(cell_diagnostic["raw_text_excerpt"]) == 203
+    assert str(cell_diagnostic["raw_text_excerpt"]).endswith("...")
+
+
+def test_missing_bundle_diagnostics_do_not_infer_comparability() -> None:
+    """验证缺失 bundle 时行级诊断不可用，不能推出 comparability。"""
+
+    row = _row(fact_id="F002", field_name="fund_code", value="004393", section_id="§2")
+    blocked_bundle = _bundle(
+        reference_bundle_schema_version="repository_reference_bundle.v2",
+    ).to_dict()
+    blocked_bundle["reference_generation_status"] = "blocked_reference_unavailable"
+    result = close_source_truth_residuals(
+        source_truth_matrix=_matrix(row),
+        repository_reference_rows={"S1": blocked_bundle},
+    ).to_dict()["rows"][0]
+    bundle = closure._coerce_bundle(blocked_bundle).to_dict()
+
+    assert bundle["diagnostic_payload_available"] is False
+    assert bundle["bundle_content_fingerprint"] is None
+    assert result["closure_disposition"] == "blocked_reference_unavailable"
+    assert result["diagnostic_payload_available"] is False
+    assert result["diagnostic_payload"] is None
 
 
 def test_legacy_reference_bundle_payload_deserializes_with_unknown_defaults() -> None:
@@ -1311,6 +1526,41 @@ def test_benchmark_closes_only_with_benchmark_semantic_label() -> None:
     assert benchmark["closure_disposition"] == "disambiguated_source_body_match"
 
 
+def test_s6_f041_investment_objective_match_emits_benchmark_label_absent_diagnostic() -> None:
+    """验证 S6-F041 投资目标文本命中仍保持 residual 并输出语义诊断。"""
+
+    row = _row(
+        fact_id="S6-F041",
+        field_name="benchmark",
+        value="沪深300指数收益率",
+        section_id="§2",
+        row_disposition="semantic_assignment_residual",
+    )
+    result = _close_one(
+        row,
+        _bundle(
+            text_spans=(
+                _span(
+                    value="沪深300指数收益率",
+                    context_label="投资目标",
+                    semantic_context_label="investment_objective",
+                ),
+            )
+        ),
+    )
+    payload = result["diagnostic_payload"]
+    assert isinstance(payload, dict)
+    considered = payload["considered_match_diagnostics"]
+    assert isinstance(considered, list)
+    reference = considered[0]["reference_diagnostic"]
+
+    assert result["closure_disposition"] == "semantic_assignment_residual"
+    assert result["fund_layer_status"] == "semantic_rule_rejected"
+    assert "required_text_semantic_context_absent" in _diagnostic_categories(result)
+    assert reference["semantic_context_label"] == "investment_objective"
+    assert reference["context_label"] == "投资目标"
+
+
 def test_raw_legacy_text_span_with_benchmark_context_label_closes_benchmark() -> None:
     """验证 raw v1 text span 可由 context_label 派生 benchmark 语义并闭合。"""
 
@@ -1522,6 +1772,38 @@ def test_neighbor_row_labels_do_not_prove_positive_hierarchy() -> None:
     assert result["closure_disposition"] == "semantic_assignment_residual"
 
 
+def test_s6_f035_style_unknown_hierarchy_emits_row_diagnostic_without_closure() -> None:
+    """验证 row hierarchy unknown 时保留 residual 并输出拒绝诊断。"""
+
+    row = _row(
+        fact_id="S6-F035",
+        field_name="stock_investment_amount",
+        value="149698325.51",
+        section_id="§8",
+    )
+    result = _close_one(
+        row,
+        _bundle(
+            _cell(
+                value="149698325.51",
+                row_label_path=("其中：股票",),
+                section_id="§8",
+                table_family="portfolio_asset_composition_table",
+                row_hierarchy_role="unknown",
+            )
+        ),
+    )
+    payload = result["diagnostic_payload"]
+    assert isinstance(payload, dict)
+    considered = payload["considered_match_diagnostics"]
+    assert isinstance(considered, list)
+
+    assert result["closure_disposition"] == "semantic_assignment_residual"
+    assert result["diagnostic_payload_available"] is True
+    assert "required_row_hierarchy_role_absent" in _diagnostic_categories(result)
+    assert considered[0]["reference_diagnostic"]["row_hierarchy_role"] == "unknown"
+
+
 def test_investment_objective_without_same_source_body_stays_mismatch() -> None:
     """验证 S5-F023 没有同源正文 proof 时保持 source_body_mismatch。"""
 
@@ -1536,6 +1818,41 @@ def test_investment_objective_without_same_source_body_stays_mismatch() -> None:
 
     assert result["closure_disposition"] == "source_body_mismatch"
     assert result["source_layer_status"] == "same_source_text_absent"
+
+
+def test_s5_f023_source_absent_row_emits_bounded_search_diagnostics() -> None:
+    """验证 source text absent 行输出有界候选搜索诊断。"""
+
+    row = _row(
+        fact_id="S5-F023",
+        field_name="investment_objective",
+        value="在严格控制风险的前提下追求回报",
+        section_id="§2",
+        row_disposition="source_body_mismatch",
+    )
+    result = _close_one(
+        row,
+        _bundle(
+            text_spans=(
+                _span(
+                    value="业绩比较基准为沪深300指数收益率",
+                    context_label="业绩比较基准",
+                    semantic_context_label="benchmark",
+                ),
+            )
+        ),
+    )
+    payload = result["diagnostic_payload"]
+    assert isinstance(payload, dict)
+    search = payload["candidate_search_diagnostics"]
+    assert isinstance(search, dict)
+
+    assert result["closure_disposition"] == "source_body_mismatch"
+    assert result["diagnostic_payload_available"] is True
+    assert payload["diagnostic_kind"] == "candidate_search_no_source_match"
+    assert payload["searched_text_span_count"] == 1
+    assert search["diagnostic_limit"] == 20
+    assert search["text_spans"][0]["semantic_context_label"] == "benchmark"
 
 
 def test_unresolved_expense_duplicate_remains_semantic_equivalent_residual() -> None:
@@ -1624,6 +1941,39 @@ def test_f015_closes_only_with_c_current_expense_fee_context(
     )
 
     assert result["closure_disposition"] == expected
+
+
+def test_f015_semantic_residual_emits_share_and_period_rejection_diagnostics() -> None:
+    """验证 F015 residual 输出份额和期间拒绝诊断，不放宽闭合。"""
+
+    row = _row(
+        fact_id="F015",
+        field_name="sales_service_fee_C_current_year",
+        value="75815.59",
+        section_id="§7",
+    )
+    result = _close_one(
+        row,
+        _bundle(
+            _cell(
+                value="75815.59",
+                row_label_path=("销售服务费",),
+                section_id="§7",
+                table_family="expense_fee_table",
+                share_class_context="A",
+                share_class_context_source="column_header",
+                period_context="prior_period",
+                period_context_source="column_header",
+            )
+        ),
+    )
+    categories = _diagnostic_categories(result)
+
+    assert result["closure_disposition"] == "semantic_assignment_residual"
+    assert result["diagnostic_payload_available"] is True
+    assert "share_class_context_mismatch" in categories
+    assert "period_context_mismatch" in categories
+    assert "rejected_period_context" in categories
 
 
 def test_manager_holding_range_a_requires_fund_share_class_label() -> None:
