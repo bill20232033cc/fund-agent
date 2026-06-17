@@ -17,6 +17,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from fund_agent.config import paths
 from fund_agent.fund.documents.candidates.representation_export import (
     CandidateRepresentationExportEntry,
     CandidateRepresentationRoute,
@@ -47,7 +48,7 @@ class CandidateHandlerConfig:
     """
 
     workspace_root: Path = Path(".")
-    docling_artifacts_path: Path = Path("cache/docling-artifacts")
+    docling_artifacts_path: Path = paths.DEFAULT_DOCLING_ARTIFACT_ROOT
     docling_do_ocr: bool = False
     docling_do_table_structure: bool = True
     docling_socket_block: bool = True

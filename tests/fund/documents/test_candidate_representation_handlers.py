@@ -5,6 +5,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+import pytest
+
 from fund_agent.fund.documents import __all__ as documents_public_exports
 from fund_agent.fund.documents.candidates.representation_export import (
     CandidateRepresentationExportEntry,
@@ -412,9 +414,12 @@ def test_default_docling_converter_binds_configured_local_artifacts_path(tmp_pat
         AssertionError: 默认 converter 未消费配置时抛出。
     """
 
-    from docling.datamodel.base_models import InputFormat
+    base_models = pytest.importorskip("docling.datamodel.base_models")
+    InputFormat = base_models.InputFormat
 
-    artifacts_path = Path("cache/docling-artifacts")
+    from fund_agent.config import paths
+
+    artifacts_path = paths.DEFAULT_DOCLING_ARTIFACT_ROOT
     (tmp_path / artifacts_path).mkdir(parents=True)
 
     converter = _default_docling_converter(

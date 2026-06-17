@@ -17,10 +17,12 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any, Literal
 
+from fund_agent.config import paths
+
 MANIFEST_SCHEMA_VERSION = "candidate_representation_export_manifest.v1"
 ENVELOPE_SCHEMA_VERSION = "candidate_annual_report_representation.v1"
-DEFAULT_OUTPUT_ROOT = Path("reports/representation-json")
-PRODUCTION_CACHE_ROOT = Path("cache/pdf")
+DEFAULT_OUTPUT_ROOT = paths.DEFAULT_REPRESENTATION_JSON_OUTPUT_ROOT
+PRODUCTION_CACHE_ROOT = paths.DEFAULT_PDF_CACHE_ROOT
 
 CandidateStatus = Literal["not_proven"]
 ParserReplacementStatus = Literal["not_authorized"]
@@ -407,7 +409,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--output-root", default=DEFAULT_OUTPUT_ROOT, type=Path)
     parser.add_argument("--write-blocked", action="store_true")
     parser.add_argument("--run-built-in-handlers", action="store_true")
-    parser.add_argument("--docling-artifacts-path", default=Path("cache/docling-artifacts"), type=Path)
+    parser.add_argument("--docling-artifacts-path", default=paths.DEFAULT_DOCLING_ARTIFACT_ROOT, type=Path)
     parser.add_argument("--docling-no-socket-block", action="store_true")
     parser.add_argument("--allow-overwrite", action="store_true")
     args = parser.parse_args(argv)
