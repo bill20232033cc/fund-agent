@@ -1904,13 +1904,13 @@ def _classify_bundle_tables(bundle: RepositoryReferenceBundle) -> RepositoryRefe
 def _enrich_reference_bundle_contexts(
     bundle: RepositoryReferenceBundle,
 ) -> RepositoryReferenceBundle:
-    """为 legacy/raw bundle 派生表族、份额类别和期间上下文。
+    """为 legacy/raw bundle 派生候选上下文。
 
     Args:
         bundle: 引用 bundle。
 
     Returns:
-        legacy/raw bundle 返回带派生 cell context 的引用 bundle；v2 bundle 原样返回。
+        legacy/raw bundle 返回带派生 context 的引用 bundle；v2 bundle 原样返回。
 
     Raises:
         无显式抛出。
@@ -1919,8 +1919,9 @@ def _enrich_reference_bundle_contexts(
     if bundle.reference_bundle_schema_version != _LEGACY_REFERENCE_BUNDLE_SCHEMA_VERSION:
         return bundle
     classified = _classify_bundle_tables(bundle)
+    hierarchy_enriched = _enrich_row_hierarchy_contexts(classified)
     cells: list[RepositoryReferenceCell] = []
-    for cell in classified.cells:
+    for cell in hierarchy_enriched.cells:
         share_context, share_source = _derive_share_class_context(cell)
         period_context, period_source = _derive_period_context(cell)
         cells.append(
@@ -1932,7 +1933,423 @@ def _enrich_reference_bundle_contexts(
                 period_context_source=period_source,
             )
         )
-    return replace(classified, cells=tuple(cells))
+    context_enriched = replace(hierarchy_enriched, cells=tuple(cells))
+    return _enrich_text_span_semantic_contexts(context_enriched)
+
+
+def _enrich_row_hierarchy_contexts(
+    bundle: RepositoryReferenceBundle,
+) -> RepositoryReferenceBundle:
+    """为 legacy/raw §8 组合表派生候选行层级。
+
+    Args:
+        bundle: 已完成表族分类的引用 bundle。
+
+    Returns:
+        带已证明 aggregate/child 行层级的引用 bundle。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if not bundle.cells:
+        return bundle
+    grouped: dict[tuple[str, int, str, str, str], list[RepositoryReferenceCell]] = {}
+    for cell in bundle.cells:
+        key = (
+            cell.fund_code,
+            cell.document_year,
+            cell.repository_source_name,
+            cell.section_id,
+            cell.table_id,
+        )
+        grouped.setdefault(key, []).append(cell)
+    hierarchy_by_cell: dict[
+        tuple[str, int, str, str, str, int, int],
+        tuple[tuple[str, ...], tuple[str, ...], RowHierarchyRole],
+    ] = {}
+    for key, cells in grouped.items():
+        table_hierarchy = _derive_table_row_hierarchy(tuple(cells))
+        for row_column, hierarchy in table_hierarchy.items():
+            hierarchy_by_cell[(*key, *row_column)] = hierarchy
+    if not hierarchy_by_cell:
+        return bundle
+    enriched_cells: list[RepositoryReferenceCell] = []
+    for cell in bundle.cells:
+        key = (
+            cell.fund_code,
+            cell.document_year,
+            cell.repository_source_name,
+            cell.section_id,
+            cell.table_id,
+            cell.row_index,
+            cell.column_index,
+        )
+        hierarchy = hierarchy_by_cell.get(key)
+        if hierarchy is None:
+            enriched_cells.append(cell)
+            continue
+        parent_path, hierarchy_path, role = hierarchy
+        enriched_cells.append(
+            replace(
+                cell,
+                row_parent_label_path=parent_path,
+                row_hierarchy_path=hierarchy_path,
+                row_hierarchy_role=role,
+            )
+        )
+    return replace(bundle, cells=tuple(enriched_cells))
+
+
+def _derive_table_row_hierarchy(
+    cells: tuple[RepositoryReferenceCell, ...],
+) -> dict[tuple[int, int], tuple[tuple[str, ...], tuple[str, ...], RowHierarchyRole]]:
+    """从单表内显式行标签派生组合表父子层级。
+
+    Args:
+        cells: 同一 table identity 下的单元格。
+
+    Returns:
+        以 ``(row_index, column_index)`` 为 key 的层级证明映射。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if not cells:
+        return {}
+    if any(cell.section_id != "§8" for cell in cells):
+        return {}
+    if any(cell.table_family != "portfolio_asset_composition_table" for cell in cells):
+        return {}
+
+    row_labels: dict[int, str] = {}
+    cell_identities: set[tuple[int, int]] = set()
+    for cell in cells:
+        if not _is_comparable_row_index(cell.row_index):
+            return {}
+        cell_identity = (cell.row_index, cell.column_index)
+        if cell_identity in cell_identities:
+            return {}
+        cell_identities.add(cell_identity)
+        label = _row_primary_label(cell)
+        if not label:
+            return {}
+        existing = row_labels.get(cell.row_index)
+        if existing is not None and existing != label:
+            return {}
+        row_labels[cell.row_index] = label
+
+    sorted_rows = tuple(sorted(row_labels.items()))
+    parent_by_row: dict[int, str] = {}
+    current_parent: tuple[int, str] | None = None
+    for row_index, label in sorted_rows:
+        if _is_equity_parent_label(label):
+            current_parent = (row_index, label)
+            continue
+        if _is_stock_child_label(label):
+            if current_parent is not None:
+                parent_index, parent_label = current_parent
+                if parent_index < row_index:
+                    parent_by_row[row_index] = parent_label
+            continue
+        if _is_detail_or_geography_row(label):
+            current_parent = None
+            continue
+        if _is_explicit_top_level_asset_row(label):
+            current_parent = None
+
+    children_by_parent: dict[str, list[int]] = {}
+    for child_index, parent_label in parent_by_row.items():
+        children_by_parent.setdefault(parent_label, []).append(child_index)
+    if not children_by_parent:
+        return {}
+
+    hierarchy: dict[tuple[int, int], tuple[tuple[str, ...], tuple[str, ...], RowHierarchyRole]] = {}
+    proven_parent_labels = set(children_by_parent)
+    for cell in cells:
+        label = row_labels[cell.row_index]
+        if _is_equity_parent_label(label) and label in proven_parent_labels:
+            hierarchy[(cell.row_index, cell.column_index)] = ((), (label,), "aggregate")
+            continue
+        parent_label = parent_by_row.get(cell.row_index)
+        if parent_label is not None and _is_stock_child_label(label):
+            hierarchy[(cell.row_index, cell.column_index)] = (
+                (parent_label,),
+                (parent_label, label),
+                "child",
+            )
+    return hierarchy
+
+
+def _row_primary_label(cell: RepositoryReferenceCell) -> str:
+    """返回单元格最贴近数值的行标签。
+
+    Args:
+        cell: 单元格引用。
+
+    Returns:
+        ``row_label_path`` 最后一个非空 strip 后元素；不存在时返回空字符串。
+
+    Raises:
+        无显式抛出。
+    """
+
+    for label in reversed(cell.row_label_path):
+        stripped = label.strip()
+        if stripped:
+            return stripped
+    return ""
+
+
+def _is_equity_parent_label(label: str) -> bool:
+    """判断行标签是否为组合表权益投资父行。
+
+    Args:
+        label: primary row label。
+
+    Returns:
+        是权益投资父行时返回 ``True``。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return "权益投资" in _normalize_for_label(label)
+
+
+def _is_stock_child_label(label: str) -> bool:
+    """判断行标签是否为本 gate 允许正向闭合的股票 child 行。
+
+    Args:
+        label: primary row label。
+
+    Returns:
+        标签同时包含 ``其中`` 和 ``股票`` 时返回 ``True``。
+
+    Raises:
+        无显式抛出。
+    """
+
+    normalized = _normalize_for_label(label)
+    return "其中" in normalized and "股票" in normalized
+
+
+def _is_explicit_top_level_asset_row(label: str) -> bool:
+    """判断行标签是否为明确的组合表顶层资产行。
+
+    Args:
+        label: primary row label。
+
+    Returns:
+        是顶层资产行时返回 ``True``。
+
+    Raises:
+        无显式抛出。
+    """
+
+    normalized = _normalize_for_label(label)
+    return any(
+        _normalize_for_label(candidate) in normalized
+        for candidate in (
+            "权益投资",
+            "基金投资",
+            "固定收益投资",
+            "贵金属投资",
+            "金融衍生品投资",
+            "买入返售金融资产",
+        )
+    )
+
+
+def _is_detail_or_geography_row(label: str) -> bool:
+    """判断行标签是否为明细、国家/地区等非组合层级行。
+
+    Args:
+        label: primary row label。
+
+    Returns:
+        是明细或地理分类行时返回 ``True``。
+
+    Raises:
+        无显式抛出。
+    """
+
+    normalized = _normalize_for_label(label)
+    return any(
+        _normalize_for_label(candidate) in normalized
+        for candidate in (
+            "国家",
+            "地区",
+            "美国",
+            "行业",
+            "明细",
+            "前十名",
+            "券种",
+            "第二层次",
+            "第三层次",
+        )
+    )
+
+
+def _is_comparable_row_index(value: object) -> bool:
+    """判断 row_index 是否可用于表内顺序比较。
+
+    Args:
+        value: row_index 值。
+
+    Returns:
+        整数且非 bool 时返回 ``True``；整数 gaps 仍可比较。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return isinstance(value, int) and not isinstance(value, bool)
+
+
+def _enrich_text_span_semantic_contexts(
+    bundle: RepositoryReferenceBundle,
+) -> RepositoryReferenceBundle:
+    """为 legacy/raw 文本 span 派生规范语义上下文。
+
+    Args:
+        bundle: 引用 bundle。
+
+    Returns:
+        带文本语义上下文的引用 bundle。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if not bundle.text_spans:
+        return bundle
+    return replace(
+        bundle,
+        text_spans=tuple(
+            replace(span, semantic_context_label=_derive_text_semantic_context(span))
+            for span in bundle.text_spans
+        ),
+    )
+
+
+def _derive_text_semantic_context(
+    span: RepositoryReferenceTextSpan,
+) -> TextSemanticContext:
+    """从已加载文本局部标签派生规范语义上下文。
+
+    Args:
+        span: 文本引用。
+
+    Returns:
+        ``benchmark``、``investment_objective`` 或 ``unknown``。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if span.section_id != "§2":
+        return "unknown"
+
+    context_values = (span.context_label,) if span.context_label else ()
+    context_benchmark = _has_local_benchmark_label(context_values)
+    context_objective = _has_local_investment_objective_label(context_values)
+    heading_benchmark = _has_local_benchmark_label(span.heading_path)
+    heading_objective = _has_local_investment_objective_label(span.heading_path)
+    raw_benchmark = _raw_text_has_local_label(span.raw_text, _BENCHMARK_CONTEXT_LABELS)
+    raw_objective = _raw_text_has_local_label(span.raw_text, _INVESTMENT_OBJECTIVE_LABELS)
+
+    if context_benchmark and context_objective:
+        return "unknown"
+    if context_objective:
+        return "investment_objective"
+    if context_benchmark:
+        if heading_objective or raw_objective:
+            return "unknown"
+        return "benchmark"
+
+    if heading_benchmark and heading_objective:
+        return "unknown"
+    if heading_objective:
+        return "investment_objective"
+    if heading_benchmark:
+        if raw_objective:
+            return "unknown"
+        return "benchmark"
+
+    if raw_benchmark and raw_objective:
+        return "unknown"
+    if raw_objective:
+        return "investment_objective"
+    if raw_benchmark:
+        return "benchmark"
+    return "unknown"
+
+
+_BENCHMARK_CONTEXT_LABELS = ("业绩比较基准", "比较基准", "业绩基准")
+_INVESTMENT_OBJECTIVE_LABELS = ("投资目标", "投资目的")
+
+
+def _has_local_benchmark_label(values: tuple[str, ...]) -> bool:
+    """判断文本集合是否含 benchmark 局部标签。
+
+    Args:
+        values: 标签集合。
+
+    Returns:
+        含 benchmark 标签时返回 ``True``。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return _contains_any(values, _BENCHMARK_CONTEXT_LABELS)
+
+
+def _has_local_investment_objective_label(values: tuple[str, ...]) -> bool:
+    """判断文本集合是否含投资目标局部标签。
+
+    Args:
+        values: 标签集合。
+
+    Returns:
+        含投资目标标签时返回 ``True``。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return _contains_any(values, _INVESTMENT_OBJECTIVE_LABELS)
+
+
+def _raw_text_has_local_label(text: str, labels: tuple[str, ...]) -> bool:
+    """判断 raw text 是否以局部标签前缀开头。
+
+    Args:
+        text: 原始文本。
+        labels: 可接受标签。
+
+    Returns:
+        以 ``label + delimiter/end`` 开头时返回 ``True``。
+
+    Raises:
+        无显式抛出。
+    """
+
+    normalized_text = normalize_text(text).normalized_text.lower().lstrip()
+    if not normalized_text:
+        return False
+    for label in labels:
+        normalized_label = normalize_text(label).normalized_text.lower()
+        if not normalized_text.startswith(normalized_label):
+            continue
+        suffix = normalized_text[len(normalized_label) :]
+        if not suffix:
+            return True
+        if suffix[0] in (":", "：", "|", "｜") or suffix[0].isspace():
+            return True
+    return False
 
 
 def _classify_table_family(cells: tuple[RepositoryReferenceCell, ...]) -> TableFamily:

@@ -112,6 +112,8 @@ def _cell(
     column_header_path: tuple[str, ...] = ("项目", "值"),
     table_context: tuple[str, ...] = ("基金概况",),
     table_id: str = "source_table_1",
+    row_index: int = 0,
+    column_index: int = 1,
     repository_source_name: str = "eid",
     table_title_path: tuple[str, ...] = (),
     heading_path: tuple[str, ...] = (),
@@ -135,6 +137,8 @@ def _cell(
         column_header_path: 列表头路径。
         table_context: 表格上下文。
         table_id: 表格 ID。
+        row_index: 行号。
+        column_index: 列号。
         repository_source_name: 仓库来源名。
         table_title_path: 表格标题路径。
         heading_path: 标题路径。
@@ -165,8 +169,8 @@ def _cell(
         section_id=section_id,
         page_number=5,
         table_id=table_id,
-        row_index=0,
-        column_index=1,
+        row_index=row_index,
+        column_index=column_index,
         row_label_path=row_label_path,
         column_header_path=column_header_path,
         raw_text=value,
@@ -231,6 +235,7 @@ def _bundle(
     *cells: RepositoryReferenceCell,
     metadata_ok: bool = True,
     text_spans: tuple[RepositoryReferenceTextSpan, ...] = (),
+    reference_bundle_schema_version: str = "repository_reference_bundle.v2",
 ) -> RepositoryReferenceBundle:
     """构造 repository reference bundle fixture。
 
@@ -238,6 +243,7 @@ def _bundle(
         *cells: 仓库引用单元格。
         metadata_ok: metadata guard 是否通过。
         text_spans: 仓库引用文本。
+        reference_bundle_schema_version: reference bundle schema 版本。
 
     Returns:
         仓库引用 bundle。
@@ -254,6 +260,7 @@ def _bundle(
         metadata_reason=None if metadata_ok else "unsafe metadata",
         cells=cells,
         text_spans=text_spans,
+        reference_bundle_schema_version=reference_bundle_schema_version,
     )
 
 
@@ -801,6 +808,387 @@ def test_identical_portfolio_values_remain_residual_without_proven_hierarchy() -
     )
 
 
+def test_raw_legacy_portfolio_bundle_enriches_equity_aggregate_row() -> None:
+    """验证 raw v1 组合表可派生权益投资 aggregate 并闭合。"""
+
+    row = _row(
+        fact_id="S5-F032",
+        field_name="equity_investment_amount",
+        value="1818456375.25",
+        section_id="§8",
+    )
+    result = _close_one(
+        row,
+        _bundle(
+            _cell(
+                value="1818456375.25",
+                row_label_path=("权益投资",),
+                section_id="§8",
+                table_context=("报告期末基金资产组合",),
+                row_index=0,
+            ),
+            _cell(
+                value="1818456375.25",
+                row_label_path=("其中：股票",),
+                section_id="§8",
+                table_context=("报告期末基金资产组合",),
+                row_index=1,
+            ),
+            reference_bundle_schema_version="repository_reference_bundle.v1",
+        ),
+    )
+
+    assert result["closure_disposition"] == "disambiguated_source_body_match"
+    assert result["matched_row_label_path"] == ["权益投资"]
+    assert result["source_truth_status"] == "not_proven"
+
+
+@pytest.mark.parametrize("child_label", ["其中：股票", "其中:股票"])
+def test_raw_legacy_portfolio_bundle_enriches_stock_child_under_equity_parent(
+    child_label: str,
+) -> None:
+    """验证 raw v1 组合表可派生权益投资父行下的股票 child 并闭合。"""
+
+    row = _row(
+        fact_id="S6-F050",
+        field_name="stock_investment_amount",
+        value="149698325.51",
+        section_id="§8",
+    )
+    result = _close_one(
+        row,
+        _bundle(
+            _cell(
+                value="149698325.51",
+                row_label_path=("权益投资",),
+                section_id="§8",
+                table_context=("报告期末基金资产组合",),
+                row_index=0,
+            ),
+            _cell(
+                value="149698325.51",
+                row_label_path=(child_label,),
+                section_id="§8",
+                table_context=("报告期末基金资产组合",),
+                row_index=1,
+            ),
+            reference_bundle_schema_version="repository_reference_bundle.v1",
+        ),
+    )
+
+    assert result["closure_disposition"] == "disambiguated_source_body_match"
+    assert result["matched_row_label_path"] == [child_label]
+    assert result["source_truth_status"] == "not_proven"
+
+
+def test_raw_legacy_identical_equity_and_stock_values_close_distinct_rows_when_hierarchy_proven() -> None:
+    """验证 raw v1 同值权益/股票只在层级证明后分别闭合到不同 row。"""
+
+    equity = _row(
+        fact_id="S6-F049",
+        field_name="equity_investment_amount",
+        value="149698325.51",
+        section_id="§8",
+    )
+    stock = _row(
+        fact_id="S6-F050",
+        field_name="stock_investment_amount",
+        value="149698325.51",
+        section_id="§8",
+    )
+    matrix = close_source_truth_residuals(
+        source_truth_matrix=_matrix(equity, stock),
+        repository_reference_rows={
+            "S1": _bundle(
+                _cell(
+                    value="149698325.51",
+                    row_label_path=("权益投资",),
+                    section_id="§8",
+                    table_context=("报告期末基金资产组合",),
+                    row_index=0,
+                ),
+                _cell(
+                    value="149698325.51",
+                    row_label_path=("其中：股票",),
+                    section_id="§8",
+                    table_context=("报告期末基金资产组合",),
+                    row_index=2,
+                ),
+                reference_bundle_schema_version="repository_reference_bundle.v1",
+            )
+        },
+    ).to_dict()
+
+    rows = {item["field_name"]: item for item in matrix["rows"]}
+    assert rows["equity_investment_amount"]["closure_disposition"] == (
+        "disambiguated_source_body_match"
+    )
+    assert rows["equity_investment_amount"]["matched_row_label_path"] == ["权益投资"]
+    assert rows["stock_investment_amount"]["closure_disposition"] == (
+        "disambiguated_source_body_match"
+    )
+    assert rows["stock_investment_amount"]["matched_row_label_path"] == ["其中：股票"]
+
+
+def test_raw_legacy_stock_child_without_equity_parent_remains_residual() -> None:
+    """验证 raw v1 股票 child 没有同表权益投资父行时保持 residual。"""
+
+    row = _row(
+        fact_id="S6-F050",
+        field_name="stock_investment_amount",
+        value="149698325.51",
+        section_id="§8",
+    )
+    result = _close_one(
+        row,
+        _bundle(
+            _cell(
+                value="149698325.51",
+                row_label_path=("其中：股票",),
+                section_id="§8",
+                table_context=("报告期末基金资产组合",),
+                row_index=0,
+            ),
+            reference_bundle_schema_version="repository_reference_bundle.v1",
+        ),
+    )
+
+    assert result["closure_disposition"] == "semantic_assignment_residual"
+
+
+@pytest.mark.parametrize("row_label", ["股票", "普通股"])
+def test_raw_legacy_stock_label_without_child_marker_remains_residual(row_label: str) -> None:
+    """验证 raw v1 股票/普通股缺少其中 marker 时不能正向闭合。"""
+
+    row = _row(
+        fact_id="S6-F050",
+        field_name="stock_investment_amount",
+        value="149698325.51",
+        section_id="§8",
+    )
+    result = _close_one(
+        row,
+        _bundle(
+            _cell(
+                value="149698325.51",
+                row_label_path=("权益投资",),
+                section_id="§8",
+                table_context=("报告期末基金资产组合",),
+                row_index=0,
+            ),
+            _cell(
+                value="149698325.51",
+                row_label_path=(row_label,),
+                section_id="§8",
+                table_context=("报告期末基金资产组合",),
+                row_index=1,
+            ),
+            reference_bundle_schema_version="repository_reference_bundle.v1",
+        ),
+    )
+
+    assert result["closure_disposition"] == "semantic_assignment_residual"
+
+
+def test_raw_legacy_stock_child_plain_common_share_label_remains_residual_under_current_rules() -> None:
+    """验证其中：普通股不扩展当前 stock FIELD_RULES，仍保持 residual。"""
+
+    row = _row(
+        fact_id="S6-F050",
+        field_name="stock_investment_amount",
+        value="149698325.51",
+        section_id="§8",
+    )
+    result = _close_one(
+        row,
+        _bundle(
+            _cell(
+                value="149698325.51",
+                row_label_path=("权益投资",),
+                section_id="§8",
+                table_context=("报告期末基金资产组合",),
+                row_index=0,
+            ),
+            _cell(
+                value="149698325.51",
+                row_label_path=("其中：普通股",),
+                section_id="§8",
+                table_context=("报告期末基金资产组合",),
+                row_index=1,
+            ),
+            reference_bundle_schema_version="repository_reference_bundle.v1",
+        ),
+    )
+
+    assert "普通股" not in closure.FIELD_RULES["stock_investment_amount"].required_row_label_any
+    assert result["closure_disposition"] == "semantic_assignment_residual"
+
+
+def test_raw_legacy_equity_without_explicit_child_remains_residual() -> None:
+    """验证 raw v1 权益投资没有显式股票 child 时不推断 aggregate。"""
+
+    row = _row(
+        fact_id="S6-F049",
+        field_name="equity_investment_amount",
+        value="149698325.51",
+        section_id="§8",
+    )
+    result = _close_one(
+        row,
+        _bundle(
+            _cell(
+                value="149698325.51",
+                row_label_path=("权益投资",),
+                section_id="§8",
+                table_context=("报告期末基金资产组合",),
+                row_index=0,
+            ),
+            reference_bundle_schema_version="repository_reference_bundle.v1",
+        ),
+    )
+
+    assert result["closure_disposition"] == "semantic_assignment_residual"
+
+
+def test_raw_legacy_neighbor_labels_still_do_not_prove_hierarchy_after_enrichment() -> None:
+    """验证 raw v1 bounded_neighbor_row_labels 不作为正向层级证明。"""
+
+    row = _row(
+        fact_id="S6-F050",
+        field_name="stock_investment_amount",
+        value="149698325.51",
+        section_id="§8",
+    )
+    result = _close_one(
+        row,
+        _bundle(
+            _cell(
+                value="149698325.51",
+                row_label_path=("其中：股票",),
+                section_id="§8",
+                table_context=("报告期末基金资产组合",),
+                row_index=0,
+                bounded_neighbor_row_labels=("权益投资",),
+            ),
+            reference_bundle_schema_version="repository_reference_bundle.v1",
+        ),
+    )
+
+    assert result["closure_disposition"] == "semantic_assignment_residual"
+
+
+def test_raw_legacy_detail_or_geography_row_does_not_bridge_equity_parent_to_stock_child() -> None:
+    """验证国家/地区等明细行不会把后续股票行挂到权益投资父行。"""
+
+    row = _row(
+        fact_id="S6-F050",
+        field_name="stock_investment_amount",
+        value="149698325.51",
+        section_id="§8",
+    )
+    result = _close_one(
+        row,
+        _bundle(
+            _cell(
+                value="1",
+                row_label_path=("权益投资",),
+                section_id="§8",
+                table_context=("报告期末基金资产组合",),
+                row_index=0,
+            ),
+            _cell(
+                value="1",
+                row_label_path=("美国",),
+                section_id="§8",
+                table_context=("报告期末基金资产组合",),
+                row_index=1,
+            ),
+            _cell(
+                value="149698325.51",
+                row_label_path=("其中：股票",),
+                section_id="§8",
+                table_context=("报告期末基金资产组合",),
+                row_index=2,
+            ),
+            reference_bundle_schema_version="repository_reference_bundle.v1",
+        ),
+    )
+
+    assert result["closure_disposition"] == "semantic_assignment_residual"
+
+
+def test_raw_legacy_top_level_asset_row_resets_parent_scope() -> None:
+    """验证新的顶层资产行会关闭权益投资 parent scope。"""
+
+    row = _row(
+        fact_id="S6-F050",
+        field_name="stock_investment_amount",
+        value="149698325.51",
+        section_id="§8",
+    )
+    result = _close_one(
+        row,
+        _bundle(
+            _cell(
+                value="1",
+                row_label_path=("权益投资",),
+                section_id="§8",
+                table_context=("报告期末基金资产组合",),
+                row_index=0,
+            ),
+            _cell(
+                value="1",
+                row_label_path=("基金投资",),
+                section_id="§8",
+                table_context=("报告期末基金资产组合",),
+                row_index=1,
+            ),
+            _cell(
+                value="149698325.51",
+                row_label_path=("其中：股票",),
+                section_id="§8",
+                table_context=("报告期末基金资产组合",),
+                row_index=2,
+            ),
+            reference_bundle_schema_version="repository_reference_bundle.v1",
+        ),
+    )
+
+    assert result["closure_disposition"] == "semantic_assignment_residual"
+
+
+def test_v2_bundle_with_unknown_hierarchy_is_not_repaired_by_v1_enrichment() -> None:
+    """验证 v2 bundle 被视为 already enriched，不被 raw v1 enrichment 修复。"""
+
+    row = _row(
+        fact_id="S6-F050",
+        field_name="stock_investment_amount",
+        value="149698325.51",
+        section_id="§8",
+    )
+    result = _close_one(
+        row,
+        _bundle(
+            _cell(
+                value="149698325.51",
+                row_label_path=("权益投资",),
+                section_id="§8",
+                table_context=("报告期末基金资产组合",),
+                row_index=0,
+            ),
+            _cell(
+                value="149698325.51",
+                row_label_path=("其中：股票",),
+                section_id="§8",
+                table_context=("报告期末基金资产组合",),
+                row_index=1,
+            ),
+        ),
+    )
+
+    assert result["closure_disposition"] == "semantic_assignment_residual"
+
+
 def test_fixed_income_rejects_fair_value_hierarchy_and_accepts_portfolio_row() -> None:
     """验证固定收益投资拒绝公允价值层级行，只接受组合表行。"""
 
@@ -921,6 +1309,192 @@ def test_benchmark_closes_only_with_benchmark_semantic_label() -> None:
 
     assert investment_objective["closure_disposition"] == "semantic_assignment_residual"
     assert benchmark["closure_disposition"] == "disambiguated_source_body_match"
+
+
+def test_raw_legacy_text_span_with_benchmark_context_label_closes_benchmark() -> None:
+    """验证 raw v1 text span 可由 context_label 派生 benchmark 语义并闭合。"""
+
+    row = _row(
+        fact_id="S6-F041",
+        field_name="benchmark",
+        value="沪深300指数收益率",
+        section_id="§2",
+        row_disposition="semantic_assignment_residual",
+    )
+    result = _close_one(
+        row,
+        _bundle(
+            text_spans=(
+                _span(
+                    value="沪深300指数收益率",
+                    context_label="业绩比较基准",
+                ),
+            ),
+            reference_bundle_schema_version="repository_reference_bundle.v1",
+        ),
+    )
+
+    assert result["closure_disposition"] == "disambiguated_source_body_match"
+    assert result["source_truth_status"] == "not_proven"
+
+
+def test_raw_legacy_text_span_with_benchmark_row_prefix_closes_benchmark() -> None:
+    """验证 raw v1 text span 可由 delimiter-aware raw prefix 派生 benchmark。"""
+
+    row = _row(
+        fact_id="S6-F041",
+        field_name="benchmark",
+        value="沪深300指数收益率",
+        section_id="§2",
+        row_disposition="semantic_assignment_residual",
+    )
+    result = _close_one(
+        row,
+        _bundle(
+            text_spans=(
+                _span(
+                    value="　业绩比较基准 | 沪深300指数收益率",
+                    context_label="基金概况",
+                ),
+            ),
+            reference_bundle_schema_version="repository_reference_bundle.v1",
+        ),
+    )
+
+    assert result["closure_disposition"] == "disambiguated_source_body_match"
+
+
+def test_raw_legacy_text_span_with_benchmark_heading_path_closes_benchmark_when_context_generic() -> None:
+    """验证 raw v1 text span 可由 generic context 下的 heading_path 派生 benchmark。"""
+
+    row = _row(
+        fact_id="S6-F041",
+        field_name="benchmark",
+        value="沪深300指数收益率",
+        section_id="§2",
+        row_disposition="semantic_assignment_residual",
+    )
+    result = _close_one(
+        row,
+        _bundle(
+            text_spans=(
+                _span(
+                    value="沪深300指数收益率",
+                    context_label="基金概况",
+                    heading_path=("基金概况", "业绩比较基准"),
+                ),
+            ),
+            reference_bundle_schema_version="repository_reference_bundle.v1",
+        ),
+    )
+
+    assert result["closure_disposition"] == "disambiguated_source_body_match"
+
+
+def test_raw_legacy_investment_objective_text_mentions_benchmark_but_remains_residual() -> None:
+    """验证投资目标局部上下文提到 benchmark 也不能闭合 benchmark 字段。"""
+
+    row = _row(
+        fact_id="S6-F041",
+        field_name="benchmark",
+        value="沪深300指数收益率",
+        section_id="§2",
+        row_disposition="semantic_assignment_residual",
+    )
+    result = _close_one(
+        row,
+        _bundle(
+            text_spans=(
+                _span(
+                    value="紧密跟踪业绩比较基准，沪深300指数收益率",
+                    context_label="投资目标",
+                ),
+            ),
+            reference_bundle_schema_version="repository_reference_bundle.v1",
+        ),
+    )
+
+    assert result["closure_disposition"] == "semantic_assignment_residual"
+
+
+def test_raw_legacy_ambiguous_benchmark_and_objective_labels_remain_residual() -> None:
+    """验证同一局部标签同时含 benchmark/objective 时 fail-closed。"""
+
+    row = _row(
+        fact_id="S6-F041",
+        field_name="benchmark",
+        value="沪深300指数收益率",
+        section_id="§2",
+        row_disposition="semantic_assignment_residual",
+    )
+    result = _close_one(
+        row,
+        _bundle(
+            text_spans=(
+                _span(
+                    value="沪深300指数收益率",
+                    context_label="投资目标/业绩比较基准",
+                ),
+            ),
+            reference_bundle_schema_version="repository_reference_bundle.v1",
+        ),
+    )
+
+    assert result["closure_disposition"] == "semantic_assignment_residual"
+
+
+def test_raw_legacy_benchmark_label_outside_section_two_remains_residual() -> None:
+    """验证 §2 外 benchmark 标签不派生 benchmark 语义闭合。"""
+
+    row = _row(
+        fact_id="S6-F041",
+        field_name="benchmark",
+        value="沪深300指数收益率",
+        section_id="§2",
+        row_disposition="semantic_assignment_residual",
+    )
+    result = _close_one(
+        row,
+        _bundle(
+            text_spans=(
+                _span(
+                    value="沪深300指数收益率",
+                    context_label="业绩比较基准",
+                    section_id="§8",
+                ),
+            ),
+            reference_bundle_schema_version="repository_reference_bundle.v1",
+        ),
+    )
+
+    assert result["closure_disposition"] == "semantic_assignment_residual"
+
+
+def test_raw_legacy_context_objective_heading_benchmark_conflict_remains_residual() -> None:
+    """验证 context_label 投资目标优先阻断 heading_path benchmark 推断。"""
+
+    row = _row(
+        fact_id="S6-F041",
+        field_name="benchmark",
+        value="沪深300指数收益率",
+        section_id="§2",
+        row_disposition="semantic_assignment_residual",
+    )
+    result = _close_one(
+        row,
+        _bundle(
+            text_spans=(
+                _span(
+                    value="紧密跟踪业绩比较基准，沪深300指数收益率",
+                    context_label="投资目标",
+                    heading_path=("基金概况", "业绩比较基准"),
+                ),
+            ),
+            reference_bundle_schema_version="repository_reference_bundle.v1",
+        ),
+    )
+
+    assert result["closure_disposition"] == "semantic_assignment_residual"
 
 
 def test_neighbor_row_labels_do_not_prove_positive_hierarchy() -> None:
