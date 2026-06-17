@@ -11,6 +11,10 @@ import re
 from dataclasses import dataclass
 from typing import Final, Literal
 
+from fund_agent.fund.documents.candidates.evidence_anchor_mapping import (
+    CandidateAnchorSchemaFamily,
+    map_candidate_locator_to_anchor_candidate,
+)
 from fund_agent.fund.documents.candidates.representation_models import (
     CandidateRepresentationDocument,
     CandidateRepresentationSourceKind,
@@ -23,6 +27,7 @@ DOCLING_TEMPLATE_FIELD_SCHEMA_VERSION: Final[str] = "docling_template_field_cand
 CandidateTemplateExtractionMode = Literal["direct", "missing"]
 CandidateTemplateSourceTruthStatus = Literal["not_proven"]
 CandidateTemplateSourceKind = Literal["annual_report"]
+_SectionContextCache = dict[int, str | None]
 
 DEFAULT_DOCLING_TEMPLATE_FIELD_PATHS: Final[tuple[str, ...]] = (
     "basic_identity.fund_name",
@@ -253,7 +258,11 @@ def extract_docling_template_fields(
     _validate_document(document)
     _validate_target_field_paths(target_field_paths)
 
-    fields = tuple(_extract_single_field(document, field_path) for field_path in target_field_paths)
+    section_context_cache: _SectionContextCache = {}
+    fields = tuple(
+        _extract_single_field(document, field_path, section_context_cache)
+        for field_path in target_field_paths
+    )
     missing_field_paths = tuple(field.field_path for field in fields if field.extraction_mode == "missing")
     blocked_field_paths = tuple(
         field.field_path
@@ -329,12 +338,14 @@ def _validate_target_field_paths(target_field_paths: tuple[str, ...]) -> None:
 def _extract_single_field(
     document: CandidateRepresentationDocument,
     field_path: str,
+    section_context_cache: _SectionContextCache,
 ) -> CandidateTemplateField:
     """抽取单个模板字段候选。
 
     Args:
         document: 候选文档。
         field_path: 目标字段路径。
+        section_context_cache: 本次抽取的章节解析缓存。
 
     Returns:
         单字段候选结果。
@@ -343,7 +354,7 @@ def _extract_single_field(
         ValueError: 字段路径不在默认集合时抛出。
     """
 
-    match = _match_field(document, field_path)
+    match = _match_field(document, field_path, section_context_cache)
     if match is None:
         return _missing_field(field_path, _missing_note_for(field_path))
     return CandidateTemplateField(
@@ -358,12 +369,17 @@ def _extract_single_field(
     )
 
 
-def _match_field(document: CandidateRepresentationDocument, field_path: str) -> _FieldMatch | None:
+def _match_field(
+    document: CandidateRepresentationDocument,
+    field_path: str,
+    section_context_cache: _SectionContextCache,
+) -> _FieldMatch | None:
     """按字段路径分派匹配规则。
 
     Args:
         document: 候选文档。
         field_path: 目标字段路径。
+        section_context_cache: 本次抽取的章节解析缓存。
 
     Returns:
         命中结果；未命中时返回 ``None``。
@@ -373,21 +389,50 @@ def _match_field(document: CandidateRepresentationDocument, field_path: str) -> 
     """
 
     if field_path in _PROFILE_LABELS:
-        return _match_key_value_field(document, field_path, _PROFILE_LABELS[field_path], ("§2",))
+        return _match_key_value_field(
+            document,
+            field_path,
+            _PROFILE_LABELS[field_path],
+            ("§2",),
+            section_context_cache,
+        )
     if field_path in _FEE_LABELS:
-        return _match_key_value_field(document, field_path, _FEE_LABELS[field_path], ("§7",))
+        return _match_key_value_field(
+            document,
+            field_path,
+            _FEE_LABELS[field_path],
+            ("§7",),
+            section_context_cache,
+        )
     if field_path in _PERFORMANCE_LABELS:
-        return _match_performance_field(document, field_path, _PERFORMANCE_LABELS[field_path])
+        return _match_performance_field(
+            document,
+            field_path,
+            _PERFORMANCE_LABELS[field_path],
+            section_context_cache,
+        )
     if field_path == "tracking_error.value_text":
-        return _match_tracking_error(document)
+        return _match_tracking_error(document, section_context_cache)
     if field_path == "portfolio_managers":
-        return _match_portfolio_managers(document)
+        return _match_portfolio_managers(document, section_context_cache)
     if field_path == "turnover_rate":
-        return _match_key_value_field(document, field_path, ("换手率", "股票交易金额占基金资产净值比例"), ("§8",))
+        return _match_key_value_field(
+            document,
+            field_path,
+            ("换手率", "股票交易金额占基金资产净值比例"),
+            ("§8",),
+            section_context_cache,
+        )
     if field_path == "manager_alignment.manager_holding_range":
-        return _match_key_value_field(document, field_path, ("基金经理持有", "本基金基金经理持有"), ("§10",))
+        return _match_key_value_field(
+            document,
+            field_path,
+            ("基金经理持有", "本基金基金经理持有"),
+            ("§10",),
+            section_context_cache,
+        )
     if field_path.startswith("holdings_snapshot."):
-        return _match_holding_row(document, field_path)
+        return _match_holding_row(document, field_path, section_context_cache)
     return None
 
 
@@ -396,6 +441,7 @@ def _match_key_value_field(
     field_path: str,
     labels: tuple[str, ...],
     section_ids: tuple[str, ...],
+    section_context_cache: _SectionContextCache,
 ) -> _FieldMatch | None:
     """从候选表格或文本块匹配键值字段。
 
@@ -404,6 +450,7 @@ def _match_key_value_field(
         field_path: 目标字段路径。
         labels: 可接受标签。
         section_ids: 允许章节。
+        section_context_cache: 本次抽取的章节解析缓存。
 
     Returns:
         命中结果；未命中时返回 ``None``。
@@ -412,10 +459,16 @@ def _match_key_value_field(
         无显式抛出。
     """
 
-    table_match = _match_key_value_table_field(document, field_path, labels, section_ids)
+    table_match = _match_key_value_table_field(
+        document,
+        field_path,
+        labels,
+        section_ids,
+        section_context_cache,
+    )
     if table_match is not None:
         return table_match
-    return _match_text_label_field(document, field_path, labels, section_ids)
+    return _match_text_label_field(document, field_path, labels, section_ids, section_context_cache)
 
 
 def _match_key_value_table_field(
@@ -423,6 +476,7 @@ def _match_key_value_table_field(
     field_path: str,
     labels: tuple[str, ...],
     section_ids: tuple[str, ...],
+    section_context_cache: _SectionContextCache,
 ) -> _FieldMatch | None:
     """从候选表格匹配键值字段。
 
@@ -431,6 +485,7 @@ def _match_key_value_table_field(
         field_path: 目标字段路径。
         labels: 可接受标签。
         section_ids: 允许章节。
+        section_context_cache: 本次抽取的章节解析缓存。
 
     Returns:
         命中结果；未命中时返回 ``None``。
@@ -440,7 +495,8 @@ def _match_key_value_table_field(
     """
 
     for table in document.tables:
-        if not _section_allowed(table.section_id, section_ids):
+        effective_section_id = _effective_section_id(document, table, section_context_cache)
+        if not _section_allowed(effective_section_id, section_ids):
             continue
         rows = _group_cells_by_row(table)
         for row_cells in rows:
@@ -457,7 +513,13 @@ def _match_key_value_table_field(
                 document,
                 field_path,
                 value,
-                _anchor_for_cell(document, table, value_cell, note=f"label={_normalize_text(label_cell.text)}"),
+                _anchor_for_cell(
+                    document,
+                    table,
+                    value_cell,
+                    note=f"label={_normalize_text(label_cell.text)}",
+                    section_id=effective_section_id,
+                ),
                 "candidate_table_key_value_match",
             )
     return None
@@ -468,6 +530,7 @@ def _match_text_label_field(
     field_path: str,
     labels: tuple[str, ...],
     section_ids: tuple[str, ...],
+    section_context_cache: _SectionContextCache,
 ) -> _FieldMatch | None:
     """从候选文本块匹配标签字段。
 
@@ -476,6 +539,7 @@ def _match_text_label_field(
         field_path: 目标字段路径。
         labels: 可接受标签。
         section_ids: 允许章节。
+        section_context_cache: 本次抽取的章节解析缓存。
 
     Returns:
         命中结果；未命中时返回 ``None``。
@@ -485,7 +549,8 @@ def _match_text_label_field(
     """
 
     for block in document.text_blocks:
-        if not _section_allowed(block.section_id, section_ids):
+        effective_section_id = _effective_section_id(document, block, section_context_cache)
+        if not _section_allowed(effective_section_id, section_ids):
             continue
         text = _normalize_text(block.normalized_text or block.text)
         for label in labels:
@@ -495,7 +560,7 @@ def _match_text_label_field(
                     document,
                     field_path,
                     value,
-                    _anchor_for_text_block(document, block, note=f"label={label}"),
+                    _anchor_for_text_block(document, block, note=f"label={label}", section_id=effective_section_id),
                     "candidate_text_label_match",
                 )
     return None
@@ -505,6 +570,7 @@ def _match_performance_field(
     document: CandidateRepresentationDocument,
     field_path: str,
     labels: tuple[str, ...],
+    section_context_cache: _SectionContextCache,
 ) -> _FieldMatch | None:
     """从 `§3` 候选业绩表匹配净值/基准收益字段。
 
@@ -512,6 +578,7 @@ def _match_performance_field(
         document: 候选文档。
         field_path: 目标字段路径。
         labels: 目标列头标签。
+        section_context_cache: 本次抽取的章节解析缓存。
 
     Returns:
         命中结果；未命中时返回 ``None``。
@@ -521,7 +588,8 @@ def _match_performance_field(
     """
 
     for table in document.tables:
-        if not _section_allowed(table.section_id, ("§3",)):
+        effective_section_id = _effective_section_id(document, table, section_context_cache)
+        if not _section_allowed(effective_section_id, ("§3",)):
             continue
         for cell in table.cells:
             if not _contains_any(cell.column_header_path, labels):
@@ -534,17 +602,27 @@ def _match_performance_field(
                     document,
                     field_path,
                     value,
-                    _anchor_for_cell(document, table, cell, note="performance_table_match"),
+                    _anchor_for_cell(
+                        document,
+                        table,
+                        cell,
+                        note="performance_table_match",
+                        section_id=effective_section_id,
+                    ),
                     "candidate_performance_table_match",
                 )
     return None
 
 
-def _match_tracking_error(document: CandidateRepresentationDocument) -> _FieldMatch | None:
+def _match_tracking_error(
+    document: CandidateRepresentationDocument,
+    section_context_cache: _SectionContextCache,
+) -> _FieldMatch | None:
     """匹配实际披露的跟踪误差字段，见模板第 2 章 R=A+B-C。
 
     Args:
         document: 候选文档。
+        section_context_cache: 本次抽取的章节解析缓存。
 
     Returns:
         命中结果；目标/限制/叙述性文本返回 ``None``。
@@ -554,7 +632,8 @@ def _match_tracking_error(document: CandidateRepresentationDocument) -> _FieldMa
     """
 
     for block in document.text_blocks:
-        if not _section_allowed(block.section_id, ("§3", "§4")):
+        effective_section_id = _effective_section_id(document, block, section_context_cache)
+        if not _section_allowed(effective_section_id, ("§3", "§4")):
             continue
         text = _normalize_text(block.normalized_text or block.text)
         if "跟踪误差" not in text:
@@ -570,17 +649,21 @@ def _match_tracking_error(document: CandidateRepresentationDocument) -> _FieldMa
             document,
             "tracking_error.value_text",
             value_match.group(0),
-            _anchor_for_text_block(document, block, note="actual_tracking_error_text"),
+            _anchor_for_text_block(document, block, note="actual_tracking_error_text", section_id=effective_section_id),
             "candidate_actual_tracking_error_match",
         )
     return None
 
 
-def _match_portfolio_managers(document: CandidateRepresentationDocument) -> _FieldMatch | None:
+def _match_portfolio_managers(
+    document: CandidateRepresentationDocument,
+    section_context_cache: _SectionContextCache,
+) -> _FieldMatch | None:
     """匹配基金经理列表字段，见模板第 3 章基金经理画像。
 
     Args:
         document: 候选文档。
+        section_context_cache: 本次抽取的章节解析缓存。
 
     Returns:
         命中结果；未命中时返回 ``None``。
@@ -592,7 +675,8 @@ def _match_portfolio_managers(document: CandidateRepresentationDocument) -> _Fie
     managers: list[dict[str, str]] = []
     anchors: list[CandidateTemplateFieldAnchor] = []
     for table in document.tables:
-        if not _section_allowed(table.section_id, ("§4",)):
+        effective_section_id = _effective_section_id(document, table, section_context_cache)
+        if not _section_allowed(effective_section_id, ("§4",)):
             continue
         rows = _group_cells_by_row(table)
         for row_cells in rows:
@@ -607,7 +691,15 @@ def _match_portfolio_managers(document: CandidateRepresentationDocument) -> _Fie
             if start_cell is not None and _normalize_text(start_cell.text):
                 manager["start_date"] = _normalize_text(start_cell.text)
             managers.append(manager)
-            anchors.append(_anchor_for_cell(document, table, name_cell, note="portfolio_manager_row"))
+            anchors.append(
+                _anchor_for_cell(
+                    document,
+                    table,
+                    name_cell,
+                    note="portfolio_manager_row",
+                    section_id=effective_section_id,
+                )
+            )
     if not managers:
         return None
     return _field_match(
@@ -619,12 +711,17 @@ def _match_portfolio_managers(document: CandidateRepresentationDocument) -> _Fie
     )
 
 
-def _match_holding_row(document: CandidateRepresentationDocument, field_path: str) -> _FieldMatch | None:
+def _match_holding_row(
+    document: CandidateRepresentationDocument,
+    field_path: str,
+    section_context_cache: _SectionContextCache,
+) -> _FieldMatch | None:
     """匹配持仓快照首行候选字段。
 
     Args:
         document: 候选文档。
         field_path: 持仓字段路径。
+        section_context_cache: 本次抽取的章节解析缓存。
 
     Returns:
         命中结果；缺少上下文时返回 ``None``。
@@ -635,7 +732,8 @@ def _match_holding_row(document: CandidateRepresentationDocument, field_path: st
 
     required_labels = _holding_required_labels(field_path)
     for table in document.tables:
-        if not _section_allowed(table.section_id, ("§8",)):
+        effective_section_id = _effective_section_id(document, table, section_context_cache)
+        if not _section_allowed(effective_section_id, ("§8",)):
             continue
         rows = _group_cells_by_row(table)
         for row_cells in rows:
@@ -657,7 +755,13 @@ def _match_holding_row(document: CandidateRepresentationDocument, field_path: st
                 document,
                 field_path,
                 {"rows": (value,)},
-                _anchor_for_cell(document, table, name_cell, note="holding_row_match"),
+                _anchor_for_cell(
+                    document,
+                    table,
+                    name_cell,
+                    note="holding_row_match",
+                    section_id=effective_section_id,
+                ),
                 "candidate_holding_table_match",
             )
     return None
@@ -932,6 +1036,7 @@ def _anchor_for_cell(
     cell: CandidateTableCell,
     *,
     note: str,
+    section_id: str | None = None,
 ) -> CandidateTemplateFieldAnchor:
     """从候选表格单元格构造候选模板锚点。
 
@@ -940,6 +1045,7 @@ def _anchor_for_cell(
         table: 候选表格。
         cell: 候选单元格。
         note: 锚点说明。
+        section_id: 已解析的有效章节；为空时使用表格原始章节。
 
     Returns:
         候选模板字段锚点。
@@ -953,7 +1059,7 @@ def _anchor_for_cell(
     return CandidateTemplateFieldAnchor(
         source_kind="annual_report",
         document_year=document.identity.document_year,
-        section_id=table.section_id,
+        section_id=section_id or table.section_id,
         page_number=cell.source_locator.page_number,
         table_id=table.table_id,
         row_locator=f"cell:r{row}:c{column}:idx{cell.cell_index}",
@@ -966,6 +1072,7 @@ def _anchor_for_text_block(
     block: CandidateTextBlock,
     *,
     note: str,
+    section_id: str | None = None,
 ) -> CandidateTemplateFieldAnchor:
     """从候选文本块构造候选模板锚点。
 
@@ -973,6 +1080,7 @@ def _anchor_for_text_block(
         document: 候选文档。
         block: 候选文本块。
         note: 锚点说明。
+        section_id: 已解析的有效章节；为空时使用文本块原始章节。
 
     Returns:
         候选模板字段锚点。
@@ -984,7 +1092,7 @@ def _anchor_for_text_block(
     return CandidateTemplateFieldAnchor(
         source_kind="annual_report",
         document_year=document.identity.document_year,
-        section_id=block.section_id,
+        section_id=section_id or block.section_id,
         page_number=block.source_locator.page_number,
         table_id=None,
         row_locator=block.block_id,
@@ -1029,6 +1137,62 @@ def _section_allowed(section_id: str | None, allowed: tuple[str, ...]) -> bool:
     """
 
     return section_id in allowed
+
+
+def _effective_section_id(
+    document: CandidateRepresentationDocument,
+    block: CandidateTableBlock | CandidateTextBlock,
+    section_context_cache: _SectionContextCache,
+) -> str | None:
+    """解析候选块的有效年报章节。
+
+    Args:
+        document: 候选文档。
+        block: 候选表格或文本块。
+        section_context_cache: 本次抽取的章节解析缓存。
+
+    Returns:
+        稳定 ``§N`` 章节；无法安全解析时返回 ``None``。
+
+    Raises:
+        无显式抛出。
+    """
+
+    cache_key = id(block)
+    if cache_key in section_context_cache:
+        return section_context_cache[cache_key]
+    if block.section_id and block.section_id.startswith("§"):
+        section_context_cache[cache_key] = block.section_id
+        return block.section_id
+    result = map_candidate_locator_to_anchor_candidate(
+        document,
+        block,
+        schema_family=_schema_family_for_document(document),
+    )
+    if len(result.mapped) != 1:
+        section_context_cache[cache_key] = None
+        return None
+    section_id = result.mapped[0].fields.section_id
+    section_context_cache[cache_key] = section_id
+    return section_id
+
+
+def _schema_family_for_document(document: CandidateRepresentationDocument) -> CandidateAnchorSchemaFamily:
+    """返回 section 解析使用的候选 schema family。
+
+    Args:
+        document: 候选文档。
+
+    Returns:
+        候选 schema family。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if document.identity.sample_id == "S1":
+        return "S1_full"
+    return "S4_S5_S6_lightweight"
 
 
 def _contains_any(values: tuple[str, ...], labels: tuple[str, ...]) -> bool:

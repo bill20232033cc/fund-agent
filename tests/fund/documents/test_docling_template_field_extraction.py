@@ -9,6 +9,7 @@ from fund_agent.fund.documents.candidates.representation_models import (
     CandidateRepresentationIdentity,
     CandidateRepresentationSourceKind,
     CandidateRepresentationStatus,
+    CandidateSectionNode,
     CandidateSourceLocator,
     CandidateTableBlock,
     CandidateTableCell,
@@ -129,8 +130,10 @@ def _cell(
 
 def _table(
     table_id: str,
-    section_id: str,
+    section_id: str | None,
     cells: tuple[CandidateTableCell, ...],
+    *,
+    page_number: int = 2,
 ) -> CandidateTableBlock:
     """构造候选表格。
 
@@ -138,6 +141,7 @@ def _table(
         table_id: 表格 ID。
         section_id: 章节 ID。
         cells: 单元格。
+        page_number: 表格页码。
 
     Returns:
         候选表格。
@@ -151,9 +155,9 @@ def _table(
         source_ref=table_id,
         route_table_index=1,
         section_id=section_id,
-        heading_path=(section_id,),
-        page_numbers=(2,),
-        source_locator=_locator(table_id, page_number=2),
+        heading_path=(section_id,) if section_id else (),
+        page_numbers=(page_number,),
+        source_locator=_locator(table_id, page_number=page_number),
         bbox_by_page=(),
         caption=None,
         label=None,
@@ -168,13 +172,20 @@ def _table(
     )
 
 
-def _text_block(block_id: str, section_id: str, text: str) -> CandidateTextBlock:
+def _text_block(
+    block_id: str,
+    section_id: str | None,
+    text: str,
+    *,
+    page_number: int = 3,
+) -> CandidateTextBlock:
     """构造候选文本块。
 
     Args:
         block_id: 文本块 ID。
         section_id: 章节 ID。
         text: 文本内容。
+        page_number: 文本块页码。
 
     Returns:
         候选文本块。
@@ -187,11 +198,41 @@ def _text_block(block_id: str, section_id: str, text: str) -> CandidateTextBlock
         block_id=block_id,
         block_type="paragraph",
         section_id=section_id,
-        heading_path=(section_id,),
+        heading_path=(section_id,) if section_id else (),
         text=text,
         normalized_text=text,
-        source_locator=_locator(block_id, page_number=3),
+        source_locator=_locator(block_id, page_number=page_number),
         content_hash=f"hash-{block_id}",
+        excluded_reason=None,
+    )
+
+
+def _section_node(section_id: str, heading_text: str, page_number: int) -> CandidateSectionNode:
+    """构造候选章节节点。
+
+    Args:
+        section_id: 候选章节节点 ID。
+        heading_text: 标题文本。
+        page_number: 页码。
+
+    Returns:
+        候选章节节点。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return CandidateSectionNode(
+        section_id=section_id,
+        source_ref=section_id,
+        heading_text=heading_text,
+        heading_path=(heading_text,),
+        heading_level=1,
+        page_start=page_number,
+        page_end=page_number,
+        source_locator=_locator(section_id, page_number=page_number),
+        content_hash=f"hash-{section_id}",
+        confidence="usable",
         excluded_reason=None,
     )
 
@@ -502,6 +543,95 @@ def test_docling_template_field_extractor_uses_text_label_fallback() -> None:
     assert field.extraction_mode == "direct"
     assert field.value == "004393"
     assert field.anchors[0].note.startswith("candidate_only:")
+
+
+def test_docling_template_field_extractor_uses_page_section_context_for_unlinked_table() -> None:
+    """验证无显式 section_id 的表格可按稳定章节页码 span 抽取。"""
+
+    cells = (
+        _cell(100, 1, 0, "基金名称"),
+        _cell(101, 1, 1, "安信企业价值优选混合型证券投资基金"),
+    )
+    document = CandidateRepresentationDocument(
+        schema_version="candidate_annual_report_representation.v1",
+        identity=_identity(),
+        status=CandidateRepresentationStatus(),
+        summary_metrics={},
+        sections=(
+            _section_node("sec_2", "§2 基金简介", 2),
+            _section_node("sec_3", "§3 主要财务指标、基金净值表现及利润分配情况", 10),
+        ),
+        text_blocks=(),
+        tables=(_table("unlinked-profile", None, cells, page_number=3),),
+        route_failures=(),
+        projection_issues=(),
+        blocked_claims=(),
+    )
+
+    result = extract_docling_template_fields(document, target_field_paths=("basic_identity.fund_name",))
+    field = result.fields[0]
+
+    assert field.extraction_mode == "direct"
+    assert field.value == "安信企业价值优选混合型证券投资基金"
+    assert field.anchors[0].section_id == "§2"
+
+
+def test_docling_template_field_extractor_uses_page_section_context_for_unlinked_text() -> None:
+    """验证无显式 section_id 的文本块可按稳定章节页码 span 抽取。"""
+
+    document = CandidateRepresentationDocument(
+        schema_version="candidate_annual_report_representation.v1",
+        identity=_identity(),
+        status=CandidateRepresentationStatus(),
+        summary_metrics={},
+        sections=(
+            _section_node("sec_2", "§2 基金简介", 2),
+            _section_node("sec_3", "§3 主要财务指标、基金净值表现及利润分配情况", 10),
+        ),
+        text_blocks=(_text_block("fund-code-text", None, "基金代码：004393", page_number=3),),
+        tables=(),
+        route_failures=(),
+        projection_issues=(),
+        blocked_claims=(),
+    )
+
+    result = extract_docling_template_fields(document, target_field_paths=("basic_identity.fund_code",))
+    field = result.fields[0]
+
+    assert field.extraction_mode == "direct"
+    assert field.value == "004393"
+    assert field.anchors[0].section_id == "§2"
+
+
+def test_docling_template_field_extractor_keeps_duplicate_section_context_missing() -> None:
+    """验证同页重复顶层章节时 fail-closed，不因标签存在而抽取。"""
+
+    cells = (
+        _cell(110, 1, 0, "基金名称"),
+        _cell(111, 1, 1, "安信企业价值优选混合型证券投资基金"),
+    )
+    document = CandidateRepresentationDocument(
+        schema_version="candidate_annual_report_representation.v1",
+        identity=_identity(),
+        status=CandidateRepresentationStatus(),
+        summary_metrics={},
+        sections=(
+            _section_node("sec_2_a", "§2 基金简介", 2),
+            _section_node("sec_2_b", "§2 基金简介", 2),
+        ),
+        text_blocks=(),
+        tables=(_table("ambiguous-profile", None, cells, page_number=2),),
+        route_failures=(),
+        projection_issues=(),
+        blocked_claims=(),
+    )
+
+    result = extract_docling_template_fields(document, target_field_paths=("basic_identity.fund_name",))
+    field = result.fields[0]
+
+    assert field.extraction_mode == "missing"
+    assert field.value is None
+    assert field.anchors == ()
 
 
 def test_candidate_template_field_anchor_rejects_non_candidate_note() -> None:
