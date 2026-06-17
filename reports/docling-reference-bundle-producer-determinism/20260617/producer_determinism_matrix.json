@@ -1,0 +1,91 @@
+{
+  "accepted_implementation_commit": "8fe0bb4",
+  "assertions": {
+    "companion_metadata_excluded_from_fingerprint": true,
+    "current_10_7_remains_blocked_evidence": true,
+    "different_order_same_fingerprint": true,
+    "hash_participating_perturbation_changes_fingerprint": true,
+    "missing_diagnostics_blocks_comparability": true,
+    "not_reinterpreting_prior_current_residual_closure": true,
+    "same_input_same_fingerprint": true
+  },
+  "candidate_only": true,
+  "evidence_method": "synthetic_no_live_in_memory_repository_reference_bundle",
+  "gate": "Docling Reference Bundle Producer Determinism No-live Evidence Gate",
+  "no_live": true,
+  "non_claims": {
+    "baseline_promotion": false,
+    "full_field_correctness": false,
+    "golden_readiness": false,
+    "parser_replacement": false,
+    "pr_readiness": false,
+    "release_readiness": false,
+    "source_truth_acceptance": false
+  },
+  "prior_current_context": {
+    "current_blocked_reevidence": {
+      "closed": 10,
+      "residual_or_blocked": 7
+    },
+    "interpretation": "blocked_non_comparable_until_producer_diagnostics_exist",
+    "prior_accepted_residual_closure": {
+      "closed": 13,
+      "residual_or_blocked": 4
+    },
+    "regression_rows": [
+      "F015",
+      "S5-F023",
+      "S6-F035"
+    ]
+  },
+  "producer_contract_version": "docling_reference_bundle_producer_contract.v1",
+  "release_readiness": "NOT_READY",
+  "samples": {
+    "base": {
+      "bundle_content_fingerprint": "7fc0a334b3640d20b2e6018f901589286aac035adad91aa11039d322a056b6dc",
+      "cell_count": 2,
+      "diagnostic_payload_available": true,
+      "producer_contract_version": "docling_reference_bundle_producer_contract.v1",
+      "producer_input_mode": "pre_enriched_v2",
+      "reference_generation_status": "available",
+      "section_inference_counts": {
+        "\u00a72": 3
+      },
+      "table_count": 2,
+      "text_span_count": 1
+    },
+    "blocked_missing_diagnostics": {
+      "bundle_content_fingerprint": null,
+      "cell_count": 0,
+      "diagnostic_payload_available": false,
+      "producer_contract_version": "docling_reference_bundle_producer_contract.v1",
+      "producer_input_mode": "pre_enriched_v2",
+      "reference_generation_status": "blocked_reference_unavailable",
+      "table_count": 0,
+      "text_span_count": 0
+    },
+    "companion_metadata_only_change": {
+      "bundle_content_fingerprint": "7fc0a334b3640d20b2e6018f901589286aac035adad91aa11039d322a056b6dc",
+      "diagnostic_payload_available": true,
+      "producer_contract_version": "companion-metadata-only-change"
+    },
+    "mutated_hash_participating_content": {
+      "bundle_content_fingerprint": "e14e5639a455dbc923770c6158c3be6e59b42be10be9fe01c074c590542f1662",
+      "diagnostic_payload_available": true,
+      "mutation": "cell normalized text changed from 004393 to 004394"
+    },
+    "reordered": {
+      "bundle_content_fingerprint": "7fc0a334b3640d20b2e6018f901589286aac035adad91aa11039d322a056b6dc",
+      "diagnostic_payload_available": true,
+      "mutation": "cell order changed"
+    },
+    "repeat": {
+      "bundle_content_fingerprint": "7fc0a334b3640d20b2e6018f901589286aac035adad91aa11039d322a056b6dc",
+      "diagnostic_payload_available": true,
+      "mutation": "same logical input repeated"
+    }
+  },
+  "schema_version": "docling_reference_bundle_producer_determinism_evidence.v1",
+  "source_truth_status": "not_proven",
+  "verdict": "PRODUCER_DETERMINISM_EVIDENCE_ACCEPTED_NOT_READY"
+}
