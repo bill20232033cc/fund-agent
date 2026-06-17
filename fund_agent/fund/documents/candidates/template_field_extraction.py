@@ -90,6 +90,28 @@ _TRACKING_ERROR_REJECT_KEYWORDS: Final[tuple[str, ...]] = (
 )
 _TRACKING_ERROR_ACCEPT_KEYWORDS: Final[tuple[str, ...]] = ("实际", "报告期", "本报告期", "过去一年")
 _PERCENT_PATTERN: Final[re.Pattern[str]] = re.compile(r"[-+]?\d+(?:,\d{3})*(?:\.\d+)?\s*%")
+_NUMERIC_TEXT_PATTERN: Final[re.Pattern[str]] = re.compile(
+    r"^\s*[-+]?\d+(?:,\d{3})*(?:\.\d+)?(?:\s*%|万份|份|元|亿元|万元)?\s*$"
+)
+_TABLE_HEADER_LABELS: Final[tuple[str, ...]] = (
+    "阶段",
+    "姓名",
+    "基金经理",
+    "任职日期",
+    "开始日期",
+    "净值增长率",
+    "基金份额净值增长率",
+    "业绩比较基准收益率",
+    "基准收益率",
+    "股票名称",
+    "债券名称",
+    "基金名称",
+    "名称",
+    "公允价值",
+    "金额",
+    "占基金资产净值比例",
+    "占净值比例",
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -235,6 +257,15 @@ class _FieldMatch:
     value: object
     anchors: tuple[CandidateTemplateFieldAnchor, ...]
     note: str
+
+
+@dataclass(frozen=True, slots=True)
+class _TableContext:
+    """候选表格的 extractor-local 派生语义上下文。"""
+
+    derived_column_labels_by_column: dict[int, tuple[str, ...]]
+    ambiguous_column_labels: frozenset[str]
+    header_row_indexes: frozenset[int]
 
 
 def extract_docling_template_fields(
@@ -591,26 +622,31 @@ def _match_performance_field(
         effective_section_id = _effective_section_id(document, table, section_context_cache)
         if not _section_allowed(effective_section_id, ("§3",)):
             continue
-        for cell in table.cells:
-            if not _contains_any(cell.column_header_path, labels):
+        rows = _group_cells_by_row(table)
+        table_context = _derive_table_context(rows)
+        for row_cells in rows:
+            if _row_is_header(row_cells, table_context):
                 continue
-            if not _contains_any(cell.row_label_path, ("过去一年", "过去一年内", "报告期")):
-                continue
-            value = _normalize_text(cell.text)
-            if value:
-                return _field_match(
-                    document,
-                    field_path,
-                    value,
-                    _anchor_for_cell(
+            for cell in row_cells:
+                if not _cell_has_column_label(cell, labels, table_context):
+                    continue
+                if not _cell_has_row_label(cell, row_cells, ("过去一年", "过去一年内", "报告期")):
+                    continue
+                value = _normalize_text(cell.text)
+                if value:
+                    return _field_match(
                         document,
-                        table,
-                        cell,
-                        note="performance_table_match",
-                        section_id=effective_section_id,
-                    ),
-                    "candidate_performance_table_match",
-                )
+                        field_path,
+                        value,
+                        _anchor_for_cell(
+                            document,
+                            table,
+                            cell,
+                            note="performance_table_match",
+                            section_id=effective_section_id,
+                        ),
+                        "candidate_performance_table_match",
+                    )
     return None
 
 
@@ -679,9 +715,10 @@ def _match_portfolio_managers(
         if not _section_allowed(effective_section_id, ("§4",)):
             continue
         rows = _group_cells_by_row(table)
+        table_context = _derive_table_context(rows)
         for row_cells in rows:
-            name_cell = _find_cell_by_headers_or_labels(row_cells, ("姓名", "基金经理"))
-            start_cell = _find_cell_by_headers_or_labels(row_cells, ("任职日期", "开始日期"))
+            name_cell = _find_cell_by_headers_or_labels(row_cells, ("姓名", "基金经理"), table_context)
+            start_cell = _find_cell_by_headers_or_labels(row_cells, ("任职日期", "开始日期"), table_context)
             if name_cell is None:
                 continue
             name = _normalize_text(name_cell.text)
@@ -736,12 +773,23 @@ def _match_holding_row(
         if not _section_allowed(effective_section_id, ("§8",)):
             continue
         rows = _group_cells_by_row(table)
+        table_context = _derive_table_context(rows)
         for row_cells in rows:
-            if required_labels and not _row_contains_any(row_cells, required_labels):
+            if _row_is_header(row_cells, table_context):
                 continue
-            name_cell = _find_cell_by_headers_or_labels(row_cells, ("股票名称", "债券名称", "基金名称", "名称"))
-            value_cell = _find_cell_by_headers_or_labels(row_cells, ("公允价值", "金额"))
-            ratio_cell = _find_cell_by_headers_or_labels(row_cells, ("占基金资产净值比例", "占净值比例"))
+            if required_labels and not _row_contains_any(row_cells, required_labels, table_context):
+                continue
+            name_cell = _find_cell_by_headers_or_labels(
+                row_cells,
+                ("股票名称", "债券名称", "基金名称", "名称"),
+                table_context,
+            )
+            value_cell = _find_cell_by_headers_or_labels(row_cells, ("公允价值", "金额"), table_context)
+            ratio_cell = _find_cell_by_headers_or_labels(
+                row_cells,
+                ("占基金资产净值比例", "占净值比例"),
+                table_context,
+            )
             if name_cell is None:
                 continue
             value = {
@@ -928,6 +976,217 @@ def _cell_column_key(cell: CandidateTableCell) -> tuple[int, int]:
     return (cell.column_start if cell.column_start is not None else cell.cell_index, cell.cell_index)
 
 
+def _derive_table_context(rows: tuple[tuple[CandidateTableCell, ...], ...]) -> _TableContext:
+    """从候选表格文本和几何位置派生本 extractor 使用的表格上下文。
+
+    Args:
+        rows: 已按行分组的候选单元格。
+
+    Returns:
+        派生表头、歧义标签和表头行位置。
+
+    Raises:
+        无显式抛出。
+    """
+
+    header_rows = tuple(row_cells for row_cells in rows if _is_header_like_row(row_cells))
+    if len(header_rows) != 1:
+        header_indexes = frozenset(
+            row_cells[0].row_start if row_cells and row_cells[0].row_start is not None else -1
+            for row_cells in header_rows
+        )
+        return _TableContext(
+            derived_column_labels_by_column={},
+            ambiguous_column_labels=frozenset(_TABLE_HEADER_LABELS) if len(header_rows) > 1 else frozenset(),
+            header_row_indexes=header_indexes,
+        )
+
+    header_row = header_rows[0]
+    labels_by_column: dict[int, tuple[str, ...]] = {}
+    known_label_counts: dict[str, int] = {}
+    for cell in header_row:
+        column_index = cell.column_start
+        label = _normalize_text(cell.normalized_text or cell.text)
+        if column_index is None or not label:
+            continue
+        labels_by_column[column_index] = (label,)
+        for known_label in _TABLE_HEADER_LABELS:
+            if known_label in label:
+                known_label_counts[known_label] = known_label_counts.get(known_label, 0) + 1
+
+    ambiguous_labels = frozenset(
+        known_label for known_label, count in known_label_counts.items() if count > 1
+    )
+    header_row_index = header_row[0].row_start if header_row and header_row[0].row_start is not None else -1
+    return _TableContext(
+        derived_column_labels_by_column=labels_by_column,
+        ambiguous_column_labels=ambiguous_labels,
+        header_row_indexes=frozenset((header_row_index,)),
+    )
+
+
+def _is_header_like_row(row_cells: tuple[CandidateTableCell, ...]) -> bool:
+    """判断一行是否足以作为确定性表头候选。
+
+    Args:
+        row_cells: 同一行单元格。
+
+    Returns:
+        至少两个单元格包含已知表头词时返回 ``True``。
+
+    Raises:
+        无显式抛出。
+    """
+
+    hits = 0
+    for cell in row_cells:
+        text = _normalize_text(cell.normalized_text or cell.text)
+        if _contains_keyword(text, _TABLE_HEADER_LABELS):
+            hits += 1
+    return hits >= 2
+
+
+def _row_is_header(row_cells: tuple[CandidateTableCell, ...], table_context: _TableContext) -> bool:
+    """判断当前行是否为已识别表头行。
+
+    Args:
+        row_cells: 同一行单元格。
+        table_context: 派生表格上下文。
+
+    Returns:
+        当前行是表头行时返回 ``True``。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if not row_cells:
+        return False
+    row_index = row_cells[0].row_start if row_cells[0].row_start is not None else -1
+    return row_index in table_context.header_row_indexes
+
+
+def _cell_has_column_label(
+    cell: CandidateTableCell,
+    labels: tuple[str, ...],
+    table_context: _TableContext,
+) -> bool:
+    """判断单元格是否有目标列标签。
+
+    Args:
+        cell: 候选单元格。
+        labels: 目标列标签。
+        table_context: 派生表格上下文。
+
+    Returns:
+        存储或派生列标签命中时返回 ``True``。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if _contains_any(cell.column_header_path, labels):
+        return True
+    if _target_labels_are_ambiguous(labels, table_context):
+        return False
+    return _contains_any(_derived_column_labels(cell, table_context), labels)
+
+
+def _cell_has_row_label(
+    cell: CandidateTableCell,
+    row_cells: tuple[CandidateTableCell, ...],
+    labels: tuple[str, ...],
+) -> bool:
+    """判断单元格所在行是否有目标行标签。
+
+    Args:
+        cell: 候选单元格。
+        row_cells: 同一行单元格。
+        labels: 目标行标签。
+
+    Returns:
+        存储或派生行标签命中时返回 ``True``。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if _contains_any(cell.row_label_path, labels):
+        return True
+    return _contains_any(_derived_row_labels(row_cells), labels)
+
+
+def _derived_column_labels(
+    cell: CandidateTableCell,
+    table_context: _TableContext,
+) -> tuple[str, ...]:
+    """读取单元格的派生列标签。
+
+    Args:
+        cell: 候选单元格。
+        table_context: 派生表格上下文。
+
+    Returns:
+        派生列标签；无确定性标签时为空元组。
+
+    Raises:
+        无显式抛出。
+    """
+
+    column_index = cell.column_start
+    if column_index is None:
+        return ()
+    return table_context.derived_column_labels_by_column.get(column_index, ())
+
+
+def _derived_row_labels(row_cells: tuple[CandidateTableCell, ...]) -> tuple[str, ...]:
+    """从行首非空单元格派生行上下文标签。
+
+    Args:
+        row_cells: 同一行单元格。
+
+    Returns:
+        派生行标签；无确定性标签时为空元组。
+
+    Raises:
+        无显式抛出。
+    """
+
+    for cell in row_cells:
+        text = _normalize_text(cell.normalized_text or cell.text)
+        if not text:
+            continue
+        if _NUMERIC_TEXT_PATTERN.match(text):
+            continue
+        if _contains_keyword(text, _TABLE_HEADER_LABELS):
+            continue
+        return (text,)
+    return ()
+
+
+def _target_labels_are_ambiguous(
+    labels: tuple[str, ...],
+    table_context: _TableContext,
+) -> bool:
+    """判断目标标签是否命中派生表头歧义集合。
+
+    Args:
+        labels: 目标标签。
+        table_context: 派生表格上下文。
+
+    Returns:
+        目标标签歧义时返回 ``True``。
+
+    Raises:
+        无显式抛出。
+    """
+
+    for label in labels:
+        if label in table_context.ambiguous_column_labels:
+            return True
+    return False
+
+
 def _find_label_cell(
     row_cells: tuple[CandidateTableCell, ...],
     labels: tuple[str, ...],
@@ -981,12 +1240,14 @@ def _find_value_cell(
 def _find_cell_by_headers_or_labels(
     row_cells: tuple[CandidateTableCell, ...],
     labels: tuple[str, ...],
+    table_context: _TableContext,
 ) -> CandidateTableCell | None:
     """按表头、行标签或文本查找单元格。
 
     Args:
         row_cells: 同一行单元格。
         labels: 标签集合。
+        table_context: 派生表格上下文。
 
     Returns:
         命中的单元格；未命中返回 ``None``。
@@ -996,9 +1257,11 @@ def _find_cell_by_headers_or_labels(
     """
 
     for cell in row_cells:
-        if _contains_any(cell.column_header_path, labels):
+        if _cell_has_column_label(cell, labels, table_context):
             return cell
         if _contains_any(cell.row_label_path, labels):
+            return cell
+        if _contains_any(_derived_row_labels(row_cells), labels):
             return cell
         if _contains_keyword(_normalize_text(cell.text), labels):
             return cell
@@ -1008,12 +1271,14 @@ def _find_cell_by_headers_or_labels(
 def _row_contains_any(
     row_cells: tuple[CandidateTableCell, ...],
     labels: tuple[str, ...],
+    table_context: _TableContext,
 ) -> bool:
     """判断一行是否包含任一上下文标签。
 
     Args:
         row_cells: 同一行单元格。
         labels: 标签集合。
+        table_context: 派生表格上下文。
 
     Returns:
         命中时返回 ``True``。
@@ -1027,6 +1292,10 @@ def _row_contains_any(
             return True
         if _contains_any(cell.row_label_path, labels) or _contains_any(cell.column_header_path, labels):
             return True
+        if _contains_any(_derived_column_labels(cell, table_context), labels):
+            return True
+    if _contains_any(_derived_row_labels(row_cells), labels):
+        return True
     return False
 
 

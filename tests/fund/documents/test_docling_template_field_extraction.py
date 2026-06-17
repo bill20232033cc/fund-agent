@@ -634,6 +634,209 @@ def test_docling_template_field_extractor_keeps_duplicate_section_context_missin
     assert field.anchors == ()
 
 
+def test_docling_template_field_extractor_derives_performance_labels_from_header_row() -> None:
+    """验证空 label path 的业绩表可从确定性表头与行首标签派生字段。"""
+
+    cells = (
+        _cell(120, 0, 0, "阶段"),
+        _cell(121, 0, 1, "净值增长率"),
+        _cell(122, 0, 2, "业绩比较基准收益率"),
+        _cell(123, 1, 0, "过去一年"),
+        _cell(124, 1, 1, "12.34%"),
+        _cell(125, 1, 2, "10.00%"),
+    )
+    document = CandidateRepresentationDocument(
+        schema_version="candidate_annual_report_representation.v1",
+        identity=_identity(),
+        status=CandidateRepresentationStatus(),
+        summary_metrics={},
+        sections=(),
+        text_blocks=(),
+        tables=(_table("derived-performance", "§3", cells),),
+        route_failures=(),
+        projection_issues=(),
+        blocked_claims=(),
+    )
+
+    result = extract_docling_template_fields(
+        document,
+        target_field_paths=(
+            "nav_benchmark_performance.nav_growth_rate",
+            "nav_benchmark_performance.benchmark_return_rate",
+        ),
+    )
+    fields = {field.field_path: field for field in result.fields}
+
+    assert _field(fields, "nav_benchmark_performance.nav_growth_rate").value == "12.34%"
+    assert _field(fields, "nav_benchmark_performance.benchmark_return_rate").value == "10.00%"
+    assert all(field.extraction_mode == "direct" for field in result.fields)
+
+
+def test_docling_template_field_extractor_derives_manager_labels_from_header_row() -> None:
+    """验证空 label path 的基金经理表可从确定性表头派生姓名和任职日期。"""
+
+    cells = (
+        _cell(130, 0, 0, "姓名"),
+        _cell(131, 0, 1, "任职日期"),
+        _cell(132, 1, 0, "李四"),
+        _cell(133, 1, 1, "2021-05-01"),
+    )
+    document = CandidateRepresentationDocument(
+        schema_version="candidate_annual_report_representation.v1",
+        identity=_identity(),
+        status=CandidateRepresentationStatus(),
+        summary_metrics={},
+        sections=(),
+        text_blocks=(),
+        tables=(_table("derived-manager", "§4", cells),),
+        route_failures=(),
+        projection_issues=(),
+        blocked_claims=(),
+    )
+
+    result = extract_docling_template_fields(document, target_field_paths=("portfolio_managers",))
+    field = result.fields[0]
+
+    assert field.extraction_mode == "direct"
+    assert field.value == {
+        "schema_version": "portfolio_manager_tenure_list.v1",
+        "managers": [{"name": "李四", "start_date": "2021-05-01"}],
+    }
+
+
+def test_docling_template_field_extractor_derives_holding_labels_from_header_row() -> None:
+    """验证空 label path 的持仓表可从确定性表头和行首资产类型派生字段。"""
+
+    cells = (
+        _cell(140, 0, 0, "资产类型"),
+        _cell(141, 0, 1, "股票名称"),
+        _cell(142, 0, 2, "公允价值"),
+        _cell(143, 0, 3, "占基金资产净值比例"),
+        _cell(144, 1, 0, "股票"),
+        _cell(145, 1, 1, "宁德时代"),
+        _cell(146, 1, 2, "123456.00"),
+        _cell(147, 1, 3, "6.66%"),
+    )
+    document = CandidateRepresentationDocument(
+        schema_version="candidate_annual_report_representation.v1",
+        identity=_identity(),
+        status=CandidateRepresentationStatus(),
+        summary_metrics={},
+        sections=(),
+        text_blocks=(),
+        tables=(_table("derived-holding", "§8", cells),),
+        route_failures=(),
+        projection_issues=(),
+        blocked_claims=(),
+    )
+
+    result = extract_docling_template_fields(document, target_field_paths=("holdings_snapshot.top_holdings",))
+    field = result.fields[0]
+
+    assert field.extraction_mode == "direct"
+    assert field.value == {
+        "rows": ({"name": "宁德时代", "fair_value_cny": "123456.00", "net_asset_ratio": "6.66%"},)
+    }
+    assert field.anchors[0].note.startswith("candidate_only:")
+
+
+def test_docling_template_field_extractor_keeps_missing_without_deterministic_header() -> None:
+    """验证无确定性表头时不按位置猜测业绩字段。"""
+
+    cells = (
+        _cell(150, 1, 0, "过去一年"),
+        _cell(151, 1, 1, "12.34%"),
+    )
+    document = CandidateRepresentationDocument(
+        schema_version="candidate_annual_report_representation.v1",
+        identity=_identity(),
+        status=CandidateRepresentationStatus(),
+        summary_metrics={},
+        sections=(),
+        text_blocks=(),
+        tables=(_table("no-header-performance", "§3", cells),),
+        route_failures=(),
+        projection_issues=(),
+        blocked_claims=(),
+    )
+
+    result = extract_docling_template_fields(
+        document,
+        target_field_paths=("nav_benchmark_performance.nav_growth_rate",),
+    )
+    field = result.fields[0]
+
+    assert field.extraction_mode == "missing"
+    assert field.value is None
+    assert field.anchors == ()
+
+
+def test_docling_template_field_extractor_ignores_structural_column_header_without_labels() -> None:
+    """验证结构性 column_header 标记不能单独触发表头派生。"""
+
+    cells = (
+        _cell(152, 0, 0, "过去一年"),
+        _cell(153, 0, 1, "12.34%"),
+    )
+    document = CandidateRepresentationDocument(
+        schema_version="candidate_annual_report_representation.v1",
+        identity=_identity(),
+        status=CandidateRepresentationStatus(),
+        summary_metrics={},
+        sections=(),
+        text_blocks=(),
+        tables=(_table("structural-header-only-performance", "§3", cells),),
+        route_failures=(),
+        projection_issues=(),
+        blocked_claims=(),
+    )
+
+    result = extract_docling_template_fields(
+        document,
+        target_field_paths=("nav_benchmark_performance.nav_growth_rate",),
+    )
+    field = result.fields[0]
+
+    assert field.extraction_mode == "missing"
+    assert field.value is None
+    assert field.anchors == ()
+
+
+def test_docling_template_field_extractor_keeps_missing_for_ambiguous_performance_header() -> None:
+    """验证重复目标表头时不取第一个匹配列。"""
+
+    cells = (
+        _cell(160, 0, 0, "阶段"),
+        _cell(161, 0, 1, "净值增长率"),
+        _cell(162, 0, 2, "净值增长率"),
+        _cell(163, 1, 0, "过去一年"),
+        _cell(164, 1, 1, "12.34%"),
+        _cell(165, 1, 2, "13.57%"),
+    )
+    document = CandidateRepresentationDocument(
+        schema_version="candidate_annual_report_representation.v1",
+        identity=_identity(),
+        status=CandidateRepresentationStatus(),
+        summary_metrics={},
+        sections=(),
+        text_blocks=(),
+        tables=(_table("ambiguous-performance", "§3", cells),),
+        route_failures=(),
+        projection_issues=(),
+        blocked_claims=(),
+    )
+
+    result = extract_docling_template_fields(
+        document,
+        target_field_paths=("nav_benchmark_performance.nav_growth_rate",),
+    )
+    field = result.fields[0]
+
+    assert field.extraction_mode == "missing"
+    assert field.value is None
+    assert field.anchors == ()
+
+
 def test_candidate_template_field_anchor_rejects_non_candidate_note() -> None:
     """验证候选锚点 note 必须显式标记 candidate-only。"""
 
