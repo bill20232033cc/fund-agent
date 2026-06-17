@@ -1,0 +1,399 @@
+{
+  "aggregate": {
+    "anchor_count": 0,
+    "blocked_input_count": 1,
+    "blocked_slot_count": 0,
+    "blocked_slot_ratio": 0.0,
+    "direct_coverage_ratio": 0.0,
+    "direct_slot_count": 0,
+    "missing_ratio": 1.0,
+    "missing_slot_count": 92,
+    "runnable_sample_count": 4,
+    "target_field_slot_count": 92
+  },
+  "blocked_inputs": [
+    {
+      "document_year": 2025,
+      "fund_code": "004393",
+      "path": "reports/representation-json/004393_2025_docling_full.json",
+      "reason": "unsupported candidate representation schema_version",
+      "reason_type": "ValueError",
+      "sample_id": "S1",
+      "status": "blocked"
+    }
+  ],
+  "candidate_only": true,
+  "extractor_schema_version": "docling_template_field_candidates.v1",
+  "interpretation": {
+    "baseline_promotion_supported": false,
+    "direct_fields_are_correctness_proof": false,
+    "missing_fields_prove_source_absence": false,
+    "production_integration_supported": false
+  },
+  "per_field": [
+    {
+      "direct_count": 0,
+      "field_path": "basic_identity.fund_name",
+      "missing_count": 4,
+      "sample_count": 4
+    },
+    {
+      "direct_count": 0,
+      "field_path": "basic_identity.fund_code",
+      "missing_count": 4,
+      "sample_count": 4
+    },
+    {
+      "direct_count": 0,
+      "field_path": "basic_identity.management_company",
+      "missing_count": 4,
+      "sample_count": 4
+    },
+    {
+      "direct_count": 0,
+      "field_path": "basic_identity.custodian",
+      "missing_count": 4,
+      "sample_count": 4
+    },
+    {
+      "direct_count": 0,
+      "field_path": "product_profile.investment_objective",
+      "missing_count": 4,
+      "sample_count": 4
+    },
+    {
+      "direct_count": 0,
+      "field_path": "product_profile.investment_scope",
+      "missing_count": 4,
+      "sample_count": 4
+    },
+    {
+      "direct_count": 0,
+      "field_path": "benchmark.benchmark_text",
+      "missing_count": 4,
+      "sample_count": 4
+    },
+    {
+      "direct_count": 0,
+      "field_path": "risk_characteristic_text.risk_characteristic_text",
+      "missing_count": 4,
+      "sample_count": 4
+    },
+    {
+      "direct_count": 0,
+      "field_path": "fee_schedule.management_fee",
+      "missing_count": 4,
+      "sample_count": 4
+    },
+    {
+      "direct_count": 0,
+      "field_path": "fee_schedule.custody_fee",
+      "missing_count": 4,
+      "sample_count": 4
+    },
+    {
+      "direct_count": 0,
+      "field_path": "nav_benchmark_performance.nav_growth_rate",
+      "missing_count": 4,
+      "sample_count": 4
+    },
+    {
+      "direct_count": 0,
+      "field_path": "nav_benchmark_performance.benchmark_return_rate",
+      "missing_count": 4,
+      "sample_count": 4
+    },
+    {
+      "direct_count": 0,
+      "field_path": "tracking_error.value_text",
+      "missing_count": 4,
+      "sample_count": 4
+    },
+    {
+      "direct_count": 0,
+      "field_path": "portfolio_managers",
+      "missing_count": 4,
+      "sample_count": 4
+    },
+    {
+      "direct_count": 0,
+      "field_path": "turnover_rate",
+      "missing_count": 4,
+      "sample_count": 4
+    },
+    {
+      "direct_count": 0,
+      "field_path": "manager_alignment.manager_holding_range",
+      "missing_count": 4,
+      "sample_count": 4
+    },
+    {
+      "direct_count": 0,
+      "field_path": "holdings_snapshot.top_holdings",
+      "missing_count": 4,
+      "sample_count": 4
+    },
+    {
+      "direct_count": 0,
+      "field_path": "holdings_snapshot.bond_top_holdings",
+      "missing_count": 4,
+      "sample_count": 4
+    },
+    {
+      "direct_count": 0,
+      "field_path": "holdings_snapshot.target_fund_holdings",
+      "missing_count": 4,
+      "sample_count": 4
+    },
+    {
+      "direct_count": 0,
+      "field_path": "manager_strategy_text",
+      "missing_count": 4,
+      "sample_count": 4
+    },
+    {
+      "direct_count": 0,
+      "field_path": "holder_structure",
+      "missing_count": 4,
+      "sample_count": 4
+    },
+    {
+      "direct_count": 0,
+      "field_path": "share_change",
+      "missing_count": 4,
+      "sample_count": 4
+    },
+    {
+      "direct_count": 0,
+      "field_path": "bond_risk_evidence",
+      "missing_count": 4,
+      "sample_count": 4
+    }
+  ],
+  "release_readiness": "NOT_READY",
+  "rows": [
+    {
+      "anchor_count": 0,
+      "blocked_count": 0,
+      "blocked_field_paths": [],
+      "candidate_status": "not_proven",
+      "diagnostics": {
+        "blocked_field_count": 0,
+        "direct_field_count": 0,
+        "missing_field_count": 23,
+        "target_field_count": 23
+      },
+      "direct_count": 0,
+      "direct_field_paths": [],
+      "document_year": 2025,
+      "field_correctness_status": "not_proven",
+      "fund_code": "004393",
+      "missing_count": 23,
+      "missing_field_paths": [
+        "basic_identity.fund_name",
+        "basic_identity.fund_code",
+        "basic_identity.management_company",
+        "basic_identity.custodian",
+        "product_profile.investment_objective",
+        "product_profile.investment_scope",
+        "benchmark.benchmark_text",
+        "risk_characteristic_text.risk_characteristic_text",
+        "fee_schedule.management_fee",
+        "fee_schedule.custody_fee",
+        "nav_benchmark_performance.nav_growth_rate",
+        "nav_benchmark_performance.benchmark_return_rate",
+        "tracking_error.value_text",
+        "portfolio_managers",
+        "turnover_rate",
+        "manager_alignment.manager_holding_range",
+        "holdings_snapshot.top_holdings",
+        "holdings_snapshot.bond_top_holdings",
+        "holdings_snapshot.target_fund_holdings",
+        "manager_strategy_text",
+        "holder_structure",
+        "share_change",
+        "bond_risk_evidence"
+      ],
+      "production_parser_replacement_status": "not_authorized",
+      "sample_id": "S1",
+      "source_kind": "docling_pdf_candidate",
+      "source_path": "reports/representation-json/004393_2025_docling_current_envelope.json",
+      "source_truth_status": "not_proven",
+      "target_field_count": 23
+    },
+    {
+      "anchor_count": 0,
+      "blocked_count": 0,
+      "blocked_field_paths": [],
+      "candidate_status": "not_proven",
+      "diagnostics": {
+        "blocked_field_count": 0,
+        "direct_field_count": 0,
+        "missing_field_count": 23,
+        "target_field_count": 23
+      },
+      "direct_count": 0,
+      "direct_field_paths": [],
+      "document_year": 2024,
+      "field_correctness_status": "not_proven",
+      "fund_code": "006597",
+      "missing_count": 23,
+      "missing_field_paths": [
+        "basic_identity.fund_name",
+        "basic_identity.fund_code",
+        "basic_identity.management_company",
+        "basic_identity.custodian",
+        "product_profile.investment_objective",
+        "product_profile.investment_scope",
+        "benchmark.benchmark_text",
+        "risk_characteristic_text.risk_characteristic_text",
+        "fee_schedule.management_fee",
+        "fee_schedule.custody_fee",
+        "nav_benchmark_performance.nav_growth_rate",
+        "nav_benchmark_performance.benchmark_return_rate",
+        "tracking_error.value_text",
+        "portfolio_managers",
+        "turnover_rate",
+        "manager_alignment.manager_holding_range",
+        "holdings_snapshot.top_holdings",
+        "holdings_snapshot.bond_top_holdings",
+        "holdings_snapshot.target_fund_holdings",
+        "manager_strategy_text",
+        "holder_structure",
+        "share_change",
+        "bond_risk_evidence"
+      ],
+      "production_parser_replacement_status": "not_authorized",
+      "sample_id": "S4",
+      "source_kind": "docling_pdf_candidate",
+      "source_path": "reports/representation-json/006597_2024_docling_full.json",
+      "source_truth_status": "not_proven",
+      "target_field_count": 23
+    },
+    {
+      "anchor_count": 0,
+      "blocked_count": 0,
+      "blocked_field_paths": [],
+      "candidate_status": "not_proven",
+      "diagnostics": {
+        "blocked_field_count": 0,
+        "direct_field_count": 0,
+        "missing_field_count": 23,
+        "target_field_count": 23
+      },
+      "direct_count": 0,
+      "direct_field_paths": [],
+      "document_year": 2024,
+      "field_correctness_status": "not_proven",
+      "fund_code": "017641",
+      "missing_count": 23,
+      "missing_field_paths": [
+        "basic_identity.fund_name",
+        "basic_identity.fund_code",
+        "basic_identity.management_company",
+        "basic_identity.custodian",
+        "product_profile.investment_objective",
+        "product_profile.investment_scope",
+        "benchmark.benchmark_text",
+        "risk_characteristic_text.risk_characteristic_text",
+        "fee_schedule.management_fee",
+        "fee_schedule.custody_fee",
+        "nav_benchmark_performance.nav_growth_rate",
+        "nav_benchmark_performance.benchmark_return_rate",
+        "tracking_error.value_text",
+        "portfolio_managers",
+        "turnover_rate",
+        "manager_alignment.manager_holding_range",
+        "holdings_snapshot.top_holdings",
+        "holdings_snapshot.bond_top_holdings",
+        "holdings_snapshot.target_fund_holdings",
+        "manager_strategy_text",
+        "holder_structure",
+        "share_change",
+        "bond_risk_evidence"
+      ],
+      "production_parser_replacement_status": "not_authorized",
+      "sample_id": "S5",
+      "source_kind": "docling_pdf_candidate",
+      "source_path": "reports/representation-json/017641_2024_docling_full.json",
+      "source_truth_status": "not_proven",
+      "target_field_count": 23
+    },
+    {
+      "anchor_count": 0,
+      "blocked_count": 0,
+      "blocked_field_paths": [],
+      "candidate_status": "not_proven",
+      "diagnostics": {
+        "blocked_field_count": 0,
+        "direct_field_count": 0,
+        "missing_field_count": 23,
+        "target_field_count": 23
+      },
+      "direct_count": 0,
+      "direct_field_paths": [],
+      "document_year": 2024,
+      "field_correctness_status": "not_proven",
+      "fund_code": "110020",
+      "missing_count": 23,
+      "missing_field_paths": [
+        "basic_identity.fund_name",
+        "basic_identity.fund_code",
+        "basic_identity.management_company",
+        "basic_identity.custodian",
+        "product_profile.investment_objective",
+        "product_profile.investment_scope",
+        "benchmark.benchmark_text",
+        "risk_characteristic_text.risk_characteristic_text",
+        "fee_schedule.management_fee",
+        "fee_schedule.custody_fee",
+        "nav_benchmark_performance.nav_growth_rate",
+        "nav_benchmark_performance.benchmark_return_rate",
+        "tracking_error.value_text",
+        "portfolio_managers",
+        "turnover_rate",
+        "manager_alignment.manager_holding_range",
+        "holdings_snapshot.top_holdings",
+        "holdings_snapshot.bond_top_holdings",
+        "holdings_snapshot.target_fund_holdings",
+        "manager_strategy_text",
+        "holder_structure",
+        "share_change",
+        "bond_risk_evidence"
+      ],
+      "production_parser_replacement_status": "not_authorized",
+      "sample_id": "S6",
+      "source_kind": "docling_pdf_candidate",
+      "source_path": "reports/representation-json/110020_2024_docling_full.json",
+      "source_truth_status": "not_proven",
+      "target_field_count": 23
+    }
+  ],
+  "schema_version": "docling_dedicated_extractor_candidate_field_no_live_evidence.v1",
+  "source_truth_status": "not_proven",
+  "target_field_paths": [
+    "basic_identity.fund_name",
+    "basic_identity.fund_code",
+    "basic_identity.management_company",
+    "basic_identity.custodian",
+    "product_profile.investment_objective",
+    "product_profile.investment_scope",
+    "benchmark.benchmark_text",
+    "risk_characteristic_text.risk_characteristic_text",
+    "fee_schedule.management_fee",
+    "fee_schedule.custody_fee",
+    "nav_benchmark_performance.nav_growth_rate",
+    "nav_benchmark_performance.benchmark_return_rate",
+    "tracking_error.value_text",
+    "portfolio_managers",
+    "turnover_rate",
+    "manager_alignment.manager_holding_range",
+    "holdings_snapshot.top_holdings",
+    "holdings_snapshot.bond_top_holdings",
+    "holdings_snapshot.target_fund_holdings",
+    "manager_strategy_text",
+    "holder_structure",
+    "share_change",
+    "bond_risk_evidence"
+  ]
+}
