@@ -1,0 +1,40 @@
+{
+  "schema_version": "fund-agent.small_golden_set_manual_source_payload.v1",
+  "provider": "user_provided",
+  "fund_code": "017641",
+  "report_year": 2024,
+  "document_kind": "annual_report",
+  "official_search_url": "http://eid.csrc.gov.cn/fund/disclose/advanced_search.html?queryType=1&reportType=FB010&fundCode=017641",
+  "official_fund_detail_url": "unknown",
+  "official_document_url": "https://www.cifm.com/fund/017641/announce/202503/W020250331321243719367.pdf",
+  "official_document_id": "cifm:W020250331321243719367",
+  "official_announcement_id": "unknown",
+  "source_document_title": "摩根标普500指数型发起式证券投资基金(QDII)2024年年度报告",
+  "source_publisher": "摩根基金管理（中国）有限公司",
+  "source_registry": "摩根基金官网 / CIFM；EID search locator provided, EID document id unknown",
+  "publication_date": "2025-03-31",
+  "fund_name": "摩根标普500指数型发起式证券投资基金(QDII)",
+  "share_class": {
+    "target": "人民币A",
+    "target_code": "017641",
+    "other_classes": [
+      "人民币C=019305"
+    ]
+  },
+  "user_provided_pdf_sha256": "not_provided",
+  "identity_anchor": {
+    "registry_metadata": {
+      "source": "摩根基金官网 PDF / announcement path",
+      "evidence": "公告标题=摩根标普500指数型发起式证券投资基金(QDII)2024年年度报告；公告路径日期=202503"
+    },
+    "pdf_title_page": {
+      "source": "official PDF title page",
+      "evidence": "标题=摩根标普500指数型发起式证券投资基金(QDII)2024年年度报告；基金管理人=摩根基金管理（中国）有限公司"
+    },
+    "pdf_profile": {
+      "source": "§2 基金简介 / 2.1 基金基本情况",
+      "evidence": "基金主代码=017641；基金名称=摩根标普500指数型发起式证券投资基金(QDII)；下属分级基金交易代码 人民币A=017641，人民币C=019305"
+    }
+  },
+  "notes": "候选记录；待 manual evidence intake gate 复核。QDII row 仍不得自动转 promotion-ready。"
+}

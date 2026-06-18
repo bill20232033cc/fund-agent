@@ -1,0 +1,41 @@
+{
+  "schema_version": "fund-agent.small_golden_set_manual_source_payload.v1",
+  "provider": "user_provided",
+  "fund_code": "110020",
+  "report_year": 2024,
+  "document_kind": "annual_report",
+  "official_search_url": "http://eid.csrc.gov.cn/fund/disclose/advanced_search.html?queryType=1&reportType=FB010&fundCode=110020",
+  "official_fund_detail_url": "unknown",
+  "official_document_url": "https://cdn.efunds.com.cn/owch/data/bulletin/20250331/%E6%98%93%E6%96%B9%E8%BE%BE%E6%B2%AA%E6%B7%B1300%E4%BA%A4%E6%98%93%E5%9E%8B%E5%BC%80%E6%94%BE%E5%BC%8F%E6%8C%87%E6%95%B0%E5%8F%91%E8%B5%B7%E5%BC%8F%E8%AF%81%E5%88%B8%E6%8A%95%E8%B5%84%E5%9F%BA%E9%87%91%E8%81%94%E6%8E%A5%E5%9F%BA%E9%87%912024%E5%B9%B4%E5%B9%B4%E5%BA%A6%E6%8A%A5%E5%91%8A.pdf",
+  "official_document_id": "efunds-bulletin-20250331-annual-report-110020",
+  "official_announcement_id": "unknown",
+  "source_document_title": "易方达沪深300交易型开放式指数发起式证券投资基金联接基金2024年年度报告",
+  "source_publisher": "易方达基金管理有限公司",
+  "source_registry": "易方达基金官网 CDN；EID search locator provided, EID document id unknown",
+  "publication_date": "2025-03-31",
+  "fund_name": "易方达沪深300交易型开放式指数发起式证券投资基金联接基金",
+  "share_class": {
+    "target": "A",
+    "target_code": "110020",
+    "other_classes": [
+      "C=007339",
+      "Y=022928"
+    ]
+  },
+  "user_provided_pdf_sha256": "not_provided",
+  "identity_anchor": {
+    "registry_metadata": {
+      "source": "易方达基金官网 PDF / bulletin path",
+      "evidence": "公告标题=易方达沪深300交易型开放式指数发起式证券投资基金联接基金2024年年度报告；公告路径日期=20250331"
+    },
+    "pdf_title_page": {
+      "source": "official PDF title page",
+      "evidence": "标题=易方达沪深300交易型开放式指数发起式证券投资基金联接基金2024年年度报告；基金管理人=易方达基金管理有限公司"
+    },
+    "pdf_profile": {
+      "source": "§2 基金简介 / 2.1 基金基本情况",
+      "evidence": "基金主代码=110020；基金名称=易方达沪深300交易型开放式指数发起式证券投资基金联接基金；下属分级基金交易代码 A=110020，C=007339，Y=022928"
+    }
+  },
+  "notes": "候选记录；待 manual evidence intake gate 复核。Y 类为 2024-12-13 起增设，字段级取值时需区分份额列。"
+}

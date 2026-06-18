@@ -1,0 +1,62 @@
+{
+  "blocked_claims": [
+    "not_raw_xml_download_proof",
+    "not_field_correctness_proof",
+    "not_taxonomy_compatibility_proof",
+    "not_source_truth",
+    "not_readiness_proof",
+    "no_repository_behavior_change",
+    "no_parser_replacement"
+  ],
+  "candidate_status": "not_proven",
+  "document_year": 2025,
+  "failure_taxonomy": {
+    "canonical_source_failures": [
+      "not_found",
+      "unavailable",
+      "schema_drift",
+      "identity_mismatch",
+      "integrity_error"
+    ],
+    "route_failures": [
+      {
+        "failure_code": "eid_html_current_envelope_mapping_deferred",
+        "reason": "004393 route-specific EID HTML render JSON requires separate EID HTML Candidate Envelope Mapping Gate before table-bearing current envelope output",
+        "source_kind": "eid_xbrl_html_render_candidate"
+      }
+    ]
+  },
+  "field_correctness_status": "not_proven",
+  "fund_code": "004393",
+  "headings": [],
+  "input_artifact": {
+    "accepted_sha256": "63b5575b8591f572fa31cb6f359f70ad855460baa0adff383882bf27a0e2e22b",
+    "path": null,
+    "provenance_judgment_path": "docs/reviews/docling-baseline-qualification-004393-current-envelope-artifact-refresh-plan-controller-judgment-20260615.md"
+  },
+  "paragraphs": [],
+  "production_parser_replacement_status": "not_authorized",
+  "report_type": "annual_report",
+  "sample_id": "S1",
+  "schema_version": "candidate_annual_report_representation.v1",
+  "sections": [],
+  "source_kind": "eid_xbrl_html_render_candidate",
+  "source_truth_status": "not_proven",
+  "summary_metrics": {
+    "has_bbox": false,
+    "has_content_hash": false,
+    "has_page_number": false,
+    "has_section_tree": false,
+    "has_table_cell_locator": false,
+    "has_url_or_source_locator": false,
+    "heading_count": 0,
+    "page_count": 0,
+    "paragraph_count": 0,
+    "section_count": 0,
+    "table_cell_count": 0,
+    "table_count": 0
+  },
+  "tables": [],
+  "taxonomy_compatibility_status": "not_proven",
+  "text_blocks": []
+}

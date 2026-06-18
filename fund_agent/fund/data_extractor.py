@@ -136,6 +136,48 @@ def _default_bond_risk_evidence_field() -> ExtractedField[BondRiskEvidenceValue]
     )
 
 
+def _default_portfolio_managers_field() -> ExtractedField[dict[str, object]]:
+    """构造默认基金经理任期列表缺失字段，见模板第 1/3 章。
+
+    Args:
+        无。
+
+    Returns:
+        未执行生产抽取时使用的显式缺失字段。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return ExtractedField(
+        value=None,
+        anchors=(),
+        extraction_mode="missing",
+        note="portfolio_managers_not_extracted",
+    )
+
+
+def _default_risk_characteristic_text_field() -> ExtractedField[dict[str, object]]:
+    """构造默认风险收益特征文本缺失字段，见模板第 1/6 章。
+
+    Args:
+        无。
+
+    Returns:
+        未执行生产抽取时使用的显式缺失字段。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return ExtractedField(
+        value=None,
+        anchors=(),
+        extraction_mode="missing",
+        note="risk_characteristic_text_not_extracted",
+    )
+
+
 @dataclass(frozen=True, slots=True)
 class StructuredFundDataBundle:
     """P1 结构化基金数据包。
@@ -157,6 +199,8 @@ class StructuredFundDataBundle:
         manager_strategy_text: 管理人报告策略原文。
         holdings_snapshot: 前十大重仓与行业分布。
         holder_structure: 机构/个人持有人结构。
+        portfolio_managers: 基金经理任期列表，见模板第 1 章“产品本质”和第 3 章“基金经理画像”。
+        risk_characteristic_text: 风险收益特征文本，见模板第 1 章“产品本质”和第 6 章“核心风险”。
         bond_risk_evidence: 债券基金模板第 6 章“核心风险”七组证据；非债券基金为不适用缺失字段。
         nav_data: 净值数据结果。
         source_provenance: 年报公共来源 provenance，不暴露 `None`。
@@ -184,6 +228,12 @@ class StructuredFundDataBundle:
     )
     bond_risk_evidence: ExtractedField[BondRiskEvidenceValue] = field(
         default_factory=_default_bond_risk_evidence_field
+    )
+    portfolio_managers: ExtractedField[dict[str, object]] = field(
+        default_factory=_default_portfolio_managers_field
+    )
+    risk_characteristic_text: ExtractedField[dict[str, object]] = field(
+        default_factory=_default_risk_characteristic_text_field
     )
 
 
@@ -290,6 +340,8 @@ class FundDataExtractor:
             nav_data=nav_data,
             source_provenance=project_public_source_provenance(report.metadata.source),
             bond_risk_evidence=bond_risk_evidence,
+            portfolio_managers=manager_ownership_result.portfolio_managers,
+            risk_characteristic_text=profile_result.risk_characteristic_text,
         )
 
 

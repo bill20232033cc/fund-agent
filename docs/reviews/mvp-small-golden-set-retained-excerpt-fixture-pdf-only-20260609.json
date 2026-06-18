@@ -1,0 +1,461 @@
+{
+  "schema_version": "fund-agent.small_golden_set_retained_excerpt_fixture.v1",
+  "gate": "retained excerpt fixture gate for accepted rows only",
+  "classification": "heavy",
+  "date": "2026-06-09",
+  "source_identity_checkpoint": "866a12b",
+  "local_pdf_directory": "/Users/maomao/Downloads/基金年报",
+  "access_boundary": {
+    "local_pdf_read_performed": true,
+    "sha256_computed": true,
+    "pdf_text_extraction_tool": "pdfplumber via uv run python",
+    "network_access_performed": false,
+    "fund_document_repository_live_acquisition_performed": false,
+    "fallback_invocation_performed": false,
+    "extractor_modified": false,
+    "fixture_projection_performed": false,
+    "exact_numeric_correctness_accepted": false,
+    "golden_readiness_promotion_performed": false
+  },
+  "retention_boundary": {
+    "full_pdf_retained": false,
+    "full_page_text_retained": false,
+    "excerpt_policy": "Retain only short field-level excerpts needed to anchor expected values.",
+    "next_unlock": "Rows and fields below may be used to write row-field extractor correctness tests; extractor fixes remain a later gate after same-source failing tests."
+  },
+  "rows": [
+    {
+      "fund_code": "004393",
+      "report_year": 2024,
+      "document_kind": "annual_report",
+      "pdf_file": "/Users/maomao/Downloads/基金年报/安信企业价值优选混合型证券投资基金2024年年度报告.pdf",
+      "pdf_sha256": "bc6b0a1ae2f709f4cb4fa501f88ba9c19aa0f37d36758160577c57222e9860bf",
+      "source_document_title": "安信企业价值优选混合型证券投资基金2024年年度报告",
+      "fields": {
+        "identity": {
+          "expected": {
+            "fund_name": "安信企业价值优选混合型证券投资基金",
+            "fund_code": "004393",
+            "target_share_class": "A",
+            "other_share_classes": {
+              "C": "020964"
+            }
+          },
+          "anchor": "PDF p5 §2.1 基金基本情况",
+          "excerpt": "基金名称=安信企业价值优选混合型证券投资基金；基金主代码=004393；A=004393；C=020964"
+        },
+        "benchmark": {
+          "expected": "沪深300指数收益率×60%+恒生指数收益率（经汇率调整后）×20%+中债综合（全价）指数收益率×20%",
+          "anchor": "PDF p5 §2.2 基金产品说明",
+          "excerpt": "业绩比较基准=沪深300指数收益率×60%+恒生指数收益率（经汇率调整后）×20%+中债综合（全价）指数收益率×20%"
+        },
+        "manager": {
+          "expected": [
+            {
+              "name": "张明",
+              "role": "基金经理",
+              "start_date": "2022-08-08"
+            }
+          ],
+          "anchor": "PDF p13 §4.1.2 基金经理简介",
+          "excerpt": "张明；本基金的基金经理；任职日期=2022年8月8日"
+        },
+        "scale": {
+          "expected": {
+            "target_share_net_asset_cny": "274,751,595.74",
+            "target_share_units": "149,565,740.00"
+          },
+          "anchor": "PDF p5 §2.1 and p7 §3.1",
+          "excerpt": "A份额总额=149,565,740.00份；期末基金资产净值=274,751,595.74"
+        },
+        "fee": {
+          "expected": {
+            "management_fee_rate": "1.20%",
+            "custodian_fee_rate": "0.20%",
+            "target_share_sales_service_fee_rate": "0%",
+            "c_share_sales_service_fee_rate": "0.40%"
+          },
+          "anchor": "PDF p39-p40 §7.4.10.2",
+          "excerpt": "管理费按1.20%计提；托管费按0.20%计提；A类不收销售服务费，C类0.40%"
+        },
+        "return": {
+          "expected": {
+            "target_share_one_year_nav_growth": "17.32%",
+            "one_year_benchmark_return": "14.45%"
+          },
+          "anchor": "PDF p8 §3.2.1",
+          "excerpt": "A类过去一年份额净值增长率=17.32%；业绩比较基准收益率=14.45%"
+        },
+        "holdings": {
+          "expected": {
+            "top_stock_table_row": {
+              "code": "00939",
+              "name": "建设银行",
+              "fair_value_cny": "18,182,239.78",
+              "net_asset_ratio": "6.08%"
+            }
+          },
+          "anchor": "PDF p55 §8.3 股票投资明细",
+          "excerpt": "00939 建设银行；公允价值=18,182,239.78；占基金资产净值比例=6.08%"
+        },
+        "risk": {
+          "expected": "混合型基金；高于债券型和货币市场基金，低于股票型基金；含港股通特有风险",
+          "anchor": "PDF p5 §2.2 基金产品说明",
+          "excerpt": "预期收益及预期风险高于债券型基金和货币市场基金，但低于股票型基金；还可通过港股通投资"
+        }
+      }
+    },
+    {
+      "fund_code": "004194",
+      "report_year": 2024,
+      "document_kind": "annual_report",
+      "pdf_file": "/Users/maomao/Downloads/基金年报/招商中证1000指数增强型证券投资基金2024年年度报告.pdf",
+      "pdf_sha256": "c5b8efd8a4d57265e5ce34ff4a7426a259da19401638f859467b2ee76bb9d976",
+      "source_document_title": "招商中证1000指数增强型证券投资基金2024年年度报告",
+      "fields": {
+        "identity": {
+          "expected": {
+            "fund_name": "招商中证1000指数增强型证券投资基金",
+            "fund_code": "004194",
+            "target_share_class": "A",
+            "other_share_classes": {
+              "C": "004195"
+            }
+          },
+          "anchor": "PDF p5 §2.1 基金基本情况",
+          "excerpt": "基金名称=招商中证1000指数增强型证券投资基金；基金主代码=004194；A=004194；C=004195"
+        },
+        "benchmark": {
+          "expected": "中证1000指数收益率×95%+同期银行活期存款利率（税后）×5%",
+          "anchor": "PDF p5 §2.2 基金产品说明",
+          "excerpt": "业绩比较基准=中证1000指数收益率×95%+同期银行活期存款利率（税后）×5%"
+        },
+        "manager": {
+          "expected": [
+            {
+              "name": "蔡振",
+              "role": "基金经理",
+              "start_date": "2021-11-05"
+            },
+            {
+              "name": "王平",
+              "role": "基金经理（已离任）",
+              "start_date": "2017-03-03",
+              "end_date": "2024-12-31"
+            }
+          ],
+          "anchor": "PDF p10-p11 §4.1.2 基金经理简介",
+          "excerpt": "蔡振，任职日期=2021年11月5日；王平，离任日期=2024年12月31日"
+        },
+        "scale": {
+          "expected": {
+            "target_share_net_asset_cny": "974,836,778.19"
+          },
+          "anchor": "PDF p7 §3.1",
+          "excerpt": "招商中证1000指数增强A；期末基金资产净值=974,836,778.19"
+        },
+        "fee": {
+          "expected": {
+            "management_fee_rate": "1.20%",
+            "custodian_fee_rate": "0.15%",
+            "target_share_sales_service_fee_rate": "0%",
+            "c_share_sales_service_fee_rate": "0.40%"
+          },
+          "anchor": "PDF p39-p40 §7.4.10.2",
+          "excerpt": "管理人报酬按1.20%计提；托管费按0.15%计提；C类销售服务费率0.40%"
+        },
+        "return": {
+          "expected": {
+            "target_share_one_year_nav_growth": "6.88%",
+            "one_year_benchmark_return": "1.41%"
+          },
+          "anchor": "PDF p7 §3.2.1",
+          "excerpt": "A类过去一年份额净值增长率=6.88%；业绩比较基准收益率=1.41%"
+        },
+        "holdings": {
+          "expected": {
+            "top_index_stock_table_row": {
+              "code": "600428",
+              "name": "中远海特",
+              "fair_value_cny": "16,125,700.00",
+              "net_asset_ratio": "1.02%"
+            }
+          },
+          "anchor": "PDF p55 §8.3.1 指数投资股票明细",
+          "excerpt": "600428 中远海特；公允价值=16,125,700.00；占基金资产净值比例=1.02%"
+        },
+        "risk": {
+          "expected": "股票指数增强型基金；较高风险、较高预期收益",
+          "anchor": "PDF p5 §2.2 基金产品说明",
+          "excerpt": "股票指数增强型基金，属于较高风险、较高预期收益的基金品种"
+        }
+      }
+    },
+    {
+      "fund_code": "006597",
+      "report_year": 2024,
+      "document_kind": "annual_report",
+      "pdf_file": "/Users/maomao/Downloads/基金年报/国泰利享中短债债券型证券投资基金2024年年度报告.pdf",
+      "pdf_sha256": "85c08ef235b06f5dd8867040193b547c7a91da3829c86eabf2817bbf1934e982",
+      "source_document_title": "国泰利享中短债债券型证券投资基金2024年年度报告",
+      "fields": {
+        "identity": {
+          "expected": {
+            "fund_name": "国泰利享中短债债券型证券投资基金",
+            "fund_code": "006597",
+            "target_share_class": "A",
+            "other_share_classes": {
+              "C": "006598",
+              "E": "014217",
+              "F": "022176"
+            }
+          },
+          "anchor": "PDF p5 §2.1 基金基本情况",
+          "excerpt": "基金名称=国泰利享中短债债券型证券投资基金；基金主代码=006597；A=006597；C=006598；E=014217；F=022176"
+        },
+        "benchmark": {
+          "expected": "中债总财富（1-3年）指数收益率*80%＋一年期定期存款利率(税后)*20%",
+          "anchor": "PDF p5 §2.2 基金产品说明",
+          "excerpt": "业绩比较基准=中债总财富（1-3年）指数收益率*80%＋一年期定期存款利率(税后)*20%"
+        },
+        "manager": {
+          "expected": [
+            {
+              "name": "陶然",
+              "role": "基金经理",
+              "start_date": "2020-07-07"
+            },
+            {
+              "name": "丁士恒",
+              "role": "基金经理",
+              "start_date": "2020-05-15"
+            }
+          ],
+          "anchor": "PDF p18 §4.1.2 基金经理简介",
+          "excerpt": "陶然，任职日期=2020-07-07；丁士恒，任职日期=2020-05-15"
+        },
+        "scale": {
+          "expected": {
+            "target_share_net_asset_cny": "6,854,914,154.93",
+            "target_share_units": "5,711,224,267.09"
+          },
+          "anchor": "PDF p5 and p7 §3.1",
+          "excerpt": "A份额总额=5,711,224,267.09份；期末基金资产净值=6,854,914,154.93"
+        },
+        "fee": {
+          "expected": {
+            "management_fee_rate": "0.20%",
+            "custodian_fee_rate": "0.05%",
+            "target_share_sales_service_fee_rate": "0%",
+            "c_share_sales_service_fee_rate": "0.20%",
+            "e_share_sales_service_fee_rate": "0.30%",
+            "f_share_sales_service_fee_rate": "0.01%"
+          },
+          "anchor": "PDF p48-p49 §7.4.10.2",
+          "excerpt": "管理人报酬按0.20%计提；托管费按0.05%计提；C类0.20%；E类0.30%；F类0.01%"
+        },
+        "return": {
+          "expected": {
+            "target_share_one_year_nav_growth": "2.57%",
+            "one_year_benchmark_return": "3.42%"
+          },
+          "anchor": "PDF p11 §3.2.1 / p21 §4.4.2",
+          "excerpt": "A类本报告期内净值增长率=2.57%；同期业绩比较基准收益率=3.42%"
+        },
+        "holdings": {
+          "expected": {
+            "top_bond_table_row": {
+              "code": "230214",
+              "name": "23国开14",
+              "fair_value_cny": "1,133,300,622.22",
+              "net_asset_ratio": "9.00%"
+            }
+          },
+          "anchor": "PDF p61 §8.6 前五名债券投资明细",
+          "excerpt": "230214 23国开14；公允价值=1,133,300,622.22；占基金资产净值比例=9.00%"
+        },
+        "risk": {
+          "expected": "债券型基金；较低预期风险和预期收益；操作中强调信用风险和流动性风险控制",
+          "anchor": "PDF p5 §2.2 and p21 §4.4.1",
+          "excerpt": "债券型基金，属于较低预期风险和预期收益；严控组合信用风险和流动性风险"
+        }
+      }
+    },
+    {
+      "fund_code": "110020",
+      "report_year": 2024,
+      "document_kind": "annual_report",
+      "pdf_file": "/Users/maomao/Downloads/基金年报/易方达沪深300交易型开放式指数发起式证券投资基金联接基金2024年年度报告.pdf",
+      "pdf_sha256": "307210ba3e55cf611334cebc3c0103824cf7c3352598522f257e741220dd6790",
+      "source_document_title": "易方达沪深300交易型开放式指数发起式证券投资基金联接基金2024年年度报告",
+      "fields": {
+        "identity": {
+          "expected": {
+            "fund_name": "易方达沪深300交易型开放式指数发起式证券投资基金联接基金",
+            "fund_code": "110020",
+            "target_share_class": "A",
+            "other_share_classes": {
+              "C": "007339",
+              "Y": "022928"
+            }
+          },
+          "anchor": "PDF p5 §2.1 基金基本情况",
+          "excerpt": "基金主代码=110020；下属分级基金交易代码 A=110020，C=007339，Y=022928"
+        },
+        "benchmark": {
+          "expected": "沪深300指数收益率×95%+活期存款利率(税后)×5%",
+          "anchor": "PDF p6 §2.2 基金产品说明",
+          "excerpt": "业绩比较基准=沪深300指数收益率×95%+活期存款利率(税后)×5%"
+        },
+        "manager": {
+          "expected": [
+            {
+              "name": "余海燕",
+              "role": "基金经理",
+              "start_date": "2016-04-16"
+            },
+            {
+              "name": "庞亚平",
+              "role": "基金经理",
+              "start_date": "2022-12-15"
+            }
+          ],
+          "anchor": "PDF p14-p15 §4.1.2 基金经理简介",
+          "excerpt": "余海燕，任职日期=2016-04-16；庞亚平，任职日期=2022-12-15"
+        },
+        "scale": {
+          "expected": {
+            "target_share_net_asset_cny": "13,571,885,066.79",
+            "target_share_units": "8,742,266,267.54"
+          },
+          "anchor": "PDF p5 and p8 §3.1",
+          "excerpt": "A份额总额=8,742,266,267.54份；期末基金资产净值=13,571,885,066.79"
+        },
+        "fee": {
+          "expected": {
+            "management_fee_rate": "0.15%",
+            "custodian_fee_rate": "0.05%",
+            "target_share_sales_service_fee_rate": "0%",
+            "c_share_sales_service_fee_rate": "0.2%",
+            "y_share_sales_service_fee_rate": "0%"
+          },
+          "anchor": "PDF p47-p49 §7.4.10.2",
+          "excerpt": "管理费按扣除目标ETF后的余额0.15%计提；托管费0.05%；A类、Y类不收销售服务费，C类0.2%"
+        },
+        "return": {
+          "expected": {
+            "target_share_one_year_nav_growth": "16.38%",
+            "one_year_benchmark_return": "14.04%",
+            "annual_tracking_error": "0.99%"
+          },
+          "anchor": "PDF p9 §3.2.1 / p17 §4.4.2",
+          "excerpt": "A类份额净值增长率=16.38%；同期业绩比较基准收益率=14.04%；年化跟踪误差0.99%"
+        },
+        "holdings": {
+          "expected": {
+            "target_etf_holding": {
+              "name": "易方达沪深300交易型开放式指数发起式证券投资基金",
+              "fair_value_cny": "19,085,355,845.40",
+              "net_asset_ratio": "93.19%"
+            }
+          },
+          "anchor": "PDF p64 §8.2 期末投资目标基金明细",
+          "excerpt": "目标ETF公允价值=19,085,355,845.40；占基金资产净值比例=93.19%"
+        },
+        "risk": {
+          "expected": "沪深300ETF联接基金；高于混合型、债券基金和货币市场基金；风险收益与业绩比较基准相似",
+          "anchor": "PDF p6 §2.2 基金产品说明",
+          "excerpt": "沪深300ETF联接基金；预期风险收益水平高于混合型基金、债券基金和货币市场基金"
+        }
+      }
+    },
+    {
+      "fund_code": "017641",
+      "report_year": 2024,
+      "document_kind": "annual_report",
+      "pdf_file": "/Users/maomao/Downloads/基金年报/摩根标普500指数型发起式证券投资基金(QDII)2024年年度报告.pdf",
+      "pdf_sha256": "33e1898cfd80408f16c52bddd9f823a0577b000055ec9e69870ee1d212933f2c",
+      "source_document_title": "摩根标普500指数型发起式证券投资基金(QDII)2024年年度报告",
+      "fields": {
+        "identity": {
+          "expected": {
+            "fund_name": "摩根标普500指数型发起式证券投资基金(QDII)",
+            "fund_code": "017641",
+            "target_share_class": "人民币A",
+            "other_share_classes": {
+              "人民币C": "019305"
+            }
+          },
+          "anchor": "PDF p5 §2.1 基金基本情况",
+          "excerpt": "基金名称=摩根标普500指数型发起式证券投资基金(QDII)；基金主代码=017641；人民币A=017641；人民币C=019305"
+        },
+        "benchmark": {
+          "expected": "标普500指数收益率(经汇率调整后) ×95%+银行活期存款利率(税后) ×5%",
+          "anchor": "PDF p7 §2.2 基金产品说明",
+          "excerpt": "业绩比较基准=标普500指数收益率(经汇率调整后) ×95%+银行活期存款利率(税后) ×5%"
+        },
+        "manager": {
+          "expected": [
+            {
+              "name": "张军",
+              "role": "基金经理",
+              "start_date": "2023-04-06"
+            }
+          ],
+          "anchor": "PDF p15 §4.1.2 基金经理简介",
+          "excerpt": "张军；本基金基金经理；任职日期=2023-04-06"
+        },
+                "scale": {
+                    "expected": {
+                        "total_share_units": "1,397,663,444.02",
+                        "target_share_net_asset_cny": "1,309,982,515.81"
+                    },
+                    "anchor": "PDF p5 and p9 §3.1",
+                    "excerpt": "报告期末基金份额总额=1,397,663,444.02份；人民币A期末基金资产净值=1,309,982,515.81"
+                },
+        "fee": {
+          "expected": {
+            "management_fee_rate": "0.5%",
+            "custodian_fee_rate": "0.15%",
+            "target_share_sales_service_fee_rate": "0%",
+            "c_share_sales_service_fee_rate": "0.30%"
+          },
+          "anchor": "PDF p45-p46 §7.4.10.2",
+          "excerpt": "管理人报酬按0.5%计提；托管费按0.15%计提；C类销售服务费按0.30%计提"
+        },
+        "return": {
+          "expected": {
+            "target_share_one_year_nav_growth": "20.92%",
+            "one_year_benchmark_return": "23.91%"
+          },
+          "anchor": "PDF p18 §4.4.2",
+          "excerpt": "人民币A份额净值增长率=20.92%；同期业绩比较基准收益率=23.91%"
+        },
+        "holdings": {
+          "expected": {
+            "top_equity_table_row": {
+              "code": "AAPL",
+              "name": "APPLE INC",
+              "fair_value_cny": "148,655,637.71",
+              "net_asset_ratio": "7.66%"
+            }
+          },
+          "anchor": "PDF p59 §8.4 权益投资明细",
+          "excerpt": "APPLE INC；证券代码=AAPL；公允价值=148,655,637.71；占基金资产净值比例=7.66%"
+        },
+        "risk": {
+          "expected": "股票型被动指数基金；境外证券市场投资；含汇率风险等特别投资风险",
+          "anchor": "PDF p7 §2.2 基金产品说明",
+          "excerpt": "股票型基金产品；投资于境外证券市场，因此还面临汇率风险等特别投资风险"
+        }
+      }
+    }
+  ],
+  "next_gate": "row-field extractor correctness test gate after review acceptance",
+  "non_goals_preserved": [
+    "No full golden promotion.",
+    "No readiness or quality gate promotion.",
+    "No extractor fix without same-source failing row-field test.",
+    "No network, live provider, fallback, or FundDocumentRepository live acquisition."
+  ]
+}

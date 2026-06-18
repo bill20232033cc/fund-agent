@@ -100,4 +100,3 @@ Do not change code, tests, renderer, FQ0-FQ6, Service/CLI defaults, `FundDocumen
 | `096001` P1 gaps: `turnover_rate`, `holder_structure`, `holdings_snapshot`, `share_change` | future QDII diagnosis or durable-baseline gate | Must be resolved or explicitly accepted before durable baseline consideration. |
 | Eastmoney fallback source | next fallback/evidence gates | Record that source is eligible fallback, but quality reflects fallback-source extraction. |
 | `040046` provenance/quality unknown | next fallback evidence plan gate | Plan before any evidence run; keep not promoted. |
-

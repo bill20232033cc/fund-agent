@@ -14,6 +14,11 @@ from fund_agent.fund.data.nav_data import NavDataResult
 from fund_agent.fund.data.thermometer import ThermometerSnapshot
 from fund_agent.fund.data.thermometer_types import ThermometerBatchResult, ThermometerReading
 from fund_agent.fund.data_extractor import StructuredFundDataBundle
+from fund_agent.fund.annual_evidence import (
+    ANNUAL_EVIDENCE_BUNDLE_SCHEMA_VERSION,
+    AnnualEvidenceBundle,
+    AnnualEvidenceScopeRequest,
+)
 from fund_agent.fund.extractors.models import (
     EvidenceAnchor,
     ExtractedField,
@@ -24,6 +29,7 @@ from fund_agent.services import (
     FundAnalysisDeveloperOverrides,
     FundAnalysisRequest,
     FundAnalysisService,
+    MultiYearAnnualAnalysisRequest,
     QualityGateBlockedError,
     QualityGateNotRunBlockedError,
 )
@@ -290,6 +296,65 @@ class _FakeExtractor:
 
         self.calls.append((fund_code, report_year, force_refresh))
         return replace(self.bundle, fund_code=fund_code, report_year=report_year)
+
+
+class _FakeAnnualEvidenceLoader:
+    """Service 多年年报测试用 fake loader。"""
+
+    def __init__(self) -> None:
+        """初始化 fake loader。
+
+        Args:
+            无。
+
+        Returns:
+            无返回值。
+
+        Raises:
+            无显式抛出。
+        """
+
+        self.calls: list[tuple[AnnualEvidenceScopeRequest, StructuredFundDataBundle]] = []
+
+    async def load(
+        self,
+        scope: AnnualEvidenceScopeRequest,
+        *,
+        current_year_bundle: StructuredFundDataBundle,
+    ) -> AnnualEvidenceBundle:
+        """记录调用并返回最小多年证据 bundle。
+
+        Args:
+            scope: Fund 层年度证据 scope。
+            current_year_bundle: 当前年份结构化数据包。
+
+        Returns:
+            最小多年证据 bundle。
+
+        Raises:
+            无显式抛出。
+        """
+
+        self.calls.append((scope, current_year_bundle))
+        return AnnualEvidenceBundle(
+            schema_version=ANNUAL_EVIDENCE_BUNDLE_SCHEMA_VERSION,
+            fund_code=scope.fund_code,
+            target_year=scope.target_year,
+            canonical_years=scope.canonical_years,
+            current_year_bundle=current_year_bundle,
+            year_records=(),
+            available_years=(scope.target_year,),
+            gap_years=scope.optional_years,
+            fail_closed_years=(),
+            source_provenance_by_year={},
+            source_documents_by_year={},
+            anchors_by_year={},
+            data_gaps=(),
+            requirement_availability={},
+            cross_year_facts=(),
+            degradation_summary={"cross_year_claims_allowed": False},
+            fallback_summary={"fallback_year_count": 0},
+        )
 
 
 class _FakeThermometerService:
@@ -1307,10 +1372,10 @@ async def test_fund_analysis_service_explicit_gate_run_id_remains_authoritative(
 
 
 @pytest.mark.asyncio
-async def test_fund_analysis_service_pre_2026_missing_turnover_is_warn_not_standalone_block(
+async def test_fund_analysis_service_pre_2026_missing_turnover_is_not_quality_warn(
     tmp_path: Path,
 ) -> None:
-    """验证 2026 前缺失换手率是数据不足 warning，不是独立 hard blocker。
+    """验证 2026 前缺失换手率不再投影为 quality warning。
 
     Args:
         tmp_path: pytest 临时目录 fixture。
@@ -1319,7 +1384,7 @@ async def test_fund_analysis_service_pre_2026_missing_turnover_is_warn_not_stand
         无返回值。
 
     Raises:
-        AssertionError: 当缺失换手率单独阻断或触发 FQ4 时抛出。
+        AssertionError: 当 2026 前缺失换手率仍触发 FQ2/FQ2F/FQ4 时抛出。
     """
 
     bundle = _bundle()
@@ -1345,20 +1410,63 @@ async def test_fund_analysis_service_pre_2026_missing_turnover_is_warn_not_stand
     assert result.rabc_attribution.note is not None
     assert "缺少 §8 换手率" in result.rabc_attribution.note
     assert result.quality_gate_result is not None
-    assert result.quality_gate_result.status == "warn"
-    assert any(
+    assert not any(
         issue.rule_code == "FQ2"
-        and issue.severity == "warn"
         and issue.field_name == "turnover_rate"
         for issue in result.quality_gate_result.issues
     )
-    assert any(
+    assert not any(
         issue.rule_code == "FQ2F"
-        and issue.severity == "warn"
         and issue.priority == "P1"
+        and "turnover_rate" in issue.message
         for issue in result.quality_gate_result.issues
     )
     assert not any(issue.rule_code == "FQ4" for issue in result.quality_gate_result.issues)
+
+
+@pytest.mark.asyncio
+async def test_multi_year_annual_analysis_maps_service_request_to_fund_scope() -> None:
+    """验证 Service 多年请求显式翻译为 Fund 年度证据 scope。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: scope 映射不符合 accepted plan 时抛出。
+    """
+
+    bundle = _bundle()
+    annual_loader = _FakeAnnualEvidenceLoader()
+    service = FundAnalysisService(
+        extractor=_FakeExtractor(bundle),
+        annual_evidence_loader=annual_loader,
+    )
+
+    result = await service.analyze_multi_year_annual(
+        MultiYearAnnualAnalysisRequest(
+            fund_code="110011",
+            target_year=2025,
+            start_year=2021,
+            valuation_state="unavailable",
+            quality_gate_policy="off",
+        )
+    )
+
+    scope, current_year_bundle = annual_loader.calls[0]
+    assert scope.required_years == (2025,)
+    assert scope.optional_years == (2024, 2023, 2022, 2021)
+    assert scope.canonical_years == (2025, 2024, 2023, 2022, 2021)
+    assert current_year_bundle.report_year == 2025
+    assert result.used_years == (2025,)
+    assert result.gap_years == (2024, 2023, 2022, 2021)
+    assert result.report_markdown == result.current_year_result.report_markdown
+    assert result.annual_period_report.report_markdown != result.report_markdown
+    assert "# 多年年报分析（2021-2025）" in result.annual_period_report.report_markdown
+    assert "quality_gate_status=not_available" in result.annual_period_report.report_markdown
+    assert "impact_status=insufficient_evidence" in result.annual_period_report.report_markdown
 
 
 def _source_csv(tmp_path: Path, fund_code: str) -> Path:

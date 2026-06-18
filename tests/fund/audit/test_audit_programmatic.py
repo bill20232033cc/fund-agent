@@ -12,6 +12,10 @@ from fund_agent.fund.analysis.valuation_state import (
     ValuationStateResolution,
     build_thermometer_failure_anchor,
 )
+from fund_agent.fund.chapter_auditor import ChapterAuditInput, audit_chapter_programmatic
+from fund_agent.fund.chapter_facts import project_chapter_facts
+from fund_agent.fund.chapter_writer import ChapterDraft, build_chapter_writer_input
+from fund_agent.fund.evidence_availability import derive_evidence_availability
 from fund_agent.fund.extractors.models import EvidenceAnchor
 from fund_agent.fund.audit.contract_rules import (
     ContractAuditCoverageManifest,
@@ -30,6 +34,7 @@ from fund_agent.fund.audit import ProgrammaticAuditInput, run_programmatic_audit
 from fund_agent.fund.template import render_template_report, split_rendered_chapter_blocks
 from tests.fund.template.test_renderer import _render_input, _tracking_error_field
 from tests.fund.template.test_renderer import _thermometer_valuation_resolution
+from tests.fund.test_chapter_facts import _bundle
 
 
 def _complete_report() -> str:
@@ -902,9 +907,29 @@ def test_contract_audit_coverage_manifest_covers_every_must_not_cover() -> None:
     assert any(
         rule.chapter_id == 3
         and rule.item_text == "不在换手率或风格变化证据缺失、不可用、未复核时，推断主动基金风格稳定、风格一致或言行一致。"
-        and rule.coverage_kind == "narrative_guidance"
+        and rule.coverage_kind == "typed_programmatic_evidence_conditional"
         for rule in coverage_manifest.must_not_cover_coverages
     )
+
+
+def test_typed_must_not_cover_issue_id_uses_clause_id() -> None:
+    """验证 typed must_not_cover issue id 使用 clause_id 而不是 phrase hash。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 issue id 未绑定 clause_id 时抛出。
+    """
+
+    result = audit_chapter_programmatic(_ch3_typed_audit_input("言行一致性判断：言行一致。"))
+
+    assert result.status == "fail"
+    assert any(issue.issue_id == "programmatic:C2:ch3.must_not_cover.item_04" for issue in result.issues)
+    assert not any(issue.issue_id.startswith("programmatic:C2:言行一致:") for issue in result.issues)
 
 
 def test_active_fund_chapter_3_gap_contract_does_not_add_unconditional_required_item() -> None:
@@ -1763,3 +1788,56 @@ def test_run_programmatic_audit_allows_explicit_high_without_thermometer_fields(
     )
 
     assert not any(issue.code == "R1" for issue in result.issues)
+
+
+def _ch3_typed_audit_input(body_line: str) -> ChapterAuditInput:
+    """构造第 3 章 typed must_not_cover 审计输入。
+
+    Args:
+        body_line: 第 3 章详细情况正文。
+
+    Returns:
+        带 EvidenceAvailability 的章节审计输入。
+
+    Raises:
+        AssertionError: 当 fixture 缺少 anchor 时抛出。
+    """
+
+    projection = project_chapter_facts(_bundle(), chapter_ids=(3,))
+    writer_input = build_chapter_writer_input(
+        projection,
+        chapter_id=3,
+        evidence_availability=derive_evidence_availability(projection),
+    )
+    anchor_id = writer_input.chapter.evidence_anchors[0].anchor_id
+    required_lines = "\n".join(
+        f"<!-- required_output:{item} -->\n- {item}: 证据不足，当前只输出证据缺口。"
+        for item in writer_input.chapter.contract.required_output_items
+    )
+    markdown = (
+        "### 结论要点\n"
+        f"{required_lines}\n"
+        "### 详细情况\n"
+        f"{body_line}\n"
+        "### 证据与出处\n"
+        f"<!-- anchor:{anchor_id} -->\n"
+        "> 📎 证据：年报2024§§2表None行basic_identity（fixture）\n"
+    )
+    return ChapterAuditInput(
+        writer_input=writer_input,
+        draft=ChapterDraft(
+            chapter_id=writer_input.chapter.chapter_id,
+            title=writer_input.chapter.title,
+            markdown=markdown,
+            used_fact_ids=tuple(fact.fact_id for fact in writer_input.chapter.facts[:1]),
+            used_anchor_ids=(anchor_id,),
+            declared_missing_reasons=(),
+            deleted_item_rule_ids=tuple(
+                decision.rule_id
+                for decision in writer_input.chapter.item_rule_projection.decisions
+                if decision.status == "delete"
+            ),
+            model_name="fake-writer",
+            finish_reason="stop",
+        ),
+    )

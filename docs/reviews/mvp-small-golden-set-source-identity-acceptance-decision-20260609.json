@@ -1,0 +1,78 @@
+{
+  "schema_version": "fund-agent.small_golden_set_source_identity_acceptance_decision.v1",
+  "gate": "source identity acceptance decision gate",
+  "classification": "standard",
+  "input_payload": "docs/reviews/mvp-small-golden-set-manual-evidence-intake-all5-20260609-source-payload.json",
+  "source_access_performed": false,
+  "pdf_file_read_performed": false,
+  "network_access_performed": false,
+  "fund_document_repository_access_performed": false,
+  "fallback_invocation_performed": false,
+  "fixture_projection_performed": false,
+  "exact_numeric_correctness_accepted": false,
+  "decision_policy": {
+    "matched": "All required source identity anchors are present and user-provided PDF hash is present.",
+    "matched_without_hash": "All required source identity anchors are present, but PDF hash is not provided.",
+    "needs_manual_hash": "Source identity anchors are otherwise sufficient, but downstream gate requires hash before proceeding.",
+    "rejected_identity_mismatch": "Title, publisher, fund code, fund name, share-class mapping, report year or document kind conflicts.",
+    "deferred_insufficient_evidence": "Required source identity anchor is absent."
+  },
+  "rows": [
+    {
+      "fund_code": "004393",
+      "report_year": 2024,
+      "decision": "matched",
+      "official_document_url_origin": "eid_official_pdf",
+      "official_document_id": "instanceid=1248088",
+      "pdf_hash_status": "user_provided",
+      "accepted_for_retained_excerpt_gate": true,
+      "exact_numeric_correctness_allowed": false,
+      "reason": "Annual-report title, publisher, PDF profile code/name/share-class anchor, official document URL/id and user-provided PDF hash are recorded."
+    },
+    {
+      "fund_code": "004194",
+      "report_year": 2024,
+      "decision": "matched_without_hash",
+      "official_document_url_origin": "eid_official_pdf",
+      "official_document_id": "instanceid=1248907",
+      "pdf_hash_status": "not_provided",
+      "accepted_for_retained_excerpt_gate": true,
+      "exact_numeric_correctness_allowed": false,
+      "reason": "Annual-report title, publisher, PDF profile code/name/share-class anchor and official document URL/id are recorded; PDF hash is not provided."
+    },
+    {
+      "fund_code": "006597",
+      "report_year": 2024,
+      "decision": "matched_without_hash",
+      "official_document_url_origin": "cninfo_pdf",
+      "official_document_id": "cninfo:1222957988",
+      "pdf_hash_status": "not_provided",
+      "accepted_for_retained_excerpt_gate": true,
+      "exact_numeric_correctness_allowed": false,
+      "reason": "Annual-report title, publisher, PDF profile code/name/share-class anchor and CNINFO official document URL/id are recorded; PDF hash is not provided."
+    },
+    {
+      "fund_code": "110020",
+      "report_year": 2024,
+      "decision": "matched_without_hash",
+      "official_document_url_origin": "fund_company_official_pdf",
+      "official_document_id": "efunds-bulletin-20250331-annual-report-110020",
+      "pdf_hash_status": "not_provided",
+      "accepted_for_retained_excerpt_gate": true,
+      "exact_numeric_correctness_allowed": false,
+      "reason": "Annual-report title, publisher, PDF profile code/name/share-class anchor and fund-company official PDF URL/id are recorded; PDF hash is not provided."
+    },
+    {
+      "fund_code": "017641",
+      "report_year": 2024,
+      "decision": "matched_without_hash",
+      "official_document_url_origin": "fund_company_official_pdf",
+      "official_document_id": "cifm:W020250331321243719367",
+      "pdf_hash_status": "not_provided",
+      "accepted_for_retained_excerpt_gate": true,
+      "exact_numeric_correctness_allowed": false,
+      "reason": "Annual-report title, publisher, PDF profile code/name/share-class anchor and fund-company official PDF URL/id are recorded; PDF hash is not provided."
+    }
+  ],
+  "next_gate": "retained excerpt fixture gate for accepted rows only"
+}

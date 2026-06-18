@@ -25,6 +25,8 @@ from fund_agent.services.chapter_orchestrator import (
 FinalChapterAssemblerSchemaVersion = Literal["final_chapter_assembler.v1"]
 FinalAssemblyStatus = Literal["accepted", "incomplete", "blocked"]
 FinalAssemblyIssueSeverity = Literal["blocking", "informational"]
+FinalAssemblyReadinessStatus = Literal["ready", "blocked"]
+FinalAssemblyEvidenceStatus = Literal["accepted_body_chapters", "incomplete_body_chapters"]
 FinalAssemblyIssueReason = Literal[
     "identity_mismatch",
     "invalid_policy",
@@ -35,6 +37,9 @@ FinalAssemblyIssueReason = Literal[
     "missing_accepted_draft",
     "missing_accepted_conclusion",
     "final_judgment_missing",
+    "chapter7_readiness_blocked",
+    "chapter7_missing",
+    "chapter7_readiness_mismatch",
     "chapter0_source_missing",
     "chapter0_contract_violation",
     "chapter7_contract_violation",
@@ -150,6 +155,29 @@ class FinalAssemblyIssue:
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
+class FinalAssemblyReadiness:
+    """最终章节总装 readiness，见模板第 0 章消费第 7 章的依赖关系。
+
+    Attributes:
+        status: 第 7 章和第 0 章是否可进入 accepted 总装。
+        required_body_chapter_ids: 必需正文章节编号，当前固定为模板第 1-6 章。
+        accepted_body_chapter_ids: 同时具备 accepted draft 和 accepted conclusion 的章节编号。
+        chapter7_required: 第 0 章是否要求第 7 章 typed bundle。
+        chapter7_ready: 第 7 章 typed bundle 是否可作为第 0 章唯一动作来源。
+        evidence_status: 证据/readiness 状态，用于第 7 章 typed bundle。
+        issues: readiness 阻断或提示问题。
+    """
+
+    status: FinalAssemblyReadinessStatus
+    required_body_chapter_ids: tuple[int, ...]
+    accepted_body_chapter_ids: tuple[int, ...]
+    chapter7_required: bool
+    chapter7_ready: bool
+    evidence_status: FinalAssemblyEvidenceStatus
+    issues: tuple[FinalAssemblyIssue, ...]
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
 class FinalChapter7Summary:
     """Gate 4 本地第 7 章 typed 摘要，避免第 0 章反解析 markdown。
 
@@ -160,6 +188,9 @@ class FinalChapter7Summary:
         easiest_misread: 当前最容易看错的地方。
         next_validation_plan: 下一轮最小验证计划。
         threshold_events: 升级/降级或终止当前判断的阈值事件。
+        readiness_status: 第 7 章自身 readiness 状态。
+        evidence_status: 第 7 章依据的正文章节证据/readiness 状态。
+        accepted_body_chapter_ids: 支撑第 7 章的 accepted 正文章节编号。
         source: 最终判断来源。
         conflict_reasons: developer override 冲突原因。
     """
@@ -170,6 +201,9 @@ class FinalChapter7Summary:
     easiest_misread: str
     next_validation_plan: str
     threshold_events: tuple[str, ...]
+    readiness_status: FinalAssemblyReadinessStatus
+    evidence_status: FinalAssemblyEvidenceStatus
+    accepted_body_chapter_ids: tuple[int, ...]
     source: str
     conflict_reasons: tuple[str, ...]
 
@@ -242,8 +276,9 @@ def assemble_final_chapters(
     """
 
     policy = input_data.policy
-    issues = list(_validate_orchestration(input_data))
     chapter_map = _chapter_result_map(input_data.orchestration_result)
+    readiness = _build_final_assembly_readiness(input_data, chapter_map)
+    issues = list(readiness.issues)
     body_conclusions = tuple(
         conclusion
         for chapter_id in policy.required_body_chapter_ids
@@ -258,7 +293,29 @@ def assemble_final_chapters(
     chapter7_summary = _build_chapter7_summary(
         input_data.final_judgment_decision,
         body_conclusions,
+        readiness,
     )
+    if chapter7_summary is None:
+        return _incomplete_result(
+            input_data,
+            issues=(
+                FinalAssemblyIssue(
+                    issue_id="final_assembly:chapter_7:missing",
+                    severity="blocking",
+                    reason="chapter7_missing",
+                    message="第 7 章 typed bundle 缺失，第 0 章不能独立派生最终动作。",
+                    chapter_ids=(CHAPTER7_ID,),
+                ),
+            ),
+            source_chapter_ids=source_chapter_ids,
+        )
+    chapter7_issues = _validate_chapter7_summary(chapter7_summary, readiness)
+    if chapter7_issues:
+        return _incomplete_result(
+            input_data,
+            issues=chapter7_issues,
+            source_chapter_ids=source_chapter_ids,
+        )
     chapter7_markdown = _render_chapter7_markdown(chapter7_summary)
     chapter7_conclusion = _chapter7_accepted_conclusion(chapter7_summary)
     chapter0_markdown: str | None = None
@@ -271,6 +328,8 @@ def assemble_final_chapters(
             max_chars=policy.max_chapter0_chars,
         )
         issues.extend(chapter0_issues)
+        if chapter0_markdown is not None:
+            issues.extend(_validate_chapter0_action(chapter0_markdown, chapter7_summary))
 
     status: FinalAssemblyStatus = "accepted"
     blocking_issues = tuple(issue for issue in issues if issue.severity == "blocking")
@@ -414,6 +473,62 @@ def _validate_orchestration(
     return tuple(issues)
 
 
+def _build_final_assembly_readiness(
+    input_data: FinalChapterAssemblyInput,
+    chapter_map: dict[int, ChapterRunResult],
+) -> FinalAssemblyReadiness:
+    """构造第 7 章 required-body readiness，见模板第 7 章最终判断。
+
+    Args:
+        input_data: 最终章节总装输入。
+        chapter_map: Gate 3 单章结果映射。
+
+    Returns:
+        typed readiness；只有第 1-6 章均 accepted 且有 draft/conclusion 才 ready。
+
+    Raises:
+        无显式抛出。
+    """
+
+    issues = list(_validate_orchestration(input_data))
+    policy = input_data.policy
+    accepted_body_chapter_ids = tuple(
+        chapter_id
+        for chapter_id in policy.required_body_chapter_ids
+        if (result := chapter_map.get(chapter_id)) is not None
+        and result.status == "accepted"
+        and result.accepted_draft is not None
+        and result.accepted_conclusion is not None
+    )
+    status: FinalAssemblyReadinessStatus = "ready" if not issues else "blocked"
+    evidence_status: FinalAssemblyEvidenceStatus = (
+        "accepted_body_chapters" if status == "ready" else "incomplete_body_chapters"
+    )
+    readiness_issues = tuple(issues)
+    if status == "blocked" and not any(
+        issue.reason == "chapter7_readiness_blocked" for issue in readiness_issues
+    ):
+        readiness_issues = (
+            *readiness_issues,
+            FinalAssemblyIssue(
+                issue_id="final_assembly:chapter_7:readiness_blocked",
+                severity="blocking",
+                reason="chapter7_readiness_blocked",
+                message="第 7 章要求模板第 1-6 章均 accepted 且具备 accepted draft/conclusion。",
+                chapter_ids=(CHAPTER7_ID, *policy.required_body_chapter_ids),
+            ),
+        )
+    return FinalAssemblyReadiness(
+        status=status,
+        required_body_chapter_ids=policy.required_body_chapter_ids,
+        accepted_body_chapter_ids=accepted_body_chapter_ids,
+        chapter7_required=policy.include_chapter7 and policy.include_chapter0,
+        chapter7_ready=status == "ready",
+        evidence_status=evidence_status,
+        issues=readiness_issues,
+    )
+
+
 def _validate_required_chapter(chapter_result: ChapterRunResult) -> tuple[FinalAssemblyIssue, ...]:
     """校验单个必需正文章节。
 
@@ -481,20 +596,24 @@ def _chapter_result_map(result: ChapterOrchestrationResult) -> dict[int, Chapter
 def _build_chapter7_summary(
     decision: FinalJudgmentDecision,
     body_conclusions: tuple[AcceptedChapterConclusion, ...],
-) -> FinalChapter7Summary:
+    readiness: FinalAssemblyReadiness,
+) -> FinalChapter7Summary | None:
     """构造第 7 章 typed 摘要，不重新派生最终判断。
 
     Args:
         decision: Agent/Fund 层已派生的最终判断。
         body_conclusions: Gate 3 第 1-6 章 accepted conclusions。
+        readiness: 第 7 章 required-body readiness。
 
     Returns:
-        第 7 章 typed 摘要。
+        第 7 章 typed 摘要；readiness 未 ready 时返回 `None`。
 
     Raises:
         无显式抛出。
     """
 
+    if readiness.status != "ready" or not readiness.chapter7_ready:
+        return None
     basis = _chapter7_core_basis(decision, body_conclusions)
     return FinalChapter7Summary(
         selected_judgment=decision.selected_judgment,
@@ -503,8 +622,45 @@ def _build_chapter7_summary(
         easiest_misread=_easiest_misread(decision, body_conclusions),
         next_validation_plan=_next_validation_plan(decision, body_conclusions),
         threshold_events=_threshold_events(decision),
+        readiness_status=readiness.status,
+        evidence_status=readiness.evidence_status,
+        accepted_body_chapter_ids=readiness.accepted_body_chapter_ids,
         source=decision.source,
         conflict_reasons=decision.conflict_reasons,
+    )
+
+
+def _validate_chapter7_summary(
+    summary: FinalChapter7Summary,
+    readiness: FinalAssemblyReadiness,
+) -> tuple[FinalAssemblyIssue, ...]:
+    """校验第 7 章 typed bundle 与 required-body readiness 一致。
+
+    Args:
+        summary: 第 7 章 typed 摘要。
+        readiness: 第 7 章 readiness。
+
+    Returns:
+        阻断问题；无问题时为空元组。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if (
+        summary.readiness_status == readiness.status
+        and summary.evidence_status == readiness.evidence_status
+        and summary.accepted_body_chapter_ids == readiness.accepted_body_chapter_ids
+    ):
+        return ()
+    return (
+        FinalAssemblyIssue(
+            issue_id="final_assembly:chapter_7:readiness_mismatch",
+            severity="blocking",
+            reason="chapter7_readiness_mismatch",
+            message="第 7 章 typed bundle 的 readiness/evidence 状态与 required-body readiness 不一致。",
+            chapter_ids=(CHAPTER7_ID, *readiness.required_body_chapter_ids),
+        ),
     )
 
 
@@ -660,6 +816,8 @@ def _render_chapter7_markdown(summary: FinalChapter7Summary) -> str:
         f"- **下一轮最小验证计划**：{summary.next_validation_plan}\n"
         "- **什么变化会改变判断**：\n"
         f"{threshold_lines}\n"
+        f"- **证据/readiness 状态**：{summary.evidence_status}；{summary.readiness_status}；"
+        f"accepted_body_chapters={summary.accepted_body_chapter_ids}\n"
         f"{conflict_lines}\n"
     ).strip()
 
@@ -712,7 +870,8 @@ def _chapter7_accepted_conclusion(summary: FinalChapter7Summary) -> AcceptedChap
             f"- **支撑判断的核心依据**：{basis}\n"
             f"- **当前最容易看错的地方**：{summary.easiest_misread}\n"
             f"- **下一轮最小验证计划**：{summary.next_validation_plan}\n"
-            f"- **什么变化会改变判断**：{threshold}"
+            f"- **什么变化会改变判断**：{threshold}\n"
+            f"- **证据/readiness 状态**：{summary.evidence_status}；{summary.readiness_status}"
         ),
         conclusion_truncated=False,
         conclusion_source="heading",
@@ -785,6 +944,37 @@ def _render_chapter0_markdown(
             )
         )
     return markdown, tuple(issues)
+
+
+def _validate_chapter0_action(
+    chapter0_markdown: str,
+    chapter7_summary: FinalChapter7Summary,
+) -> tuple[FinalAssemblyIssue, ...]:
+    """校验第 0 章当前动作与第 7 章 typed action 完全一致。
+
+    Args:
+        chapter0_markdown: 第 0 章 Markdown。
+        chapter7_summary: 第 7 章 typed 摘要。
+
+    Returns:
+        阻断问题；动作一致时为空元组。
+
+    Raises:
+        无显式抛出。
+    """
+
+    expected_line = f"- **当前动作**：{chapter7_summary.selected_judgment_label}"
+    if expected_line in chapter0_markdown:
+        return ()
+    return (
+        FinalAssemblyIssue(
+            issue_id="final_assembly:chapter_0:action_mismatch",
+            severity="blocking",
+            reason="chapter0_contract_violation",
+            message="第 0 章当前动作必须与第 7 章 typed action 完全一致。",
+            chapter_ids=(CHAPTER0_ID, CHAPTER7_ID),
+        ),
+    )
 
 
 def _chapter0_source_issues(

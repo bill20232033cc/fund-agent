@@ -76,6 +76,8 @@
 
 - **生产年报 PDF 访问必须经过 `FundDocumentRepository`**。年报来源编排属于 Agent 层 `fund_agent/fund` documents 内部实现，Service、UI、Host、renderer、quality gate 不得直接调用具体来源、PDF cache 或下载 helper。
 
+- **结构化基金字段提取必须通过 Fund 层 Processor/Extractor 边界**。Docling、pdfplumber、EID HTML render 或其它 parser/转换产物只能作为 `FundDocumentRepository` / Fund documents 内部中间态或候选 evidence harness 输入；禁止 Service、UI、Host、renderer、quality gate、LLM prompt 或分析模板直接消费 Docling 原始 Markdown/JSON。后续生产化结构化提取必须先经过 `FundProcessorRegistry` / Extractor 设计与实现 gate，并由 Extractor 输出模板章节需要的强类型字段、证据锚点和 fail-closed 缺口语义。
+
 - **年报来源 fallback 必须显式按失败分类决策**：`not_found`、`unavailable` 才允许 fallback；`schema_drift`、`identity_mismatch`、`integrity_error` 必须 fail-closed，禁止被 Eastmoney fallback 静默掩盖。
 
 - **Dayu 是四层架构参考与 Host/Agent 能力来源，不是当前生产 runtime 直接依赖**。本项目目标架构统一为 `UI -> Service -> Host -> Agent`。当前确定性 CLI 主链路尚未接入 Host/Agent 调度；后续 Host 层必须在本项目内内化 Dayu Host 的稳定能力（run lifecycle、global deadline、cancel、terminal state、safe diagnostics、event/outbox 等），后续 Agent 执行内核必须在本项目内内化 Dayu Engine 的稳定能力（runner、tool loop、ToolRegistry、ToolTrace、context budget、tool execution contract 等）。禁止把 `dayu-agent` 作为生产 runtime 直接依赖；禁止通过零散外部 Dayu API 绕过本项目四层边界。上游 Dayu 代码只能作为研究输入；复制或改写代码必须先经过独立 license/compliance gate。

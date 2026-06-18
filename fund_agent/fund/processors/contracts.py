@@ -1,0 +1,376 @@
+"""Fund Processor/Extractor 契约模型。
+
+本模块定义 Fund 层 Processor/Extractor 的最小公共契约，见模板第 1-6 章。
+它只描述受控中间态、字段族、证据锚点和 fail-closed 缺口语义，不读取
+`FundDocumentRepository`、PDF/cache/source helper、Docling、provider、LLM 或上层
+Service/UI/Host。
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import ClassVar, Literal, Protocol
+
+from fund_agent.fund.documents.models import AnnualReportReferenceMetadata, ParsedAnnualReport
+from fund_agent.fund.extractors.models import EvidenceAnchor
+from fund_agent.fund.fund_type import FundType
+from fund_agent.fund.source_provenance import PublicSourceProvenance
+
+FundReportType = Literal["annual_report"]
+FundIntermediateKind = Literal[
+    "parsed_annual_report.v1",
+    "fund_disclosure_document.v1",
+    "docling_pdf_candidate.v1",
+    "pdfplumber_pdf_candidate.v1",
+    "eid_xbrl_html_render_candidate.v1",
+]
+FundProcessorGoal = Literal["template_chapters_1_6_minimum_field_families"]
+FundFieldFamilyId = Literal[
+    "product_essence.v1",
+    "return_attribution.v1",
+    "manager_profile.v1",
+    "investor_experience.v1",
+    "current_stage.v1",
+    "core_risk.v1",
+]
+FundFieldFamilyStatus = Literal["accepted", "partial", "missing", "not_applicable", "blocked"]
+FundProcessorContractStatus = Literal["satisfied", "partial", "missing", "unsupported", "blocked"]
+FundProcessorExtractionMode = Literal["direct", "derived", "estimated", "missing", "not_applicable"]
+FundExtractionGapCode = Literal[
+    "field_family_missing",
+    "field_family_partial",
+    "evidence_anchor_missing",
+    "unsupported_processor",
+    "unsupported_intermediate",
+    "unsupported_intermediate_kind",
+    "unsupported_report_type",
+    "unsupported_fund_type",
+    "unsupported_processor_goal",
+    "input_type_mismatch",
+    "source_provenance_unsafe",
+    "candidate_boundary_blocked",
+    "candidate_only_not_source_truth",
+    "derived_metric_unavailable",
+    "ambiguous_table_or_locator",
+    "fund_type_missing_or_ambiguous",
+]
+FundExtractionSourceBoundary = Literal[
+    "annual_report",
+    "derived_nav",
+    "candidate_only",
+    "unsupported_intermediate",
+    "unsupported_report_type",
+    "unsupported_fund_type",
+    "unsupported_processor_goal",
+    "ambiguous_locator",
+    "source_provenance_unsafe",
+]
+
+_SUPPORTED_REPORT_TYPES = frozenset(("annual_report",))
+_SUPPORTED_INTERMEDIATE_KINDS = frozenset(
+    (
+        "parsed_annual_report.v1",
+        "fund_disclosure_document.v1",
+        "docling_pdf_candidate.v1",
+        "pdfplumber_pdf_candidate.v1",
+        "eid_xbrl_html_render_candidate.v1",
+    )
+)
+_SUPPORTED_PROCESSOR_GOALS = frozenset(("template_chapters_1_6_minimum_field_families",))
+
+
+@dataclass(frozen=True, slots=True)
+class FundProcessorDispatchKey:
+    """Processor 路由键。
+
+    Args:
+        无。
+
+    Attributes:
+        fund_type: 已识别的基金类型；解析前必须先分类。
+        report_type: 报告类型；S1 只支持年报。
+        intermediate_kind: 受控中间态类型；S1 只实现 `ParsedAnnualReport`。
+        source_kind: 公共来源类型；生产锚点当前只允许 `annual_report`、`external_api`
+            或 `derived`。
+        document_year: 年报年份，必须为正整数。
+        fund_code: 6 位基金代码。
+        processor_goal: 当前 processor 目标。
+
+    Raises:
+        ValueError: 当基金代码、年份、报告类型、中间态或目标非法时抛出。
+    """
+
+    fund_type: FundType
+    report_type: FundReportType
+    intermediate_kind: FundIntermediateKind
+    source_kind: str
+    document_year: int
+    fund_code: str
+    processor_goal: FundProcessorGoal = "template_chapters_1_6_minimum_field_families"
+
+    def __post_init__(self) -> None:
+        """校验 dispatch key 的显式字段。
+
+        Args:
+            无。
+
+        Returns:
+            无返回值。
+
+        Raises:
+            ValueError: 当字段值不在当前契约支持范围内时抛出。
+        """
+
+        if not (self.fund_code.isdigit() and len(self.fund_code) == 6):
+            raise ValueError("fund_code 必须是 6 位数字")
+        if self.document_year <= 0:
+            raise ValueError("document_year 必须为正整数")
+        if self.report_type not in _SUPPORTED_REPORT_TYPES:
+            raise ValueError(f"report_type 不受支持：{self.report_type}")
+        if self.intermediate_kind not in _SUPPORTED_INTERMEDIATE_KINDS:
+            raise ValueError(f"intermediate_kind 不受支持：{self.intermediate_kind}")
+        if self.processor_goal not in _SUPPORTED_PROCESSOR_GOALS:
+            raise ValueError(f"processor_goal 不受支持：{self.processor_goal}")
+
+
+@dataclass(frozen=True, slots=True)
+class CandidateBoundaryStatus:
+    """候选中间态边界状态。
+
+    Args:
+        无。
+
+    Attributes:
+        candidate_only: 是否仍为 candidate-only。
+        field_correctness_status: 字段正确性状态；候选路径必须保持 `not_proven`。
+        source_truth_status: 来源真源状态；候选路径必须保持 `not_proven`。
+        parser_replacement_authorized: 是否授权替换生产 parser；S1 必须为 `False`。
+        readiness_status: readiness 状态；S1 不声明 readiness。
+
+    Raises:
+        ValueError: 当候选边界被错误提升为 proof/readiness 时抛出。
+    """
+
+    candidate_only: bool
+    field_correctness_status: Literal["not_proven"]
+    source_truth_status: Literal["not_proven"]
+    parser_replacement_authorized: bool = False
+    readiness_status: Literal["not_ready"] = "not_ready"
+
+    def __post_init__(self) -> None:
+        """校验候选边界不能声明 proof、parser replacement 或 readiness。
+
+        Args:
+            无。
+
+        Returns:
+            无返回值。
+
+        Raises:
+            ValueError: 当候选边界字段违反 S1 NOT_READY 约束时抛出。
+        """
+
+        if not self.candidate_only:
+            raise ValueError("候选边界必须保持 candidate_only=True")
+        if self.parser_replacement_authorized:
+            raise ValueError("候选边界不得授权 parser replacement")
+        if self.readiness_status != "not_ready":
+            raise ValueError("候选边界不得声明 readiness")
+
+
+@dataclass(frozen=True, slots=True)
+class FundProcessorInput:
+    """Processor 输入契约。
+
+    Args:
+        无。
+
+    Attributes:
+        context: Processor 路由键。
+        intermediate: 受控中间态；S1 只接受 `ParsedAnnualReport`。
+        reference_metadata: 可选同源引用元数据。
+        candidate_boundary: 可选候选边界状态；S1 生产路径不使用。
+        source_provenance: 可选公共来源 provenance；缺省时 processor 从 report metadata
+            投影。
+
+    Raises:
+        无显式抛出。
+    """
+
+    context: FundProcessorDispatchKey
+    intermediate: ParsedAnnualReport | object
+    reference_metadata: AnnualReportReferenceMetadata | None = None
+    candidate_boundary: CandidateBoundaryStatus | None = None
+    source_provenance: PublicSourceProvenance | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class FundExtractionGap:
+    """字段抽取缺口。
+
+    Args:
+        无。
+
+    Attributes:
+        gap_code: 稳定缺口码。
+        message: 人可读缺口说明。
+        field_family_id: 字段族内缺口所属字段族；跨字段缺口为 `None`。
+        source_field_path: 缺失或阻断的 extractor 输出路径。
+        source_boundary: 缺口所属来源边界。
+        required: 该字段是否为当前 mapping table 的必需项。
+
+    Raises:
+        无显式抛出。
+    """
+
+    gap_code: FundExtractionGapCode
+    message: str
+    field_family_id: FundFieldFamilyId | None
+    source_field_path: str | None
+    source_boundary: FundExtractionSourceBoundary
+    required: bool = True
+
+
+@dataclass(frozen=True, slots=True)
+class FundFieldFamilyResult:
+    """单个模板字段族输出。
+
+    Args:
+        无。
+
+    Attributes:
+        field_family_id: 字段族 ID，对应模板第 1-6 章最小字段族。
+        chapter_ids: 公开模板章节 ID。
+        value: 字段族值；只能来自 documented mapping table。
+        status: 字段族状态。
+        extraction_mode: 字段族抽取模式。
+        anchors: 当前字段族公共证据锚点。
+        gaps: 当前字段族本地缺口；不进入 result-level gaps。
+        source_provenance: 公共来源 provenance。
+
+    Raises:
+        ValueError: 非缺失字段族没有 anchor 或缺失字段族没有 gap 时抛出。
+    """
+
+    field_family_id: FundFieldFamilyId
+    chapter_ids: tuple[int, ...]
+    value: dict[str, object]
+    status: FundFieldFamilyStatus
+    extraction_mode: FundProcessorExtractionMode
+    anchors: tuple[EvidenceAnchor, ...]
+    gaps: tuple[FundExtractionGap, ...]
+    source_provenance: PublicSourceProvenance | None
+
+    def __post_init__(self) -> None:
+        """校验字段族 anchor/gap 的 fail-closed 形状。
+
+        Args:
+            无。
+
+        Returns:
+            无返回值。
+
+        Raises:
+            ValueError: 当非缺失字段族缺少锚点或缺失字段族缺少缺口时抛出。
+        """
+
+        if self.status in {"accepted", "partial"} and not self.anchors:
+            raise ValueError(f"{self.field_family_id} 非缺失字段族必须包含 EvidenceAnchor")
+        if self.status == "missing" and not self.gaps:
+            raise ValueError(f"{self.field_family_id} missing 字段族必须包含本地 gap")
+
+
+@dataclass(frozen=True, slots=True)
+class FundProcessorResult:
+    """Processor 输出契约。
+
+    Args:
+        无。
+
+    Attributes:
+        processor_id: processor 稳定 ID。
+        output_schema_version: 输出 schema 版本。
+        fund_code: 6 位基金代码。
+        report_year: 年报年份。
+        fund_type: 基金类型。
+        report_type: 报告类型。
+        input_intermediate_kind: 输入中间态类型。
+        field_families: 模板字段族输出。
+        gaps: 跨字段族缺口；字段族本地缺口必须留在对应字段族。
+        anchors: 去重后的公共证据锚点。
+        source_provenance: 公共来源 provenance。
+        candidate_boundary: 候选边界状态；S1 生产路径为 `None`。
+        contract_status: 整体契约状态。
+
+    Raises:
+        ValueError: 当 result-level gaps 错收字段族本地缺口时抛出。
+    """
+
+    processor_id: str
+    output_schema_version: str
+    fund_code: str
+    report_year: int
+    fund_type: FundType
+    report_type: FundReportType
+    input_intermediate_kind: FundIntermediateKind
+    field_families: tuple[FundFieldFamilyResult, ...]
+    gaps: tuple[FundExtractionGap, ...]
+    anchors: tuple[EvidenceAnchor, ...]
+    source_provenance: PublicSourceProvenance | None
+    candidate_boundary: CandidateBoundaryStatus | None
+    contract_status: FundProcessorContractStatus
+
+    def __post_init__(self) -> None:
+        """校验 result-level gaps 只承载跨字段族缺口。
+
+        Args:
+            无。
+
+        Returns:
+            无返回值。
+
+        Raises:
+            ValueError: 当 result-level gap 带字段族 ID 时抛出。
+        """
+
+        if any(gap.field_family_id is not None for gap in self.gaps):
+            raise ValueError("FundProcessorResult.gaps 只允许跨字段族缺口")
+
+
+class FundProcessorProtocol(Protocol):
+    """Fund Processor 协议。
+
+    Processor 只能基于 dispatch metadata 判断支持性，且 `extract()` 只能消费已传入的
+    受控中间态。实现不得读取 repository、PDF/cache/source helper、Docling、network、
+    provider、LLM、Service/UI/Host、renderer 或 quality gate。
+    """
+
+    processor_id: ClassVar[str]
+    priority: ClassVar[int]
+    output_schema_version: ClassVar[str]
+
+    def supports(self, context: FundProcessorDispatchKey) -> bool:
+        """判断当前 processor 是否支持 dispatch key。
+
+        Args:
+            context: Processor 路由键。
+
+        Returns:
+            支持时返回 `True`。
+
+        Raises:
+            无显式抛出。
+        """
+
+    def extract(self, input_data: FundProcessorInput) -> FundProcessorResult:
+        """执行字段族抽取。
+
+        Args:
+            input_data: Processor 输入契约。
+
+        Returns:
+            Processor 输出结果。
+
+        Raises:
+            实现可在契约字段非法时抛出 `ValueError`。
+        """

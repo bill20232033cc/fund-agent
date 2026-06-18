@@ -32,7 +32,7 @@ Prior DS review：`docs/reviews/release-maintenance-csrc-eid-stock-sdk-nav-sourc
 
 **Prior state**: Plan 直接给出 `cFundCode=5755` 候选 URL，未说明来源，验证方向倒置。
 
-**Updated plan**: 
+**Updated plan**:
 - URL 改标为 "User-supplied candidate URL"，新增显式声明："该 URL 只能作为用户提供的待验证候选，不是已接受身份。Evidence worker 不得从 `cFundCode=5755` 反向假设目标基金身份。"（lines 69–75）
 - E1-0 前置步骤（line 79）：通过 CSRC EID 公开搜索按基金名称 `国泰利享中短债债券` 或份额代码定位，记录 EID 内部 ID 后再进入 HTTP/XHR。搜索不可复现时直接 block，不得 reverse-assume 5755
 - Stop condition 同步更新（line 218）：新增 "public search cannot map fund name / target 6 位 share-class codes to an official EID internal ID"

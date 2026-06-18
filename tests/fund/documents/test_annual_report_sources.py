@@ -11,7 +11,6 @@ import pytest
 from fund_agent.fund.documents.adapters.annual_report_pdf import AnnualReportPdfAdapter
 from fund_agent.fund.documents.models import AnnualReportSourceMetadata
 from fund_agent.fund.documents.sources import (
-    AnnualReportSourceAggregateError,
     AnnualReportSourceConfig,
     AnnualReportSourceFallbackBlockedError,
     AnnualReportSourceIntegrityError,
@@ -393,8 +392,8 @@ def _assert_blocked_failure(
     assert f"{source}:{category}:{message}" in str(error)
 
 
-def test_orchestrator_rejects_empty_sources_but_none_uses_default() -> None:
-    """验证空来源列表会被拒绝，`None` 使用 EID 主源和 Eastmoney fallback。
+def test_orchestrator_rejects_empty_sources_but_none_uses_default(tmp_path: Path) -> None:
+    """验证空/多来源会被拒绝，`None` 使用 EID single-source 默认来源。
 
     Args:
         无。
@@ -403,17 +402,26 @@ def test_orchestrator_rejects_empty_sources_but_none_uses_default() -> None:
         无返回值。
 
     Raises:
-        AssertionError: 当空来源未抛错或默认来源顺序错误时抛出。
+        AssertionError: 当非法来源未抛错或默认来源顺序错误时抛出。
     """
 
     with pytest.raises(ValueError, match="sources 不能为空"):
         AnnualReportSourceOrchestrator(())
+    with pytest.raises(ValueError, match="single-source"):
+        AnnualReportSourceOrchestrator(
+            (
+                _FakeAnnualReportSource("eid", result=_source_result(tmp_path, "eid")),
+                _FakeAnnualReportSource(
+                    "eastmoney",
+                    result=_source_result(tmp_path, "eastmoney"),
+                ),
+            )
+        )
 
     orchestrator = AnnualReportSourceOrchestrator(None)
 
-    assert len(orchestrator.sources) == 2
+    assert len(orchestrator.sources) == 1
     assert isinstance(orchestrator.sources[0], EidAnnualReportSource)
-    assert isinstance(orchestrator.sources[1], EastmoneyAnnualReportSource)
 
 
 @pytest.mark.asyncio
@@ -452,6 +460,12 @@ async def test_eid_source_fetches_004393_annual_report_with_validated_metadata(
     assert result.metadata.upload_info_id == "1248088"
     assert result.metadata.upload_info_detail_id == "1285356"
     assert result.metadata.table_name == "PDF"
+    assert result.metadata.fallback_used is False
+    assert result.metadata.primary_failure_category is None
+    assert result.metadata.selected_source == "eid"
+    assert result.metadata.source_mode == "single_source_only"
+    assert result.metadata.fallback_enabled is False
+    assert result.metadata.discovery_contract_version == "eid_annual_report_discovery.v1"
     assert result.metadata.source_url == (
         "http://eid.test/fund/disclose/instance_show_pdf_id.do?instanceid=1248088"
     )
@@ -734,8 +748,8 @@ async def test_eid_source_transient_http_error_is_unavailable(tmp_path: Path) ->
 
 
 @pytest.mark.asyncio
-async def test_orchestrator_falls_back_to_eastmoney_after_eid_not_found(tmp_path: Path) -> None:
-    """验证 EID not-found 后会进入 Eastmoney fallback。
+async def test_orchestrator_terminal_not_found_does_not_fallback(tmp_path: Path) -> None:
+    """验证 EID single-source not-found 直接终止，不进入 fallback。
 
     Args:
         tmp_path: pytest 临时目录。
@@ -744,18 +758,17 @@ async def test_orchestrator_falls_back_to_eastmoney_after_eid_not_found(tmp_path
         无返回值。
 
     Raises:
-        AssertionError: 当 fallback 未执行或 metadata 未标记时抛出。
+        AssertionError: 当 not-found 未终止或来源调用错误时抛出。
     """
 
     eid = _FakeAnnualReportSource("eid", error=AnnualReportSourceNotFoundError("eid none"))
-    eastmoney = _FakeAnnualReportSource("eastmoney", result=_source_result(tmp_path))
-    orchestrator = AnnualReportSourceOrchestrator((eid, eastmoney))
+    orchestrator = AnnualReportSourceOrchestrator((eid,))
 
-    result = await orchestrator.fetch_annual_report_pdf("004393", 2024)
+    with pytest.raises(AnnualReportSourceNotFoundError) as exc_info:
+        await orchestrator.fetch_annual_report_pdf("004393", 2024)
 
-    assert result.metadata.source == "eastmoney"
-    assert result.metadata.fallback_used is True
-    assert result.metadata.primary_failure_category == "not_found"
+    assert "eid:not_found:eid none" in str(exc_info.value)
+    assert eid.calls == [("004393", 2024, False)]
 
 
 @pytest.mark.asyncio
@@ -773,8 +786,7 @@ async def test_orchestrator_does_not_fallback_after_eid_mismatch(tmp_path: Path)
     """
 
     eid = _FakeAnnualReportSource("eid", error=AnnualReportSourceMismatchError("wrong year"))
-    eastmoney = _FakeAnnualReportSource("eastmoney", result=_source_result(tmp_path))
-    orchestrator = AnnualReportSourceOrchestrator((eid, eastmoney))
+    orchestrator = AnnualReportSourceOrchestrator((eid,))
 
     with pytest.raises(AnnualReportSourceFallbackBlockedError) as exc_info:
         await orchestrator.fetch_annual_report_pdf("004393", 2024)
@@ -785,7 +797,7 @@ async def test_orchestrator_does_not_fallback_after_eid_mismatch(tmp_path: Path)
         category="identity_mismatch",
         message="wrong year",
     )
-    assert eastmoney.calls == []
+    assert eid.calls == [("004393", 2024, False)]
 
 
 @pytest.mark.asyncio
@@ -926,7 +938,7 @@ async def test_eid_source_uses_distinct_request_level_timeouts(tmp_path: Path) -
 
 @pytest.mark.asyncio
 async def test_orchestrator_returns_first_successful_source(tmp_path: Path) -> None:
-    """验证编排器返回第一个成功来源且不调用 fallback。
+    """验证编排器在 single-source 模式返回唯一成功来源。
 
     Args:
         tmp_path: pytest 临时目录。
@@ -935,24 +947,22 @@ async def test_orchestrator_returns_first_successful_source(tmp_path: Path) -> N
         无返回值。
 
     Raises:
-        AssertionError: 当 fallback 被错误调用时抛出。
+        AssertionError: 当来源返回值或调用记录错误时抛出。
     """
 
     primary = _FakeAnnualReportSource("eid", result=_source_result(tmp_path, "eid"))
-    fallback = _FakeAnnualReportSource("eastmoney", result=_source_result(tmp_path, "eastmoney"))
-    orchestrator = AnnualReportSourceOrchestrator((primary, fallback))
+    orchestrator = AnnualReportSourceOrchestrator((primary,))
 
     result = await orchestrator.fetch_annual_report_pdf("004393", 2024)
 
     assert result.metadata.source == "eid"
     assert result.metadata.fallback_used is False
     assert primary.calls == [("004393", 2024, False)]
-    assert fallback.calls == []
 
 
 @pytest.mark.asyncio
-async def test_orchestrator_falls_back_after_unavailable_error(tmp_path: Path) -> None:
-    """验证来源临时不可用时会进入 fallback 并标记 metadata。
+async def test_orchestrator_terminal_unavailable_does_not_fallback(tmp_path: Path) -> None:
+    """验证 single-source unavailable 直接终止，不进入 fallback。
 
     Args:
         tmp_path: pytest 临时目录。
@@ -961,28 +971,25 @@ async def test_orchestrator_falls_back_after_unavailable_error(tmp_path: Path) -
         无返回值。
 
     Raises:
-        AssertionError: 当 fallback 未执行或未标记时抛出。
+        AssertionError: 当 unavailable 未终止或来源调用错误时抛出。
     """
 
     primary = _FakeAnnualReportSource(
         "eid",
         error=AnnualReportSourceUnavailableError("timeout"),
     )
-    fallback = _FakeAnnualReportSource("eastmoney", result=_source_result(tmp_path))
-    orchestrator = AnnualReportSourceOrchestrator((primary, fallback))
+    orchestrator = AnnualReportSourceOrchestrator((primary,))
 
-    result = await orchestrator.fetch_annual_report_pdf("004393", 2024)
+    with pytest.raises(AnnualReportSourceUnavailableError) as exc_info:
+        await orchestrator.fetch_annual_report_pdf("004393", 2024)
 
-    assert result.metadata.source == "eastmoney"
-    assert result.metadata.fallback_used is True
-    assert result.metadata.primary_failure_category == "unavailable"
+    assert "eid:unavailable:timeout" in str(exc_info.value)
     assert primary.calls == [("004393", 2024, False)]
-    assert fallback.calls == [("004393", 2024, False)]
 
 
 @pytest.mark.asyncio
-async def test_orchestrator_falls_back_after_not_found_error(tmp_path: Path) -> None:
-    """验证来源未找到时会进入 fallback。
+async def test_orchestrator_not_found_terminal_in_single_source(tmp_path: Path) -> None:
+    """验证来源未找到时在 single-source 模式终止。
 
     Args:
         tmp_path: pytest 临时目录。
@@ -991,21 +998,20 @@ async def test_orchestrator_falls_back_after_not_found_error(tmp_path: Path) -> 
         无返回值。
 
     Raises:
-        AssertionError: 当 fallback 未执行时抛出。
+        AssertionError: 当终止异常或来源调用记录错误时抛出。
     """
 
     primary = _FakeAnnualReportSource(
         "eid",
         error=AnnualReportSourceNotFoundError("not found"),
     )
-    fallback = _FakeAnnualReportSource("eastmoney", result=_source_result(tmp_path))
-    orchestrator = AnnualReportSourceOrchestrator((primary, fallback))
+    orchestrator = AnnualReportSourceOrchestrator((primary,))
 
-    result = await orchestrator.fetch_annual_report_pdf("004393", 2024)
+    with pytest.raises(AnnualReportSourceNotFoundError) as exc_info:
+        await orchestrator.fetch_annual_report_pdf("004393", 2024)
 
-    assert result.metadata.source == "eastmoney"
-    assert result.metadata.fallback_used is True
-    assert result.metadata.primary_failure_category == "not_found"
+    assert "eid:not_found:not found" in str(exc_info.value)
+    assert primary.calls == [("004393", 2024, False)]
 
 
 @pytest.mark.asyncio
@@ -1023,8 +1029,7 @@ async def test_orchestrator_stops_on_mismatch_error(tmp_path: Path) -> None:
     """
 
     primary = _FakeAnnualReportSource("eid", error=AnnualReportSourceMismatchError("wrong year"))
-    fallback = _FakeAnnualReportSource("eastmoney", result=_source_result(tmp_path))
-    orchestrator = AnnualReportSourceOrchestrator((primary, fallback))
+    orchestrator = AnnualReportSourceOrchestrator((primary,))
 
     with pytest.raises(AnnualReportSourceFallbackBlockedError) as exc_info:
         await orchestrator.fetch_annual_report_pdf("004393", 2024)
@@ -1035,7 +1040,7 @@ async def test_orchestrator_stops_on_mismatch_error(tmp_path: Path) -> None:
         category="identity_mismatch",
         message="wrong year",
     )
-    assert fallback.calls == []
+    assert primary.calls == [("004393", 2024, False)]
 
 
 @pytest.mark.asyncio
@@ -1053,8 +1058,7 @@ async def test_orchestrator_stops_on_schema_error(tmp_path: Path) -> None:
     """
 
     primary = _FakeAnnualReportSource("eid", error=AnnualReportSourceSchemaError("missing field"))
-    fallback = _FakeAnnualReportSource("eastmoney", result=_source_result(tmp_path))
-    orchestrator = AnnualReportSourceOrchestrator((primary, fallback))
+    orchestrator = AnnualReportSourceOrchestrator((primary,))
 
     with pytest.raises(AnnualReportSourceFallbackBlockedError) as exc_info:
         await orchestrator.fetch_annual_report_pdf("004393", 2024)
@@ -1065,7 +1069,7 @@ async def test_orchestrator_stops_on_schema_error(tmp_path: Path) -> None:
         category="schema_drift",
         message="missing field",
     )
-    assert fallback.calls == []
+    assert primary.calls == [("004393", 2024, False)]
 
 
 @pytest.mark.asyncio
@@ -1086,8 +1090,7 @@ async def test_orchestrator_stops_on_integrity_error(tmp_path: Path) -> None:
         "eid",
         error=AnnualReportSourceIntegrityError("bad pdf"),
     )
-    fallback = _FakeAnnualReportSource("eastmoney", result=_source_result(tmp_path))
-    orchestrator = AnnualReportSourceOrchestrator((primary, fallback))
+    orchestrator = AnnualReportSourceOrchestrator((primary,))
 
     with pytest.raises(AnnualReportSourceFallbackBlockedError) as exc_info:
         await orchestrator.fetch_annual_report_pdf("004393", 2024)
@@ -1098,14 +1101,12 @@ async def test_orchestrator_stops_on_integrity_error(tmp_path: Path) -> None:
         category="integrity_error",
         message="bad pdf",
     )
-    assert fallback.calls == []
+    assert primary.calls == [("004393", 2024, False)]
 
 
 @pytest.mark.asyncio
-async def test_orchestrator_blocked_failure_preserves_prior_eligible_failures(
-    tmp_path: Path,
-) -> None:
-    """验证阻断错误包含阻断前所有 eligible 失败记录。
+async def test_orchestrator_rejects_multi_source_failure_chain(tmp_path: Path) -> None:
+    """验证 single-source 模式拒绝多来源失败链路。
 
     Args:
         tmp_path: pytest 临时目录。
@@ -1114,7 +1115,7 @@ async def test_orchestrator_blocked_failure_preserves_prior_eligible_failures(
         无返回值。
 
     Raises:
-        AssertionError: 当 prior failures 或 blocking failure 丢失时抛出。
+        AssertionError: 当多来源链路未被拒绝时抛出。
     """
 
     primary = _FakeAnnualReportSource(
@@ -1125,29 +1126,13 @@ async def test_orchestrator_blocked_failure_preserves_prior_eligible_failures(
         "eastmoney",
         error=AnnualReportSourceIntegrityError("bad pdf"),
     )
-    unused = _FakeAnnualReportSource("archive", result=_source_result(tmp_path, "archive"))
-    orchestrator = AnnualReportSourceOrchestrator((primary, secondary, unused))
-
-    with pytest.raises(AnnualReportSourceFallbackBlockedError) as exc_info:
-        await orchestrator.fetch_annual_report_pdf("004393", 2024)
-
-    assert isinstance(exc_info.value.__cause__, AnnualReportSourceIntegrityError)
-    assert [(failure.source, failure.category) for failure in exc_info.value.failures] == [
-        ("eid", "not_found"),
-        ("eastmoney", "integrity_error"),
-    ]
-    _assert_blocked_failure(
-        exc_info.value,
-        source="eastmoney",
-        category="integrity_error",
-        message="bad pdf",
-    )
-    assert unused.calls == []
+    with pytest.raises(ValueError, match="single-source"):
+        AnnualReportSourceOrchestrator((primary, secondary))
 
 
 @pytest.mark.asyncio
 async def test_orchestrator_raises_file_not_found_when_all_sources_are_not_found() -> None:
-    """验证所有来源均为 not-found 时最终抛出 FileNotFoundError。
+    """验证 EID single-source not-found 时最终抛出 FileNotFoundError。
 
     Args:
         无。
@@ -1160,23 +1145,18 @@ async def test_orchestrator_raises_file_not_found_when_all_sources_are_not_found
     """
 
     primary = _FakeAnnualReportSource("eid", error=AnnualReportSourceNotFoundError("eid none"))
-    fallback = _FakeAnnualReportSource(
-        "eastmoney",
-        error=AnnualReportSourceNotFoundError("eastmoney none"),
-    )
-    orchestrator = AnnualReportSourceOrchestrator((primary, fallback))
+    orchestrator = AnnualReportSourceOrchestrator((primary,))
 
     with pytest.raises(FileNotFoundError) as exc_info:
         await orchestrator.fetch_annual_report_pdf("004393", 2024)
 
     assert isinstance(exc_info.value, AnnualReportSourceNotFoundError)
     assert "eid:not_found" in str(exc_info.value)
-    assert "eastmoney:not_found" in str(exc_info.value)
 
 
 @pytest.mark.asyncio
 async def test_orchestrator_unavailable_exhaustion_is_not_file_not_found() -> None:
-    """验证所有来源不可用时不会被折叠为 FileNotFoundError。
+    """验证 EID single-source unavailable 不会被折叠为 FileNotFoundError。
 
     Args:
         无。
@@ -1189,22 +1169,18 @@ async def test_orchestrator_unavailable_exhaustion_is_not_file_not_found() -> No
     """
 
     primary = _FakeAnnualReportSource("eid", error=AnnualReportSourceUnavailableError("timeout"))
-    fallback = _FakeAnnualReportSource(
-        "eastmoney",
-        error=AnnualReportSourceUnavailableError("http 503"),
-    )
-    orchestrator = AnnualReportSourceOrchestrator((primary, fallback))
+    orchestrator = AnnualReportSourceOrchestrator((primary,))
 
-    with pytest.raises(AnnualReportSourceAggregateError) as exc_info:
+    with pytest.raises(AnnualReportSourceUnavailableError) as exc_info:
         await orchestrator.fetch_annual_report_pdf("004393", 2024)
 
     assert not isinstance(exc_info.value, FileNotFoundError)
-    assert {failure.category for failure in exc_info.value.failures} == {"unavailable"}
+    assert "eid:unavailable:timeout" in str(exc_info.value)
 
 
 @pytest.mark.asyncio
 async def test_orchestrator_mixed_not_found_and_unavailable_preserves_unavailable_category() -> None:
-    """验证 not-found 与 unavailable 混合时保留 unavailable 类别。
+    """验证 single-source 模式拒绝 not-found 与 unavailable 混合来源。
 
     Args:
         无。
@@ -1213,7 +1189,7 @@ async def test_orchestrator_mixed_not_found_and_unavailable_preserves_unavailabl
         无返回值。
 
     Raises:
-        AssertionError: 当混合失败被误报为纯 not-found 时抛出。
+        AssertionError: 当混合来源链路未被拒绝时抛出。
     """
 
     primary = _FakeAnnualReportSource("eid", error=AnnualReportSourceNotFoundError("none"))
@@ -1221,16 +1197,8 @@ async def test_orchestrator_mixed_not_found_and_unavailable_preserves_unavailabl
         "eastmoney",
         error=AnnualReportSourceUnavailableError("timeout"),
     )
-    orchestrator = AnnualReportSourceOrchestrator((primary, fallback))
-
-    with pytest.raises(AnnualReportSourceAggregateError) as exc_info:
-        await orchestrator.fetch_annual_report_pdf("004393", 2024)
-
-    assert not isinstance(exc_info.value, FileNotFoundError)
-    assert {failure.category for failure in exc_info.value.failures} == {
-        "not_found",
-        "unavailable",
-    }
+    with pytest.raises(ValueError, match="single-source"):
+        AnnualReportSourceOrchestrator((primary, fallback))
 
 
 @pytest.mark.asyncio

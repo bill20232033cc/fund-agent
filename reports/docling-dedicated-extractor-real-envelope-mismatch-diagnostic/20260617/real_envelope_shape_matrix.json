@@ -1,0 +1,1048 @@
+{
+  "aggregate": {
+    "failure_classification_counts": {
+      "deferred_by_plan": 16,
+      "section_candidates_exist_but_blocks_unlinked": 74,
+      "section_id_absent_or_not_projected": 2
+    },
+    "field_slot_count": 92,
+    "sample_count": 4
+  },
+  "candidate_only": true,
+  "input_commit": "028f0b8",
+  "interpretation": {
+    "baseline_promotion_supported": false,
+    "field_correctness_proof": false,
+    "production_integration_supported": false,
+    "source_truth_proof": false
+  },
+  "release_readiness": "NOT_READY",
+  "rows": [
+    {
+      "cell_label_path_metrics": {
+        "column_header_nonempty_count": 0,
+        "column_header_nonempty_ratio": 0.0,
+        "row_label_nonempty_count": 0,
+        "row_label_nonempty_ratio": 0.0
+      },
+      "counts": {
+        "cells": 3493,
+        "sections": 25,
+        "tables": 95,
+        "text_blocks": 670
+      },
+      "document_year": 2025,
+      "field_failure_classifications": [
+        {
+          "classification": "section_candidates_exist_but_blocks_unlinked",
+          "field_path": "basic_identity.fund_name"
+        },
+        {
+          "classification": "section_candidates_exist_but_blocks_unlinked",
+          "field_path": "basic_identity.fund_code"
+        },
+        {
+          "classification": "section_candidates_exist_but_blocks_unlinked",
+          "field_path": "basic_identity.management_company"
+        },
+        {
+          "classification": "section_candidates_exist_but_blocks_unlinked",
+          "field_path": "basic_identity.custodian"
+        },
+        {
+          "classification": "section_candidates_exist_but_blocks_unlinked",
+          "field_path": "product_profile.investment_objective"
+        },
+        {
+          "classification": "section_candidates_exist_but_blocks_unlinked",
+          "field_path": "product_profile.investment_scope"
+        },
+        {
+          "classification": "section_candidates_exist_but_blocks_unlinked",
+          "field_path": "benchmark.benchmark_text"
+        },
+        {
+          "classification": "section_candidates_exist_but_blocks_unlinked",
+          "field_path": "risk_characteristic_text.risk_characteristic_text"
+        },
+        {
+          "classification": "section_id_absent_or_not_projected",
+          "field_path": "fee_schedule.management_fee"
+        },
+        {
+          "classification": "section_id_absent_or_not_projected",
+          "field_path": "fee_schedule.custody_fee"
+        },
+        {
+          "classification": "section_candidates_exist_but_blocks_unlinked",
+          "field_path": "nav_benchmark_performance.nav_growth_rate"
+        },
+        {
+          "classification": "section_candidates_exist_but_blocks_unlinked",
+          "field_path": "nav_benchmark_performance.benchmark_return_rate"
+        },
+        {
+          "classification": "section_candidates_exist_but_blocks_unlinked",
+          "field_path": "tracking_error.value_text"
+        },
+        {
+          "classification": "section_candidates_exist_but_blocks_unlinked",
+          "field_path": "portfolio_managers"
+        },
+        {
+          "classification": "section_candidates_exist_but_blocks_unlinked",
+          "field_path": "turnover_rate"
+        },
+        {
+          "classification": "section_candidates_exist_but_blocks_unlinked",
+          "field_path": "manager_alignment.manager_holding_range"
+        },
+        {
+          "classification": "section_candidates_exist_but_blocks_unlinked",
+          "field_path": "holdings_snapshot.top_holdings"
+        },
+        {
+          "classification": "section_candidates_exist_but_blocks_unlinked",
+          "field_path": "holdings_snapshot.bond_top_holdings"
+        },
+        {
+          "classification": "section_candidates_exist_but_blocks_unlinked",
+          "field_path": "holdings_snapshot.target_fund_holdings"
+        },
+        {
+          "classification": "deferred_by_plan",
+          "field_path": "manager_strategy_text"
+        },
+        {
+          "classification": "deferred_by_plan",
+          "field_path": "holder_structure"
+        },
+        {
+          "classification": "deferred_by_plan",
+          "field_path": "share_change"
+        },
+        {
+          "classification": "deferred_by_plan",
+          "field_path": "bond_risk_evidence"
+        }
+      ],
+      "fund_code": "004393",
+      "normalized_section_heading_candidates": {
+        "§10": [
+          "§9 基金份额持有人信息"
+        ],
+        "§2": [
+          "§2 基金简介"
+        ],
+        "§3": [
+          "§3 主要财务指标、基金净值表现及利润分配情况"
+        ],
+        "§4": [
+          "§4 管理人报告"
+        ],
+        "§7": [],
+        "§8": [
+          "§8 投资组合报告"
+        ]
+      },
+      "sample_id": "S1",
+      "section_heading_examples": [
+        "安信企业价值优选混合型证券投资基金 2025 年年度报告",
+        "§1 重要提示及目录",
+        "§2 基金简介",
+        "§3 主要财务指标、基金净值表现及利润分配情况",
+        "§4 管理人报告",
+        "§5 托管人报告",
+        "§6 审计报告",
+        "§7 年度财务报表",
+        "（1）金融资产分类",
+        "（2）金融负债分类",
+        "（1）增值税及附加",
+        "（2）企业所得税"
+      ],
+      "source_path": "reports/representation-json/004393_2025_docling_current_envelope.json",
+      "table_family_top_counts": [
+        [
+          "unknown",
+          95
+        ]
+      ],
+      "table_section_id_top_counts": [
+        [
+          "None",
+          95
+        ]
+      ],
+      "target_label_hits": {
+        "业绩比较基准": {
+          "table_cell_count": 1,
+          "text_block_count": 6
+        },
+        "业绩比较基准收益率": {
+          "table_cell_count": 0,
+          "text_block_count": 3
+        },
+        "任职日期": {
+          "table_cell_count": 1,
+          "text_block_count": 1
+        },
+        "债券名称": {
+          "table_cell_count": 1,
+          "text_block_count": 0
+        },
+        "公允价值": {
+          "table_cell_count": 23,
+          "text_block_count": 43
+        },
+        "净值增长率": {
+          "table_cell_count": 0,
+          "text_block_count": 3
+        },
+        "占基金资产净值比例": {
+          "table_cell_count": 10,
+          "text_block_count": 5
+        },
+        "基金代码": {
+          "table_cell_count": 0,
+          "text_block_count": 0
+        },
+        "基金名称": {
+          "table_cell_count": 1,
+          "text_block_count": 0
+        },
+        "基金托管人": {
+          "table_cell_count": 7,
+          "text_block_count": 14
+        },
+        "基金管理人": {
+          "table_cell_count": 17,
+          "text_block_count": 52
+        },
+        "基金经理持有": {
+          "table_cell_count": 1,
+          "text_block_count": 0
+        },
+        "姓名": {
+          "table_cell_count": 3,
+          "text_block_count": 0
+        },
+        "托管费": {
+          "table_cell_count": 5,
+          "text_block_count": 4
+        },
+        "投资目标": {
+          "table_cell_count": 1,
+          "text_block_count": 0
+        },
+        "投资范围": {
+          "table_cell_count": 0,
+          "text_block_count": 2
+        },
+        "换手率": {
+          "table_cell_count": 0,
+          "text_block_count": 0
+        },
+        "管理费": {
+          "table_cell_count": 2,
+          "text_block_count": 3
+        },
+        "股票交易金额占基金资产净值比例": {
+          "table_cell_count": 0,
+          "text_block_count": 0
+        },
+        "股票名称": {
+          "table_cell_count": 3,
+          "text_block_count": 0
+        },
+        "跟踪误差": {
+          "table_cell_count": 0,
+          "text_block_count": 0
+        },
+        "风险收益特征": {
+          "table_cell_count": 1,
+          "text_block_count": 2
+        }
+      },
+      "text_block_section_id_top_counts": [
+        [
+          "None",
+          670
+        ]
+      ]
+    },
+    {
+      "cell_label_path_metrics": {
+        "column_header_nonempty_count": 0,
+        "column_header_nonempty_ratio": 0.0,
+        "row_label_nonempty_count": 0,
+        "row_label_nonempty_ratio": 0.0
+      },
+      "counts": {
+        "cells": 2759,
+        "sections": 229,
+        "tables": 96,
+        "text_blocks": 737
+      },
+      "document_year": 2024,
+      "field_failure_classifications": [
+        {
+          "classification": "section_candidates_exist_but_blocks_unlinked",
+          "field_path": "basic_identity.fund_name"
+        },
+        {
+          "classification": "section_candidates_exist_but_blocks_unlinked",
+          "field_path": "basic_identity.fund_code"
+        },
+        {
+          "classification": "section_candidates_exist_but_blocks_unlinked",
+          "field_path": "basic_identity.management_company"
+        },
+        {
+          "classification": "section_candidates_exist_but_blocks_unlinked",
+          "field_path": "basic_identity.custodian"
+        },
+        {
+          "classification": "section_candidates_exist_but_blocks_unlinked",
+          "field_path": "product_profile.investment_objective"
+        },
+        {
+          "classification": "section_candidates_exist_but_blocks_unlinked",
+          "field_path": "product_profile.investment_scope"
+        },
+        {
+          "classification": "section_candidates_exist_but_blocks_unlinked",
+          "field_path": "benchmark.benchmark_text"
+        },
+        {
+          "classification": "section_candidates_exist_but_blocks_unlinked",
+          "field_path": "risk_characteristic_text.risk_characteristic_text"
+        },
+        {
+          "classification": "section_candidates_exist_but_blocks_unlinked",
+          "field_path": "fee_schedule.management_fee"
+        },
+        {
+          "classification": "section_candidates_exist_but_blocks_unlinked",
+          "field_path": "fee_schedule.custody_fee"
+        },
+        {
+          "classification": "section_candidates_exist_but_blocks_unlinked",
+          "field_path": "nav_benchmark_performance.nav_growth_rate"
+        },
+        {
+          "classification": "section_candidates_exist_but_blocks_unlinked",
+          "field_path": "nav_benchmark_performance.benchmark_return_rate"
+        },
+        {
+          "classification": "section_candidates_exist_but_blocks_unlinked",
+          "field_path": "tracking_error.value_text"
+        },
+        {
+          "classification": "section_candidates_exist_but_blocks_unlinked",
+          "field_path": "portfolio_managers"
+        },
+        {
+          "classification": "section_candidates_exist_but_blocks_unlinked",
+          "field_path": "turnover_rate"
+        },
+        {
+          "classification": "section_candidates_exist_but_blocks_unlinked",
+          "field_path": "manager_alignment.manager_holding_range"
+        },
+        {
+          "classification": "section_candidates_exist_but_blocks_unlinked",
+          "field_path": "holdings_snapshot.top_holdings"
+        },
+        {
+          "classification": "section_candidates_exist_but_blocks_unlinked",
+          "field_path": "holdings_snapshot.bond_top_holdings"
+        },
+        {
+          "classification": "section_candidates_exist_but_blocks_unlinked",
+          "field_path": "holdings_snapshot.target_fund_holdings"
+        },
+        {
+          "classification": "deferred_by_plan",
+          "field_path": "manager_strategy_text"
+        },
+        {
+          "classification": "deferred_by_plan",
+          "field_path": "holder_structure"
+        },
+        {
+          "classification": "deferred_by_plan",
+          "field_path": "share_change"
+        },
+        {
+          "classification": "deferred_by_plan",
+          "field_path": "bond_risk_evidence"
+        }
+      ],
+      "fund_code": "006597",
+      "normalized_section_heading_candidates": {
+        "§10": [
+          "§9 基金份额持有人信息"
+        ],
+        "§2": [
+          "§2 基金简介"
+        ],
+        "§3": [
+          "§3 主要财务指标、基金净值表现及利润分配情况",
+          "3.2 基金净值表现"
+        ],
+        "§4": [
+          "§4 管理人报告"
+        ],
+        "§7": [
+          "费用的确认和计量",
+          "7.4.7.17 其他费用"
+        ],
+        "§8": [
+          "§8 投资组合报告",
+          "8.12 投资组合报告附注"
+        ]
+      },
+      "sample_id": "S4",
+      "section_heading_examples": [
+        "国泰利享中短债债券型证券投资基金 2024 年年度报告 2024 年 12 月 31 日",
+        "1.1 重要提示",
+        "§1 重要提示及目录",
+        "1.2 目录",
+        "2.1 基金基本情况",
+        "2.2 基金产品说明",
+        "2.3 基金管理人和基金托管人",
+        "§2 基金简介",
+        "2.4 信息披露方式",
+        "2.5 其他相关资料",
+        "§3 主要财务指标、基金净值表现及利润分配情况",
+        "3.1 主要会计数据和财务指标"
+      ],
+      "source_path": "reports/representation-json/006597_2024_docling_full.json",
+      "table_family_top_counts": [
+        [
+          "unknown",
+          96
+        ]
+      ],
+      "table_section_id_top_counts": [
+        [
+          "None",
+          96
+        ]
+      ],
+      "target_label_hits": {
+        "业绩比较基准": {
+          "table_cell_count": 1,
+          "text_block_count": 11
+        },
+        "业绩比较基准收益率": {
+          "table_cell_count": 0,
+          "text_block_count": 9
+        },
+        "任职日期": {
+          "table_cell_count": 1,
+          "text_block_count": 1
+        },
+        "债券名称": {
+          "table_cell_count": 2,
+          "text_block_count": 0
+        },
+        "公允价值": {
+          "table_cell_count": 14,
+          "text_block_count": 40
+        },
+        "净值增长率": {
+          "table_cell_count": 2,
+          "text_block_count": 9
+        },
+        "占基金资产净值比例": {
+          "table_cell_count": 5,
+          "text_block_count": 5
+        },
+        "基金代码": {
+          "table_cell_count": 0,
+          "text_block_count": 5
+        },
+        "基金名称": {
+          "table_cell_count": 1,
+          "text_block_count": 0
+        },
+        "基金托管人": {
+          "table_cell_count": 6,
+          "text_block_count": 13
+        },
+        "基金管理人": {
+          "table_cell_count": 15,
+          "text_block_count": 60
+        },
+        "基金经理持有": {
+          "table_cell_count": 1,
+          "text_block_count": 0
+        },
+        "姓名": {
+          "table_cell_count": 2,
+          "text_block_count": 0
+        },
+        "托管费": {
+          "table_cell_count": 5,
+          "text_block_count": 4
+        },
+        "投资目标": {
+          "table_cell_count": 1,
+          "text_block_count": 1
+        },
+        "投资范围": {
+          "table_cell_count": 0,
+          "text_block_count": 1
+        },
+        "换手率": {
+          "table_cell_count": 0,
+          "text_block_count": 0
+        },
+        "管理费": {
+          "table_cell_count": 2,
+          "text_block_count": 1
+        },
+        "股票交易金额占基金资产净值比例": {
+          "table_cell_count": 0,
+          "text_block_count": 0
+        },
+        "股票名称": {
+          "table_cell_count": 0,
+          "text_block_count": 0
+        },
+        "跟踪误差": {
+          "table_cell_count": 0,
+          "text_block_count": 0
+        },
+        "风险收益特征": {
+          "table_cell_count": 1,
+          "text_block_count": 2
+        }
+      },
+      "text_block_section_id_top_counts": [
+        [
+          "None",
+          737
+        ]
+      ]
+    },
+    {
+      "cell_label_path_metrics": {
+        "column_header_nonempty_count": 0,
+        "column_header_nonempty_ratio": 0.0,
+        "row_label_nonempty_count": 0,
+        "row_label_nonempty_ratio": 0.0
+      },
+      "counts": {
+        "cells": 7060,
+        "sections": 208,
+        "tables": 121,
+        "text_blocks": 856
+      },
+      "document_year": 2024,
+      "field_failure_classifications": [
+        {
+          "classification": "section_candidates_exist_but_blocks_unlinked",
+          "field_path": "basic_identity.fund_name"
+        },
+        {
+          "classification": "section_candidates_exist_but_blocks_unlinked",
+          "field_path": "basic_identity.fund_code"
+        },
+        {
+          "classification": "section_candidates_exist_but_blocks_unlinked",
+          "field_path": "basic_identity.management_company"
+        },
+        {
+          "classification": "section_candidates_exist_but_blocks_unlinked",
+          "field_path": "basic_identity.custodian"
+        },
+        {
+          "classification": "section_candidates_exist_but_blocks_unlinked",
+          "field_path": "product_profile.investment_objective"
+        },
+        {
+          "classification": "section_candidates_exist_but_blocks_unlinked",
+          "field_path": "product_profile.investment_scope"
+        },
+        {
+          "classification": "section_candidates_exist_but_blocks_unlinked",
+          "field_path": "benchmark.benchmark_text"
+        },
+        {
+          "classification": "section_candidates_exist_but_blocks_unlinked",
+          "field_path": "risk_characteristic_text.risk_characteristic_text"
+        },
+        {
+          "classification": "section_candidates_exist_but_blocks_unlinked",
+          "field_path": "fee_schedule.management_fee"
+        },
+        {
+          "classification": "section_candidates_exist_but_blocks_unlinked",
+          "field_path": "fee_schedule.custody_fee"
+        },
+        {
+          "classification": "section_candidates_exist_but_blocks_unlinked",
+          "field_path": "nav_benchmark_performance.nav_growth_rate"
+        },
+        {
+          "classification": "section_candidates_exist_but_blocks_unlinked",
+          "field_path": "nav_benchmark_performance.benchmark_return_rate"
+        },
+        {
+          "classification": "section_candidates_exist_but_blocks_unlinked",
+          "field_path": "tracking_error.value_text"
+        },
+        {
+          "classification": "section_candidates_exist_but_blocks_unlinked",
+          "field_path": "portfolio_managers"
+        },
+        {
+          "classification": "section_candidates_exist_but_blocks_unlinked",
+          "field_path": "turnover_rate"
+        },
+        {
+          "classification": "section_candidates_exist_but_blocks_unlinked",
+          "field_path": "manager_alignment.manager_holding_range"
+        },
+        {
+          "classification": "section_candidates_exist_but_blocks_unlinked",
+          "field_path": "holdings_snapshot.top_holdings"
+        },
+        {
+          "classification": "section_candidates_exist_but_blocks_unlinked",
+          "field_path": "holdings_snapshot.bond_top_holdings"
+        },
+        {
+          "classification": "section_candidates_exist_but_blocks_unlinked",
+          "field_path": "holdings_snapshot.target_fund_holdings"
+        },
+        {
+          "classification": "deferred_by_plan",
+          "field_path": "manager_strategy_text"
+        },
+        {
+          "classification": "deferred_by_plan",
+          "field_path": "holder_structure"
+        },
+        {
+          "classification": "deferred_by_plan",
+          "field_path": "share_change"
+        },
+        {
+          "classification": "deferred_by_plan",
+          "field_path": "bond_risk_evidence"
+        }
+      ],
+      "fund_code": "017641",
+      "normalized_section_heading_candidates": {
+        "§10": [
+          "§ 9 基金份额持有人信息"
+        ],
+        "§2": [
+          "§ 2 基金简介"
+        ],
+        "§3": [
+          "§ 3 主要财务指标、基金净值表现及利润分配情况",
+          "3.2 基金净值表现"
+        ],
+        "§4": [
+          "§ 4 管理人报告"
+        ],
+        "§7": [
+          "7.4.4.10 费用的确认和计量",
+          "7.4.7.16 其他费用"
+        ],
+        "§8": [
+          "§ 8 投资组合报告",
+          "8.11 投资组合报告附注",
+          "8.11.6 投资组合报告附注的其他文字描述部分"
+        ]
+      },
+      "sample_id": "S5",
+      "section_heading_examples": [
+        "摩根标普 500 指数型发起式证券投资基金 2024 年年度报告 2024 年 12 月 31 日",
+        "(QDII)",
+        "1.1 重要提示",
+        "§ 1 重要提示及目录",
+        "1.2 目录",
+        "2.1 基金基本情况",
+        "2.2 基金产品说明",
+        "§ 2 基金简介",
+        "2.3 基金管理人和基金托管人",
+        "2.4 境外投资顾问和境外资产托管人",
+        "2.5 信息披露方式",
+        "2.6 其他相关资料"
+      ],
+      "source_path": "reports/representation-json/017641_2024_docling_full.json",
+      "table_family_top_counts": [
+        [
+          "unknown",
+          121
+        ]
+      ],
+      "table_section_id_top_counts": [
+        [
+          "None",
+          121
+        ]
+      ],
+      "target_label_hits": {
+        "业绩比较基准": {
+          "table_cell_count": 5,
+          "text_block_count": 9
+        },
+        "业绩比较基准收益率": {
+          "table_cell_count": 0,
+          "text_block_count": 6
+        },
+        "任职日期": {
+          "table_cell_count": 1,
+          "text_block_count": 2
+        },
+        "债券名称": {
+          "table_cell_count": 0,
+          "text_block_count": 0
+        },
+        "公允价值": {
+          "table_cell_count": 17,
+          "text_block_count": 45
+        },
+        "净值增长率": {
+          "table_cell_count": 1,
+          "text_block_count": 8
+        },
+        "占基金资产净值比例": {
+          "table_cell_count": 7,
+          "text_block_count": 7
+        },
+        "基金代码": {
+          "table_cell_count": 0,
+          "text_block_count": 0
+        },
+        "基金名称": {
+          "table_cell_count": 1,
+          "text_block_count": 0
+        },
+        "基金托管人": {
+          "table_cell_count": 7,
+          "text_block_count": 14
+        },
+        "基金管理人": {
+          "table_cell_count": 20,
+          "text_block_count": 55
+        },
+        "基金经理持有": {
+          "table_cell_count": 1,
+          "text_block_count": 0
+        },
+        "姓名": {
+          "table_cell_count": 4,
+          "text_block_count": 0
+        },
+        "托管费": {
+          "table_cell_count": 5,
+          "text_block_count": 4
+        },
+        "投资目标": {
+          "table_cell_count": 1,
+          "text_block_count": 1
+        },
+        "投资范围": {
+          "table_cell_count": 0,
+          "text_block_count": 1
+        },
+        "换手率": {
+          "table_cell_count": 0,
+          "text_block_count": 0
+        },
+        "管理费": {
+          "table_cell_count": 2,
+          "text_block_count": 2
+        },
+        "股票交易金额占基金资产净值比例": {
+          "table_cell_count": 0,
+          "text_block_count": 0
+        },
+        "股票名称": {
+          "table_cell_count": 0,
+          "text_block_count": 0
+        },
+        "跟踪误差": {
+          "table_cell_count": 1,
+          "text_block_count": 5
+        },
+        "风险收益特征": {
+          "table_cell_count": 2,
+          "text_block_count": 1
+        }
+      },
+      "text_block_section_id_top_counts": [
+        [
+          "None",
+          856
+        ]
+      ]
+    },
+    {
+      "cell_label_path_metrics": {
+        "column_header_nonempty_count": 0,
+        "column_header_nonempty_ratio": 0.0,
+        "row_label_nonempty_count": 0,
+        "row_label_nonempty_ratio": 0.0
+      },
+      "counts": {
+        "cells": 5940,
+        "sections": 222,
+        "tables": 124,
+        "text_blocks": 840
+      },
+      "document_year": 2024,
+      "field_failure_classifications": [
+        {
+          "classification": "section_candidates_exist_but_blocks_unlinked",
+          "field_path": "basic_identity.fund_name"
+        },
+        {
+          "classification": "section_candidates_exist_but_blocks_unlinked",
+          "field_path": "basic_identity.fund_code"
+        },
+        {
+          "classification": "section_candidates_exist_but_blocks_unlinked",
+          "field_path": "basic_identity.management_company"
+        },
+        {
+          "classification": "section_candidates_exist_but_blocks_unlinked",
+          "field_path": "basic_identity.custodian"
+        },
+        {
+          "classification": "section_candidates_exist_but_blocks_unlinked",
+          "field_path": "product_profile.investment_objective"
+        },
+        {
+          "classification": "section_candidates_exist_but_blocks_unlinked",
+          "field_path": "product_profile.investment_scope"
+        },
+        {
+          "classification": "section_candidates_exist_but_blocks_unlinked",
+          "field_path": "benchmark.benchmark_text"
+        },
+        {
+          "classification": "section_candidates_exist_but_blocks_unlinked",
+          "field_path": "risk_characteristic_text.risk_characteristic_text"
+        },
+        {
+          "classification": "section_candidates_exist_but_blocks_unlinked",
+          "field_path": "fee_schedule.management_fee"
+        },
+        {
+          "classification": "section_candidates_exist_but_blocks_unlinked",
+          "field_path": "fee_schedule.custody_fee"
+        },
+        {
+          "classification": "section_candidates_exist_but_blocks_unlinked",
+          "field_path": "nav_benchmark_performance.nav_growth_rate"
+        },
+        {
+          "classification": "section_candidates_exist_but_blocks_unlinked",
+          "field_path": "nav_benchmark_performance.benchmark_return_rate"
+        },
+        {
+          "classification": "section_candidates_exist_but_blocks_unlinked",
+          "field_path": "tracking_error.value_text"
+        },
+        {
+          "classification": "section_candidates_exist_but_blocks_unlinked",
+          "field_path": "portfolio_managers"
+        },
+        {
+          "classification": "section_candidates_exist_but_blocks_unlinked",
+          "field_path": "turnover_rate"
+        },
+        {
+          "classification": "section_candidates_exist_but_blocks_unlinked",
+          "field_path": "manager_alignment.manager_holding_range"
+        },
+        {
+          "classification": "section_candidates_exist_but_blocks_unlinked",
+          "field_path": "holdings_snapshot.top_holdings"
+        },
+        {
+          "classification": "section_candidates_exist_but_blocks_unlinked",
+          "field_path": "holdings_snapshot.bond_top_holdings"
+        },
+        {
+          "classification": "section_candidates_exist_but_blocks_unlinked",
+          "field_path": "holdings_snapshot.target_fund_holdings"
+        },
+        {
+          "classification": "deferred_by_plan",
+          "field_path": "manager_strategy_text"
+        },
+        {
+          "classification": "deferred_by_plan",
+          "field_path": "holder_structure"
+        },
+        {
+          "classification": "deferred_by_plan",
+          "field_path": "share_change"
+        },
+        {
+          "classification": "deferred_by_plan",
+          "field_path": "bond_risk_evidence"
+        }
+      ],
+      "fund_code": "110020",
+      "normalized_section_heading_candidates": {
+        "§10": [
+          "§9  基金份额持有人信息"
+        ],
+        "§2": [
+          "§2  基金简介"
+        ],
+        "§3": [
+          "§3  主要财务指标、基金净值表现及利润分配情况",
+          "3.2  基金净值表现"
+        ],
+        "§4": [
+          "§4  管理人报告"
+        ],
+        "§7": [
+          "7.4.4.10费用的确认和计量",
+          "7.4.7.19 其他费用"
+        ],
+        "§8": [
+          "§8  投资组合报告",
+          "8.13  投资组合报告附注"
+        ]
+      },
+      "sample_id": "S6",
+      "section_heading_examples": [
+        "易方达沪深300交易型开放式指数发起式证券投资基金联 接基金",
+        "2024 年年度报告",
+        "1.1  重要提示",
+        "§1  重要提示及目录",
+        "1.2  目录",
+        "2.1  基金基本情况",
+        "2.1.1 目标基金基本情况",
+        "§2  基金简介",
+        "2.2  基金产品说明",
+        "2.2.1 目标基金产品说明",
+        "2.3  基金管理人和基金托管人",
+        "2.4  信息披露方式"
+      ],
+      "source_path": "reports/representation-json/110020_2024_docling_full.json",
+      "table_family_top_counts": [
+        [
+          "unknown",
+          124
+        ]
+      ],
+      "table_section_id_top_counts": [
+        [
+          "None",
+          124
+        ]
+      ],
+      "target_label_hits": {
+        "业绩比较基准": {
+          "table_cell_count": 7,
+          "text_block_count": 8
+        },
+        "业绩比较基准收益率": {
+          "table_cell_count": 0,
+          "text_block_count": 6
+        },
+        "任职日期": {
+          "table_cell_count": 0,
+          "text_block_count": 1
+        },
+        "债券名称": {
+          "table_cell_count": 0,
+          "text_block_count": 0
+        },
+        "公允价值": {
+          "table_cell_count": 22,
+          "text_block_count": 45
+        },
+        "净值增长率": {
+          "table_cell_count": 1,
+          "text_block_count": 7
+        },
+        "占基金资产净值比例": {
+          "table_cell_count": 5,
+          "text_block_count": 5
+        },
+        "基金代码": {
+          "table_cell_count": 0,
+          "text_block_count": 0
+        },
+        "基金名称": {
+          "table_cell_count": 3,
+          "text_block_count": 0
+        },
+        "基金托管人": {
+          "table_cell_count": 7,
+          "text_block_count": 15
+        },
+        "基金管理人": {
+          "table_cell_count": 30,
+          "text_block_count": 46
+        },
+        "基金经理持有": {
+          "table_cell_count": 1,
+          "text_block_count": 0
+        },
+        "姓名": {
+          "table_cell_count": 1,
+          "text_block_count": 0
+        },
+        "托管费": {
+          "table_cell_count": 5,
+          "text_block_count": 5
+        },
+        "投资目标": {
+          "table_cell_count": 4,
+          "text_block_count": 2
+        },
+        "投资范围": {
+          "table_cell_count": 0,
+          "text_block_count": 3
+        },
+        "换手率": {
+          "table_cell_count": 0,
+          "text_block_count": 0
+        },
+        "管理费": {
+          "table_cell_count": 2,
+          "text_block_count": 5
+        },
+        "股票交易金额占基金资产净值比例": {
+          "table_cell_count": 0,
+          "text_block_count": 0
+        },
+        "股票名称": {
+          "table_cell_count": 3,
+          "text_block_count": 0
+        },
+        "跟踪误差": {
+          "table_cell_count": 4,
+          "text_block_count": 5
+        },
+        "风险收益特征": {
+          "table_cell_count": 3,
+          "text_block_count": 1
+        }
+      },
+      "text_block_section_id_top_counts": [
+        [
+          "None",
+          840
+        ]
+      ]
+    }
+  ],
+  "schema_version": "docling_dedicated_extractor_real_envelope_mismatch_diagnostic.v1",
+  "source_truth_status": "not_proven"
+}

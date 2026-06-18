@@ -77,4 +77,3 @@ Do not run evidence, modify code, modify renderer, modify FQ0-FQ6, change Servic
 | `013308` QDII name vs domestic-stock CSV category conflict | future taxonomy/controller gate | Do not enter evidence for `013308` until conflict is resolved. |
 | Bond QDII asset-class mismatch | future controller gate if equity QDII candidates fail | Do not use bond QDII candidates as replacement evidence without explicit asset-class fitness acceptance. |
 | Non-QDII-named overseas rows classification | future taxonomy gate | Keep `539003` and `000614` out of the next evidence path. |
-

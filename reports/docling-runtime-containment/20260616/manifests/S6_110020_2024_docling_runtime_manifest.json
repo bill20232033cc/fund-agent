@@ -1,0 +1,17 @@
+{
+  "schema_version": "candidate_representation_export_manifest.v1",
+  "entries": [
+    {
+      "sample_id": "S6",
+      "fund_code": "110020",
+      "document_year": 2024,
+      "route": "docling_pdf_candidate",
+      "mode": "handled",
+      "input_artifact_path": "cache/eid-artifact-capture/docling-baseline-qualification-20260615/pdf/110020_2024_annual_report_eid.pdf",
+      "accepted_input_sha256": "307210ba3e55cf611334cebc3c0103824cf7c3352598522f257e741220dd6790",
+      "provenance_judgment_path": "docs/reviews/docling-baseline-qualification-staged-eid-artifact-capture-evidence-20260615.md",
+      "output_path": "reports/docling-runtime-containment/20260616/outputs/110020_2024_docling_full.json",
+      "report_type": "annual_report"
+    }
+  ]
+}

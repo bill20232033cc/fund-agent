@@ -1,0 +1,128 @@
+{
+  "schema_version": "fund-agent.small_golden_set_manifest.v1",
+  "promotion_allowed_default": false,
+  "ordinary_pytest_network_allowed": false,
+  "fallback_invocation_allowed": false,
+  "rows": [
+    {
+      "fund_code": "004393",
+      "report_year": 2024,
+      "slot": "active_equity_or_mixed",
+      "expected_fund_type": "active_fund",
+      "promotion_allowed": false,
+      "source_document_identity": {
+        "source_kind": "annual_report",
+        "identity_status": "pending_offline_fixture",
+        "fallback_used": false,
+        "fallback_invocation": "prohibited"
+      },
+      "field_expectations": {
+        "identity": "expected",
+        "source_document": "expected",
+        "benchmark": "expected",
+        "manager": "expected",
+        "scale": "expected",
+        "fee": "expected",
+        "return": "expected",
+        "holdings": "expected",
+        "risk": "expected"
+      }
+    },
+    {
+      "fund_code": "110020",
+      "report_year": 2024,
+      "slot": "broad_domestic_index",
+      "expected_fund_type": "index_fund",
+      "promotion_allowed": false,
+      "source_document_identity": {
+        "source_kind": "annual_report",
+        "identity_status": "pending_offline_fixture",
+        "fallback_used": false,
+        "fallback_invocation": "prohibited"
+      },
+      "field_expectations": {
+        "identity": "expected",
+        "source_document": "expected",
+        "benchmark": "expected",
+        "manager": "expected",
+        "scale": "expected",
+        "fee": "expected",
+        "return": "expected",
+        "holdings": "expected",
+        "risk": "expected"
+      }
+    },
+    {
+      "fund_code": "004194",
+      "report_year": 2024,
+      "slot": "enhanced_index",
+      "expected_fund_type": "enhanced_index",
+      "promotion_allowed": false,
+      "source_document_identity": {
+        "source_kind": "annual_report",
+        "identity_status": "pending_offline_fixture",
+        "fallback_used": false,
+        "fallback_invocation": "prohibited"
+      },
+      "field_expectations": {
+        "identity": "expected",
+        "source_document": "expected",
+        "benchmark": "expected",
+        "manager": "expected",
+        "scale": "expected",
+        "fee": "expected",
+        "return": "expected",
+        "holdings": "expected",
+        "risk": "expected"
+      }
+    },
+    {
+      "fund_code": "006597",
+      "report_year": 2024,
+      "slot": "bond",
+      "expected_fund_type": "bond_fund",
+      "promotion_allowed": false,
+      "source_document_identity": {
+        "source_kind": "annual_report",
+        "identity_status": "pending_offline_fixture",
+        "fallback_used": false,
+        "fallback_invocation": "prohibited"
+      },
+      "field_expectations": {
+        "identity": "expected",
+        "source_document": "expected",
+        "benchmark": "expected",
+        "manager": "expected",
+        "scale": "expected",
+        "fee": "expected",
+        "return": "expected",
+        "holdings": "expected",
+        "risk": "expected"
+      }
+    },
+    {
+      "fund_code": "017641",
+      "report_year": 2024,
+      "slot": "qdii",
+      "expected_fund_type": "qdii_fund",
+      "promotion_allowed": false,
+      "source_document_identity": {
+        "source_kind": "annual_report",
+        "identity_status": "pending_offline_fixture",
+        "fallback_used": false,
+        "fallback_invocation": "prohibited"
+      },
+      "field_expectations": {
+        "identity": "expected",
+        "source_document": "expected",
+        "benchmark": "expected",
+        "manager": "expected",
+        "scale": "expected",
+        "fee": "expected",
+        "return": "expected",
+        "holdings": "unavailable",
+        "risk": "deferred_policy"
+      }
+    }
+  ]
+}

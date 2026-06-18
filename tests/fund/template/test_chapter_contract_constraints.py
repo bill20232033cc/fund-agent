@@ -13,6 +13,7 @@ from fund_agent.fund.template.chapter_contract_constraints import (
     map_requirement_severity_to_issue_severity,
 )
 from fund_agent.fund.template.contracts import load_template_contract_manifest
+from fund_agent.fund.template.typed_contracts import load_typed_template_contract_manifest
 
 
 def test_sidecar_covers_all_chapter_ids_0_to_7() -> None:
@@ -52,6 +53,10 @@ def test_sidecar_wraps_existing_chapter_contract_without_parallel_truth() -> Non
         chapter.chapter_id: chapter
         for chapter in load_template_contract_manifest().chapters
     }
+    typed_by_id = {
+        chapter.chapter_id: chapter
+        for chapter in load_typed_template_contract_manifest().chapters
+    }
     sidecar_manifest = load_chapter_contract_constraint_manifest()
     default_constraints = {
         constraint.chapter_id: constraint
@@ -63,6 +68,16 @@ def test_sidecar_wraps_existing_chapter_contract_without_parallel_truth() -> Non
     for chapter_id, constraint in default_constraints.items():
         assert constraint.must_answer == source_by_id[chapter_id].must_answer
         assert constraint.must_not_cover == source_by_id[chapter_id].must_not_cover
+        assert constraint.must_answer == tuple(item.text for item in typed_by_id[chapter_id].must_answer)
+        assert constraint.must_not_cover == tuple(item.text for item in typed_by_id[chapter_id].must_not_cover)
+
+    active_constraints = constraints_for_chapter(3, "active_fund")
+    assert tuple(constraint.fund_type_slot for constraint in active_constraints) == (
+        "default",
+        "active_fund",
+    )
+    assert active_constraints[0].must_answer == source_by_id[3].must_answer
+    assert active_constraints[1].must_answer == source_by_id[3].must_answer
 
 
 def test_active_chapter_3_turnover_requirement_is_material() -> None:

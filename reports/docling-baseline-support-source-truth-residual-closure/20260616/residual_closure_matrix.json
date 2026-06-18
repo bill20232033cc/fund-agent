@@ -1,0 +1,1403 @@
+{
+  "candidate_only": true,
+  "gate": "Docling Source-truth Residual Closure No-live Evidence Gate",
+  "input_artifacts": [
+    {
+      "path": "reports/docling-field-correctness-anchor-coverage-no-live-implementation/20260616/anchor_coverage_after_matrix.json",
+      "sha256": "4c7de6fa68d28e5db0032cf7e951f36206cdbae00f96ea504d4f870ab6f6870c"
+    },
+    {
+      "path": "reports/representation-json/004393_field_family_correctness_pilot_reviewed_facts_20260615.json",
+      "sha256": "8ca8071f6c3f3fc96fe41c877c14b90697821f3b6a2272cb2cf8bb2945413beb"
+    },
+    {
+      "path": "reports/representation-json/docling_multi_sample_field_family_correctness_reviewed_facts_20260616.json",
+      "sha256": "ddea0a101b3f084478c369f7822ef338154157ccdf584a2c10970a4a330932e0"
+    },
+    {
+      "path": "reports/docling-field-correctness-comparative/20260616/field_comparison_matrix.json",
+      "sha256": "94d8e7d5ad2626c5afefb0dbaf3daed8b489454ec50b38f05ce857de80c792c9"
+    },
+    {
+      "path": "docs/reviews/docling-baseline-support-source-truth-evidence-plan-20260616.md",
+      "sha256": "0b79b8c8b4479ea394c29e025df21671479de6c88e835fd4c1df49d6ebdaa626"
+    },
+    {
+      "path": "docs/reviews/docling-baseline-support-source-truth-evidence-plan-controller-judgment-20260616.md",
+      "sha256": "650123ff109cb1aee1b80ff07776c1874f2382e0f89c55357bd9730a4fbe9490"
+    }
+  ],
+  "not_baseline_promotion": true,
+  "not_full_field_correctness": true,
+  "not_parser_replacement": true,
+  "not_raw_pdf_bbox_truth": true,
+  "not_release_readiness": true,
+  "repository_loads": {
+    "S1": {
+      "cell_reference_count": 3294,
+      "document_year": 2025,
+      "fund_code": "004393",
+      "guard_flags": {
+        "candidate_only": true,
+        "force_refresh_false": true,
+        "network_socket_guard": "blocked",
+        "not_baseline_promotion": true,
+        "not_full_field_correctness": true,
+        "not_parser_replacement": true,
+        "not_raw_pdf_bbox_truth": true,
+        "not_release_readiness": true,
+        "not_source_truth": true,
+        "repository_access_only_via_fund_document_repository": true
+      },
+      "metadata_ok": true,
+      "metadata_reason": null,
+      "reference_generation_status": "available",
+      "sample_id": "S1",
+      "status": "loaded",
+      "text_span_reference_count": 8
+    },
+    "S4": {
+      "cell_reference_count": 2620,
+      "document_year": 2024,
+      "fund_code": "006597",
+      "guard_flags": {
+        "candidate_only": true,
+        "force_refresh_false": true,
+        "network_socket_guard": "blocked",
+        "not_baseline_promotion": true,
+        "not_full_field_correctness": true,
+        "not_parser_replacement": true,
+        "not_raw_pdf_bbox_truth": true,
+        "not_release_readiness": true,
+        "not_source_truth": true,
+        "repository_access_only_via_fund_document_repository": true
+      },
+      "metadata_ok": true,
+      "metadata_reason": null,
+      "reference_generation_status": "available",
+      "sample_id": "S4",
+      "status": "loaded",
+      "text_span_reference_count": 8
+    },
+    "S5": {
+      "cell_reference_count": 6879,
+      "document_year": 2024,
+      "fund_code": "017641",
+      "guard_flags": {
+        "candidate_only": true,
+        "force_refresh_false": true,
+        "network_socket_guard": "blocked",
+        "not_baseline_promotion": true,
+        "not_full_field_correctness": true,
+        "not_parser_replacement": true,
+        "not_raw_pdf_bbox_truth": true,
+        "not_release_readiness": true,
+        "not_source_truth": true,
+        "repository_access_only_via_fund_document_repository": true
+      },
+      "metadata_ok": true,
+      "metadata_reason": null,
+      "reference_generation_status": "available",
+      "sample_id": "S5",
+      "status": "loaded",
+      "text_span_reference_count": 6
+    },
+    "S6": {
+      "cell_reference_count": 5784,
+      "document_year": 2024,
+      "fund_code": "110020",
+      "guard_flags": {
+        "candidate_only": true,
+        "force_refresh_false": true,
+        "network_socket_guard": "blocked",
+        "not_baseline_promotion": true,
+        "not_full_field_correctness": true,
+        "not_parser_replacement": true,
+        "not_raw_pdf_bbox_truth": true,
+        "not_release_readiness": true,
+        "not_source_truth": true,
+        "repository_access_only_via_fund_document_repository": true
+      },
+      "metadata_ok": true,
+      "metadata_reason": null,
+      "reference_generation_status": "available",
+      "sample_id": "S6",
+      "status": "loaded",
+      "text_span_reference_count": 8
+    }
+  },
+  "rows": [
+    {
+      "candidate_anchor": {
+        "candidate_only": true,
+        "page_number": 5,
+        "row_locator": "cell:r2:c1:idx5",
+        "section_id": "§2",
+        "table_id": "#/tables/2"
+      },
+      "candidate_only": true,
+      "candidate_processor_source_kind": null,
+      "closure_disposition": "disambiguated_source_body_match",
+      "closure_reason": "source, processed locator and fund semantic rule agree",
+      "current_disposition": "ambiguous_source_body_match",
+      "document_year": 2025,
+      "evidence_anchor_source_kind": "annual_report",
+      "fact_id": "F002",
+      "family": "fund_identity_profile",
+      "field_name": "fund_code",
+      "fund_code": "004393",
+      "fund_layer_status": "semantic_rule_satisfied",
+      "guard_flags": {
+        "candidate_only": true,
+        "force_refresh_false": true,
+        "network_socket_guard": "blocked",
+        "not_baseline_promotion": true,
+        "not_full_field_correctness": true,
+        "not_parser_replacement": true,
+        "not_raw_pdf_bbox_truth": true,
+        "not_release_readiness": true,
+        "not_source_truth": true,
+        "repository_access_only_via_fund_document_repository": true
+      },
+      "matched_column_header_path": [
+        "安信企业价值优选混合型证券投资基金"
+      ],
+      "matched_reference_origin": "fund_document_repository_parsed_table",
+      "matched_repository_source_name": "eid",
+      "matched_row_label_path": [
+        "基金主代码"
+      ],
+      "matched_source_mode": "single_source_only",
+      "matched_table_context": [
+        "基金名称",
+        "安信企业价值优选混合型证券投资基金"
+      ],
+      "normalized_candidate": "004393",
+      "original_residual_reason": "multiple_normalized_source_body_matches_in_allowed_scope",
+      "processed_layer_status": "locator_context_available",
+      "repository_reference_bundle_status": {
+        "cell_reference_count": 3294,
+        "document_year": 2025,
+        "fund_code": "004393",
+        "guard_flags": {
+          "candidate_only": true,
+          "force_refresh_false": true,
+          "network_socket_guard": "blocked",
+          "not_baseline_promotion": true,
+          "not_full_field_correctness": true,
+          "not_parser_replacement": true,
+          "not_raw_pdf_bbox_truth": true,
+          "not_release_readiness": true,
+          "not_source_truth": true,
+          "repository_access_only_via_fund_document_repository": true
+        },
+        "metadata_ok": true,
+        "metadata_reason": null,
+        "reference_generation_status": "available",
+        "sample_id": "S1",
+        "status": "loaded",
+        "text_span_reference_count": 8
+      },
+      "sample_id": "S1",
+      "source_layer_status": "same_source_reference_loaded",
+      "source_truth_status": "not_proven"
+    },
+    {
+      "candidate_anchor": {
+        "candidate_only": true,
+        "page_number": 38,
+        "row_locator": "cell:r2:c2:idx7",
+        "section_id": "§7",
+        "table_id": "#/tables/51"
+      },
+      "candidate_only": true,
+      "candidate_processor_source_kind": null,
+      "closure_disposition": "semantic_assignment_residual",
+      "closure_reason": "same-source value is present but fund semantic context is not proven",
+      "current_disposition": "ambiguous_source_body_match",
+      "document_year": 2025,
+      "evidence_anchor_source_kind": "annual_report",
+      "fact_id": "F015",
+      "family": "expense_costs",
+      "field_name": "sales_service_fee_C_current_year",
+      "fund_code": "004393",
+      "fund_layer_status": "semantic_rule_rejected",
+      "guard_flags": {
+        "candidate_only": true,
+        "force_refresh_false": true,
+        "network_socket_guard": "blocked",
+        "not_baseline_promotion": true,
+        "not_full_field_correctness": true,
+        "not_parser_replacement": true,
+        "not_raw_pdf_bbox_truth": true,
+        "not_release_readiness": true,
+        "not_source_truth": true,
+        "repository_access_only_via_fund_document_repository": true
+      },
+      "matched_column_header_path": [],
+      "matched_reference_origin": null,
+      "matched_repository_source_name": null,
+      "matched_row_label_path": [],
+      "matched_source_mode": null,
+      "matched_table_context": [],
+      "normalized_candidate": "75815.59",
+      "original_residual_reason": "multiple_normalized_source_body_matches_in_allowed_scope",
+      "processed_layer_status": "locator_context_available",
+      "repository_reference_bundle_status": {
+        "cell_reference_count": 3294,
+        "document_year": 2025,
+        "fund_code": "004393",
+        "guard_flags": {
+          "candidate_only": true,
+          "force_refresh_false": true,
+          "network_socket_guard": "blocked",
+          "not_baseline_promotion": true,
+          "not_full_field_correctness": true,
+          "not_parser_replacement": true,
+          "not_raw_pdf_bbox_truth": true,
+          "not_release_readiness": true,
+          "not_source_truth": true,
+          "repository_access_only_via_fund_document_repository": true
+        },
+        "metadata_ok": true,
+        "metadata_reason": null,
+        "reference_generation_status": "available",
+        "sample_id": "S1",
+        "status": "loaded",
+        "text_span_reference_count": 8
+      },
+      "sample_id": "S1",
+      "source_layer_status": "same_source_reference_loaded",
+      "source_truth_status": "not_proven"
+    },
+    {
+      "candidate_anchor": {
+        "candidate_only": true,
+        "page_number": 60,
+        "row_locator": "cell:r4:c2:idx12",
+        "section_id": "§10",
+        "table_id": "#/tables/86"
+      },
+      "candidate_only": true,
+      "candidate_processor_source_kind": null,
+      "closure_disposition": "semantic_assignment_residual",
+      "closure_reason": "same-source value is present but fund semantic context is not proven",
+      "current_disposition": "ambiguous_source_body_match",
+      "document_year": 2025,
+      "evidence_anchor_source_kind": "annual_report",
+      "fact_id": "F020",
+      "family": "manager_alignment",
+      "field_name": "manager_holding_range_A",
+      "fund_code": "004393",
+      "fund_layer_status": "semantic_rule_rejected",
+      "guard_flags": {
+        "candidate_only": true,
+        "force_refresh_false": true,
+        "network_socket_guard": "blocked",
+        "not_baseline_promotion": true,
+        "not_full_field_correctness": true,
+        "not_parser_replacement": true,
+        "not_raw_pdf_bbox_truth": true,
+        "not_release_readiness": true,
+        "not_source_truth": true,
+        "repository_access_only_via_fund_document_repository": true
+      },
+      "matched_column_header_path": [],
+      "matched_reference_origin": null,
+      "matched_repository_source_name": null,
+      "matched_row_label_path": [],
+      "matched_source_mode": null,
+      "matched_table_context": [],
+      "normalized_candidate": "50~100",
+      "original_residual_reason": "multiple_normalized_source_body_matches_in_allowed_scope",
+      "processed_layer_status": "locator_context_available",
+      "repository_reference_bundle_status": {
+        "cell_reference_count": 3294,
+        "document_year": 2025,
+        "fund_code": "004393",
+        "guard_flags": {
+          "candidate_only": true,
+          "force_refresh_false": true,
+          "network_socket_guard": "blocked",
+          "not_baseline_promotion": true,
+          "not_full_field_correctness": true,
+          "not_parser_replacement": true,
+          "not_raw_pdf_bbox_truth": true,
+          "not_release_readiness": true,
+          "not_source_truth": true,
+          "repository_access_only_via_fund_document_repository": true
+        },
+        "metadata_ok": true,
+        "metadata_reason": null,
+        "reference_generation_status": "available",
+        "sample_id": "S1",
+        "status": "loaded",
+        "text_span_reference_count": 8
+      },
+      "sample_id": "S1",
+      "source_layer_status": "same_source_reference_loaded",
+      "source_truth_status": "not_proven"
+    },
+    {
+      "candidate_anchor": {
+        "candidate_only": true,
+        "page_number": 5,
+        "row_locator": "cell:r0:c1:idx1",
+        "section_id": "§2",
+        "table_id": "docling_table_2"
+      },
+      "candidate_only": true,
+      "candidate_processor_source_kind": null,
+      "closure_disposition": "disambiguated_source_body_match",
+      "closure_reason": "source, processed locator and fund semantic rule agree",
+      "current_disposition": "ambiguous_source_body_match",
+      "document_year": 2024,
+      "evidence_anchor_source_kind": "annual_report",
+      "fact_id": "S4-F001",
+      "family": "fund_identity_profile",
+      "field_name": "fund_name",
+      "fund_code": "006597",
+      "fund_layer_status": "semantic_rule_satisfied",
+      "guard_flags": {
+        "candidate_only": true,
+        "force_refresh_false": true,
+        "network_socket_guard": "blocked",
+        "not_baseline_promotion": true,
+        "not_full_field_correctness": true,
+        "not_parser_replacement": true,
+        "not_raw_pdf_bbox_truth": true,
+        "not_release_readiness": true,
+        "not_source_truth": true,
+        "repository_access_only_via_fund_document_repository": true
+      },
+      "matched_column_header_path": [],
+      "matched_reference_origin": "fund_document_repository_parsed_table",
+      "matched_repository_source_name": "eid",
+      "matched_row_label_path": [
+        "基金名称"
+      ],
+      "matched_source_mode": "single_source_only",
+      "matched_table_context": [
+        "基金名称",
+        "国泰利享中短债债券型证券投资基金"
+      ],
+      "normalized_candidate": "国泰利享中短债债券型证券投资基金",
+      "original_residual_reason": "multiple_normalized_source_body_matches_in_allowed_scope",
+      "processed_layer_status": "locator_context_available",
+      "repository_reference_bundle_status": {
+        "cell_reference_count": 2620,
+        "document_year": 2024,
+        "fund_code": "006597",
+        "guard_flags": {
+          "candidate_only": true,
+          "force_refresh_false": true,
+          "network_socket_guard": "blocked",
+          "not_baseline_promotion": true,
+          "not_full_field_correctness": true,
+          "not_parser_replacement": true,
+          "not_raw_pdf_bbox_truth": true,
+          "not_release_readiness": true,
+          "not_source_truth": true,
+          "repository_access_only_via_fund_document_repository": true
+        },
+        "metadata_ok": true,
+        "metadata_reason": null,
+        "reference_generation_status": "available",
+        "sample_id": "S4",
+        "status": "loaded",
+        "text_span_reference_count": 8
+      },
+      "sample_id": "S4",
+      "source_layer_status": "same_source_reference_loaded",
+      "source_truth_status": "not_proven"
+    },
+    {
+      "candidate_anchor": {
+        "candidate_only": true,
+        "page_number": 5,
+        "row_locator": "cell:r2:c1:idx5",
+        "section_id": "§2",
+        "table_id": "docling_table_2"
+      },
+      "candidate_only": true,
+      "candidate_processor_source_kind": null,
+      "closure_disposition": "disambiguated_source_body_match",
+      "closure_reason": "source, processed locator and fund semantic rule agree",
+      "current_disposition": "ambiguous_source_body_match",
+      "document_year": 2024,
+      "evidence_anchor_source_kind": "annual_report",
+      "fact_id": "S4-F002",
+      "family": "fund_identity_profile",
+      "field_name": "fund_code",
+      "fund_code": "006597",
+      "fund_layer_status": "semantic_rule_satisfied",
+      "guard_flags": {
+        "candidate_only": true,
+        "force_refresh_false": true,
+        "network_socket_guard": "blocked",
+        "not_baseline_promotion": true,
+        "not_full_field_correctness": true,
+        "not_parser_replacement": true,
+        "not_raw_pdf_bbox_truth": true,
+        "not_release_readiness": true,
+        "not_source_truth": true,
+        "repository_access_only_via_fund_document_repository": true
+      },
+      "matched_column_header_path": [
+        "国泰利享中短债债券型证券投资基金"
+      ],
+      "matched_reference_origin": "fund_document_repository_parsed_table",
+      "matched_repository_source_name": "eid",
+      "matched_row_label_path": [
+        "基金主代码"
+      ],
+      "matched_source_mode": "single_source_only",
+      "matched_table_context": [
+        "基金名称",
+        "国泰利享中短债债券型证券投资基金"
+      ],
+      "normalized_candidate": "006597",
+      "original_residual_reason": "multiple_normalized_source_body_matches_in_allowed_scope",
+      "processed_layer_status": "locator_context_available",
+      "repository_reference_bundle_status": {
+        "cell_reference_count": 2620,
+        "document_year": 2024,
+        "fund_code": "006597",
+        "guard_flags": {
+          "candidate_only": true,
+          "force_refresh_false": true,
+          "network_socket_guard": "blocked",
+          "not_baseline_promotion": true,
+          "not_full_field_correctness": true,
+          "not_parser_replacement": true,
+          "not_raw_pdf_bbox_truth": true,
+          "not_release_readiness": true,
+          "not_source_truth": true,
+          "repository_access_only_via_fund_document_repository": true
+        },
+        "metadata_ok": true,
+        "metadata_reason": null,
+        "reference_generation_status": "available",
+        "sample_id": "S4",
+        "status": "loaded",
+        "text_span_reference_count": 8
+      },
+      "sample_id": "S4",
+      "source_layer_status": "same_source_reference_loaded",
+      "source_truth_status": "not_proven"
+    },
+    {
+      "candidate_anchor": {
+        "candidate_only": true,
+        "page_number": 59,
+        "row_locator": "cell:r4:c2:idx17",
+        "section_id": "§8",
+        "table_id": "docling_table_77"
+      },
+      "candidate_only": true,
+      "candidate_processor_source_kind": null,
+      "closure_disposition": "semantic_assignment_residual",
+      "closure_reason": "same-source value is present but fund semantic context is not proven",
+      "current_disposition": "ambiguous_source_body_match",
+      "document_year": 2024,
+      "evidence_anchor_source_kind": "annual_report",
+      "fact_id": "S4-F015",
+      "family": "portfolio_structure",
+      "field_name": "fixed_income_investment_amount",
+      "fund_code": "006597",
+      "fund_layer_status": "semantic_rule_rejected",
+      "guard_flags": {
+        "candidate_only": true,
+        "force_refresh_false": true,
+        "network_socket_guard": "blocked",
+        "not_baseline_promotion": true,
+        "not_full_field_correctness": true,
+        "not_parser_replacement": true,
+        "not_raw_pdf_bbox_truth": true,
+        "not_release_readiness": true,
+        "not_source_truth": true,
+        "repository_access_only_via_fund_document_repository": true
+      },
+      "matched_column_header_path": [],
+      "matched_reference_origin": null,
+      "matched_repository_source_name": null,
+      "matched_row_label_path": [],
+      "matched_source_mode": null,
+      "matched_table_context": [],
+      "normalized_candidate": "12106715596.39",
+      "original_residual_reason": "multiple_normalized_source_body_matches_in_allowed_scope",
+      "processed_layer_status": "locator_context_available",
+      "repository_reference_bundle_status": {
+        "cell_reference_count": 2620,
+        "document_year": 2024,
+        "fund_code": "006597",
+        "guard_flags": {
+          "candidate_only": true,
+          "force_refresh_false": true,
+          "network_socket_guard": "blocked",
+          "not_baseline_promotion": true,
+          "not_full_field_correctness": true,
+          "not_parser_replacement": true,
+          "not_raw_pdf_bbox_truth": true,
+          "not_release_readiness": true,
+          "not_source_truth": true,
+          "repository_access_only_via_fund_document_repository": true
+        },
+        "metadata_ok": true,
+        "metadata_reason": null,
+        "reference_generation_status": "available",
+        "sample_id": "S4",
+        "status": "loaded",
+        "text_span_reference_count": 8
+      },
+      "sample_id": "S4",
+      "source_layer_status": "same_source_reference_loaded",
+      "source_truth_status": "not_proven"
+    },
+    {
+      "candidate_anchor": {
+        "candidate_only": true,
+        "page_number": 5,
+        "row_locator": "cell:r0:c1:idx1",
+        "section_id": "§2",
+        "table_id": "docling_table_2"
+      },
+      "candidate_only": true,
+      "candidate_processor_source_kind": null,
+      "closure_disposition": "disambiguated_source_body_match",
+      "closure_reason": "source, processed locator and fund semantic rule agree",
+      "current_disposition": "ambiguous_source_body_match",
+      "document_year": 2024,
+      "evidence_anchor_source_kind": "annual_report",
+      "fact_id": "S5-F018",
+      "family": "fund_identity_profile",
+      "field_name": "fund_name",
+      "fund_code": "017641",
+      "fund_layer_status": "semantic_rule_satisfied",
+      "guard_flags": {
+        "candidate_only": true,
+        "force_refresh_false": true,
+        "network_socket_guard": "blocked",
+        "not_baseline_promotion": true,
+        "not_full_field_correctness": true,
+        "not_parser_replacement": true,
+        "not_raw_pdf_bbox_truth": true,
+        "not_release_readiness": true,
+        "not_source_truth": true,
+        "repository_access_only_via_fund_document_repository": true
+      },
+      "matched_column_header_path": [],
+      "matched_reference_origin": "fund_document_repository_parsed_table",
+      "matched_repository_source_name": "eid",
+      "matched_row_label_path": [
+        "基金名称"
+      ],
+      "matched_source_mode": "single_source_only",
+      "matched_table_context": [
+        "基金名称",
+        "摩根标普500指数型发起式证券投资基金(QDII)"
+      ],
+      "normalized_candidate": "摩根标普500指数型发起式证券投资基金(qdii)",
+      "original_residual_reason": "multiple_normalized_source_body_matches_in_allowed_scope",
+      "processed_layer_status": "locator_context_available",
+      "repository_reference_bundle_status": {
+        "cell_reference_count": 6879,
+        "document_year": 2024,
+        "fund_code": "017641",
+        "guard_flags": {
+          "candidate_only": true,
+          "force_refresh_false": true,
+          "network_socket_guard": "blocked",
+          "not_baseline_promotion": true,
+          "not_full_field_correctness": true,
+          "not_parser_replacement": true,
+          "not_raw_pdf_bbox_truth": true,
+          "not_release_readiness": true,
+          "not_source_truth": true,
+          "repository_access_only_via_fund_document_repository": true
+        },
+        "metadata_ok": true,
+        "metadata_reason": null,
+        "reference_generation_status": "available",
+        "sample_id": "S5",
+        "status": "loaded",
+        "text_span_reference_count": 6
+      },
+      "sample_id": "S5",
+      "source_layer_status": "same_source_reference_loaded",
+      "source_truth_status": "not_proven"
+    },
+    {
+      "candidate_anchor": {
+        "candidate_only": true,
+        "page_number": 5,
+        "row_locator": "cell:r2:c1:idx5",
+        "section_id": "§2",
+        "table_id": "docling_table_2"
+      },
+      "candidate_only": true,
+      "candidate_processor_source_kind": null,
+      "closure_disposition": "disambiguated_source_body_match",
+      "closure_reason": "source, processed locator and fund semantic rule agree",
+      "current_disposition": "ambiguous_source_body_match",
+      "document_year": 2024,
+      "evidence_anchor_source_kind": "annual_report",
+      "fact_id": "S5-F019",
+      "family": "fund_identity_profile",
+      "field_name": "fund_code",
+      "fund_code": "017641",
+      "fund_layer_status": "semantic_rule_satisfied",
+      "guard_flags": {
+        "candidate_only": true,
+        "force_refresh_false": true,
+        "network_socket_guard": "blocked",
+        "not_baseline_promotion": true,
+        "not_full_field_correctness": true,
+        "not_parser_replacement": true,
+        "not_raw_pdf_bbox_truth": true,
+        "not_release_readiness": true,
+        "not_source_truth": true,
+        "repository_access_only_via_fund_document_repository": true
+      },
+      "matched_column_header_path": [
+        "摩根标普500指数型发起式证券投资基金(QDII)"
+      ],
+      "matched_reference_origin": "fund_document_repository_parsed_table",
+      "matched_repository_source_name": "eid",
+      "matched_row_label_path": [
+        "基金主代码"
+      ],
+      "matched_source_mode": "single_source_only",
+      "matched_table_context": [
+        "基金名称",
+        "摩根标普500指数型发起式证券投资基金(QDII)"
+      ],
+      "normalized_candidate": "017641",
+      "original_residual_reason": "multiple_normalized_source_body_matches_in_allowed_scope",
+      "processed_layer_status": "locator_context_available",
+      "repository_reference_bundle_status": {
+        "cell_reference_count": 6879,
+        "document_year": 2024,
+        "fund_code": "017641",
+        "guard_flags": {
+          "candidate_only": true,
+          "force_refresh_false": true,
+          "network_socket_guard": "blocked",
+          "not_baseline_promotion": true,
+          "not_full_field_correctness": true,
+          "not_parser_replacement": true,
+          "not_raw_pdf_bbox_truth": true,
+          "not_release_readiness": true,
+          "not_source_truth": true,
+          "repository_access_only_via_fund_document_repository": true
+        },
+        "metadata_ok": true,
+        "metadata_reason": null,
+        "reference_generation_status": "available",
+        "sample_id": "S5",
+        "status": "loaded",
+        "text_span_reference_count": 6
+      },
+      "sample_id": "S5",
+      "source_layer_status": "same_source_reference_loaded",
+      "source_truth_status": "not_proven"
+    },
+    {
+      "candidate_anchor": {
+        "candidate_only": true,
+        "page_number": 5,
+        "row_locator": "cell:r0:c1:idx1",
+        "section_id": "§2",
+        "table_id": "docling_table_3"
+      },
+      "candidate_only": true,
+      "candidate_processor_source_kind": null,
+      "closure_disposition": "disambiguated_source_body_match",
+      "closure_reason": "source, processed locator and fund semantic rule agree",
+      "current_disposition": "source_body_mismatch",
+      "document_year": 2024,
+      "evidence_anchor_source_kind": "annual_report",
+      "fact_id": "S5-F023",
+      "family": "product_contract_profile",
+      "field_name": "investment_objective",
+      "fund_code": "017641",
+      "fund_layer_status": "semantic_rule_satisfied",
+      "guard_flags": {
+        "candidate_only": true,
+        "force_refresh_false": true,
+        "network_socket_guard": "blocked",
+        "not_baseline_promotion": true,
+        "not_full_field_correctness": true,
+        "not_parser_replacement": true,
+        "not_raw_pdf_bbox_truth": true,
+        "not_release_readiness": true,
+        "not_source_truth": true,
+        "repository_access_only_via_fund_document_repository": true
+      },
+      "matched_column_header_path": [],
+      "matched_reference_origin": "fund_document_repository_parsed_table",
+      "matched_repository_source_name": "eid",
+      "matched_row_label_path": [
+        "投资目标"
+      ],
+      "matched_source_mode": "single_source_only",
+      "matched_table_context": [
+        "投资目标",
+        "本基金进行被动指数化投资，紧密跟踪标的指数，追求跟踪偏离度和跟踪 误差最小化。"
+      ],
+      "normalized_candidate": "本基金进行被动指数化投资,紧密跟踪标的指数,追求跟踪偏离度和跟踪误差最小化.",
+      "original_residual_reason": "no_normalized_source_body_match_in_allowed_scope",
+      "processed_layer_status": "locator_context_available",
+      "repository_reference_bundle_status": {
+        "cell_reference_count": 6879,
+        "document_year": 2024,
+        "fund_code": "017641",
+        "guard_flags": {
+          "candidate_only": true,
+          "force_refresh_false": true,
+          "network_socket_guard": "blocked",
+          "not_baseline_promotion": true,
+          "not_full_field_correctness": true,
+          "not_parser_replacement": true,
+          "not_raw_pdf_bbox_truth": true,
+          "not_release_readiness": true,
+          "not_source_truth": true,
+          "repository_access_only_via_fund_document_repository": true
+        },
+        "metadata_ok": true,
+        "metadata_reason": null,
+        "reference_generation_status": "available",
+        "sample_id": "S5",
+        "status": "loaded",
+        "text_span_reference_count": 6
+      },
+      "sample_id": "S5",
+      "source_layer_status": "same_source_reference_loaded",
+      "source_truth_status": "not_proven"
+    },
+    {
+      "candidate_anchor": {
+        "candidate_only": true,
+        "page_number": 58,
+        "row_locator": "cell:r1:c2:idx6",
+        "section_id": "§8",
+        "table_id": "docling_table_58"
+      },
+      "candidate_only": true,
+      "candidate_processor_source_kind": null,
+      "closure_disposition": "semantic_assignment_residual",
+      "closure_reason": "same-source value is present but fund semantic context is not proven",
+      "current_disposition": "ambiguous_source_body_match",
+      "document_year": 2024,
+      "evidence_anchor_source_kind": "annual_report",
+      "fact_id": "S5-F032",
+      "family": "portfolio_structure",
+      "field_name": "equity_investment_amount",
+      "fund_code": "017641",
+      "fund_layer_status": "semantic_rule_rejected",
+      "guard_flags": {
+        "candidate_only": true,
+        "force_refresh_false": true,
+        "network_socket_guard": "blocked",
+        "not_baseline_promotion": true,
+        "not_full_field_correctness": true,
+        "not_parser_replacement": true,
+        "not_raw_pdf_bbox_truth": true,
+        "not_release_readiness": true,
+        "not_source_truth": true,
+        "repository_access_only_via_fund_document_repository": true
+      },
+      "matched_column_header_path": [],
+      "matched_reference_origin": null,
+      "matched_repository_source_name": null,
+      "matched_row_label_path": [],
+      "matched_source_mode": null,
+      "matched_table_context": [],
+      "normalized_candidate": "1818456375.25",
+      "original_residual_reason": "multiple_normalized_source_body_matches_in_allowed_scope",
+      "processed_layer_status": "locator_context_available",
+      "repository_reference_bundle_status": {
+        "cell_reference_count": 6879,
+        "document_year": 2024,
+        "fund_code": "017641",
+        "guard_flags": {
+          "candidate_only": true,
+          "force_refresh_false": true,
+          "network_socket_guard": "blocked",
+          "not_baseline_promotion": true,
+          "not_full_field_correctness": true,
+          "not_parser_replacement": true,
+          "not_raw_pdf_bbox_truth": true,
+          "not_release_readiness": true,
+          "not_source_truth": true,
+          "repository_access_only_via_fund_document_repository": true
+        },
+        "metadata_ok": true,
+        "metadata_reason": null,
+        "reference_generation_status": "available",
+        "sample_id": "S5",
+        "status": "loaded",
+        "text_span_reference_count": 6
+      },
+      "sample_id": "S5",
+      "source_layer_status": "same_source_reference_loaded",
+      "source_truth_status": "not_proven"
+    },
+    {
+      "candidate_anchor": {
+        "candidate_only": true,
+        "page_number": 5,
+        "row_locator": "cell:r0:c1:idx1",
+        "section_id": "§2",
+        "table_id": "docling_table_2"
+      },
+      "candidate_only": true,
+      "candidate_processor_source_kind": null,
+      "closure_disposition": "disambiguated_source_body_match",
+      "closure_reason": "source, processed locator and fund semantic rule agree",
+      "current_disposition": "ambiguous_source_body_match",
+      "document_year": 2024,
+      "evidence_anchor_source_kind": "annual_report",
+      "fact_id": "S6-F035",
+      "family": "fund_identity_profile",
+      "field_name": "fund_name",
+      "fund_code": "110020",
+      "fund_layer_status": "semantic_rule_satisfied",
+      "guard_flags": {
+        "candidate_only": true,
+        "force_refresh_false": true,
+        "network_socket_guard": "blocked",
+        "not_baseline_promotion": true,
+        "not_full_field_correctness": true,
+        "not_parser_replacement": true,
+        "not_raw_pdf_bbox_truth": true,
+        "not_release_readiness": true,
+        "not_source_truth": true,
+        "repository_access_only_via_fund_document_repository": true
+      },
+      "matched_column_header_path": [],
+      "matched_reference_origin": "fund_document_repository_parsed_table",
+      "matched_repository_source_name": "eid",
+      "matched_row_label_path": [
+        "基金名称"
+      ],
+      "matched_source_mode": "single_source_only",
+      "matched_table_context": [
+        "基金名称",
+        "易方达沪深300交易型开放式指数发起式证券投资基金 联接基金"
+      ],
+      "normalized_candidate": "易方达沪深300交易型开放式指数发起式证券投资基金联接基金",
+      "original_residual_reason": "multiple_normalized_source_body_matches_in_allowed_scope",
+      "processed_layer_status": "locator_context_available",
+      "repository_reference_bundle_status": {
+        "cell_reference_count": 5784,
+        "document_year": 2024,
+        "fund_code": "110020",
+        "guard_flags": {
+          "candidate_only": true,
+          "force_refresh_false": true,
+          "network_socket_guard": "blocked",
+          "not_baseline_promotion": true,
+          "not_full_field_correctness": true,
+          "not_parser_replacement": true,
+          "not_raw_pdf_bbox_truth": true,
+          "not_release_readiness": true,
+          "not_source_truth": true,
+          "repository_access_only_via_fund_document_repository": true
+        },
+        "metadata_ok": true,
+        "metadata_reason": null,
+        "reference_generation_status": "available",
+        "sample_id": "S6",
+        "status": "loaded",
+        "text_span_reference_count": 8
+      },
+      "sample_id": "S6",
+      "source_layer_status": "same_source_reference_loaded",
+      "source_truth_status": "not_proven"
+    },
+    {
+      "candidate_anchor": {
+        "candidate_only": true,
+        "page_number": 5,
+        "row_locator": "cell:r2:c1:idx5",
+        "section_id": "§2",
+        "table_id": "docling_table_2"
+      },
+      "candidate_only": true,
+      "candidate_processor_source_kind": null,
+      "closure_disposition": "disambiguated_source_body_match",
+      "closure_reason": "source, processed locator and fund semantic rule agree",
+      "current_disposition": "ambiguous_source_body_match",
+      "document_year": 2024,
+      "evidence_anchor_source_kind": "annual_report",
+      "fact_id": "S6-F036",
+      "family": "fund_identity_profile",
+      "field_name": "fund_code",
+      "fund_code": "110020",
+      "fund_layer_status": "semantic_rule_satisfied",
+      "guard_flags": {
+        "candidate_only": true,
+        "force_refresh_false": true,
+        "network_socket_guard": "blocked",
+        "not_baseline_promotion": true,
+        "not_full_field_correctness": true,
+        "not_parser_replacement": true,
+        "not_raw_pdf_bbox_truth": true,
+        "not_release_readiness": true,
+        "not_source_truth": true,
+        "repository_access_only_via_fund_document_repository": true
+      },
+      "matched_column_header_path": [
+        "易方达沪深300交易型开放式指数发起式证券投资基金 联接基金"
+      ],
+      "matched_reference_origin": "fund_document_repository_parsed_table",
+      "matched_repository_source_name": "eid",
+      "matched_row_label_path": [
+        "基金主代码"
+      ],
+      "matched_source_mode": "single_source_only",
+      "matched_table_context": [
+        "基金名称",
+        "易方达沪深300交易型开放式指数发起式证券投资基金 联接基金"
+      ],
+      "normalized_candidate": "110020",
+      "original_residual_reason": "multiple_normalized_source_body_matches_in_allowed_scope",
+      "processed_layer_status": "locator_context_available",
+      "repository_reference_bundle_status": {
+        "cell_reference_count": 5784,
+        "document_year": 2024,
+        "fund_code": "110020",
+        "guard_flags": {
+          "candidate_only": true,
+          "force_refresh_false": true,
+          "network_socket_guard": "blocked",
+          "not_baseline_promotion": true,
+          "not_full_field_correctness": true,
+          "not_parser_replacement": true,
+          "not_raw_pdf_bbox_truth": true,
+          "not_release_readiness": true,
+          "not_source_truth": true,
+          "repository_access_only_via_fund_document_repository": true
+        },
+        "metadata_ok": true,
+        "metadata_reason": null,
+        "reference_generation_status": "available",
+        "sample_id": "S6",
+        "status": "loaded",
+        "text_span_reference_count": 8
+      },
+      "sample_id": "S6",
+      "source_layer_status": "same_source_reference_loaded",
+      "source_truth_status": "not_proven"
+    },
+    {
+      "candidate_anchor": {
+        "candidate_only": true,
+        "page_number": 5,
+        "row_locator": "cell:r5:c1:idx11",
+        "section_id": "§2",
+        "table_id": "docling_table_2"
+      },
+      "candidate_only": true,
+      "candidate_processor_source_kind": null,
+      "closure_disposition": "disambiguated_source_body_match",
+      "closure_reason": "source, processed locator and fund semantic rule agree",
+      "current_disposition": "ambiguous_source_body_match",
+      "document_year": 2024,
+      "evidence_anchor_source_kind": "annual_report",
+      "fact_id": "S6-F037",
+      "family": "fund_identity_profile",
+      "field_name": "manager",
+      "fund_code": "110020",
+      "fund_layer_status": "semantic_rule_satisfied",
+      "guard_flags": {
+        "candidate_only": true,
+        "force_refresh_false": true,
+        "network_socket_guard": "blocked",
+        "not_baseline_promotion": true,
+        "not_full_field_correctness": true,
+        "not_parser_replacement": true,
+        "not_raw_pdf_bbox_truth": true,
+        "not_release_readiness": true,
+        "not_source_truth": true,
+        "repository_access_only_via_fund_document_repository": true
+      },
+      "matched_column_header_path": [
+        "易方达沪深300交易型开放式指数发起式证券投资基金 联接基金"
+      ],
+      "matched_reference_origin": "fund_document_repository_parsed_table",
+      "matched_repository_source_name": "eid",
+      "matched_row_label_path": [
+        "基金管理人"
+      ],
+      "matched_source_mode": "single_source_only",
+      "matched_table_context": [
+        "基金名称",
+        "易方达沪深300交易型开放式指数发起式证券投资基金 联接基金"
+      ],
+      "normalized_candidate": "易方达基金管理有限公司",
+      "original_residual_reason": "multiple_normalized_source_body_matches_in_allowed_scope",
+      "processed_layer_status": "locator_context_available",
+      "repository_reference_bundle_status": {
+        "cell_reference_count": 5784,
+        "document_year": 2024,
+        "fund_code": "110020",
+        "guard_flags": {
+          "candidate_only": true,
+          "force_refresh_false": true,
+          "network_socket_guard": "blocked",
+          "not_baseline_promotion": true,
+          "not_full_field_correctness": true,
+          "not_parser_replacement": true,
+          "not_raw_pdf_bbox_truth": true,
+          "not_release_readiness": true,
+          "not_source_truth": true,
+          "repository_access_only_via_fund_document_repository": true
+        },
+        "metadata_ok": true,
+        "metadata_reason": null,
+        "reference_generation_status": "available",
+        "sample_id": "S6",
+        "status": "loaded",
+        "text_span_reference_count": 8
+      },
+      "sample_id": "S6",
+      "source_layer_status": "same_source_reference_loaded",
+      "source_truth_status": "not_proven"
+    },
+    {
+      "candidate_anchor": {
+        "candidate_only": true,
+        "page_number": 5,
+        "row_locator": "cell:r6:c1:idx13",
+        "section_id": "§2",
+        "table_id": "docling_table_2"
+      },
+      "candidate_only": true,
+      "candidate_processor_source_kind": null,
+      "closure_disposition": "disambiguated_source_body_match",
+      "closure_reason": "source, processed locator and fund semantic rule agree",
+      "current_disposition": "ambiguous_source_body_match",
+      "document_year": 2024,
+      "evidence_anchor_source_kind": "annual_report",
+      "fact_id": "S6-F038",
+      "family": "fund_identity_profile",
+      "field_name": "custodian",
+      "fund_code": "110020",
+      "fund_layer_status": "semantic_rule_satisfied",
+      "guard_flags": {
+        "candidate_only": true,
+        "force_refresh_false": true,
+        "network_socket_guard": "blocked",
+        "not_baseline_promotion": true,
+        "not_full_field_correctness": true,
+        "not_parser_replacement": true,
+        "not_raw_pdf_bbox_truth": true,
+        "not_release_readiness": true,
+        "not_source_truth": true,
+        "repository_access_only_via_fund_document_repository": true
+      },
+      "matched_column_header_path": [
+        "易方达沪深300交易型开放式指数发起式证券投资基金 联接基金"
+      ],
+      "matched_reference_origin": "fund_document_repository_parsed_table",
+      "matched_repository_source_name": "eid",
+      "matched_row_label_path": [
+        "基金托管人"
+      ],
+      "matched_source_mode": "single_source_only",
+      "matched_table_context": [
+        "基金名称",
+        "易方达沪深300交易型开放式指数发起式证券投资基金 联接基金"
+      ],
+      "normalized_candidate": "中国建设银行股份有限公司",
+      "original_residual_reason": "multiple_normalized_source_body_matches_in_allowed_scope",
+      "processed_layer_status": "locator_context_available",
+      "repository_reference_bundle_status": {
+        "cell_reference_count": 5784,
+        "document_year": 2024,
+        "fund_code": "110020",
+        "guard_flags": {
+          "candidate_only": true,
+          "force_refresh_false": true,
+          "network_socket_guard": "blocked",
+          "not_baseline_promotion": true,
+          "not_full_field_correctness": true,
+          "not_parser_replacement": true,
+          "not_raw_pdf_bbox_truth": true,
+          "not_release_readiness": true,
+          "not_source_truth": true,
+          "repository_access_only_via_fund_document_repository": true
+        },
+        "metadata_ok": true,
+        "metadata_reason": null,
+        "reference_generation_status": "available",
+        "sample_id": "S6",
+        "status": "loaded",
+        "text_span_reference_count": 8
+      },
+      "sample_id": "S6",
+      "source_layer_status": "same_source_reference_loaded",
+      "source_truth_status": "not_proven"
+    },
+    {
+      "candidate_anchor": {
+        "candidate_only": true,
+        "page_number": 6,
+        "row_locator": "cell:r0:c1:idx1",
+        "section_id": "§2",
+        "table_id": "docling_table_4"
+      },
+      "candidate_only": true,
+      "candidate_processor_source_kind": null,
+      "closure_disposition": "semantic_assignment_residual",
+      "closure_reason": "same-source value is present but fund semantic context is not proven",
+      "current_disposition": "semantic_assignment_residual",
+      "document_year": 2024,
+      "evidence_anchor_source_kind": "annual_report",
+      "fact_id": "S6-F041",
+      "family": "product_contract_profile",
+      "field_name": "benchmark",
+      "fund_code": "110020",
+      "fund_layer_status": "semantic_rule_rejected",
+      "guard_flags": {
+        "candidate_only": true,
+        "force_refresh_false": true,
+        "network_socket_guard": "blocked",
+        "not_baseline_promotion": true,
+        "not_full_field_correctness": true,
+        "not_parser_replacement": true,
+        "not_raw_pdf_bbox_truth": true,
+        "not_release_readiness": true,
+        "not_source_truth": true,
+        "repository_access_only_via_fund_document_repository": true
+      },
+      "matched_column_header_path": [],
+      "matched_reference_origin": null,
+      "matched_repository_source_name": null,
+      "matched_row_label_path": [],
+      "matched_source_mode": null,
+      "matched_table_context": [],
+      "normalized_candidate": "紧密跟踪业绩比较基准,追求跟踪偏离度及跟踪误差的最小化.",
+      "original_residual_reason": "benchmark semantics requires benchmark-labeled source context; shared investment-objective candidate locator is insufficient",
+      "processed_layer_status": "locator_context_available",
+      "repository_reference_bundle_status": {
+        "cell_reference_count": 5784,
+        "document_year": 2024,
+        "fund_code": "110020",
+        "guard_flags": {
+          "candidate_only": true,
+          "force_refresh_false": true,
+          "network_socket_guard": "blocked",
+          "not_baseline_promotion": true,
+          "not_full_field_correctness": true,
+          "not_parser_replacement": true,
+          "not_raw_pdf_bbox_truth": true,
+          "not_release_readiness": true,
+          "not_source_truth": true,
+          "repository_access_only_via_fund_document_repository": true
+        },
+        "metadata_ok": true,
+        "metadata_reason": null,
+        "reference_generation_status": "available",
+        "sample_id": "S6",
+        "status": "loaded",
+        "text_span_reference_count": 8
+      },
+      "sample_id": "S6",
+      "source_layer_status": "same_source_reference_loaded",
+      "source_truth_status": "not_proven"
+    },
+    {
+      "candidate_anchor": {
+        "candidate_only": true,
+        "page_number": 63,
+        "row_locator": "cell:r1:c2:idx6",
+        "section_id": "§8",
+        "table_id": "docling_table_91"
+      },
+      "candidate_only": true,
+      "candidate_processor_source_kind": null,
+      "closure_disposition": "semantic_assignment_residual",
+      "closure_reason": "same-source value is present but fund semantic context is not proven",
+      "current_disposition": "ambiguous_source_body_match",
+      "document_year": 2024,
+      "evidence_anchor_source_kind": "annual_report",
+      "fact_id": "S6-F049",
+      "family": "portfolio_structure",
+      "field_name": "equity_investment_amount",
+      "fund_code": "110020",
+      "fund_layer_status": "semantic_rule_rejected",
+      "guard_flags": {
+        "candidate_only": true,
+        "force_refresh_false": true,
+        "network_socket_guard": "blocked",
+        "not_baseline_promotion": true,
+        "not_full_field_correctness": true,
+        "not_parser_replacement": true,
+        "not_raw_pdf_bbox_truth": true,
+        "not_release_readiness": true,
+        "not_source_truth": true,
+        "repository_access_only_via_fund_document_repository": true
+      },
+      "matched_column_header_path": [],
+      "matched_reference_origin": null,
+      "matched_repository_source_name": null,
+      "matched_row_label_path": [],
+      "matched_source_mode": null,
+      "matched_table_context": [],
+      "normalized_candidate": "149698325.51",
+      "original_residual_reason": "multiple_normalized_source_body_matches_in_allowed_scope",
+      "processed_layer_status": "locator_context_available",
+      "repository_reference_bundle_status": {
+        "cell_reference_count": 5784,
+        "document_year": 2024,
+        "fund_code": "110020",
+        "guard_flags": {
+          "candidate_only": true,
+          "force_refresh_false": true,
+          "network_socket_guard": "blocked",
+          "not_baseline_promotion": true,
+          "not_full_field_correctness": true,
+          "not_parser_replacement": true,
+          "not_raw_pdf_bbox_truth": true,
+          "not_release_readiness": true,
+          "not_source_truth": true,
+          "repository_access_only_via_fund_document_repository": true
+        },
+        "metadata_ok": true,
+        "metadata_reason": null,
+        "reference_generation_status": "available",
+        "sample_id": "S6",
+        "status": "loaded",
+        "text_span_reference_count": 8
+      },
+      "sample_id": "S6",
+      "source_layer_status": "same_source_reference_loaded",
+      "source_truth_status": "not_proven"
+    },
+    {
+      "candidate_anchor": {
+        "candidate_only": true,
+        "page_number": 63,
+        "row_locator": "cell:r2:c2:idx9",
+        "section_id": "§8",
+        "table_id": "docling_table_91"
+      },
+      "candidate_only": true,
+      "candidate_processor_source_kind": null,
+      "closure_disposition": "semantic_assignment_residual",
+      "closure_reason": "same-source value is present but fund semantic context is not proven",
+      "current_disposition": "ambiguous_source_body_match",
+      "document_year": 2024,
+      "evidence_anchor_source_kind": "annual_report",
+      "fact_id": "S6-F050",
+      "family": "portfolio_structure",
+      "field_name": "stock_investment_amount",
+      "fund_code": "110020",
+      "fund_layer_status": "semantic_rule_rejected",
+      "guard_flags": {
+        "candidate_only": true,
+        "force_refresh_false": true,
+        "network_socket_guard": "blocked",
+        "not_baseline_promotion": true,
+        "not_full_field_correctness": true,
+        "not_parser_replacement": true,
+        "not_raw_pdf_bbox_truth": true,
+        "not_release_readiness": true,
+        "not_source_truth": true,
+        "repository_access_only_via_fund_document_repository": true
+      },
+      "matched_column_header_path": [],
+      "matched_reference_origin": null,
+      "matched_repository_source_name": null,
+      "matched_row_label_path": [],
+      "matched_source_mode": null,
+      "matched_table_context": [],
+      "normalized_candidate": "149698325.51",
+      "original_residual_reason": "multiple_normalized_source_body_matches_in_allowed_scope",
+      "processed_layer_status": "locator_context_available",
+      "repository_reference_bundle_status": {
+        "cell_reference_count": 5784,
+        "document_year": 2024,
+        "fund_code": "110020",
+        "guard_flags": {
+          "candidate_only": true,
+          "force_refresh_false": true,
+          "network_socket_guard": "blocked",
+          "not_baseline_promotion": true,
+          "not_full_field_correctness": true,
+          "not_parser_replacement": true,
+          "not_raw_pdf_bbox_truth": true,
+          "not_release_readiness": true,
+          "not_source_truth": true,
+          "repository_access_only_via_fund_document_repository": true
+        },
+        "metadata_ok": true,
+        "metadata_reason": null,
+        "reference_generation_status": "available",
+        "sample_id": "S6",
+        "status": "loaded",
+        "text_span_reference_count": 8
+      },
+      "sample_id": "S6",
+      "source_layer_status": "same_source_reference_loaded",
+      "source_truth_status": "not_proven"
+    }
+  ],
+  "schema_version": "docling_source_truth_residual_closure.v1",
+  "source_truth_matrix_artifact": {
+    "path": "reports/docling-baseline-support-source-truth/20260616/source_truth_matrix.json",
+    "sha256": "a7fcb523ee6bc9219033ec9ca5ed4876d83ae5ac5b1c0ca31872bcf84f9a3f99"
+  },
+  "summary": {
+    "closed_rows_total": 10,
+    "closure_dispositions": {
+      "disambiguated_source_body_match": 10,
+      "semantic_assignment_residual": 7
+    },
+    "fund_layer_statuses": {
+      "semantic_rule_rejected": 7,
+      "semantic_rule_satisfied": 10
+    },
+    "processed_layer_statuses": {
+      "locator_context_available": 17
+    },
+    "residual_rows_total": 7,
+    "rows_total": 17,
+    "s5_f023_closed_with_same_source_proof": true,
+    "s6_f041_preserved_residual": true,
+    "source_layer_statuses": {
+      "same_source_reference_loaded": 17
+    },
+    "verdict": "RESIDUAL_CLOSURE_PARTIAL_NOT_READY"
+  },
+  "upstream_input_artifacts": [
+    {
+      "path": "reports/docling-field-correctness-anchor-coverage-no-live-implementation/20260616/anchor_coverage_after_matrix.json",
+      "sha256": "4c7de6fa68d28e5db0032cf7e951f36206cdbae00f96ea504d4f870ab6f6870c"
+    },
+    {
+      "path": "reports/representation-json/004393_field_family_correctness_pilot_reviewed_facts_20260615.json",
+      "sha256": "8ca8071f6c3f3fc96fe41c877c14b90697821f3b6a2272cb2cf8bb2945413beb"
+    },
+    {
+      "path": "reports/representation-json/docling_multi_sample_field_family_correctness_reviewed_facts_20260616.json",
+      "sha256": "ddea0a101b3f084478c369f7822ef338154157ccdf584a2c10970a4a330932e0"
+    },
+    {
+      "path": "reports/docling-field-correctness-comparative/20260616/field_comparison_matrix.json",
+      "sha256": "94d8e7d5ad2626c5afefb0dbaf3daed8b489454ec50b38f05ce857de80c792c9"
+    },
+    {
+      "path": "docs/reviews/docling-baseline-support-source-truth-evidence-plan-20260616.md",
+      "sha256": "0b79b8c8b4479ea394c29e025df21671479de6c88e835fd4c1df49d6ebdaa626"
+    },
+    {
+      "path": "docs/reviews/docling-baseline-support-source-truth-evidence-plan-controller-judgment-20260616.md",
+      "sha256": "650123ff109cb1aee1b80ff07776c1874f2382e0f89c55357bd9730a4fbe9490"
+    }
+  ],
+  "verdict": "RESIDUAL_CLOSURE_PARTIAL_NOT_READY"
+}

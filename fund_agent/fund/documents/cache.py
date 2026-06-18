@@ -16,7 +16,14 @@ from tempfile import NamedTemporaryFile
 from typing import Final
 
 from fund_agent.config.paths import DEFAULT_DOCUMENT_CACHE_ROOT
-from fund_agent.fund.documents.models import AnnualReportSourceMetadata, DocumentKey, ParsedAnnualReport
+from fund_agent.fund.documents.models import (
+    ANNUAL_REPORT_DOCUMENT_KIND,
+    AnnualReportReferenceMetadata,
+    AnnualReportReferenceMetadataResult,
+    AnnualReportSourceMetadata,
+    DocumentKey,
+    ParsedAnnualReport,
+)
 
 DOCUMENT_CACHE_ROOT: Final[Path] = DEFAULT_DOCUMENT_CACHE_ROOT
 PARSED_REPORT_CACHE_DIRNAME: Final[str] = "parsed_reports"
@@ -161,6 +168,79 @@ def _normalize_report_source_metadata(
     )
 
 
+def _build_reference_metadata_result(
+    key: DocumentKey,
+    source_metadata: AnnualReportSourceMetadata,
+) -> AnnualReportReferenceMetadataResult:
+    """构造不含正文和路径的引用元数据查询结果。
+
+    Args:
+        key: 文档主键。
+        source_metadata: documents 表保存的来源元数据。
+
+    Returns:
+        可供仓库 facade 返回的引用元数据结果。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if source_metadata.fund_code is not None and source_metadata.fund_code != key.fund_code:
+        return AnnualReportReferenceMetadataResult(
+            status="unsafe_metadata",
+            reason="source_metadata_fund_code_mismatch",
+        )
+    if source_metadata.report_year is not None and source_metadata.report_year != key.year:
+        return AnnualReportReferenceMetadataResult(
+            status="unsafe_metadata",
+            reason="source_metadata_report_year_mismatch",
+        )
+
+    metadata = AnnualReportReferenceMetadata(
+        fund_code=key.fund_code,
+        document_year=key.year,
+        report_type=key.document_kind,
+        source=source_metadata.source,
+        selected_source=source_metadata.selected_source,
+        source_mode=source_metadata.source_mode,
+        fallback_enabled=source_metadata.fallback_enabled,
+        fallback_used=source_metadata.fallback_used,
+        primary_failure_category=source_metadata.primary_failure_category,
+    ).with_identity_hash()
+
+    if metadata.source != "eid":
+        return AnnualReportReferenceMetadataResult(
+            status="unsafe_metadata",
+            reason="source_not_eid",
+        )
+    if metadata.selected_source != "eid":
+        return AnnualReportReferenceMetadataResult(
+            status="unsafe_metadata",
+            reason="selected_source_not_eid",
+        )
+    if metadata.source_mode != "single_source_only":
+        return AnnualReportReferenceMetadataResult(
+            status="unsafe_metadata",
+            reason="source_mode_not_single_source_only",
+        )
+    if metadata.fallback_enabled is not False:
+        return AnnualReportReferenceMetadataResult(
+            status="unsafe_metadata",
+            reason="fallback_enabled_not_false",
+        )
+    if metadata.fallback_used is not False:
+        return AnnualReportReferenceMetadataResult(
+            status="unsafe_metadata",
+            reason="fallback_used_not_false",
+        )
+    if metadata.primary_failure_category is not None:
+        return AnnualReportReferenceMetadataResult(
+            status="unsafe_metadata",
+            reason="primary_failure_category_present",
+        )
+    return AnnualReportReferenceMetadataResult(status="available", metadata=metadata)
+
+
 class AnnualReportDocumentCache:
     """年报文档缓存。
 
@@ -274,6 +354,82 @@ class AnnualReportDocumentCache:
         }
         if "source_metadata_json" not in columns:
             connection.execute("ALTER TABLE documents ADD COLUMN source_metadata_json TEXT")
+
+    async def get_reference_metadata(
+        self,
+        key: DocumentKey,
+    ) -> AnnualReportReferenceMetadataResult:
+        """读取不含正文和路径的年报引用元数据。
+
+        该方法只查询 documents 表中的身份列与来源元数据 JSON，不读取 PDF 路径字段、
+        不检查文件是否存在、不读取 parsed report payload，见模板第 1-6 章证据准入需求。
+
+        Args:
+            key: 文档主键。
+
+        Returns:
+            年报引用元数据查询结果。
+
+        Raises:
+            sqlite3.Error: 查询 SQLite 失败时抛出。
+        """
+
+        await self.initialize()
+        return await asyncio.to_thread(self._get_reference_metadata_sync, key)
+
+    def _get_reference_metadata_sync(
+        self,
+        key: DocumentKey,
+    ) -> AnnualReportReferenceMetadataResult:
+        """同步读取不含正文和路径的年报引用元数据。
+
+        Args:
+            key: 文档主键。
+
+        Returns:
+            年报引用元数据查询结果。
+
+        Raises:
+            sqlite3.Error: 查询 SQLite 失败时抛出。
+        """
+
+        with sqlite3.connect(self.sqlite_path) as connection:
+            self._ensure_documents_source_metadata_column(connection)
+            row = connection.execute(
+                """
+                SELECT fund_code, year, document_kind, source_metadata_json
+                FROM documents
+                WHERE document_key = ?
+                """,
+                (_document_cache_key(key),),
+            ).fetchone()
+        if row is None:
+            return AnnualReportReferenceMetadataResult(
+                status="missing",
+                reason="metadata_row_missing",
+            )
+
+        row_fund_code = str(row[0])
+        row_year = int(row[1])
+        row_document_kind = str(row[2])
+        if (
+            row_fund_code != key.fund_code
+            or row_year != key.year
+            or row_document_kind != key.document_kind
+            or row_document_kind != ANNUAL_REPORT_DOCUMENT_KIND
+        ):
+            return AnnualReportReferenceMetadataResult(
+                status="unsafe_metadata",
+                reason="document_identity_mismatch",
+            )
+
+        metadata = _source_metadata_from_json(row[3])
+        if metadata is None:
+            return AnnualReportReferenceMetadataResult(
+                status="unsafe_metadata",
+                reason="source_metadata_missing_or_invalid",
+            )
+        return _build_reference_metadata_result(key, metadata)
 
     async def get_pdf_path(self, key: DocumentKey) -> Path | None:
         """读取缓存中的原始 PDF 路径。

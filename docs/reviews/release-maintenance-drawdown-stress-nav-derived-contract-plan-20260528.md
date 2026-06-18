@@ -547,4 +547,3 @@ Implementation worker must report:
 Implementation is recommended only if the controller accepts NAV-derived quantitative evidence as a valid source class under the explicit contract above.
 
 The plan does not recommend weakening the current blocker. If total-return NAV provenance cannot be established, `drawdown_stress` must remain weak / unsatisfied and `bond_risk_evidence_missing.baseline_blocking=true` must remain.
-

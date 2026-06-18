@@ -28,8 +28,29 @@ _FORBIDDEN_DIAGNOSTIC_KEY_PARTS = (
     "stdout",
     "stderr",
 )
+_FORBIDDEN_DIAGNOSTIC_VALUE_PARTS = (
+    "api_key",
+    "authorization",
+    "auth_header",
+    "bearer ",
+    "sk-",
+    "system_prompt",
+    "user_prompt",
+    "full_prompt",
+    "chapter_draft",
+    "draft_markdown",
+    "provider_response",
+    "audit_response",
+    "raw_response",
+    "raw_provider_response",
+    "raw_audit_response",
+    "cookie",
+    "password",
+    "secret",
+)
 
 TResult = TypeVar("TResult")
+HostRunEventSink = Callable[["HostRunEvent"], None]
 
 
 class HostRuntimeError(RuntimeError):
@@ -131,6 +152,9 @@ def _normalize_diagnostic_value(value: object) -> object:
     if isinstance(value, StrEnum):
         return value.value
     if isinstance(value, str):
+        lowered_value = value.lower()
+        if any(part in lowered_value for part in _FORBIDDEN_DIAGNOSTIC_VALUE_PARTS):
+            raise HostRuntimeError("Host 安全诊断禁止敏感字符串值")
         if len(value) <= _MAX_DIAGNOSTIC_STRING_LENGTH:
             return value
         return value[: _MAX_DIAGNOSTIC_STRING_LENGTH - 3].rstrip() + "..."
@@ -413,6 +437,7 @@ class HostRuntimeRunner:
         operation: Callable[[HostRunContext], TResult],
         timeout_seconds: int | None = None,
         session_id: str | None = None,
+        event_sink: HostRunEventSink | None = None,
     ) -> HostRunResult:
         """托管一次同步 operation。
 
@@ -421,6 +446,7 @@ class HostRuntimeRunner:
             operation: 被托管的同步 callable。
             timeout_seconds: 可选 run deadline 秒数，必须为正整数。
             session_id: 可选 Host session ID，仅进入安全诊断。
+            event_sink: 可选通用事件接收器；Host 提交事件后同步调用。
 
         Returns:
             HostRunResult。
@@ -440,20 +466,31 @@ class HostRuntimeRunner:
             if timeout_seconds is not None
             else None
         )
-        events: list[HostRunEvent] = [
-            _event(
-                HostRunEventType.RUN_STARTED,
-                run_id=run_id,
-                operation_name=operation_name,
-                session_id=session_id,
-            )
-        ]
+        events: list[HostRunEvent] = []
+        event_sink_errors: list[BaseException] = []
+        _commit_event(
+            events,
+            HostRunEventType.RUN_STARTED,
+            run_id=run_id,
+            event_sink=event_sink,
+            event_sink_errors=event_sink_errors,
+            operation_name=operation_name,
+            session_id=session_id,
+            timeout_seconds=timeout_seconds,
+        )
         token = HostCancellationToken()
 
         def record_event(event_type: HostRunEventType, diagnostics: Mapping[str, object]) -> None:
             """把 operation 内部事件追加到当前 run 事件流。"""
 
-            events.append(_event(event_type, run_id=run_id, **diagnostics))
+            _commit_event(
+                events,
+                event_type,
+                run_id=run_id,
+                event_sink=event_sink,
+                event_sink_errors=event_sink_errors,
+                **diagnostics,
+            )
 
         context = HostRunContext(
             run_id=run_id,
@@ -472,6 +509,8 @@ class HostRuntimeRunner:
                     events=events,
                     operation_name=operation_name,
                     operation_result=None,
+                    event_sink=event_sink,
+                    event_sink_errors=event_sink_errors,
                 )
 
             operation_result = operation(context)
@@ -483,10 +522,18 @@ class HostRuntimeRunner:
                     events=events,
                     operation_name=operation_name,
                     operation_result=operation_result,
+                    event_sink=event_sink,
+                    event_sink_errors=event_sink_errors,
                 )
 
             completed_at = _now_utc()
-            events.append(_event(HostRunEventType.RUN_COMPLETED, run_id=run_id))
+            _commit_event(
+                events,
+                HostRunEventType.RUN_COMPLETED,
+                run_id=run_id,
+                event_sink=event_sink,
+                event_sink_errors=event_sink_errors,
+            )
             return HostRunResult(
                 run_id=run_id,
                 status=HostRunStatus.SUCCEEDED,
@@ -506,6 +553,8 @@ class HostRuntimeRunner:
                 events=tuple(events),
             )
         except Exception as exc:  # noqa: BLE001
+            if event_sink_errors and event_sink_errors[-1] is exc:
+                raise
             context.cancel_if_deadline_exceeded()
             if token.is_cancelled():
                 return self._cancelled_result(
@@ -514,6 +563,8 @@ class HostRuntimeRunner:
                     events=events,
                     operation_name=operation_name,
                     operation_result=None,
+                    event_sink=event_sink,
+                    event_sink_errors=event_sink_errors,
                 )
             completed_at = _now_utc()
             diagnostics = build_safe_diagnostics(
@@ -524,14 +575,21 @@ class HostRuntimeRunner:
                     "session_id": session_id,
                 }
             )
-            events.append(
-                _event(
-                    HostRunEventType.DIAGNOSTIC_RECORDED,
-                    run_id=run_id,
-                    **diagnostics,
-                )
+            _commit_event(
+                events,
+                HostRunEventType.DIAGNOSTIC_RECORDED,
+                run_id=run_id,
+                event_sink=event_sink,
+                event_sink_errors=event_sink_errors,
+                **diagnostics,
             )
-            events.append(_event(HostRunEventType.RUN_FAILED, run_id=run_id))
+            _commit_event(
+                events,
+                HostRunEventType.RUN_FAILED,
+                run_id=run_id,
+                event_sink=event_sink,
+                event_sink_errors=event_sink_errors,
+            )
             return HostRunResult(
                 run_id=run_id,
                 status=HostRunStatus.FAILED,
@@ -553,6 +611,8 @@ class HostRuntimeRunner:
         events: list[HostRunEvent],
         operation_name: str,
         operation_result: object | None,
+        event_sink: HostRunEventSink | None = None,
+        event_sink_errors: list[BaseException] | None = None,
     ) -> HostRunResult:
         """构造取消 / deadline exceeded 终态结果。"""
 
@@ -575,14 +635,21 @@ class HostRuntimeRunner:
                 "timeout_classification": timeout_classification,
             }
         )
-        events.append(
-            _event(
-                HostRunEventType.DIAGNOSTIC_RECORDED,
-                run_id=context.run_id,
-                **diagnostics,
-            )
+        _commit_event(
+            events,
+            HostRunEventType.DIAGNOSTIC_RECORDED,
+            run_id=context.run_id,
+            event_sink=event_sink,
+            event_sink_errors=event_sink_errors,
+            **diagnostics,
         )
-        events.append(_event(HostRunEventType.RUN_CANCELLED, run_id=context.run_id))
+        _commit_event(
+            events,
+            HostRunEventType.RUN_CANCELLED,
+            run_id=context.run_id,
+            event_sink=event_sink,
+            event_sink_errors=event_sink_errors,
+        )
         return HostRunResult(
             run_id=context.run_id,
             status=status,
@@ -611,3 +678,42 @@ def _event(
         created_at=_now_utc(),
         diagnostics=build_safe_diagnostics(diagnostics),
     )
+
+
+def _commit_event(
+    events: list[HostRunEvent],
+    event_type: HostRunEventType,
+    *,
+    run_id: str,
+    event_sink: HostRunEventSink | None,
+    event_sink_errors: list[BaseException] | None = None,
+    **diagnostics: object,
+) -> HostRunEvent:
+    """提交 Host 事件并同步投递给通用 sink。
+
+    Args:
+        events: 当前 run 的内存事件列表。
+        event_type: 事件类型。
+        run_id: Host run ID。
+        event_sink: 可选通用事件接收器。
+        event_sink_errors: 可选 sink 异常记录，用于避免 broad operation catch 误吞。
+        diagnostics: 安全诊断字段。
+
+    Returns:
+        已追加到事件列表的同一个事件对象。
+
+    Raises:
+        HostRuntimeError: 当诊断字段不符合安全契约时抛出。
+        Exception: `event_sink` 抛出的异常原样传播，Host 不吞掉或翻译。
+    """
+
+    event = _event(event_type, run_id=run_id, **diagnostics)
+    events.append(event)
+    if event_sink is not None:
+        try:
+            event_sink(event)
+        except Exception as exc:  # noqa: BLE001 - 只记录后原样抛出，Host 不翻译。
+            if event_sink_errors is not None:
+                event_sink_errors.append(exc)
+            raise
+    return event

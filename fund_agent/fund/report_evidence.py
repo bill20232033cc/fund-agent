@@ -274,7 +274,9 @@ _FIELD_SPECS: Final[tuple[_FieldSpec, ...]] = (
     _FieldSpec("share_change", "holders", "share_change", "object"),
     _FieldSpec("manager_alignment", "manager", "manager_alignment", "object"),
     _FieldSpec("manager_strategy_text", "manager", "manager_strategy_text", "object"),
+    _FieldSpec("portfolio_managers", "manager", "portfolio_managers", "object"),
     _FieldSpec("holdings_snapshot", "holdings", "holdings_snapshot", "object"),
+    _FieldSpec("risk_characteristic_text", "risk", "risk_characteristic_text", "object"),
     _FieldSpec("holder_structure", "holders", "holder_structure", "object"),
 )
 

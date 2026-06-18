@@ -25,6 +25,7 @@ reports/data-source-runs/
 reports/mvp-local-acceptance/
 reports/mvp-provider-runtime-budget-prompt-cost-root-cause-calibration/
 reports/mvp-real-provider-smoke-rerun/
+reports/llm-runs/
 # reports/golden-answers/ contains curated fixtures and is intentionally tracked.
 
 # Binary source audit inputs stay local unless converted to Markdown review artifacts.

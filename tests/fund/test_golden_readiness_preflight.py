@@ -339,7 +339,7 @@ def test_preflight_preserves_110020_raw_disposition_and_blocks_not_promoted(
 
 
 def test_preflight_blocks_strict_golden_absence_and_fund_miss(tmp_path: Path) -> None:
-    """strict golden 缺失或 fund-level 未覆盖必须阻断。
+    """strict golden 缺失、fund-level 或 year-level 未覆盖必须阻断。
 
     Args:
         tmp_path: pytest 临时目录 fixture。
@@ -354,13 +354,26 @@ def test_preflight_blocks_strict_golden_absence_and_fund_miss(tmp_path: Path) ->
     absent = _run_single_artifact(tmp_path / "absent", fund_code="000001", golden_path=None)
     miss_golden = _write_golden(tmp_path / "golden.json", ("000002",))
     miss = _run_single_artifact(tmp_path / "miss", fund_code="000001", golden_path=miss_golden)
+    year_miss_golden = _write_golden(
+        tmp_path / "golden-year-miss.json", ("000001",), report_year=2024
+    )
+    year_miss = _run_single_artifact(
+        tmp_path / "year-miss",
+        fund_code="000001",
+        report_year=2025,
+        golden_path=year_miss_golden,
+    )
 
     assert "strict_golden_not_configured" in _all_blocker_codes(absent)
     assert "strict_golden_fund_not_covered" in _row_blocker_codes(miss.rows[0])
+    assert year_miss.rows[0].strict_golden_coverage == "year_not_covered"
+    assert "strict_golden_year_not_covered" in _row_blocker_codes(year_miss.rows[0])
 
 
-def test_preflight_reserves_strict_golden_year_and_partial_coverage_codes(tmp_path: Path) -> None:
-    """v1 不触发 strict_golden_year_not_covered / partial coverage reserved codes。
+def test_preflight_accepts_strict_golden_matching_year_and_reserves_partial_code(
+    tmp_path: Path,
+) -> None:
+    """strict golden 覆盖当前年份时通过 coverage，partial coverage code 保留。
 
     Args:
         tmp_path: pytest 临时目录 fixture。
@@ -369,11 +382,18 @@ def test_preflight_reserves_strict_golden_year_and_partial_coverage_codes(tmp_pa
         无返回值。
 
     Raises:
-        AssertionError: 当 reserved codes 被触发时抛出。
+        AssertionError: 当 coverage 状态或 reserved code 回归时抛出。
     """
 
-    result = _run_single_artifact(tmp_path, fund_code="000001")
+    golden = _write_golden(tmp_path / "golden.json", ("000001",), report_year=2025)
+    result = _run_single_artifact(
+        tmp_path,
+        fund_code="000001",
+        report_year=2025,
+        golden_path=golden,
+    )
 
+    assert result.rows[0].strict_golden_coverage == "covered"
     assert "strict_golden_year_not_covered" not in _all_blocker_codes(result)
     assert "strict_golden_partial_coverage" not in _all_blocker_codes(result)
 
@@ -394,6 +414,251 @@ def test_preflight_blocks_fixture_promotion_absence(tmp_path: Path) -> None:
     result = _run_single_artifact(tmp_path, fund_code="000001")
 
     assert "fixture_promotion_absent" in _all_blocker_codes(result)
+
+
+def test_preflight_accepts_year_aware_fixture_promotion_matching_year(
+    tmp_path: Path,
+) -> None:
+    """year-aware fixture promotion 只对完全匹配年份放行。
+
+    Args:
+        tmp_path: pytest 临时目录 fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当匹配年份 promotion 未被接受时抛出。
+    """
+
+    promotion = _write_fixture_promotion_state(
+        tmp_path / "fixture-promotion.json",
+        (
+            {
+                "fund_code": "004393",
+                "report_year": 2025,
+                "promotion_state": "promoted_fixture",
+                "promotion_identity": "fund_year",
+                "evidence_artifacts": ["docs/reviews/unit.md"],
+            },
+        ),
+    )
+    golden = _write_golden(tmp_path / "golden.json", ("004393",), report_year=2025)
+
+    result = _run_single_artifact(
+        tmp_path,
+        fund_code="004393",
+        report_year=2025,
+        golden_path=golden,
+        fixture_promotion_state_path=promotion,
+    )
+    row = result.rows[0]
+
+    assert row.fixture_promotion_state == "promoted_fixture"
+    assert row.promotion_state == "promoted_fixture"
+    assert not {
+        "fixture_promotion_absent",
+        "fixture_promotion_unknown",
+        "fixture_promotion_legacy_fund_only",
+    } & _row_blocker_codes(row)
+
+
+def test_preflight_rejects_fixture_promotion_wrong_year(tmp_path: Path) -> None:
+    """year-aware fixture promotion 不得跨年份复用。
+
+    Args:
+        tmp_path: pytest 临时目录 fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 2024 promotion 被误用为 2025 proof 时抛出。
+    """
+
+    promotion = _write_fixture_promotion_state(
+        tmp_path / "fixture-promotion.json",
+        (
+            {
+                "fund_code": "004393",
+                "report_year": 2024,
+                "promotion_state": "promoted_fixture",
+                "promotion_identity": "fund_year",
+                "evidence_artifacts": ["docs/reviews/unit.md"],
+            },
+        ),
+    )
+    golden = _write_golden(tmp_path / "golden.json", ("004393",), report_year=2025)
+
+    result = _run_single_artifact(
+        tmp_path,
+        fund_code="004393",
+        report_year=2025,
+        golden_path=golden,
+        fixture_promotion_state_path=promotion,
+    )
+    row = result.rows[0]
+
+    assert row.fixture_promotion_state == "unknown"
+    assert row.promotion_state == "unknown"
+    assert "fixture_promotion_unknown" in _row_blocker_codes(row)
+
+
+def test_preflight_blocks_legacy_fund_code_only_fixture_promotion(
+    tmp_path: Path,
+) -> None:
+    """legacy fund-code-only promotion 只能诊断，不能作为年份 proof。
+
+    Args:
+        tmp_path: pytest 临时目录 fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 legacy promotion 被误用为 year-specific proof 时抛出。
+    """
+
+    promotion = _write_json(tmp_path / "fixture-promotion.json", {"004393": "promoted_fixture"})
+    golden = _write_golden(tmp_path / "golden.json", ("004393",), report_year=2025)
+
+    result = _run_single_artifact(
+        tmp_path,
+        fund_code="004393",
+        report_year=2025,
+        golden_path=golden,
+        fixture_promotion_state_path=promotion,
+    )
+    row = result.rows[0]
+
+    assert row.fixture_promotion_state == "legacy_fund_only"
+    assert row.promotion_state == "unknown"
+    assert "fixture_promotion_legacy_fund_only" in _row_blocker_codes(row)
+
+
+def test_preflight_rejects_duplicate_year_aware_fixture_promotion_entry(
+    tmp_path: Path,
+) -> None:
+    """year-aware promotion manifest 不允许重复 fund/year identity。
+
+    Args:
+        tmp_path: pytest 临时目录 fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当重复身份未 fail-closed 时抛出。
+    """
+
+    promotion = _write_fixture_promotion_state(
+        tmp_path / "fixture-promotion.json",
+        (
+            {
+                "fund_code": "004393",
+                "report_year": 2025,
+                "promotion_state": "not_promoted",
+                "promotion_identity": "fund_year",
+                "evidence_artifacts": ["docs/reviews/unit-a.md"],
+            },
+            {
+                "fund_code": "004393",
+                "report_year": 2025,
+                "promotion_state": "promoted_fixture",
+                "promotion_identity": "fund_year",
+                "evidence_artifacts": ["docs/reviews/unit-b.md"],
+            },
+        ),
+    )
+    golden = _write_golden(tmp_path / "golden.json", ("004393",), report_year=2025)
+
+    with pytest.raises(ValueError, match="duplicate identity"):
+        _run_single_artifact(
+            tmp_path,
+            fund_code="004393",
+            report_year=2025,
+            golden_path=golden,
+            fixture_promotion_state_path=promotion,
+        )
+
+
+def test_preflight_rejects_year_aware_fixture_promotion_unknown_field(
+    tmp_path: Path,
+) -> None:
+    """year-aware promotion manifest 未知字段必须 fail-closed。
+
+    Args:
+        tmp_path: pytest 临时目录 fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当未知字段未 fail-closed 时抛出。
+    """
+
+    promotion = _write_fixture_promotion_state(
+        tmp_path / "fixture-promotion.json",
+        (
+            {
+                "fund_code": "004393",
+                "report_year": 2025,
+                "promotion_state": "promoted_fixture",
+                "promotion_identity": "fund_year",
+                "evidence_artifacts": ["docs/reviews/unit.md"],
+                "extra_payload": True,
+            },
+        ),
+    )
+    golden = _write_golden(tmp_path / "golden.json", ("004393",), report_year=2025)
+
+    with pytest.raises(ValueError, match="未知字段"):
+        _run_single_artifact(
+            tmp_path,
+            fund_code="004393",
+            report_year=2025,
+            golden_path=golden,
+            fixture_promotion_state_path=promotion,
+        )
+
+
+def test_preflight_rejects_year_aware_fixture_promotion_wrong_identity(
+    tmp_path: Path,
+) -> None:
+    """year-aware schema 中错误 identity 声明必须 fail-closed。
+
+    Args:
+        tmp_path: pytest 临时目录 fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当错误 promotion_identity 未 fail-closed 时抛出。
+    """
+
+    promotion = _write_fixture_promotion_state(
+        tmp_path / "fixture-promotion.json",
+        (
+            {
+                "fund_code": "004393",
+                "report_year": 2025,
+                "promotion_state": "promoted_fixture",
+                "promotion_identity": "fund_code_only",
+                "evidence_artifacts": ["docs/reviews/unit.md"],
+            },
+        ),
+    )
+    golden = _write_golden(tmp_path / "golden.json", ("004393",), report_year=2025)
+
+    with pytest.raises(ValueError, match="promotion_identity"):
+        _run_single_artifact(
+            tmp_path,
+            fund_code="004393",
+            report_year=2025,
+            golden_path=golden,
+            fixture_promotion_state_path=promotion,
+        )
 
 
 def test_preflight_outputs_static_disposition_manifest_metadata(tmp_path: Path) -> None:
@@ -489,20 +754,24 @@ def _run_single_artifact(
     tmp_path: Path,
     *,
     fund_code: str,
+    report_year: int = 2024,
     snapshot_extra: dict[str, object] | None = None,
     score_extra: dict[str, object] | None = None,
     quality_status: str = "pass",
     golden_path: Path | None | bool = True,
+    fixture_promotion_state_path: Path | None = None,
 ):
     """构造单基金 preflight 测试运行。
 
     Args:
         tmp_path: 临时目录。
         fund_code: 基金代码。
+        report_year: 年报年份。
         snapshot_extra: snapshot 额外字段。
         score_extra: score 额外字段。
         quality_status: quality gate 状态。
         golden_path: golden 路径；True 表示自动生成覆盖当前基金，None 表示不配置。
+        fixture_promotion_state_path: fixture promotion state manifest 路径。
 
     Returns:
         preflight result。
@@ -517,8 +786,10 @@ def _run_single_artifact(
         actual_golden_path = _write_golden(tmp_path / "golden.json", (fund_code,))
     else:
         actual_golden_path = golden_path
+    resolved_snapshot_extra = {"report_year": report_year}
+    resolved_snapshot_extra.update(snapshot_extra or {})
     snapshot = _write_snapshot(
-        tmp_path / "snapshot.jsonl", fund_code=fund_code, extra=snapshot_extra or {}
+        tmp_path / "snapshot.jsonl", fund_code=fund_code, extra=resolved_snapshot_extra
     )
     score = _write_score(tmp_path / "score.json", fund_code=fund_code, extra=score_extra or {})
     quality = _write_quality(tmp_path / "quality.json", fund_code=fund_code, status=quality_status)
@@ -529,7 +800,7 @@ def _run_single_artifact(
         fund_artifacts=(
             FundArtifactInput(
                 fund_code=fund_code,
-                report_year=2024,
+                report_year=report_year,
                 snapshot_path=snapshot,
                 score_path=score,
                 quality_gate_path=quality,
@@ -538,7 +809,7 @@ def _run_single_artifact(
             ),
         ),
         golden_answer_path=actual_golden_path,
-        fixture_promotion_state_path=None,
+        fixture_promotion_state_path=fixture_promotion_state_path,
         coverage_disposition_path=None,
     )
 
@@ -628,12 +899,48 @@ def _write_quality(path: Path, *, fund_code: str, status: str) -> Path:
     return _write_json(path, {"status": status, "issues": [], "rule_results": [], "fund_code": fund_code})
 
 
-def _write_golden(path: Path, fund_codes: tuple[str, ...]) -> Path:
+def _write_golden(path: Path, fund_codes: tuple[str, ...], *, report_year: int | None = None) -> Path:
     """写入最小 strict golden answer v1 JSON。
 
     Args:
         path: 输出路径。
         fund_codes: 覆盖基金代码。
+        report_year: 可选覆盖年份；为空时保留 legacy 缺失年份形态。
+
+    Returns:
+        输出路径。
+
+    Raises:
+        OSError: 写入失败时抛出。
+    """
+
+    funds: list[dict[str, object]] = []
+    for fund_code in fund_codes:
+        fund: dict[str, object] = {
+            "fund_code": fund_code,
+            "records": [{"fund_code": fund_code, "field_name": "basic_identity"}],
+        }
+        if report_year is not None:
+            fund["report_year"] = report_year
+        funds.append(fund)
+    return _write_json(
+        path,
+        {
+            "schema_version": "fund-agent.golden-answer.v1",
+            "funds": funds,
+        },
+    )
+
+
+def _write_fixture_promotion_state(
+    path: Path,
+    entries: tuple[dict[str, object], ...],
+) -> Path:
+    """写入 year-aware fixture promotion state manifest。
+
+    Args:
+        path: 输出路径。
+        entries: manifest entries。
 
     Returns:
         输出路径。
@@ -645,14 +952,10 @@ def _write_golden(path: Path, fund_codes: tuple[str, ...]) -> Path:
     return _write_json(
         path,
         {
-            "schema_version": "fund-agent.golden-answer.v1",
-            "funds": [
-                {
-                    "fund_code": fund_code,
-                    "records": [{"fund_code": fund_code, "field_name": "basic_identity"}],
-                }
-                for fund_code in fund_codes
-            ],
+            "schema_version": "fund-agent.fixture-promotion-state.year-aware.v1",
+            "accepted_as_of": "2026-06-13",
+            "source_artifacts": ["docs/reviews/unit.md"],
+            "entries": list(entries),
         },
     )
 

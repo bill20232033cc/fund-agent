@@ -1,9 +1,9 @@
 # V0 Release Readiness PR17 Integration Precheck
 
-> Date: 2026-05-24  
-> Branch: `codex/v0-release-readiness-plan`  
-> PR under test: `https://github.com/bill20232033cc/fund-agent/pull/17`  
-> PR head: `d16b5bdea2e9f246bf622ed9725bf321c5824e6d`  
+> Date: 2026-05-24
+> Branch: `codex/v0-release-readiness-plan`
+> PR under test: `https://github.com/bill20232033cc/fund-agent/pull/17`
+> PR head: `d16b5bdea2e9f246bf622ed9725bf321c5824e6d`
 > Result: `precheck passed for PR17 smoke; integration requires control-doc conflict resolution and user authorization`
 
 ## Purpose

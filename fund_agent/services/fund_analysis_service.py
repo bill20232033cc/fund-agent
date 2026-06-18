@@ -7,12 +7,13 @@
 
 from __future__ import annotations
 
+import asyncio
 import time
 from dataclasses import dataclass, replace
 from decimal import Decimal
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Literal, Protocol
+from typing import Callable, Literal, Mapping, Protocol
 
 from fund_agent.config.paths import DEFAULT_GOLDEN_ANSWER_JSON
 from fund_agent.fund.analysis import (
@@ -44,6 +45,13 @@ from fund_agent.fund.analysis import (
     ValuationStateResolution,
 )
 from fund_agent.fund.analysis.thermometer_calculator import ThermometerCalculationError
+from fund_agent.fund.annual_evidence import (
+    AnnualEvidenceBundle,
+    AnnualEvidenceLoader,
+    AnnualEvidenceScopeRequest,
+    CURRENT_YEAR_REQUIRED_PRIOR_YEARS_OPTIONAL,
+    MAX_ANNUAL_EVIDENCE_YEARS,
+)
 from fund_agent.fund.audit import ProgrammaticAuditResult, run_programmatic_audit
 from fund_agent.fund.data.thermometer import ThermometerSnapshot
 from fund_agent.fund.data.thermometer_types import ThermometerBatchResult, ThermometerReading
@@ -52,8 +60,13 @@ from fund_agent.config.paths import DEFAULT_SELECTED_FUNDS_CSV
 from fund_agent.fund.fund_type import FundType
 from fund_agent.fund.quality_gate import GATE_STATUS_BLOCK, QualityGateResult
 from fund_agent.fund.quality_gate_integration import check_quality_gate_fund_membership, run_quality_gate_for_bundle
-from fund_agent.host import HostRunContext
+from fund_agent.host import HostRunContext, HostRuntimeRunner
 from fund_agent.fund.template import TemplateRenderInput, TemplateRenderResult, render_template_report
+from fund_agent.fund.template.annual_period_renderer import (
+    AnnualPeriodReportRenderInput,
+    AnnualPeriodReportRenderResult,
+    render_annual_period_report,
+)
 from fund_agent.services.chapter_orchestrator import (
     ChapterOrchestrationPolicy,
     ChapterOrchestrationResult,
@@ -146,6 +159,33 @@ class _ThermometerService(Protocol):
         """
 
 
+class _AnnualEvidenceLoader(Protocol):
+    """多年年报证据 loader 协议。
+
+    该协议用于 Service 层注入 fake loader。Service 只传递显式 scope 和当前年份
+    结构化数据包，不直接读取年报 repository、PDF cache 或来源 helper。
+    """
+
+    async def load(
+        self,
+        scope: AnnualEvidenceScopeRequest,
+        *,
+        current_year_bundle: StructuredFundDataBundle,
+    ) -> AnnualEvidenceBundle:
+        """加载多年年报证据。
+
+        Args:
+            scope: Fund 层年度证据作用域。
+            current_year_bundle: 当前年份结构化数据包。
+
+        Returns:
+            多年年报证据 bundle。
+
+        Raises:
+            Exception: 允许 Fund 层 loader 传播异常。
+        """
+
+
 @dataclass(frozen=True, slots=True)
 class FundAnalysisDeveloperOverrides:
     """开发覆盖参数，只能在 developer override mode 使用。
@@ -212,6 +252,82 @@ class FundAnalysisRequest:
     mode: AnalyzeMode = "product"
     developer_overrides: FundAnalysisDeveloperOverrides | None = None
     command_source: AnalyzeCommandSource = "analyze"
+
+
+@dataclass(frozen=True, slots=True)
+class MultiYearAnnualAnalysisRequest:
+    """多年年报分析 Service 请求，见模板第 5 章“当前阶段”。
+
+    Attributes:
+        fund_code: 基金代码。
+        target_year: 当前必需年报年份。
+        start_year: 最早 optional prior 年报年份。
+        max_years: 年报证据硬上限，MVP 为 1..5。
+        investment_amount: 压力测试投入金额。
+        max_tolerable_loss_rate: 最大可承受亏损比例。
+        valuation_state: 估值状态；`None` 表示沿用单年分析自动估值行为。
+        thermometer_cache_dir: 自动温度计缓存目录。
+        user_money_horizon_years: 用户资金不用年限。
+        force_refresh: 是否统一强制刷新。
+        quality_gate_policy: quality gate 策略。
+        quality_gate_source_csv: quality gate 精选基金池 CSV 路径。
+        quality_gate_output_dir: quality gate 输出目录。
+        quality_gate_run_id: quality gate 运行 ID。
+        quality_gate_golden_answer_path: strict golden answer JSON 路径。
+    """
+
+    fund_code: str
+    target_year: int = 2025
+    start_year: int = 2021
+    max_years: int = MAX_ANNUAL_EVIDENCE_YEARS
+    investment_amount: Decimal | str | int | float = Decimal("10000")
+    max_tolerable_loss_rate: Decimal | str | int | float | None = None
+    valuation_state: ValuationState | None = None
+    thermometer_cache_dir: Path | None = None
+    user_money_horizon_years: Decimal | str | int | float | None = None
+    force_refresh: bool = False
+    quality_gate_policy: QualityGatePolicy = "block"
+    quality_gate_source_csv: Path | None = None
+    quality_gate_output_dir: Path | None = None
+    quality_gate_run_id: str | None = None
+    quality_gate_golden_answer_path: Path | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class MultiYearAnnualAnalysisResult:
+    """多年年报分析 Service 结果。
+
+    Attributes:
+        current_year_result: 当前必需年份的既有单年分析结果。
+        annual_evidence_bundle: 多年年报证据 bundle。
+        annual_period_report: 多年期间正式报告渲染结果。
+        used_years: 已用于跨年证据的可用年份。
+        gap_years: 可降级缺口年份。
+        fail_closed_years: fail-closed 年份。
+    """
+
+    current_year_result: FundAnalysisResult
+    annual_evidence_bundle: AnnualEvidenceBundle
+    annual_period_report: AnnualPeriodReportRenderResult
+    used_years: tuple[int, ...]
+    gap_years: tuple[int, ...]
+    fail_closed_years: tuple[int, ...]
+
+    @property
+    def report_markdown(self) -> str:
+        """返回当前年份报告 Markdown。
+
+        Args:
+            无。
+
+        Returns:
+            当前必需年份的 8 章 Markdown 报告。
+
+        Raises:
+            无显式抛出。
+        """
+
+        return self.current_year_result.report_markdown
 
 
 @dataclass(frozen=True, slots=True)
@@ -353,6 +469,33 @@ class FundLLMAnalysisResult:
 
 
 @dataclass(frozen=True, slots=True)
+class FundLLMHostedRunResult:
+    """Service 投影给 UI 的 Host 托管 LLM run 安全结果，见模板第 0-7 章。
+
+    Attributes:
+        analysis_result: LLM 分析结果；Host 未产出业务结果时为空。
+        host_status: Host 终态字符串。
+        host_run_id: Host run ID。
+        host_elapsed_ms: Host run 耗时毫秒。
+        host_timeout_classification: Host timeout 分类字符串。
+        host_safe_diagnostics: Host 安全诊断。
+        host_event_count: Host 事件数量。
+        host_completed_at_iso: Host 完成时间 ISO 字符串。
+        host_operation_result_present: Host operation result 是否存在。
+    """
+
+    analysis_result: FundLLMAnalysisResult | None
+    host_status: str
+    host_run_id: str
+    host_elapsed_ms: int | None
+    host_timeout_classification: str | None
+    host_safe_diagnostics: Mapping[str, object]
+    host_event_count: int
+    host_completed_at_iso: str | None
+    host_operation_result_present: bool
+
+
+@dataclass(frozen=True, slots=True)
 class FundChecklistResult:
     """基金检查清单 Service 结果。
 
@@ -484,6 +627,10 @@ class QualityGateNotRunBlockedError(ValueError):
         super().__init__(f"质量 gate 未运行：{reason}")
 
 
+class _LLMIncompleteHostRunError(RuntimeError):
+    """LLM 分析未完成时用于让 Host runner 形成 failed 终态的内部异常。"""
+
+
 class FundAnalysisService:
     """基金分析用例编排 Service。
 
@@ -495,12 +642,14 @@ class FundAnalysisService:
         self,
         extractor: _FundDataExtractor | None = None,
         thermometer_service: _ThermometerService | None = None,
+        annual_evidence_loader: _AnnualEvidenceLoader | None = None,
     ) -> None:
         """初始化基金分析 Service。
 
         Args:
             extractor: P1 结构化抽取器；未提供时使用默认 `FundDataExtractor`。
             thermometer_service: 自建温度计 Service；未提供时使用默认实现。
+            annual_evidence_loader: 多年年报证据 loader；未提供时使用默认实现。
 
         Returns:
             无返回值。
@@ -511,6 +660,7 @@ class FundAnalysisService:
 
         self._extractor = extractor or FundDataExtractor()
         self._thermometer_service = thermometer_service or IndexThermometerService()
+        self._annual_evidence_loader = annual_evidence_loader or AnnualEvidenceLoader()
 
     async def analyze(self, request: FundAnalysisRequest) -> FundAnalysisResult:
         """执行单只基金完整分析并生成 8 章报告。
@@ -599,6 +749,79 @@ class FundAnalysisService:
             quality_gate_not_run_reason=core_result.quality_gate_not_run_reason,
         )
 
+    async def analyze_multi_year_annual(
+        self,
+        request: MultiYearAnnualAnalysisRequest,
+    ) -> MultiYearAnnualAnalysisResult:
+        """执行多年年报分析产品用例。
+
+        Args:
+            request: 多年年报分析显式请求。
+
+        Returns:
+            当前年份分析结果和多年年报证据 bundle。
+
+        Raises:
+            ValueError: 当请求契约非法时抛出。
+            Exception: 允许单年分析或 Fund 层多年证据 loader 传播异常。
+        """
+
+        normalized_fund_code = _normalize_fund_code(request.fund_code)
+        prior_years = _prior_years_from_range(
+            target_year=request.target_year,
+            start_year=request.start_year,
+            max_years=request.max_years,
+        )
+        annual_scope = AnnualEvidenceScopeRequest(
+            fund_code=normalized_fund_code,
+            target_year=request.target_year,
+            required_years=(request.target_year,),
+            optional_years=prior_years,
+            max_years=request.max_years,
+            force_refresh=request.force_refresh,
+            degradation_policy=CURRENT_YEAR_REQUIRED_PRIOR_YEARS_OPTIONAL,
+        )
+        developer_overrides = _multi_year_developer_overrides(request)
+        current_year_result = await self.analyze(
+            FundAnalysisRequest(
+                fund_code=normalized_fund_code,
+                report_year=request.target_year,
+                investment_amount=request.investment_amount,
+                max_tolerable_loss_rate=request.max_tolerable_loss_rate,
+                valuation_state=request.valuation_state,
+                thermometer_cache_dir=request.thermometer_cache_dir,
+                user_money_horizon_years=request.user_money_horizon_years,
+                force_refresh=request.force_refresh,
+                mode="developer_override" if developer_overrides is not None else "product",
+                developer_overrides=developer_overrides,
+                command_source="analyze",
+            )
+        )
+        annual_bundle = await self._annual_evidence_loader.load(
+            annual_scope,
+            current_year_bundle=current_year_result.structured_data,
+        )
+        annual_period_report = render_annual_period_report(
+            AnnualPeriodReportRenderInput(
+                annual_evidence_bundle=annual_bundle,
+                current_year_report_markdown=current_year_result.report_markdown,
+                quality_gate_status=(
+                    current_year_result.quality_gate_result.status
+                    if current_year_result.quality_gate_result is not None
+                    else None
+                ),
+                quality_gate_not_run_reason=current_year_result.quality_gate_not_run_reason,
+            )
+        )
+        return MultiYearAnnualAnalysisResult(
+            current_year_result=current_year_result,
+            annual_evidence_bundle=annual_bundle,
+            annual_period_report=annual_period_report,
+            used_years=annual_bundle.available_years,
+            gap_years=annual_bundle.gap_years,
+            fail_closed_years=annual_bundle.fail_closed_years,
+        )
+
     async def analyze_with_llm(
         self,
         request: FundAnalysisRequest,
@@ -633,8 +856,15 @@ class FundAnalysisService:
             Exception: 允许底层抽取器或 Agent 层基金能力传播异常。
         """
 
+        _record_host_phase_started(host_context, phase="analysis_core")
+        phase_started = time.monotonic()
         core_result = await self._run_analysis_core(
             replace(request, command_source="analyze")
+        )
+        _record_host_phase_completed(
+            host_context,
+            phase="analysis_core",
+            phase_started=phase_started,
         )
         _raise_if_host_cancelled(host_context)
         orchestration_input = build_chapter_orchestration_input(
@@ -714,6 +944,78 @@ class FundAnalysisService:
             assembly_policy=execution_request.runtime_plan.assembly_policy,
             host_context=host_context,
         )
+
+    def analyze_with_llm_hosted(
+        self,
+        request: FundAnalysisRequest,
+        *,
+        event_sink: Callable[[object], None] | None = None,
+    ) -> FundLLMHostedRunResult:
+        """通过 Service-owned Host run 执行显式 LLM 分析。
+
+        该方法是 UI `--use-llm` 的唯一 hosted LLM 用例入口。Service 先构造
+        `FundLLMExecutionRequest` 和 provider clients，再把同步 operation、
+        operation name、Host timeout 标量和可选 event sink 交给 Host runner。
+        Host 只接收通用 lifecycle 字段，不接收基金代码、章节策略或 provider
+        runtime 业务字段。
+
+        Args:
+            request: CLI/UI 构造的显式分析请求。
+            event_sink: 可选 Host 通用事件 sink，用于 UI stderr progress。
+
+        Returns:
+            Service 投影后的 hosted run 安全结果。
+
+        Raises:
+            LLMProviderConfigError: 当 provider 配置缺失或非法时抛出。
+            LLMProviderConstructionError: 当 provider clients 构造失败时抛出。
+            QualityGateBlockedError: 当 quality gate 在 block 策略下阻断报告时抛出。
+            QualityGateNotRunBlockedError: 当 quality gate 在 block 策略下未运行时抛出。
+            ValueError: 当请求或执行契约非法时抛出。
+        """
+
+        execution_request = build_fund_llm_execution_request(
+            request,
+            opt_in_mode="explicit_cli_flag",
+        )
+        quality_gate_exception: QualityGateBlockedError | QualityGateNotRunBlockedError | None = None
+        incomplete_result: FundLLMAnalysisResult | None = None
+
+        def operation(host_context: HostRunContext) -> FundLLMAnalysisResult:
+            """Service-owned async bridge，Host runner 不管理 event loop。"""
+
+            nonlocal incomplete_result, quality_gate_exception
+            try:
+                result = asyncio.run(
+                    self.analyze_with_llm_execution(
+                        execution_request,
+                        host_context=host_context,
+                    )
+                )
+                if result.final_assembly_result.report_markdown is None:
+                    incomplete_result = result
+                    host_context.record_diagnostic(
+                        final_assembly_status=result.final_assembly_result.status,
+                        error_type=_LLMIncompleteHostRunError.__name__,
+                    )
+                    raise _LLMIncompleteHostRunError("llm_result_incomplete")
+                return result
+            except (QualityGateBlockedError, QualityGateNotRunBlockedError) as exc:
+                quality_gate_exception = exc
+                host_context.record_diagnostic(error_type=type(exc).__name__)
+                raise
+
+        host_result = HostRuntimeRunner().run_sync(
+            operation_name="fund_analysis_llm_report",
+            operation=operation,
+            timeout_seconds=execution_request.runtime_plan.host_timeout_seconds,
+            event_sink=event_sink,
+        )
+        if quality_gate_exception is not None:
+            raise quality_gate_exception
+        if incomplete_result is not None:
+            host_result = replace(host_result, operation_result=incomplete_result)
+        return _project_hosted_llm_run_result(host_result)
 
     async def _resolve_valuation_state(
         self,
@@ -929,17 +1231,25 @@ def build_fund_llm_execution_request(
         ValueError: 当业务请求或契约字段非法时抛出。
     """
 
-    config = load_llm_provider_config_from_env()
-    llm_clients = build_chapter_llm_clients(config)
     resolved_contract = _resolve_analyze_contract(request)
     analysis_input = normalize_fund_llm_analysis_input(request)
     quality_policy = QualityPolicyDeclaration(
         quality_gate_policy=resolved_contract.quality_gate_policy,
         deterministic_fallback_allowed=False,
     )
+    contract = FundLLMExecutionContract(
+        fund_code=analysis_input.fund_code,
+        report_year=analysis_input.report_year,
+        analysis_input=analysis_input,
+        quality_policy=quality_policy,
+        llm_opt_in_mode=opt_in_mode,
+    )
+
+    config = load_llm_provider_config_from_env()
     chapter_policy = ChapterOrchestrationPolicy(
         max_output_chars=config.max_output_chars,
         prompt_payload_mode="compact",
+        typed_template_path="typed_template_contract",
     )
     provider_runtime_budget = ProviderRuntimeBudget(
         writer_timeout_seconds=config.writer_timeout_seconds,
@@ -964,22 +1274,18 @@ def build_fund_llm_execution_request(
         provider_runtime_budget=provider_runtime_budget,
         quality_fail_closed_policy=quality_fail_closed_policy,
         safe_diagnostic_policy=SafeDiagnosticPolicy(),
+        typed_template_path="typed_template_contract",
         host_timeout_seconds=derive_host_timeout_seconds(
             provider_runtime_budget,
             chapter_count=LLM_REPORT_HOST_TIMEOUT_CHAPTER_COUNT,
         ),
     )
-    contract = FundLLMExecutionContract(
-        fund_code=analysis_input.fund_code,
-        report_year=analysis_input.report_year,
-        analysis_input=analysis_input,
-        quality_policy=quality_policy,
-        llm_opt_in_mode=opt_in_mode,
-    )
+    llm_clients = build_chapter_llm_clients(config)
     return FundLLMExecutionRequest(
         contract=contract,
         runtime_plan=runtime_plan,
         llm_clients=llm_clients,
+        typed_template_path="typed_template_contract",
     )
 
 
@@ -1011,6 +1317,64 @@ def _fund_analysis_request_from_llm_input(
         developer_overrides=analysis_input.developer_overrides,
         command_source="analyze",
     )
+
+
+def _project_hosted_llm_run_result(host_result: object) -> FundLLMHostedRunResult:
+    """把 HostRunResult 投影成 Service-owned 安全返回形状。
+
+    Args:
+        host_result: Host runner 返回的通用 run result。
+
+    Returns:
+        只包含 UI 安全消费字段的 hosted LLM run result。
+
+    Raises:
+        AttributeError: 当传入对象不具备 HostRunResult 必要字段时自然抛出。
+    """
+
+    operation_result = getattr(host_result, "operation_result")
+    status = getattr(host_result, "status")
+    timeout_classification = getattr(host_result, "timeout_classification")
+    completed_at = getattr(host_result, "completed_at")
+    analysis_result = (
+        operation_result if isinstance(operation_result, FundLLMAnalysisResult) else None
+    )
+    return FundLLMHostedRunResult(
+        analysis_result=analysis_result,
+        host_status=_enum_value_or_str(status),
+        host_run_id=str(getattr(host_result, "run_id")),
+        host_elapsed_ms=getattr(host_result, "elapsed_ms"),
+        host_timeout_classification=(
+            None
+            if timeout_classification is None
+            else _enum_value_or_str(timeout_classification)
+        ),
+        host_safe_diagnostics=dict(getattr(host_result, "safe_diagnostics")),
+        host_event_count=len(getattr(host_result, "events")),
+        host_completed_at_iso=(
+            None if completed_at is None else completed_at.isoformat()
+        ),
+        host_operation_result_present=operation_result is not None,
+    )
+
+
+def _enum_value_or_str(value: object) -> str:
+    """返回 enum-like 对象的 value，否则返回字符串形式。
+
+    Args:
+        value: enum-like 对象或普通标量。
+
+    Returns:
+        可安全展示的字符串。
+
+    Raises:
+        无显式抛出。
+    """
+
+    enum_value = getattr(value, "value", None)
+    if enum_value is not None:
+        return str(enum_value)
+    return str(value)
 
 
 def _validate_llm_execution_fail_closed_policy(
@@ -1127,11 +1491,7 @@ def _validate_request(
         ValueError: 当基金代码或年报年份非法时抛出。
     """
 
-    normalized_fund_code = request.fund_code.strip()
-    if not normalized_fund_code:
-        raise ValueError("fund_code 不能为空")
-    if len(normalized_fund_code) != 6 or not normalized_fund_code.isdigit():
-        raise ValueError("fund_code 必须是 6 位数字")
+    normalized_fund_code = _normalize_fund_code(request.fund_code)
     if request.report_year <= 0:
         raise ValueError("report_year 必须为正整数")
     if request.command_source not in {"analyze", "checklist"}:
@@ -1150,6 +1510,95 @@ def _validate_request(
     ):
         raise ValueError("quality_gate_output_dir 必须是目录")
     return _ValidatedRequest(fund_code=normalized_fund_code)
+
+
+def _normalize_fund_code(fund_code: str) -> str:
+    """规范化基金代码。
+
+    Args:
+        fund_code: 原始基金代码。
+
+    Returns:
+        6 位数字基金代码。
+
+    Raises:
+        ValueError: 基金代码为空或格式非法时抛出。
+    """
+
+    normalized_fund_code = fund_code.strip()
+    if not normalized_fund_code:
+        raise ValueError("fund_code 不能为空")
+    if len(normalized_fund_code) != 6 or not normalized_fund_code.isdigit():
+        raise ValueError("fund_code 必须是 6 位数字")
+    return normalized_fund_code
+
+
+def _prior_years_from_range(
+    *,
+    target_year: int,
+    start_year: int,
+    max_years: int,
+) -> tuple[int, ...]:
+    """从用户范围参数派生 optional prior years。
+
+    Args:
+        target_year: 当前必需年报年份。
+        start_year: 最早 optional prior 年份。
+        max_years: 年报证据硬上限。
+
+    Returns:
+        降序排列的 optional prior 年份。
+
+    Raises:
+        ValueError: 年份范围或上限非法时抛出。
+    """
+
+    if target_year <= 0:
+        raise ValueError("target_year 必须为正整数")
+    if start_year <= 0:
+        raise ValueError("start_year 必须为正整数")
+    if max_years < 1 or max_years > MAX_ANNUAL_EVIDENCE_YEARS:
+        raise ValueError("max_years 必须在 1..5 范围内")
+    if start_year > target_year:
+        raise ValueError("start_year 不能晚于 target_year")
+    requested_year_count = target_year - start_year + 1
+    if requested_year_count > max_years:
+        raise ValueError("target_year 到 start_year 的闭区间不能超过 max_years")
+    if requested_year_count < 1:
+        raise ValueError("年报年份范围不能为空")
+    return tuple(range(target_year - 1, start_year - 1, -1))
+
+
+def _multi_year_developer_overrides(
+    request: MultiYearAnnualAnalysisRequest,
+) -> FundAnalysisDeveloperOverrides | None:
+    """按现有单年 analyze 契约构造必要的开发覆盖参数。
+
+    Args:
+        request: 多年年报分析请求。
+
+    Returns:
+        需要 developer override mode 时返回覆盖参数；默认 product 契约返回 `None`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if (
+        request.quality_gate_policy == "block"
+        and request.quality_gate_source_csv is None
+        and request.quality_gate_output_dir is None
+        and request.quality_gate_run_id is None
+        and request.quality_gate_golden_answer_path is None
+    ):
+        return None
+    return FundAnalysisDeveloperOverrides(
+        quality_gate_policy=request.quality_gate_policy,
+        quality_gate_source_csv=request.quality_gate_source_csv,
+        quality_gate_output_dir=request.quality_gate_output_dir,
+        quality_gate_run_id=request.quality_gate_run_id,
+        quality_gate_golden_answer_path=request.quality_gate_golden_answer_path,
+    )
 
 
 def _check_pool_membership_before_extraction(

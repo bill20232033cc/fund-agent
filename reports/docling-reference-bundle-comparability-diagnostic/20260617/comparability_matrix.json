@@ -1,0 +1,1921 @@
+{
+  "accepted_plan": "docs/reviews/docling-reference-bundle-evidence-comparability-determinism-diagnostic-plan-20260617.md",
+  "accepted_plan_controller_judgment": "docs/reviews/docling-reference-bundle-evidence-comparability-determinism-diagnostic-plan-controller-judgment-20260617.md",
+  "candidate_only": true,
+  "classification": {
+    "helper_semantics_not_isolated_as_root_cause": true,
+    "json_artifacts_identify_non_comparability": true,
+    "json_artifacts_insufficient_for_exact_producer_line": true,
+    "primary_class": "wrapper_or_reference_bundle_construction_drift",
+    "repository_mediated_followup_needed": true,
+    "repository_mediated_followup_scope": "separate later gate only; do not reload repository in this gate"
+  },
+  "comparison_basis": "committed_json_artifacts_only",
+  "diagnostic_findings": [
+    "repository_load_count_drift",
+    "section_inference_drift",
+    "text_span_count_drift",
+    "matched_context_drift",
+    "source_layer_status_drift",
+    "json_artifacts_insufficient_for_exact_producer_line",
+    "current_10_7_artifact_remains_valid_blocked_regression_evidence"
+  ],
+  "direct_pdf_cache_source_helper_access": false,
+  "gate": "Docling Reference Bundle Comparability Diagnostic No-live Evidence Gate",
+  "inputs": {
+    "accepted_plan": {
+      "path": "docs/reviews/docling-reference-bundle-evidence-comparability-determinism-diagnostic-plan-20260617.md",
+      "sha256": "9db62d36203ffd70d42e75525d28809b488af99097859d979a786f33de59f3a8"
+    },
+    "accepted_plan_controller_judgment": {
+      "path": "docs/reviews/docling-reference-bundle-evidence-comparability-determinism-diagnostic-plan-controller-judgment-20260617.md",
+      "sha256": "32a24d48023b5ca032585c2abb8ff8e9b2a43318d6b6bb0dc91cc9c74d678c7b"
+    },
+    "current_controller_judgment": {
+      "path": "docs/reviews/docling-reference-bundle-producer-row-hierarchy-benchmark-semantic-label-no-live-reevidence-controller-judgment-20260617.md",
+      "sha256": "63b343d941f77cca84f3048c4d98f3ea667f0fd2e5d6147d0f8d105597165301"
+    },
+    "current_matrix": {
+      "path": "reports/docling-reference-bundle-producer-row-hierarchy-benchmark-semantic-label-reevidence/20260617/residual_closure_matrix.json",
+      "sha256": "f7fe7a3046fb40427e55179faaa40f20cd3a6c47664387f957c23b832af7639c"
+    },
+    "current_report": {
+      "path": "docs/reviews/docling-reference-bundle-producer-row-hierarchy-benchmark-semantic-label-no-live-reevidence-20260617.md",
+      "sha256": "1609597c3dd24944a62c1622ecdfa901708896beb12220e19998cc0e0229a1e3"
+    },
+    "helper_hash_only": {
+      "path": "fund_agent/fund/documents/candidates/source_truth_residual_closure.py",
+      "sha256": "f2a4f87a9d85a89c8b9ec6f3292db29c8dfe334d92958212b3126e98028d7ba8"
+    },
+    "prior_matrix": {
+      "path": "reports/docling-reference-bundle-enrichment-residual-closure/20260617/residual_closure_matrix.json",
+      "sha256": "958ee899d7b9f43510ef9cd45bd402be4f69ca58f81dfbfee86832febc776948"
+    },
+    "prior_report": {
+      "path": "docs/reviews/docling-reference-bundle-enrichment-residual-closure-no-live-reevidence-20260617.md",
+      "sha256": "a76f3830fd7b3e806d713212ab59dc56741e6e9b32da391b2098f1c4a49a701b"
+    }
+  },
+  "not_baseline_promotion": true,
+  "not_full_field_correctness": true,
+  "not_parser_replacement": true,
+  "not_ready": true,
+  "not_release_readiness": true,
+  "not_source_truth": true,
+  "regression_rows": [
+    {
+      "closure_disposition_changed": true,
+      "comparability_class": "regression_with_context_or_source_status_drift",
+      "current": {
+        "closure_disposition": "semantic_assignment_residual",
+        "fund_layer_status": "semantic_rule_rejected",
+        "matched_column_header_path": [],
+        "matched_row_label_path": [],
+        "matched_table_context": [],
+        "processed_layer_status": "locator_context_available",
+        "source_layer_status": "same_source_reference_loaded",
+        "source_truth_status": "not_proven"
+      },
+      "fact_id": "F015",
+      "field_name": "sales_service_fee_C_current_year",
+      "fund_status_changed": true,
+      "improvement_flag": false,
+      "matched_context_changed": true,
+      "prior": {
+        "closure_disposition": "disambiguated_source_body_match",
+        "fund_layer_status": "semantic_rule_satisfied",
+        "matched_column_header_path": [
+          "本期 2025年1月1日至2025年12月31日",
+          "当期发生的基金应支付的销售服务费",
+          "安信企业价值优选混 合C"
+        ],
+        "matched_row_label_path": [
+          "当期发生的基金应支付的销售服务费",
+          "安信基金"
+        ],
+        "matched_table_context": [
+          "§7",
+          "table text contains fee-accounting label",
+          "获得销售服务费的各关联 方名称",
+          "本期 2025年1月1日至2025年12月31日"
+        ],
+        "processed_layer_status": "locator_context_available",
+        "source_layer_status": "same_source_reference_loaded",
+        "source_truth_status": "not_proven"
+      },
+      "regression_flag": true,
+      "row_key": "S1::F015::sales_service_fee_C_current_year",
+      "sample_id": "S1",
+      "source_status_changed": false
+    },
+    {
+      "closure_disposition_changed": true,
+      "comparability_class": "regression_with_context_or_source_status_drift",
+      "current": {
+        "closure_disposition": "source_body_mismatch",
+        "fund_layer_status": "semantic_rule_unresolved",
+        "matched_column_header_path": [],
+        "matched_row_label_path": [],
+        "matched_table_context": [],
+        "processed_layer_status": "locator_context_available",
+        "source_layer_status": "same_source_text_absent",
+        "source_truth_status": "not_proven"
+      },
+      "fact_id": "S5-F023",
+      "field_name": "investment_objective",
+      "fund_status_changed": true,
+      "improvement_flag": false,
+      "matched_context_changed": true,
+      "prior": {
+        "closure_disposition": "disambiguated_source_body_match",
+        "fund_layer_status": "semantic_rule_satisfied",
+        "matched_column_header_path": [
+          "table_header"
+        ],
+        "matched_row_label_path": [
+          "投资目标"
+        ],
+        "matched_table_context": [
+          "§2",
+          "table text contains profile/objective label",
+          "投资目标",
+          "本基金进行被动指数化投资，紧密跟踪标的指数，追求跟踪偏离度和跟踪 误差最小化。"
+        ],
+        "processed_layer_status": "locator_context_available",
+        "source_layer_status": "same_source_reference_loaded",
+        "source_truth_status": "not_proven"
+      },
+      "regression_flag": true,
+      "row_key": "S5::S5-F023::investment_objective",
+      "sample_id": "S5",
+      "source_status_changed": true
+    },
+    {
+      "closure_disposition_changed": true,
+      "comparability_class": "regression_with_context_or_source_status_drift",
+      "current": {
+        "closure_disposition": "semantic_assignment_residual",
+        "fund_layer_status": "semantic_rule_rejected",
+        "matched_column_header_path": [],
+        "matched_row_label_path": [],
+        "matched_table_context": [],
+        "processed_layer_status": "locator_context_available",
+        "source_layer_status": "same_source_reference_loaded",
+        "source_truth_status": "not_proven"
+      },
+      "fact_id": "S6-F035",
+      "field_name": "fund_name",
+      "fund_status_changed": true,
+      "improvement_flag": false,
+      "matched_context_changed": true,
+      "prior": {
+        "closure_disposition": "disambiguated_source_body_match",
+        "fund_layer_status": "semantic_rule_satisfied",
+        "matched_column_header_path": [
+          "table_header"
+        ],
+        "matched_row_label_path": [
+          "基金名称"
+        ],
+        "matched_table_context": [
+          "§2",
+          "table text contains profile/objective label",
+          "基金名称",
+          "易方达沪深300交易型开放式指数发起式证券投资基金 联接基金"
+        ],
+        "processed_layer_status": "locator_context_available",
+        "source_layer_status": "same_source_reference_loaded",
+        "source_truth_status": "not_proven"
+      },
+      "regression_flag": true,
+      "row_key": "S6::S6-F035::fund_name",
+      "sample_id": "S6",
+      "source_status_changed": false
+    }
+  ],
+  "repository_load_comparison": [
+    {
+      "count_comparison": {
+        "cell_reference_count": {
+          "changed": true,
+          "current": 3247,
+          "delta": 46,
+          "prior": 3201
+        },
+        "section_count": {
+          "changed": false,
+          "current": 8,
+          "delta": 0,
+          "prior": 8
+        },
+        "table_count": {
+          "changed": false,
+          "current": 88,
+          "delta": 0,
+          "prior": 88
+        },
+        "text_span_count": {
+          "changed": true,
+          "current": 6,
+          "delta": -2,
+          "prior": 8
+        }
+      },
+      "current_reference_bundle_schema_version": "repository_reference_bundle.v1(raw legacy; helper enrichment delegated)",
+      "document_year": 2025,
+      "fund_code": "004393",
+      "has_count_drift": true,
+      "has_metadata_drift": false,
+      "has_section_inference_drift": true,
+      "metadata_comparison": {
+        "cache_schema_version": {
+          "changed": false,
+          "current": 1,
+          "prior": 1
+        },
+        "fallback_enabled": {
+          "changed": false,
+          "current": false,
+          "prior": false
+        },
+        "fallback_used": {
+          "changed": false,
+          "current": false,
+          "prior": false
+        },
+        "parsed_cache_hit": {
+          "changed": false,
+          "current": true,
+          "prior": true
+        },
+        "pdf_cache_hit": {
+          "changed": false,
+          "current": false,
+          "prior": false
+        },
+        "primary_failure_category": {
+          "changed": false,
+          "current": null,
+          "prior": null
+        },
+        "report_year": {
+          "changed": false,
+          "current": 2025,
+          "prior": 2025
+        },
+        "selected_source": {
+          "changed": false,
+          "current": "eid",
+          "prior": "eid"
+        },
+        "source": {
+          "changed": false,
+          "current": "eid",
+          "prior": "eid"
+        },
+        "source_metadata_present": {
+          "changed": false,
+          "current": true,
+          "prior": true
+        },
+        "source_mode": {
+          "changed": false,
+          "current": "single_source_only",
+          "prior": "single_source_only"
+        }
+      },
+      "prior_reference_bundle_schema_version": "repository_reference_bundle.v1(raw legacy; helper enrichment delegated)",
+      "sample_id": "S1",
+      "section_inference_counts_comparison": {
+        "unknown": {
+          "changed": true,
+          "current": 58,
+          "delta": 4,
+          "prior": 54
+        },
+        "§10": {
+          "changed": true,
+          "current": 2,
+          "delta": 1,
+          "prior": 1
+        },
+        "§2": {
+          "changed": true,
+          "current": 8,
+          "delta": 1,
+          "prior": 7
+        },
+        "§7": {
+          "changed": true,
+          "current": 8,
+          "delta": 3,
+          "prior": 5
+        },
+        "§8": {
+          "changed": true,
+          "current": 12,
+          "delta": -9,
+          "prior": 21
+        }
+      },
+      "section_inference_reason_counts_comparison": {
+        "no deterministic section label from ParsedTable text": {
+          "changed": true,
+          "current": 58,
+          "delta": 4,
+          "prior": 54
+        },
+        "table text contains fee-accounting label": {
+          "changed": true,
+          "current": 8,
+          "delta": 3,
+          "prior": 5
+        },
+        "table text contains manager-holding label": {
+          "changed": true,
+          "current": 2,
+          "delta": 1,
+          "prior": 1
+        },
+        "table text contains portfolio/fair-value/financial-statement label": {
+          "changed": true,
+          "current": 12,
+          "delta": -9,
+          "prior": 21
+        },
+        "table text contains profile/objective label": {
+          "changed": true,
+          "current": 8,
+          "delta": 1,
+          "prior": 7
+        }
+      }
+    },
+    {
+      "count_comparison": {
+        "cell_reference_count": {
+          "changed": true,
+          "current": 2561,
+          "delta": 32,
+          "prior": 2529
+        },
+        "section_count": {
+          "changed": false,
+          "current": 8,
+          "delta": 0,
+          "prior": 8
+        },
+        "table_count": {
+          "changed": false,
+          "current": 85,
+          "delta": 0,
+          "prior": 85
+        },
+        "text_span_count": {
+          "changed": true,
+          "current": 6,
+          "delta": -2,
+          "prior": 8
+        }
+      },
+      "current_reference_bundle_schema_version": "repository_reference_bundle.v1(raw legacy; helper enrichment delegated)",
+      "document_year": 2024,
+      "fund_code": "006597",
+      "has_count_drift": true,
+      "has_metadata_drift": false,
+      "has_section_inference_drift": true,
+      "metadata_comparison": {
+        "cache_schema_version": {
+          "changed": false,
+          "current": 1,
+          "prior": 1
+        },
+        "fallback_enabled": {
+          "changed": false,
+          "current": false,
+          "prior": false
+        },
+        "fallback_used": {
+          "changed": false,
+          "current": false,
+          "prior": false
+        },
+        "parsed_cache_hit": {
+          "changed": false,
+          "current": true,
+          "prior": true
+        },
+        "pdf_cache_hit": {
+          "changed": false,
+          "current": false,
+          "prior": false
+        },
+        "primary_failure_category": {
+          "changed": false,
+          "current": null,
+          "prior": null
+        },
+        "report_year": {
+          "changed": false,
+          "current": 2024,
+          "prior": 2024
+        },
+        "selected_source": {
+          "changed": false,
+          "current": "eid",
+          "prior": "eid"
+        },
+        "source": {
+          "changed": false,
+          "current": "eid",
+          "prior": "eid"
+        },
+        "source_metadata_present": {
+          "changed": false,
+          "current": true,
+          "prior": true
+        },
+        "source_mode": {
+          "changed": false,
+          "current": "single_source_only",
+          "prior": "single_source_only"
+        }
+      },
+      "prior_reference_bundle_schema_version": "repository_reference_bundle.v1(raw legacy; helper enrichment delegated)",
+      "sample_id": "S4",
+      "section_inference_counts_comparison": {
+        "unknown": {
+          "changed": true,
+          "current": 56,
+          "delta": -8,
+          "prior": 64
+        },
+        "§10": {
+          "changed": true,
+          "current": 2,
+          "delta": 1,
+          "prior": 1
+        },
+        "§2": {
+          "changed": true,
+          "current": 8,
+          "delta": 4,
+          "prior": 4
+        },
+        "§7": {
+          "changed": true,
+          "current": 9,
+          "delta": 2,
+          "prior": 7
+        },
+        "§8": {
+          "changed": true,
+          "current": 10,
+          "delta": 1,
+          "prior": 9
+        }
+      },
+      "section_inference_reason_counts_comparison": {
+        "no deterministic section label from ParsedTable text": {
+          "changed": true,
+          "current": 56,
+          "delta": -8,
+          "prior": 64
+        },
+        "table text contains fee-accounting label": {
+          "changed": true,
+          "current": 9,
+          "delta": 2,
+          "prior": 7
+        },
+        "table text contains manager-holding label": {
+          "changed": true,
+          "current": 2,
+          "delta": 1,
+          "prior": 1
+        },
+        "table text contains portfolio/fair-value/financial-statement label": {
+          "changed": true,
+          "current": 10,
+          "delta": 1,
+          "prior": 9
+        },
+        "table text contains profile/objective label": {
+          "changed": true,
+          "current": 8,
+          "delta": 4,
+          "prior": 4
+        }
+      }
+    },
+    {
+      "count_comparison": {
+        "cell_reference_count": {
+          "changed": true,
+          "current": 6805,
+          "delta": 66,
+          "prior": 6739
+        },
+        "section_count": {
+          "changed": false,
+          "current": 6,
+          "delta": 0,
+          "prior": 6
+        },
+        "table_count": {
+          "changed": false,
+          "current": 114,
+          "delta": 0,
+          "prior": 114
+        },
+        "text_span_count": {
+          "changed": false,
+          "current": 6,
+          "delta": 0,
+          "prior": 6
+        }
+      },
+      "current_reference_bundle_schema_version": "repository_reference_bundle.v1(raw legacy; helper enrichment delegated)",
+      "document_year": 2024,
+      "fund_code": "017641",
+      "has_count_drift": true,
+      "has_metadata_drift": false,
+      "has_section_inference_drift": true,
+      "metadata_comparison": {
+        "cache_schema_version": {
+          "changed": false,
+          "current": 1,
+          "prior": 1
+        },
+        "fallback_enabled": {
+          "changed": false,
+          "current": false,
+          "prior": false
+        },
+        "fallback_used": {
+          "changed": false,
+          "current": false,
+          "prior": false
+        },
+        "parsed_cache_hit": {
+          "changed": false,
+          "current": false,
+          "prior": false
+        },
+        "pdf_cache_hit": {
+          "changed": false,
+          "current": true,
+          "prior": true
+        },
+        "primary_failure_category": {
+          "changed": false,
+          "current": null,
+          "prior": null
+        },
+        "report_year": {
+          "changed": false,
+          "current": 2024,
+          "prior": 2024
+        },
+        "selected_source": {
+          "changed": false,
+          "current": "eid",
+          "prior": "eid"
+        },
+        "source": {
+          "changed": false,
+          "current": "eid",
+          "prior": "eid"
+        },
+        "source_metadata_present": {
+          "changed": false,
+          "current": true,
+          "prior": true
+        },
+        "source_mode": {
+          "changed": false,
+          "current": "single_source_only",
+          "prior": "single_source_only"
+        }
+      },
+      "prior_reference_bundle_schema_version": "repository_reference_bundle.v1(raw legacy; helper enrichment delegated)",
+      "sample_id": "S5",
+      "section_inference_counts_comparison": {
+        "unknown": {
+          "changed": true,
+          "current": 85,
+          "delta": 2,
+          "prior": 83
+        },
+        "§10": {
+          "changed": true,
+          "current": 2,
+          "delta": 1,
+          "prior": 1
+        },
+        "§2": {
+          "changed": true,
+          "current": 10,
+          "delta": 1,
+          "prior": 9
+        },
+        "§7": {
+          "changed": false,
+          "current": 7,
+          "delta": 0,
+          "prior": 7
+        },
+        "§8": {
+          "changed": true,
+          "current": 10,
+          "delta": -4,
+          "prior": 14
+        }
+      },
+      "section_inference_reason_counts_comparison": {
+        "no deterministic section label from ParsedTable text": {
+          "changed": true,
+          "current": 85,
+          "delta": 2,
+          "prior": 83
+        },
+        "table text contains fee-accounting label": {
+          "changed": false,
+          "current": 7,
+          "delta": 0,
+          "prior": 7
+        },
+        "table text contains manager-holding label": {
+          "changed": true,
+          "current": 2,
+          "delta": 1,
+          "prior": 1
+        },
+        "table text contains portfolio/fair-value/financial-statement label": {
+          "changed": true,
+          "current": 10,
+          "delta": -4,
+          "prior": 14
+        },
+        "table text contains profile/objective label": {
+          "changed": true,
+          "current": 10,
+          "delta": 1,
+          "prior": 9
+        }
+      }
+    },
+    {
+      "count_comparison": {
+        "cell_reference_count": {
+          "changed": true,
+          "current": 5633,
+          "delta": -32,
+          "prior": 5665
+        },
+        "section_count": {
+          "changed": false,
+          "current": 8,
+          "delta": 0,
+          "prior": 8
+        },
+        "table_count": {
+          "changed": false,
+          "current": 118,
+          "delta": 0,
+          "prior": 118
+        },
+        "text_span_count": {
+          "changed": true,
+          "current": 6,
+          "delta": -2,
+          "prior": 8
+        }
+      },
+      "current_reference_bundle_schema_version": "repository_reference_bundle.v1(raw legacy; helper enrichment delegated)",
+      "document_year": 2024,
+      "fund_code": "110020",
+      "has_count_drift": true,
+      "has_metadata_drift": false,
+      "has_section_inference_drift": true,
+      "metadata_comparison": {
+        "cache_schema_version": {
+          "changed": false,
+          "current": 1,
+          "prior": 1
+        },
+        "fallback_enabled": {
+          "changed": false,
+          "current": false,
+          "prior": false
+        },
+        "fallback_used": {
+          "changed": false,
+          "current": false,
+          "prior": false
+        },
+        "parsed_cache_hit": {
+          "changed": false,
+          "current": true,
+          "prior": true
+        },
+        "pdf_cache_hit": {
+          "changed": false,
+          "current": false,
+          "prior": false
+        },
+        "primary_failure_category": {
+          "changed": false,
+          "current": null,
+          "prior": null
+        },
+        "report_year": {
+          "changed": false,
+          "current": 2024,
+          "prior": 2024
+        },
+        "selected_source": {
+          "changed": false,
+          "current": "eid",
+          "prior": "eid"
+        },
+        "source": {
+          "changed": false,
+          "current": "eid",
+          "prior": "eid"
+        },
+        "source_metadata_present": {
+          "changed": false,
+          "current": true,
+          "prior": true
+        },
+        "source_mode": {
+          "changed": false,
+          "current": "single_source_only",
+          "prior": "single_source_only"
+        }
+      },
+      "prior_reference_bundle_schema_version": "repository_reference_bundle.v1(raw legacy; helper enrichment delegated)",
+      "sample_id": "S6",
+      "section_inference_counts_comparison": {
+        "unknown": {
+          "changed": true,
+          "current": 78,
+          "delta": -5,
+          "prior": 83
+        },
+        "§10": {
+          "changed": true,
+          "current": 2,
+          "delta": 1,
+          "prior": 1
+        },
+        "§2": {
+          "changed": true,
+          "current": 14,
+          "delta": 5,
+          "prior": 9
+        },
+        "§7": {
+          "changed": true,
+          "current": 12,
+          "delta": 4,
+          "prior": 8
+        },
+        "§8": {
+          "changed": true,
+          "current": 12,
+          "delta": -5,
+          "prior": 17
+        }
+      },
+      "section_inference_reason_counts_comparison": {
+        "no deterministic section label from ParsedTable text": {
+          "changed": true,
+          "current": 78,
+          "delta": -5,
+          "prior": 83
+        },
+        "table text contains fee-accounting label": {
+          "changed": true,
+          "current": 12,
+          "delta": 4,
+          "prior": 8
+        },
+        "table text contains manager-holding label": {
+          "changed": true,
+          "current": 2,
+          "delta": 1,
+          "prior": 1
+        },
+        "table text contains portfolio/fair-value/financial-statement label": {
+          "changed": true,
+          "current": 12,
+          "delta": -5,
+          "prior": 17
+        },
+        "table text contains profile/objective label": {
+          "changed": true,
+          "current": 14,
+          "delta": 5,
+          "prior": 9
+        }
+      }
+    }
+  ],
+  "repository_object_access": false,
+  "row_comparison": [
+    {
+      "closure_disposition_changed": false,
+      "comparability_class": "matched_context_drift_only",
+      "current": {
+        "closure_disposition": "disambiguated_source_body_match",
+        "fund_layer_status": "semantic_rule_satisfied",
+        "matched_column_header_path": [],
+        "matched_row_label_path": [
+          "基金主代码"
+        ],
+        "matched_table_context": [
+          "基金主代码"
+        ],
+        "processed_layer_status": "locator_context_available",
+        "source_layer_status": "same_source_reference_loaded",
+        "source_truth_status": "not_proven"
+      },
+      "fact_id": "F002",
+      "field_name": "fund_code",
+      "fund_status_changed": false,
+      "improvement_flag": false,
+      "matched_context_changed": true,
+      "prior": {
+        "closure_disposition": "disambiguated_source_body_match",
+        "fund_layer_status": "semantic_rule_satisfied",
+        "matched_column_header_path": [
+          "安信企业价值优选混合型证券投资基金"
+        ],
+        "matched_row_label_path": [
+          "基金主代码"
+        ],
+        "matched_table_context": [
+          "§2",
+          "table text contains profile/objective label",
+          "基金名称",
+          "安信企业价值优选混合型证券投资基金"
+        ],
+        "processed_layer_status": "locator_context_available",
+        "source_layer_status": "same_source_reference_loaded",
+        "source_truth_status": "not_proven"
+      },
+      "regression_flag": false,
+      "row_key": "S1::F002::fund_code",
+      "sample_id": "S1",
+      "source_status_changed": false
+    },
+    {
+      "closure_disposition_changed": true,
+      "comparability_class": "regression_with_context_or_source_status_drift",
+      "current": {
+        "closure_disposition": "semantic_assignment_residual",
+        "fund_layer_status": "semantic_rule_rejected",
+        "matched_column_header_path": [],
+        "matched_row_label_path": [],
+        "matched_table_context": [],
+        "processed_layer_status": "locator_context_available",
+        "source_layer_status": "same_source_reference_loaded",
+        "source_truth_status": "not_proven"
+      },
+      "fact_id": "F015",
+      "field_name": "sales_service_fee_C_current_year",
+      "fund_status_changed": true,
+      "improvement_flag": false,
+      "matched_context_changed": true,
+      "prior": {
+        "closure_disposition": "disambiguated_source_body_match",
+        "fund_layer_status": "semantic_rule_satisfied",
+        "matched_column_header_path": [
+          "本期 2025年1月1日至2025年12月31日",
+          "当期发生的基金应支付的销售服务费",
+          "安信企业价值优选混 合C"
+        ],
+        "matched_row_label_path": [
+          "当期发生的基金应支付的销售服务费",
+          "安信基金"
+        ],
+        "matched_table_context": [
+          "§7",
+          "table text contains fee-accounting label",
+          "获得销售服务费的各关联 方名称",
+          "本期 2025年1月1日至2025年12月31日"
+        ],
+        "processed_layer_status": "locator_context_available",
+        "source_layer_status": "same_source_reference_loaded",
+        "source_truth_status": "not_proven"
+      },
+      "regression_flag": true,
+      "row_key": "S1::F015::sales_service_fee_C_current_year",
+      "sample_id": "S1",
+      "source_status_changed": false
+    },
+    {
+      "closure_disposition_changed": false,
+      "comparability_class": "matched_context_drift_only",
+      "current": {
+        "closure_disposition": "disambiguated_source_body_match",
+        "fund_layer_status": "semantic_rule_satisfied",
+        "matched_column_header_path": [
+          "持有基金份额总量的数量区间（万份）"
+        ],
+        "matched_row_label_path": [
+          "本基金基金经理持有 本开放式基金",
+          "安信企业价值优选混合A"
+        ],
+        "matched_table_context": [
+          "§10",
+          "table text contains manager-holding label",
+          "项目",
+          "份额级别",
+          "持有基金份额总量的数量区间（万份）"
+        ],
+        "processed_layer_status": "locator_context_available",
+        "source_layer_status": "same_source_reference_loaded",
+        "source_truth_status": "not_proven"
+      },
+      "fact_id": "F020",
+      "field_name": "manager_holding_range_A",
+      "fund_status_changed": false,
+      "improvement_flag": false,
+      "matched_context_changed": true,
+      "prior": {
+        "closure_disposition": "disambiguated_source_body_match",
+        "fund_layer_status": "semantic_rule_satisfied",
+        "matched_column_header_path": [
+          "持有基金份额总量的数量区间（万份）",
+          "0",
+          "10~50"
+        ],
+        "matched_row_label_path": [
+          "本基金基金经理持有 本开放式基金",
+          "安信企业价值优选混合A"
+        ],
+        "matched_table_context": [
+          "§10",
+          "table text contains manager-holding label",
+          "项目",
+          "份额级别",
+          "持有基金份额总量的数量区间（万份）"
+        ],
+        "processed_layer_status": "locator_context_available",
+        "source_layer_status": "same_source_reference_loaded",
+        "source_truth_status": "not_proven"
+      },
+      "regression_flag": false,
+      "row_key": "S1::F020::manager_holding_range_A",
+      "sample_id": "S1",
+      "source_status_changed": false
+    },
+    {
+      "closure_disposition_changed": false,
+      "comparability_class": "matched_context_drift_only",
+      "current": {
+        "closure_disposition": "disambiguated_source_body_match",
+        "fund_layer_status": "semantic_rule_satisfied",
+        "matched_column_header_path": [],
+        "matched_row_label_path": [
+          "基金名称"
+        ],
+        "matched_table_context": [
+          "基金名称"
+        ],
+        "processed_layer_status": "locator_context_available",
+        "source_layer_status": "same_source_reference_loaded",
+        "source_truth_status": "not_proven"
+      },
+      "fact_id": "S4-F001",
+      "field_name": "fund_name",
+      "fund_status_changed": false,
+      "improvement_flag": false,
+      "matched_context_changed": true,
+      "prior": {
+        "closure_disposition": "disambiguated_source_body_match",
+        "fund_layer_status": "semantic_rule_satisfied",
+        "matched_column_header_path": [
+          "table_header"
+        ],
+        "matched_row_label_path": [
+          "基金名称"
+        ],
+        "matched_table_context": [
+          "§2",
+          "table text contains profile/objective label",
+          "基金名称",
+          "国泰利享中短债债券型证券投资基金"
+        ],
+        "processed_layer_status": "locator_context_available",
+        "source_layer_status": "same_source_reference_loaded",
+        "source_truth_status": "not_proven"
+      },
+      "regression_flag": false,
+      "row_key": "S4::S4-F001::fund_name",
+      "sample_id": "S4",
+      "source_status_changed": false
+    },
+    {
+      "closure_disposition_changed": false,
+      "comparability_class": "matched_context_drift_only",
+      "current": {
+        "closure_disposition": "disambiguated_source_body_match",
+        "fund_layer_status": "semantic_rule_satisfied",
+        "matched_column_header_path": [],
+        "matched_row_label_path": [
+          "基金主代码"
+        ],
+        "matched_table_context": [
+          "基金主代码"
+        ],
+        "processed_layer_status": "locator_context_available",
+        "source_layer_status": "same_source_reference_loaded",
+        "source_truth_status": "not_proven"
+      },
+      "fact_id": "S4-F002",
+      "field_name": "fund_code",
+      "fund_status_changed": false,
+      "improvement_flag": false,
+      "matched_context_changed": true,
+      "prior": {
+        "closure_disposition": "disambiguated_source_body_match",
+        "fund_layer_status": "semantic_rule_satisfied",
+        "matched_column_header_path": [
+          "国泰利享中短债债券型证券投资基金"
+        ],
+        "matched_row_label_path": [
+          "基金主代码"
+        ],
+        "matched_table_context": [
+          "§2",
+          "table text contains profile/objective label",
+          "基金名称",
+          "国泰利享中短债债券型证券投资基金"
+        ],
+        "processed_layer_status": "locator_context_available",
+        "source_layer_status": "same_source_reference_loaded",
+        "source_truth_status": "not_proven"
+      },
+      "regression_flag": false,
+      "row_key": "S4::S4-F002::fund_code",
+      "sample_id": "S4",
+      "source_status_changed": false
+    },
+    {
+      "closure_disposition_changed": false,
+      "comparability_class": "matched_context_drift_only",
+      "current": {
+        "closure_disposition": "disambiguated_source_body_match",
+        "fund_layer_status": "semantic_rule_satisfied",
+        "matched_column_header_path": [
+          "金额"
+        ],
+        "matched_row_label_path": [
+          "3",
+          "固定收益投资"
+        ],
+        "matched_table_context": [
+          "§8",
+          "table text contains portfolio/fair-value/financial-statement label",
+          "序号",
+          "项目",
+          "金额",
+          "占基金总资产的比例（%）"
+        ],
+        "processed_layer_status": "locator_context_available",
+        "source_layer_status": "same_source_reference_loaded",
+        "source_truth_status": "not_proven"
+      },
+      "fact_id": "S4-F015",
+      "field_name": "fixed_income_investment_amount",
+      "fund_status_changed": false,
+      "improvement_flag": false,
+      "matched_context_changed": true,
+      "prior": {
+        "closure_disposition": "disambiguated_source_body_match",
+        "fund_layer_status": "semantic_rule_satisfied",
+        "matched_column_header_path": [
+          "金额",
+          "-"
+        ],
+        "matched_row_label_path": [
+          "固定收益投资"
+        ],
+        "matched_table_context": [
+          "§8",
+          "table text contains portfolio/fair-value/financial-statement label",
+          "序号",
+          "项目",
+          "金额",
+          "占基金总资产的比例（%）"
+        ],
+        "processed_layer_status": "locator_context_available",
+        "source_layer_status": "same_source_reference_loaded",
+        "source_truth_status": "not_proven"
+      },
+      "regression_flag": false,
+      "row_key": "S4::S4-F015::fixed_income_investment_amount",
+      "sample_id": "S4",
+      "source_status_changed": false
+    },
+    {
+      "closure_disposition_changed": false,
+      "comparability_class": "matched_context_drift_only",
+      "current": {
+        "closure_disposition": "disambiguated_source_body_match",
+        "fund_layer_status": "semantic_rule_satisfied",
+        "matched_column_header_path": [],
+        "matched_row_label_path": [
+          "基金名称"
+        ],
+        "matched_table_context": [
+          "基金名称"
+        ],
+        "processed_layer_status": "locator_context_available",
+        "source_layer_status": "same_source_reference_loaded",
+        "source_truth_status": "not_proven"
+      },
+      "fact_id": "S5-F018",
+      "field_name": "fund_name",
+      "fund_status_changed": false,
+      "improvement_flag": false,
+      "matched_context_changed": true,
+      "prior": {
+        "closure_disposition": "disambiguated_source_body_match",
+        "fund_layer_status": "semantic_rule_satisfied",
+        "matched_column_header_path": [
+          "table_header"
+        ],
+        "matched_row_label_path": [
+          "基金名称"
+        ],
+        "matched_table_context": [
+          "§2",
+          "table text contains profile/objective label",
+          "基金名称",
+          "摩根标普500指数型发起式证券投资基金(QDII)"
+        ],
+        "processed_layer_status": "locator_context_available",
+        "source_layer_status": "same_source_reference_loaded",
+        "source_truth_status": "not_proven"
+      },
+      "regression_flag": false,
+      "row_key": "S5::S5-F018::fund_name",
+      "sample_id": "S5",
+      "source_status_changed": false
+    },
+    {
+      "closure_disposition_changed": false,
+      "comparability_class": "matched_context_drift_only",
+      "current": {
+        "closure_disposition": "disambiguated_source_body_match",
+        "fund_layer_status": "semantic_rule_satisfied",
+        "matched_column_header_path": [],
+        "matched_row_label_path": [
+          "基金主代码"
+        ],
+        "matched_table_context": [
+          "基金主代码"
+        ],
+        "processed_layer_status": "locator_context_available",
+        "source_layer_status": "same_source_reference_loaded",
+        "source_truth_status": "not_proven"
+      },
+      "fact_id": "S5-F019",
+      "field_name": "fund_code",
+      "fund_status_changed": false,
+      "improvement_flag": false,
+      "matched_context_changed": true,
+      "prior": {
+        "closure_disposition": "disambiguated_source_body_match",
+        "fund_layer_status": "semantic_rule_satisfied",
+        "matched_column_header_path": [
+          "摩根标普500指数型发起式证券投资基金(QDII)"
+        ],
+        "matched_row_label_path": [
+          "基金主代码"
+        ],
+        "matched_table_context": [
+          "§2",
+          "table text contains profile/objective label",
+          "基金名称",
+          "摩根标普500指数型发起式证券投资基金(QDII)"
+        ],
+        "processed_layer_status": "locator_context_available",
+        "source_layer_status": "same_source_reference_loaded",
+        "source_truth_status": "not_proven"
+      },
+      "regression_flag": false,
+      "row_key": "S5::S5-F019::fund_code",
+      "sample_id": "S5",
+      "source_status_changed": false
+    },
+    {
+      "closure_disposition_changed": true,
+      "comparability_class": "regression_with_context_or_source_status_drift",
+      "current": {
+        "closure_disposition": "source_body_mismatch",
+        "fund_layer_status": "semantic_rule_unresolved",
+        "matched_column_header_path": [],
+        "matched_row_label_path": [],
+        "matched_table_context": [],
+        "processed_layer_status": "locator_context_available",
+        "source_layer_status": "same_source_text_absent",
+        "source_truth_status": "not_proven"
+      },
+      "fact_id": "S5-F023",
+      "field_name": "investment_objective",
+      "fund_status_changed": true,
+      "improvement_flag": false,
+      "matched_context_changed": true,
+      "prior": {
+        "closure_disposition": "disambiguated_source_body_match",
+        "fund_layer_status": "semantic_rule_satisfied",
+        "matched_column_header_path": [
+          "table_header"
+        ],
+        "matched_row_label_path": [
+          "投资目标"
+        ],
+        "matched_table_context": [
+          "§2",
+          "table text contains profile/objective label",
+          "投资目标",
+          "本基金进行被动指数化投资，紧密跟踪标的指数，追求跟踪偏离度和跟踪 误差最小化。"
+        ],
+        "processed_layer_status": "locator_context_available",
+        "source_layer_status": "same_source_reference_loaded",
+        "source_truth_status": "not_proven"
+      },
+      "regression_flag": true,
+      "row_key": "S5::S5-F023::investment_objective",
+      "sample_id": "S5",
+      "source_status_changed": true
+    },
+    {
+      "closure_disposition_changed": false,
+      "comparability_class": "comparable_no_observed_row_drift",
+      "current": {
+        "closure_disposition": "semantic_assignment_residual",
+        "fund_layer_status": "semantic_rule_rejected",
+        "matched_column_header_path": [],
+        "matched_row_label_path": [],
+        "matched_table_context": [],
+        "processed_layer_status": "locator_context_available",
+        "source_layer_status": "same_source_reference_loaded",
+        "source_truth_status": "not_proven"
+      },
+      "fact_id": "S5-F032",
+      "field_name": "equity_investment_amount",
+      "fund_status_changed": false,
+      "improvement_flag": false,
+      "matched_context_changed": false,
+      "prior": {
+        "closure_disposition": "semantic_assignment_residual",
+        "fund_layer_status": "semantic_rule_rejected",
+        "matched_column_header_path": [],
+        "matched_row_label_path": [],
+        "matched_table_context": [],
+        "processed_layer_status": "locator_context_available",
+        "source_layer_status": "same_source_reference_loaded",
+        "source_truth_status": "not_proven"
+      },
+      "regression_flag": false,
+      "row_key": "S5::S5-F032::equity_investment_amount",
+      "sample_id": "S5",
+      "source_status_changed": false
+    },
+    {
+      "closure_disposition_changed": true,
+      "comparability_class": "regression_with_context_or_source_status_drift",
+      "current": {
+        "closure_disposition": "semantic_assignment_residual",
+        "fund_layer_status": "semantic_rule_rejected",
+        "matched_column_header_path": [],
+        "matched_row_label_path": [],
+        "matched_table_context": [],
+        "processed_layer_status": "locator_context_available",
+        "source_layer_status": "same_source_reference_loaded",
+        "source_truth_status": "not_proven"
+      },
+      "fact_id": "S6-F035",
+      "field_name": "fund_name",
+      "fund_status_changed": true,
+      "improvement_flag": false,
+      "matched_context_changed": true,
+      "prior": {
+        "closure_disposition": "disambiguated_source_body_match",
+        "fund_layer_status": "semantic_rule_satisfied",
+        "matched_column_header_path": [
+          "table_header"
+        ],
+        "matched_row_label_path": [
+          "基金名称"
+        ],
+        "matched_table_context": [
+          "§2",
+          "table text contains profile/objective label",
+          "基金名称",
+          "易方达沪深300交易型开放式指数发起式证券投资基金 联接基金"
+        ],
+        "processed_layer_status": "locator_context_available",
+        "source_layer_status": "same_source_reference_loaded",
+        "source_truth_status": "not_proven"
+      },
+      "regression_flag": true,
+      "row_key": "S6::S6-F035::fund_name",
+      "sample_id": "S6",
+      "source_status_changed": false
+    },
+    {
+      "closure_disposition_changed": false,
+      "comparability_class": "matched_context_drift_only",
+      "current": {
+        "closure_disposition": "disambiguated_source_body_match",
+        "fund_layer_status": "semantic_rule_satisfied",
+        "matched_column_header_path": [],
+        "matched_row_label_path": [
+          "基金主代码"
+        ],
+        "matched_table_context": [
+          "基金主代码"
+        ],
+        "processed_layer_status": "locator_context_available",
+        "source_layer_status": "same_source_reference_loaded",
+        "source_truth_status": "not_proven"
+      },
+      "fact_id": "S6-F036",
+      "field_name": "fund_code",
+      "fund_status_changed": false,
+      "improvement_flag": false,
+      "matched_context_changed": true,
+      "prior": {
+        "closure_disposition": "disambiguated_source_body_match",
+        "fund_layer_status": "semantic_rule_satisfied",
+        "matched_column_header_path": [
+          "易方达沪深300交易型开放式指数发起式证券投资基金 联接基金"
+        ],
+        "matched_row_label_path": [
+          "基金主代码"
+        ],
+        "matched_table_context": [
+          "§2",
+          "table text contains profile/objective label",
+          "基金名称",
+          "易方达沪深300交易型开放式指数发起式证券投资基金 联接基金"
+        ],
+        "processed_layer_status": "locator_context_available",
+        "source_layer_status": "same_source_reference_loaded",
+        "source_truth_status": "not_proven"
+      },
+      "regression_flag": false,
+      "row_key": "S6::S6-F036::fund_code",
+      "sample_id": "S6",
+      "source_status_changed": false
+    },
+    {
+      "closure_disposition_changed": false,
+      "comparability_class": "matched_context_drift_only",
+      "current": {
+        "closure_disposition": "disambiguated_source_body_match",
+        "fund_layer_status": "semantic_rule_satisfied",
+        "matched_column_header_path": [
+          "易方达沪深300交易型开放式指数发起式证券投资基金"
+        ],
+        "matched_row_label_path": [
+          "基金管理人名称"
+        ],
+        "matched_table_context": [
+          "§2",
+          "table text contains profile/objective label",
+          "基金名称",
+          "易方达沪深300交易型开放式指数发起式证券投资基金"
+        ],
+        "processed_layer_status": "locator_context_available",
+        "source_layer_status": "same_source_reference_loaded",
+        "source_truth_status": "not_proven"
+      },
+      "fact_id": "S6-F037",
+      "field_name": "manager",
+      "fund_status_changed": false,
+      "improvement_flag": false,
+      "matched_context_changed": true,
+      "prior": {
+        "closure_disposition": "disambiguated_source_body_match",
+        "fund_layer_status": "semantic_rule_satisfied",
+        "matched_column_header_path": [
+          "易方达沪深300交易型开放式指数发起式证券投资基金 联接基金"
+        ],
+        "matched_row_label_path": [
+          "基金管理人"
+        ],
+        "matched_table_context": [
+          "§2",
+          "table text contains profile/objective label",
+          "基金名称",
+          "易方达沪深300交易型开放式指数发起式证券投资基金 联接基金"
+        ],
+        "processed_layer_status": "locator_context_available",
+        "source_layer_status": "same_source_reference_loaded",
+        "source_truth_status": "not_proven"
+      },
+      "regression_flag": false,
+      "row_key": "S6::S6-F037::manager",
+      "sample_id": "S6",
+      "source_status_changed": false
+    },
+    {
+      "closure_disposition_changed": false,
+      "comparability_class": "matched_context_drift_only",
+      "current": {
+        "closure_disposition": "disambiguated_source_body_match",
+        "fund_layer_status": "semantic_rule_satisfied",
+        "matched_column_header_path": [
+          "易方达沪深300交易型开放式指数发起式证券投资基金"
+        ],
+        "matched_row_label_path": [
+          "基金托管人名称"
+        ],
+        "matched_table_context": [
+          "§2",
+          "table text contains profile/objective label",
+          "基金名称",
+          "易方达沪深300交易型开放式指数发起式证券投资基金"
+        ],
+        "processed_layer_status": "locator_context_available",
+        "source_layer_status": "same_source_reference_loaded",
+        "source_truth_status": "not_proven"
+      },
+      "fact_id": "S6-F038",
+      "field_name": "custodian",
+      "fund_status_changed": false,
+      "improvement_flag": false,
+      "matched_context_changed": true,
+      "prior": {
+        "closure_disposition": "disambiguated_source_body_match",
+        "fund_layer_status": "semantic_rule_satisfied",
+        "matched_column_header_path": [
+          "易方达沪深300交易型开放式指数发起式证券投资基金 联接基金"
+        ],
+        "matched_row_label_path": [
+          "基金托管人"
+        ],
+        "matched_table_context": [
+          "§2",
+          "table text contains profile/objective label",
+          "基金名称",
+          "易方达沪深300交易型开放式指数发起式证券投资基金 联接基金"
+        ],
+        "processed_layer_status": "locator_context_available",
+        "source_layer_status": "same_source_reference_loaded",
+        "source_truth_status": "not_proven"
+      },
+      "regression_flag": false,
+      "row_key": "S6::S6-F038::custodian",
+      "sample_id": "S6",
+      "source_status_changed": false
+    },
+    {
+      "closure_disposition_changed": true,
+      "comparability_class": "status_drift_only",
+      "current": {
+        "closure_disposition": "source_body_mismatch",
+        "fund_layer_status": "semantic_rule_unresolved",
+        "matched_column_header_path": [],
+        "matched_row_label_path": [],
+        "matched_table_context": [],
+        "processed_layer_status": "locator_context_available",
+        "source_layer_status": "same_source_text_absent",
+        "source_truth_status": "not_proven"
+      },
+      "fact_id": "S6-F041",
+      "field_name": "benchmark",
+      "fund_status_changed": true,
+      "improvement_flag": false,
+      "matched_context_changed": false,
+      "prior": {
+        "closure_disposition": "semantic_assignment_residual",
+        "fund_layer_status": "semantic_rule_rejected",
+        "matched_column_header_path": [],
+        "matched_row_label_path": [],
+        "matched_table_context": [],
+        "processed_layer_status": "locator_context_available",
+        "source_layer_status": "same_source_reference_loaded",
+        "source_truth_status": "not_proven"
+      },
+      "regression_flag": false,
+      "row_key": "S6::S6-F041::benchmark",
+      "sample_id": "S6",
+      "source_status_changed": true
+    },
+    {
+      "closure_disposition_changed": false,
+      "comparability_class": "comparable_no_observed_row_drift",
+      "current": {
+        "closure_disposition": "semantic_assignment_residual",
+        "fund_layer_status": "semantic_rule_rejected",
+        "matched_column_header_path": [],
+        "matched_row_label_path": [],
+        "matched_table_context": [],
+        "processed_layer_status": "locator_context_available",
+        "source_layer_status": "same_source_reference_loaded",
+        "source_truth_status": "not_proven"
+      },
+      "fact_id": "S6-F049",
+      "field_name": "equity_investment_amount",
+      "fund_status_changed": false,
+      "improvement_flag": false,
+      "matched_context_changed": false,
+      "prior": {
+        "closure_disposition": "semantic_assignment_residual",
+        "fund_layer_status": "semantic_rule_rejected",
+        "matched_column_header_path": [],
+        "matched_row_label_path": [],
+        "matched_table_context": [],
+        "processed_layer_status": "locator_context_available",
+        "source_layer_status": "same_source_reference_loaded",
+        "source_truth_status": "not_proven"
+      },
+      "regression_flag": false,
+      "row_key": "S6::S6-F049::equity_investment_amount",
+      "sample_id": "S6",
+      "source_status_changed": false
+    },
+    {
+      "closure_disposition_changed": false,
+      "comparability_class": "comparable_no_observed_row_drift",
+      "current": {
+        "closure_disposition": "semantic_assignment_residual",
+        "fund_layer_status": "semantic_rule_rejected",
+        "matched_column_header_path": [],
+        "matched_row_label_path": [],
+        "matched_table_context": [],
+        "processed_layer_status": "locator_context_available",
+        "source_layer_status": "same_source_reference_loaded",
+        "source_truth_status": "not_proven"
+      },
+      "fact_id": "S6-F050",
+      "field_name": "stock_investment_amount",
+      "fund_status_changed": false,
+      "improvement_flag": false,
+      "matched_context_changed": false,
+      "prior": {
+        "closure_disposition": "semantic_assignment_residual",
+        "fund_layer_status": "semantic_rule_rejected",
+        "matched_column_header_path": [],
+        "matched_row_label_path": [],
+        "matched_table_context": [],
+        "processed_layer_status": "locator_context_available",
+        "source_layer_status": "same_source_reference_loaded",
+        "source_truth_status": "not_proven"
+      },
+      "regression_flag": false,
+      "row_key": "S6::S6-F050::stock_investment_amount",
+      "sample_id": "S6",
+      "source_status_changed": false
+    }
+  ],
+  "schema_version": "docling_reference_bundle_comparability_diagnostic.v1",
+  "source_truth_status_preserved": "not_proven",
+  "summary": {
+    "current_closed_rows_total": 10,
+    "current_closure_dispositions": {
+      "disambiguated_source_body_match": 10,
+      "semantic_assignment_residual": 5,
+      "source_body_mismatch": 2
+    },
+    "current_residual_rows_total": 7,
+    "delta_closed_rows": -3,
+    "prior_closed_rows_total": 13,
+    "prior_closure_dispositions": {
+      "disambiguated_source_body_match": 13,
+      "semantic_assignment_residual": 4
+    },
+    "prior_residual_rows_total": 4,
+    "regression_fact_ids": [
+      "F015",
+      "S5-F023",
+      "S6-F035"
+    ],
+    "regression_rows_total": 3,
+    "rows_total": 17,
+    "samples_with_count_drift": [
+      "S1",
+      "S4",
+      "S5",
+      "S6"
+    ],
+    "samples_with_section_inference_drift": [
+      "S1",
+      "S4",
+      "S5",
+      "S6"
+    ],
+    "target_seven_current_closed": 2,
+    "target_seven_prior_closed": 3,
+    "verdict": "COMPARABILITY_DIAGNOSTIC_WRAPPER_DRIFT_IDENTIFIED_NOT_READY"
+  },
+  "target_seven_comparison": [
+    {
+      "closure_disposition_changed": true,
+      "comparability_class": "regression_with_context_or_source_status_drift",
+      "current": {
+        "closure_disposition": "semantic_assignment_residual",
+        "fund_layer_status": "semantic_rule_rejected",
+        "matched_column_header_path": [],
+        "matched_row_label_path": [],
+        "matched_table_context": [],
+        "processed_layer_status": "locator_context_available",
+        "source_layer_status": "same_source_reference_loaded",
+        "source_truth_status": "not_proven"
+      },
+      "fact_id": "F015",
+      "field_name": "sales_service_fee_C_current_year",
+      "fund_status_changed": true,
+      "improvement_flag": false,
+      "matched_context_changed": true,
+      "prior": {
+        "closure_disposition": "disambiguated_source_body_match",
+        "fund_layer_status": "semantic_rule_satisfied",
+        "matched_column_header_path": [
+          "本期 2025年1月1日至2025年12月31日",
+          "当期发生的基金应支付的销售服务费",
+          "安信企业价值优选混 合C"
+        ],
+        "matched_row_label_path": [
+          "当期发生的基金应支付的销售服务费",
+          "安信基金"
+        ],
+        "matched_table_context": [
+          "§7",
+          "table text contains fee-accounting label",
+          "获得销售服务费的各关联 方名称",
+          "本期 2025年1月1日至2025年12月31日"
+        ],
+        "processed_layer_status": "locator_context_available",
+        "source_layer_status": "same_source_reference_loaded",
+        "source_truth_status": "not_proven"
+      },
+      "regression_flag": true,
+      "row_key": "S1::F015::sales_service_fee_C_current_year",
+      "sample_id": "S1",
+      "source_status_changed": false
+    },
+    {
+      "closure_disposition_changed": false,
+      "comparability_class": "matched_context_drift_only",
+      "current": {
+        "closure_disposition": "disambiguated_source_body_match",
+        "fund_layer_status": "semantic_rule_satisfied",
+        "matched_column_header_path": [
+          "持有基金份额总量的数量区间（万份）"
+        ],
+        "matched_row_label_path": [
+          "本基金基金经理持有 本开放式基金",
+          "安信企业价值优选混合A"
+        ],
+        "matched_table_context": [
+          "§10",
+          "table text contains manager-holding label",
+          "项目",
+          "份额级别",
+          "持有基金份额总量的数量区间（万份）"
+        ],
+        "processed_layer_status": "locator_context_available",
+        "source_layer_status": "same_source_reference_loaded",
+        "source_truth_status": "not_proven"
+      },
+      "fact_id": "F020",
+      "field_name": "manager_holding_range_A",
+      "fund_status_changed": false,
+      "improvement_flag": false,
+      "matched_context_changed": true,
+      "prior": {
+        "closure_disposition": "disambiguated_source_body_match",
+        "fund_layer_status": "semantic_rule_satisfied",
+        "matched_column_header_path": [
+          "持有基金份额总量的数量区间（万份）",
+          "0",
+          "10~50"
+        ],
+        "matched_row_label_path": [
+          "本基金基金经理持有 本开放式基金",
+          "安信企业价值优选混合A"
+        ],
+        "matched_table_context": [
+          "§10",
+          "table text contains manager-holding label",
+          "项目",
+          "份额级别",
+          "持有基金份额总量的数量区间（万份）"
+        ],
+        "processed_layer_status": "locator_context_available",
+        "source_layer_status": "same_source_reference_loaded",
+        "source_truth_status": "not_proven"
+      },
+      "regression_flag": false,
+      "row_key": "S1::F020::manager_holding_range_A",
+      "sample_id": "S1",
+      "source_status_changed": false
+    },
+    {
+      "closure_disposition_changed": false,
+      "comparability_class": "matched_context_drift_only",
+      "current": {
+        "closure_disposition": "disambiguated_source_body_match",
+        "fund_layer_status": "semantic_rule_satisfied",
+        "matched_column_header_path": [
+          "金额"
+        ],
+        "matched_row_label_path": [
+          "3",
+          "固定收益投资"
+        ],
+        "matched_table_context": [
+          "§8",
+          "table text contains portfolio/fair-value/financial-statement label",
+          "序号",
+          "项目",
+          "金额",
+          "占基金总资产的比例（%）"
+        ],
+        "processed_layer_status": "locator_context_available",
+        "source_layer_status": "same_source_reference_loaded",
+        "source_truth_status": "not_proven"
+      },
+      "fact_id": "S4-F015",
+      "field_name": "fixed_income_investment_amount",
+      "fund_status_changed": false,
+      "improvement_flag": false,
+      "matched_context_changed": true,
+      "prior": {
+        "closure_disposition": "disambiguated_source_body_match",
+        "fund_layer_status": "semantic_rule_satisfied",
+        "matched_column_header_path": [
+          "金额",
+          "-"
+        ],
+        "matched_row_label_path": [
+          "固定收益投资"
+        ],
+        "matched_table_context": [
+          "§8",
+          "table text contains portfolio/fair-value/financial-statement label",
+          "序号",
+          "项目",
+          "金额",
+          "占基金总资产的比例（%）"
+        ],
+        "processed_layer_status": "locator_context_available",
+        "source_layer_status": "same_source_reference_loaded",
+        "source_truth_status": "not_proven"
+      },
+      "regression_flag": false,
+      "row_key": "S4::S4-F015::fixed_income_investment_amount",
+      "sample_id": "S4",
+      "source_status_changed": false
+    },
+    {
+      "closure_disposition_changed": false,
+      "comparability_class": "comparable_no_observed_row_drift",
+      "current": {
+        "closure_disposition": "semantic_assignment_residual",
+        "fund_layer_status": "semantic_rule_rejected",
+        "matched_column_header_path": [],
+        "matched_row_label_path": [],
+        "matched_table_context": [],
+        "processed_layer_status": "locator_context_available",
+        "source_layer_status": "same_source_reference_loaded",
+        "source_truth_status": "not_proven"
+      },
+      "fact_id": "S5-F032",
+      "field_name": "equity_investment_amount",
+      "fund_status_changed": false,
+      "improvement_flag": false,
+      "matched_context_changed": false,
+      "prior": {
+        "closure_disposition": "semantic_assignment_residual",
+        "fund_layer_status": "semantic_rule_rejected",
+        "matched_column_header_path": [],
+        "matched_row_label_path": [],
+        "matched_table_context": [],
+        "processed_layer_status": "locator_context_available",
+        "source_layer_status": "same_source_reference_loaded",
+        "source_truth_status": "not_proven"
+      },
+      "regression_flag": false,
+      "row_key": "S5::S5-F032::equity_investment_amount",
+      "sample_id": "S5",
+      "source_status_changed": false
+    },
+    {
+      "closure_disposition_changed": true,
+      "comparability_class": "status_drift_only",
+      "current": {
+        "closure_disposition": "source_body_mismatch",
+        "fund_layer_status": "semantic_rule_unresolved",
+        "matched_column_header_path": [],
+        "matched_row_label_path": [],
+        "matched_table_context": [],
+        "processed_layer_status": "locator_context_available",
+        "source_layer_status": "same_source_text_absent",
+        "source_truth_status": "not_proven"
+      },
+      "fact_id": "S6-F041",
+      "field_name": "benchmark",
+      "fund_status_changed": true,
+      "improvement_flag": false,
+      "matched_context_changed": false,
+      "prior": {
+        "closure_disposition": "semantic_assignment_residual",
+        "fund_layer_status": "semantic_rule_rejected",
+        "matched_column_header_path": [],
+        "matched_row_label_path": [],
+        "matched_table_context": [],
+        "processed_layer_status": "locator_context_available",
+        "source_layer_status": "same_source_reference_loaded",
+        "source_truth_status": "not_proven"
+      },
+      "regression_flag": false,
+      "row_key": "S6::S6-F041::benchmark",
+      "sample_id": "S6",
+      "source_status_changed": true
+    },
+    {
+      "closure_disposition_changed": false,
+      "comparability_class": "comparable_no_observed_row_drift",
+      "current": {
+        "closure_disposition": "semantic_assignment_residual",
+        "fund_layer_status": "semantic_rule_rejected",
+        "matched_column_header_path": [],
+        "matched_row_label_path": [],
+        "matched_table_context": [],
+        "processed_layer_status": "locator_context_available",
+        "source_layer_status": "same_source_reference_loaded",
+        "source_truth_status": "not_proven"
+      },
+      "fact_id": "S6-F049",
+      "field_name": "equity_investment_amount",
+      "fund_status_changed": false,
+      "improvement_flag": false,
+      "matched_context_changed": false,
+      "prior": {
+        "closure_disposition": "semantic_assignment_residual",
+        "fund_layer_status": "semantic_rule_rejected",
+        "matched_column_header_path": [],
+        "matched_row_label_path": [],
+        "matched_table_context": [],
+        "processed_layer_status": "locator_context_available",
+        "source_layer_status": "same_source_reference_loaded",
+        "source_truth_status": "not_proven"
+      },
+      "regression_flag": false,
+      "row_key": "S6::S6-F049::equity_investment_amount",
+      "sample_id": "S6",
+      "source_status_changed": false
+    },
+    {
+      "closure_disposition_changed": false,
+      "comparability_class": "comparable_no_observed_row_drift",
+      "current": {
+        "closure_disposition": "semantic_assignment_residual",
+        "fund_layer_status": "semantic_rule_rejected",
+        "matched_column_header_path": [],
+        "matched_row_label_path": [],
+        "matched_table_context": [],
+        "processed_layer_status": "locator_context_available",
+        "source_layer_status": "same_source_reference_loaded",
+        "source_truth_status": "not_proven"
+      },
+      "fact_id": "S6-F050",
+      "field_name": "stock_investment_amount",
+      "fund_status_changed": false,
+      "improvement_flag": false,
+      "matched_context_changed": false,
+      "prior": {
+        "closure_disposition": "semantic_assignment_residual",
+        "fund_layer_status": "semantic_rule_rejected",
+        "matched_column_header_path": [],
+        "matched_row_label_path": [],
+        "matched_table_context": [],
+        "processed_layer_status": "locator_context_available",
+        "source_layer_status": "same_source_reference_loaded",
+        "source_truth_status": "not_proven"
+      },
+      "regression_flag": false,
+      "row_key": "S6::S6-F050::stock_investment_amount",
+      "sample_id": "S6",
+      "source_status_changed": false
+    }
+  ],
+  "validation": {
+    "git_diff_check": "pass",
+    "jq_candidate_boundary_and_row_count": "pass",
+    "jq_regression_rows_total": "pass",
+    "python_m_json_tool": "pass"
+  }
+}

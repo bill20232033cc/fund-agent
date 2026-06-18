@@ -42,9 +42,9 @@ Commit：`c4cd413` — gateflow: accept golden readiness preflight implementatio
 
 ### 2. 是否误削弱 FQ0-FQ6 或 score/quality/golden fixture？
 
-**否。** 
+**否。**
 
-- 未修改 `extraction_score.py`、`quality_gate.py`、`golden_answer.py` 
+- 未修改 `extraction_score.py`、`quality_gate.py`、`golden_answer.py`
 - 未修改 `reports/golden-answers/golden-answer.json`
 - 未修改 FQ0-FQ6 severity 或 baseline_blocking 语义
 - 未修改 `score_applicability_issues` 生成逻辑

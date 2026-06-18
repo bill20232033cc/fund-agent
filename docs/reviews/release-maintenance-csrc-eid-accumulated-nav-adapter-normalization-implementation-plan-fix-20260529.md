@@ -1,8 +1,8 @@
 # CSRC EID Accumulated NAV Adapter Normalization — Plan Fix
 
-日期：2026-05-29  
-角色：planning fix worker  
-目标 plan：`docs/reviews/release-maintenance-csrc-eid-accumulated-nav-adapter-normalization-implementation-plan-20260529.md`  
+日期：2026-05-29
+角色：planning fix worker
+目标 plan：`docs/reviews/release-maintenance-csrc-eid-accumulated-nav-adapter-normalization-implementation-plan-20260529.md`
 Review inputs：
 
 - `docs/reviews/release-maintenance-csrc-eid-accumulated-nav-adapter-normalization-implementation-plan-review-mimo-20260529.md`

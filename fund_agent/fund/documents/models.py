@@ -5,13 +5,16 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+import hashlib
+import json
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, Final, Literal
 
 # P1-S1 当前只支持年报文档类型，避免在多个模块散落同一个魔法字符串。
 ANNUAL_REPORT_DOCUMENT_KIND: Final[Literal["annual_report"]] = "annual_report"
 AnnualReportSourceName = Literal["eid", "eastmoney"]
+AnnualReportSourceMode = Literal["single_source_only"]
 AnnualReportSourceFailureCategory = Literal[
     "not_found",
     "unavailable",
@@ -19,6 +22,7 @@ AnnualReportSourceFailureCategory = Literal[
     "identity_mismatch",
     "integrity_error",
 ]
+AnnualReportReferenceMetadataStatus = Literal["available", "missing", "unsafe_metadata"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -42,6 +46,10 @@ class AnnualReportSourceMetadata:
         corrections_num: 来源更正次数。
         fallback_used: 是否为 fallback 来源命中。
         primary_failure_category: 主来源失败后允许 fallback 的失败类别。
+        selected_source: 当前来源策略选中的来源。
+        source_mode: 当前来源策略模式。
+        fallback_enabled: 当前来源策略是否启用 fallback。
+        discovery_contract_version: 来源 discovery 契约版本。
     """
 
     source: AnnualReportSourceName | None = None
@@ -60,6 +68,10 @@ class AnnualReportSourceMetadata:
     corrections_num: int | None = None
     fallback_used: bool = False
     primary_failure_category: AnnualReportSourceFailureCategory | None = None
+    selected_source: AnnualReportSourceName | None = None
+    source_mode: AnnualReportSourceMode | None = None
+    fallback_enabled: bool | None = None
+    discovery_contract_version: str | None = None
 
     def to_dict(self) -> dict[str, object]:
         """把来源元数据序列化为 JSON 兼容字典。
@@ -91,6 +103,10 @@ class AnnualReportSourceMetadata:
             "corrections_num": self.corrections_num,
             "fallback_used": self.fallback_used,
             "primary_failure_category": self.primary_failure_category,
+            "selected_source": self.selected_source,
+            "source_mode": self.source_mode,
+            "fallback_enabled": self.fallback_enabled,
+            "discovery_contract_version": self.discovery_contract_version,
         }
 
     @classmethod
@@ -108,6 +124,8 @@ class AnnualReportSourceMetadata:
         """
 
         source_value = _optional_string(payload.get("source"))
+        selected_source_value = _optional_string(payload.get("selected_source"))
+        source_mode_value = _optional_string(payload.get("source_mode"))
         failure_category_value = _optional_string(payload.get("primary_failure_category"))
         return cls(
             source=_normalize_source_name(source_value),
@@ -126,6 +144,12 @@ class AnnualReportSourceMetadata:
             corrections_num=_optional_int(payload.get("corrections_num")),
             fallback_used=bool(payload.get("fallback_used", False)),
             primary_failure_category=_normalize_failure_category(failure_category_value),
+            selected_source=_normalize_source_name(selected_source_value),
+            source_mode=_normalize_source_mode(source_mode_value),
+            fallback_enabled=_optional_bool(payload.get("fallback_enabled")),
+            discovery_contract_version=_optional_string(
+                payload.get("discovery_contract_version")
+            ),
         )
 
 
@@ -265,6 +289,137 @@ class AnnualReportPdfFetchResult:
     source_metadata: AnnualReportSourceMetadata | None = None
 
 
+@dataclass(frozen=True, slots=True)
+class AnnualReportReferenceMetadata:
+    """年报同源引用可用性元数据。
+
+    该模型只承载模板第 1-6 章后续证据准入所需的来源身份字段，不包含
+    PDF 路径、缓存路径、正文、表格、章节、来源 URL 或公告详情字段。
+
+    Attributes:
+        fund_code: 基金代码。
+        document_year: 报告年份。
+        report_type: 报告类型，当前只支持年报。
+        source: 来源名称。
+        selected_source: 来源策略选中的来源。
+        source_mode: 来源策略模式。
+        fallback_enabled: 来源策略是否启用 fallback。
+        fallback_used: 是否实际使用 fallback。
+        primary_failure_category: 主来源失败类别。
+        metadata_identity_hash: 只覆盖本模型允许字段的稳定摘要。
+    """
+
+    fund_code: str
+    document_year: int
+    report_type: Literal["annual_report"] = ANNUAL_REPORT_DOCUMENT_KIND
+    source: AnnualReportSourceName | None = None
+    selected_source: AnnualReportSourceName | None = None
+    source_mode: AnnualReportSourceMode | None = None
+    fallback_enabled: bool | None = None
+    fallback_used: bool = False
+    primary_failure_category: AnnualReportSourceFailureCategory | None = None
+    metadata_identity_hash: str | None = None
+
+    def with_identity_hash(self) -> "AnnualReportReferenceMetadata":
+        """返回带稳定身份摘要的元数据副本。
+
+        Args:
+            无。
+
+        Returns:
+            ``metadata_identity_hash`` 已填充的元数据。
+
+        Raises:
+            无显式抛出。
+        """
+
+        return replace(self, metadata_identity_hash=self.compute_identity_hash())
+
+    def compute_identity_hash(self) -> str:
+        """计算只覆盖允许字段的稳定 SHA-256 摘要。
+
+        Args:
+            无。
+
+        Returns:
+            十六进制 SHA-256 摘要。
+
+        Raises:
+            无显式抛出。
+        """
+
+        payload = self.to_dict(include_hash=False)
+        encoded = json.dumps(
+            payload,
+            ensure_ascii=False,
+            separators=(",", ":"),
+            sort_keys=True,
+        ).encode("utf-8")
+        return hashlib.sha256(encoded).hexdigest()
+
+    def to_dict(self, *, include_hash: bool = True) -> dict[str, object]:
+        """把元数据序列化为 JSON 兼容字典。
+
+        Args:
+            include_hash: 是否包含 ``metadata_identity_hash`` 字段。
+
+        Returns:
+            只含允许字段的字典结构。
+
+        Raises:
+            无显式抛出。
+        """
+
+        payload: dict[str, object] = {
+            "fund_code": self.fund_code,
+            "document_year": self.document_year,
+            "report_type": self.report_type,
+            "source": self.source,
+            "selected_source": self.selected_source,
+            "source_mode": self.source_mode,
+            "fallback_enabled": self.fallback_enabled,
+            "fallback_used": self.fallback_used,
+            "primary_failure_category": self.primary_failure_category,
+        }
+        if include_hash:
+            payload["metadata_identity_hash"] = self.metadata_identity_hash
+        return payload
+
+
+@dataclass(frozen=True, slots=True)
+class AnnualReportReferenceMetadataResult:
+    """年报同源引用元数据查询结果。
+
+    Attributes:
+        status: 查询状态。
+        metadata: 状态为 ``available`` 时返回的元数据。
+        reason: ``missing`` 或 ``unsafe_metadata`` 的稳定原因。
+    """
+
+    status: AnnualReportReferenceMetadataStatus
+    metadata: AnnualReportReferenceMetadata | None = None
+    reason: str | None = None
+
+    def to_dict(self) -> dict[str, object]:
+        """把查询结果序列化为 JSON 兼容字典。
+
+        Args:
+            无。
+
+        Returns:
+            查询结果字典。
+
+        Raises:
+            无显式抛出。
+        """
+
+        return {
+            "status": self.status,
+            "metadata": self.metadata.to_dict() if self.metadata is not None else None,
+            "reason": self.reason,
+        }
+
+
 def _optional_string(value: Any) -> str | None:
     """把可选字段规范化为字符串。
 
@@ -301,6 +456,32 @@ def _optional_int(value: Any) -> int | None:
     if normalized is None:
         return None
     return int(normalized)
+
+
+def _optional_bool(value: Any) -> bool | None:
+    """把可选字段规范化为布尔值。
+
+    Args:
+        value: 原始字段值。
+
+    Returns:
+        布尔值；空值返回 ``None``。
+
+    Raises:
+        ValueError: 非空字段无法转换为布尔值时抛出。
+    """
+
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in ("true", "1"):
+            return True
+        if normalized in ("false", "0"):
+            return False
+    raise ValueError(f"布尔字段非法: {value!r}")
 
 
 def _normalize_source_name(source: str | None) -> AnnualReportSourceName | None:
@@ -347,6 +528,26 @@ def _normalize_failure_category(
     ):
         return category
     return None
+
+
+def _normalize_source_mode(mode: str | None) -> AnnualReportSourceMode | None:
+    """校验并规范化年报来源策略模式。
+
+    Args:
+        mode: 原始来源策略模式。
+
+    Returns:
+        合法来源策略模式；空值返回 ``None``。
+
+    Raises:
+        ValueError: 来源策略模式不在闭集内时抛出。
+    """
+
+    if mode is None:
+        return None
+    if mode != "single_source_only":
+        raise ValueError(f"未知年报来源策略模式: {mode}")
+    return mode
 
 
 @dataclass(frozen=True, slots=True)

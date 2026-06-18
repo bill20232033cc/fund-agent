@@ -56,7 +56,7 @@ Output artifact：`docs/reviews/release-maintenance-fixture-promotion-state-mani
 - **位置**: Consuming The 12-Entry Residual Disposition Manifest Step 7 (line 182)
 - **问题类型**: 不可直接实施 / 契约缺失
 - **当前写法**: "if preflight and residual blocker sets conflict materially, stop for controller."
-- **反例/失败场景**: 
+- **反例/失败场景**:
   - 场景 A: preflight 报告 `quality_gate_block` 为 blocker，但 residual manifest 的 `current_blockers` 中没有这个 code（例如 residual 只在 `decision_reason` 中提了 quality block，但没放进 `current_blockers`）。这是 material 还是 immaterial？
   - 场景 B: preflight 的 warning（如 `quality_gate_warn`）不在 residual blocker 中——这算 conflict 吗？根据 plan 的 precedence rules（line 185-190），residual disposition 决定 decision/owner/next_gate，preflight 决定 current blocker observations。如果 preflight 观察到一个 residual 没列出的 blocker，应该 stop 还是继续？
   - 实际检查当前数据：004393 preflight blocker 只有 `fixture_promotion_absent`，residual blocker 也是 `["fixture_promotion_absent"]`。一致。006597 preflight blockers: `strict_golden_not_configured` + `fixture_promotion_absent`，residual blockers: `["strict_golden_not_configured", "fixture_promotion_absent"]`。一致。当前数据没有触发冲突，但 plan 没有定义未来触发时怎么判断。

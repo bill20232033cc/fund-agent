@@ -167,7 +167,7 @@ def _build_tables(raw_tables: list[TablePayload]) -> tuple[ParsedTable, ...]:
 
 
 class AnnualReportPdfAdapter:
-    """基于现有 PDF helper 的年报加载器。
+    """基于 EID single-source 来源编排和 PDF parser 的年报加载器。
 
     P1-S1 不修改 parser 能力本身，只负责把现有 helper 适配到统一仓库契约。
     """
@@ -182,7 +182,7 @@ class AnnualReportPdfAdapter:
         """初始化 PDF 适配器。
 
         Args:
-            source_orchestrator: 年报来源编排器；未提供时使用当前默认来源。
+            source_orchestrator: 年报来源编排器；未提供时使用当前默认 EID 来源。
             text_extractor: PDF 全文提取函数。
             table_extractor: PDF 表格提取函数。
             section_locator: 章节定位函数。

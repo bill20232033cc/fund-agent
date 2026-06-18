@@ -1,0 +1,137 @@
+{
+  "entries": [
+    {
+      "accepted_input_sha256": "069282b22d7926e93743cc12a8538e43eaf262aa165376d872552a76efac0e49",
+      "document_year": 2025,
+      "fund_code": "004393",
+      "input_artifact_path": "reports/representation-json/004393_2025_docling_full.json",
+      "mode": "reference_existing_json",
+      "output_path": "reports/representation-json/004393_2025_docling_full.json",
+      "provenance_judgment_path": "docs/reviews/docling-route-a-local-artifact-conversion-quality-evidence-20260615.md",
+      "route": "docling_pdf_candidate",
+      "sample_id": "S1"
+    },
+    {
+      "accepted_input_sha256": "ef1787934e0a8b46bd9b3c8e03a9b760d6c987fd51952739c1f77ac7f24b6ab4",
+      "document_year": 2025,
+      "fund_code": "004393",
+      "input_artifact_path": "reports/representation-json/004393_2025_pdfplumber_full.json",
+      "mode": "reference_existing_json",
+      "output_path": "reports/representation-json/004393_2025_pdfplumber_full.json",
+      "provenance_judgment_path": "docs/reviews/docling-route-a-local-artifact-conversion-quality-evidence-20260615.md",
+      "route": "pdfplumber_pdf_candidate",
+      "sample_id": "S1"
+    },
+    {
+      "accepted_input_sha256": "63b5575b8591f572fa31cb6f359f70ad855460baa0adff383882bf27a0e2e22b",
+      "document_year": 2025,
+      "fund_code": "004393",
+      "input_artifact_path": "reports/representation-json/004393_2025_eid_html_render_full.json",
+      "mode": "reference_existing_json",
+      "output_path": "reports/representation-json/004393_2025_eid_html_render_full.json",
+      "provenance_judgment_path": "docs/reviews/docling-route-a-local-artifact-conversion-quality-evidence-20260615.md",
+      "route": "eid_xbrl_html_render_candidate",
+      "sample_id": "S1"
+    },
+    {
+      "accepted_input_sha256": "85c08ef235b06f5dd8867040193b547c7a91da3829c86eabf2817bbf1934e982",
+      "document_year": 2024,
+      "fund_code": "006597",
+      "input_artifact_path": "cache/eid-artifact-capture/docling-baseline-qualification-20260615/pdf/006597_2024_annual_report_eid.pdf",
+      "mode": "handled",
+      "output_path": "reports/representation-json/006597_2024_docling_full.json",
+      "provenance_judgment_path": "docs/reviews/docling-baseline-qualification-staged-eid-artifact-capture-evidence-20260615.md",
+      "route": "docling_pdf_candidate",
+      "sample_id": "S4"
+    },
+    {
+      "accepted_input_sha256": "85c08ef235b06f5dd8867040193b547c7a91da3829c86eabf2817bbf1934e982",
+      "document_year": 2024,
+      "fund_code": "006597",
+      "input_artifact_path": "cache/eid-artifact-capture/docling-baseline-qualification-20260615/pdf/006597_2024_annual_report_eid.pdf",
+      "mode": "handled",
+      "output_path": "reports/representation-json/006597_2024_pdfplumber_full.json",
+      "provenance_judgment_path": "docs/reviews/docling-baseline-qualification-staged-eid-artifact-capture-evidence-20260615.md",
+      "route": "pdfplumber_pdf_candidate",
+      "sample_id": "S4"
+    },
+    {
+      "accepted_input_sha256": null,
+      "document_year": 2024,
+      "fund_code": "006597",
+      "input_artifact_path": null,
+      "mode": "blocked",
+      "output_path": "reports/representation-json/006597_2024_eid_html_render_blocked.json",
+      "provenance_judgment_path": "docs/reviews/docling-baseline-qualification-built-in-representation-handler-implementation-controller-judgment-20260615.md",
+      "route": "eid_xbrl_html_render_candidate",
+      "sample_id": "S4"
+    },
+    {
+      "accepted_input_sha256": "33e1898cfd80408f16c52bddd9f823a0577b000055ec9e69870ee1d212933f2c",
+      "document_year": 2024,
+      "fund_code": "017641",
+      "input_artifact_path": "cache/eid-artifact-capture/docling-baseline-qualification-20260615/pdf/017641_2024_annual_report_eid.pdf",
+      "mode": "handled",
+      "output_path": "reports/representation-json/017641_2024_docling_full.json",
+      "provenance_judgment_path": "docs/reviews/docling-baseline-qualification-staged-eid-artifact-capture-evidence-20260615.md",
+      "route": "docling_pdf_candidate",
+      "sample_id": "S5"
+    },
+    {
+      "accepted_input_sha256": "33e1898cfd80408f16c52bddd9f823a0577b000055ec9e69870ee1d212933f2c",
+      "document_year": 2024,
+      "fund_code": "017641",
+      "input_artifact_path": "cache/eid-artifact-capture/docling-baseline-qualification-20260615/pdf/017641_2024_annual_report_eid.pdf",
+      "mode": "handled",
+      "output_path": "reports/representation-json/017641_2024_pdfplumber_full.json",
+      "provenance_judgment_path": "docs/reviews/docling-baseline-qualification-staged-eid-artifact-capture-evidence-20260615.md",
+      "route": "pdfplumber_pdf_candidate",
+      "sample_id": "S5"
+    },
+    {
+      "accepted_input_sha256": null,
+      "document_year": 2024,
+      "fund_code": "017641",
+      "input_artifact_path": null,
+      "mode": "blocked",
+      "output_path": "reports/representation-json/017641_2024_eid_html_render_blocked.json",
+      "provenance_judgment_path": "docs/reviews/docling-baseline-qualification-built-in-representation-handler-implementation-controller-judgment-20260615.md",
+      "route": "eid_xbrl_html_render_candidate",
+      "sample_id": "S5"
+    },
+    {
+      "accepted_input_sha256": "307210ba3e55cf611334cebc3c0103824cf7c3352598522f257e741220dd6790",
+      "document_year": 2024,
+      "fund_code": "110020",
+      "input_artifact_path": "cache/eid-artifact-capture/docling-baseline-qualification-20260615/pdf/110020_2024_annual_report_eid.pdf",
+      "mode": "handled",
+      "output_path": "reports/representation-json/110020_2024_docling_full.json",
+      "provenance_judgment_path": "docs/reviews/docling-baseline-qualification-staged-eid-artifact-capture-evidence-20260615.md",
+      "route": "docling_pdf_candidate",
+      "sample_id": "S6"
+    },
+    {
+      "accepted_input_sha256": "307210ba3e55cf611334cebc3c0103824cf7c3352598522f257e741220dd6790",
+      "document_year": 2024,
+      "fund_code": "110020",
+      "input_artifact_path": "cache/eid-artifact-capture/docling-baseline-qualification-20260615/pdf/110020_2024_annual_report_eid.pdf",
+      "mode": "handled",
+      "output_path": "reports/representation-json/110020_2024_pdfplumber_full.json",
+      "provenance_judgment_path": "docs/reviews/docling-baseline-qualification-staged-eid-artifact-capture-evidence-20260615.md",
+      "route": "pdfplumber_pdf_candidate",
+      "sample_id": "S6"
+    },
+    {
+      "accepted_input_sha256": null,
+      "document_year": 2024,
+      "fund_code": "110020",
+      "input_artifact_path": null,
+      "mode": "blocked",
+      "output_path": "reports/representation-json/110020_2024_eid_html_render_blocked.json",
+      "provenance_judgment_path": "docs/reviews/docling-baseline-qualification-built-in-representation-handler-implementation-controller-judgment-20260615.md",
+      "route": "eid_xbrl_html_render_candidate",
+      "sample_id": "S6"
+    }
+  ],
+  "schema_version": "candidate_representation_export_manifest.v1"
+}

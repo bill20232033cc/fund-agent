@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import ast
 import asyncio
+from dataclasses import dataclass, replace
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
@@ -17,14 +19,18 @@ from fund_agent.fund.chapter_writer import (
     ChapterLLMRequest,
     ChapterLLMResponse,
 )
+from fund_agent.fund.extractors.models import ExtractedField
 from fund_agent.services import (
     ChapterOrchestrationPolicy,
     ChapterOrchestratorLLMClients,
     FinalAssemblyPolicy,
+    FundAnalysisDeveloperOverrides,
+    FundAnalysisRequest,
     FundLLMExecutionContract,
     FundLLMExecutionRequest,
     FundLLMRuntimePlan,
     FundLLMAnalysisResult,
+    FundLLMHostedRunResult,
     LLMProviderConstructionError,
     ProviderRuntimeBudget,
     QualityFailClosedPolicy,
@@ -138,6 +144,290 @@ class _FakeAuditLLMClient:
         )
 
 
+class _Chapter6BlockingWriterLLMClient(_FakeChapterLLMClient):
+    """测试用章节写作 fake client，只让第 6 章缺少 required structure。
+
+    Attributes:
+        requests: 收到的 writer typed requests。
+        texts: 父类兼容字段。
+    """
+
+    def generate_chapter(self, request: ChapterLLMRequest) -> ChapterLLMResponse:
+        """返回第 6 章非法、其他章节合法的 fake 响应。
+
+        Args:
+            request: Gate 2 writer typed request。
+
+        Returns:
+            fake LLM 写作响应。
+
+        Raises:
+            无显式抛出。
+        """
+
+        self.requests.append(request)
+        if request.chapter_id == 6:
+            text = "第 6 章缺少固定结构。"
+        else:
+            text = _valid_markdown_from_request(request)
+        return ChapterLLMResponse(
+            text=text,
+            model_name="fake-writer",
+            finish_reason="stop",
+        )
+
+
+class _Chapter3ValueErrorWriterLLMClient(_FakeChapterLLMClient):
+    """测试用 writer，第 3 章抛出 pre-provider ValueError。"""
+
+    def generate_chapter(self, request: ChapterLLMRequest) -> ChapterLLMResponse:
+        """第 3 章抛出异常，其他章节返回合法 Markdown。"""
+
+        self.requests.append(request)
+        if request.chapter_id == 3:
+            raise ValueError("Authorization Bearer sk-secret prompt raw")
+        return ChapterLLMResponse(
+            text=_valid_markdown_from_request(request),
+            model_name="fake-writer",
+            finish_reason="stop",
+        )
+
+
+class _Chapter3Item01GapWriterLLMClient(_FakeChapterLLMClient):
+    """测试用 writer，第 3 章 item 01 用 approved evidence-gap wording 降级。"""
+
+    def generate_chapter(self, request: ChapterLLMRequest) -> ChapterLLMResponse:
+        """第 3 章 item 01 输出证据缺口，其他章节返回合法 Markdown。"""
+
+        self.requests.append(request)
+        text = _valid_markdown_from_request(request)
+        if request.chapter_id == 3:
+            text = text.replace(
+                "<!-- required_output:ch3.required_output.item_01 -->",
+                "<!-- required_output:ch3.required_output.item_01 -->\n"
+                "- 基金经理基本信息证据不足，不能据此判断基金经理基本信息。",
+                1,
+            )
+        return ChapterLLMResponse(
+            text=text,
+            model_name="fake-writer",
+            finish_reason="stop",
+        )
+
+
+class _Chapter3Item01UnsafeWriterLLMClient(_FakeChapterLLMClient):
+    """测试用 writer，第 3 章 item 01 保留 marker 但缺少 approved gap wording。"""
+
+    def generate_chapter(self, request: ChapterLLMRequest) -> ChapterLLMResponse:
+        """第 3 章返回 unsafe item 01 输出，其他章节返回合法 Markdown。"""
+
+        self.requests.append(request)
+        if request.chapter_id != 3:
+            text = _valid_markdown_from_request(request)
+        else:
+            text = _chapter_3_markdown_without_item01_gap(request)
+        return ChapterLLMResponse(
+            text=text,
+            model_name="fake-writer",
+            finish_reason="stop",
+        )
+
+
+class _Chapter2GapWriterLLMClient(_FakeChapterLLMClient):
+    """测试用 writer，第 2 章输出 approved evidence-gap / minimum-verification wording。"""
+
+    def generate_chapter(self, request: ChapterLLMRequest) -> ChapterLLMResponse:
+        """第 2 章返回安全缺口输出，其他章节返回合法 Markdown。"""
+
+        self.requests.append(request)
+        text = _chapter_2_markdown_with_gap(request) if request.chapter_id == 2 else _valid_markdown_from_request(request)
+        return ChapterLLMResponse(
+            text=text,
+            model_name="fake-writer",
+            finish_reason="stop",
+        )
+
+
+class _Chapter2UnsafeGapWriterLLMClient(_FakeChapterLLMClient):
+    """测试用 writer，第 2 章保留 marker 但缺少 approved gap wording。"""
+
+    def generate_chapter(self, request: ChapterLLMRequest) -> ChapterLLMResponse:
+        """第 2 章返回 unsafe 缺口输出，其他章节返回合法 Markdown。"""
+
+        self.requests.append(request)
+        text = (
+            _chapter_2_markdown_without_gap_phrase(request)
+            if request.chapter_id == 2
+            else _valid_markdown_from_request(request)
+        )
+        return ChapterLLMResponse(
+            text=text,
+            model_name="fake-writer",
+            finish_reason="stop",
+        )
+
+
+@dataclass(slots=True)
+class _FakeHostedRunContext:
+    """Service hosted wrapper 测试用 Host context。"""
+
+    run_id: str = "host_run_fake"
+    timeout_seconds: int | None = None
+    diagnostics: list[dict[str, object]] | None = None
+    cancellation_token: object | None = None
+
+    def __post_init__(self) -> None:
+        """补齐 Host bridge 需要的 cancellation token。"""
+
+        if self.cancellation_token is None:
+            self.cancellation_token = _FakeCancellationToken()
+
+    def cancel_if_deadline_exceeded(self) -> bool:
+        """模拟 deadline 未超时。"""
+
+        return False
+
+    def raise_if_cancelled_or_deadline_exceeded(self) -> None:
+        """模拟未取消且未超时的 Host lifecycle 检查。"""
+
+    def record_phase_started(
+        self,
+        *,
+        phase: str,
+        chapter_id: int | None = None,
+        attempt: int | None = None,
+        provider_attempt: int | None = None,
+    ) -> None:
+        """记录 fake phase_started 诊断。"""
+
+        self.record_diagnostic(
+            event_type="phase_started",
+            phase=phase,
+            chapter_id=chapter_id,
+            attempt=attempt,
+            provider_attempt=provider_attempt,
+        )
+
+    def record_phase_completed(
+        self,
+        *,
+        phase: str,
+        chapter_id: int | None = None,
+        attempt: int | None = None,
+        provider_attempt: int | None = None,
+        elapsed_ms: int | None = None,
+    ) -> None:
+        """记录 fake phase_completed 诊断。"""
+
+        self.record_diagnostic(
+            event_type="phase_completed",
+            phase=phase,
+            chapter_id=chapter_id,
+            attempt=attempt,
+            provider_attempt=provider_attempt,
+            elapsed_ms=elapsed_ms,
+        )
+
+    def record_diagnostic(self, **diagnostics: object) -> None:
+        """记录 fake Host 安全诊断。"""
+
+        if self.diagnostics is None:
+            self.diagnostics = []
+        self.diagnostics.append(diagnostics)
+
+
+class _FakeCancellationToken:
+    """Service hosted wrapper 测试用取消令牌。"""
+
+    reason = None
+
+    def is_cancelled(self) -> bool:
+        """模拟未取消。"""
+
+        return False
+
+
+@dataclass(frozen=True, slots=True)
+class _FakeHostedRunResult:
+    """Service hosted wrapper 测试用 Host run result。"""
+
+    run_id: str
+    status: str
+    completed_at: datetime
+    elapsed_ms: int
+    operation_result: object | None
+    timeout_classification: str | None
+    safe_diagnostics: dict[str, object]
+    events: tuple[object, ...]
+
+
+class _RecordingHostRuntimeRunner:
+    """记录 Service 传给 Host runner 的 generic lifecycle 参数。"""
+
+    run_called = False
+    last_operation_name: str | None = None
+    last_timeout_seconds: int | None = None
+    last_session_id: str | None = None
+    last_event_sink = None
+    forbidden_kwargs: dict[str, object] = {}
+
+    def run_sync(  # type: ignore[no-untyped-def]
+        self,
+        *,
+        operation_name,
+        operation,
+        timeout_seconds=None,
+        session_id=None,
+        event_sink=None,
+        **kwargs,
+    ):
+        """执行 fake Host run 并记录 Service 传入的参数。"""
+
+        assert kwargs == {}
+        type(self).run_called = True
+        type(self).last_operation_name = operation_name
+        type(self).last_timeout_seconds = timeout_seconds
+        type(self).last_session_id = session_id
+        type(self).last_event_sink = event_sink
+        type(self).forbidden_kwargs = kwargs
+        context = _FakeHostedRunContext(timeout_seconds=timeout_seconds)
+        operation_result = operation(context)
+        return _FakeHostedRunResult(
+            run_id=context.run_id,
+            status="succeeded",
+            completed_at=datetime.now(timezone.utc),
+            elapsed_ms=42,
+            operation_result=operation_result,
+            timeout_classification=None,
+            safe_diagnostics={},
+            events=tuple(context.diagnostics or ()),
+        )
+
+
+class _RaisingHostRuntimeRunner:
+    """用于证明某些错误在 Host run 前传播。"""
+
+    run_called = False
+
+    def run_sync(self, **kwargs):  # type: ignore[no-untyped-def]
+        """记录调用并失败。"""
+
+        type(self).run_called = True
+        raise AssertionError("HostRuntimeRunner.run_sync must not be called")
+
+
+def _reset_recording_host_runner() -> None:
+    """重置 fake Host runner 状态。"""
+
+    _RecordingHostRuntimeRunner.run_called = False
+    _RecordingHostRuntimeRunner.last_operation_name = None
+    _RecordingHostRuntimeRunner.last_timeout_seconds = None
+    _RecordingHostRuntimeRunner.last_session_id = None
+    _RecordingHostRuntimeRunner.last_event_sink = None
+    _RecordingHostRuntimeRunner.forbidden_kwargs = {}
+    _RaisingHostRuntimeRunner.run_called = False
+
+
 @pytest.mark.asyncio
 async def test_analyze_with_llm_returns_accepted_final_assembly_and_report_markdown() -> None:
     """验证 LLM Service 用例串起 core、Gate 3 和 Gate 4 accepted 报告。
@@ -174,6 +464,120 @@ async def test_analyze_with_llm_returns_accepted_final_assembly_and_report_markd
     assert "## 第 7 章：是否值得持有--最终判断" in result.report_markdown
     assert result.quality_gate_result is None
     assert result.quality_gate_not_run_reason == "policy=off"
+
+
+@pytest.mark.asyncio
+async def test_analyze_with_llm_accepts_final_assembly_when_ch3_item01_degrades_to_gap() -> None:
+    """验证第 3 章 item 01 证据缺口合规降级后可参与完整总装。"""
+
+    extractor = _FakeExtractor(_bundle_with_missing_portfolio_managers())
+    writer = _Chapter3Item01GapWriterLLMClient()
+    auditor = _FakeAuditLLMClient()
+    service = FundAnalysisService(extractor=extractor)
+
+    result = await service.analyze_with_llm(
+        _developer_request(force_refresh=True),
+        llm_clients=_clients(writer=writer, auditor=auditor),
+        chapter_policy=ChapterOrchestrationPolicy(
+            run_programmatic_audit=False,
+            typed_template_path="typed_template_contract",
+        ),
+    )
+
+    chapter_3 = next(
+        chapter_result
+        for chapter_result in result.llm_orchestration_result.chapter_results
+        if chapter_result.chapter_id == 3
+    )
+    assert extractor.calls == [("110011", 2024, True)]
+    assert [request.chapter_id for request in writer.requests] == [1, 2, 3, 4, 5, 6]
+    assert len(auditor.requests) == 6
+    assert result.llm_orchestration_result.status == "accepted"
+    assert chapter_3.status == "accepted"
+    assert result.final_assembly_result.status == "accepted"
+    assert result.final_assembly_result.assembled_chapter_ids == (0, 1, 2, 3, 4, 5, 6, 7)
+    assert result.final_assembly_result.report_markdown is not None
+    assert result.quality_gate_result is None
+    assert result.quality_gate_not_run_reason == "policy=off"
+
+
+@pytest.mark.asyncio
+async def test_analyze_with_llm_accepts_final_assembly_when_ch2_degrades_to_gap() -> None:
+    """验证第 2 章非 available 证据缺口合规降级后可参与完整总装。"""
+
+    extractor = _FakeExtractor(_bundle_with_missing_chapter_2_evidence())
+    writer = _Chapter2GapWriterLLMClient()
+    auditor = _FakeAuditLLMClient()
+    service = FundAnalysisService(extractor=extractor)
+
+    result = await service.analyze_with_llm(
+        _developer_request(force_refresh=True),
+        llm_clients=_clients(writer=writer, auditor=auditor),
+        chapter_policy=ChapterOrchestrationPolicy(
+            run_programmatic_audit=False,
+            typed_template_path="typed_template_contract",
+        ),
+    )
+
+    chapter_2 = next(
+        chapter_result
+        for chapter_result in result.llm_orchestration_result.chapter_results
+        if chapter_result.chapter_id == 2
+    )
+    assert extractor.calls == [("110011", 2024, True)]
+    assert [request.chapter_id for request in writer.requests] == [1, 2, 3, 4, 5, 6]
+    assert result.llm_orchestration_result.status == "accepted"
+    assert chapter_2.status == "accepted"
+    assert "证据不足" in (chapter_2.accepted_draft.markdown if chapter_2.accepted_draft else "")
+    assert "下一步最小验证问题" in (
+        chapter_2.accepted_draft.markdown if chapter_2.accepted_draft else ""
+    )
+    assert result.final_assembly_result.status == "accepted"
+    assert result.final_assembly_result.assembled_chapter_ids == (0, 1, 2, 3, 4, 5, 6, 7)
+    assert result.final_assembly_result.report_markdown is not None
+
+
+@pytest.mark.asyncio
+async def test_partial_llm_result_does_not_fallback_when_ch2_gap_output_is_unsafe() -> None:
+    """验证第 2 章缺证但 unsafe 输出阻断总装且不回退确定性报告。"""
+
+    extractor = _FakeExtractor(_bundle_with_missing_chapter_2_evidence())
+    writer = _Chapter2UnsafeGapWriterLLMClient()
+    auditor = _FakeAuditLLMClient()
+    service = FundAnalysisService(extractor=extractor)
+
+    result = await service.analyze_with_llm(
+        _developer_request(),
+        llm_clients=_clients(writer=writer, auditor=auditor),
+        chapter_policy=ChapterOrchestrationPolicy(
+            run_programmatic_audit=False,
+            typed_template_path="typed_template_contract",
+        ),
+    )
+
+    chapter_2 = next(
+        chapter_result
+        for chapter_result in result.llm_orchestration_result.chapter_results
+        if chapter_result.chapter_id == 2
+    )
+    assert result.llm_orchestration_result.status == "partial"
+    assert [request.chapter_id for request in writer.requests] == [1, 2, 3, 4, 5, 6]
+    assert chapter_2.status == "blocked"
+    assert chapter_2.stop_reason == "missing_required_output_marker"
+    assert chapter_2.failure_category == "prompt_contract"
+    assert chapter_2.failure_subcategory == "missing_required_marker"
+    assert any(
+        "writer:required_output_gap_missing:ch2.required_output.item_01" in issue
+        for issue in chapter_2.issues
+    )
+    assert all(
+        "required_output_block:ch2.required_output.item_01" not in issue
+        for issue in chapter_2.issues
+    )
+    assert result.final_assembly_result.status == "incomplete"
+    assert result.final_assembly_result.report_markdown is None
+    with pytest.raises(ValueError, match="LLM 分析报告尚未完成"):
+        _ = result.report_markdown
 
 
 def test_build_fund_llm_execution_request_prepares_contract_and_runtime_plan(
@@ -289,6 +693,84 @@ def test_build_fund_llm_execution_request_raises_construction_error_before_host_
 
     with pytest.raises(LLMProviderConstructionError, match="fixture-model"):
         build_fund_llm_execution_request(_developer_request())
+
+
+def test_build_fund_llm_execution_request_rejects_product_overrides_before_provider(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """验证非法业务请求在 provider config/client 构造前失败。
+
+    Args:
+        monkeypatch: pytest monkeypatch fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 provider 构造路径被触发或非法请求未失败时抛出。
+    """
+
+    calls = _install_provider_construction_spies(monkeypatch)
+    request = FundAnalysisRequest(
+        fund_code="110011",
+        report_year=2024,
+        mode="product",
+        developer_overrides=FundAnalysisDeveloperOverrides(),
+    )
+
+    with pytest.raises(ValueError, match="product mode"):
+        build_fund_llm_execution_request(request)
+
+    assert calls == []
+
+
+def test_build_fund_llm_execution_request_rejects_invalid_opt_in_before_provider(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """验证非法 LLM opt-in mode 在 provider client 构造前失败。
+
+    Args:
+        monkeypatch: pytest monkeypatch fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 provider 构造路径被触发或非法 opt-in 未失败时抛出。
+    """
+
+    calls = _install_provider_construction_spies(monkeypatch)
+
+    with pytest.raises(ValueError, match="llm_opt_in_mode"):
+        build_fund_llm_execution_request(
+            _developer_request(),
+            opt_in_mode="implicit",  # type: ignore[arg-type]
+        )
+
+    assert calls == []
+
+
+def test_build_fund_llm_execution_request_rejects_invalid_identity_before_provider(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """验证非法基金身份在 provider config/client 构造前失败。
+
+    Args:
+        monkeypatch: pytest monkeypatch fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 provider 构造路径被触发或非法身份未失败时抛出。
+    """
+
+    calls = _install_provider_construction_spies(monkeypatch)
+
+    with pytest.raises(ValueError, match="fund_code"):
+        build_fund_llm_execution_request(_developer_request(fund_code="11001"))
+
+    assert calls == []
 
 
 @pytest.mark.asyncio
@@ -420,6 +902,8 @@ def test_host_runner_records_llm_service_phase_events() -> None:
     ]
     assert host_result.status == "succeeded"
     assert [(event.event_type, event.diagnostics["phase"]) for event in phase_events] == [
+        (HostRunEventType.PHASE_STARTED, "analysis_core"),
+        (HostRunEventType.PHASE_COMPLETED, "analysis_core"),
         (HostRunEventType.PHASE_STARTED, "writer"),
         (HostRunEventType.PHASE_COMPLETED, "writer"),
         (HostRunEventType.PHASE_STARTED, "auditor"),
@@ -427,7 +911,218 @@ def test_host_runner_records_llm_service_phase_events() -> None:
         (HostRunEventType.PHASE_STARTED, "final_assembly"),
         (HostRunEventType.PHASE_COMPLETED, "final_assembly"),
     ]
-    assert phase_events[0].diagnostics["chapter_id"] == 1
+    assert phase_events[0].diagnostics == {
+        "phase": "analysis_core",
+        "chapter_id": None,
+        "attempt": None,
+        "provider_attempt": None,
+    }
+    assert phase_events[2].diagnostics["chapter_id"] == 1
+
+
+def test_analyze_with_llm_hosted_invokes_host_with_generic_lifecycle_fields(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """验证 Service hosted 用例只向 Host 传通用 lifecycle 参数。"""
+
+    writer = _FakeChapterLLMClient()
+    auditor = _FakeAuditLLMClient()
+    event_sink = object()
+    service = FundAnalysisService(extractor=_FakeExtractor(_bundle()))
+    builder_calls: list[str] = []
+
+    def fake_builder(  # type: ignore[no-untyped-def]
+        request,
+        *,
+        opt_in_mode="explicit_cli_flag",
+    ):
+        builder_calls.append(opt_in_mode)
+        return _execution_request(
+            request,
+            writer=writer,
+            auditor=auditor,
+            chapter_policy=ChapterOrchestrationPolicy(run_programmatic_audit=False),
+        )
+
+    monkeypatch.setattr(
+        fund_analysis_service_module,
+        "build_fund_llm_execution_request",
+        fake_builder,
+    )
+    monkeypatch.setattr(
+        fund_analysis_service_module,
+        "HostRuntimeRunner",
+        _RecordingHostRuntimeRunner,
+    )
+    _reset_recording_host_runner()
+
+    result = service.analyze_with_llm_hosted(
+        _developer_request(force_refresh=True),
+        event_sink=event_sink,  # type: ignore[arg-type]
+    )
+
+    assert isinstance(result, FundLLMHostedRunResult)
+    assert result.analysis_result is not None
+    assert result.host_status == "succeeded"
+    assert result.host_run_id == "host_run_fake"
+    assert result.host_elapsed_ms == 42
+    assert result.host_operation_result_present is True
+    assert _RecordingHostRuntimeRunner.run_called is True
+    assert _RecordingHostRuntimeRunner.last_operation_name == "fund_analysis_llm_report"
+    assert _RecordingHostRuntimeRunner.last_timeout_seconds == (7 + 11 + 13) * 2 * 6
+    assert _RecordingHostRuntimeRunner.last_session_id is None
+    assert _RecordingHostRuntimeRunner.last_event_sink is event_sink
+    assert _RecordingHostRuntimeRunner.forbidden_kwargs == {}
+    assert builder_calls == ["explicit_cli_flag"]
+    assert len(writer.requests) == 6
+    assert len(auditor.requests) == 6
+
+
+def test_analyze_with_llm_hosted_raises_config_error_before_host_run(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """验证 hosted 用例在 LLM 配置错误时不启动 Host。"""
+
+    service = FundAnalysisService(extractor=_FakeExtractor(_bundle()))
+    monkeypatch.setattr(
+        fund_analysis_service_module,
+        "load_llm_provider_config_from_env",
+        _raise_config_error,
+    )
+    monkeypatch.setattr(
+        fund_analysis_service_module,
+        "HostRuntimeRunner",
+        _RaisingHostRuntimeRunner,
+    )
+    _reset_recording_host_runner()
+
+    with pytest.raises(LLMProviderConfigError, match="missing fixture config"):
+        service.analyze_with_llm_hosted(_developer_request())
+
+    assert _RaisingHostRuntimeRunner.run_called is False
+
+
+def test_analyze_with_llm_hosted_raises_construction_error_before_host_run(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """验证 hosted 用例在 provider 构造错误时不启动 Host。"""
+
+    service = FundAnalysisService(extractor=_FakeExtractor(_bundle()))
+    monkeypatch.setattr(
+        fund_analysis_service_module,
+        "load_llm_provider_config_from_env",
+        lambda: _provider_config(model="fixture-model"),
+    )
+    monkeypatch.setattr(
+        fund_analysis_service_module,
+        "build_chapter_llm_clients",
+        _raise_construction_error,
+    )
+    monkeypatch.setattr(
+        fund_analysis_service_module,
+        "HostRuntimeRunner",
+        _RaisingHostRuntimeRunner,
+    )
+    _reset_recording_host_runner()
+
+    with pytest.raises(LLMProviderConstructionError, match="fixture-model"):
+        service.analyze_with_llm_hosted(_developer_request())
+
+    assert _RaisingHostRuntimeRunner.run_called is False
+
+
+def test_analyze_with_llm_hosted_preserves_incomplete_fail_closed_result(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """验证 hosted 用例对 incomplete final assembly 保持 fail-closed 投影。"""
+
+    service = FundAnalysisService(extractor=_FakeExtractor(_bundle()))
+    monkeypatch.setattr(
+        fund_analysis_service_module,
+        "load_llm_provider_config_from_env",
+        lambda: _provider_config(),
+    )
+    monkeypatch.setattr(
+        fund_analysis_service_module,
+        "build_chapter_llm_clients",
+        lambda config: ChapterOrchestratorLLMClients(
+            writer=_FakeChapterLLMClient(),
+            auditor=None,
+        ),
+    )
+
+    result = service.analyze_with_llm_hosted(_developer_request())
+
+    assert result.host_status == "failed"
+    assert result.host_operation_result_present is True
+    assert result.analysis_result is not None
+    assert result.analysis_result.final_assembly_result.report_markdown is None
+    assert result.host_safe_diagnostics["error_type"] == "_LLMIncompleteHostRunError"
+
+
+def test_analyze_with_llm_hosted_propagates_quality_gate_block(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """验证 hosted 用例继续传播 quality gate block 异常。"""
+
+    service = FundAnalysisService(extractor=_FakeExtractor(_low_quality_bundle()))
+    monkeypatch.setattr(
+        fund_analysis_service_module,
+        "load_llm_provider_config_from_env",
+        lambda: _provider_config(),
+    )
+    monkeypatch.setattr(
+        fund_analysis_service_module,
+        "build_chapter_llm_clients",
+        lambda config: _clients(),
+    )
+
+    with pytest.raises(QualityGateBlockedError) as exc_info:
+        service.analyze_with_llm_hosted(
+            _developer_request(
+                fund_code="004393",
+                quality_gate_policy="block",
+                quality_gate_source_csv=Path("docs/code_20260519.csv"),
+                quality_gate_output_dir=tmp_path / "gate",
+                quality_gate_run_id="fixture-run",
+                quality_gate_golden_answer_path=None,
+            )
+        )
+
+    assert exc_info.value.quality_gate_result.status == "block"
+
+
+def test_analyze_with_llm_hosted_propagates_quality_gate_not_run(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """验证 hosted 用例继续传播 quality gate not-run 异常。"""
+
+    service = FundAnalysisService(extractor=_FakeExtractor(_bundle()))
+    monkeypatch.setattr(
+        fund_analysis_service_module,
+        "load_llm_provider_config_from_env",
+        lambda: _provider_config(),
+    )
+    monkeypatch.setattr(
+        fund_analysis_service_module,
+        "build_chapter_llm_clients",
+        lambda config: _clients(),
+    )
+
+    with pytest.raises(QualityGateNotRunBlockedError) as exc_info:
+        service.analyze_with_llm_hosted(
+            _developer_request(
+                fund_code="110011",
+                quality_gate_policy="block",
+                quality_gate_source_csv=_source_csv(tmp_path, "004393"),
+                quality_gate_run_id="fixture-run",
+                quality_gate_golden_answer_path=None,
+            )
+        )
+
+    assert exc_info.value.reason == "fund_code `110011` not found in quality gate source csv"
 
 
 @pytest.mark.asyncio
@@ -511,6 +1206,110 @@ async def test_missing_writer_or_auditor_blocks_without_deterministic_fallback()
     ) == (1, 2, 3, 4, 5, 6)
     assert result.final_assembly_result.status == "incomplete"
     assert result.final_assembly_result.report_markdown is None
+    with pytest.raises(ValueError, match="LLM 分析报告尚未完成"):
+        _ = result.report_markdown
+
+
+@pytest.mark.asyncio
+async def test_analyze_with_llm_execution_projects_chapter_3_value_error_as_code_bug_safe_diagnostic() -> None:
+    """验证 execution path 将第 3 章 pre-provider 异常投影为安全 code_bug。"""
+
+    writer = _Chapter3ValueErrorWriterLLMClient()
+    service = FundAnalysisService(extractor=_FakeExtractor(_bundle()))
+    chapter_policy = ChapterOrchestrationPolicy(
+        target_chapter_ids=(3,),
+        max_repair_attempts=0,
+        max_output_chars=12000,
+        prompt_payload_mode="compact",
+        run_programmatic_audit=False,
+    )
+    execution_request = _execution_request(
+        _developer_request(force_refresh=True),
+        writer=writer,
+        auditor=_FakeAuditLLMClient(),
+        chapter_policy=chapter_policy,
+    )
+
+    result = await service.analyze_with_llm_execution(execution_request)
+
+    chapter = result.llm_orchestration_result.chapter_results[-1]
+    diagnostic = chapter.runtime_diagnostics[0]
+    assert [request.chapter_id for request in writer.requests] == [3]
+    assert result.llm_orchestration_result.status == "blocked"
+    assert result.final_assembly_result.status == "incomplete"
+    assert result.final_assembly_result.report_markdown is None
+    assert chapter.chapter_id == 3
+    assert chapter.status == "failed"
+    assert chapter.stop_reason == "llm_exception"
+    assert chapter.failure_category == "code_bug"
+    assert diagnostic.error_type == "ValueError"
+    assert diagnostic.provider_runtime_category is None
+    assert diagnostic.max_output_chars == 12000
+    serialized = repr(result)
+    assert "Authorization" not in serialized
+    assert "Bearer" not in serialized
+    assert "sk-secret" not in serialized
+    assert "prompt raw" not in serialized
+    with pytest.raises(ValueError, match="LLM 分析报告尚未完成"):
+        _ = result.report_markdown
+
+
+@pytest.mark.asyncio
+async def test_partial_llm_result_does_not_fallback_to_deterministic_after_typed_readiness() -> None:
+    """验证第 3 章 item 01 unsafe 缺口输出阻断总装且不回退确定性报告。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 partial LLM 结果被 deterministic markdown 掩盖时抛出。
+    """
+
+    writer = _Chapter3Item01UnsafeWriterLLMClient()
+    auditor = _FakeAuditLLMClient()
+    service = FundAnalysisService(extractor=_FakeExtractor(_bundle_with_missing_portfolio_managers()))
+
+    result = await service.analyze_with_llm(
+        _developer_request(),
+        llm_clients=ChapterOrchestratorLLMClients(
+            writer=writer,
+            auditor=auditor,
+        ),
+        chapter_policy=ChapterOrchestrationPolicy(
+            run_programmatic_audit=False,
+            typed_template_path="typed_template_contract",
+        ),
+    )
+
+    chapter_3 = next(
+        chapter_result
+        for chapter_result in result.llm_orchestration_result.chapter_results
+        if chapter_result.chapter_id == 3
+    )
+    assert result.llm_orchestration_result.status == "partial"
+    assert [request.chapter_id for request in writer.requests] == [1, 2, 3, 4, 5, 6]
+    assert chapter_3.status == "blocked"
+    assert chapter_3.stop_reason == "missing_required_output_marker"
+    assert chapter_3.failure_category == "prompt_contract"
+    assert chapter_3.failure_subcategory == "missing_required_marker"
+    assert any(
+        "writer:required_output_gap_missing:ch3.required_output.item_01" in issue
+        for issue in chapter_3.issues
+    )
+    assert all(
+        "required_output_block:ch3.required_output.item_01" not in issue
+        for issue in chapter_3.issues
+    )
+    assert result.final_assembly_result.status == "incomplete"
+    assert result.final_assembly_result.report_markdown is None
+    assert result.final_assembly_result.chapter7_markdown is None
+    assert result.final_assembly_result.chapter0_markdown is None
+    assert "chapter7_readiness_blocked" in {
+        issue.reason for issue in result.final_assembly_result.issues
+    }
     with pytest.raises(ValueError, match="LLM 分析报告尚未完成"):
         _ = result.report_markdown
 
@@ -786,12 +1585,48 @@ def _execution_request(
             provider_runtime_budget=runtime_plan.provider_runtime_budget,
             quality_fail_closed_policy=runtime_plan.quality_fail_closed_policy,
             safe_diagnostic_policy=runtime_plan.safe_diagnostic_policy,
+            typed_template_path=chapter_policy.typed_template_path,
             host_timeout_seconds=runtime_plan.host_timeout_seconds,
         )
     return FundLLMExecutionRequest(
         contract=contract,
         runtime_plan=runtime_plan,
         llm_clients=_clients(writer=writer, auditor=auditor),
+        typed_template_path=runtime_plan.typed_template_path,
+    )
+
+
+def _bundle_with_missing_portfolio_managers() -> object:
+    """构造第 3 章基金经理基本信息缺少已复核证据的抽取结果。"""
+
+    missing_portfolio_managers = ExtractedField(
+        value=None,
+        anchors=(),
+        extraction_mode="missing",
+        note="no-live missing portfolio managers",
+    )
+    return replace(_bundle(), portfolio_managers=missing_portfolio_managers)
+
+
+def _bundle_with_missing_chapter_2_evidence() -> object:
+    """构造第 2 章收益与成本证据缺少已复核证据的抽取结果。"""
+
+    missing_nav = ExtractedField(
+        value=None,
+        anchors=(),
+        extraction_mode="missing",
+        note="no-live missing nav benchmark performance",
+    )
+    missing_fee = ExtractedField(
+        value=None,
+        anchors=(),
+        extraction_mode="missing",
+        note="no-live missing fee schedule",
+    )
+    return replace(
+        _bundle(),
+        nav_benchmark_performance=missing_nav,
+        fee_schedule=missing_fee,
     )
 
 
@@ -932,6 +1767,85 @@ def _raise_construction_error(
     raise LLMProviderConstructionError(f"fixture construction failure: {config.model}")
 
 
+def _install_provider_construction_spies(monkeypatch: pytest.MonkeyPatch) -> list[str]:
+    """安装 provider config/client 构造 spy。
+
+    Args:
+        monkeypatch: pytest monkeypatch fixture。
+
+    Returns:
+        记录 provider config/client 构造调用顺序的列表。
+
+    Raises:
+        AssertionError: 当被测分支错误触发 provider 构造时由 spy 抛出。
+    """
+
+    spy = _ProviderConstructionSpy()
+
+    monkeypatch.setattr(
+        fund_analysis_service_module,
+        "load_llm_provider_config_from_env",
+        spy.load_config,
+    )
+    monkeypatch.setattr(
+        fund_analysis_service_module,
+        "build_chapter_llm_clients",
+        spy.build_clients,
+    )
+    return spy.calls
+
+
+class _ProviderConstructionSpy:
+    """记录并阻断 provider config/client 构造的测试 spy。"""
+
+    def __init__(self) -> None:
+        """初始化调用记录。
+
+        Args:
+            无。
+
+        Returns:
+            无返回值。
+
+        Raises:
+            无显式抛出。
+        """
+
+        self.calls: list[str] = []
+
+    def load_config(self) -> LLMProviderConfig:
+        """记录并阻断 provider config 加载。
+
+        Args:
+            无。
+
+        Returns:
+            不返回。
+
+        Raises:
+            AssertionError: 始终抛出，表示该分支不应加载 provider config。
+        """
+
+        self.calls.append("load_config")
+        raise AssertionError("provider config should not be loaded")
+
+    def build_clients(self, config: LLMProviderConfig) -> ChapterOrchestratorLLMClients:
+        """记录并阻断 provider client 构造。
+
+        Args:
+            config: provider config；只用于记录模型名。
+
+        Returns:
+            不返回。
+
+        Raises:
+            AssertionError: 始终抛出，表示该分支不应构造 provider clients。
+        """
+
+        self.calls.append(f"build_clients:{config.model}")
+        raise AssertionError("provider clients should not be built")
+
+
 def _valid_markdown_from_request(request: ChapterLLMRequest) -> str:
     """按 writer request 构造合法章节 Markdown。
 
@@ -949,6 +1863,58 @@ def _valid_markdown_from_request(request: ChapterLLMRequest) -> str:
     return (
         "### 结论要点\n"
         f"{_required_lines(_required_items_from_request(request))}\n"
+        "### 详细情况\n"
+        "本章只使用已断言事实，并把候选 facet 写成未断言。\n"
+        "### 证据与出处\n"
+        f"<!-- anchor:{anchor_id} -->\n"
+        "> 📎 证据：年报2024§§2表None行fixture（fixture）\n"
+    )
+
+
+def _chapter_2_markdown_with_gap(request: ChapterLLMRequest) -> str:
+    """构造第 2 章 approved gap/minimum-verification Markdown。"""
+
+    required_lines = "\n".join(
+        f"<!-- required_output:{_required_item_id_from_prompt_payload(item)} -->\n"
+        "- 证据不足，不能完成具体 R=A+B-C 数字闭环。"
+        "下一步最小验证问题：复核同源年报中的基金收益、基准收益和费用口径。"
+        for item in _required_items_from_request(request)
+    )
+    markdown = _valid_markdown_from_request(request)
+    start = markdown.find("<!-- required_output:")
+    end = markdown.find("### 详细情况")
+    if start < 0 or end < 0:
+        raise AssertionError("第 2 章测试 Markdown 缺少 required output 区段")
+    return markdown[:start] + required_lines + "\n" + markdown[end:]
+
+
+def _chapter_2_markdown_without_gap_phrase(request: ChapterLLMRequest) -> str:
+    """构造第 2 章缺少 approved gap wording 的 Markdown。"""
+
+    required_lines = "\n".join(
+        f"<!-- required_output:{_required_item_id_from_prompt_payload(item)} -->\n"
+        f"- {_required_item_id_from_prompt_payload(item)}: 已根据结构化事实说明。"
+        for item in _required_items_from_request(request)
+    )
+    markdown = _valid_markdown_from_request(request)
+    start = markdown.find("<!-- required_output:")
+    end = markdown.find("### 详细情况")
+    if start < 0 or end < 0:
+        raise AssertionError("第 2 章测试 Markdown 缺少 required output 区段")
+    return markdown[:start] + required_lines + "\n" + markdown[end:]
+
+
+def _chapter_3_markdown_without_item01_gap(request: ChapterLLMRequest) -> str:
+    """构造第 3 章 item 01 缺少 approved gap wording 的 Markdown。"""
+
+    anchor_id = request.required_anchor_ids[0]
+    required_items = tuple(
+        _required_item_id_from_prompt_payload(item)
+        for item in _required_items_from_request(request)
+    )
+    return (
+        "### 结论要点\n"
+        f"{_chapter_3_unsafe_required_lines(required_items)}\n"
         "### 详细情况\n"
         "本章只使用已断言事实，并把候选 facet 写成未断言。\n"
         "### 证据与出处\n"
@@ -975,6 +1941,31 @@ def _required_items_from_request(request: ChapterLLMRequest) -> tuple[str, ...]:
         if line.startswith(marker):
             return tuple(ast.literal_eval(line.removeprefix(marker)))
     raise ValueError("writer request 缺少必须输出项")
+
+
+def _required_item_id_from_prompt_payload(item: str) -> str:
+    """从 typed prompt payload 中提取 required output item id。"""
+
+    first_line = item.splitlines()[0] if item else ""
+    if first_line.startswith("<!-- required_output:") and first_line.endswith(" -->"):
+        return first_line.removeprefix("<!-- required_output:").removesuffix(" -->")
+    return item
+
+
+def _chapter_3_unsafe_required_lines(required_items: tuple[str, ...]) -> str:
+    """构造第 3 章 item 01 unsafe、其它缺证项安全降级的 required output 行。"""
+
+    return "\n".join(_chapter_3_unsafe_required_line(item) for item in required_items)
+
+
+def _chapter_3_unsafe_required_line(item: str) -> str:
+    """构造单个第 3 章 required output 行。"""
+
+    if item == "ch3.required_output.item_01":
+        return f"<!-- required_output:{item} -->\n- 基金经理基本信息：已根据结构化事实说明。"
+    if item.startswith("ch3.required_output."):
+        return f"<!-- required_output:{item} -->\n- {item}: 证据不足，下一步最小验证问题是复核同源年报披露。"
+    return f"<!-- required_output:{item} -->\n- {item}: 已根据结构化事实说明。"
 
 
 def _required_lines(required_items: tuple[str, ...]) -> str:

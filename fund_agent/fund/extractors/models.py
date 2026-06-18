@@ -516,6 +516,7 @@ class ProfileExtractionResult:
     Attributes:
         basic_identity: 基础身份信息。
         product_profile: 产品本质与投资范围摘要。
+        risk_characteristic_text: 风险收益特征文本，见模板第 1 章产品本质和第 6 章核心风险。
         benchmark: 业绩比较基准信息。
         index_profile: 指数画像信息，见模板第 1 章“指数编制规则与成分股”。
         fee_schedule: 费率信息。
@@ -523,6 +524,7 @@ class ProfileExtractionResult:
 
     basic_identity: ExtractedField[dict[str, object]]
     product_profile: ExtractedField[dict[str, object]]
+    risk_characteristic_text: ExtractedField[dict[str, object]]
     benchmark: ExtractedField[dict[str, object]]
     index_profile: ExtractedField["IndexProfileValue"]
     fee_schedule: ExtractedField[dict[str, object]]
@@ -637,16 +639,18 @@ class TrackingErrorValue:
 
 @dataclass(frozen=True, slots=True)
 class ManagerOwnershipExtractionResult:
-    """`§4/§8/§9` 管理人文本、换手率、利益一致性与持有人结构抽取结果。
+    """`§4/§8/§9` 管理人文本、任期列表、换手率、利益一致性与持有人结构抽取结果。
 
     Attributes:
         manager_strategy_text: 管理人报告中的策略与展望原文。
+        portfolio_managers: 年报 `§4` 披露的基金经理任期列表。
         turnover_rate: 年报 `§8` 披露的换手率。
         manager_alignment: 年报 `§9` 披露的基金经理/从业人员持有原始数据。
         holder_structure: 年报 `§9` 披露的机构/个人持有人结构。
     """
 
     manager_strategy_text: ExtractedField[dict[str, object]]
+    portfolio_managers: ExtractedField[dict[str, object]]
     turnover_rate: ExtractedField[dict[str, object]]
     manager_alignment: ExtractedField[dict[str, object]]
     holder_structure: ExtractedField[dict[str, object]]

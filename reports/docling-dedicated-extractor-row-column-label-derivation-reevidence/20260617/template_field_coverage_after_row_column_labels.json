@@ -1,0 +1,917 @@
+{
+  "accepted_plan_commit": "07886d1",
+  "aggregate": {
+    "anchor_count": 57,
+    "blocked_slot_count": 0,
+    "direct_coverage_ratio": 0.532608695652174,
+    "direct_slot_count": 49,
+    "missing_ratio": 0.4673913043478261,
+    "missing_slot_count": 43,
+    "sample_count": 4,
+    "target_field_slot_count": 92
+  },
+  "candidate_only": true,
+  "extractor_schema_version": "docling_template_field_candidates.v1",
+  "interpretation": {
+    "baseline_promotion_supported": false,
+    "direct_fields_are_correctness_proof": false,
+    "missing_fields_prove_source_absence": false,
+    "production_integration_supported": false
+  },
+  "per_field": [
+    {
+      "direct_count": 4,
+      "field_path": "basic_identity.fund_name",
+      "missing_count": 0,
+      "sample_count": 4
+    },
+    {
+      "direct_count": 4,
+      "field_path": "basic_identity.fund_code",
+      "missing_count": 0,
+      "sample_count": 4
+    },
+    {
+      "direct_count": 4,
+      "field_path": "basic_identity.management_company",
+      "missing_count": 0,
+      "sample_count": 4
+    },
+    {
+      "direct_count": 4,
+      "field_path": "basic_identity.custodian",
+      "missing_count": 0,
+      "sample_count": 4
+    },
+    {
+      "direct_count": 4,
+      "field_path": "product_profile.investment_objective",
+      "missing_count": 0,
+      "sample_count": 4
+    },
+    {
+      "direct_count": 0,
+      "field_path": "product_profile.investment_scope",
+      "missing_count": 4,
+      "sample_count": 4
+    },
+    {
+      "direct_count": 4,
+      "field_path": "benchmark.benchmark_text",
+      "missing_count": 0,
+      "sample_count": 4
+    },
+    {
+      "direct_count": 4,
+      "field_path": "risk_characteristic_text.risk_characteristic_text",
+      "missing_count": 0,
+      "sample_count": 4
+    },
+    {
+      "direct_count": 4,
+      "field_path": "fee_schedule.management_fee",
+      "missing_count": 0,
+      "sample_count": 4
+    },
+    {
+      "direct_count": 4,
+      "field_path": "fee_schedule.custody_fee",
+      "missing_count": 0,
+      "sample_count": 4
+    },
+    {
+      "direct_count": 0,
+      "field_path": "nav_benchmark_performance.nav_growth_rate",
+      "missing_count": 4,
+      "sample_count": 4
+    },
+    {
+      "direct_count": 0,
+      "field_path": "nav_benchmark_performance.benchmark_return_rate",
+      "missing_count": 4,
+      "sample_count": 4
+    },
+    {
+      "direct_count": 0,
+      "field_path": "tracking_error.value_text",
+      "missing_count": 4,
+      "sample_count": 4
+    },
+    {
+      "direct_count": 4,
+      "field_path": "portfolio_managers",
+      "missing_count": 0,
+      "sample_count": 4
+    },
+    {
+      "direct_count": 0,
+      "field_path": "turnover_rate",
+      "missing_count": 4,
+      "sample_count": 4
+    },
+    {
+      "direct_count": 4,
+      "field_path": "manager_alignment.manager_holding_range",
+      "missing_count": 0,
+      "sample_count": 4
+    },
+    {
+      "direct_count": 2,
+      "field_path": "holdings_snapshot.top_holdings",
+      "missing_count": 2,
+      "sample_count": 4
+    },
+    {
+      "direct_count": 2,
+      "field_path": "holdings_snapshot.bond_top_holdings",
+      "missing_count": 2,
+      "sample_count": 4
+    },
+    {
+      "direct_count": 1,
+      "field_path": "holdings_snapshot.target_fund_holdings",
+      "missing_count": 3,
+      "sample_count": 4
+    },
+    {
+      "direct_count": 0,
+      "field_path": "manager_strategy_text",
+      "missing_count": 4,
+      "sample_count": 4
+    },
+    {
+      "direct_count": 0,
+      "field_path": "holder_structure",
+      "missing_count": 4,
+      "sample_count": 4
+    },
+    {
+      "direct_count": 0,
+      "field_path": "share_change",
+      "missing_count": 4,
+      "sample_count": 4
+    },
+    {
+      "direct_count": 0,
+      "field_path": "bond_risk_evidence",
+      "missing_count": 4,
+      "sample_count": 4
+    }
+  ],
+  "release_readiness": "NOT_READY",
+  "rows": [
+    {
+      "anchor_count": 14,
+      "blocked_count": 0,
+      "blocked_field_paths": [],
+      "candidate_status": "not_proven",
+      "diagnostics": {
+        "blocked_field_count": 0,
+        "direct_field_count": 13,
+        "missing_field_count": 10,
+        "target_field_count": 23
+      },
+      "direct_count": 13,
+      "direct_fields": [
+        {
+          "anchor_section_ids": [
+            "§2"
+          ],
+          "field_path": "basic_identity.fund_name",
+          "notes": [
+            "candidate_only:label=基金名称; locator_hash=6f5a846f244bf2b04b2dc001d36c0586ae7ca90cee8db48094139e748657ce43"
+          ],
+          "value": "安信企业价值优选混合型证券投资基金"
+        },
+        {
+          "anchor_section_ids": [
+            "§2"
+          ],
+          "field_path": "basic_identity.fund_code",
+          "notes": [
+            "candidate_only:label=基金主代码; locator_hash=9920db23778b1d72c1cd097d0631f513b2b77d0094f26763beb2c22d8691ced4"
+          ],
+          "value": "004393"
+        },
+        {
+          "anchor_section_ids": [
+            "§2"
+          ],
+          "field_path": "basic_identity.management_company",
+          "notes": [
+            "candidate_only:label=基金管理人; locator_hash=0b6b06dafe489a61d1a7f05b4028cf3101ecc5168713f8b126734315afbc3a74"
+          ],
+          "value": "安信基金管理有限责任公司"
+        },
+        {
+          "anchor_section_ids": [
+            "§2"
+          ],
+          "field_path": "basic_identity.custodian",
+          "notes": [
+            "candidate_only:label=基金托管人; locator_hash=3326488517611c3d3a485702416e9fdd3804c826c6ef456a06645a0e20d908ef"
+          ],
+          "value": "中国银行股份有限公司"
+        },
+        {
+          "anchor_section_ids": [
+            "§2"
+          ],
+          "field_path": "product_profile.investment_objective",
+          "notes": [
+            "candidate_only:label=投资目标; locator_hash=d78d18ba911f804e50a747f4575c7dd1a45be45fb5c2c6883bccd57da15309d3"
+          ],
+          "value": "本基金在有效控制组合风险并保持基金资产流动性的前提下，力争 实现基金资产的长期稳健增值。"
+        },
+        {
+          "anchor_section_ids": [
+            "§2"
+          ],
+          "field_path": "benchmark.benchmark_text",
+          "notes": [
+            "candidate_only:label=业绩比较基准; locator_hash=51fcbeb1b33fecd6687f8f5a695fa89674c8d48ff1adbd821e70167e66f1a53c"
+          ],
+          "value": "沪深300指数收益率×60%+恒生指数收益率 （经汇率调整后） ×20%+ 中债综合（全价）指数收益率×20%"
+        },
+        {
+          "anchor_section_ids": [
+            "§2"
+          ],
+          "field_path": "risk_characteristic_text.risk_characteristic_text",
+          "notes": [
+            "candidate_only:label=风险收益特征; locator_hash=9f4be4ee26835be28e5935365324643cbcd1246507e5aed426e971d9a871d276"
+          ],
+          "value": "本基金为混合型基金，其预期收益及预期风险水平高于债券型基金 和货币市场基金，但低于股票型基金。 根据《证券期货投资者适当性管理办法》及其配套规则，基金管理 人及本基金其他销售机构将定期或不定期对本基金产品风险等级进 行重新评定，因而本基金的产品风险等级具体结果应以各销售机构 提供的最新评级结果为准。 本基金除了投资A股外，还可通过港股通投资于香港证券市场，会 面临港股通机制下因投资环境、投资标的、市场制度以及交易规则 等差异带来的特有风险。"
+        },
+        {
+          "anchor_section_ids": [
+            "§7"
+          ],
+          "field_path": "fee_schedule.management_fee",
+          "notes": [
+            "candidate_only:label=当期发生的基金应支付的管理费; locator_hash=8c8abdf899180ad187985d8d343c635fcbba01d9ceb829337a7c8475c131ae05"
+          ],
+          "value": "3,033,849.49"
+        },
+        {
+          "anchor_section_ids": [
+            "§7"
+          ],
+          "field_path": "fee_schedule.custody_fee",
+          "notes": [
+            "candidate_only:label=应付托管费; locator_hash=524d3bf675f3617669e4c9c8053e7e9aaaf3d34931c63ca2a2157439a4d23922"
+          ],
+          "value": "28,387.48"
+        },
+        {
+          "anchor_section_ids": [
+            "§4",
+            "§4"
+          ],
+          "field_path": "portfolio_managers",
+          "notes": [
+            "candidate_only:portfolio_manager_row; locator_hash=828ed5bf06c8779eba249a9eab7bb64f212ef2b0850f105f13dc489f6f718001",
+            "candidate_only:portfolio_manager_row; locator_hash=c7aeba10325302c32da09dc8950e3f3fdaceab693a77bccd9561a240b033b140"
+          ],
+          "value": {
+            "managers": [
+              {
+                "name": "任职日期",
+                "start_date": "任职日期"
+              },
+              {
+                "name": "张明"
+              }
+            ],
+            "schema_version": "portfolio_manager_tenure_list.v1"
+          }
+        },
+        {
+          "anchor_section_ids": [
+            "§10"
+          ],
+          "field_path": "manager_alignment.manager_holding_range",
+          "notes": [
+            "candidate_only:label=本基金基金经理持有 本开放式基金; locator_hash=b93ccf3948047f02696c4a334b4fae8db272c687b98fff5ed9939d53267d6273"
+          ],
+          "value": "安信企业价值优选混合A"
+        },
+        {
+          "anchor_section_ids": [
+            "§8"
+          ],
+          "field_path": "holdings_snapshot.top_holdings",
+          "notes": [
+            "candidate_only:holding_row_match; locator_hash=e231f51b55ffc602b1b953245ec44c793b59840189e0821fe1af8bbb7cff8ffd"
+          ],
+          "value": {
+            "rows": [
+              {
+                "fair_value_cny": "负相关",
+                "name": "预期波动率",
+                "net_asset_ratio": null
+              }
+            ]
+          }
+        },
+        {
+          "anchor_section_ids": [
+            "§8"
+          ],
+          "field_path": "holdings_snapshot.bond_top_holdings",
+          "notes": [
+            "candidate_only:holding_row_match; locator_hash=25c2af0a65c2f662248107a2dc605b9e534fae345fad78802602477e59a8fda9"
+          ],
+          "value": {
+            "rows": [
+              {
+                "fair_value_cny": "4,246,851.29",
+                "name": "25国债01",
+                "net_asset_ratio": "2.50"
+              }
+            ]
+          }
+        }
+      ],
+      "document_year": 2025,
+      "field_correctness_status": "not_proven",
+      "fund_code": "004393",
+      "missing_count": 10,
+      "missing_field_paths": [
+        "product_profile.investment_scope",
+        "nav_benchmark_performance.nav_growth_rate",
+        "nav_benchmark_performance.benchmark_return_rate",
+        "tracking_error.value_text",
+        "turnover_rate",
+        "holdings_snapshot.target_fund_holdings",
+        "manager_strategy_text",
+        "holder_structure",
+        "share_change",
+        "bond_risk_evidence"
+      ],
+      "production_parser_replacement_status": "not_authorized",
+      "sample_id": "S1",
+      "source_kind": "docling_pdf_candidate",
+      "source_path": "reports/representation-json/004393_2025_docling_current_envelope.json",
+      "source_truth_status": "not_proven"
+    },
+    {
+      "anchor_count": 15,
+      "blocked_count": 0,
+      "blocked_field_paths": [],
+      "candidate_status": "not_proven",
+      "diagnostics": {
+        "blocked_field_count": 0,
+        "direct_field_count": 12,
+        "missing_field_count": 11,
+        "target_field_count": 23
+      },
+      "direct_count": 12,
+      "direct_fields": [
+        {
+          "anchor_section_ids": [
+            "§2"
+          ],
+          "field_path": "basic_identity.fund_name",
+          "notes": [
+            "candidate_only:label=基金名称; locator_hash=e64e958277e4c41eac3de80d38afbc9131897a2b38925f4bd996637a220a05e1"
+          ],
+          "value": "国泰利享中短债债券型证券投资基金"
+        },
+        {
+          "anchor_section_ids": [
+            "§2"
+          ],
+          "field_path": "basic_identity.fund_code",
+          "notes": [
+            "candidate_only:label=基金主代码; locator_hash=8c925e0756947d45bbbdbfdb4e9217c72f4e625fe2de544261ecc5bd5b9a2b61"
+          ],
+          "value": "006597"
+        },
+        {
+          "anchor_section_ids": [
+            "§2"
+          ],
+          "field_path": "basic_identity.management_company",
+          "notes": [
+            "candidate_only:label=基金管理人; locator_hash=36f81ec4391c60d0b885fd12ebfce5f246068865820457c3348e53067fbdc8d7"
+          ],
+          "value": "国泰基金管理有限公司"
+        },
+        {
+          "anchor_section_ids": [
+            "§2"
+          ],
+          "field_path": "basic_identity.custodian",
+          "notes": [
+            "candidate_only:label=基金托管人; locator_hash=fd643d9c1ab5c6b59b1a3b966db444f10370183b585fb756444a3d1024e98ae1"
+          ],
+          "value": "招商银行股份有限公司"
+        },
+        {
+          "anchor_section_ids": [
+            "§2"
+          ],
+          "field_path": "product_profile.investment_objective",
+          "notes": [
+            "candidate_only:label=投资目标; locator_hash=b63a0a70ccec4b91b03e15b1bc64393b5463651389cc83ed68226ea228b112d2"
+          ],
+          "value": "在严格控制风险的前提下，追求稳健的投资回报。"
+        },
+        {
+          "anchor_section_ids": [
+            "§2"
+          ],
+          "field_path": "benchmark.benchmark_text",
+          "notes": [
+            "candidate_only:label=业绩比较基准; locator_hash=03533c99bf1cdb9eaf956f0fec0ed3f15a13d3a970a7cdb41994a5002780754a"
+          ],
+          "value": "中债总财富 （ 1-3 年） 指数收益率 *80% ＋一年期定期存款利率 ( 税后 )*20%"
+        },
+        {
+          "anchor_section_ids": [
+            "§2"
+          ],
+          "field_path": "risk_characteristic_text.risk_characteristic_text",
+          "notes": [
+            "candidate_only:label=风险收益特征; locator_hash=d39bdfaccaca4bdea9335049fddc64d5f867eed1d5770bcc1a5951400ed282ac"
+          ],
+          "value": "本基金为债券型基金，预期收益和预期风险高于货币市场基金，但低于 混合型基金、股票型基金，属于较低预期风险和预期收益的产品。"
+        },
+        {
+          "anchor_section_ids": [
+            "§7"
+          ],
+          "field_path": "fee_schedule.management_fee",
+          "notes": [
+            "candidate_only:label=当期发生的基金应支付的管理费; locator_hash=e50f53d5e3952bc820e84cd5f427d3207ade2d2420e5a27cba5e55790fe244e3"
+          ],
+          "value": "37,148,436.96"
+        },
+        {
+          "anchor_section_ids": [
+            "§7"
+          ],
+          "field_path": "fee_schedule.custody_fee",
+          "notes": [
+            "candidate_only:label=应付托管费; locator_hash=db5584d8ca8c2d798e228c5632e59a40507c07d5fec88e345cc56ad61945b108"
+          ],
+          "value": "540,356.37"
+        },
+        {
+          "anchor_section_ids": [
+            "§4",
+            "§4",
+            "§4",
+            "§4"
+          ],
+          "field_path": "portfolio_managers",
+          "notes": [
+            "candidate_only:portfolio_manager_row; locator_hash=f7574936d8ff370a90be4a97f0b41f5113529c42b633dedeadd830fba285bc9c",
+            "candidate_only:portfolio_manager_row; locator_hash=84c23675d5ca8244bee419213a44cab4a6ee1dbd46c1cc301fb7756665b97e34",
+            "candidate_only:portfolio_manager_row; locator_hash=a8d67f565b2b03c9d1220c6ff388a9e6b289e0071f971a6cac0ee14eea336796",
+            "candidate_only:portfolio_manager_row; locator_hash=658b9344f47d6c87d19e6340e6cad6847ac92c6b8b089ca86961099dace5f7f4"
+          ],
+          "value": {
+            "managers": [
+              {
+                "name": "任职日期",
+                "start_date": "任职日期"
+              },
+              {
+                "name": "陶然"
+              },
+              {
+                "name": "丁士恒"
+              },
+              {
+                "name": "的基金经理， 2020 年 5 月至 2024 年 12 月任国泰惠鑫一年定期开放 债券型发起式证券投资基金的基 金经理， 2022 年 12 月至 2024 年 12 月任国泰利享安益短债债券型 证券投资基金的基金经理， 2023 年 8 月至 2024 年 12 月任国泰鑫 鸿一年定期开放债券型发起式证 券投资基金的基金经理， 2024 年 3 月起兼任国泰利恒 30 天持有期 债券型证券投资基金的基金经 理。"
+              }
+            ],
+            "schema_version": "portfolio_manager_tenure_list.v1"
+          }
+        },
+        {
+          "anchor_section_ids": [
+            "§10"
+          ],
+          "field_path": "manager_alignment.manager_holding_range",
+          "notes": [
+            "candidate_only:label=本基金基金经理持有本开 放式基金; locator_hash=6ee1904fe9bd68b595b043229a95fa7b844b49ddbccbc595a85864bab06b4c38"
+          ],
+          "value": "国泰利享中短债债券 A"
+        },
+        {
+          "anchor_section_ids": [
+            "§8"
+          ],
+          "field_path": "holdings_snapshot.bond_top_holdings",
+          "notes": [
+            "candidate_only:holding_row_match; locator_hash=96ef61fa6ffb9ce0c30ee87054fc9897a7f007ac766e27883de4e4de31d64c5f"
+          ],
+          "value": {
+            "rows": [
+              {
+                "fair_value_cny": "1,133,300,622.22",
+                "name": "23 国开 14",
+                "net_asset_ratio": null
+              }
+            ]
+          }
+        }
+      ],
+      "document_year": 2024,
+      "field_correctness_status": "not_proven",
+      "fund_code": "006597",
+      "missing_count": 11,
+      "missing_field_paths": [
+        "product_profile.investment_scope",
+        "nav_benchmark_performance.nav_growth_rate",
+        "nav_benchmark_performance.benchmark_return_rate",
+        "tracking_error.value_text",
+        "turnover_rate",
+        "holdings_snapshot.top_holdings",
+        "holdings_snapshot.target_fund_holdings",
+        "manager_strategy_text",
+        "holder_structure",
+        "share_change",
+        "bond_risk_evidence"
+      ],
+      "production_parser_replacement_status": "not_authorized",
+      "sample_id": "S4",
+      "source_kind": "docling_pdf_candidate",
+      "source_path": "reports/representation-json/006597_2024_docling_full.json",
+      "source_truth_status": "not_proven"
+    },
+    {
+      "anchor_count": 12,
+      "blocked_count": 0,
+      "blocked_field_paths": [],
+      "candidate_status": "not_proven",
+      "diagnostics": {
+        "blocked_field_count": 0,
+        "direct_field_count": 11,
+        "missing_field_count": 12,
+        "target_field_count": 23
+      },
+      "direct_count": 11,
+      "direct_fields": [
+        {
+          "anchor_section_ids": [
+            "§2"
+          ],
+          "field_path": "basic_identity.fund_name",
+          "notes": [
+            "candidate_only:label=基金名称; locator_hash=fc630c4aa7ae7087f33b7edbdf2d0244121d66fa7afd479a1f45559510b23eb3"
+          ],
+          "value": "摩根标普 500 指数型发起式证券投资基金 (QDII)"
+        },
+        {
+          "anchor_section_ids": [
+            "§2"
+          ],
+          "field_path": "basic_identity.fund_code",
+          "notes": [
+            "candidate_only:label=基金主代码; locator_hash=dd3827d2502932f83a10dd00a357d1219d35fed9f78f057d526700451b453d5e"
+          ],
+          "value": "017641"
+        },
+        {
+          "anchor_section_ids": [
+            "§2"
+          ],
+          "field_path": "basic_identity.management_company",
+          "notes": [
+            "candidate_only:label=基金管理人; locator_hash=6ecfd84ea831abb07fe3477a03d561fe7d7f5ed0182ac5a0466dc3f360832f5b"
+          ],
+          "value": "摩根基金管理（中国）有限公司"
+        },
+        {
+          "anchor_section_ids": [
+            "§2"
+          ],
+          "field_path": "basic_identity.custodian",
+          "notes": [
+            "candidate_only:label=基金托管人; locator_hash=fd643d9c1ab5c6b59b1a3b966db444f10370183b585fb756444a3d1024e98ae1"
+          ],
+          "value": "招商银行股份有限公司"
+        },
+        {
+          "anchor_section_ids": [
+            "§2"
+          ],
+          "field_path": "product_profile.investment_objective",
+          "notes": [
+            "candidate_only:label=投资目标; locator_hash=7c4661749612add312d07ce7e5b429b23c8cd15839a8ad0ff990406a2d7befc3"
+          ],
+          "value": "本基金进行被动指数化投资，紧密跟踪标的指数，追求跟踪偏离度和跟踪 误差最小化。"
+        },
+        {
+          "anchor_section_ids": [
+            "§2"
+          ],
+          "field_path": "benchmark.benchmark_text",
+          "notes": [
+            "candidate_only:label=本基金采用完全复制策略，按照标的指数成份股构成及其权重构建股票资 产组合，并根据标的指数成份股及其权重的变化对股票组合进行动态调 整。但因特殊情况导致基金无法有效跟踪标的指数时，本基金将运用其他 方法建立实际组合，力求实现基金相对业绩比较基准的跟踪误差最小化。 1 、资产配置策略 为了实现追踪误差最小化，本基金投资于标的指数成份股及其备选成份股 的比例不低于基金资产净值的 80% ，且不低于非现金基金资产 80% 。 在正常市场情况下，本基金力争控制基金净值增长率与业绩比较基准之间; locator_hash=5ffee7fd7bced0c1c389270281461fa967431aa7ccfebfdc74816153ccf008b4"
+          ],
+          "value": "投资策略"
+        },
+        {
+          "anchor_section_ids": [
+            "§2"
+          ],
+          "field_path": "risk_characteristic_text.risk_characteristic_text",
+          "notes": [
+            "candidate_only:label=风险收益特征; locator_hash=0e4735064068e9206c5113088ba1c2a61e434b495c567eaf97b5a9f76f9346f2"
+          ],
+          "value": "本基金属于股票型基金产品，预期风险和收益水平高于混合型基金、债券 型基金和货币市场基金。本基金为被动管理的指数型基金，具有与标的指 数、以及标的指数所代表的股票市场相似的风险收益特征。 本基金投资于境外证券市场，因此还面临汇率风险等境外证券市场投资所 面临的特别投资风险。"
+        },
+        {
+          "anchor_section_ids": [
+            "§7"
+          ],
+          "field_path": "fee_schedule.management_fee",
+          "notes": [
+            "candidate_only:label=当期发生的基金应支付的管理费; locator_hash=c984096eea4d06bbda74b20c61a7773a79db2b69627d7d4c3883e81f80b9484b"
+          ],
+          "value": "5,453,074.81"
+        },
+        {
+          "anchor_section_ids": [
+            "§7"
+          ],
+          "field_path": "fee_schedule.custody_fee",
+          "notes": [
+            "candidate_only:label=应付托管费; locator_hash=b62af25cff0ec7e95278e2b67a09e6f8ed211a4c51ccadeccb43abf6609cd853"
+          ],
+          "value": "251,153.32"
+        },
+        {
+          "anchor_section_ids": [
+            "§4",
+            "§4"
+          ],
+          "field_path": "portfolio_managers",
+          "notes": [
+            "candidate_only:portfolio_manager_row; locator_hash=828ed5bf06c8779eba249a9eab7bb64f212ef2b0850f105f13dc489f6f718001",
+            "candidate_only:portfolio_manager_row; locator_hash=e8e10bc775b5007d8b36cf010049e807aec94ab68434cf73860867c4f251eac2"
+          ],
+          "value": {
+            "managers": [
+              {
+                "name": "任职日期",
+                "start_date": "任职日期"
+              },
+              {
+                "name": "张军"
+              }
+            ],
+            "schema_version": "portfolio_manager_tenure_list.v1"
+          }
+        },
+        {
+          "anchor_section_ids": [
+            "§10"
+          ],
+          "field_path": "manager_alignment.manager_holding_range",
+          "notes": [
+            "candidate_only:label=本基金基金经理持有本开 放式基金; locator_hash=d9fc7b26cd320ded331ecbbc7b757b4e7cca6103e21b6eda49a51ad4a2a8de12"
+          ],
+          "value": "摩根标普 500 指数 (QDII) 人民币 A"
+        }
+      ],
+      "document_year": 2024,
+      "field_correctness_status": "not_proven",
+      "fund_code": "017641",
+      "missing_count": 12,
+      "missing_field_paths": [
+        "product_profile.investment_scope",
+        "nav_benchmark_performance.nav_growth_rate",
+        "nav_benchmark_performance.benchmark_return_rate",
+        "tracking_error.value_text",
+        "turnover_rate",
+        "holdings_snapshot.top_holdings",
+        "holdings_snapshot.bond_top_holdings",
+        "holdings_snapshot.target_fund_holdings",
+        "manager_strategy_text",
+        "holder_structure",
+        "share_change",
+        "bond_risk_evidence"
+      ],
+      "production_parser_replacement_status": "not_authorized",
+      "sample_id": "S5",
+      "source_kind": "docling_pdf_candidate",
+      "source_path": "reports/representation-json/017641_2024_docling_full.json",
+      "source_truth_status": "not_proven"
+    },
+    {
+      "anchor_count": 16,
+      "blocked_count": 0,
+      "blocked_field_paths": [],
+      "candidate_status": "not_proven",
+      "diagnostics": {
+        "blocked_field_count": 0,
+        "direct_field_count": 13,
+        "missing_field_count": 10,
+        "target_field_count": 23
+      },
+      "direct_count": 13,
+      "direct_fields": [
+        {
+          "anchor_section_ids": [
+            "§2"
+          ],
+          "field_path": "basic_identity.fund_name",
+          "notes": [
+            "candidate_only:label=基金名称; locator_hash=5929a2008bbe03275463e503ffaefd035572b8504a829764c4f4b7b55f49a19c"
+          ],
+          "value": "易方达沪深 300 交易型开放式指数发起式证券投资基金 联接基金"
+        },
+        {
+          "anchor_section_ids": [
+            "§2"
+          ],
+          "field_path": "basic_identity.fund_code",
+          "notes": [
+            "candidate_only:label=基金主代码; locator_hash=53c3e514940d71533518b3dcad322f9214a4d1132bc4400c2167e8dff0c45111"
+          ],
+          "value": "110020"
+        },
+        {
+          "anchor_section_ids": [
+            "§2"
+          ],
+          "field_path": "basic_identity.management_company",
+          "notes": [
+            "candidate_only:label=基金管理人; locator_hash=4e2ebbf759e5f3af1619fa04a1b12d7b3b297828ba6aeb6e8f43eba14cc650c1"
+          ],
+          "value": "易方达基金管理有限公司"
+        },
+        {
+          "anchor_section_ids": [
+            "§2"
+          ],
+          "field_path": "basic_identity.custodian",
+          "notes": [
+            "candidate_only:label=基金托管人; locator_hash=9ba51762b3e95e42517a694052c1a7b27590c32ca106566e7013175aa6c3b14e"
+          ],
+          "value": "中国建设银行股份有限公司"
+        },
+        {
+          "anchor_section_ids": [
+            "§2"
+          ],
+          "field_path": "product_profile.investment_objective",
+          "notes": [
+            "candidate_only:label=投资目标; locator_hash=f0dabd5fd40715437656d545c047061c6efc3de814babf98903587554f047f4b"
+          ],
+          "value": "紧密跟踪业绩比较基准，追求跟踪偏离度及跟踪误差的最小化。"
+        },
+        {
+          "anchor_section_ids": [
+            "§2"
+          ],
+          "field_path": "benchmark.benchmark_text",
+          "notes": [
+            "candidate_only:label=紧密跟踪业绩比较基准，追求跟踪偏离度及跟踪误差的最小化。; locator_hash=a2fd78e496f6571aee5e2f0ea1d5230131840f698dfc5a940d6a335ee9be0875"
+          ],
+          "value": "投资目标"
+        },
+        {
+          "anchor_section_ids": [
+            "§2"
+          ],
+          "field_path": "risk_characteristic_text.risk_characteristic_text",
+          "notes": [
+            "candidate_only:label=风险收益特征; locator_hash=c873506e3066976c73488a2878a94c7404b9b52a41c3c304f2376939dc5441e4"
+          ],
+          "value": "本基金为沪深 300ETF 的联接基金，其预期风险收益水平高于混合型基 金、债券基金和货币市场基金；本基金主要通过投资沪深 300ETF 实现对 业绩比较基准的紧密跟踪，具有与业绩比较基准相似的风险收益特征。"
+        },
+        {
+          "anchor_section_ids": [
+            "§7"
+          ],
+          "field_path": "fee_schedule.management_fee",
+          "notes": [
+            "candidate_only:label=当期发生的基金应支付的管理费; locator_hash=f96968d55243fbefd82291b0209f6d088d7e3ac52a206108cd066e7647fe6b08"
+          ],
+          "value": "1,601,454.92"
+        },
+        {
+          "anchor_section_ids": [
+            "§7"
+          ],
+          "field_path": "fee_schedule.custody_fee",
+          "notes": [
+            "candidate_only:label=应付托管费; locator_hash=9252edc9c924df0711fc610f8e738dd698819baabd8c304088c539ae79e46081"
+          ],
+          "value": "59,299.54"
+        },
+        {
+          "anchor_section_ids": [
+            "§4",
+            "§4",
+            "§4",
+            "§4"
+          ],
+          "field_path": "portfolio_managers",
+          "notes": [
+            "candidate_only:portfolio_manager_row; locator_hash=882b7b8b5ffefbeec2e7fab66d68f93ce236848c46c3f26195d5f1584462acd7",
+            "candidate_only:portfolio_manager_row; locator_hash=0edddc31ac260104cf76177f2a09dd83724860fef09d4e0f0377b9caed3dad69",
+            "candidate_only:portfolio_manager_row; locator_hash=570b7e3c0afc35c87b2b60231551d83453304e53304b94127e2e2cfdd3490b46",
+            "candidate_only:portfolio_manager_row; locator_hash=f43f783584de74c0278c268fcadbd41a9967d2ccd8dd2ac7cab01dbf8873ec67"
+          ],
+          "value": {
+            "managers": [
+              {
+                "name": "任本基金的 基金经理（助 理）期限"
+              },
+              {
+                "name": "本基金的基金经理， 易方达沪深 300 医药 ETF 、易方达沪深 300 非银 ETF 、易方达沪深 300 非银联接、 易方达沪深 300ETF 、易方达中证 500ETF 、易方达中证海外中国互联 网 50 （ QDII-ETF ） 、易方达沪深 300 医药 ETF 联接、易方达恒生国企联 接（ QDII ） 、易方达恒生国企 （ QDII-ETF ） 、易方达中证海外中 国互联网 50ETF 联接（ QDII ） 、易 方达中证 500ETF 联接发起式、易 方达日兴资管日经 225ETF （ QDII ） 、 易方达上证 50ETF 、易方达上证 50ETF 联接发起式、易方达中证军 工指数（ LOF ） 、易方达中证全指证 券公司指数（ LOF ） 、易方达中证军 工 ETF 、易方达中证港股通互联网 ETF （自 2023 年 05 月 31 日至 2024 年 11 月 26 日） 、易方达中证港股通 互联网 ETF 联接发起式（自 2023 年 09 月 21 日至 2024 年 11 月 26 日） 的基金经理， 指数投资部副总经理、 指数投资决策委员会委员"
+              },
+              {
+                "name": "本基金的基金经理，易方达中证上"
+              },
+              {
+                "name": "海环交所碳中和 ETF （自 2022 年 08 月 10 日至 2024 年 07 月 12 日） 、 易方达沪深 300ETF 、易方达中证 500ETF 联接发起式、易方达中证 500ETF 、易方达北证 50 成份指数、 易方达标普生物科技指数 （ QDII-LOF ） （自 2023 年 02 月 10 日至 2024 年 07 月 12 日） 、易方达 中证 1000ETF 联接、易方达中证 1000ETF 、易方达中证光伏产业指 数发起式（自 2023 年 04 月 11 日至 2024 年 05 月 06 日） 、易方达中证 国新央企科技引领 ETF 、易方达中 证 A100ETF 、易方达中证港股通互 联网 ETF （自 2023 年 07 月 27 日至 2024 年 11 月 26 日） 、易方达上证 科创板成长 ETF 、易方达中证家电 龙头 ETF 联接发起式、易方达中证 港股通互联网 ETF 联接发起式（自 2023 年 09 月 21 日至 2024 年 11 月 26 日） 、 易方达上证科创板 100ETF 、 易方达中证国新央企科技引领 ETF 联接、易方达中证 A500ETF 联接、 易方达中证 A500ETF 的基金经理， 指数研究部总经理、指数投资决策 委员会委员"
+              }
+            ],
+            "schema_version": "portfolio_manager_tenure_list.v1"
+          }
+        },
+        {
+          "anchor_section_ids": [
+            "§10"
+          ],
+          "field_path": "manager_alignment.manager_holding_range",
+          "notes": [
+            "candidate_only:label=本基金基金经理持有本开 放式基金; locator_hash=ddf6e17dc1ca31b08f1b2a7605c0a67cc2859a0548419f665a8c9126e836cddf"
+          ],
+          "value": "易方达沪深 300ETF 联 接 A"
+        },
+        {
+          "anchor_section_ids": [
+            "§8"
+          ],
+          "field_path": "holdings_snapshot.top_holdings",
+          "notes": [
+            "candidate_only:holding_row_match; locator_hash=0eed0d455c559a2b8e6b9982b915a730f640318bdc00547be12cb5c929c34854"
+          ],
+          "value": {
+            "rows": [
+              {
+                "fair_value_cny": "19,085,355,845.4 0",
+                "name": "易方达沪深 300 交易型 开放式指数 发起式证券 投资基金",
+                "net_asset_ratio": null
+              }
+            ]
+          }
+        },
+        {
+          "anchor_section_ids": [
+            "§8"
+          ],
+          "field_path": "holdings_snapshot.target_fund_holdings",
+          "notes": [
+            "candidate_only:holding_row_match; locator_hash=0eed0d455c559a2b8e6b9982b915a730f640318bdc00547be12cb5c929c34854"
+          ],
+          "value": {
+            "rows": [
+              {
+                "fair_value_cny": "19,085,355,845.4 0",
+                "name": "易方达沪深 300 交易型 开放式指数 发起式证券 投资基金",
+                "net_asset_ratio": null
+              }
+            ]
+          }
+        }
+      ],
+      "document_year": 2024,
+      "field_correctness_status": "not_proven",
+      "fund_code": "110020",
+      "missing_count": 10,
+      "missing_field_paths": [
+        "product_profile.investment_scope",
+        "nav_benchmark_performance.nav_growth_rate",
+        "nav_benchmark_performance.benchmark_return_rate",
+        "tracking_error.value_text",
+        "turnover_rate",
+        "holdings_snapshot.bond_top_holdings",
+        "manager_strategy_text",
+        "holder_structure",
+        "share_change",
+        "bond_risk_evidence"
+      ],
+      "production_parser_replacement_status": "not_authorized",
+      "sample_id": "S6",
+      "source_kind": "docling_pdf_candidate",
+      "source_path": "reports/representation-json/110020_2024_docling_full.json",
+      "source_truth_status": "not_proven"
+    }
+  ],
+  "section_context_baseline": {
+    "anchor_count": 52,
+    "direct_coverage_ratio": 0.5217391304347826,
+    "direct_slot_count": 48
+  }
+}

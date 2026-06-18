@@ -1,0 +1,215 @@
+{
+  "schema_version": "fund-agent.small_golden_set_manual_source_payload_batch.v2",
+  "provider": "user_provided",
+  "gate": "manual evidence intake gate for all 5 rows",
+  "report_year": 2024,
+  "document_kind": "annual_report",
+  "source_identity_policy": {
+    "eid_role": "preferred_official_registry_locator",
+    "official_document_url_allowed_origins": [
+      "eid_official_pdf",
+      "fund_company_official_pdf",
+      "cninfo_pdf",
+      "other_official_first_party_disclosure_platform"
+    ],
+    "search_result_is_source_truth": false,
+    "fallback_is_source_truth": false,
+    "synthetic_fixture_is_source_truth": false,
+    "llm_summary_is_source_truth": false,
+    "exact_numeric_correctness_allowed_by_this_payload": false
+  },
+  "agent_side_access": {
+    "network": false,
+    "pdf_download": false,
+    "pdf_read": false,
+    "pdf_hash": false,
+    "fund_document_repository": false,
+    "fallback": false,
+    "eid_live_access": false
+  },
+  "rows": [
+    {
+      "fund_code": "004393",
+      "report_year": 2024,
+      "document_kind": "annual_report",
+      "official_registry_locator": {
+        "preferred_registry": "EID",
+        "official_search_url": "http://eid.csrc.gov.cn/fund/disclose/advanced_search.html?queryType=1&reportType=FB010&fundCode=004393",
+        "official_fund_detail_url": "http://eid.csrc.gov.cn/fund/disclose/fund_detail_search.do?cFundCode=1618&rnd=0.602227203698933"
+      },
+      "official_document_url": "http://eid.csrc.gov.cn/fund/disclose/instance_show_pdf_id.do?instanceid=1248088",
+      "official_document_url_origin": "eid_official_pdf",
+      "official_document_id": "instanceid=1248088",
+      "official_announcement_id": "unknown",
+      "source_document_title": "安信企业价值优选混合型证券投资基金2024年年度报告",
+      "source_publisher": "安信基金管理有限责任公司",
+      "source_registry": "中国证监会基金电子披露网站 / EID",
+      "publication_date": "2025-03-28",
+      "fund_name": "安信企业价值优选混合型证券投资基金",
+      "share_class": {
+        "target": "A",
+        "target_code": "004393",
+        "other_classes": [
+          "C=020964"
+        ]
+      },
+      "user_provided_pdf_sha256": "bc6b0a1ae2f709f4cb4fa501f88ba9c19aa0f37d36758160577c57222e9860bf",
+      "pdf_hash_status": "user_provided",
+      "identity_anchor": {
+        "title_annual_report": "标题=安信企业价值优选混合型证券投资基金2024年年度报告",
+        "publisher": "基金管理人=安信基金管理有限责任公司",
+        "profile": "§2 基金简介 / 基金产品概况：基金主代码=004393；下属分级基金交易代码 A=004393；C=020964",
+        "registry_locator": "fundCode=004393；reportType=FB010；披露日期=2025-03-28；document instanceid=1248088"
+      },
+      "source_truth_boundary": "official_document_url_plus_user_provided_anchors",
+      "source_identity_acceptance_status": "pending_source_identity_acceptance_decision"
+    },
+    {
+      "fund_code": "004194",
+      "report_year": 2024,
+      "document_kind": "annual_report",
+      "official_registry_locator": {
+        "preferred_registry": "EID",
+        "official_search_url": "http://eid.csrc.gov.cn/fund/disclose/advanced_search.html?queryType=1&reportType=FB010&fundCode=004194",
+        "official_fund_detail_url": "http://eid.csrc.gov.cn/fund/disclose/fund_detail_search.do?cFundCode=1488&rnd=0.41437996451709624"
+      },
+      "official_document_url": "http://eid.csrc.gov.cn/fund/disclose/instance_show_pdf_id.do?instanceid=1248907",
+      "official_document_url_origin": "eid_official_pdf",
+      "official_document_id": "instanceid=1248907",
+      "official_announcement_id": "unknown",
+      "source_document_title": "招商中证1000 指数增强型证券投资基金2024 年年度报告",
+      "source_publisher": "招商基金管理有限公司",
+      "source_registry": "中国证监会基金电子披露网站 / EID",
+      "publication_date": "2025-03-28",
+      "fund_name": "招商中证1000指数增强型证券投资基金",
+      "share_class": {
+        "target": "A",
+        "target_code": "004194",
+        "other_classes": [
+          "C=004195"
+        ]
+      },
+      "user_provided_pdf_sha256": "not_provided",
+      "pdf_hash_status": "not_provided",
+      "identity_anchor": {
+        "title_annual_report": "标题=招商中证1000 指数增强型证券投资基金2024 年年度报告",
+        "publisher": "基金管理人=招商基金管理有限公司",
+        "profile": "§2 基金简介 / 基金产品概况：基金主代码=004194；下属分级基金交易代码 A=004194；C=004195",
+        "registry_locator": "fundCode=004194；reportType=FB010；披露日期=2025-03-28；document instanceid=1248907"
+      },
+      "source_truth_boundary": "official_document_url_plus_user_provided_anchors",
+      "source_identity_acceptance_status": "pending_source_identity_acceptance_decision"
+    },
+    {
+      "fund_code": "006597",
+      "report_year": 2024,
+      "document_kind": "annual_report",
+      "official_registry_locator": {
+        "preferred_registry": "EID",
+        "official_search_url": "http://eid.csrc.gov.cn/fund/disclose/advanced_search.html?queryType=1&reportType=FB010&fundCode=006597",
+        "official_fund_detail_url": "unknown"
+      },
+      "official_document_url": "https://static.cninfo.com.cn/finalpage/2025-03-29/1222957988.PDF",
+      "official_document_url_origin": "cninfo_pdf",
+      "official_document_id": "cninfo:1222957988",
+      "official_announcement_id": "unknown",
+      "source_document_title": "国泰利享中短债债券型证券投资基金2024年年度报告",
+      "source_publisher": "国泰基金管理有限公司",
+      "source_registry": "巨潮资讯 / CNINFO；EID search locator provided, EID document id unknown",
+      "publication_date": "2025-03-29",
+      "fund_name": "国泰利享中短债债券型证券投资基金",
+      "share_class": {
+        "target": "A",
+        "target_code": "006597",
+        "other_classes": [
+          "C=006598",
+          "E=014217",
+          "F=022176"
+        ]
+      },
+      "user_provided_pdf_sha256": "not_provided",
+      "pdf_hash_status": "not_provided",
+      "identity_anchor": {
+        "title_annual_report": "标题=国泰利享中短债债券型证券投资基金2024年年度报告",
+        "publisher": "基金管理人=国泰基金管理有限公司",
+        "profile": "§2 基金简介 / 2.1 基金基本情况：基金主代码=006597；基金名称=国泰利享中短债债券型证券投资基金；下属分级基金交易代码 A=006597，C=006598，E=014217，F=022176",
+        "registry_locator": "EID search locator provided；CNINFO PDF id=1222957988；披露日期/报告送出日期=2025-03-29"
+      },
+      "source_truth_boundary": "official_document_url_plus_user_provided_anchors",
+      "source_identity_acceptance_status": "pending_source_identity_acceptance_decision"
+    },
+    {
+      "fund_code": "110020",
+      "report_year": 2024,
+      "document_kind": "annual_report",
+      "official_registry_locator": {
+        "preferred_registry": "EID",
+        "official_search_url": "http://eid.csrc.gov.cn/fund/disclose/advanced_search.html?queryType=1&reportType=FB010&fundCode=110020",
+        "official_fund_detail_url": "unknown"
+      },
+      "official_document_url": "https://cdn.efunds.com.cn/owch/data/bulletin/20250331/%E6%98%93%E6%96%B9%E8%BE%BE%E6%B2%AA%E6%B7%B1300%E4%BA%A4%E6%98%93%E5%9E%8B%E5%BC%80%E6%94%BE%E5%BC%8F%E6%8C%87%E6%95%B0%E5%8F%91%E8%B5%B7%E5%BC%8F%E8%AF%81%E5%88%B8%E6%8A%95%E8%B5%84%E5%9F%BA%E9%87%91%E8%81%94%E6%8E%A5%E5%9F%BA%E9%87%912024%E5%B9%B4%E5%B9%B4%E5%BA%A6%E6%8A%A5%E5%91%8A.pdf",
+      "official_document_url_origin": "fund_company_official_pdf",
+      "official_document_id": "efunds-bulletin-20250331-annual-report-110020",
+      "official_announcement_id": "unknown",
+      "source_document_title": "易方达沪深300交易型开放式指数发起式证券投资基金联接基金2024年年度报告",
+      "source_publisher": "易方达基金管理有限公司",
+      "source_registry": "易方达基金官网 CDN；EID search locator provided, EID document id unknown",
+      "publication_date": "2025-03-31",
+      "fund_name": "易方达沪深300交易型开放式指数发起式证券投资基金联接基金",
+      "share_class": {
+        "target": "A",
+        "target_code": "110020",
+        "other_classes": [
+          "C=007339",
+          "Y=022928"
+        ]
+      },
+      "user_provided_pdf_sha256": "not_provided",
+      "pdf_hash_status": "not_provided",
+      "identity_anchor": {
+        "title_annual_report": "标题=易方达沪深300交易型开放式指数发起式证券投资基金联接基金2024年年度报告",
+        "publisher": "基金管理人=易方达基金管理有限公司",
+        "profile": "§2 基金简介 / 2.1 基金基本情况：基金主代码=110020；基金名称=易方达沪深300交易型开放式指数发起式证券投资基金联接基金；下属分级基金交易代码 A=110020，C=007339，Y=022928",
+        "registry_locator": "EID search locator provided；易方达基金官网公告路径日期=20250331"
+      },
+      "source_truth_boundary": "official_document_url_plus_user_provided_anchors",
+      "source_identity_acceptance_status": "pending_source_identity_acceptance_decision"
+    },
+    {
+      "fund_code": "017641",
+      "report_year": 2024,
+      "document_kind": "annual_report",
+      "official_registry_locator": {
+        "preferred_registry": "EID",
+        "official_search_url": "http://eid.csrc.gov.cn/fund/disclose/advanced_search.html?queryType=1&reportType=FB010&fundCode=017641",
+        "official_fund_detail_url": "unknown"
+      },
+      "official_document_url": "https://www.cifm.com/fund/017641/announce/202503/W020250331321243719367.pdf",
+      "official_document_url_origin": "fund_company_official_pdf",
+      "official_document_id": "cifm:W020250331321243719367",
+      "official_announcement_id": "unknown",
+      "source_document_title": "摩根标普500指数型发起式证券投资基金(QDII)2024年年度报告",
+      "source_publisher": "摩根基金管理（中国）有限公司",
+      "source_registry": "摩根基金官网 / CIFM；EID search locator provided, EID document id unknown",
+      "publication_date": "2025-03-31",
+      "fund_name": "摩根标普500指数型发起式证券投资基金(QDII)",
+      "share_class": {
+        "target": "人民币A",
+        "target_code": "017641",
+        "other_classes": [
+          "人民币C=019305"
+        ]
+      },
+      "user_provided_pdf_sha256": "not_provided",
+      "pdf_hash_status": "not_provided",
+      "identity_anchor": {
+        "title_annual_report": "标题=摩根标普500指数型发起式证券投资基金(QDII)2024年年度报告",
+        "publisher": "基金管理人=摩根基金管理（中国）有限公司",
+        "profile": "§2 基金简介 / 2.1 基金基本情况：基金主代码=017641；基金名称=摩根标普500指数型发起式证券投资基金(QDII)；下属分级基金交易代码 人民币A=017641，人民币C=019305",
+        "registry_locator": "EID search locator provided；摩根基金官网公告路径日期=202503"
+      },
+      "source_truth_boundary": "official_document_url_plus_user_provided_anchors",
+      "source_identity_acceptance_status": "pending_source_identity_acceptance_decision"
+    }
+  ]
+}

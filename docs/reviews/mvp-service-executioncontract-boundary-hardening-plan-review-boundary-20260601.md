@@ -90,4 +90,3 @@ None requiring user input. The blocking findings are plan-specification issues a
 ## Plan Review Verdict
 
 Plan review verdict: not accepted; blocking findings present.
-

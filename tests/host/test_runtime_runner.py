@@ -165,6 +165,237 @@ def test_run_sync_records_operation_phase_events() -> None:
     }
 
 
+def test_run_sync_event_sink_receives_events_in_order() -> None:
+    """验证 event_sink 按提交顺序收到 Host 事件。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 sink 事件顺序或结果事件不一致时抛出。
+    """
+
+    sink_events = []
+
+    def operation(context: HostRunContext) -> str:
+        context.record_phase_started(phase="writer", chapter_id=1, attempt=0)
+        context.record_phase_completed(
+            phase="writer",
+            chapter_id=1,
+            attempt=0,
+            elapsed_ms=12,
+        )
+        return "ok"
+
+    result = HostRuntimeRunner().run_sync(
+        operation_name="unit_operation",
+        operation=operation,
+        timeout_seconds=10,
+        event_sink=sink_events.append,
+    )
+
+    assert sink_events == list(result.events)
+    assert [event.event_type for event in sink_events] == [
+        HostRunEventType.RUN_STARTED,
+        HostRunEventType.PHASE_STARTED,
+        HostRunEventType.PHASE_COMPLETED,
+        HostRunEventType.RUN_COMPLETED,
+    ]
+
+
+def test_run_sync_event_sink_receives_terminal_failure_event() -> None:
+    """验证 event_sink 在失败路径收到 failed 终态事件。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 sink 未收到 failed 终态事件时抛出。
+    """
+
+    sink_events = []
+
+    def operation(context: HostRunContext) -> object:
+        raise RuntimeError(f"boom {context.run_id}")
+
+    result = HostRuntimeRunner().run_sync(
+        operation_name="unit_operation",
+        operation=operation,
+        timeout_seconds=10,
+        event_sink=sink_events.append,
+    )
+
+    assert result.status == HostRunStatus.FAILED
+    assert sink_events[-1].event_type == HostRunEventType.RUN_FAILED
+    assert sink_events[-1] is result.events[-1]
+
+
+def test_run_sync_event_sink_payload_is_safe() -> None:
+    """验证 event_sink 只收到 Host allowlist 标量诊断。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 sink payload 含 unsafe key 或复杂值时抛出。
+    """
+
+    sink_events = []
+
+    def operation(context: HostRunContext) -> str:
+        context.record_diagnostic(
+            phase="writer",
+            chapter_id=1,
+            attempt=0,
+            elapsed_ms=7,
+        )
+        return "ok"
+
+    result = HostRuntimeRunner().run_sync(
+        operation_name="unit_operation",
+        operation=operation,
+        timeout_seconds=10,
+        event_sink=sink_events.append,
+    )
+
+    assert sink_events == list(result.events)
+    for event in sink_events:
+        for key, value in event.diagnostics.items():
+            assert "prompt" not in key.lower()
+            assert "draft" not in key.lower()
+            assert "response" not in key.lower()
+            assert "authorization" not in key.lower()
+            assert value is None or isinstance(value, bool | int | float | str)
+
+
+def test_run_sync_rejects_diagnostic_sensitive_values_before_event_sink() -> None:
+    """验证 Host 事件提交前拒绝敏感诊断字符串值。"""
+
+    sink_events = []
+
+    def operation(context: HostRunContext) -> str:
+        context.record_diagnostic(message="Bearer sk-test-secret system_prompt raw_response")
+        return "ok"
+
+    result = HostRuntimeRunner().run_sync(
+        operation_name="unit_operation",
+        operation=operation,
+        timeout_seconds=10,
+        event_sink=sink_events.append,
+    )
+
+    assert result.status == "failed"
+    assert sink_events == list(result.events)
+    assert all("sk-test-secret" not in str(event.diagnostics) for event in sink_events)
+
+
+def test_run_sync_event_sink_receives_committed_event_object() -> None:
+    """验证 sink 收到的是已进入 HostRunResult.events 的同一事件对象。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 sink 事件对象不是结果事件对象时抛出。
+    """
+
+    sink_events = []
+
+    result = HostRuntimeRunner().run_sync(
+        operation_name="unit_operation",
+        operation=lambda context: "ok",
+        timeout_seconds=10,
+        event_sink=sink_events.append,
+    )
+
+    assert sink_events[0] is result.events[0]
+    assert sink_events[-1] is result.events[-1]
+
+
+def test_run_sync_event_sink_receives_cancelled_event() -> None:
+    """验证 event_sink 在 cancelled 路径收到取消终态事件。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 sink 未收到取消终态事件时抛出。
+    """
+
+    sink_events = []
+
+    def operation(context: HostRunContext) -> str:
+        context.cancellation_token.cancel(HostCancelReason.USER_CANCELLED)
+        return "partial"
+
+    result = HostRuntimeRunner().run_sync(
+        operation_name="unit_operation",
+        operation=operation,
+        timeout_seconds=10,
+        event_sink=sink_events.append,
+    )
+
+    assert result.status == HostRunStatus.CANCELLED
+    assert sink_events[-1].event_type == HostRunEventType.RUN_CANCELLED
+    assert sink_events[-1] is result.events[-1]
+
+
+def test_run_sync_event_sink_exception_propagates_from_host() -> None:
+    """验证 Host 不吞掉 event_sink 异常。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 Host 吞掉或翻译 sink 异常时抛出。
+    """
+
+    def raise_sink(_event) -> None:  # type: ignore[no-untyped-def]
+        """模拟 sink 写入失败。
+
+        Args:
+            _event: Host 事件。
+
+        Returns:
+            无返回值。
+
+        Raises:
+            RuntimeError: 始终抛出。
+        """
+
+        raise RuntimeError("sink failure")
+
+    try:
+        HostRuntimeRunner().run_sync(
+            operation_name="unit_operation",
+            operation=lambda context: "ok",
+            timeout_seconds=10,
+            event_sink=raise_sink,
+        )
+    except RuntimeError as exc:
+        assert str(exc) == "sink failure"
+    else:  # pragma: no cover - 只用于明确失败信息。
+        raise AssertionError("Host swallowed event_sink exception")
+
+
 def test_run_sync_exception_is_failed_with_safe_error_type() -> None:
     """验证 operation 异常被收敛为 failed 终态和安全错误类型。"""
 

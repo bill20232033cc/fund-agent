@@ -2,7 +2,7 @@
 
 `fund_agent/config` 当前维护两类配置入口：
 
-- `fund_agent/config/paths.py`：默认 CSV、golden answer、snapshot、quality gate 和 cache 目录的唯一常量入口。
+- `fund_agent/config/paths.py`：默认 CSV、golden answer、snapshot、quality gate、LLM incomplete run artifact、candidate representation JSON 和 cache / Docling artifact 目录的唯一常量入口。
 - `fund_agent/config/llm.py`：Route C `--use-llm` 路径的 typed LLM env config，只把显式环境变量解析为不可变配置对象。
 
 当前配置包仍不提供通用 workspace/runtime 配置系统：

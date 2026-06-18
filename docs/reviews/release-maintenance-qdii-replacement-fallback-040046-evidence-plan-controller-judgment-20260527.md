@@ -89,4 +89,3 @@ Do not modify code, tests, renderer, FQ0-FQ6, Service/CLI defaults, `FundDocumen
 | Possible repeated QDII P0 `nav_benchmark_performance` gap | future QDII diagnosis or replacement decision gate | Do not diagnose or fix in evidence gate; classify and keep not promoted. |
 | Possible P0 `manager_strategy_text` gap | future QDII diagnosis or replacement decision gate | Classify from public evidence; no extractor/policy change in evidence gate. |
 | `019172` remains contingency-only | future fallback plan gate if `040046` fails | Do not run without a new accepted plan. |
-

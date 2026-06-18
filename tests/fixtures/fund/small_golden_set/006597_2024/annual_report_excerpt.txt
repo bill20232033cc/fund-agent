@@ -1,0 +1,17 @@
+SYNTHETIC SMALL GOLDEN SET EXCERPT
+fund_code: 006597
+report_year: 2024
+fixture_source_kind: synthetic
+source_identity: unmatched_synthetic
+fallback_invocation: prohibited
+promotion_allowed: false
+
+synthetic§identity: 基金代码 006597，报告年度 2024，基金类型 bond_fund。
+synthetic§source_document: 2024 annual_report synthetic minimal excerpt；不是年报原文。
+synthetic§benchmark: 业绩比较基准占位片段。
+synthetic§manager: 基金经理占位片段。
+synthetic§scale: 基金规模占位片段。
+synthetic§fee: 管理费率和托管费率占位片段。
+synthetic§return: 净值增长率和基准收益率占位片段。
+synthetic§holdings: 债券持仓占位片段。
+synthetic§risk: 久期、信用和回撤风险占位片段。

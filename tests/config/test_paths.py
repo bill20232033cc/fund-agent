@@ -23,9 +23,11 @@ EXPECTED_DEFAULTS = {
     "DEFAULT_GOLDEN_ANSWER_JSON": Path("reports/golden-answers/golden-answer.json"),
     "DEFAULT_EXTRACTION_SNAPSHOT_ROOT": Path("reports/extraction-snapshots"),
     "DEFAULT_QUALITY_GATE_OUTPUT_ROOT": Path("reports/quality-gate-runs"),
+    "DEFAULT_REPRESENTATION_JSON_OUTPUT_ROOT": Path("reports/representation-json"),
     "DEFAULT_CACHE_ROOT": Path("cache"),
     "DEFAULT_DOCUMENT_CACHE_ROOT": Path("cache/documents"),
     "DEFAULT_PDF_CACHE_ROOT": Path("cache/pdf"),
+    "DEFAULT_DOCLING_ARTIFACT_ROOT": Path("cache/docling-artifacts"),
     "DEFAULT_NAV_CACHE_ROOT": Path("cache/nav"),
     "DEFAULT_THERMOMETER_CACHE_ROOT": Path("cache/thermometer"),
 }
@@ -124,6 +126,7 @@ def test_existing_path_aliases_point_to_config_defaults() -> None:
     from fund_agent.fund.data import nav_data, thermometer
     from fund_agent.fund.documents import cache as document_cache
     from fund_agent.fund.pdf import downloader
+    from fund_agent.fund.documents.candidates import representation_export, representation_handlers
     from fund_agent.fund import quality_gate_integration
     from fund_agent.services import fund_analysis_service
     from fund_agent.ui import cli
@@ -145,6 +148,12 @@ def test_existing_path_aliases_point_to_config_defaults() -> None:
     )
     assert document_cache.DOCUMENT_CACHE_ROOT == paths.DEFAULT_DOCUMENT_CACHE_ROOT
     assert downloader.DEFAULT_CACHE_DIR == paths.DEFAULT_PDF_CACHE_ROOT
+    assert representation_export.DEFAULT_OUTPUT_ROOT == paths.DEFAULT_REPRESENTATION_JSON_OUTPUT_ROOT
+    assert representation_export.PRODUCTION_CACHE_ROOT == paths.DEFAULT_PDF_CACHE_ROOT
+    assert (
+        representation_handlers.CandidateHandlerConfig().docling_artifacts_path
+        == paths.DEFAULT_DOCLING_ARTIFACT_ROOT
+    )
     assert nav_data.NAV_CACHE_ROOT == paths.DEFAULT_NAV_CACHE_ROOT
     assert thermometer.THERMOMETER_CACHE_ROOT == paths.DEFAULT_THERMOMETER_CACHE_ROOT
 

@@ -220,6 +220,119 @@ def test_extract_manager_ownership_outputs_strategy_text_from_numbered_headings(
     }
 
 
+def test_extract_manager_ownership_outputs_portfolio_manager_tenure_list_from_table() -> None:
+    """验证 `§4.1.2` 基金经理简介表可抽取任期列表。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当任期列表、行内锚点或字段级锚点不正确时抛出。
+    """
+
+    raw_text = "\n".join(
+        (
+            "§4 管理人报告",
+            "4.1.2 基金经理简介",
+            "本节基金经理任期字段由表格承载。",
+            "§8 投资组合报告",
+            "§9 基金份额持有人信息",
+        )
+    )
+    manager_table = ParsedTable(
+        page_number=22,
+        table_index=0,
+        headers=("姓名", "职务", "任职日期", "离任日期"),
+        rows=(
+            ("张三", "基金经理", "2021-01-01", ""),
+            ("李四", "基金经理", "2022-02-02", "2024-12-31"),
+        ),
+    )
+    report = _build_report_from_text_and_tables(raw_text, (manager_table,))
+
+    result = extract_manager_ownership(report)
+
+    assert result.portfolio_managers.extraction_mode == "direct"
+    assert result.portfolio_managers.value is not None
+    assert result.portfolio_managers.value["schema_version"] == "portfolio_manager_tenure_list.v1"
+    assert result.portfolio_managers.value["fund_code"] == "004393"
+    assert result.portfolio_managers.value["report_year"] == 2024
+    assert result.portfolio_managers.value["portfolio_managers"] == [
+        {
+            "name": "张三",
+            "role": "基金经理",
+            "start_date": "2021-01-01",
+            "source_anchor": {
+                "section_id": "§4",
+                "section_title": "4.1.2 基金经理简介",
+                "page_number": 22,
+                "table_id": "page-22-table-0",
+                "row_locator": "portfolio_manager:张三",
+            },
+        },
+        {
+            "name": "李四",
+            "role": "基金经理",
+            "start_date": "2022-02-02",
+            "end_date": "2024-12-31",
+            "source_anchor": {
+                "section_id": "§4",
+                "section_title": "4.1.2 基金经理简介",
+                "page_number": 22,
+                "table_id": "page-22-table-0",
+                "row_locator": "portfolio_manager:李四",
+            },
+        },
+    ]
+    assert {anchor.section_id for anchor in result.portfolio_managers.anchors} == {"§4"}
+    assert {anchor.table_id for anchor in result.portfolio_managers.anchors} == {"page-22-table-0"}
+    assert {anchor.row_locator for anchor in result.portfolio_managers.anchors} == {
+        "portfolio_manager:张三",
+        "portfolio_manager:李四",
+    }
+
+
+def test_extract_manager_ownership_requires_section_four_manager_roster_heading() -> None:
+    """验证缺少 `§4` 基金经理简介标题时不把表格形状静默锚到 `§4`。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当无标题表格被误抽取为直接披露时抛出。
+    """
+
+    raw_text = "\n".join(
+        (
+            "§4 管理人报告",
+            "4.1.1 基金管理人及基金经理情况",
+            "本节没有可用于定位任期表的基金经理简介标题。",
+            "§8 投资组合报告",
+            "§9 基金份额持有人信息",
+        )
+    )
+    manager_table = ParsedTable(
+        page_number=22,
+        table_index=0,
+        headers=("姓名", "职务", "任职日期", "离任日期"),
+        rows=(("张三", "基金经理", "2021-01-01", ""),),
+    )
+    report = _build_report_from_text_and_tables(raw_text, (manager_table,))
+
+    result = extract_manager_ownership(report)
+
+    assert result.portfolio_managers.extraction_mode == "missing"
+    assert result.portfolio_managers.value is None
+    assert result.portfolio_managers.anchors == ()
+    assert result.portfolio_managers.note is not None
+
+
 def test_extract_manager_ownership_outputs_alignment_and_holder_structure_from_tables() -> None:
     """验证 `§9` 持有人表格可抽取利益一致性和持有人结构原始披露。
 

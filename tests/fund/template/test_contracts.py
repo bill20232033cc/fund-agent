@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
+import json
 from dataclasses import replace
+from pathlib import Path
+from typing import Any
 
 import pytest
 
 from fund_agent.fund.fund_type import FundType
+from fund_agent.fund.template import contracts as contracts_module
 from fund_agent.fund.template import (
     ChapterContract,
     TemplateContractManifest,
@@ -73,6 +77,48 @@ def test_chapter_titles_match_design_and_not_renderer_private_constant() -> None
     manifest = load_template_contract_manifest()
 
     assert tuple(chapter.title for chapter in manifest.chapters) == _EXPECTED_TITLES
+
+
+def test_current_untyped_manifest_projects_slice1_template_json_values() -> None:
+    """验证当前未类型化 manifest 逐项投影 Slice 1 模板 JSON。
+
+    Args:
+        无。
+
+    Returns:
+        无。
+
+    Raises:
+        AssertionError: 当前 manifest 未精确投影模板 JSON 中的章节文本或 lens 值。
+    """
+
+    raw_manifest = _current_template_json()
+    manifest = load_template_contract_manifest()
+
+    assert manifest.template_id == raw_manifest["source_template_id"]
+    assert manifest.source_path == raw_manifest["source_path"]
+    assert tuple(chapter.chapter_id for chapter in manifest.chapters) == tuple(
+        raw_manifest["public_chapter_ids"]
+    )
+
+    for chapter, raw_chapter in zip(manifest.chapters, raw_manifest["chapters"], strict=True):
+        assert chapter.chapter_id == raw_chapter["chapter_id"]
+        assert chapter.title == raw_chapter["title"]
+        assert chapter.narrative_mode == raw_chapter["narrative_mode"]
+        assert chapter.must_answer == tuple(item["text"] for item in raw_chapter["must_answer"])
+        assert chapter.must_not_cover == tuple(
+            item["text"] for item in raw_chapter["must_not_cover"]
+        )
+        assert chapter.required_output_items == tuple(
+            item["text"] for item in raw_chapter["required_output_items"]
+        )
+        assert tuple(chapter.preferred_lens) == tuple(raw_chapter["preferred_lens"])
+        for lens_key, raw_rule in raw_chapter["preferred_lens"].items():
+            projected_rule = chapter.preferred_lens[lens_key]
+            assert projected_rule.fund_type == raw_rule["fund_type"]
+            assert projected_rule.statements == tuple(raw_rule["statements"])
+            assert projected_rule.facets_any == tuple(raw_rule["facets_any"])
+            assert projected_rule.priority == raw_rule["priority"]
 
 
 def test_every_chapter_has_non_empty_contract_fields() -> None:
@@ -203,6 +249,251 @@ def test_validate_template_contract_manifest_fails_closed_for_invalid_cases() ->
     )
     with pytest.raises(ValueError, match="priority 不受支持"):
         validate_template_contract_manifest(unsupported_priority)
+
+
+@pytest.mark.parametrize(
+    ("markdown_text", "expected_message"),
+    (
+        ("# no block\n", "缺少 TEMPLATE_CONTRACT_MANIFEST_JSON"),
+        ("TEMPLATE_CONTRACT_MANIFEST_JSON\n\nEND_TEMPLATE_CONTRACT_MANIFEST_JSON\n", "不能为空"),
+        (
+            "TEMPLATE_CONTRACT_MANIFEST_JSON\n{}\nEND_TEMPLATE_CONTRACT_MANIFEST_JSON\n"
+            "TEMPLATE_CONTRACT_MANIFEST_JSON\n{}\nEND_TEMPLATE_CONTRACT_MANIFEST_JSON\n",
+            "exactly one",
+        ),
+        (
+            "TEMPLATE_CONTRACT_MANIFEST_JSON\n{not-json}\nEND_TEMPLATE_CONTRACT_MANIFEST_JSON\n",
+            "不是合法 JSON",
+        ),
+    ),
+)
+def test_template_doc_parser_fails_closed_for_missing_empty_duplicate_or_malformed_json(
+    tmp_path: Path,
+    markdown_text: str,
+    expected_message: str,
+) -> None:
+    """验证模板 JSON block 缺失、重复、空值或非法 JSON 时 fail closed。
+
+    Args:
+        tmp_path: pytest 临时目录。
+        markdown_text: 待写入临时模板的 Markdown 内容。
+        expected_message: 期望错误信息片段。
+
+    Returns:
+        无。
+
+    Raises:
+        AssertionError: 非法模板未抛出 `ValueError`。
+    """
+
+    template_path = _write_template_markdown(tmp_path, markdown_text)
+
+    with pytest.raises(ValueError, match=expected_message):
+        contracts_module._load_template_contract_manifest_from_path(template_path)
+
+
+@pytest.mark.parametrize(
+    ("mutator", "expected_message"),
+    (
+        (
+            lambda manifest: manifest.update({"unexpected": "value"}),
+            "manifest 存在未知字段",
+        ),
+        (
+            lambda manifest: manifest["chapters"][0].update({"unexpected": "value"}),
+            r"chapters\[0\] 存在未知字段",
+        ),
+        (
+            lambda manifest: manifest["chapters"][0]["preferred_lens"]["default"].update(
+                {"unexpected": "value"}
+            ),
+            r"preferred_lens.default 存在未知字段",
+        ),
+        (
+            lambda manifest: manifest["chapters"][0]["must_answer"][0].update(
+                {"unexpected": "value"}
+            ),
+            r"must_answer\[0\] 存在未知字段",
+        ),
+        (
+            lambda manifest: manifest["chapters"][0]["must_not_cover"][0].update(
+                {"unexpected": "value"}
+            ),
+            r"must_not_cover\[0\] 存在未知字段",
+        ),
+        (
+            lambda manifest: manifest["chapters"][0]["required_output_items"][0].update(
+                {"unexpected": "value"}
+            ),
+            r"required_output_items\[0\] 存在未知字段",
+        ),
+    ),
+)
+def test_template_doc_parser_rejects_unknown_keys_at_nested_levels(
+    tmp_path: Path,
+    mutator: Any,
+    expected_message: str,
+) -> None:
+    """验证顶层、章节、lens 和 item 层 unknown keys 均 fail closed。
+
+    Args:
+        tmp_path: pytest 临时目录。
+        mutator: 修改模板 JSON 的测试函数。
+        expected_message: 期望错误信息片段。
+
+    Returns:
+        无。
+
+    Raises:
+        AssertionError: unknown key 未触发 `ValueError`。
+    """
+
+    manifest = _current_template_json()
+    mutator(manifest)
+    template_path = _write_manifest_template(tmp_path, manifest)
+
+    with pytest.raises(ValueError, match=expected_message):
+        contracts_module._load_template_contract_manifest_from_path(template_path)
+
+
+@pytest.mark.parametrize(
+    ("mutator", "expected_message"),
+    (
+        (
+            lambda manifest: manifest.__setitem__("public_chapter_ids", [0, 1, 2]),
+            "public_chapter_ids",
+        ),
+        (
+            lambda manifest: manifest["chapters"][1].__setitem__("chapter_id", 7),
+            r"chapters\[1\].chapter_id",
+        ),
+        (
+            lambda manifest: manifest["chapters"][0]["must_answer"][0].__setitem__(
+                "id",
+                "ch0.must_answer.item_99",
+            ),
+            "stable id",
+        ),
+        (
+            lambda manifest: manifest["chapters"][0]["must_answer"][0].__setitem__(
+                "text",
+                "",
+            ),
+            r"must_answer\[0\].text",
+        ),
+        (
+            lambda manifest: manifest["chapters"][0]["preferred_lens"].__setitem__(
+                "money_market_fund",
+                {
+                    "fund_type": "money_market_fund",
+                    "statements": ["非法基金类型"],
+                    "facets_any": [],
+                    "priority": "core",
+                },
+            ),
+            "不支持的 lens key",
+        ),
+        (
+            lambda manifest: manifest["chapters"][0]["preferred_lens"]["index_fund"].__setitem__(
+                "fund_type",
+                "default",
+            ),
+            "fund_type 必须等于 lens key",
+        ),
+        (
+            lambda manifest: manifest["chapters"][0]["preferred_lens"]["default"].__setitem__(
+                "priority",
+                "urgent",
+            ),
+            "priority.*不受支持",
+        ),
+        (
+            lambda manifest: manifest["chapters"][0]["required_output_items"][0].__setitem__(
+                "when_evidence_missing",
+                "invent",
+            ),
+            "when_evidence_missing 不受支持",
+        ),
+    ),
+)
+def test_template_doc_parser_rejects_chapter_id_id_text_and_lens_drift(
+    tmp_path: Path,
+    mutator: Any,
+    expected_message: str,
+) -> None:
+    """验证章节 id、stable id、text shape、lens key/priority 漂移均 fail closed。
+
+    Args:
+        tmp_path: pytest 临时目录。
+        mutator: 修改模板 JSON 的测试函数。
+        expected_message: 期望错误信息片段。
+
+    Returns:
+        无。
+
+    Raises:
+        AssertionError: 非法模板未触发 `ValueError`。
+    """
+
+    manifest = _current_template_json()
+    mutator(manifest)
+    template_path = _write_manifest_template(tmp_path, manifest)
+
+    with pytest.raises(ValueError, match=expected_message):
+        contracts_module._load_template_contract_manifest_from_path(template_path)
+
+
+def test_template_doc_parser_cache_is_path_keyed_and_clearable(tmp_path: Path) -> None:
+    """验证模板 manifest cache 按路径隔离且可清理。
+
+    Args:
+        tmp_path: pytest 临时目录。
+
+    Returns:
+        无。
+
+    Raises:
+        AssertionError: cache 未按路径隔离或清理后未重新读取文件。
+    """
+
+    first_manifest = _current_template_json()
+    second_manifest = _current_template_json()
+    first_manifest["chapters"][0]["title"] = "缓存路径 A"
+    second_manifest["chapters"][0]["title"] = "缓存路径 B"
+    first_path = _write_manifest_template(tmp_path / "a", first_manifest)
+    second_path = _write_manifest_template(tmp_path / "b", second_manifest)
+
+    first_projection = contracts_module._load_template_contract_manifest_from_path(first_path)
+    second_projection = contracts_module._load_template_contract_manifest_from_path(second_path)
+
+    assert first_projection.chapters[0].title == "缓存路径 A"
+    assert second_projection.chapters[0].title == "缓存路径 B"
+
+    first_manifest["chapters"][0]["title"] = "缓存路径 A 已更新"
+    first_path.write_text(_manifest_markdown(first_manifest), encoding="utf-8")
+
+    cached_projection = contracts_module._load_template_contract_manifest_from_path(first_path)
+    assert cached_projection.chapters[0].title == "缓存路径 A"
+
+    contracts_module._clear_template_contract_manifest_cache()
+    refreshed_projection = contracts_module._load_template_contract_manifest_from_path(first_path)
+    assert refreshed_projection.chapters[0].title == "缓存路径 A 已更新"
+
+
+def test_template_contracts_module_cli_validate_template_doc() -> None:
+    """验证 no-provider 本地模板校验路径可用。
+
+    Args:
+        无。
+
+    Returns:
+        无。
+
+    Raises:
+        AssertionError: 模块 CLI 校验入口返回非 0。
+    """
+
+    assert contracts_module._main(["--validate-template-doc"]) == 0
 
 
 def test_get_chapter_contract_zero_returns_cover_contract() -> None:
@@ -386,3 +677,83 @@ def _shift_chapters(chapters: tuple[ChapterContract, ...]) -> tuple[ChapterContr
     """
 
     return chapters
+
+
+def _current_template_json() -> dict[str, Any]:
+    """读取当前模板文档中的 canonical JSON。
+
+    Args:
+        无。
+
+    Returns:
+        当前模板契约 JSON 的深拷贝字典。
+
+    Raises:
+        AssertionError: 当前模板 JSON 无法解析时由测试失败体现。
+    """
+
+    template_text = Path("docs/fund-analysis-template-draft.md").read_text(encoding="utf-8")
+    raw_manifest = contracts_module._parse_template_contract_manifest_json(template_text)
+    return json.loads(json.dumps(raw_manifest, ensure_ascii=False))
+
+
+def _write_manifest_template(tmp_path: Path, manifest: dict[str, Any]) -> Path:
+    """把 manifest JSON 写入临时模板 Markdown。
+
+    Args:
+        tmp_path: pytest 临时目录。
+        manifest: 待写入的 manifest JSON。
+
+    Returns:
+        临时模板路径。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return _write_template_markdown(tmp_path, _manifest_markdown(manifest))
+
+
+def _write_template_markdown(tmp_path: Path, markdown_text: str) -> Path:
+    """写入临时模板 Markdown 文本。
+
+    Args:
+        tmp_path: pytest 临时目录。
+        markdown_text: 待写入的 Markdown 文本。
+
+    Returns:
+        临时模板路径。
+
+    Raises:
+        无显式抛出。
+    """
+
+    tmp_path.mkdir(parents=True, exist_ok=True)
+    template_path = tmp_path / "template.md"
+    template_path.write_text(markdown_text, encoding="utf-8")
+    contracts_module._clear_template_contract_manifest_cache()
+    return template_path
+
+
+def _manifest_markdown(manifest: dict[str, Any]) -> str:
+    """构造包含 canonical JSON block 的临时 Markdown。
+
+    Args:
+        manifest: 待写入的 manifest JSON。
+
+    Returns:
+        Markdown 文本。
+
+    Raises:
+        无显式抛出。
+    """
+
+    manifest_json = json.dumps(manifest, ensure_ascii=False, indent=2)
+    return (
+        "# 临时模板\n\n"
+        "<!--\n"
+        "TEMPLATE_CONTRACT_MANIFEST_JSON\n"
+        f"{manifest_json}\n"
+        "END_TEMPLATE_CONTRACT_MANIFEST_JSON\n"
+        "-->\n"
+    )

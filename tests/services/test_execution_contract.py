@@ -342,6 +342,114 @@ def test_execution_request_may_contain_runtime_plan_but_contract_does_not() -> N
     assert "llm_clients" not in contract_field_names
 
 
+def test_typed_template_flags_are_explicit_fields_if_added() -> None:
+    """验证 Slice 7 typed path 只能通过显式字段选择。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 typed path 被放入自由参数袋或默认隐式开启时抛出。
+    """
+
+    runtime_plan = _runtime_plan(
+        chapter_policy=ChapterOrchestrationPolicy(
+            prompt_payload_mode="compact",
+            typed_template_path="typed_template_contract",
+        ),
+        typed_template_path="typed_template_contract",
+    )
+    execution_request = FundLLMExecutionRequest(
+        contract=FundLLMExecutionContract(
+            fund_code="110011",
+            report_year=2024,
+            analysis_input=FundLLMAnalysisInput(fund_code="110011", report_year=2024),
+            quality_policy=QualityPolicyDeclaration(),
+        ),
+        runtime_plan=runtime_plan,
+        llm_clients=ChapterOrchestratorLLMClients(writer=None, auditor=None),
+        typed_template_path="typed_template_contract",
+    )
+
+    request_field_names = {field.name for field in fields(FundLLMExecutionRequest)}
+    runtime_field_names = {field.name for field in fields(FundLLMRuntimePlan)}
+
+    assert execution_request.typed_template_path == "typed_template_contract"
+    assert execution_request.runtime_plan.chapter_policy.typed_template_path == (
+        "typed_template_contract"
+    )
+    assert "typed_template_path" in request_field_names
+    assert "typed_template_path" in runtime_field_names
+    assert "extra_payload" not in request_field_names
+    assert "payload" not in request_field_names
+
+
+def test_no_extra_payload_or_free_business_payload_bag() -> None:
+    """验证 Slice 7 显式 typed path 没有引入自由业务参数袋。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当新增字段或签名出现开放参数袋时抛出。
+    """
+
+    public_objects = (
+        ChapterOrchestrationPolicy,
+        FundLLMRuntimePlan,
+        FundLLMExecutionRequest,
+        build_fund_llm_execution_request,
+    )
+    forbidden_parameter_names = {"extra_payload", "kwargs", "payload", "metadata", "context"}
+
+    for public_object in public_objects:
+        if is_dataclass(public_object):
+            for dataclass_field in fields(public_object):
+                assert dataclass_field.name not in forbidden_parameter_names
+                assert not _is_open_business_bag(dataclass_field.type)
+        signature = inspect.signature(public_object)
+        for parameter in signature.parameters.values():
+            assert parameter.name not in forbidden_parameter_names
+            assert parameter.kind is not inspect.Parameter.VAR_KEYWORD
+            assert not _is_open_business_bag(parameter.annotation)
+
+
+def test_execution_request_rejects_typed_template_path_mismatch() -> None:
+    """验证 request 与 runtime plan 的 typed path 选择必须同源。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 typed path 漂移未被阻断时抛出。
+    """
+
+    with pytest.raises(ValueError, match="typed_template_path"):
+        FundLLMExecutionRequest(
+            contract=FundLLMExecutionContract(
+                fund_code="110011",
+                report_year=2024,
+                analysis_input=FundLLMAnalysisInput(
+                    fund_code="110011",
+                    report_year=2024,
+                ),
+                quality_policy=QualityPolicyDeclaration(),
+            ),
+            runtime_plan=_runtime_plan(typed_template_path="typed_template_contract"),
+            llm_clients=ChapterOrchestratorLLMClients(writer=None, auditor=None),
+            typed_template_path="legacy_contract",
+        )
+
+
 def test_new_dataclasses_and_public_signatures_exclude_open_business_bags() -> None:
     """验证新增类型和函数签名不引入开放业务参数袋。
 
@@ -456,6 +564,7 @@ def _runtime_plan(
     *,
     chapter_policy: ChapterOrchestrationPolicy | None = None,
     host_timeout_seconds: int = 396,
+    typed_template_path: str = "legacy_contract",
 ) -> FundLLMRuntimePlan:
     """构造测试用 Service runtime plan。
 
@@ -472,11 +581,15 @@ def _runtime_plan(
 
     return FundLLMRuntimePlan(
         chapter_policy=chapter_policy
-        or ChapterOrchestrationPolicy(prompt_payload_mode="compact"),
+        or ChapterOrchestrationPolicy(
+            prompt_payload_mode="compact",
+            typed_template_path=typed_template_path,  # type: ignore[arg-type]
+        ),
         assembly_policy=FinalAssemblyPolicy(),
         provider_runtime_budget=_provider_runtime_budget(),
         quality_fail_closed_policy=QualityFailClosedPolicy(),
         safe_diagnostic_policy=SafeDiagnosticPolicy(),
+        typed_template_path=typed_template_path,  # type: ignore[arg-type]
         host_timeout_seconds=host_timeout_seconds,
     )
 
@@ -504,6 +617,7 @@ def _chapter_policy_with_unchecked_ids(
     object.__setattr__(policy, "fail_fast", False)
     object.__setattr__(policy, "run_programmatic_audit", True)
     object.__setattr__(policy, "run_llm_audit", True)
+    object.__setattr__(policy, "typed_template_path", "legacy_contract")
     return policy
 
 

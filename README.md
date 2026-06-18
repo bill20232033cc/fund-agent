@@ -36,11 +36,17 @@ fund-analysis --help
 # 查看 analyze 参数
 fund-analysis analyze --help
 
+# 运行 2021-2025 多年年报分析入口
+fund-analysis analyze-annual-period 004393 --target-year 2025 --start-year 2021
+
 # 强制刷新底层数据
 fund-analysis analyze 004393 --report-year 2024 --force-refresh
 
 # 显式启用 Route C LLM 分章写作路径
 fund-analysis analyze 004393 --report-year 2024 --use-llm
+
+# 在非 TTY 环境强制显示安全 LLM progress
+fund-analysis analyze 004393 --report-year 2024 --use-llm --llm-progress
 
 # 生成精选基金池字段级抽取快照
 fund-analysis extraction-snapshot \
@@ -97,8 +103,12 @@ fund-analysis checklist 004393 --report-year 2024
 | `--user-money-horizon-years` | 用户资金不用年限 |
 | `--force-refresh` | 强制刷新底层数据 |
 | `--use-llm` | 仅 `analyze` 支持；显式启用 Route C LLM 分章写作路径。该路径必须先配置 LLM provider 环境变量；缺失、非法或运行不完整都会失败关闭，不回退默认确定性报告 |
+| `--llm-progress` / `--no-llm-progress` | 仅 `analyze --use-llm` 生效；progress 只写 stderr，默认仅交互式 TTY 启用，非 TTY 可用 `--llm-progress` 强制开启 |
+| `--target-year` / `--start-year` | 仅 `analyze-annual-period` 使用；`target_year` 是当前必需年报，`start_year` 是最早 optional prior 年报 |
 
 `analyze` 默认是 product mode：最终判断由 Agent 层基金能力根据检查清单、否决项、压力测试和 quality gate 派生；R=A+B-C 股票仓位、言行一致性实际风格、经理任期、同类费率、跟踪误差、当前阶段、最终判断覆盖和 quality gate `warn/off` 等夹具参数仅供开发验证使用，必须显式传 `--dev-override`。
+
+`fund-analysis analyze-annual-period FUND_CODE --target-year 2025 --start-year 2021` 是当前确定性多年年报分析入口。Service 先运行目标年份单年 `analyze`，再请求 Fund 层 `AnnualEvidenceLoader` 通过 `FundDocumentRepository` 加载 prior 年报；目标年份必需，prior 年份遇到 `not_found` / `unavailable` 会记录为可降级缺口，`schema_drift` / `identity_mismatch` / `integrity_error` 会记录为 fail-closed 年度。CLI 会先在 stdout 输出可解析的多年证据 metadata header，再输出正式多年年报 Markdown 报告；报告正文包含年度覆盖与来源、跨年关键变化、对当前判断的影响、缺口与降级，并在末尾保留目标年份 8 章报告。当前 `analyze-annual-period` 不接受 `--use-llm`，也不调用 Route C LLM 分章写作路径；基于 5 年年报的 LLM 分章报告仍属于后续 annual-period LLM route design gate。
 
 `fund-analysis analyze --use-llm` 是显式 opt-in 路径；不传该参数时，`analyze` 默认仍走确定性结构化抽取、确定性分析、模板渲染、程序审计和 quality gate。LLM 路径当前使用 `openai_compatible` HTTP chat-completions provider，基于现有 `httpx` 调用 Service 的 `analyze_with_llm()`；Fund writer/auditor 只接收 Protocol client，不读取 env、HTTP 或 provider 细节。
 
@@ -115,6 +125,8 @@ fund-analysis checklist 004393 --report-year 2024
 | `FUND_AGENT_LLM_MAX_OUTPUT_CHARS` | 否 | 本地章节输出字符上限，默认 `12000`，范围 `(0, 50000]` |
 
 缺少或非法配置会在调用 Service 前失败关闭，退出码为 `1`，stdout 为空；provider 构造失败同样退出 `1`。进入 LLM 编排后，provider runtime error、章节写作/审计 blocked、partial result 或 final assembly incomplete 都会失败关闭，且不会静默回退到默认 deterministic `analyze` 报告。`fund-analysis checklist` 不支持 `--use-llm`。
+
+`analyze --use-llm` 的 progress 输出只使用 `LLM progress:` 前缀写入 stderr，覆盖 run started、phase started/completed、still running heartbeat 和 terminal 摘要。stdout 仍只保留最终 accepted 报告；incomplete 或 Host failure 时 stdout 保持为空。
 
 `fund-analysis analyze FUND_CODE` 不传 `--valuation-state` 时，会先识别基金类型，再仅对 `index_fund` / `enhanced_index` 且业绩基准可精确映射到沪深300 `000300` 或中证500 `000905` 的基金调用项目内自建温度计。主动、债券、QDII、FOF、缺少基准、复合基准不确定、派生/策略/行业指数或未支持指数都会保持 `unavailable` 灰灯且不调用温度计。显式传 `--valuation-state unavailable` 会恢复旧的手动灰灯路径，并且不调用温度计；显式传 `low/fair/high` 也同样优先于自动估值。
 
@@ -140,6 +152,7 @@ fund-analysis checklist 004393 --report-year 2024
 已实现：
 
 - `fund-analysis analyze FUND_CODE` CLI 分析入口
+- `fund-analysis analyze-annual-period FUND_CODE` 多年年报分析入口；当前目标年报必需，prior 年报可降级，并输出正式多年年报报告和内嵌目标年份 8 章报告
 - `fund-analysis analyze FUND_CODE --use-llm` 显式 LLM opt-in 入口；配置完整时通过 Service `analyze_with_llm()` 运行 provider-backed 分章写作/审计路径，缺失配置或不完整结果失败关闭，退出码为 `1`
 - `fund-analysis checklist FUND_CODE` 独立买入前检查清单入口
 - 统一年报仓库入口：`FundDocumentRepository.load_annual_report(...)`
@@ -256,6 +269,8 @@ fund-analysis golden-build \
 ```
 
 `golden-build` 会校验每条有效行必须填写 `expected_value`、`confidence` 和 `source`，其中 `confidence` 只能是 `high / medium / low`，`source` 不能是 `manual_required`。校验通过后输出机器可读 JSON；该 JSON 是 correctness 自动比对的数据源。
+
+Reviewed Markdown 可以在每个基金标题下用 `golden-answer-metadata` 代码块声明基金级 `report_year`。缺少 metadata 的历史 Markdown 仅按 legacy 2024 兼容解析；strict identity 使用 `fund_code + report_year + field_name + sub_field`，`source` 文本中的年份不参与机器身份键推断。
 
 基于 `score.json` 生成报告质量 gate：
 

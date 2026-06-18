@@ -16,6 +16,7 @@ from fund_agent.fund.extractors import (
 )
 from fund_agent.fund.data_extractor import FundDataExtractor
 from fund_agent.fund.chapter_facts import ChapterFactProvider, project_chapter_facts
+from fund_agent.fund.evidence_availability import derive_evidence_availability
 from fund_agent.fund.chapter_writer import build_chapter_writer_input, write_chapter
 from fund_agent.fund.chapter_auditor import ChapterAuditInput, audit_chapter
 from fund_agent.fund.analysis import (
@@ -31,6 +32,7 @@ from fund_agent.fund.audit import ProgrammaticAuditInput, run_programmatic_audit
 from fund_agent.fund.template import (
     TemplateRenderInput,
     load_template_contract_manifest,
+    load_typed_template_contract_manifest,
     render_template_report,
     resolve_preferred_lens,
 )
@@ -46,6 +48,7 @@ data_extractor = FundDataExtractor()
 bundle = await data_extractor.extract("110011", 2024)
 chapter_projection = project_chapter_facts(bundle)
 chapter_projection_via_provider = ChapterFactProvider().project(bundle)
+evidence_availability = derive_evidence_availability(chapter_projection)
 writer_input = build_chapter_writer_input(chapter_projection, chapter_id=1, mode="prompt_only")
 write_result = write_chapter(writer_input, llm_client=None)
 if write_result.draft is not None:
@@ -55,6 +58,7 @@ if write_result.draft is not None:
     )
 rabc = calculate_r_abc_from_bundle(bundle, equity_position="80%")
 manifest = load_template_contract_manifest()
+typed_manifest = load_typed_template_contract_manifest()
 chapter_lens = resolve_preferred_lens(chapter_id=2, fund_type="active_fund")
 ```
 
@@ -64,14 +68,19 @@ chapter_lens = resolve_preferred_lens(chapter_id=2, fund_type="active_fund")
 - `raw_text`：年报全文文本
 - `sections`：章节索引，供后续模板第 2 章 `R=A+B-C` 和第 4 章“投资者获得感”提取复用
 - `tables`：年报表格的结构化结果
-- `metadata`：年报来源与缓存来源信息；`metadata.source` 标识 EID 或 Eastmoney fallback 及可用公告/PDF ID，`metadata.cache` 标识 parsed report 或 PDF cache 命中来源
+- `metadata`：年报来源与缓存来源信息；`metadata.source` 标识当前 EID single-source policy、可用公告/PDF ID 和 fail-closed 分类，`metadata.cache` 标识 parsed report 或 PDF cache 命中来源
 
-年报 PDF 获取由 documents 层内部的来源编排器完成，调用方不感知具体下载源。当前生产默认顺序是 EID/证监会资本市场统一信息披露平台主源，Eastmoney/akshare fallback；来源优先级、fallback、EID 请求级 timeout/retry、PDF 文件头校验、损坏 PDF cache 自动刷新、原子写入和来源元数据持久化只存在于 Fund 内部，不暴露给 Service、UI、Host、Agent 执行内核或 CLI。来源失败按 `not_found`、`unavailable`、`schema_drift`、`identity_mismatch`、`integrity_error` 显式分类，只有 `not_found` 与 `unavailable` 允许 fallback；EID schema drift、身份矛盾和 PDF 完整性错误会 fail-closed，并在阻断异常中保留来源、类别和原始错误。缓存读取时，如果历史或人工污染的 `source_metadata_json` 无法解析为合法来源元数据，documents 层会保留可用 PDF 路径并将 `metadata.source` 降级为 `None`；正常写入和模型反序列化仍保持来源闭集校验。
+年报 PDF 获取由 documents 层内部的来源编排器完成，调用方不感知具体下载源。当前生产默认策略是 EID/证监会资本市场统一信息披露平台 single-source：`selected_source=eid`、`source_mode=single_source_only`、`fallback_enabled=false`。默认来源编排器只构造 EID source，并拒绝多来源构造；Eastmoney、基金公司官网/CDN、CNINFO 只保留为 future candidate / 历史 evidence route，不是当前生产 fallback。EID 请求级 timeout/retry、PDF 文件头校验、原子写入和来源元数据持久化只存在于 Fund 内部，不暴露给 Service、UI、Host、Agent 执行内核或 CLI。来源失败按 `not_found`、`unavailable`、`schema_drift`、`identity_mismatch`、`integrity_error` 显式分类；`not_found` 与 `unavailable` 是 terminal EID source failure，不触发 fallback；EID schema drift、身份矛盾和 PDF 完整性错误会 fail-closed，并在阻断异常中保留来源、类别和原始错误。缓存读取时，documents 层只复用带当前 EID single-source metadata 的 parsed/PDF cache；历史、人工污染、metadata-less 或 Eastmoney/fallback-origin cache 会被忽略而不是删除。正常写入和模型反序列化仍保持来源闭集校验。
+
+`fund_agent/fund/documents/candidates/` 当前承载 Docling / pdfplumber / EID HTML render 候选年报表示的内部 evidence harness。`representation_export.py` 定义 candidate-only manifest、输出 envelope、路径/hash 校验、默认 no-clobber 写入策略、blocked-result 和显式 opt-in 内置 handler 入口；`representation_handlers.py` 提供候选内部 route handlers：Docling handler 仅在调用时 lazy import 并保持本地 artifact / socket-block 约束，pdfplumber handler 只用于候选表示导出，EID HTML render 在未有独立 accepted artifact 前保持 blocked；`representation_models.py` 和 `representation_projection.py` 只把已生成的候选 JSON 投影为 Fund documents 内部 route-neutral dataclass 与 candidate anchor note，不修改公共 `EvidenceAnchor` schema。它们不改变 `FundDocumentRepository` 行为，不写 `cache/pdf`，不从 `fund_agent.fund.documents` 公共入口导出，也不证明 source truth、字段正确性、taxonomy compatibility、parser replacement 或 readiness。显式 staged PDF path 仅能作为已接受 gate evidence 链中的 Fund documents candidate-harness 输入，不能成为 Service、UI、Host、renderer、quality gate 或生产 repository 的文档访问模式。
+
+Docling 架构重定位后，candidate harness 只保留为转换中间态和研究证据入口；它不是结构化基金事实提取层。当前 `fund_agent/fund/processors/` 已落地 S1 no-live Processor/Extractor 契约、`FundProcessorRegistry` 和 `ActiveFundAnnualProcessor`：只支持 `active_fund + annual_report + parsed_annual_report.v1`，消费已加载的 `ParsedAnnualReport`，包装现有窄 extractor，输出模板第 1-6 章字段族、公共 `EvidenceAnchor`、source provenance 和 fail-closed 缺口。该 processor 尚未接入 `FundDataExtractor.extract()` 默认生产 facade，不能从候选 JSON 直接外推出 CHAPTER_CONTRACT、renderer、quality gate 或 LLM prompt 输入，也不证明 source truth、字段正确性、parser replacement、golden/readiness 或 release 状态。
 
 `extract_profile()` 返回 `ProfileExtractionResult`，当前只覆盖模板第 1 章“这只基金到底是什么产品”的最小数据底座：
 
 - `basic_identity`：基金名称、代码、披露类别、规模、基金经理，以及稳定输出 `classified_fund_type` / `classification_basis`
 - `product_profile`：`§2` 中的投资目标、风格定位、投资范围、投资策略
+- `risk_characteristic_text`：`§2` 中显式披露的风险收益特征，输出 `risk_characteristic_text.v1`，不以 `product_profile.style_positioning` 作为替代
 - `benchmark`：`§2` 中的业绩比较基准文本
 - `fee_schedule`：`§2` 中的管理费、托管费
 
@@ -88,6 +97,7 @@ chapter_lens = resolve_preferred_lens(chapter_id=2, fund_type="active_fund")
 `extract_manager_ownership()` 返回 `ManagerOwnershipExtractionResult`，当前覆盖模板第 2 章“C 成本侵蚀”、第 3 章“基金经理画像与言行一致性”和第 6 章“核心风险与否决项”的最小数据底座：
 
 - `manager_strategy_text`：`§4` 中的策略摘要、后市展望原文；当前支持显式冒号行和“报告期内基金投资策略和运作分析”等编号标题后的正文块
+- `portfolio_managers`：`§4` 中的基金经理任期列表；当前只在 `§4` 存在编号“基金经理简介”标题且表格具备姓名、职务、任职日期表头时输出 `portfolio_manager_tenure_list.v1`
 - `turnover_rate`：`§8` 中的年度换手率与披露口径
 - `manager_alignment`：`§9` 中的基金经理/从业人员持有原始披露，当前支持表格披露且不输出好坏判断
 - `holder_structure`：`§9` 中的机构/个人持有人结构；当前支持持有人结构表跨页组表头
@@ -95,10 +105,10 @@ chapter_lens = resolve_preferred_lens(chapter_id=2, fund_type="active_fund")
 
 `extract_holdings_share_change()` 返回 `HoldingsShareChangeExtractionResult`，当前覆盖模板第 3 章“实际投资行为”和第 4 章“投资者获得感”的最小数据底座：
 
-- `holdings_snapshot`：`§8` 表格中的前十大重仓，以及已披露的行业分布
+- `holdings_snapshot`：`§8` 表格中的前十大重仓、`bond_top_holding_row.v1` 前五名债券投资明细、`target_fund_holding_row.v1` 期末投资目标基金明细，以及已披露的行业分布；债券持仓输出为独立 `bond_top_holdings` 子形态，目标基金持仓输出为独立 `target_fund_holdings` 子形态，二者都不复用股票 `top_holdings`
 - `share_change`：`§10` 表格中的期初份额、期末份额、净变动；当前支持申购/赎回拆分表，并在缺少净变动行时用期末减期初计算
 
-`FundDataExtractor.extract()` 返回 `StructuredFundDataBundle`，当前聚合 P1 已接受的 14 项结构化数据，并附带净值数据读取结果。新增 `index_profile` 只承载指数画像上下文，新增 `tracking_error` 只承载年报直接披露或后续已接受计算路径形成的跟踪误差；开发覆盖不写入结构化数据包。它只做 orchestration，不直接读文件、不直接写缓存。年报仓库和 PDF 来源失败仍按来源策略向上抛出；仅 NAV provider / cache / akshare 等外部净值数据失败会降级为 `NavDataResult(unavailable=True, records=[])`，让年报字段抽取和 `analyze` / `checklist` 主路径继续运行。
+`FundDataExtractor.extract()` 返回 `StructuredFundDataBundle`，当前聚合 P1 已接受的结构化数据，并附带净值数据读取结果。`portfolio_managers` 从 `extract_manager_ownership().portfolio_managers` 透传，`risk_characteristic_text` 从 `extract_profile().risk_characteristic_text` 透传；`bond_top_holdings` 和 `target_fund_holdings` 仍只作为 `holdings_snapshot.value` 的子形态存在，不是 top-level bundle 字段。`index_profile` 只承载指数画像上下文，`tracking_error` 只承载年报直接披露或后续已接受计算路径形成的跟踪误差；开发覆盖不写入结构化数据包。它只做 orchestration，不直接读文件、不直接写缓存。年报仓库和 PDF 来源失败仍按来源策略向上抛出；仅 NAV provider / cache / akshare 等外部净值数据失败会降级为 `NavDataResult(unavailable=True, records=[])`，让年报字段抽取和 `analyze` / `checklist` 主路径继续运行。
 
 `project_chapter_facts()` 和 concrete `ChapterFactProvider.project()` 当前把已存在的 `StructuredFundDataBundle` 投影为 `chapter_fact_projection.v1`：
 
@@ -106,8 +116,59 @@ chapter_lens = resolve_preferred_lens(chapter_id=2, fund_type="active_fund")
 - 输出模板第 0-7 章的 `ChapterFactProjection`、章节 facts、证据锚点、缺失/不可用/不适用语义、分类依据、lens 与 ITEM_RULE 决策
 - `classified_fund_type` 缺失或非法时投影为 `unknown`，并跳过 preferred_lens 与 ITEM_RULE 的有效基金类型路径
 - facet 行为保持确定性：没有 exact structured evidence 时 `facets=()`，候选 catalog 标签只进入 `non_asserted_facets`，不会传给 ITEM_RULE
+- `portfolio_managers` 投影到第 1 章和第 3 章，source field id 为 `structured.portfolio_managers`
+- `risk_characteristic_text` 投影到第 1 章和第 6 章，source field id 为 `structured.risk_characteristic_text`
+- `holdings_snapshot` 继续作为第 3/5/6 章持仓子形态的唯一来源字段
 - `bond_risk_evidence` 的组级 anchors 保留在 value 内部，不展开为普通章节 `ChapterEvidenceAnchor`
 - 该能力不读取文档仓库、PDF、cache、source helper、下载器或 parser，不调用 LLM、Service、Host 或 dayu；它不是 writer、auditor、orchestrator 或 `FundToolService`
+
+`AnnualEvidenceScopeRequest`、`AnnualEvidenceLoader` 和 `AnnualEvidenceBundle` 位于 `fund_agent/fund/annual_evidence.py`，当前为 `analyze-annual-period` 提供多年年报证据作用域和年度摘要：
+
+- MVP 作用域要求 `required_years=(target_year,)`，prior 年份只能作为连续 optional 年份，最多 5 年
+- 当前年份直接复用 Service 已取得的 `StructuredFundDataBundle`；prior 年份只能通过 `FundDocumentRepository.load_annual_report(...)` 加载
+- prior 年份只调用 `extract_profile()`、`extract_manager_ownership()` 和 `extract_holdings_share_change()` 的窄字段抽取，不调用完整 `FundDataExtractor.extract()`
+- `not_found` / `unavailable` prior 年份记录为 `gap`；`schema_drift` / `identity_mismatch` / `integrity_error` prior 年份记录为 `failed_closed`
+- 可用年度会派生 `fee_schedule_trend`、`turnover_rate_trend`、`share_change_trend`、`holdings_snapshot_trend` 和 `manager_continuity` 等低风险跨年事实，并保留年度 anchor 和 source provenance
+- 该能力不新增来源、不启用 fallback、不调用 LLM/provider/Host/dayu，不执行 golden/readiness/score-loop，也不删除或改写缓存
+
+`ChapterFactProvider.project_annual_evidence()` 当前在已有单年 `ChapterFactProjection` 基础上投影 `AnnualEvidenceBundle`：
+
+- 公开章节 id 仍严格为 `0-7`
+- 跨年事实只进入模板第 5 章“当前阶段与关键变化”
+- 当可用跨年事实存在时，替换单年投影中的 `cross_period_comparison_missing` 缺口；没有可用跨年事实时保持原有单年缺口语义
+- 该投影只消费内存中的 `AnnualEvidenceBundle`，不读取文档仓库、PDF、cache、source helper、Service、Host、provider 或 dayu
+
+`fund_agent/fund/template/annual_period_renderer.py` 当前为 `analyze-annual-period` 生成正式多年年报 Markdown 报告：
+
+- 输入只包含 `AnnualEvidenceBundle`、当前年份 8 章报告 Markdown 和显式 quality gate 状态
+- 输出包含年度覆盖与来源、跨年关键变化、对当前判断的影响、缺口与降级，并通过稳定 marker 保留当前年份 8 章报告
+- `MultiYearAnnualAnalysisResult.report_markdown` 仍保持当前年份报告语义；正式多年报告位于显式 `annual_period_report.report_markdown`
+- 缺少 quality gate 状态时输出 `quality_gate_status=not_available`，不声明通过、readiness 或 release 状态
+- renderer 不读取文档仓库、PDF、cache、source helper、下载器、provider、LLM、Service、Host、文件系统文档语料或 dayu
+
+`docs/fund-analysis-template-draft.md` canonical `TEMPLATE_CONTRACT_MANIFEST_JSON` 当前是 Fund template contract 的 authored truth source。模板层从同一 JSON 生成 untyped 与 typed 两种投影：
+
+- `fund_agent/fund/template/contracts.py` 解析、投影并验证 untyped `TemplateContractManifest`，继续提供 `load_template_contract_manifest()`、`validate_template_contract_manifest()`、`get_chapter_contract()` 和 `resolve_preferred_lens()`
+- `fund_agent/fund/template/typed_contracts.py` 从同一 JSON 投影并验证 typed `TypedChapterContract` dataclasses，继续提供 `load_typed_template_contract_manifest()` 和 `get_typed_chapter_contract()`
+- 模板文档中的 visible per-chapter `CHAPTER_CONTRACT_REF` 只是非权威引用；结构化 `must_answer`、`must_not_cover`、`required_output_items`、`preferred_lens`、typed ids、Ch2 internal subcontracts、Ch0/Ch7 metadata、Ch3 predicate、missing behavior 和 `audit_focus` 均以 canonical JSON 为准
+- typed schema 版本为 `typed_chapter_contract.v1`，公开章节 id 仍严格为 `0-7`
+- 第 2 章的 `performance / attribution / cost` 只作为 `chapter_id=2` 内部 `ChapterInternalSubcontract`，不会成为公开章节或 chapter matrix row
+- 第 0 章声明 `consumes_chapter_conclusions=(7,)`，且 `independent_action_source=False`，不独立派生动作判断
+- `audit_focus` 是 bounded semantic audit 的闭集语义提示；显式传入 typed contract 时只投影到 LLM audit request 和 prompt 语义强调，不能关闭 programmatic blockers、改变阻断等级或修复预算
+- `RequiredOutputItem.when_evidence_missing` 当前为第 2/3 章 typed writer path 提供缺证行为数据：第 2 章 R=A+B-C required outputs 缺少同源证据时 `block`，第 3 章策略/实际行为/言行一致性/风格稳定性缺少已复核证据时只允许输出证据缺口，利益一致性缺证时只允许输出下一步最小验证问题
+- loader 使用 strict parser/projection validation 校验当前 `must_answer / must_not_cover / required_output_items` 文本和 stable ids；template JSON 漂移、未知 requirement id 或 stale `source_manifest` 会 fail-closed，而不是 fuzzy、substring、embedding 或 LLM 匹配
+
+`fund_agent/fund/evidence_availability.py` 当前提供 additive same-source `EvidenceAvailability`：
+
+- `derive_evidence_availability()` 只消费已经存在的 `ChapterFactProjection`、章节 facts、evidence anchor ids、missing reasons 和 typed contract requirement ids
+- 输出 `evidence_availability.v1`，逐 requirement 区分 `available / missing / unavailable / not_applicable / unreviewed`
+- 第 2 章的 availability 使用 typed Ch2 `performance / attribution / cost` 内部子契约 requirement id，但所有记录仍归属公开 `chapter_id=2`，不会形成 Ch2 公开拆章
+- 第 1 章当前覆盖 `portfolio_managers` 和 `risk_characteristic_text` 的字段级 availability
+- 第 3 章当前覆盖基金经理基本信息、portfolio managers、manager strategy text、turnover、holdings snapshot、cross-period style evidence、manager alignment 和 actual behavior 聚合 requirement；当前单年 `ChapterFactProjection` 不加载 prior-year 文档，跨期风格证据保持 `unreviewed` 缺口
+- 第 6 章当前覆盖 `risk_characteristic_text` 的字段级 availability
+- malformed 或未知 typed requirement id 会 fail-closed；该能力不读取文档仓库、PDF/cache/source helper、Service、Host、provider、retained report、文件系统、环境变量或 dayu，也不替代 `ChapterFactProjection`
+
+template truth-source replacement、typed projection 和 `EvidenceAvailability` 的当前非目标是：不改变 deterministic `analyze/checklist`、renderer、FQ0-FQ6 quality gate、final judgment、provider/runtime defaults、score/golden/readiness，不实现 Ch2 公开拆章、多年证据 runtime、Agent runner/tool-loop、Host 业务理解或 dayu runtime。
 
 `fund_agent/fund/chapter_writer.py` 和 `fund_agent/fund/chapter_auditor.py` 当前提供 Gate 2 单章 writer / auditor primitives：
 
@@ -116,14 +177,20 @@ chapter_lens = resolve_preferred_lens(chapter_id=2, fund_type="active_fund")
 - writer 支持 `prompt_payload_mode="compact"`，当前由显式 `--use-llm` Service 路径使用；compact 只压缩大 `value` 的表达，保留 `fact_id`、`source_field_id`、`status`、`missing_reason`、`evidence_anchor_ids`、anchor id 和 source location metadata，并明确禁止 LLM 引用或推断被省略的 raw detail
 - writer prompt-cost diagnostic 只记录 component 字符数、fact/anchor 成本行和 prompt char/token 标量，不保存完整 prompt、fact 原文、anchor note、draft、provider request 或 provider response
 - `write_chapter()` 通过调用方显式注入的 `ChapterLLMClient` 生成单章草稿；`mode="prompt_only"` 只返回 prompt 和 blocked result，不伪造草稿
+- `audit_chapter_llm()` 在未提供 typed contract 时继续使用旧 `DEFAULT_AUDIT_FOCUS` 兼容路径；提供 typed contract 时只把闭集 `audit_focus` id 传入 LLM request，程序审计不读取 focus
 - writer 要求第 1-6 章输出固定顶层段落 `### 结论要点`、`### 详细情况`、`### 证据与出处`；每个 `required_output_items` 必须先输出 exact marker `<!-- required_output:<item> -->`
+- writer 可显式接收 typed `RequiredOutputItem` 与 `EvidenceAvailability` 作为 additive path；该路径使用 stable item id marker `<!-- required_output:<typed item id> -->`，按 `render_evidence_gap / render_minimum_verification_question / delete_if_not_applicable / block` 裁定缺证 required output。`block` 在调用 LLM client 前 fail-closed，`delete_if_not_applicable` 必须有 typed reason，gap/verification 输出必须包含 approved 缺口或最小验证问题措辞。未传 typed 输入时保持当前生产默认 marker 和写作行为
 - writer 只接受精确 marker：`<!-- required_output:<item> -->`、`<!-- anchor:<anchor_id> -->` 和 `<!-- missing:<reason> -->`；未知 anchor、缺固定段落、缺 required output marker、超出 `max_output_chars`、`finish_reason=length/max_tokens/content_filter` 都会 fail-closed 到稳定 stop reason，不截断或部分接受
+- writer prompt 明确禁止根据 `fact_id`、`source_field_id`、`source_field_name` 或 fact value 合成 anchor id；`bond_risk_evidence` 内部/组级 anchors 不属于 `ChapterEvidenceAnchor`，除非未来 conversion helper 显式转换，否则不得写入 `<!-- anchor:... -->`
+- writer prompt 对模板第 2 章 R=A+B-C 数字闭环有专门约束：R/A/B/C/A-C、Alpha/Beta/Cost 或具体百分比闭合断言必须在同句或上下 2 行内带 allowed anchor marker；来源标签、年报章节名或出处列表不能替代局部 anchor；缺同源事实或无法确认 anchor 支撑精确数值时，只能输出数据不足或下一步最小验证问题，不写具体百分比
 - `ChapterRepairContext` 是当前 regenerate 的显式 typed 输入，携带上一轮 issue ids、脱敏 messages 和 required corrections；禁止通过 extra payload 传递这些参数
-- `audit_chapter_programmatic()` 执行确定性章节审计，覆盖结构、占位符、锚点、ITEM_RULE 删除段落、禁用交易建议、`non_asserted_facets` 误断言和第 5 章跨期缺口措辞
-- `audit_chapter_programmatic()` 对 required output 只以 exact marker 作为通过条件，正文裸 item 文案不能替代 marker；候选 facet 的“候选/未断言信息”说明允许通过，但任一断言式写法仍阻断
-- `audit_chapter_llm()` 只通过调用方显式注入的 `ChapterAuditLLMClient` 审计；唯一 pass 行为 `PASS|chapter|no issues`，问题行只能是 `BLOCKING|LOCATION|MESSAGE`、`REVIEWABLE|LOCATION|MESSAGE` 或 `INFO|LOCATION|MESSAGE`；解析失败或缺少 client 都 fail-closed
+- `audit_chapter_programmatic()` 执行确定性章节审计，覆盖结构、占位符、锚点、ITEM_RULE 删除段落、禁用交易建议、`non_asserted_facets` 误断言、第 5 章跨期缺口措辞，以及第 3 章 `ch3.must_not_cover.item_04` 的 typed evidence-conditional 禁区：当 `EvidenceAvailability` 显示实际行为/风格证据 missing、unavailable 或 unreviewed 时，required label 与显式证据缺口句可通过，正向或准正向 `言行一致` / `风格稳定` 判断触发稳定 clause id C2；如果调用方没有传入 `EvidenceAvailability`，unsafe 正向/准正向判断仍 fail-closed，不会因 typed clause 接管旧 phrase path 而 silent pass
+- `audit_chapter_programmatic()` 对 required output 只以 exact marker 作为通过条件；typed writer path 使用 stable item id marker，legacy path 使用原文 item marker，正文裸 item 文案不能替代 marker；候选 facet 的“候选/未断言信息”说明允许通过，但任一断言式写法仍阻断
+- `audit_chapter_programmatic()` 的 ITEM_RULE 删除段落检查只匹配对应 optional/conditional 段落的标题或专属 marker，不把 required_output 内的合法稳定性/结构性缺口讨论当成删除段落；`must_not_cover` 字面短语抽取忽略 `除非` 后的例外语义，例如第 6 章可在风险/验证语境中讨论压力测试，但仍阻断真正的 forbidden phrase
+- `audit_chapter_llm()` 只通过调用方显式注入的 `ChapterAuditLLMClient` 审计；唯一 pass 行为必须是单行 `PASS|chapter|no issues`，问题行只能是 `BLOCKING|LOCATION|MESSAGE`、`REVIEWABLE|LOCATION|MESSAGE` 或 `INFO|LOCATION|MESSAGE`，且每行恰好三段、不得带解释性前缀、Markdown、JSON、标题、总结句或额外 `|`；解析失败或缺少 client 都 fail-closed
+- LLM auditor 只做 bounded semantic audit：`<!-- missing:<reason> -->` 是 approved evidence-gap marker；草稿已用 allowed missing marker 和谨慎缺口措辞说明数据缺失时，不得仅因缺少事实、缺少 anchor 或缺少外部来源而阻断，但将缺失数据写成确定性结论、遗漏必要缺口语义、引用未知 anchor 或与 allowed facts 矛盾仍应阻断
 - E2 证据与断言源文匹配复核不在 Gate 2 实现范围，后续 Evidence Confirm gate 处理
-- 这些 primitives 不实现 chapter orchestrator、repair loop、final assembler、第 0 章 assembly、CLI `--use-llm`、Service 编排或 Host/Agent/dayu runtime
+- 这些 primitives 不实现 Service 用例、provider construction、CLI `--use-llm`、Host lifecycle、Agent runner/tool-loop 或 dayu runtime；当前显式 `--use-llm` typed path 由 Service 选择并把 typed inputs 传入这些 Fund primitives
 
 `FundNavRepository.load_nav_series()` 是 data 层当前 typed NAV series contract，返回 `FundNavSeries`，显式承载份额类别、NAV 类型、调整基础、分红调整状态、identity 状态、source/cache/query provenance、完整性约束和强回撤证据资格。无参 `FundNavRepository()` 当前默认使用 CSRC EID accumulated NAV adapter：通过公开 search/detail/classification 页面验证 006597=A/2030-1010、006598=C/2030-1020、014217=E/2030-1040、022176=F/2030-1050，并按份额分别输出 `nav_type="accumulated_nav"`、`adjusted_basis="accumulated_nav"`、`dividend_adjustment_status="not_applicable"`、`identity_status="verified"`。旧 `FundNavDataAdapter.load_nav_data()` 继续作为 legacy/snapshot/analyze 兼容入口，返回 `NavDataResult` 并保持 `source="nav_cache" / "akshare"` 与 `cached` 语义；constructor-injected Akshare raw-unit adapter 兼容分支仍标记 `unit_nav/raw_unit_nav/requested_code_only` 且 `strong_drawdown_evidence_eligible=False`。
 
@@ -152,9 +219,9 @@ chapter_lens = resolve_preferred_lens(chapter_id=2, fund_type="active_fund")
 - 输入显式接收 `fund_code`、`report_year`、`source_csv`、`run_id`、输出目录和 `force_refresh`
 - 读取 `docs/code_20260519.csv` 的“基金名称 / 基金代码 / 类别”三列，并校验名称非空、6 位代码、类别非空和重复代码
 - 只通过 `FundDataExtractor.extract(...)` 获取结构化数据包，不直接读取 PDF、cache 或底层解析文件
-- 将 `StructuredFundDataBundle` 拆成 16 个字段级记录：`basic_identity`、`product_profile`、`benchmark`、`index_profile`、`fee_schedule`、`classified_fund_type`、`nav_benchmark_performance`、`investor_return`、`tracking_error`、`manager_strategy_text`、`turnover_rate`、`manager_alignment`、`holder_structure`、`holdings_snapshot`、`share_change`、`nav_data`
-- 每条记录包含 `comparable_values`，只暴露 correctness 可直接比较的白名单子字段；当前覆盖 `basic_identity`、`benchmark`、`index_profile`、`nav_benchmark_performance`、`tracking_error` 和 `classified_fund_type` 的稳定标量子字段
-- 每条记录包含 additive 公共来源 provenance 字段：`source_provenance_schema_version`、`source_strategy`、`resolved_source_name`、`fallback_used`、`primary_failure_category`、`fallback_eligibility`、`source_provenance_status` 和 `source_provenance_reason`；这些字段只来自 `StructuredFundDataBundle.source_provenance` 投影，不改变来源编排或 fallback 资格判定。当前 fallback 成功路径会把主来源 `not_found` / `unavailable` 分类持久化为 `AnnualReportSourceMetadata.primary_failure_category`，旧元数据缺失该字段时继续输出 `unknown_public_metadata_absent`
+- 将 `StructuredFundDataBundle` 拆成字段级记录：`basic_identity`、`product_profile`、`benchmark`、`index_profile`、`fee_schedule`、`classified_fund_type`、`nav_benchmark_performance`、`investor_return`、`tracking_error`、`manager_strategy_text`、`portfolio_managers`、`turnover_rate`、`manager_alignment`、`holder_structure`、`holdings_snapshot`、`risk_characteristic_text`、`bond_risk_evidence`、`share_change`、`nav_data`
+- 每条记录包含 `comparable_values`，只暴露 correctness 可直接比较的白名单子字段；当前覆盖 `basic_identity`、`benchmark`、`index_profile`、`nav_benchmark_performance`、`tracking_error`、`classified_fund_type`、`portfolio_managers` 和 `risk_characteristic_text` 的稳定标量子字段
+- 每条记录包含 additive 公共来源 provenance 字段：`source_provenance_schema_version`、`source_strategy`、`selected_source`、`source_mode`、`fallback_enabled`、`resolved_source_name`、`fallback_used`、`primary_failure_category`、`fallback_eligibility`、`source_provenance_status` 和 `source_provenance_reason`；这些字段只来自 `StructuredFundDataBundle.source_provenance` 投影，不改变来源编排或 fallback 资格判定。当前 v2 公共投影以 `selected_source` / `source_mode` / `fallback_enabled` 表达 EID single-source policy；`source_strategy` 只作为兼容 alias，不是来源获取策略或 fallback 授权。当前 fallback 成功路径会把主来源 `not_found` / `unavailable` 分类持久化为 `AnnualReportSourceMetadata.primary_failure_category`，旧元数据缺失 current policy 字段时继续输出 `legacy_or_unknown` / `unknown_public_metadata_absent`
 - `index_profile` 和 `tracking_error` 对 `index_fund` / `enhanced_index` 作为条件 P1 字段进入 FQ2 coverage、traceability 和单基金缺失分母；非指数基金从这些指数质量字段分母中排除，未知基金类型继续保守计分
 - 输出 `snapshot.jsonl`、`summary.md` 和 `errors.jsonl`；`summary.md` 额外包含独立 `Source Provenance` 表，完全失败且没有 snapshot 记录的基金在 v1 表中省略并保留说明；单只基金失败时继续后续基金并记录错误
 - snapshot 只记录当前 extractor 的真实输出，不为特定基金覆盖字段值；`004393` 曾被误判为 `index_fund` 的问题已在 P4-S3a 修复为 `active_fund`
@@ -183,9 +250,12 @@ chapter_lens = resolve_preferred_lens(chapter_id=2, fund_type="active_fund")
 `build_golden_answer_json()` 返回 `GoldenAnswerBuildResult`，当前用于把人工审核后的 Markdown 转成 strict JSON：
 
 - 只消费 Markdown，不读取 PDF、cache 或底层解析文件
+- 支持在每个基金标题下用 fenced `golden-answer-metadata` 代码块声明基金级 `report_year`；历史 Markdown 缺少 metadata 时仅按已复核 legacy 2024 corpus 兼容解析为 `2024`
 - 校验有效行必须包含 `expected_value`、`confidence`、`source`
 - `confidence` 只允许 `high / medium / low`
 - `source` 必须是可复核来源，不能保留 `manual_required`
+- `source` 文本只作为人工证据描述，不参与机器身份键推断
+- 构建阶段允许同一基金代码跨年份并存；同一 `fund_code + report_year` 基金区块或同一 `fund_code + report_year + field_name + sub_field` 记录重复时 fail-fast
 - 输出 `fund-agent.golden-answer.v1` JSON，包含基金级和记录级 `report_year`，供 correctness 自动比对使用
 - `load_golden_answer_json()` 读取同一 strict JSON schema，供 Fund 内部比对复用，不重新解析 Markdown；legacy JSON 缺少 `report_year` 时按当前已复核 2024 golden corpus 加载为 `2024`
 
@@ -226,8 +296,8 @@ chapter_lens = resolve_preferred_lens(chapter_id=2, fund_type="active_fund")
 
 - 只消费显式传入的 `source_csv`、snapshot JSONL、score JSON、quality gate JSON、strict `golden-answer.json`、fixture promotion state manifest 和 accepted coverage disposition manifest
 - 没有 tracked coverage disposition manifest 时使用代码内 static current accepted disposition manifest，并在输出 JSON 原样写入 `schema_version`、`accepted_as_of`、`source_artifacts`、`entries` 和 lifecycle semantics
-- strict golden answer v1 只做 fund-level coverage 检查；`strict_golden_year_not_covered` 和 `strict_golden_partial_coverage` 保留为未来 schema/gate，不在当前 preflight 触发
-- fixture promotion state manifest 缺省时输出 `fixture_promotion_absent` blocker，而不是 IO failure；eligible fallback 只解除 source provenance blocker，不证明 ready
+- strict golden answer v1 做 fund/year coverage 检查；同一基金已有 golden 但当前 `report_year` 未覆盖时输出 `strict_golden_year_not_covered` blocker；`strict_golden_partial_coverage` 仍保留为未来 schema/gate，不在当前 preflight 触发
+- fixture promotion state manifest 缺省时输出 `fixture_promotion_absent` blocker，而不是 IO failure；year-aware manifest 使用 `(fund_code, report_year)` 作为 promotion proof 身份，legacy fund-code-only manifest 只作为诊断输入并输出 `fixture_promotion_legacy_fund_only` blocker，不会被当成特定年份 promotion proof；eligible fallback 只解除 source provenance blocker，不证明 ready
 - 006597 当前 bond `bond_risk_evidence_missing` 以 `blocker_resolved` / `original_blocker_code=bond_risk_evidence_missing` 输出为 resolved item，不列为 blocker
 - 输出 `golden_readiness_preflight.json` 与 `.md`，只表达 readiness/blocker/owner/next gate，不修改 score policy、quality gate severity、golden answer、golden fixture 或 promotion state
 
@@ -348,9 +418,9 @@ C2 当前只做确定性 marker / 元数据检查，不调用 LLM，不判断语
 
 当前模板渲染器是 MVP 模板填充，不调用 LLM，不预测未来收益，不输出交易或配置指令。`FinalJudgment` 只允许 `worth_holding`、`needs_attention`、`suggest_replace` 三类，单一定义点为 `fund_agent/fund/analysis/final_judgment.py`。最终判断由 `derive_final_judgment()` 根据检查清单、否决项、压力测试和 Service 归一化后的 quality gate 状态派生；开发覆盖只改变 selected 判断，并保留 derived/source 供 R2 审计。
 
-`load_template_contract_manifest()` 返回 `TemplateContractManifest`，当前覆盖 `docs/design.md` 第 3.1 节和 `docs/fund-analysis-template-draft.md` 的第 0-7 章 `CHAPTER_CONTRACT`：
+`load_template_contract_manifest()` 返回 `TemplateContractManifest`，当前从 `docs/fund-analysis-template-draft.md` canonical `TEMPLATE_CONTRACT_MANIFEST_JSON` 投影 `docs/design.md` 第 3.1 节和模板第 0-7 章 `CHAPTER_CONTRACT`：
 
-- manifest 位于 Fund 模板层 `fund_agent/fund/template/contracts.py`，自带章节标题，不依赖 renderer 私有 `_CHAPTER_TITLES`
+- authored manifest 位于模板文档 canonical JSON；Fund 模板层 `fund_agent/fund/template/contracts.py` 只负责 strict parse / projection / validation，自带章节标题，不依赖 renderer 私有 `_CHAPTER_TITLES`
 - 每章包含 `narrative_mode`、`must_answer`、`must_not_cover`、`required_output_items` 和 `preferred_lens`
 - 第 3 章主动基金契约要求：风格稳定、风格一致或言行一致判断必须基于已复核的换手率或风格变化证据；证据缺失、不可用或未复核时，契约禁止推断主动基金风格稳定、风格一致或言行一致
 - 第 5 章“当前阶段与关键变化”只承载当前阶段、上一期或历史对比下的关键变化、变化是否影响原始投资假设和下一步最小验证问题；不得给最终判断或展开风险清单
@@ -358,7 +428,7 @@ C2 当前只做确定性 marker / 元数据检查，不调用 LLM，不判断语
 - `preferred_lens` key 只允许当前标准基金类型 `index_fund`、`active_fund`、`bond_fund`、`enhanced_index`、`qdii_fund`、`fof_fund` 和 `default`
 - `resolve_preferred_lens(chapter_id, fund_type)` 优先返回精确基金类型 lens，没有精确命中时返回 `default`；章节缺失、基金类型不支持或缺少 fallback 时抛出 `ValueError`
 - `validate_template_contract_manifest()` 对章节数量、id 连续性、重复 id、空字段、unsupported lens key 和无 lens fallback 执行 fail-closed 校验
-- 当前 CHAPTER_CONTRACT manifest 是可机器消费的契约清单，不改变 `render_template_report()` 的 Markdown 输出结构；FQ5 只使用它派生模板契约适用性，不声明 renderer compliance
+- 当前 CHAPTER_CONTRACT manifest 是从模板文档 JSON 投影出的可机器消费契约清单，不改变 `render_template_report()` 的 Markdown 输出结构；FQ5 只使用它派生模板契约适用性，不声明 renderer compliance
 - `fund_agent/fund/audit/contract_rules.py` 中的 `ContractAuditCoverageManifest` 逐条映射 `must_answer` 到 `covered_by_required_item`、`programmatic_marker`、`structured_data_availability`、`llm_semantic_audit`、`evidence_confirm` 或 `narrative_guidance`；当前内置规则没有 `programmatic_marker`，因此既有报告 C2 行为保持不变
 - `build_lens_application_plan(fund_type)` 返回 `LensApplicationPlan`，把每章 `preferred_lens` 解析为 normalized `primary_focus`、`watch_variable_label` 和 `risk_focus_label`；renderer 当前只在第 0 章“当前最值得盯住的变量”和第 1 章“看这类基金最先看什么”两个既有 slot 消费这些标签，不把 raw `lens:` statements 渲染进最终报告
 
@@ -398,9 +468,9 @@ C2 当前只做确定性 marker / 元数据检查，不调用 LLM，不判断语
 
 仓库层位于 `fund_agent/fund/documents/`：
 
-- `models.py`：`DocumentKey`、`ParsedAnnualReport`、`ReportSection`、`ParsedTable`
-- `repository.py`：对外唯一公开读取入口 `FundDocumentRepository`
-- `cache.py`：raw PDF 元信息缓存与 parsed report 物化缓存；parsed report 命中前会检查最小正文长度和关键章节集合，避免历史低质量解析物被当作真实年报复用；parsed report JSON 使用同目录临时文件加原子替换写入，替换失败会清理临时 payload 且不写入 SQLite 行；损坏的来源元数据只降级为空元数据，不阻断 PDF 路径缓存读取；同一缓存实例内 parsed report 读写串行执行，避免同进程并发读写同一 SQLite/JSON 物化状态
+- `models.py`：`DocumentKey`、`ParsedAnnualReport`、`ReportSection`、`ParsedTable`、`AnnualReportReferenceMetadataResult`
+- `repository.py`：对外唯一公开读取入口 `FundDocumentRepository`；`load_annual_report()` 返回解析年报，`get_annual_report_reference_metadata()` 只返回不含正文和路径的来源身份元数据
+- `cache.py`：raw PDF 元信息缓存、parsed report 物化缓存与 bodyless reference metadata 查询；parsed report 命中前会检查最小正文长度和关键章节集合，避免历史低质量解析物被当作真实年报复用；parsed report JSON 使用同目录临时文件加原子替换写入，替换失败会清理临时 payload 且不写入 SQLite 行；损坏的来源元数据只降级为空元数据，不阻断 PDF 路径缓存读取；同一缓存实例内 parsed report 读写串行执行，避免同进程并发读写同一 SQLite/JSON 物化状态
 - `adapters/annual_report_pdf.py`：把底层 PDF helper 适配为统一仓库返回值
 
 基础画像 extractor 位于 `fund_agent/fund/extractors/`：
@@ -424,7 +494,7 @@ C2 当前只做确定性 marker / 元数据检查，不调用 LLM，不判断语
 
 当前边界要求：
 
-- 业务调用方只通过 `FundDocumentRepository.load_annual_report(...)` 读取年报。
+- 业务调用方只通过 `FundDocumentRepository.load_annual_report(...)` 读取年报；只需要确认同源引用元数据时使用 `FundDocumentRepository.get_annual_report_reference_metadata(...)`，该接口不返回 PDF 路径、正文、章节、表格或来源 URL。
 - 业务调用方若需要基础画像，只消费 `extract_profile(report)` 的结构化结果，不直接复用正则规则。
 - `fund_agent/fund/pdf/*` 只作为仓库内部 helper / adapter，允许返回本地 `Path`，但这不是上层公共契约。
 - `ParsedAnnualReport` 是后续各章节 extractor 的统一输入；当前稳定 extractor 已扩展到 `§1/§2/§3/§4/§8/§9/§10`。
@@ -440,13 +510,15 @@ C2 当前只做确定性 marker / 元数据检查，不调用 LLM，不判断语
 - `extractors/`：章节级结构化提取能力。当前已落地基础画像、`§3` 表现、管理人/持有人、持仓/份额 extractor。
 - `data_extractor.py`：P1 façade，聚合文档仓库、净值适配器和章节 extractor。
 - `report_evidence.py`：报告证据包 typed model / projection，只消费 `StructuredFundDataBundle` 与显式投影上下文，产出事实、锚点、缺口、preferred_lens 和派生 review status。
+- `annual_evidence.py`：多年年报证据作用域、prior 年份加载、年度缺口分类、跨年事实派生和 `AnnualEvidenceBundle` typed model；只通过 `FundDocumentRepository` 加载 prior 年报。
+- `template/annual_period_renderer.py`：多年年报期间报告 renderer，只消费内存中的 `AnnualEvidenceBundle` 和显式当前年份报告，输出正式 annual-period Markdown。
 - `_value_utils.py`：Fund 内部结构化值 helper，把 dict/dataclass 抽取值规范化为子字段映射。
 - `extraction_snapshot.py`：P4-S1 字段级抽取快照能力，消费 `FundDataExtractor` 并写出 JSONL/summary/errors。
 - `extraction_score.py`：P4-S2 字段级评分与最小 golden set 选择能力，只消费 snapshot JSONL 和精选基金池 CSV。
 - `fund_type.py`：基金类型识别规则，供 extractor 先行消费。
 - `analysis/`：分析计算模块。当前包含 `r_abc.py`、`alpha_judge.py`、`consistency_check.py`、`investor_return.py`、`risk_check.py` 与内部比例解析 helper，只消费 P1/P2 结构化数据和显式判断证据，不直接读取年报文件。
 - `template/`：模板渲染能力。当前包含 `renderer.py`，只消费 P1/P2 结构化结果并输出 8 章 Markdown、章节块与程序审计输入。
-- `template/contracts.py`：模板契约能力，维护第 0-7 章 CHAPTER_CONTRACT 机器契约、章节契约读取和基金类型 lens 解析。
+- `template/contracts.py`：模板契约能力，从模板文档 canonical JSON 投影第 0-7 章 CHAPTER_CONTRACT 机器契约、章节契约读取和基金类型 lens 解析。
 - `template/chapter_contract_constraints.py`：CHAPTER_CONTRACT 可执行写作约束 sidecar，包裹既有章节契约并为 dev-only 写作审计提供 required evidence / N/A / failure behavior 配置。
 - `template/item_rules.py`：模板 ITEM_RULE manifest，维护当前四条 conditional 规则、确定性触发评估和段落标记检查。
 - `report_writing_audit.py`：dev-only 报告写作审计，只消费调用方显式传入的 `ReportEvidenceBundle`、已解析 records 和章节草稿代理，不读取基金文档、不接入 renderer、Service/CLI 或 FQ0-FQ6 质量门。
@@ -460,12 +532,12 @@ C2 当前只做确定性 marker / 元数据检查，不调用 LLM，不判断语
 
 - 当前只支持 `annual_report`。
 - 当前稳定 extractor 边界是 `§1/§2/§3/§4/§8/§9/§10`。
-- 当前基础画像只覆盖 `basic_identity`、`product_profile`、`benchmark`、`fee_schedule` 四类输出。
+- 当前基础画像只覆盖 `basic_identity`、`product_profile`、`risk_characteristic_text`、`benchmark`、`fee_schedule` 五类输出。
 - 当前 `§3` 表现只覆盖 `nav_benchmark_performance` 与 `investor_return` 两类输出。
-- 当前管理人/持有人 extractor 只覆盖 `manager_strategy_text`、`turnover_rate`、`manager_alignment`、`holder_structure` 四类输出。
-- 当前持仓/份额 extractor 只覆盖 `holdings_snapshot` 与 `share_change` 两类输出；`share_change` 对多份额列表只显式选择单值列或表头精确基金代码列，无法可靠选择时返回 `missing`，不再按列顺序或 A 类 fallback 默认取值。
-- `data_extractor.py` façade 已接入当前 12 项结构化数据；`structured_data` 当前以 `StructuredFundDataBundle` dataclass 表达，不额外物化 SQLite 表。
-- `report_evidence.py` 当前只投影已有 `StructuredFundDataBundle`，不新增抽取路径、不调用文档仓库、不把 `nav_data` 作为事实，也不改变 renderer / FQ0-FQ6 行为。
+- 当前管理人/持有人 extractor 覆盖 `manager_strategy_text`、`portfolio_managers`、`turnover_rate`、`manager_alignment`、`holder_structure` 五类输出；`portfolio_managers` 已接入 `StructuredFundDataBundle`、snapshot、report evidence、chapter facts 和 EvidenceAvailability，但不改变 renderer 或 quality gate。
+- 当前持仓/份额 extractor 只覆盖 `holdings_snapshot` 与 `share_change` 两类输出；`holdings_snapshot` 当前支持股票 `top_holdings`、债券 `bond_top_holdings`、目标基金 `target_fund_holdings` 和行业分布，债券持仓与目标基金持仓只作为 `holdings_snapshot` 子形态接入下游，不新增 top-level bundle 字段；`share_change` 对多份额列表只显式选择单值列或表头精确基金代码列，无法可靠选择时返回 `missing`，不再按列顺序或 A 类 fallback 默认取值。
+- `data_extractor.py` façade 已接入当前结构化数据；`structured_data` 当前以 `StructuredFundDataBundle` dataclass 表达，不额外物化 SQLite 表。
+- `report_evidence.py` 当前只投影已有 `StructuredFundDataBundle`，包括 `portfolio_managers` 与 `risk_characteristic_text`；不新增抽取路径、不调用文档仓库、不把 `nav_data` 作为事实，也不改变 renderer / FQ0-FQ6 行为。
 - `data/nav_repository.py` 当前默认把 CSRC EID 006597 家族 A/C/E/F 分类 `累计净值` 归一化为 accumulated NAV typed series，按份额 fail-closed 验证身份、分页、日期和数值；legacy raw-unit adapter 只能通过 constructor injection 进入兼容分支，并显式标记为非 strong drawdown evidence。`data/nav_metrics.py` 当前基于该 typed series 计算最大回撤；不提供 dividend-adjusted、total-return 或 volatility 指标。
 - `extraction_snapshot.py` 当前记录字段级抽取状态，并通过 `comparable_values` 暴露 correctness 可比子字段白名单；不为特定基金覆盖字段值。
 - `extraction_score.py` 当前计算字段级与单基金 coverage / traceability，对 strict golden answer 中 snapshot 可比字段执行 correctness 比对，并可显式消费 `errors.jsonl` 输出 `failed_funds`；旧 snapshot 仅保留 `classified_fund_type.fund_type` 兼容路径。
@@ -479,7 +551,7 @@ C2 当前只做确定性 marker / 元数据检查，不调用 LLM，不判断语
 - 当前 `analysis/risk_check.py` 同时实现压力测试，按基金类型阈值为固定下跌场景分级，不预测风险发生概率。
 - 当前 `analysis/checklist.py` 实现 7 问题检查清单，消费分析结果和显式用户输入，不读取外部数据。
 - 当前 `audit/audit_programmatic.py` 实现 MVP 程序审计，不调用 LLM 或证据复核。
-- 当前 `template/contracts.py` 实现第 0-7 章 CHAPTER_CONTRACT manifest、章节契约读取、基金类型 lens 解析和 fail-closed manifest 校验；不运行时解析 Markdown 注释。
+- 当前 `template/contracts.py` 从模板文档 canonical JSON 投影第 0-7 章 CHAPTER_CONTRACT manifest、章节契约读取和基金类型 lens，并执行 fail-closed manifest 校验。
 - 当前 `template/chapter_contract_constraints.py` 实现第 0-7 章默认 wrapper 和首个 material overlay：主动基金第 3 章换手率 / 风格变化证据约束。增强指数第 2 章和债券第 6 章只登记为 deferred `config_only` 要求，不执行材料级审计。
 - 当前 `template/item_rules.py` 实现 ITEM_RULE manifest、显式基金类型/facet 评估、审计上下文类型和唯一段落标记检查；不调用 LLM、不读取基金文档、不接入质量门禁。
 - 当前 `template/renderer.py` 实现 8 章 Markdown 模板渲染，按 CHAPTER_CONTRACT manifest 生成章节标题，按 ITEM_RULE 决策渲染/删除固定段落，并返回可直接用于程序审计的 `ProgrammaticAuditInput` 与 `RenderedChapterBlock` 章节块；主动基金第 3 章在缺少显式 reviewed turnover/style evidence 输入时输出证据不足降级措辞，不输出风格稳定、风格一致或言行一致正向结论。

@@ -86,4 +86,3 @@ Do not modify code, tests, renderer, FQ0-FQ6, Service/CLI defaults, `FundDocumen
 | Actual generated path set may differ from plan examples | QDII replacement candidate evidence gate | Record actual paths and keep scratch outputs ignored/untracked. |
 | CLI default path risk | QDII replacement candidate evidence gate | Pass explicit `--score-path` and output paths. |
 | `013308` naming/category conflict, QDII-FOF taxonomy, bond QDII asset-class mismatch | Future taxonomy/controller gates | Keep out of this evidence gate. |
-

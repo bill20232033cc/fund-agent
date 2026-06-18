@@ -1,8 +1,8 @@
 # Release Maintenance Report-Quality Baseline S1 Dry-Run Evidence
 
-> Date: 2026-05-25  
-> Worker: AgentCodex specialist evidence worker  
-> Gate: `report-quality-baseline S1 dry-run evidence collection`  
+> Date: 2026-05-25
+> Worker: AgentCodex specialist evidence worker
+> Gate: `report-quality-baseline S1 dry-run evidence collection`
 > Scope: dry-run evidence only; no source code, tests, renderer, FQ0-FQ6, Host/Agent package, `dayu.host`, `dayu.engine`, PR, push, commit, durable baseline, or fixture promotion.
 
 ## Step Self-Check

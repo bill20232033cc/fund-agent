@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 
+import fund_agent.services.chapter_orchestrator as chapter_orchestrator_module
 from fund_agent.fund.chapter_auditor import (
     ChapterAuditIssue,
     ChapterAuditLLMRequest,
@@ -21,6 +22,7 @@ from fund_agent.fund.chapter_facts import (
     project_chapter_facts,
 )
 from fund_agent.fund.chapter_writer import (
+    ChapterDraft,
     ChapterLLMRequest,
     ChapterLLMResponse,
     ChapterWriteIssue,
@@ -30,10 +32,13 @@ from fund_agent.fund.chapter_writer import (
     build_chapter_writer_input,
 )
 from fund_agent.services.chapter_orchestrator import (
+    ChapterAttemptRecord,
     ChapterLLMRuntimeDiagnostic,
+    ChapterOrchestrationResult,
     ChapterOrchestrationPolicy,
     ChapterOrchestrator,
     ChapterOrchestratorLLMClients,
+    ChapterRunResult,
     _audit_prompt_contract_diagnostic,
     _chapter_failure_category_from_audit_result,
     _decide_repair,
@@ -46,12 +51,14 @@ from fund_agent.services.chapter_orchestrator import (
     serialize_chapter_prompt_contract_diagnostics,
     serialize_chapter_runtime_diagnostics,
 )
+from fund_agent.fund.extractors.models import ExtractedField
 from fund_agent.services.llm_provider import (
     LLMProviderMalformedResponseError,
     LLMProviderNetworkError,
     LLMProviderRateLimitError,
     LLMProviderTimeoutError,
 )
+from fund_agent.fund.template.typed_contracts import load_typed_template_contract_manifest
 from tests.fund.test_chapter_facts import _bundle, _field
 
 
@@ -104,11 +111,14 @@ class _FakeChapterLLMClient:
         """
 
         self.requests.append(request)
-        if self.exception is not None:
-            raise self.exception
         if self.raises:
             raise RuntimeError("writer exploded")
-        text = self.texts.pop(0) if self.texts else _valid_markdown_from_request(request)
+        if self.texts:
+            text = self.texts.pop(0)
+        elif self.exception is not None:
+            raise self.exception
+        else:
+            text = _valid_markdown_from_request(request)
         return ChapterLLMResponse(text=text, model_name="fake-writer", finish_reason="stop")
 
 
@@ -161,11 +171,14 @@ class _FakeAuditLLMClient:
         """
 
         self.requests.append(request)
-        if self.exception is not None:
-            raise self.exception
         if self.raises:
             raise RuntimeError("auditor exploded")
-        raw_text = self.raw_responses.pop(0) if self.raw_responses else "PASS|chapter|no issues"
+        if self.raw_responses:
+            raw_text = self.raw_responses.pop(0)
+        elif self.exception is not None:
+            raise self.exception
+        else:
+            raw_text = "PASS|chapter|no issues"
         return ChapterAuditLLMResponse(raw_text=raw_text, model_name="fake-auditor", finish_reason="stop")
 
 
@@ -210,7 +223,12 @@ class _ChapterPlanWriterClient:
         action = self.actions.get(request.chapter_id)
         if isinstance(action, Exception):
             raise action
-        text = action if isinstance(action, str) else _valid_markdown_from_request(request)
+        if callable(action):
+            text = action(request)
+        elif isinstance(action, str):
+            text = action
+        else:
+            text = _valid_markdown_from_request(request)
         return ChapterLLMResponse(text=text, model_name="fake-writer", finish_reason="stop")
 
 
@@ -1138,6 +1156,241 @@ def test_runtime_diagnostic_serialization_exposes_only_safe_scalars() -> None:
         assert forbidden not in text
 
 
+def test_repair_timeout_terminal_diagnostic_is_not_shadowed_by_prior_audit_row() -> None:
+    """验证 repair 后 terminal timeout 不会被先前 auditor 诊断遮蔽。"""
+
+    projection = project_chapter_facts(_bundle(), chapter_ids=(2,))
+    markdown = _valid_markdown_from_projection(projection) + "\nA=R-B，因此 Alpha 为 2.10%。"
+    timeout_diagnostic = ChapterLLMRuntimeDiagnostic(
+        operation="auditor",
+        chapter_id=None,
+        fund_code=None,
+        report_year=None,
+        repair_attempt_index=None,
+        provider_attempt_index=1,
+        provider_max_attempts=2,
+        provider_runtime_category="timeout",
+        chapter_failure_category=None,
+        elapsed_ms=120000,
+        status_code=2000,
+        request_id="req-opaque-safe",
+        model_name="secret-model",
+        finish_reason=None,
+        response_chars=None,
+        error_type="ReadTimeout",
+        system_prompt_chars=10,
+        user_prompt_chars=3000,
+        approx_prompt_tokens=752,
+        allowed_fact_count=3,
+        allowed_anchor_count=2,
+        max_output_chars=12000,
+        timeout_seconds=60,
+        timeout_max_attempts=2,
+        timeout_backoff_seconds=1,
+        timeout_budget_kind="auditor",
+    )
+
+    result = _orchestrate(
+        writer=_FakeChapterLLMClient(
+            texts=(markdown, _valid_markdown_from_projection(projection)),
+        ),
+        auditor=_FakeAuditLLMClient(
+            ("BLOCKING|R=A+B-C 数字闭环|A=R-B 缺少邻近 anchor marker。",),
+            exception=LLMProviderTimeoutError(
+                "timeout on repair auditor provider body Authorization Bearer sk-secret",
+                diagnostics=(timeout_diagnostic,),
+            ),
+        ),
+        policy=ChapterOrchestrationPolicy(target_chapter_ids=(2,), max_repair_attempts=1),
+    )
+
+    run = result.chapter_results[0]
+    payload = serialize_chapter_runtime_diagnostics(result)
+    first_failed = payload["first_failed"]  # type: ignore[index]
+    row = payload["chapter_runtime_matrix"][0]  # type: ignore[index]
+    diagnostics = row["runtime_diagnostics"]  # type: ignore[index]
+
+    assert run.stop_reason == "llm_timeout"
+    assert run.failure_category == "llm_timeout"
+    assert len(run.attempts) == 2
+    assert run.attempts[0].runtime_diagnostics[0].chapter_failure_category == "prompt_contract"
+    assert run.attempts[1].runtime_diagnostics[0].provider_runtime_category == "timeout"
+    assert first_failed["diagnostic_consistency_status"] == "consistent"  # type: ignore[index]
+    assert first_failed["terminal_runtime_diagnostic_present"] is True  # type: ignore[index]
+    assert first_failed["terminal_runtime_operation"] == "auditor"  # type: ignore[index]
+    assert first_failed["terminal_repair_attempt_index"] == 1  # type: ignore[index]
+    assert first_failed["terminal_issue_class"] == "ReadTimeout"  # type: ignore[index]
+    assert first_failed["runtime_operation"] == "auditor"  # type: ignore[index]
+    assert first_failed["repair_attempt_index"] == 1  # type: ignore[index]
+    assert first_failed["provider_attempt_count"] == 1  # type: ignore[index]
+    assert first_failed["timeout_budget_kind"] == "auditor"  # type: ignore[index]
+    assert first_failed["timeout_seconds"] == 60  # type: ignore[index]
+    assert first_failed["approx_prompt_tokens"] == 752  # type: ignore[index]
+    assert row["diagnostic_consistency_status"] == "consistent"  # type: ignore[index]
+    assert diagnostics[0]["chapter_failure_category"] == "prompt_contract"  # type: ignore[index]
+    assert diagnostics[1]["chapter_failure_category"] == "llm_timeout"  # type: ignore[index]
+    assert diagnostics[1]["status_code"] is None  # type: ignore[index]
+    assert "secret-model" not in str(payload)
+    assert "provider body" not in str(payload)
+
+
+def test_writer_repair_timeout_terminal_diagnostic_uses_chapter_level_row() -> None:
+    """验证 writer repair timeout 没有 attempt record 时仍保留章节级 terminal row。"""
+
+    projection = project_chapter_facts(_bundle(), chapter_ids=(2,))
+    markdown = _valid_markdown_from_projection(projection) + "\nA=R-B，因此 Alpha 为 2.10%。"
+    timeout_diagnostic = ChapterLLMRuntimeDiagnostic(
+        operation="writer",
+        chapter_id=None,
+        fund_code=None,
+        report_year=None,
+        repair_attempt_index=None,
+        provider_attempt_index=1,
+        provider_max_attempts=2,
+        provider_runtime_category="timeout",
+        chapter_failure_category=None,
+        elapsed_ms=120000,
+        status_code=None,
+        request_id="req-opaque-safe",
+        model_name=None,
+        finish_reason=None,
+        response_chars=None,
+        error_type="ReadTimeout",
+        system_prompt_chars=10,
+        user_prompt_chars=3000,
+        approx_prompt_tokens=752,
+        allowed_fact_count=3,
+        allowed_anchor_count=2,
+        max_output_chars=12000,
+        timeout_seconds=60,
+        timeout_max_attempts=2,
+        timeout_backoff_seconds=1,
+        timeout_budget_kind="writer_repair",
+    )
+
+    result = _orchestrate(
+        writer=_FakeChapterLLMClient(
+            texts=(markdown,),
+            exception=LLMProviderTimeoutError(
+                "timeout on repair provider body Authorization Bearer sk-secret",
+                diagnostics=(timeout_diagnostic,),
+            ),
+        ),
+        auditor=_FakeAuditLLMClient(),
+        policy=ChapterOrchestrationPolicy(target_chapter_ids=(2,), max_repair_attempts=1),
+    )
+
+    run = result.chapter_results[0]
+    payload = serialize_chapter_runtime_diagnostics(result)
+    first_failed = payload["first_failed"]  # type: ignore[index]
+    row = payload["chapter_runtime_matrix"][0]  # type: ignore[index]
+    diagnostics = row["runtime_diagnostics"]  # type: ignore[index]
+
+    assert run.stop_reason == "llm_timeout"
+    assert run.failure_category == "llm_timeout"
+    assert run.runtime_diagnostics[0].provider_runtime_category == "timeout"
+    assert first_failed["diagnostic_consistency_status"] == "consistent"  # type: ignore[index]
+    assert first_failed["terminal_runtime_diagnostic_present"] is True  # type: ignore[index]
+    assert first_failed["terminal_runtime_operation"] == "writer"  # type: ignore[index]
+    assert first_failed["terminal_repair_attempt_index"] == 1  # type: ignore[index]
+    assert first_failed["terminal_issue_class"] == "ReadTimeout"  # type: ignore[index]
+    assert first_failed["runtime_operation"] == "writer"  # type: ignore[index]
+    assert first_failed["repair_attempt_index"] == 1  # type: ignore[index]
+    assert first_failed["provider_attempt_count"] == 1  # type: ignore[index]
+    assert first_failed["timeout_budget_kind"] == "writer_repair"  # type: ignore[index]
+    assert first_failed["timeout_seconds"] == 60  # type: ignore[index]
+    assert first_failed["approx_prompt_tokens"] == 752  # type: ignore[index]
+    assert row["diagnostic_consistency_status"] == "consistent"  # type: ignore[index]
+    assert diagnostics[0]["chapter_failure_category"] == "llm_timeout"  # type: ignore[index]
+    assert diagnostics[0]["status_code"] is None  # type: ignore[index]
+    assert diagnostics[1]["chapter_failure_category"] == "prompt_contract"  # type: ignore[index]
+    assert "secret-model" not in str(payload)
+    assert "provider body" not in str(payload)
+
+
+def test_timeout_terminal_without_matching_runtime_row_marks_missing() -> None:
+    """验证 llm_timeout 没有 timeout row 时只标缺失，不伪造 timeout 标量。"""
+
+    projection = project_chapter_facts(_bundle(), chapter_ids=(2,))
+    writer_input = build_chapter_writer_input(projection, chapter_id=2)
+    draft = _valid_markdown_from_projection(projection) + "\nA=R-B，因此 Alpha 为 2.10%。"
+    audit_result = _audit_result_for_l1()
+    run = ChapterRunResult(
+        chapter_id=2,
+        title="第 2 章",
+        status="failed",
+        stop_reason="llm_timeout",
+        accepted_draft=None,
+        accepted_conclusion=None,
+        attempts=(
+            ChapterAttemptRecord(
+                attempt_index=0,
+                writer_result=ChapterWriteResult(
+                    status="drafted",
+                    stop_reason="none",
+                    draft=ChapterDraft(
+                        chapter_id=2,
+                        title="第 2 章",
+                        markdown=draft,
+                        used_fact_ids=(),
+                        used_anchor_ids=(),
+                        declared_missing_reasons=(),
+                        deleted_item_rule_ids=(),
+                        model_name="fake-writer",
+                        finish_reason="stop",
+                    ),
+                    issues=(),
+                    prompt=build_chapter_prompt(writer_input),
+                    response_chars=len(draft),
+                    max_output_chars=12000,
+                    finish_reason="stop",
+                ),
+                audit_result=audit_result,
+                repair_decision=None,
+                runtime_diagnostics=(
+                    ChapterLLMRuntimeDiagnostic(
+                        operation="auditor",
+                        chapter_id=2,
+                        fund_code="110011",
+                        report_year=2024,
+                        repair_attempt_index=0,
+                        provider_attempt_index=None,
+                        provider_max_attempts=None,
+                        provider_runtime_category=None,
+                        chapter_failure_category="prompt_contract",
+                        elapsed_ms=None,
+                        status_code=None,
+                        request_id=None,
+                        model_name=None,
+                        finish_reason="stop",
+                        response_chars=22,
+                        error_type=None,
+                    ),
+                ),
+            ),
+        ),
+        issues=("LLM client exception category=llm_timeout: LLMProviderTimeoutError",),
+        failure_category="llm_timeout",
+    )
+    result = _orchestration_from_runs((run,))
+
+    payload = serialize_chapter_runtime_diagnostics(result)
+    first_failed = payload["first_failed"]  # type: ignore[index]
+    row = payload["chapter_runtime_matrix"][0]  # type: ignore[index]
+
+    assert first_failed["diagnostic_consistency_status"] == "missing_terminal_runtime_diagnostic"  # type: ignore[index]
+    assert first_failed["terminal_runtime_diagnostic_present"] is False  # type: ignore[index]
+    assert first_failed["terminal_issue_class"] == "LLMProviderTimeoutError"  # type: ignore[index]
+    assert first_failed["runtime_operation"] is None  # type: ignore[index]
+    assert first_failed["provider_attempt_count"] == 0  # type: ignore[index]
+    assert first_failed["provider_runtime_categories"] == ()  # type: ignore[index]
+    assert first_failed["timeout_seconds"] is None  # type: ignore[index]
+    assert first_failed["timeout_budget_kind"] is None  # type: ignore[index]
+    assert row["diagnostic_consistency_status"] == "missing_terminal_runtime_diagnostic"  # type: ignore[index]
+    assert row["runtime_diagnostics"][0]["chapter_failure_category"] == "prompt_contract"  # type: ignore[index]
+    assert row["runtime_diagnostics"][0]["finish_reason"] == "stop"  # type: ignore[index]
+
+
 def test_runtime_diagnostic_serialization_includes_attempt_level_diagnostics() -> None:
     """验证 serializer 覆盖 attempt.runtime_diagnostics。"""
 
@@ -1289,7 +1542,61 @@ def test_l1_repair_context_guides_anchored_correction_and_accepts_after_repair()
     assert repair_context is not None
     assert any(issue_id.startswith("programmatic:L1") for issue_id in repair_context.previous_issue_ids)
     assert any("第2章 R=A+B-C 数字闭环" in item for item in repair_context.required_corrections)
+    assert any("### 结论要点 与 ### 证据与出处" in item for item in repair_context.required_corrections)
+    assert any("不得在这些段落无锚点复述 R/A/B/C/A-C 具体百分比" in item for item in repair_context.required_corrections)
+    assert "第2章 L1 repair 必须改写规则" in writer.requests[1].user_prompt
+    assert "先删除上一轮无邻近 anchor 的具体数字闭环断言" in writer.requests[1].user_prompt
+    assert "只有确认 allowed `<!-- anchor:<anchor_id> -->` 支撑该具体数值时" in writer.requests[1].user_prompt
+    assert "同一句或上下2行" in writer.requests[1].user_prompt
+    assert "不确定时写数据不足或下一步最小验证问题，且不写具体百分比" in writer.requests[1].user_prompt
+    assert "输出前逐行自查 R/A/B/C/A-C/Alpha/Beta/Cost/%" in writer.requests[1].user_prompt
     assert "extra_payload" not in writer.requests[1].user_prompt
+
+
+def test_chapter_6_invalid_anchor_marker_retries_and_accepts() -> None:
+    """验证 Service 编排第 6 章 invalid anchor marker 可预算内重写通过。"""
+
+    def _first_invalid_then_valid(request: ChapterLLMRequest) -> str:
+        if request.repair_context is None:
+            return _invalid_anchor_markdown_from_request(request)
+        return _valid_markdown_from_request(request)
+
+    writer = _ChapterPlanWriterClient({6: _first_invalid_then_valid})
+
+    result = _orchestrate(
+        policy=ChapterOrchestrationPolicy(target_chapter_ids=(6,), max_repair_attempts=1),
+        writer=writer,
+        auditor=_FakeAuditLLMClient(),
+    )
+
+    run = result.chapter_results[0]
+    assert result.status == "accepted"
+    assert run.status == "accepted"
+    assert [request.chapter_id for request in writer.requests] == [6, 6]
+    assert writer.requests[0].repair_context is None
+    assert writer.requests[1].repair_context is not None
+    assert writer.requests[1].repair_context.attempt_index == 1
+    assert len(run.attempts) == 2
+
+
+def test_chapter_6_invalid_anchor_marker_budget_zero_does_not_retry() -> None:
+    """回归守卫：Service 编排第 6 章预算为 0 时 invalid marker 不重试。"""
+
+    writer = _ChapterPlanWriterClient({6: _invalid_anchor_markdown_from_request})
+
+    result = _orchestrate(
+        policy=ChapterOrchestrationPolicy(target_chapter_ids=(6,), max_repair_attempts=0),
+        writer=writer,
+        auditor=_FakeAuditLLMClient(),
+    )
+
+    run = result.chapter_results[0]
+    assert result.status == "blocked"
+    assert run.status == "blocked"
+    assert run.stop_reason == "llm_contract_violation"
+    assert len(writer.requests) == 1
+    assert writer.requests[0].repair_context is None
+    assert len(run.attempts) == 1
 
 
 def test_l1_failure_after_repair_budget_exhausted_keeps_l1_subcategory() -> None:
@@ -1352,6 +1659,111 @@ def test_unexpected_exception_records_code_bug_diagnostic_without_secret() -> No
     assert "Authorization" not in (diagnostic.message or "")
     assert "Bearer" not in (diagnostic.message or "")
     assert "sk-" not in (diagnostic.message or "")
+
+
+def test_chapter_3_pre_provider_value_error_serializes_safe_runtime_cap() -> None:
+    """验证第 3 章 pre-provider code_bug 序列化保留安全输出上限。"""
+
+    exception = ValueError("Authorization Bearer sk-secret prompt raw")
+
+    result = _orchestrate_one(
+        writer=_FakeChapterLLMClient(exception=exception),
+        auditor=_FakeAuditLLMClient(),
+        policy=ChapterOrchestrationPolicy(
+            target_chapter_ids=(3,),
+            max_output_chars=12000,
+            typed_template_path="typed_template_contract",
+        ),
+    )
+
+    payload = serialize_chapter_runtime_diagnostics(result)
+    first_failed = payload["first_failed"]  # type: ignore[index]
+    row = payload["chapter_runtime_matrix"][0]  # type: ignore[index]
+    diagnostics = row["runtime_diagnostics"]  # type: ignore[index]
+
+    assert first_failed["chapter_id"] == 3  # type: ignore[index]
+    assert first_failed["stop_reason"] == "llm_exception"  # type: ignore[index]
+    assert first_failed["category"] == "code_bug"  # type: ignore[index]
+    assert first_failed["provider_attempt_count"] == 0  # type: ignore[index]
+    assert first_failed["provider_runtime_categories"] == ()  # type: ignore[index]
+    assert first_failed["max_output_chars"] == 12000  # type: ignore[index]
+    assert first_failed["terminal_runtime_diagnostic_present"] is True  # type: ignore[index]
+    assert first_failed["diagnostic_consistency_status"] == "consistent"  # type: ignore[index]
+    assert diagnostics[0]["error_type"] == "ValueError"  # type: ignore[index]
+    assert diagnostics[0]["max_output_chars"] == 12000  # type: ignore[index]
+    assert diagnostics[0]["provider_runtime_category"] is None  # type: ignore[index]
+    diagnostic_message = diagnostics[0].get("message")  # type: ignore[union-attr]
+    assert "Authorization" not in (diagnostic_message or "")
+    assert "Bearer" not in (diagnostic_message or "")
+    assert "sk-secret" not in (diagnostic_message or "")
+    assert "prompt raw" not in (diagnostic_message or "")
+    text = str(payload)
+    assert "Authorization" not in text
+    assert "Bearer" not in text
+    assert "sk-secret" not in text
+    assert "prompt raw" not in text
+
+
+def test_chapter_3_writer_input_value_error_serializes_safe_runtime_cap_before_writer_tool(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """验证第 3 章 writer input 构造异常投影为安全运行时诊断。"""
+
+    def _raise_typed_required_output_items(
+        chapter_id: int,
+        *,
+        policy: object,
+    ) -> tuple[object, ...]:
+        """在第 3 章 writer request 构造前注入 ValueError。"""
+
+        if chapter_id == 3:
+            raise ValueError("Authorization Bearer sk-secret prompt raw")
+        return ()
+
+    monkeypatch.setattr(
+        "fund_agent.agent.runner._typed_required_output_items",
+        _raise_typed_required_output_items,
+    )
+    writer = _FakeChapterLLMClient()
+
+    result = _orchestrate(
+        writer=writer,
+        auditor=_FakeAuditLLMClient(),
+        policy=ChapterOrchestrationPolicy(
+            target_chapter_ids=(3,),
+            max_output_chars=12000,
+            typed_template_path="typed_template_contract",
+        ),
+    )
+
+    run = result.chapter_results[0]
+    payload = serialize_chapter_runtime_diagnostics(result)
+    first_failed = payload["first_failed"]  # type: ignore[index]
+    row = payload["chapter_runtime_matrix"][0]  # type: ignore[index]
+    diagnostics = row["runtime_diagnostics"]  # type: ignore[index]
+
+    assert writer.requests == []
+    assert result.status == "blocked"
+    assert run.chapter_id == 3
+    assert run.status == "failed"
+    assert run.stop_reason == "llm_exception"
+    assert run.failure_category == "code_bug"
+    assert first_failed["chapter_id"] == 3  # type: ignore[index]
+    assert first_failed["stop_reason"] == "llm_exception"  # type: ignore[index]
+    assert first_failed["category"] == "code_bug"  # type: ignore[index]
+    assert first_failed["provider_attempt_count"] == 0  # type: ignore[index]
+    assert first_failed["provider_runtime_categories"] == ()  # type: ignore[index]
+    assert first_failed["max_output_chars"] == 12000  # type: ignore[index]
+    assert first_failed["terminal_runtime_diagnostic_present"] is True  # type: ignore[index]
+    assert first_failed["diagnostic_consistency_status"] == "consistent"  # type: ignore[index]
+    assert diagnostics[0]["error_type"] == "ValueError"  # type: ignore[index]
+    assert diagnostics[0]["max_output_chars"] == 12000  # type: ignore[index]
+    assert diagnostics[0]["provider_runtime_category"] is None  # type: ignore[index]
+    text = str(payload)
+    assert "Authorization" not in text
+    assert "Bearer" not in text
+    assert "sk-secret" not in text
+    assert "prompt raw" not in text
 
 
 def test_unknown_fund_type_returns_global_blocked_without_writer_calls() -> None:
@@ -1472,6 +1884,15 @@ def test_required_corrections_are_deterministic_for_known_issue_patterns() -> No
         ),
         _audit_issue("e1", "E1", "草稿引用未授权锚点：unknown", "used_anchor_ids"),
         _audit_issue("llm:parse_failure", "C1", "parse failure", "raw_response"),
+        replace(
+            _audit_issue(
+                "programmatic:C2:chapter_2_alpha_yearly_breakdown:abcdef",
+                "C2",
+                "ITEM_RULE 要求删除的段落仍出现在草稿中：超额收益分年度拆解",
+                "chapter_2_alpha_yearly_breakdown",
+            ),
+            item_rule_ids=("chapter_2_alpha_yearly_breakdown",),
+        ),
     )
 
     corrections = _required_corrections_from_issues(issues)
@@ -1480,9 +1901,15 @@ def test_required_corrections_are_deterministic_for_known_issue_patterns() -> No
     assert any("required output item" in correction for correction in corrections)
     assert any("候选 facet" in correction for correction in corrections)
     assert any("第2章 R=A+B-C 数字闭环" in correction for correction in corrections)
+    assert any("### 结论要点 与 ### 证据与出处" in correction for correction in corrections)
     assert any("不得编造 Alpha、Beta、Cost 或 R 数值" in correction for correction in corrections)
     assert any("allowed anchor marker" in correction for correction in corrections)
     assert any("PASS|chapter|no issues" in correction for correction in corrections)
+    assert any("BLOCKING、REVIEWABLE 或 INFO" in correction for correction in corrections)
+    assert any("禁止 SEVERITY 占位词" in correction for correction in corrections)
+    assert any("解释性前缀、Markdown、JSON" in correction for correction in corrections)
+    assert any("删除 ITEM_RULE 要求删除的 optional/conditional 段落标题和专属段落" in correction for correction in corrections)
+    assert any("不得删除 required output marker" in correction for correction in corrections)
 
 
 def test_required_corrections_sanitize_unknown_issue_message() -> None:
@@ -1826,6 +2253,252 @@ def test_dependency_missing_only_for_true_writer_dependency_not_prior_failure() 
     assert result.generated_chapter_ids == (1, 2)
 
 
+def test_typed_contract_path_preserves_independent_body_execution(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    """验证 typed contract path 接入后仍独立执行正文章节。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 typed path 未传入 availability/audit_focus 或前章失败跳过后章时抛出。
+    """
+
+    availability_calls: list[tuple[str, int]] = []
+    typed_manifest = load_typed_template_contract_manifest()
+    typed_by_id = {chapter.chapter_id: chapter for chapter in typed_manifest.chapters}
+    original_derive_availability = chapter_orchestrator_module.derive_evidence_availability
+
+    def _record_derive_availability(projection):  # type: ignore[no-untyped-def]
+        """记录 Service façade 是否显式派生 EvidenceAvailability。"""
+
+        availability_calls.append((projection.fund_code, projection.report_year))
+        availability = original_derive_availability(projection)
+        assert availability.require("ch2.required_output.item_01").chapter_id == 2
+        assert availability.require("ch3.required_output.item_03").status == "unreviewed"
+        return availability
+
+    monkeypatch.setattr(
+        chapter_orchestrator_module,
+        "derive_evidence_availability",
+        _record_derive_availability,
+    )
+    writer = _ChapterPlanWriterClient({1: LLMProviderTimeoutError("timeout")})
+    auditor = _FakeAuditLLMClient()
+    result = _orchestrate(
+        policy=ChapterOrchestrationPolicy(
+            target_chapter_ids=(1, 2, 3),
+            max_repair_attempts=0,
+            prompt_payload_mode="compact",
+            typed_template_path="typed_template_contract",
+        ),
+        writer=writer,
+        auditor=auditor,
+    )
+
+    rows = {run.chapter_id: run for run in result.chapter_results}
+    assert result.status == "partial"
+    assert [request.chapter_id for request in writer.requests] == [1, 2, 3]
+    assert rows[1].status == "failed"
+    assert rows[1].stop_reason == "llm_timeout"
+    assert rows[2].status == "accepted"
+    assert rows[3].status == "accepted"
+    assert rows[2].attempts[0].writer_result.prompt.required_output_evidence_plan
+    assert rows[3].attempts[0].writer_result.prompt.required_output_evidence_plan
+    assert rows[2].attempts[0].writer_result.prompt.required_output_items == tuple(
+        item.item_id for item in typed_by_id[2].required_output_items
+    )
+    assert rows[3].attempts[0].writer_result.prompt.required_output_items == tuple(
+        item.item_id for item in typed_by_id[3].required_output_items
+    )
+    ch3_plan_by_id = {
+        plan.item_id: plan
+        for plan in rows[3].attempts[0].writer_result.prompt.required_output_evidence_plan
+    }
+    assert ch3_plan_by_id["ch3.required_output.item_03"].text == (
+        typed_by_id[3].required_output_items[2].text
+    )
+    assert ch3_plan_by_id["ch3.required_output.item_03"].action == "render_evidence_gap"
+    assert ch3_plan_by_id["ch3.required_output.item_03"].availability_status == "unreviewed"
+    assert availability_calls == [("110011", 2024)]
+    assert auditor.requests[0].chapter_id == 2
+    assert auditor.requests[0].audit_focus == typed_by_id[2].audit_focus
+    assert auditor.requests[1].chapter_id == 3
+    assert auditor.requests[1].audit_focus == typed_by_id[3].audit_focus
+    assert result.skipped_chapter_ids == ()
+    assert all(run.stop_reason != "dependency_missing" for run in result.chapter_results[1:])
+
+
+def test_typed_contract_path_repair_keeps_typed_required_output_items() -> None:
+    """验证 typed path repair 轮次也把 required output items 传给 writer。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 repair writer input 丢失 typed required output 行为时抛出。
+    """
+
+    writer = _FakeChapterLLMClient()
+    auditor = _FakeAuditLLMClient(
+        (
+            "BLOCKING|chapter|fixture semantic repair",
+            "PASS|chapter|no issues",
+        )
+    )
+
+    result = _orchestrate(
+        policy=ChapterOrchestrationPolicy(
+            target_chapter_ids=(2,),
+            max_repair_attempts=1,
+            prompt_payload_mode="compact",
+            typed_template_path="typed_template_contract",
+        ),
+        writer=writer,
+        auditor=auditor,
+    )
+
+    run = result.chapter_results[0]
+    assert result.status == "accepted"
+    assert run.status == "accepted"
+    assert run.stop_reason == "none"
+    assert [request.chapter_id for request in writer.requests] == [2, 2]
+    assert len(run.attempts) == 2
+    assert all(
+        attempt.writer_result.prompt.required_output_evidence_plan
+        for attempt in run.attempts
+    )
+    assert all(
+        attempt.writer_result.prompt.required_output_items[0].startswith(
+            "ch2.required_output."
+        )
+        for attempt in run.attempts
+    )
+
+
+def test_chapter_2_typed_missing_evidence_gap_path_accepts_without_repair() -> None:
+    """验证第 2 章 typed 非 available 证据可渲染缺口并保持一次 writer 调用。"""
+
+    projection = project_chapter_facts(
+        replace(
+            _bundle(),
+            nav_benchmark_performance=ExtractedField(
+                value=None,
+                anchors=(),
+                extraction_mode="missing",
+                note="fixture missing",
+            ),
+            fee_schedule=ExtractedField(
+                value=None,
+                anchors=(),
+                extraction_mode="missing",
+                note="fixture missing",
+            ),
+        ),
+        chapter_ids=(2,),
+    )
+    policy = ChapterOrchestrationPolicy(
+        target_chapter_ids=(2,),
+        max_repair_attempts=1,
+        typed_template_path="typed_template_contract",
+    )
+    input_data = build_chapter_orchestration_input(
+        fund_code="110011",
+        report_year=2024,
+        chapter_projection=projection,
+        policy=policy,
+    )
+    writer = _ChapterPlanWriterClient({2: _chapter_2_gap_markdown_from_request})
+
+    result = orchestrate_chapters(
+        input_data,
+        llm_clients=ChapterOrchestratorLLMClients(writer=writer, auditor=_FakeAuditLLMClient()),
+    )
+
+    run = result.chapter_results[0]
+    plan_by_id = {
+        plan.item_id: plan
+        for plan in run.attempts[0].writer_result.prompt.required_output_evidence_plan
+    }
+    assert result.status == "accepted"
+    assert run.status == "accepted"
+    assert run.stop_reason == "none"
+    assert len(writer.requests) == 1
+    assert policy.max_repair_attempts == 1
+    assert plan_by_id["ch2.required_output.item_01"].action == "render_evidence_gap"
+    assert plan_by_id["ch2.required_output.item_01"].availability_status == "missing"
+    assert plan_by_id["ch2.required_output.item_07"].action == "render_minimum_verification_question"
+    assert plan_by_id["ch2.required_output.item_07"].availability_status == "missing"
+
+
+def test_chapter_2_typed_available_facts_still_fail_l1_after_one_repair() -> None:
+    """验证第 2 章 available facts 被忽略时仍按 L1 fail-closed 且只 repair 一次。"""
+
+    writer = _ChapterPlanWriterClient({2: _chapter_2_unanchored_closure_from_request})
+
+    result = _orchestrate(
+        writer=writer,
+        auditor=_FakeAuditLLMClient(),
+        policy=ChapterOrchestrationPolicy(
+            target_chapter_ids=(2,),
+            max_repair_attempts=1,
+            typed_template_path="typed_template_contract",
+        ),
+    )
+
+    run = result.chapter_results[0]
+    assert run.status == "failed"
+    assert run.stop_reason == "repair_budget_exhausted"
+    assert run.failure_category == "prompt_contract"
+    assert run.failure_subcategory == "l1_numerical_closure"
+    assert len(writer.requests) == 2
+    assert len(run.attempts) == 2
+    assert all(
+        plan.action == "render"
+        for plan in run.attempts[0].writer_result.prompt.required_output_evidence_plan
+    )
+
+
+def test_typed_contract_path_ch1_accepts_typed_required_output_markers() -> None:
+    """验证 typed 第 1 章不会因使用 stable required-output marker 被程序审计误阻断。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 Ch1 typed marker 被 legacy marker 规则误阻断时抛出。
+    """
+
+    result = _orchestrate(
+        policy=ChapterOrchestrationPolicy(
+            target_chapter_ids=(1,),
+            prompt_payload_mode="compact",
+            typed_template_path="typed_template_contract",
+        ),
+        writer=_FakeChapterLLMClient(),
+        auditor=_FakeAuditLLMClient(),
+    )
+
+    run = result.chapter_results[0]
+    assert result.status == "accepted"
+    assert run.status == "accepted"
+    assert run.attempts[0].writer_result.prompt.required_output_items[0].startswith(
+        "ch1.required_output."
+    )
+    assert not any(
+        "required output item marker" in issue.message
+        for issue in run.attempts[0].audit_result.programmatic.issues
+    )
+
+
 def test_first_failed_diagnostic_keeps_full_chapter_matrix() -> None:
     """验证 first_failed 不隐藏完整章节矩阵。"""
 
@@ -2164,6 +2837,38 @@ def _orchestrate(
     )
 
 
+def _orchestration_from_runs(
+    chapter_results: tuple[ChapterRunResult, ...],
+) -> ChapterOrchestrationResult:
+    """从手工章节结果构造编排结果。
+
+    Args:
+        chapter_results: 手工构造的章节结果。
+
+    Returns:
+        测试用章节编排结果。
+
+    Raises:
+        无显式抛出。
+    """
+
+    projection = project_chapter_facts(
+        _bundle(),
+        chapter_ids=tuple(result.chapter_id for result in chapter_results),
+    )
+    return ChapterOrchestrationResult(
+        status="blocked",
+        fund_code="110011",
+        report_year=2024,
+        projection=projection,
+        chapter_results=chapter_results,
+        accepted_conclusions=(),
+        blocked_reasons=tuple(issue for result in chapter_results for issue in result.issues),
+        generated_chapter_ids=tuple(result.chapter_id for result in chapter_results),
+        skipped_chapter_ids=(),
+    )
+
+
 def _orchestrate_with_writer_stop_reason(stop_reason: str) -> object:
     """构造触发指定 writer stop reason 的编排结果。
 
@@ -2267,6 +2972,47 @@ def _audit_result_with_hint(
         ),
         accepted=False,
         repair_hint=repair_hint,
+    )
+
+
+def _audit_result_for_l1() -> ChapterAuditResult:
+    """构造第 2 章 L1 programmatic audit failure。
+
+    Args:
+        无。
+
+    Returns:
+        L1 审计失败结果。
+
+    Raises:
+        无显式抛出。
+    """
+
+    issue = ChapterAuditIssue(
+        issue_id="programmatic:L1:line:2:abcdef",
+        layer="programmatic",
+        rule_code="L1",
+        severity="blocking",
+        message="R=A+B-C 数字闭环缺少邻近 anchor marker。",
+        location="line:2",
+        repair_hint="patch",
+    )
+    return ChapterAuditResult(
+        status="fail",
+        programmatic=ChapterProgrammaticAuditResult(
+            status="fail",
+            issues=(issue,),
+            checked_rules=("L1",),
+        ),
+        llm=ChapterLLMAuditResult(
+            status="pass",
+            issues=(),
+            raw_response=None,
+            model_name=None,
+            finish_reason="stop",
+        ),
+        accepted=False,
+        repair_hint="patch",
     )
 
 
@@ -2401,6 +3147,39 @@ def _valid_markdown_from_request(request: ChapterLLMRequest) -> str:
 
     anchor_id = request.required_anchor_ids[0]
     return _valid_markdown_from_parts(anchor_id, _required_items_from_request(request))
+
+
+def _invalid_anchor_markdown_from_request(request: ChapterLLMRequest) -> str:
+    """按 writer request 构造非法 anchor marker 章节 Markdown。"""
+
+    return _valid_markdown_from_request(request).replace("<!-- anchor:", "<!-- ANCHOR:", 1)
+
+
+def _chapter_2_gap_markdown_from_request(request: ChapterLLMRequest) -> str:
+    """构造第 2 章非 available required output 的安全缺口/最小验证 Markdown。"""
+
+    anchor_id = request.required_anchor_ids[0]
+    required_lines = "\n".join(
+        f"<!-- required_output:{item} -->\n"
+        "- 证据不足，不能完成具体 R=A+B-C 数字闭环。"
+        "下一步最小验证问题：复核同源年报中的基金收益、基准收益和费用口径。"
+        for item in _required_items_from_request(request)
+    )
+    return (
+        "### 结论要点\n"
+        f"{required_lines}\n"
+        "### 详细情况\n"
+        "本章只记录当前同源已复核证据不足的项目，不输出具体百分比闭环。\n"
+        "### 证据与出处\n"
+        f"<!-- anchor:{anchor_id} -->\n"
+        "> 📎 证据：年报2024§§2表None行fixture（fixture）\n"
+    )
+
+
+def _chapter_2_unanchored_closure_from_request(request: ChapterLLMRequest) -> str:
+    """构造第 2 章 typed marker 完整但含无锚点数字闭环的 Markdown。"""
+
+    return _valid_markdown_from_request(request) + "\nA=R-B，因此 Alpha 为 2.10%。"
 
 
 def _valid_markdown_from_projection(projection: object) -> str:
@@ -2543,8 +3322,28 @@ def _required_items_from_request(request: ChapterLLMRequest) -> tuple[str, ...]:
         if line.startswith(marker):
             value = line.removeprefix(marker)
             parsed = ast.literal_eval(value)
-            return tuple(parsed)
+            return tuple(_required_item_from_prompt_payload(item) for item in parsed)
     return ()
+
+
+def _required_item_from_prompt_payload(item: str) -> str:
+    """从 prompt required output payload 中提取 exact marker item。
+
+    Args:
+        item: legacy required output 原文，或 typed payload 多行字符串。
+
+    Returns:
+        legacy 原文或 typed stable item id。
+
+    Raises:
+        无显式抛出。
+    """
+
+    first_line = item.splitlines()[0] if item else ""
+    if first_line.startswith("<!-- required_output:") and first_line.endswith(" -->"):
+        return first_line.removeprefix("<!-- required_output:").removesuffix(" -->")
+    return item
+
 
 
 def _required_lines(required_items: tuple[str, ...]) -> str:
@@ -2560,10 +3359,25 @@ def _required_lines(required_items: tuple[str, ...]) -> str:
         无显式抛出。
     """
 
-    return "\n".join(
-        f"<!-- required_output:{item} -->\n- {item}: 已根据结构化事实说明。"
-        for item in required_items
-    )
+    return "\n".join(f"<!-- required_output:{item} -->\n- {item}: {_required_line_text(item)}" for item in required_items)
+
+
+def _required_line_text(item: str) -> str:
+    """构造单个 required output 的测试文本。
+
+    Args:
+        item: required output item 原文或 typed item id。
+
+    Returns:
+        可通过 writer / auditor 程序检查的测试文本。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if item.startswith("ch2.required_output.") or item.startswith("ch3.required_output."):
+        return "证据不足，下一步最小验证问题是复核同源年报披露。"
+    return "已根据结构化事实说明。"
 
 
 def _imports_for(source_path: Path) -> set[str]:

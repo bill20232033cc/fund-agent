@@ -1,0 +1,4644 @@
+{
+  "schema_version": "docling_baseline_support_source_truth_matrix.v1",
+  "gate": "Docling Baseline Support Source-truth Evidence Gate",
+  "input_artifacts": [
+    {
+      "path": "reports/docling-field-correctness-anchor-coverage-no-live-implementation/20260616/anchor_coverage_after_matrix.json",
+      "sha256": "4c7de6fa68d28e5db0032cf7e951f36206cdbae00f96ea504d4f870ab6f6870c"
+    },
+    {
+      "path": "reports/representation-json/004393_field_family_correctness_pilot_reviewed_facts_20260615.json",
+      "sha256": "8ca8071f6c3f3fc96fe41c877c14b90697821f3b6a2272cb2cf8bb2945413beb"
+    },
+    {
+      "path": "reports/representation-json/docling_multi_sample_field_family_correctness_reviewed_facts_20260616.json",
+      "sha256": "ddea0a101b3f084478c369f7822ef338154157ccdf584a2c10970a4a330932e0"
+    },
+    {
+      "path": "reports/docling-field-correctness-comparative/20260616/field_comparison_matrix.json",
+      "sha256": "94d8e7d5ad2626c5afefb0dbaf3daed8b489454ec50b38f05ce857de80c792c9"
+    },
+    {
+      "path": "docs/reviews/docling-baseline-support-source-truth-evidence-plan-20260616.md",
+      "sha256": "0b79b8c8b4479ea394c29e025df21671479de6c88e835fd4c1df49d6ebdaa626"
+    },
+    {
+      "path": "docs/reviews/docling-baseline-support-source-truth-evidence-plan-controller-judgment-20260616.md",
+      "sha256": "650123ff109cb1aee1b80ff07776c1874f2382e0f89c55357bd9730a4fbe9490"
+    }
+  ],
+  "summary": {
+    "rows_total": 72,
+    "source_body_match_count": 55,
+    "residual_or_blocked_count": 17,
+    "dispositions": {
+      "source_body_match": 55,
+      "ambiguous_source_body_match": 15,
+      "source_body_mismatch": 1,
+      "semantic_assignment_residual": 1
+    },
+    "not_baseline_promotion": true,
+    "not_parser_replacement": true,
+    "not_release_readiness": true,
+    "not_full_field_correctness": true,
+    "verdict": "SOURCE_TRUTH_EVIDENCE_PARTIAL_NOT_READY"
+  },
+  "by_sample": [
+    {
+      "sample_id": "S1",
+      "rows": 21,
+      "dispositions": {
+        "source_body_match": 18,
+        "ambiguous_source_body_match": 3
+      }
+    },
+    {
+      "sample_id": "S4",
+      "rows": 17,
+      "dispositions": {
+        "ambiguous_source_body_match": 3,
+        "source_body_match": 14
+      }
+    },
+    {
+      "sample_id": "S5",
+      "rows": 17,
+      "dispositions": {
+        "ambiguous_source_body_match": 3,
+        "source_body_match": 13,
+        "source_body_mismatch": 1
+      }
+    },
+    {
+      "sample_id": "S6",
+      "rows": 17,
+      "dispositions": {
+        "ambiguous_source_body_match": 6,
+        "source_body_match": 10,
+        "semantic_assignment_residual": 1
+      }
+    }
+  ],
+  "repository_loads": {
+    "004393:2025": {
+      "status": "loaded",
+      "metadata_ok": true,
+      "metadata_reason": null,
+      "metadata": {
+        "source": "eid",
+        "selected_source": "eid",
+        "source_mode": "single_source_only",
+        "fallback_enabled": false,
+        "fallback_used": false,
+        "primary_failure_category": null,
+        "report_year": 2025,
+        "source_metadata_present": true,
+        "pdf_cache_hit": false,
+        "parsed_cache_hit": true,
+        "cache_schema_version": 1
+      },
+      "error": null
+    },
+    "006597:2024": {
+      "status": "loaded",
+      "metadata_ok": true,
+      "metadata_reason": null,
+      "metadata": {
+        "source": "eid",
+        "selected_source": "eid",
+        "source_mode": "single_source_only",
+        "fallback_enabled": false,
+        "fallback_used": false,
+        "primary_failure_category": null,
+        "report_year": 2024,
+        "source_metadata_present": true,
+        "pdf_cache_hit": false,
+        "parsed_cache_hit": true,
+        "cache_schema_version": 1
+      },
+      "error": null
+    },
+    "017641:2024": {
+      "status": "loaded",
+      "metadata_ok": true,
+      "metadata_reason": null,
+      "metadata": {
+        "source": "eid",
+        "selected_source": "eid",
+        "source_mode": "single_source_only",
+        "fallback_enabled": false,
+        "fallback_used": false,
+        "primary_failure_category": null,
+        "report_year": 2024,
+        "source_metadata_present": true,
+        "pdf_cache_hit": true,
+        "parsed_cache_hit": false,
+        "cache_schema_version": 1
+      },
+      "error": null
+    },
+    "110020:2024": {
+      "status": "loaded",
+      "metadata_ok": true,
+      "metadata_reason": null,
+      "metadata": {
+        "source": "eid",
+        "selected_source": "eid",
+        "source_mode": "single_source_only",
+        "fallback_enabled": false,
+        "fallback_used": false,
+        "primary_failure_category": null,
+        "report_year": 2024,
+        "source_metadata_present": true,
+        "pdf_cache_hit": false,
+        "parsed_cache_hit": true,
+        "cache_schema_version": 1
+      },
+      "error": null
+    }
+  },
+  "rows": [
+    {
+      "sample_id": "S1",
+      "fact_id": "F001",
+      "fund_code": "004393",
+      "document_year": 2025,
+      "family": "fund_identity_profile",
+      "field_name": "fund_name",
+      "candidate_anchor": {
+        "section_id": "§2",
+        "page_number": 5,
+        "table_id": "#/tables/2",
+        "row_locator": "cell:r0:c1:idx1",
+        "candidate_only": true
+      },
+      "candidate_value": "安信企业价值优选混合型证券投资基金",
+      "candidate_excerpt": "安信企业价值优选混合型证券投资基金",
+      "normalized_candidate": "安信企业价值优选混合型证券投资基金",
+      "not_baseline_promotion": true,
+      "not_parser_replacement": true,
+      "not_release_readiness": true,
+      "not_full_field_correctness": true,
+      "repository_load_status": {
+        "status": "loaded",
+        "metadata_ok": true,
+        "metadata_reason": null,
+        "metadata": {
+          "source": "eid",
+          "selected_source": "eid",
+          "source_mode": "single_source_only",
+          "fallback_enabled": false,
+          "fallback_used": false,
+          "primary_failure_category": null,
+          "report_year": 2025,
+          "source_metadata_present": true,
+          "pdf_cache_hit": false,
+          "parsed_cache_hit": true,
+          "cache_schema_version": 1
+        },
+        "error": null
+      },
+      "match_strategy": "section_text",
+      "proof_level": "repository_section_text_match",
+      "normalized_source_match_count": 1,
+      "source_excerpt": "§2 基金简介 2.1 基金基本情况 基金名称 安信企业价值优选混合型证券投资基金 基金简称 安信企业价值优选混合 基金主代码 004393 基金运作方式 契约型开放式 基金合同生效日 2022年8月8日 基金管理人 安信基金管理有限责任公司 基金托管人 中国银行股份有限公司 报告期末基金份 81,986,743.27...",
+      "source_excerpt_samples": [
+        "§2 基金简介 2.1 基金基本情况 基金名称 安信企业价值优选混合型证券投资基金 基金简称 安信企业价值优选混合 基金主代码 004393 基金运作方式 契约型开放式 基金合同生效日 2022年8月8日 基金管理人 安信基金管理有限责任公司 基金托管人 中国银行股份有限公司 报告期末基金份 81,986,743.27..."
+      ],
+      "row_disposition": "source_body_match",
+      "residual_reason": null
+    },
+    {
+      "sample_id": "S1",
+      "fact_id": "F002",
+      "fund_code": "004393",
+      "document_year": 2025,
+      "family": "fund_identity_profile",
+      "field_name": "fund_code",
+      "candidate_anchor": {
+        "section_id": "§2",
+        "page_number": 5,
+        "table_id": "#/tables/2",
+        "row_locator": "cell:r2:c1:idx5",
+        "candidate_only": true
+      },
+      "candidate_value": "004393",
+      "candidate_excerpt": "004393",
+      "normalized_candidate": "004393",
+      "not_baseline_promotion": true,
+      "not_parser_replacement": true,
+      "not_release_readiness": true,
+      "not_full_field_correctness": true,
+      "repository_load_status": {
+        "status": "loaded",
+        "metadata_ok": true,
+        "metadata_reason": null,
+        "metadata": {
+          "source": "eid",
+          "selected_source": "eid",
+          "source_mode": "single_source_only",
+          "fallback_enabled": false,
+          "fallback_used": false,
+          "primary_failure_category": null,
+          "report_year": 2025,
+          "source_metadata_present": true,
+          "pdf_cache_hit": false,
+          "parsed_cache_hit": true,
+          "cache_schema_version": 1
+        },
+        "error": null
+      },
+      "match_strategy": "table_page",
+      "proof_level": "repository_table_page_cell_or_row_match",
+      "normalized_source_match_count": 2,
+      "source_excerpt": "基金主代码 | 004393 | ",
+      "source_excerpt_samples": [
+        "基金主代码 | 004393 | ",
+        "下属分级基金的交\n易代码 | 004393 | 020964"
+      ],
+      "row_disposition": "ambiguous_source_body_match",
+      "residual_reason": "multiple_normalized_source_body_matches_in_allowed_scope"
+    },
+    {
+      "sample_id": "S1",
+      "fact_id": "F003",
+      "fund_code": "004393",
+      "document_year": 2025,
+      "family": "fund_identity_profile",
+      "field_name": "operation_mode",
+      "candidate_anchor": {
+        "section_id": "§2",
+        "page_number": 5,
+        "table_id": "#/tables/2",
+        "row_locator": "cell:r3:c1:idx7",
+        "candidate_only": true
+      },
+      "candidate_value": "契约型开放式",
+      "candidate_excerpt": "契约型开放式",
+      "normalized_candidate": "契约型开放式",
+      "not_baseline_promotion": true,
+      "not_parser_replacement": true,
+      "not_release_readiness": true,
+      "not_full_field_correctness": true,
+      "repository_load_status": {
+        "status": "loaded",
+        "metadata_ok": true,
+        "metadata_reason": null,
+        "metadata": {
+          "source": "eid",
+          "selected_source": "eid",
+          "source_mode": "single_source_only",
+          "fallback_enabled": false,
+          "fallback_used": false,
+          "primary_failure_category": null,
+          "report_year": 2025,
+          "source_metadata_present": true,
+          "pdf_cache_hit": false,
+          "parsed_cache_hit": true,
+          "cache_schema_version": 1
+        },
+        "error": null
+      },
+      "match_strategy": "table_page",
+      "proof_level": "repository_table_page_cell_or_row_match",
+      "normalized_source_match_count": 1,
+      "source_excerpt": "基金运作方式 | 契约型开放式 | ",
+      "source_excerpt_samples": [
+        "基金运作方式 | 契约型开放式 | "
+      ],
+      "row_disposition": "source_body_match",
+      "residual_reason": null
+    },
+    {
+      "sample_id": "S1",
+      "fact_id": "F004",
+      "fund_code": "004393",
+      "document_year": 2025,
+      "family": "fund_identity_profile",
+      "field_name": "contract_effective_date",
+      "candidate_anchor": {
+        "section_id": "§2",
+        "page_number": 5,
+        "table_id": "#/tables/2",
+        "row_locator": "cell:r4:c1:idx9",
+        "candidate_only": true
+      },
+      "candidate_value": "2022年8月8日",
+      "candidate_excerpt": "2022年8月8日",
+      "normalized_candidate": "2022年8月8日",
+      "not_baseline_promotion": true,
+      "not_parser_replacement": true,
+      "not_release_readiness": true,
+      "not_full_field_correctness": true,
+      "repository_load_status": {
+        "status": "loaded",
+        "metadata_ok": true,
+        "metadata_reason": null,
+        "metadata": {
+          "source": "eid",
+          "selected_source": "eid",
+          "source_mode": "single_source_only",
+          "fallback_enabled": false,
+          "fallback_used": false,
+          "primary_failure_category": null,
+          "report_year": 2025,
+          "source_metadata_present": true,
+          "pdf_cache_hit": false,
+          "parsed_cache_hit": true,
+          "cache_schema_version": 1
+        },
+        "error": null
+      },
+      "match_strategy": "table_page",
+      "proof_level": "repository_table_page_cell_or_row_match",
+      "normalized_source_match_count": 1,
+      "source_excerpt": "基金合同生效日 | 2022年8月8日 | ",
+      "source_excerpt_samples": [
+        "基金合同生效日 | 2022年8月8日 | "
+      ],
+      "row_disposition": "source_body_match",
+      "residual_reason": null
+    },
+    {
+      "sample_id": "S1",
+      "fact_id": "F005",
+      "fund_code": "004393",
+      "document_year": 2025,
+      "family": "fund_identity_profile",
+      "field_name": "fund_manager_company",
+      "candidate_anchor": {
+        "section_id": "§2",
+        "page_number": 5,
+        "table_id": "#/tables/2",
+        "row_locator": "cell:r5:c1:idx11",
+        "candidate_only": true
+      },
+      "candidate_value": "安信基金管理有限责任公司",
+      "candidate_excerpt": "安信基金管理有限责任公司",
+      "normalized_candidate": "安信基金管理有限责任公司",
+      "not_baseline_promotion": true,
+      "not_parser_replacement": true,
+      "not_release_readiness": true,
+      "not_full_field_correctness": true,
+      "repository_load_status": {
+        "status": "loaded",
+        "metadata_ok": true,
+        "metadata_reason": null,
+        "metadata": {
+          "source": "eid",
+          "selected_source": "eid",
+          "source_mode": "single_source_only",
+          "fallback_enabled": false,
+          "fallback_used": false,
+          "primary_failure_category": null,
+          "report_year": 2025,
+          "source_metadata_present": true,
+          "pdf_cache_hit": false,
+          "parsed_cache_hit": true,
+          "cache_schema_version": 1
+        },
+        "error": null
+      },
+      "match_strategy": "table_page",
+      "proof_level": "repository_table_page_cell_or_row_match",
+      "normalized_source_match_count": 1,
+      "source_excerpt": "基金管理人 | 安信基金管理有限责任公司 | ",
+      "source_excerpt_samples": [
+        "基金管理人 | 安信基金管理有限责任公司 | "
+      ],
+      "row_disposition": "source_body_match",
+      "residual_reason": null
+    },
+    {
+      "sample_id": "S1",
+      "fact_id": "F006",
+      "fund_code": "004393",
+      "document_year": 2025,
+      "family": "product_contract_profile",
+      "field_name": "investment_objective",
+      "candidate_anchor": {
+        "section_id": "§2",
+        "page_number": 5,
+        "table_id": "#/tables/3",
+        "row_locator": "cell:r0:c1:idx1",
+        "candidate_only": true
+      },
+      "candidate_value": "本基金在有效控制组合风险并保持基金资产流动性的前提下，力争 实现基金资产的长期稳健增值。",
+      "candidate_excerpt": "本基金在有效控制组合风险并保持基金资产流动性的前提下，力争 实现基金资产的长期稳健增值。",
+      "normalized_candidate": "本基金在有效控制组合风险并保持基金资产流动性的前提下,力争实现基金资产的长期稳健增值.",
+      "not_baseline_promotion": true,
+      "not_parser_replacement": true,
+      "not_release_readiness": true,
+      "not_full_field_correctness": true,
+      "repository_load_status": {
+        "status": "loaded",
+        "metadata_ok": true,
+        "metadata_reason": null,
+        "metadata": {
+          "source": "eid",
+          "selected_source": "eid",
+          "source_mode": "single_source_only",
+          "fallback_enabled": false,
+          "fallback_used": false,
+          "primary_failure_category": null,
+          "report_year": 2025,
+          "source_metadata_present": true,
+          "pdf_cache_hit": false,
+          "parsed_cache_hit": true,
+          "cache_schema_version": 1
+        },
+        "error": null
+      },
+      "match_strategy": "section_text",
+      "proof_level": "repository_section_text_match",
+      "normalized_source_match_count": 1,
+      "source_excerpt": "分级基金的基 安信企业价值优选混合A 安信企业价值优选混合C 金简称 下属分级基金的交 004393 020964 易代码 报告期末下属分级 74,809,046.98份 7,177,696.29份 基金的份额总额 2.2 基金产品说明 投资目标 本基金在有效控制组合风险并保持基金资产流动性的前提下，力争 实现基金资产...",
+      "source_excerpt_samples": [
+        "分级基金的基 安信企业价值优选混合A 安信企业价值优选混合C 金简称 下属分级基金的交 004393 020964 易代码 报告期末下属分级 74,809,046.98份 7,177,696.29份 基金的份额总额 2.2 基金产品说明 投资目标 本基金在有效控制组合风险并保持基金资产流动性的前提下，力争 实现基金资产..."
+      ],
+      "row_disposition": "source_body_match",
+      "residual_reason": null
+    },
+    {
+      "sample_id": "S1",
+      "fact_id": "F007",
+      "fund_code": "004393",
+      "document_year": 2025,
+      "family": "product_contract_profile",
+      "field_name": "benchmark",
+      "candidate_anchor": {
+        "section_id": "§2",
+        "page_number": 5,
+        "table_id": "#/tables/3",
+        "row_locator": "cell:r2:c1:idx5",
+        "candidate_only": true
+      },
+      "candidate_value": "沪深300指数收益率×60%+恒生指数收益率 （经汇率调整后） ×20%+ 中债综合（全价）指数收益率×20%",
+      "candidate_excerpt": "沪深300指数收益率×60%+恒生指数收益率 （经汇率调整后） ×20%+ 中债综合（全价）指数收益率×20%",
+      "normalized_candidate": "沪深300指数收益率x60%+恒生指数收益率(经汇率调整后)x20%+中债综合(全价)指数收益率x20%",
+      "not_baseline_promotion": true,
+      "not_parser_replacement": true,
+      "not_release_readiness": true,
+      "not_full_field_correctness": true,
+      "repository_load_status": {
+        "status": "loaded",
+        "metadata_ok": true,
+        "metadata_reason": null,
+        "metadata": {
+          "source": "eid",
+          "selected_source": "eid",
+          "source_mode": "single_source_only",
+          "fallback_enabled": false,
+          "fallback_used": false,
+          "primary_failure_category": null,
+          "report_year": 2025,
+          "source_metadata_present": true,
+          "pdf_cache_hit": false,
+          "parsed_cache_hit": true,
+          "cache_schema_version": 1
+        },
+        "error": null
+      },
+      "match_strategy": "table_page",
+      "proof_level": "repository_table_page_cell_or_row_match",
+      "normalized_source_match_count": 1,
+      "source_excerpt": "业绩比较基准 | 沪深300指数收益率×60%+恒生指数收益率（经汇率调整后）×20%+\n中债综合（全价）指数收益率×20%",
+      "source_excerpt_samples": [
+        "业绩比较基准 | 沪深300指数收益率×60%+恒生指数收益率（经汇率调整后）×20%+\n中债综合（全价）指数收益率×20%"
+      ],
+      "row_disposition": "source_body_match",
+      "residual_reason": null
+    },
+    {
+      "sample_id": "S1",
+      "fact_id": "F008",
+      "fund_code": "004393",
+      "document_year": 2025,
+      "family": "product_contract_profile",
+      "field_name": "risk_return_characteristic",
+      "candidate_anchor": {
+        "section_id": "§2",
+        "page_number": 5,
+        "table_id": "#/tables/3",
+        "row_locator": "cell:r3:c1:idx7",
+        "candidate_only": true
+      },
+      "candidate_value": "本基金为混合型基金，其预期收益及预期风险水平高于债券型基金 和货币市场基金，但低于股票型基金。 根据《证券期货投资者适当性管理办法》及其配套规则，基金管理 人及本基金其他销售机构将定期或不定期对本基金产品风险等级进 行重新评定，因而本基金的产品风险等级具体结果应以各销售机构 提供的最新评级结果为准。 本基金除了投资A股外，还可通过港股通投资于香港证券市场，会 面临港股通机制下因投资环境、投资标的、市场制度以及交易规则 等差异带来的特有风险。",
+      "candidate_excerpt": "本基金为混合型基金，其预期收益及预期风险水平高于债券型基金 和货币市场基金，但低于股票型基金。 根据《证券期货投资者适当性管理办法》及其配套规则，基金管理 人及本基金其他销售机构将定期或不定期对本基金产品风险等级进 行重新评定，因而本基金的产品风险等级具体结果应以各销售机构 提供的最新评级结果为准。 本基金除了投资A股外，还可通过港股通投资于香港证券市场，会 面临港股通机制下因投资环境、投资标的、市场制度以及交易规则 等差异带来的特有风险。",
+      "normalized_candidate": "本基金为混合型基金,其预期收益及预期风险水平高于债券型基金和货币市场基金,但低于股票型基金.根据《证券期货投资者适当性管理办法》及其配套规则,基金管理人及本基金其他销售机构将定期或不定期对本基金产品风险等级进行重新评定,因而本基金的产品风险等级具体结果应以各销售机构提供的最新评级结果为准.本基金除了投资a股外,还可通过港股通投资于香港证券市场,会面临港股通机制下因投资环境、投资标的、市场制度以及交易规则等差异带来的特有风险.",
+      "not_baseline_promotion": true,
+      "not_parser_replacement": true,
+      "not_release_readiness": true,
+      "not_full_field_correctness": true,
+      "repository_load_status": {
+        "status": "loaded",
+        "metadata_ok": true,
+        "metadata_reason": null,
+        "metadata": {
+          "source": "eid",
+          "selected_source": "eid",
+          "source_mode": "single_source_only",
+          "fallback_enabled": false,
+          "fallback_used": false,
+          "primary_failure_category": null,
+          "report_year": 2025,
+          "source_metadata_present": true,
+          "pdf_cache_hit": false,
+          "parsed_cache_hit": true,
+          "cache_schema_version": 1
+        },
+        "error": null
+      },
+      "match_strategy": "table_page",
+      "proof_level": "repository_table_page_cell_or_row_match",
+      "normalized_source_match_count": 1,
+      "source_excerpt": "风险收益特征 | 本基金为混合型基金，其预期收益及预期风险水平高于债券型基金\n和货币市场基金，但低于股票型基金。\n根据《证券期货投资者适当性管理办法》及其配套规则，基金管理\n人及本基金其他销售机构将定期或不定期对本基金产品风险等级进\n行重新评定，因而本基金的产品风险等级具体结果应以各销售机构\n提供的最新评级结果为准。\n...",
+      "source_excerpt_samples": [
+        "风险收益特征 | 本基金为混合型基金，其预期收益及预期风险水平高于债券型基金\n和货币市场基金，但低于股票型基金。\n根据《证券期货投资者适当性管理办法》及其配套规则，基金管理\n人及本基金其他销售机构将定期或不定期对本基金产品风险等级进\n行重新评定，因而本基金的产品风险等级具体结果应以各销售机构\n提供的最新评级结果为准。\n..."
+      ],
+      "row_disposition": "source_body_match",
+      "residual_reason": null
+    },
+    {
+      "sample_id": "S1",
+      "fact_id": "F009",
+      "fund_code": "004393",
+      "document_year": 2025,
+      "family": "performance_indicators",
+      "field_name": "period_profit_A_2025",
+      "candidate_anchor": {
+        "section_id": "§3",
+        "page_number": 7,
+        "table_id": "#/tables/8",
+        "row_locator": "cell:r1:c1:idx8",
+        "candidate_only": true
+      },
+      "candidate_value": "28,909,958 .71",
+      "candidate_excerpt": "28,909,958 .71",
+      "normalized_candidate": "28909958.71",
+      "not_baseline_promotion": true,
+      "not_parser_replacement": true,
+      "not_release_readiness": true,
+      "not_full_field_correctness": true,
+      "repository_load_status": {
+        "status": "loaded",
+        "metadata_ok": true,
+        "metadata_reason": null,
+        "metadata": {
+          "source": "eid",
+          "selected_source": "eid",
+          "source_mode": "single_source_only",
+          "fallback_enabled": false,
+          "fallback_used": false,
+          "primary_failure_category": null,
+          "report_year": 2025,
+          "source_metadata_present": true,
+          "pdf_cache_hit": false,
+          "parsed_cache_hit": true,
+          "cache_schema_version": 1
+        },
+        "error": null
+      },
+      "match_strategy": "table_page",
+      "proof_level": "repository_table_page_cell_or_row_match",
+      "normalized_source_match_count": 1,
+      "source_excerpt": "本期利润 | 28,909,958\n.71 | 2,843,866.\n81 | 35,442,732\n.66 | 2,383,556.\n68 | -846,812.6\n2 | -",
+      "source_excerpt_samples": [
+        "本期利润 | 28,909,958\n.71 | 2,843,866.\n81 | 35,442,732\n.66 | 2,383,556.\n68 | -846,812.6\n2 | -"
+      ],
+      "row_disposition": "source_body_match",
+      "residual_reason": null
+    },
+    {
+      "sample_id": "S1",
+      "fact_id": "F010",
+      "fund_code": "004393",
+      "document_year": 2025,
+      "family": "performance_indicators",
+      "field_name": "nav_growth_A_current_period",
+      "candidate_anchor": {
+        "section_id": "§3",
+        "page_number": 7,
+        "table_id": "#/tables/8",
+        "row_locator": "cell:r4:c1:idx29",
+        "candidate_only": true
+      },
+      "candidate_value": "12.77%",
+      "candidate_excerpt": "12.77%",
+      "normalized_candidate": "12.77%",
+      "not_baseline_promotion": true,
+      "not_parser_replacement": true,
+      "not_release_readiness": true,
+      "not_full_field_correctness": true,
+      "repository_load_status": {
+        "status": "loaded",
+        "metadata_ok": true,
+        "metadata_reason": null,
+        "metadata": {
+          "source": "eid",
+          "selected_source": "eid",
+          "source_mode": "single_source_only",
+          "fallback_enabled": false,
+          "fallback_used": false,
+          "primary_failure_category": null,
+          "report_year": 2025,
+          "source_metadata_present": true,
+          "pdf_cache_hit": false,
+          "parsed_cache_hit": true,
+          "cache_schema_version": 1
+        },
+        "error": null
+      },
+      "match_strategy": "table_page",
+      "proof_level": "repository_table_page_cell_or_row_match",
+      "normalized_source_match_count": 1,
+      "source_excerpt": "本期基金份\n额净值增长\n率 | 12.77% | 12.33% | 17.32% | 10.21% | -1.11% | -",
+      "source_excerpt_samples": [
+        "本期基金份\n额净值增长\n率 | 12.77% | 12.33% | 17.32% | 10.21% | -1.11% | -"
+      ],
+      "row_disposition": "source_body_match",
+      "residual_reason": null
+    },
+    {
+      "sample_id": "S1",
+      "fact_id": "F011",
+      "fund_code": "004393",
+      "document_year": 2025,
+      "family": "performance_indicators",
+      "field_name": "past_year_nav_growth_A",
+      "candidate_anchor": {
+        "section_id": "§3",
+        "page_number": 8,
+        "table_id": "#/tables/9",
+        "row_locator": "cell:r3:c1:idx22",
+        "candidate_only": true
+      },
+      "candidate_value": "12.77%",
+      "candidate_excerpt": "12.77%",
+      "normalized_candidate": "12.77%",
+      "not_baseline_promotion": true,
+      "not_parser_replacement": true,
+      "not_release_readiness": true,
+      "not_full_field_correctness": true,
+      "repository_load_status": {
+        "status": "loaded",
+        "metadata_ok": true,
+        "metadata_reason": null,
+        "metadata": {
+          "source": "eid",
+          "selected_source": "eid",
+          "source_mode": "single_source_only",
+          "fallback_enabled": false,
+          "fallback_used": false,
+          "primary_failure_category": null,
+          "report_year": 2025,
+          "source_metadata_present": true,
+          "pdf_cache_hit": false,
+          "parsed_cache_hit": true,
+          "cache_schema_version": 1
+        },
+        "error": null
+      },
+      "match_strategy": "table_page",
+      "proof_level": "repository_table_page_cell_or_row_match",
+      "normalized_source_match_count": 1,
+      "source_excerpt": "过去一年 | 12.77% | 0.81% | 15.34% | 0.81% | -2.57% | 0.00%",
+      "source_excerpt_samples": [
+        "过去一年 | 12.77% | 0.81% | 15.34% | 0.81% | -2.57% | 0.00%"
+      ],
+      "row_disposition": "source_body_match",
+      "residual_reason": null
+    },
+    {
+      "sample_id": "S1",
+      "fact_id": "F012",
+      "fund_code": "004393",
+      "document_year": 2025,
+      "family": "performance_indicators",
+      "field_name": "past_year_excess_A",
+      "candidate_anchor": {
+        "section_id": "§3",
+        "page_number": 8,
+        "table_id": "#/tables/9",
+        "row_locator": "cell:r3:c5:idx26",
+        "candidate_only": true
+      },
+      "candidate_value": "-2.57%",
+      "candidate_excerpt": "-2.57%",
+      "normalized_candidate": "-2.57%",
+      "not_baseline_promotion": true,
+      "not_parser_replacement": true,
+      "not_release_readiness": true,
+      "not_full_field_correctness": true,
+      "repository_load_status": {
+        "status": "loaded",
+        "metadata_ok": true,
+        "metadata_reason": null,
+        "metadata": {
+          "source": "eid",
+          "selected_source": "eid",
+          "source_mode": "single_source_only",
+          "fallback_enabled": false,
+          "fallback_used": false,
+          "primary_failure_category": null,
+          "report_year": 2025,
+          "source_metadata_present": true,
+          "pdf_cache_hit": false,
+          "parsed_cache_hit": true,
+          "cache_schema_version": 1
+        },
+        "error": null
+      },
+      "match_strategy": "table_page",
+      "proof_level": "repository_table_page_cell_or_row_match",
+      "normalized_source_match_count": 1,
+      "source_excerpt": "过去一年 | 12.77% | 0.81% | 15.34% | 0.81% | -2.57% | 0.00%",
+      "source_excerpt_samples": [
+        "过去一年 | 12.77% | 0.81% | 15.34% | 0.81% | -2.57% | 0.00%"
+      ],
+      "row_disposition": "source_body_match",
+      "residual_reason": null
+    },
+    {
+      "sample_id": "S1",
+      "fact_id": "F013",
+      "fund_code": "004393",
+      "document_year": 2025,
+      "family": "expense_costs",
+      "field_name": "management_fee_current_year",
+      "candidate_anchor": {
+        "section_id": "§7",
+        "page_number": 37,
+        "table_id": "#/tables/48",
+        "row_locator": "cell:r1:c1:idx4",
+        "candidate_only": true
+      },
+      "candidate_value": "3,033,849.49",
+      "candidate_excerpt": "3,033,849.49",
+      "normalized_candidate": "3033849.49",
+      "not_baseline_promotion": true,
+      "not_parser_replacement": true,
+      "not_release_readiness": true,
+      "not_full_field_correctness": true,
+      "repository_load_status": {
+        "status": "loaded",
+        "metadata_ok": true,
+        "metadata_reason": null,
+        "metadata": {
+          "source": "eid",
+          "selected_source": "eid",
+          "source_mode": "single_source_only",
+          "fallback_enabled": false,
+          "fallback_used": false,
+          "primary_failure_category": null,
+          "report_year": 2025,
+          "source_metadata_present": true,
+          "pdf_cache_hit": false,
+          "parsed_cache_hit": true,
+          "cache_schema_version": 1
+        },
+        "error": null
+      },
+      "match_strategy": "table_page",
+      "proof_level": "repository_table_page_cell_or_row_match",
+      "normalized_source_match_count": 1,
+      "source_excerpt": "当期发生的基金应支付的管理费 | 3,033,849.49 | 2,308,368.87",
+      "source_excerpt_samples": [
+        "当期发生的基金应支付的管理费 | 3,033,849.49 | 2,308,368.87"
+      ],
+      "row_disposition": "source_body_match",
+      "residual_reason": null
+    },
+    {
+      "sample_id": "S1",
+      "fact_id": "F014",
+      "fund_code": "004393",
+      "document_year": 2025,
+      "family": "expense_costs",
+      "field_name": "custodian_fee_current_year",
+      "candidate_anchor": {
+        "section_id": "§7",
+        "page_number": 38,
+        "table_id": "#/tables/50",
+        "row_locator": "cell:r1:c1:idx4",
+        "candidate_only": true
+      },
+      "candidate_value": "505,641.58",
+      "candidate_excerpt": "505,641.58",
+      "normalized_candidate": "505641.58",
+      "not_baseline_promotion": true,
+      "not_parser_replacement": true,
+      "not_release_readiness": true,
+      "not_full_field_correctness": true,
+      "repository_load_status": {
+        "status": "loaded",
+        "metadata_ok": true,
+        "metadata_reason": null,
+        "metadata": {
+          "source": "eid",
+          "selected_source": "eid",
+          "source_mode": "single_source_only",
+          "fallback_enabled": false,
+          "fallback_used": false,
+          "primary_failure_category": null,
+          "report_year": 2025,
+          "source_metadata_present": true,
+          "pdf_cache_hit": false,
+          "parsed_cache_hit": true,
+          "cache_schema_version": 1
+        },
+        "error": null
+      },
+      "match_strategy": "table_page",
+      "proof_level": "repository_table_page_cell_or_row_match",
+      "normalized_source_match_count": 1,
+      "source_excerpt": "当期发生的基金应支付的托管费 | 505,641.58 | 384,728.17",
+      "source_excerpt_samples": [
+        "当期发生的基金应支付的托管费 | 505,641.58 | 384,728.17"
+      ],
+      "row_disposition": "source_body_match",
+      "residual_reason": null
+    },
+    {
+      "sample_id": "S1",
+      "fact_id": "F015",
+      "fund_code": "004393",
+      "document_year": 2025,
+      "family": "expense_costs",
+      "field_name": "sales_service_fee_C_current_year",
+      "candidate_anchor": {
+        "section_id": "§7",
+        "page_number": 38,
+        "table_id": "#/tables/51",
+        "row_locator": "cell:r2:c2:idx7",
+        "candidate_only": true
+      },
+      "candidate_value": "75,815.59",
+      "candidate_excerpt": "75,815.59",
+      "normalized_candidate": "75815.59",
+      "not_baseline_promotion": true,
+      "not_parser_replacement": true,
+      "not_release_readiness": true,
+      "not_full_field_correctness": true,
+      "repository_load_status": {
+        "status": "loaded",
+        "metadata_ok": true,
+        "metadata_reason": null,
+        "metadata": {
+          "source": "eid",
+          "selected_source": "eid",
+          "source_mode": "single_source_only",
+          "fallback_enabled": false,
+          "fallback_used": false,
+          "primary_failure_category": null,
+          "report_year": 2025,
+          "source_metadata_present": true,
+          "pdf_cache_hit": false,
+          "parsed_cache_hit": true,
+          "cache_schema_version": 1
+        },
+        "error": null
+      },
+      "match_strategy": "table_page",
+      "proof_level": "repository_table_page_cell_or_row_match",
+      "normalized_source_match_count": 4,
+      "source_excerpt": "安信基金 | - | 75,815.59 | 75,815.59",
+      "source_excerpt_samples": [
+        "安信基金 | - | 75,815.59 | 75,815.59",
+        "合计 | - | 75,815.59 | 75,815.59"
+      ],
+      "row_disposition": "ambiguous_source_body_match",
+      "residual_reason": "multiple_normalized_source_body_matches_in_allowed_scope"
+    },
+    {
+      "sample_id": "S1",
+      "fact_id": "F016",
+      "fund_code": "004393",
+      "document_year": 2025,
+      "family": "portfolio_structure",
+      "field_name": "manufacturing_fair_value",
+      "candidate_anchor": {
+        "section_id": "§8",
+        "page_number": 52,
+        "table_id": "#/tables/72",
+        "row_locator": "cell:r3:c2:idx14",
+        "candidate_only": true
+      },
+      "candidate_value": "39,484,558.44",
+      "candidate_excerpt": "39,484,558.44",
+      "normalized_candidate": "39484558.44",
+      "not_baseline_promotion": true,
+      "not_parser_replacement": true,
+      "not_release_readiness": true,
+      "not_full_field_correctness": true,
+      "repository_load_status": {
+        "status": "loaded",
+        "metadata_ok": true,
+        "metadata_reason": null,
+        "metadata": {
+          "source": "eid",
+          "selected_source": "eid",
+          "source_mode": "single_source_only",
+          "fallback_enabled": false,
+          "fallback_used": false,
+          "primary_failure_category": null,
+          "report_year": 2025,
+          "source_metadata_present": true,
+          "pdf_cache_hit": false,
+          "parsed_cache_hit": true,
+          "cache_schema_version": 1
+        },
+        "error": null
+      },
+      "match_strategy": "table_page",
+      "proof_level": "repository_table_page_cell_or_row_match",
+      "normalized_source_match_count": 1,
+      "source_excerpt": "C | 制造业 | 39,484,558.44 | 23.27",
+      "source_excerpt_samples": [
+        "C | 制造业 | 39,484,558.44 | 23.27"
+      ],
+      "row_disposition": "source_body_match",
+      "residual_reason": null
+    },
+    {
+      "sample_id": "S1",
+      "fact_id": "F017",
+      "fund_code": "004393",
+      "document_year": 2025,
+      "family": "portfolio_structure",
+      "field_name": "manufacturing_nav_ratio",
+      "candidate_anchor": {
+        "section_id": "§8",
+        "page_number": 52,
+        "table_id": "#/tables/72",
+        "row_locator": "cell:r3:c3:idx15",
+        "candidate_only": true
+      },
+      "candidate_value": "23.27",
+      "candidate_excerpt": "23.27",
+      "normalized_candidate": "23.27",
+      "not_baseline_promotion": true,
+      "not_parser_replacement": true,
+      "not_release_readiness": true,
+      "not_full_field_correctness": true,
+      "repository_load_status": {
+        "status": "loaded",
+        "metadata_ok": true,
+        "metadata_reason": null,
+        "metadata": {
+          "source": "eid",
+          "selected_source": "eid",
+          "source_mode": "single_source_only",
+          "fallback_enabled": false,
+          "fallback_used": false,
+          "primary_failure_category": null,
+          "report_year": 2025,
+          "source_metadata_present": true,
+          "pdf_cache_hit": false,
+          "parsed_cache_hit": true,
+          "cache_schema_version": 1
+        },
+        "error": null
+      },
+      "match_strategy": "table_page",
+      "proof_level": "repository_table_page_cell_or_row_match",
+      "normalized_source_match_count": 1,
+      "source_excerpt": "C | 制造业 | 39,484,558.44 | 23.27",
+      "source_excerpt_samples": [
+        "C | 制造业 | 39,484,558.44 | 23.27"
+      ],
+      "row_disposition": "source_body_match",
+      "residual_reason": null
+    },
+    {
+      "sample_id": "S1",
+      "fact_id": "F018",
+      "fund_code": "004393",
+      "document_year": 2025,
+      "family": "portfolio_structure",
+      "field_name": "hk_industry_financial_fair_value",
+      "candidate_anchor": {
+        "section_id": "§8",
+        "page_number": 52,
+        "table_id": "#/tables/73",
+        "row_locator": "cell:r7:c1:idx22",
+        "candidate_only": true
+      },
+      "candidate_value": "17,612,049.35",
+      "candidate_excerpt": "17,612,049.35",
+      "normalized_candidate": "17612049.35",
+      "not_baseline_promotion": true,
+      "not_parser_replacement": true,
+      "not_release_readiness": true,
+      "not_full_field_correctness": true,
+      "repository_load_status": {
+        "status": "loaded",
+        "metadata_ok": true,
+        "metadata_reason": null,
+        "metadata": {
+          "source": "eid",
+          "selected_source": "eid",
+          "source_mode": "single_source_only",
+          "fallback_enabled": false,
+          "fallback_used": false,
+          "primary_failure_category": null,
+          "report_year": 2025,
+          "source_metadata_present": true,
+          "pdf_cache_hit": false,
+          "parsed_cache_hit": true,
+          "cache_schema_version": 1
+        },
+        "error": null
+      },
+      "match_strategy": "table_page",
+      "proof_level": "repository_table_page_cell_or_row_match",
+      "normalized_source_match_count": 1,
+      "source_excerpt": "金融 | 17,612,049.35 | 10.38",
+      "source_excerpt_samples": [
+        "金融 | 17,612,049.35 | 10.38"
+      ],
+      "row_disposition": "source_body_match",
+      "residual_reason": null
+    },
+    {
+      "sample_id": "S1",
+      "fact_id": "F019",
+      "fund_code": "004393",
+      "document_year": 2025,
+      "family": "manager_alignment",
+      "field_name": "manager_name",
+      "candidate_anchor": {
+        "section_id": "§4",
+        "page_number": 11,
+        "table_id": "#/tables/14",
+        "row_locator": "cell:r2:c0:idx7",
+        "candidate_only": true
+      },
+      "candidate_value": "张明",
+      "candidate_excerpt": "张明",
+      "normalized_candidate": "张明",
+      "not_baseline_promotion": true,
+      "not_parser_replacement": true,
+      "not_release_readiness": true,
+      "not_full_field_correctness": true,
+      "repository_load_status": {
+        "status": "loaded",
+        "metadata_ok": true,
+        "metadata_reason": null,
+        "metadata": {
+          "source": "eid",
+          "selected_source": "eid",
+          "source_mode": "single_source_only",
+          "fallback_enabled": false,
+          "fallback_used": false,
+          "primary_failure_category": null,
+          "report_year": 2025,
+          "source_metadata_present": true,
+          "pdf_cache_hit": false,
+          "parsed_cache_hit": true,
+          "cache_schema_version": 1
+        },
+        "error": null
+      },
+      "match_strategy": "table_page",
+      "proof_level": "repository_table_page_cell_or_row_match",
+      "normalized_source_match_count": 1,
+      "source_excerpt": "张明 | 本基金的\n基 金 经\n理，价值\n投资部副\n总经理 | 2022年8\n月8日 | - | 14年 | 张明先生，管理学硕士。历任安信证券股\n份有限公司安信基金筹备组研究部研究\n员，安信基金管理有限责任公司研究部研\n究员、特定资产管理部投资经理、权益投\n资部基金经理、价值投资部总经理助理。\n现任安信基金管理有限责...",
+      "source_excerpt_samples": [
+        "张明 | 本基金的\n基 金 经\n理，价值\n投资部副\n总经理 | 2022年8\n月8日 | - | 14年 | 张明先生，管理学硕士。历任安信证券股\n份有限公司安信基金筹备组研究部研究\n员，安信基金管理有限责任公司研究部研\n究员、特定资产管理部投资经理、权益投\n资部基金经理、价值投资部总经理助理。\n现任安信基金管理有限责..."
+      ],
+      "row_disposition": "source_body_match",
+      "residual_reason": null
+    },
+    {
+      "sample_id": "S1",
+      "fact_id": "F020",
+      "fund_code": "004393",
+      "document_year": 2025,
+      "family": "manager_alignment",
+      "field_name": "manager_holding_range_A",
+      "candidate_anchor": {
+        "section_id": "§10",
+        "page_number": 60,
+        "table_id": "#/tables/86",
+        "row_locator": "cell:r4:c2:idx12",
+        "candidate_only": true
+      },
+      "candidate_value": "50~100",
+      "candidate_excerpt": "50~100",
+      "normalized_candidate": "50~100",
+      "not_baseline_promotion": true,
+      "not_parser_replacement": true,
+      "not_release_readiness": true,
+      "not_full_field_correctness": true,
+      "repository_load_status": {
+        "status": "loaded",
+        "metadata_ok": true,
+        "metadata_reason": null,
+        "metadata": {
+          "source": "eid",
+          "selected_source": "eid",
+          "source_mode": "single_source_only",
+          "fallback_enabled": false,
+          "fallback_used": false,
+          "primary_failure_category": null,
+          "report_year": 2025,
+          "source_metadata_present": true,
+          "pdf_cache_hit": false,
+          "parsed_cache_hit": true,
+          "cache_schema_version": 1
+        },
+        "error": null
+      },
+      "match_strategy": "table_page",
+      "proof_level": "repository_table_page_cell_or_row_match",
+      "normalized_source_match_count": 2,
+      "source_excerpt": "本基金基金经理持有\n本开放式基金 | 安信企业价值优选混合A | 50~100",
+      "source_excerpt_samples": [
+        "本基金基金经理持有\n本开放式基金 | 安信企业价值优选混合A | 50~100",
+        " | 合计 | 50~100"
+      ],
+      "row_disposition": "ambiguous_source_body_match",
+      "residual_reason": "multiple_normalized_source_body_matches_in_allowed_scope"
+    },
+    {
+      "sample_id": "S1",
+      "fact_id": "F025",
+      "fund_code": "004393",
+      "document_year": 2025,
+      "family": "manager_alignment",
+      "field_name": "manager_tenure_start",
+      "candidate_anchor": {
+        "section_id": "§4",
+        "page_number": 11,
+        "table_id": "#/tables/14",
+        "row_locator": "cell:r2:c2:idx9",
+        "candidate_only": true
+      },
+      "candidate_value": "2022年8 月8日",
+      "candidate_excerpt": "2022年8 月8日",
+      "normalized_candidate": "2022年8月8日",
+      "not_baseline_promotion": true,
+      "not_parser_replacement": true,
+      "not_release_readiness": true,
+      "not_full_field_correctness": true,
+      "repository_load_status": {
+        "status": "loaded",
+        "metadata_ok": true,
+        "metadata_reason": null,
+        "metadata": {
+          "source": "eid",
+          "selected_source": "eid",
+          "source_mode": "single_source_only",
+          "fallback_enabled": false,
+          "fallback_used": false,
+          "primary_failure_category": null,
+          "report_year": 2025,
+          "source_metadata_present": true,
+          "pdf_cache_hit": false,
+          "parsed_cache_hit": true,
+          "cache_schema_version": 1
+        },
+        "error": null
+      },
+      "match_strategy": "table_page",
+      "proof_level": "repository_table_page_cell_or_row_match",
+      "normalized_source_match_count": 1,
+      "source_excerpt": "张明 | 本基金的\n基 金 经\n理，价值\n投资部副\n总经理 | 2022年8\n月8日 | - | 14年 | 张明先生，管理学硕士。历任安信证券股\n份有限公司安信基金筹备组研究部研究\n员，安信基金管理有限责任公司研究部研\n究员、特定资产管理部投资经理、权益投\n资部基金经理、价值投资部总经理助理。\n现任安信基金管理有限责...",
+      "source_excerpt_samples": [
+        "张明 | 本基金的\n基 金 经\n理，价值\n投资部副\n总经理 | 2022年8\n月8日 | - | 14年 | 张明先生，管理学硕士。历任安信证券股\n份有限公司安信基金筹备组研究部研究\n员，安信基金管理有限责任公司研究部研\n究员、特定资产管理部投资经理、权益投\n资部基金经理、价值投资部总经理助理。\n现任安信基金管理有限责..."
+      ],
+      "row_disposition": "source_body_match",
+      "residual_reason": null
+    },
+    {
+      "sample_id": "S4",
+      "fact_id": "S4-F001",
+      "fund_code": "006597",
+      "document_year": 2024,
+      "family": "fund_identity_profile",
+      "field_name": "fund_name",
+      "candidate_anchor": {
+        "section_id": "§2",
+        "page_number": 5,
+        "table_id": "docling_table_2",
+        "row_locator": "cell:r0:c1:idx1",
+        "candidate_only": true
+      },
+      "candidate_value": "国泰利享中短债债券型证券投资基金",
+      "candidate_excerpt": "基金名称 | 国泰利享中短债债券型证券投资基金",
+      "normalized_candidate": "国泰利享中短债债券型证券投资基金",
+      "not_baseline_promotion": true,
+      "not_parser_replacement": true,
+      "not_release_readiness": true,
+      "not_full_field_correctness": true,
+      "repository_load_status": {
+        "status": "loaded",
+        "metadata_ok": true,
+        "metadata_reason": null,
+        "metadata": {
+          "source": "eid",
+          "selected_source": "eid",
+          "source_mode": "single_source_only",
+          "fallback_enabled": false,
+          "fallback_used": false,
+          "primary_failure_category": null,
+          "report_year": 2024,
+          "source_metadata_present": true,
+          "pdf_cache_hit": false,
+          "parsed_cache_hit": true,
+          "cache_schema_version": 1
+        },
+        "error": null
+      },
+      "match_strategy": "section_text",
+      "proof_level": "repository_section_text_match",
+      "normalized_source_match_count": 3,
+      "source_excerpt": "§2 基金简介 2.1 基金基本情况 基金名称 国泰利享中短债债券型证券投资基金 基金简称 国泰利享中短债债券 基金主代码 006597 交易代码 006597 基金运作方式 契约型开放式 基金合同生效日 2018年12月3日 基金管理人 国泰基金管理有限公司 基金托管人 招商银行股份有限公司 报告期末基金份额总额 1...",
+      "source_excerpt_samples": [
+        "§2 基金简介 2.1 基金基本情况 基金名称 国泰利享中短债债券型证券投资基金 基金简称 国泰利享中短债债券 基金主代码 006597 交易代码 006597 基金运作方式 契约型开放式 基金合同生效日 2018年12月3日 基金管理人 国泰基金管理有限公司 基金托管人 招商银行股份有限公司 报告期末基金份额总额 1..."
+      ],
+      "row_disposition": "ambiguous_source_body_match",
+      "residual_reason": "multiple_normalized_source_body_matches_in_allowed_scope"
+    },
+    {
+      "sample_id": "S4",
+      "fact_id": "S4-F002",
+      "fund_code": "006597",
+      "document_year": 2024,
+      "family": "fund_identity_profile",
+      "field_name": "fund_code",
+      "candidate_anchor": {
+        "section_id": "§2",
+        "page_number": 5,
+        "table_id": "docling_table_2",
+        "row_locator": "cell:r2:c1:idx5",
+        "candidate_only": true
+      },
+      "candidate_value": "006597",
+      "candidate_excerpt": "基金主代码 | 006597",
+      "normalized_candidate": "006597",
+      "not_baseline_promotion": true,
+      "not_parser_replacement": true,
+      "not_release_readiness": true,
+      "not_full_field_correctness": true,
+      "repository_load_status": {
+        "status": "loaded",
+        "metadata_ok": true,
+        "metadata_reason": null,
+        "metadata": {
+          "source": "eid",
+          "selected_source": "eid",
+          "source_mode": "single_source_only",
+          "fallback_enabled": false,
+          "fallback_used": false,
+          "primary_failure_category": null,
+          "report_year": 2024,
+          "source_metadata_present": true,
+          "pdf_cache_hit": false,
+          "parsed_cache_hit": true,
+          "cache_schema_version": 1
+        },
+        "error": null
+      },
+      "match_strategy": "table_page",
+      "proof_level": "repository_table_page_cell_or_row_match",
+      "normalized_source_match_count": 3,
+      "source_excerpt": "基金主代码 | 006597 |  |  | ",
+      "source_excerpt_samples": [
+        "基金主代码 | 006597 |  |  | ",
+        "交易代码 | 006597 |  |  | ",
+        "下属分级基金的交易代码 | 006597 | 006598 | 014217 | 022176"
+      ],
+      "row_disposition": "ambiguous_source_body_match",
+      "residual_reason": "multiple_normalized_source_body_matches_in_allowed_scope"
+    },
+    {
+      "sample_id": "S4",
+      "fact_id": "S4-F003",
+      "fund_code": "006597",
+      "document_year": 2024,
+      "family": "fund_identity_profile",
+      "field_name": "manager",
+      "candidate_anchor": {
+        "section_id": "§2",
+        "page_number": 5,
+        "table_id": "docling_table_2",
+        "row_locator": "cell:r6:c1:idx13",
+        "candidate_only": true
+      },
+      "candidate_value": "国泰基金管理有限公司",
+      "candidate_excerpt": "基金管理人 | 国泰基金管理有限公司",
+      "normalized_candidate": "国泰基金管理有限公司",
+      "not_baseline_promotion": true,
+      "not_parser_replacement": true,
+      "not_release_readiness": true,
+      "not_full_field_correctness": true,
+      "repository_load_status": {
+        "status": "loaded",
+        "metadata_ok": true,
+        "metadata_reason": null,
+        "metadata": {
+          "source": "eid",
+          "selected_source": "eid",
+          "source_mode": "single_source_only",
+          "fallback_enabled": false,
+          "fallback_used": false,
+          "primary_failure_category": null,
+          "report_year": 2024,
+          "source_metadata_present": true,
+          "pdf_cache_hit": false,
+          "parsed_cache_hit": true,
+          "cache_schema_version": 1
+        },
+        "error": null
+      },
+      "match_strategy": "table_page",
+      "proof_level": "repository_table_page_cell_or_row_match",
+      "normalized_source_match_count": 1,
+      "source_excerpt": "基金管理人 | 国泰基金管理有限公司 |  |  | ",
+      "source_excerpt_samples": [
+        "基金管理人 | 国泰基金管理有限公司 |  |  | "
+      ],
+      "row_disposition": "source_body_match",
+      "residual_reason": null
+    },
+    {
+      "sample_id": "S4",
+      "fact_id": "S4-F004",
+      "fund_code": "006597",
+      "document_year": 2024,
+      "family": "fund_identity_profile",
+      "field_name": "custodian",
+      "candidate_anchor": {
+        "section_id": "§2",
+        "page_number": 5,
+        "table_id": "docling_table_2",
+        "row_locator": "cell:r7:c1:idx15",
+        "candidate_only": true
+      },
+      "candidate_value": "招商银行股份有限公司",
+      "candidate_excerpt": "基金托管人 | 招商银行股份有限公司",
+      "normalized_candidate": "招商银行股份有限公司",
+      "not_baseline_promotion": true,
+      "not_parser_replacement": true,
+      "not_release_readiness": true,
+      "not_full_field_correctness": true,
+      "repository_load_status": {
+        "status": "loaded",
+        "metadata_ok": true,
+        "metadata_reason": null,
+        "metadata": {
+          "source": "eid",
+          "selected_source": "eid",
+          "source_mode": "single_source_only",
+          "fallback_enabled": false,
+          "fallback_used": false,
+          "primary_failure_category": null,
+          "report_year": 2024,
+          "source_metadata_present": true,
+          "pdf_cache_hit": false,
+          "parsed_cache_hit": true,
+          "cache_schema_version": 1
+        },
+        "error": null
+      },
+      "match_strategy": "table_page",
+      "proof_level": "repository_table_page_cell_or_row_match",
+      "normalized_source_match_count": 1,
+      "source_excerpt": "基金托管人 | 招商银行股份有限公司 |  |  | ",
+      "source_excerpt_samples": [
+        "基金托管人 | 招商银行股份有限公司 |  |  | "
+      ],
+      "row_disposition": "source_body_match",
+      "residual_reason": null
+    },
+    {
+      "sample_id": "S4",
+      "fact_id": "S4-F005",
+      "fund_code": "006597",
+      "document_year": 2024,
+      "family": "fund_identity_profile",
+      "field_name": "contract_effective_date",
+      "candidate_anchor": {
+        "section_id": "§2",
+        "page_number": 5,
+        "table_id": "docling_table_2",
+        "row_locator": "cell:r5:c1:idx11",
+        "candidate_only": true
+      },
+      "candidate_value": "2018 年 12 月 3 日",
+      "candidate_excerpt": "基金合同生效日 | 2018 年 12 月 3 日",
+      "normalized_candidate": "2018年12月3日",
+      "not_baseline_promotion": true,
+      "not_parser_replacement": true,
+      "not_release_readiness": true,
+      "not_full_field_correctness": true,
+      "repository_load_status": {
+        "status": "loaded",
+        "metadata_ok": true,
+        "metadata_reason": null,
+        "metadata": {
+          "source": "eid",
+          "selected_source": "eid",
+          "source_mode": "single_source_only",
+          "fallback_enabled": false,
+          "fallback_used": false,
+          "primary_failure_category": null,
+          "report_year": 2024,
+          "source_metadata_present": true,
+          "pdf_cache_hit": false,
+          "parsed_cache_hit": true,
+          "cache_schema_version": 1
+        },
+        "error": null
+      },
+      "match_strategy": "table_page",
+      "proof_level": "repository_table_page_cell_or_row_match",
+      "normalized_source_match_count": 1,
+      "source_excerpt": "基金合同生效日 | 2018年12月3日 |  |  | ",
+      "source_excerpt_samples": [
+        "基金合同生效日 | 2018年12月3日 |  |  | "
+      ],
+      "row_disposition": "source_body_match",
+      "residual_reason": null
+    },
+    {
+      "sample_id": "S4",
+      "fact_id": "S4-F006",
+      "fund_code": "006597",
+      "document_year": 2024,
+      "family": "product_contract_profile",
+      "field_name": "investment_objective",
+      "candidate_anchor": {
+        "section_id": "§2",
+        "page_number": 5,
+        "table_id": "docling_table_3",
+        "row_locator": "cell:r0:c1:idx1",
+        "candidate_only": true
+      },
+      "candidate_value": "在严格控制风险的前提下，追求稳健的投资回报。",
+      "candidate_excerpt": "投资目标 | 在严格控制风险的前提下，追求稳健的投资回报。",
+      "normalized_candidate": "在严格控制风险的前提下,追求稳健的投资回报.",
+      "not_baseline_promotion": true,
+      "not_parser_replacement": true,
+      "not_release_readiness": true,
+      "not_full_field_correctness": true,
+      "repository_load_status": {
+        "status": "loaded",
+        "metadata_ok": true,
+        "metadata_reason": null,
+        "metadata": {
+          "source": "eid",
+          "selected_source": "eid",
+          "source_mode": "single_source_only",
+          "fallback_enabled": false,
+          "fallback_used": false,
+          "primary_failure_category": null,
+          "report_year": 2024,
+          "source_metadata_present": true,
+          "pdf_cache_hit": false,
+          "parsed_cache_hit": true,
+          "cache_schema_version": 1
+        },
+        "error": null
+      },
+      "match_strategy": "section_text",
+      "proof_level": "repository_section_text_match",
+      "normalized_source_match_count": 1,
+      "source_excerpt": "下属分级基金的交易代码 006597 006598 014217 022176 报告期末下属分级基金的份 5,711,224,267 4,760,029,01 25,795,859.1 52,531,021.8 额总额 .09份 5.27份 2份 4份 2.2 基金产品说明 投资目标 在严格控制风险的前提下，追求稳健的...",
+      "source_excerpt_samples": [
+        "下属分级基金的交易代码 006597 006598 014217 022176 报告期末下属分级基金的份 5,711,224,267 4,760,029,01 25,795,859.1 52,531,021.8 额总额 .09份 5.27份 2份 4份 2.2 基金产品说明 投资目标 在严格控制风险的前提下，追求稳健的..."
+      ],
+      "row_disposition": "source_body_match",
+      "residual_reason": null
+    },
+    {
+      "sample_id": "S4",
+      "fact_id": "S4-F007",
+      "fund_code": "006597",
+      "document_year": 2024,
+      "family": "product_contract_profile",
+      "field_name": "benchmark",
+      "candidate_anchor": {
+        "section_id": "§2",
+        "page_number": 5,
+        "table_id": "docling_table_3",
+        "row_locator": "cell:r2:c1:idx5",
+        "candidate_only": true
+      },
+      "candidate_value": "中债总财富 （ 1-3 年） 指数收益率 *80% ＋一年期定期存款利率 ( 税后 )*20%",
+      "candidate_excerpt": "业绩比较基准 | 中债总财富 （ 1-3 年） 指数收益率 *80% ＋一年期定期存款利率 ( 税后 )*20%",
+      "normalized_candidate": "中债总财富(1-3年)指数收益率*80%＋一年期定期存款利率(税后)*20%",
+      "not_baseline_promotion": true,
+      "not_parser_replacement": true,
+      "not_release_readiness": true,
+      "not_full_field_correctness": true,
+      "repository_load_status": {
+        "status": "loaded",
+        "metadata_ok": true,
+        "metadata_reason": null,
+        "metadata": {
+          "source": "eid",
+          "selected_source": "eid",
+          "source_mode": "single_source_only",
+          "fallback_enabled": false,
+          "fallback_used": false,
+          "primary_failure_category": null,
+          "report_year": 2024,
+          "source_metadata_present": true,
+          "pdf_cache_hit": false,
+          "parsed_cache_hit": true,
+          "cache_schema_version": 1
+        },
+        "error": null
+      },
+      "match_strategy": "table_page",
+      "proof_level": "repository_table_page_cell_or_row_match",
+      "normalized_source_match_count": 1,
+      "source_excerpt": "业绩比较基准 | 中债总财富（1-3年）指数收益率*80%＋一年期定期存款利率(税后)*20%",
+      "source_excerpt_samples": [
+        "业绩比较基准 | 中债总财富（1-3年）指数收益率*80%＋一年期定期存款利率(税后)*20%"
+      ],
+      "row_disposition": "source_body_match",
+      "residual_reason": null
+    },
+    {
+      "sample_id": "S4",
+      "fact_id": "S4-F008",
+      "fund_code": "006597",
+      "document_year": 2024,
+      "family": "product_contract_profile",
+      "field_name": "risk_characteristic",
+      "candidate_anchor": {
+        "section_id": "§2",
+        "page_number": 5,
+        "table_id": "docling_table_3",
+        "row_locator": "cell:r3:c1:idx7",
+        "candidate_only": true
+      },
+      "candidate_value": "本基金为债券型基金，预期收益和预期风险高于货币市场基金，但低于 混合型基金、股票型基金，属于较低预期风险和预期收益的产品。",
+      "candidate_excerpt": "风险收益特征 | 本基金为债券型基金，预期收益和预期风险高于货币市场基金，但低于 混合型基金、股票型基金，属于较低预期风险和预期收益的产品。",
+      "normalized_candidate": "本基金为债券型基金,预期收益和预期风险高于货币市场基金,但低于混合型基金、股票型基金,属于较低预期风险和预期收益的产品.",
+      "not_baseline_promotion": true,
+      "not_parser_replacement": true,
+      "not_release_readiness": true,
+      "not_full_field_correctness": true,
+      "repository_load_status": {
+        "status": "loaded",
+        "metadata_ok": true,
+        "metadata_reason": null,
+        "metadata": {
+          "source": "eid",
+          "selected_source": "eid",
+          "source_mode": "single_source_only",
+          "fallback_enabled": false,
+          "fallback_used": false,
+          "primary_failure_category": null,
+          "report_year": 2024,
+          "source_metadata_present": true,
+          "pdf_cache_hit": false,
+          "parsed_cache_hit": true,
+          "cache_schema_version": 1
+        },
+        "error": null
+      },
+      "match_strategy": "table_page",
+      "proof_level": "repository_table_page_cell_or_row_match",
+      "normalized_source_match_count": 1,
+      "source_excerpt": "风险收益特征 | 本基金为债券型基金，预期收益和预期风险高于货币市场基金，但低于\n混合型基金、股票型基金，属于较低预期风险和预期收益的产品。",
+      "source_excerpt_samples": [
+        "风险收益特征 | 本基金为债券型基金，预期收益和预期风险高于货币市场基金，但低于\n混合型基金、股票型基金，属于较低预期风险和预期收益的产品。"
+      ],
+      "row_disposition": "source_body_match",
+      "residual_reason": null
+    },
+    {
+      "sample_id": "S4",
+      "fact_id": "S4-F009",
+      "fund_code": "006597",
+      "document_year": 2024,
+      "family": "performance_indicators",
+      "field_name": "period_profit_f_share",
+      "candidate_anchor": {
+        "section_id": "§3",
+        "page_number": 10,
+        "table_id": "docling_table_14",
+        "row_locator": "cell:r3:c2:idx6",
+        "candidate_only": true
+      },
+      "candidate_value": "175,752.40",
+      "candidate_excerpt": "本期利润 | 175,752.40",
+      "normalized_candidate": "175752.40",
+      "not_baseline_promotion": true,
+      "not_parser_replacement": true,
+      "not_release_readiness": true,
+      "not_full_field_correctness": true,
+      "repository_load_status": {
+        "status": "loaded",
+        "metadata_ok": true,
+        "metadata_reason": null,
+        "metadata": {
+          "source": "eid",
+          "selected_source": "eid",
+          "source_mode": "single_source_only",
+          "fallback_enabled": false,
+          "fallback_used": false,
+          "primary_failure_category": null,
+          "report_year": 2024,
+          "source_metadata_present": true,
+          "pdf_cache_hit": false,
+          "parsed_cache_hit": true,
+          "cache_schema_version": 1
+        },
+        "error": null
+      },
+      "match_strategy": "table_page",
+      "proof_level": "repository_table_page_cell_or_row_match",
+      "normalized_source_match_count": 1,
+      "source_excerpt": "本期利润 | 175,752.40",
+      "source_excerpt_samples": [
+        "本期利润 | 175,752.40"
+      ],
+      "row_disposition": "source_body_match",
+      "residual_reason": null
+    },
+    {
+      "sample_id": "S4",
+      "fact_id": "S4-F010",
+      "fund_code": "006597",
+      "document_year": 2024,
+      "family": "performance_indicators",
+      "field_name": "weighted_nav_profit_rate_f_share",
+      "candidate_anchor": {
+        "section_id": "§3",
+        "page_number": 10,
+        "table_id": "docling_table_14",
+        "row_locator": "cell:r5:c2:idx10",
+        "candidate_only": true
+      },
+      "candidate_value": "0.68%",
+      "candidate_excerpt": "本期加权平均净值利润率 | 0.68%",
+      "normalized_candidate": "0.68%",
+      "not_baseline_promotion": true,
+      "not_parser_replacement": true,
+      "not_release_readiness": true,
+      "not_full_field_correctness": true,
+      "repository_load_status": {
+        "status": "loaded",
+        "metadata_ok": true,
+        "metadata_reason": null,
+        "metadata": {
+          "source": "eid",
+          "selected_source": "eid",
+          "source_mode": "single_source_only",
+          "fallback_enabled": false,
+          "fallback_used": false,
+          "primary_failure_category": null,
+          "report_year": 2024,
+          "source_metadata_present": true,
+          "pdf_cache_hit": false,
+          "parsed_cache_hit": true,
+          "cache_schema_version": 1
+        },
+        "error": null
+      },
+      "match_strategy": "table_page",
+      "proof_level": "repository_table_page_cell_or_row_match",
+      "normalized_source_match_count": 1,
+      "source_excerpt": "本期加权平均净值利润率 | 0.68%",
+      "source_excerpt_samples": [
+        "本期加权平均净值利润率 | 0.68%"
+      ],
+      "row_disposition": "source_body_match",
+      "residual_reason": null
+    },
+    {
+      "sample_id": "S4",
+      "fact_id": "S4-F011",
+      "fund_code": "006597",
+      "document_year": 2024,
+      "family": "performance_indicators",
+      "field_name": "nav_growth_rate_f_share",
+      "candidate_anchor": {
+        "section_id": "§3",
+        "page_number": 10,
+        "table_id": "docling_table_14",
+        "row_locator": "cell:r6:c2:idx12",
+        "candidate_only": true
+      },
+      "candidate_value": "0.60%",
+      "candidate_excerpt": "本期基金份额净值增长率 | 0.60%",
+      "normalized_candidate": "0.60%",
+      "not_baseline_promotion": true,
+      "not_parser_replacement": true,
+      "not_release_readiness": true,
+      "not_full_field_correctness": true,
+      "repository_load_status": {
+        "status": "loaded",
+        "metadata_ok": true,
+        "metadata_reason": null,
+        "metadata": {
+          "source": "eid",
+          "selected_source": "eid",
+          "source_mode": "single_source_only",
+          "fallback_enabled": false,
+          "fallback_used": false,
+          "primary_failure_category": null,
+          "report_year": 2024,
+          "source_metadata_present": true,
+          "pdf_cache_hit": false,
+          "parsed_cache_hit": true,
+          "cache_schema_version": 1
+        },
+        "error": null
+      },
+      "match_strategy": "table_page",
+      "proof_level": "repository_table_page_cell_or_row_match",
+      "normalized_source_match_count": 1,
+      "source_excerpt": "本期基金份额净值增长率 | 0.60%",
+      "source_excerpt_samples": [
+        "本期基金份额净值增长率 | 0.60%"
+      ],
+      "row_disposition": "source_body_match",
+      "residual_reason": null
+    },
+    {
+      "sample_id": "S4",
+      "fact_id": "S4-F012",
+      "fund_code": "006597",
+      "document_year": 2024,
+      "family": "expense_costs",
+      "field_name": "manager_fee_current_year",
+      "candidate_anchor": {
+        "section_id": "§7",
+        "page_number": 27,
+        "table_id": "docling_table_26",
+        "row_locator": "cell:r20:c2:idx70",
+        "candidate_only": true
+      },
+      "candidate_value": "37,148,436.96",
+      "candidate_excerpt": "1 ．管理人报酬 | 37,148,436.96 | 30,944,287.58",
+      "normalized_candidate": "37148436.96",
+      "not_baseline_promotion": true,
+      "not_parser_replacement": true,
+      "not_release_readiness": true,
+      "not_full_field_correctness": true,
+      "repository_load_status": {
+        "status": "loaded",
+        "metadata_ok": true,
+        "metadata_reason": null,
+        "metadata": {
+          "source": "eid",
+          "selected_source": "eid",
+          "source_mode": "single_source_only",
+          "fallback_enabled": false,
+          "fallback_used": false,
+          "primary_failure_category": null,
+          "report_year": 2024,
+          "source_metadata_present": true,
+          "pdf_cache_hit": false,
+          "parsed_cache_hit": true,
+          "cache_schema_version": 1
+        },
+        "error": null
+      },
+      "match_strategy": "table_page",
+      "proof_level": "repository_table_page_cell_or_row_match",
+      "normalized_source_match_count": 1,
+      "source_excerpt": "1．管理人报酬 |  | 37,148,436.96 | 30,944,287.58",
+      "source_excerpt_samples": [
+        "1．管理人报酬 |  | 37,148,436.96 | 30,944,287.58"
+      ],
+      "row_disposition": "source_body_match",
+      "residual_reason": null
+    },
+    {
+      "sample_id": "S4",
+      "fact_id": "S4-F013",
+      "fund_code": "006597",
+      "document_year": 2024,
+      "family": "expense_costs",
+      "field_name": "custodian_fee_current_year",
+      "candidate_anchor": {
+        "section_id": "§7",
+        "page_number": 27,
+        "table_id": "docling_table_26",
+        "row_locator": "cell:r21:c2:idx73",
+        "candidate_only": true
+      },
+      "candidate_value": "9,287,109.25",
+      "candidate_excerpt": "2 ．托管费 | 9,287,109.25 | 7,736,071.94",
+      "normalized_candidate": "9287109.25",
+      "not_baseline_promotion": true,
+      "not_parser_replacement": true,
+      "not_release_readiness": true,
+      "not_full_field_correctness": true,
+      "repository_load_status": {
+        "status": "loaded",
+        "metadata_ok": true,
+        "metadata_reason": null,
+        "metadata": {
+          "source": "eid",
+          "selected_source": "eid",
+          "source_mode": "single_source_only",
+          "fallback_enabled": false,
+          "fallback_used": false,
+          "primary_failure_category": null,
+          "report_year": 2024,
+          "source_metadata_present": true,
+          "pdf_cache_hit": false,
+          "parsed_cache_hit": true,
+          "cache_schema_version": 1
+        },
+        "error": null
+      },
+      "match_strategy": "table_page",
+      "proof_level": "repository_table_page_cell_or_row_match",
+      "normalized_source_match_count": 1,
+      "source_excerpt": "2．托管费 |  | 9,287,109.25 | 7,736,071.94",
+      "source_excerpt_samples": [
+        "2．托管费 |  | 9,287,109.25 | 7,736,071.94"
+      ],
+      "row_disposition": "source_body_match",
+      "residual_reason": null
+    },
+    {
+      "sample_id": "S4",
+      "fact_id": "S4-F014",
+      "fund_code": "006597",
+      "document_year": 2024,
+      "family": "expense_costs",
+      "field_name": "sales_service_fee_current_year",
+      "candidate_anchor": {
+        "section_id": "§7",
+        "page_number": 27,
+        "table_id": "docling_table_26",
+        "row_locator": "cell:r22:c2:idx76",
+        "candidate_only": true
+      },
+      "candidate_value": "15,167,826.02",
+      "candidate_excerpt": "3 ．销售服务费 | 15,167,826.02 | 16,741,457.65",
+      "normalized_candidate": "15167826.02",
+      "not_baseline_promotion": true,
+      "not_parser_replacement": true,
+      "not_release_readiness": true,
+      "not_full_field_correctness": true,
+      "repository_load_status": {
+        "status": "loaded",
+        "metadata_ok": true,
+        "metadata_reason": null,
+        "metadata": {
+          "source": "eid",
+          "selected_source": "eid",
+          "source_mode": "single_source_only",
+          "fallback_enabled": false,
+          "fallback_used": false,
+          "primary_failure_category": null,
+          "report_year": 2024,
+          "source_metadata_present": true,
+          "pdf_cache_hit": false,
+          "parsed_cache_hit": true,
+          "cache_schema_version": 1
+        },
+        "error": null
+      },
+      "match_strategy": "table_page",
+      "proof_level": "repository_table_page_cell_or_row_match",
+      "normalized_source_match_count": 1,
+      "source_excerpt": "3．销售服务费 |  | 15,167,826.02 | 16,741,457.65",
+      "source_excerpt_samples": [
+        "3．销售服务费 |  | 15,167,826.02 | 16,741,457.65"
+      ],
+      "row_disposition": "source_body_match",
+      "residual_reason": null
+    },
+    {
+      "sample_id": "S4",
+      "fact_id": "S4-F015",
+      "fund_code": "006597",
+      "document_year": 2024,
+      "family": "portfolio_structure",
+      "field_name": "fixed_income_investment_amount",
+      "candidate_anchor": {
+        "section_id": "§8",
+        "page_number": 59,
+        "table_id": "docling_table_77",
+        "row_locator": "cell:r4:c2:idx17",
+        "candidate_only": true
+      },
+      "candidate_value": "12,106,715,596.39",
+      "candidate_excerpt": "3 | 固定收益投资 | 12,106,715,596.39 | 94.97",
+      "normalized_candidate": "12106715596.39",
+      "not_baseline_promotion": true,
+      "not_parser_replacement": true,
+      "not_release_readiness": true,
+      "not_full_field_correctness": true,
+      "repository_load_status": {
+        "status": "loaded",
+        "metadata_ok": true,
+        "metadata_reason": null,
+        "metadata": {
+          "source": "eid",
+          "selected_source": "eid",
+          "source_mode": "single_source_only",
+          "fallback_enabled": false,
+          "fallback_used": false,
+          "primary_failure_category": null,
+          "report_year": 2024,
+          "source_metadata_present": true,
+          "pdf_cache_hit": false,
+          "parsed_cache_hit": true,
+          "cache_schema_version": 1
+        },
+        "error": null
+      },
+      "match_strategy": "table_page",
+      "proof_level": "repository_table_page_cell_or_row_match",
+      "normalized_source_match_count": 3,
+      "source_excerpt": "第二层次 | 12,106,715,596.39 | 17,967,215,359.10",
+      "source_excerpt_samples": [
+        "第二层次 | 12,106,715,596.39 | 17,967,215,359.10",
+        "合计 | 12,106,715,596.39 | 17,967,215,359.10",
+        "3 | 固定收益投资 | 12,106,715,596.39 | 94.97"
+      ],
+      "row_disposition": "ambiguous_source_body_match",
+      "residual_reason": "multiple_normalized_source_body_matches_in_allowed_scope"
+    },
+    {
+      "sample_id": "S4",
+      "fact_id": "S4-F016",
+      "fund_code": "006597",
+      "document_year": 2024,
+      "family": "portfolio_structure",
+      "field_name": "bond_investment_amount",
+      "candidate_anchor": {
+        "section_id": "§8",
+        "page_number": 59,
+        "table_id": "docling_table_77",
+        "row_locator": "cell:r5:c2:idx20",
+        "candidate_only": true
+      },
+      "candidate_value": "11,987,768,459.17",
+      "candidate_excerpt": "其中：债券 | 11,987,768,459.17 | 94.03",
+      "normalized_candidate": "11987768459.17",
+      "not_baseline_promotion": true,
+      "not_parser_replacement": true,
+      "not_release_readiness": true,
+      "not_full_field_correctness": true,
+      "repository_load_status": {
+        "status": "loaded",
+        "metadata_ok": true,
+        "metadata_reason": null,
+        "metadata": {
+          "source": "eid",
+          "selected_source": "eid",
+          "source_mode": "single_source_only",
+          "fallback_enabled": false,
+          "fallback_used": false,
+          "primary_failure_category": null,
+          "report_year": 2024,
+          "source_metadata_present": true,
+          "pdf_cache_hit": false,
+          "parsed_cache_hit": true,
+          "cache_schema_version": 1
+        },
+        "error": null
+      },
+      "match_strategy": "table_page",
+      "proof_level": "repository_table_page_cell_or_row_match",
+      "normalized_source_match_count": 1,
+      "source_excerpt": " | 其中：债券 | 11,987,768,459.17 | 94.03",
+      "source_excerpt_samples": [
+        " | 其中：债券 | 11,987,768,459.17 | 94.03"
+      ],
+      "row_disposition": "source_body_match",
+      "residual_reason": null
+    },
+    {
+      "sample_id": "S4",
+      "fact_id": "S4-F017",
+      "fund_code": "006597",
+      "document_year": 2024,
+      "family": "portfolio_structure",
+      "field_name": "repo_purchase_amount",
+      "candidate_anchor": {
+        "section_id": "§8",
+        "page_number": 59,
+        "table_id": "docling_table_77",
+        "row_locator": "cell:r9:c2:idx35",
+        "candidate_only": true
+      },
+      "candidate_value": "497,184,300.60",
+      "candidate_excerpt": "6 | 买入返售金融资产 | 497,184,300.60 | 3.90",
+      "normalized_candidate": "497184300.60",
+      "not_baseline_promotion": true,
+      "not_parser_replacement": true,
+      "not_release_readiness": true,
+      "not_full_field_correctness": true,
+      "repository_load_status": {
+        "status": "loaded",
+        "metadata_ok": true,
+        "metadata_reason": null,
+        "metadata": {
+          "source": "eid",
+          "selected_source": "eid",
+          "source_mode": "single_source_only",
+          "fallback_enabled": false,
+          "fallback_used": false,
+          "primary_failure_category": null,
+          "report_year": 2024,
+          "source_metadata_present": true,
+          "pdf_cache_hit": false,
+          "parsed_cache_hit": true,
+          "cache_schema_version": 1
+        },
+        "error": null
+      },
+      "match_strategy": "table_page",
+      "proof_level": "repository_table_page_cell_or_row_match",
+      "normalized_source_match_count": 1,
+      "source_excerpt": "6 | 买入返售金融资产 | 497,184,300.60 | 3.90",
+      "source_excerpt_samples": [
+        "6 | 买入返售金融资产 | 497,184,300.60 | 3.90"
+      ],
+      "row_disposition": "source_body_match",
+      "residual_reason": null
+    },
+    {
+      "sample_id": "S5",
+      "fact_id": "S5-F018",
+      "fund_code": "017641",
+      "document_year": 2024,
+      "family": "fund_identity_profile",
+      "field_name": "fund_name",
+      "candidate_anchor": {
+        "section_id": "§2",
+        "page_number": 5,
+        "table_id": "docling_table_2",
+        "row_locator": "cell:r0:c1:idx1",
+        "candidate_only": true
+      },
+      "candidate_value": "摩根标普 500 指数型发起式证券投资基金 (QDII)",
+      "candidate_excerpt": "基金名称 | 摩根标普 500 指数型发起式证券投资基金 (QDII)",
+      "normalized_candidate": "摩根标普500指数型发起式证券投资基金(qdii)",
+      "not_baseline_promotion": true,
+      "not_parser_replacement": true,
+      "not_release_readiness": true,
+      "not_full_field_correctness": true,
+      "repository_load_status": {
+        "status": "loaded",
+        "metadata_ok": true,
+        "metadata_reason": null,
+        "metadata": {
+          "source": "eid",
+          "selected_source": "eid",
+          "source_mode": "single_source_only",
+          "fallback_enabled": false,
+          "fallback_used": false,
+          "primary_failure_category": null,
+          "report_year": 2024,
+          "source_metadata_present": true,
+          "pdf_cache_hit": true,
+          "parsed_cache_hit": false,
+          "cache_schema_version": 1
+        },
+        "error": null
+      },
+      "match_strategy": "section_text",
+      "proof_level": "repository_section_text_match",
+      "normalized_source_match_count": 4,
+      "source_excerpt": "§2 基金简介 2.1基金基本情况 基金名称 摩根标普500指数型发起式证券投资基金(QDII) 基金简称 摩根标普500指数(QDII) 基金主代码 017641 交易代码 017641 基金运作方式 契约型开放式 基金合同生效日 2023年4月6日 基金管理人 摩根基金管理（中国）有限公司 基金托管人 招商银行股份...",
+      "source_excerpt_samples": [
+        "§2 基金简介 2.1基金基本情况 基金名称 摩根标普500指数型发起式证券投资基金(QDII) 基金简称 摩根标普500指数(QDII) 基金主代码 017641 交易代码 017641 基金运作方式 契约型开放式 基金合同生效日 2023年4月6日 基金管理人 摩根基金管理（中国）有限公司 基金托管人 招商银行股份..."
+      ],
+      "row_disposition": "ambiguous_source_body_match",
+      "residual_reason": "multiple_normalized_source_body_matches_in_allowed_scope"
+    },
+    {
+      "sample_id": "S5",
+      "fact_id": "S5-F019",
+      "fund_code": "017641",
+      "document_year": 2024,
+      "family": "fund_identity_profile",
+      "field_name": "fund_code",
+      "candidate_anchor": {
+        "section_id": "§2",
+        "page_number": 5,
+        "table_id": "docling_table_2",
+        "row_locator": "cell:r2:c1:idx5",
+        "candidate_only": true
+      },
+      "candidate_value": "017641",
+      "candidate_excerpt": "基金主代码 | 017641",
+      "normalized_candidate": "017641",
+      "not_baseline_promotion": true,
+      "not_parser_replacement": true,
+      "not_release_readiness": true,
+      "not_full_field_correctness": true,
+      "repository_load_status": {
+        "status": "loaded",
+        "metadata_ok": true,
+        "metadata_reason": null,
+        "metadata": {
+          "source": "eid",
+          "selected_source": "eid",
+          "source_mode": "single_source_only",
+          "fallback_enabled": false,
+          "fallback_used": false,
+          "primary_failure_category": null,
+          "report_year": 2024,
+          "source_metadata_present": true,
+          "pdf_cache_hit": true,
+          "parsed_cache_hit": false,
+          "cache_schema_version": 1
+        },
+        "error": null
+      },
+      "match_strategy": "table_page",
+      "proof_level": "repository_table_page_cell_or_row_match",
+      "normalized_source_match_count": 3,
+      "source_excerpt": "基金主代码 | 017641 | ",
+      "source_excerpt_samples": [
+        "基金主代码 | 017641 | ",
+        "交易代码 | 017641 | ",
+        "下属分级基金的交易代码 | 017641 | 019305"
+      ],
+      "row_disposition": "ambiguous_source_body_match",
+      "residual_reason": "multiple_normalized_source_body_matches_in_allowed_scope"
+    },
+    {
+      "sample_id": "S5",
+      "fact_id": "S5-F020",
+      "fund_code": "017641",
+      "document_year": 2024,
+      "family": "fund_identity_profile",
+      "field_name": "manager",
+      "candidate_anchor": {
+        "section_id": "§2",
+        "page_number": 5,
+        "table_id": "docling_table_2",
+        "row_locator": "cell:r6:c1:idx13",
+        "candidate_only": true
+      },
+      "candidate_value": "摩根基金管理（中国）有限公司",
+      "candidate_excerpt": "基金管理人 | 摩根基金管理（中国）有限公司",
+      "normalized_candidate": "摩根基金管理(中国)有限公司",
+      "not_baseline_promotion": true,
+      "not_parser_replacement": true,
+      "not_release_readiness": true,
+      "not_full_field_correctness": true,
+      "repository_load_status": {
+        "status": "loaded",
+        "metadata_ok": true,
+        "metadata_reason": null,
+        "metadata": {
+          "source": "eid",
+          "selected_source": "eid",
+          "source_mode": "single_source_only",
+          "fallback_enabled": false,
+          "fallback_used": false,
+          "primary_failure_category": null,
+          "report_year": 2024,
+          "source_metadata_present": true,
+          "pdf_cache_hit": true,
+          "parsed_cache_hit": false,
+          "cache_schema_version": 1
+        },
+        "error": null
+      },
+      "match_strategy": "table_page",
+      "proof_level": "repository_table_page_cell_or_row_match",
+      "normalized_source_match_count": 1,
+      "source_excerpt": "基金管理人 | 摩根基金管理（中国）有限公司 | ",
+      "source_excerpt_samples": [
+        "基金管理人 | 摩根基金管理（中国）有限公司 | "
+      ],
+      "row_disposition": "source_body_match",
+      "residual_reason": null
+    },
+    {
+      "sample_id": "S5",
+      "fact_id": "S5-F021",
+      "fund_code": "017641",
+      "document_year": 2024,
+      "family": "fund_identity_profile",
+      "field_name": "custodian",
+      "candidate_anchor": {
+        "section_id": "§2",
+        "page_number": 5,
+        "table_id": "docling_table_2",
+        "row_locator": "cell:r7:c1:idx15",
+        "candidate_only": true
+      },
+      "candidate_value": "招商银行股份有限公司",
+      "candidate_excerpt": "基金托管人 | 招商银行股份有限公司",
+      "normalized_candidate": "招商银行股份有限公司",
+      "not_baseline_promotion": true,
+      "not_parser_replacement": true,
+      "not_release_readiness": true,
+      "not_full_field_correctness": true,
+      "repository_load_status": {
+        "status": "loaded",
+        "metadata_ok": true,
+        "metadata_reason": null,
+        "metadata": {
+          "source": "eid",
+          "selected_source": "eid",
+          "source_mode": "single_source_only",
+          "fallback_enabled": false,
+          "fallback_used": false,
+          "primary_failure_category": null,
+          "report_year": 2024,
+          "source_metadata_present": true,
+          "pdf_cache_hit": true,
+          "parsed_cache_hit": false,
+          "cache_schema_version": 1
+        },
+        "error": null
+      },
+      "match_strategy": "table_page",
+      "proof_level": "repository_table_page_cell_or_row_match",
+      "normalized_source_match_count": 1,
+      "source_excerpt": "基金托管人 | 招商银行股份有限公司 | ",
+      "source_excerpt_samples": [
+        "基金托管人 | 招商银行股份有限公司 | "
+      ],
+      "row_disposition": "source_body_match",
+      "residual_reason": null
+    },
+    {
+      "sample_id": "S5",
+      "fact_id": "S5-F022",
+      "fund_code": "017641",
+      "document_year": 2024,
+      "family": "fund_identity_profile",
+      "field_name": "contract_effective_date",
+      "candidate_anchor": {
+        "section_id": "§2",
+        "page_number": 5,
+        "table_id": "docling_table_2",
+        "row_locator": "cell:r5:c1:idx11",
+        "candidate_only": true
+      },
+      "candidate_value": "2023 年 4 月 6 日",
+      "candidate_excerpt": "基金合同生效日 | 2023 年 4 月 6 日",
+      "normalized_candidate": "2023年4月6日",
+      "not_baseline_promotion": true,
+      "not_parser_replacement": true,
+      "not_release_readiness": true,
+      "not_full_field_correctness": true,
+      "repository_load_status": {
+        "status": "loaded",
+        "metadata_ok": true,
+        "metadata_reason": null,
+        "metadata": {
+          "source": "eid",
+          "selected_source": "eid",
+          "source_mode": "single_source_only",
+          "fallback_enabled": false,
+          "fallback_used": false,
+          "primary_failure_category": null,
+          "report_year": 2024,
+          "source_metadata_present": true,
+          "pdf_cache_hit": true,
+          "parsed_cache_hit": false,
+          "cache_schema_version": 1
+        },
+        "error": null
+      },
+      "match_strategy": "table_page",
+      "proof_level": "repository_table_page_cell_or_row_match",
+      "normalized_source_match_count": 1,
+      "source_excerpt": "基金合同生效日 | 2023年4月6日 | ",
+      "source_excerpt_samples": [
+        "基金合同生效日 | 2023年4月6日 | "
+      ],
+      "row_disposition": "source_body_match",
+      "residual_reason": null
+    },
+    {
+      "sample_id": "S5",
+      "fact_id": "S5-F023",
+      "fund_code": "017641",
+      "document_year": 2024,
+      "family": "product_contract_profile",
+      "field_name": "investment_objective",
+      "candidate_anchor": {
+        "section_id": "§2",
+        "page_number": 5,
+        "table_id": "docling_table_3",
+        "row_locator": "cell:r0:c1:idx1",
+        "candidate_only": true
+      },
+      "candidate_value": "本基金进行被动指数化投资，紧密跟踪标的指数，追求跟踪偏离度和跟踪 误差最小化。",
+      "candidate_excerpt": "投资目标 | 本基金进行被动指数化投资，紧密跟踪标的指数，追求跟踪偏离度和跟踪 误差最小化。",
+      "normalized_candidate": "本基金进行被动指数化投资,紧密跟踪标的指数,追求跟踪偏离度和跟踪误差最小化.",
+      "not_baseline_promotion": true,
+      "not_parser_replacement": true,
+      "not_release_readiness": true,
+      "not_full_field_correctness": true,
+      "repository_load_status": {
+        "status": "loaded",
+        "metadata_ok": true,
+        "metadata_reason": null,
+        "metadata": {
+          "source": "eid",
+          "selected_source": "eid",
+          "source_mode": "single_source_only",
+          "fallback_enabled": false,
+          "fallback_used": false,
+          "primary_failure_category": null,
+          "report_year": 2024,
+          "source_metadata_present": true,
+          "pdf_cache_hit": true,
+          "parsed_cache_hit": false,
+          "cache_schema_version": 1
+        },
+        "error": null
+      },
+      "match_strategy": "section_text",
+      "proof_level": "repository_section_text_match",
+      "normalized_source_match_count": 0,
+      "source_excerpt": null,
+      "source_excerpt_samples": [],
+      "row_disposition": "source_body_mismatch",
+      "residual_reason": "no_normalized_source_body_match_in_allowed_scope"
+    },
+    {
+      "sample_id": "S5",
+      "fact_id": "S5-F024",
+      "fund_code": "017641",
+      "document_year": 2024,
+      "family": "product_contract_profile",
+      "field_name": "benchmark",
+      "candidate_anchor": {
+        "section_id": "§2",
+        "page_number": 7,
+        "table_id": "docling_table_4",
+        "row_locator": "cell:r1:c1:idx2",
+        "candidate_only": true
+      },
+      "candidate_value": "标普 500 指数收益率 ( 经汇率调整后 ) ×95%+ 银行活期存款利率 ( 税后 ) ×5%",
+      "candidate_excerpt": "业绩比较基准 | 标普 500 指数收益率 ( 经汇率调整后 ) ×95%+ 银行活期存款利率 ( 税后 ) ×5%",
+      "normalized_candidate": "标普500指数收益率(经汇率调整后)x95%+银行活期存款利率(税后)x5%",
+      "not_baseline_promotion": true,
+      "not_parser_replacement": true,
+      "not_release_readiness": true,
+      "not_full_field_correctness": true,
+      "repository_load_status": {
+        "status": "loaded",
+        "metadata_ok": true,
+        "metadata_reason": null,
+        "metadata": {
+          "source": "eid",
+          "selected_source": "eid",
+          "source_mode": "single_source_only",
+          "fallback_enabled": false,
+          "fallback_used": false,
+          "primary_failure_category": null,
+          "report_year": 2024,
+          "source_metadata_present": true,
+          "pdf_cache_hit": true,
+          "parsed_cache_hit": false,
+          "cache_schema_version": 1
+        },
+        "error": null
+      },
+      "match_strategy": "table_page",
+      "proof_level": "repository_table_page_cell_or_row_match",
+      "normalized_source_match_count": 1,
+      "source_excerpt": "业绩比较基准 | 标普500指数收益率(经汇率调整后) ×95%+银行活期存款利率(税后) ×5%",
+      "source_excerpt_samples": [
+        "业绩比较基准 | 标普500指数收益率(经汇率调整后) ×95%+银行活期存款利率(税后) ×5%"
+      ],
+      "row_disposition": "source_body_match",
+      "residual_reason": null
+    },
+    {
+      "sample_id": "S5",
+      "fact_id": "S5-F025",
+      "fund_code": "017641",
+      "document_year": 2024,
+      "family": "product_contract_profile",
+      "field_name": "risk_characteristic",
+      "candidate_anchor": {
+        "section_id": "§2",
+        "page_number": 7,
+        "table_id": "docling_table_4",
+        "row_locator": "cell:r2:c1:idx4",
+        "candidate_only": true
+      },
+      "candidate_value": "本基金属于股票型基金产品，预期风险和收益水平高于混合型基金、债券 型基金和货币市场基金。本基金为被动管理的指数型基金，具有与标的指 数、以及标的指数所代表的股票市场相似的风险收益特征。 本基金投资于境外证券市场，因此还面临汇率风险等境外证券市场投资所 面临的特别投资风险。",
+      "candidate_excerpt": "风险收益特征 | 本基金属于股票型基金产品，预期风险和收益水平高于混合型基金、债券 型基金和货币市场基金。本基金为被动管理的指数型基金，具有与标的指 数、以及标的指数所代表的股票市场相似的风险收益特征。 本基金投资于境外证券市场，因此还面临汇率风险等境外证券市场投资所 面临的特别投资风险。",
+      "normalized_candidate": "本基金属于股票型基金产品,预期风险和收益水平高于混合型基金、债券型基金和货币市场基金.本基金为被动管理的指数型基金,具有与标的指数、以及标的指数所代表的股票市场相似的风险收益特征.本基金投资于境外证券市场,因此还面临汇率风险等境外证券市场投资所面临的特别投资风险.",
+      "not_baseline_promotion": true,
+      "not_parser_replacement": true,
+      "not_release_readiness": true,
+      "not_full_field_correctness": true,
+      "repository_load_status": {
+        "status": "loaded",
+        "metadata_ok": true,
+        "metadata_reason": null,
+        "metadata": {
+          "source": "eid",
+          "selected_source": "eid",
+          "source_mode": "single_source_only",
+          "fallback_enabled": false,
+          "fallback_used": false,
+          "primary_failure_category": null,
+          "report_year": 2024,
+          "source_metadata_present": true,
+          "pdf_cache_hit": true,
+          "parsed_cache_hit": false,
+          "cache_schema_version": 1
+        },
+        "error": null
+      },
+      "match_strategy": "table_page",
+      "proof_level": "repository_table_page_cell_or_row_match",
+      "normalized_source_match_count": 1,
+      "source_excerpt": "风险收益特征 | 本基金属于股票型基金产品，预期风险和收益水平高于混合型基金、债券\n型基金和货币市场基金。本基金为被动管理的指数型基金，具有与标的指\n数、以及标的指数所代表的股票市场相似的风险收益特征。\n本基金投资于境外证券市场，因此还面临汇率风险等境外证券市场投资所\n面临的特别投资风险。",
+      "source_excerpt_samples": [
+        "风险收益特征 | 本基金属于股票型基金产品，预期风险和收益水平高于混合型基金、债券\n型基金和货币市场基金。本基金为被动管理的指数型基金，具有与标的指\n数、以及标的指数所代表的股票市场相似的风险收益特征。\n本基金投资于境外证券市场，因此还面临汇率风险等境外证券市场投资所\n面临的特别投资风险。"
+      ],
+      "row_disposition": "source_body_match",
+      "residual_reason": null
+    },
+    {
+      "sample_id": "S5",
+      "fact_id": "S5-F026",
+      "fund_code": "017641",
+      "document_year": 2024,
+      "family": "performance_indicators",
+      "field_name": "period_profit_a_share",
+      "candidate_anchor": {
+        "section_id": "§3",
+        "page_number": 9,
+        "table_id": "docling_table_11",
+        "row_locator": "cell:r1:c1:idx2",
+        "candidate_only": true
+      },
+      "candidate_value": "125,471,282.72",
+      "candidate_excerpt": "本期利润 | 125,471,282.72 | 35,697,486.68 | 16,201,243.86 | 777,760.32",
+      "normalized_candidate": "125471282.72",
+      "not_baseline_promotion": true,
+      "not_parser_replacement": true,
+      "not_release_readiness": true,
+      "not_full_field_correctness": true,
+      "repository_load_status": {
+        "status": "loaded",
+        "metadata_ok": true,
+        "metadata_reason": null,
+        "metadata": {
+          "source": "eid",
+          "selected_source": "eid",
+          "source_mode": "single_source_only",
+          "fallback_enabled": false,
+          "fallback_used": false,
+          "primary_failure_category": null,
+          "report_year": 2024,
+          "source_metadata_present": true,
+          "pdf_cache_hit": true,
+          "parsed_cache_hit": false,
+          "cache_schema_version": 1
+        },
+        "error": null
+      },
+      "match_strategy": "table_page",
+      "proof_level": "repository_table_page_cell_or_row_match",
+      "normalized_source_match_count": 1,
+      "source_excerpt": "本期利润 | 125,471,282.72 | 35,697,486.68 | 16,201,243.86 | 777,760.32",
+      "source_excerpt_samples": [
+        "本期利润 | 125,471,282.72 | 35,697,486.68 | 16,201,243.86 | 777,760.32"
+      ],
+      "row_disposition": "source_body_match",
+      "residual_reason": null
+    },
+    {
+      "sample_id": "S5",
+      "fact_id": "S5-F027",
+      "fund_code": "017641",
+      "document_year": 2024,
+      "family": "performance_indicators",
+      "field_name": "weighted_profit_a_share",
+      "candidate_anchor": {
+        "section_id": "§3",
+        "page_number": 9,
+        "table_id": "docling_table_11",
+        "row_locator": "cell:r1:c1:idx2",
+        "candidate_only": true
+      },
+      "candidate_value": "125,471,282.72",
+      "candidate_excerpt": "本期利润 | 125,471,282.72 | 35,697,486.68 | 16,201,243.86 | 777,760.32",
+      "normalized_candidate": "125471282.72",
+      "not_baseline_promotion": true,
+      "not_parser_replacement": true,
+      "not_release_readiness": true,
+      "not_full_field_correctness": true,
+      "repository_load_status": {
+        "status": "loaded",
+        "metadata_ok": true,
+        "metadata_reason": null,
+        "metadata": {
+          "source": "eid",
+          "selected_source": "eid",
+          "source_mode": "single_source_only",
+          "fallback_enabled": false,
+          "fallback_used": false,
+          "primary_failure_category": null,
+          "report_year": 2024,
+          "source_metadata_present": true,
+          "pdf_cache_hit": true,
+          "parsed_cache_hit": false,
+          "cache_schema_version": 1
+        },
+        "error": null
+      },
+      "match_strategy": "table_page",
+      "proof_level": "repository_table_page_cell_or_row_match",
+      "normalized_source_match_count": 1,
+      "source_excerpt": "本期利润 | 125,471,282.72 | 35,697,486.68 | 16,201,243.86 | 777,760.32",
+      "source_excerpt_samples": [
+        "本期利润 | 125,471,282.72 | 35,697,486.68 | 16,201,243.86 | 777,760.32"
+      ],
+      "row_disposition": "source_body_match",
+      "residual_reason": null
+    },
+    {
+      "sample_id": "S5",
+      "fact_id": "S5-F028",
+      "fund_code": "017641",
+      "document_year": 2024,
+      "family": "performance_indicators",
+      "field_name": "nav_growth_rate_a_share",
+      "candidate_anchor": {
+        "section_id": "§3",
+        "page_number": 9,
+        "table_id": "docling_table_11",
+        "row_locator": "cell:r4:c1:idx17",
+        "candidate_only": true
+      },
+      "candidate_value": "20.92%",
+      "candidate_excerpt": "本期基金份 额净值增长 率 | 20.92% | 20.50% | 14.94% | 3.46%",
+      "normalized_candidate": "20.92%",
+      "not_baseline_promotion": true,
+      "not_parser_replacement": true,
+      "not_release_readiness": true,
+      "not_full_field_correctness": true,
+      "repository_load_status": {
+        "status": "loaded",
+        "metadata_ok": true,
+        "metadata_reason": null,
+        "metadata": {
+          "source": "eid",
+          "selected_source": "eid",
+          "source_mode": "single_source_only",
+          "fallback_enabled": false,
+          "fallback_used": false,
+          "primary_failure_category": null,
+          "report_year": 2024,
+          "source_metadata_present": true,
+          "pdf_cache_hit": true,
+          "parsed_cache_hit": false,
+          "cache_schema_version": 1
+        },
+        "error": null
+      },
+      "match_strategy": "table_page",
+      "proof_level": "repository_table_page_cell_or_row_match",
+      "normalized_source_match_count": 1,
+      "source_excerpt": "本期基金份\n额净值增长\n率 | 20.92% | 20.50% | 14.94% | 3.46%",
+      "source_excerpt_samples": [
+        "本期基金份\n额净值增长\n率 | 20.92% | 20.50% | 14.94% | 3.46%"
+      ],
+      "row_disposition": "source_body_match",
+      "residual_reason": null
+    },
+    {
+      "sample_id": "S5",
+      "fact_id": "S5-F029",
+      "fund_code": "017641",
+      "document_year": 2024,
+      "family": "expense_costs",
+      "field_name": "manager_fee_current_year",
+      "candidate_anchor": {
+        "section_id": "§7",
+        "page_number": 24,
+        "table_id": "docling_table_19",
+        "row_locator": "cell:r13:c2:idx46",
+        "candidate_only": true
+      },
+      "candidate_value": "5,453,074.81",
+      "candidate_excerpt": "1 ．管理人报酬 | 5,453,074.81 | 529,891.51",
+      "normalized_candidate": "5453074.81",
+      "not_baseline_promotion": true,
+      "not_parser_replacement": true,
+      "not_release_readiness": true,
+      "not_full_field_correctness": true,
+      "repository_load_status": {
+        "status": "loaded",
+        "metadata_ok": true,
+        "metadata_reason": null,
+        "metadata": {
+          "source": "eid",
+          "selected_source": "eid",
+          "source_mode": "single_source_only",
+          "fallback_enabled": false,
+          "fallback_used": false,
+          "primary_failure_category": null,
+          "report_year": 2024,
+          "source_metadata_present": true,
+          "pdf_cache_hit": true,
+          "parsed_cache_hit": false,
+          "cache_schema_version": 1
+        },
+        "error": null
+      },
+      "match_strategy": "table_page",
+      "proof_level": "repository_table_page_cell_or_row_match",
+      "normalized_source_match_count": 1,
+      "source_excerpt": "1．管理人报酬 |  | 5,453,074.81 | 529,891.51",
+      "source_excerpt_samples": [
+        "1．管理人报酬 |  | 5,453,074.81 | 529,891.51"
+      ],
+      "row_disposition": "source_body_match",
+      "residual_reason": null
+    },
+    {
+      "sample_id": "S5",
+      "fact_id": "S5-F030",
+      "fund_code": "017641",
+      "document_year": 2024,
+      "family": "expense_costs",
+      "field_name": "custodian_fee_current_year",
+      "candidate_anchor": {
+        "section_id": "§7",
+        "page_number": 24,
+        "table_id": "docling_table_19",
+        "row_locator": "cell:r14:c2:idx49",
+        "candidate_only": true
+      },
+      "candidate_value": "1,635,922.43",
+      "candidate_excerpt": "2 ．托管费 | 1,635,922.43 | 158,967.54",
+      "normalized_candidate": "1635922.43",
+      "not_baseline_promotion": true,
+      "not_parser_replacement": true,
+      "not_release_readiness": true,
+      "not_full_field_correctness": true,
+      "repository_load_status": {
+        "status": "loaded",
+        "metadata_ok": true,
+        "metadata_reason": null,
+        "metadata": {
+          "source": "eid",
+          "selected_source": "eid",
+          "source_mode": "single_source_only",
+          "fallback_enabled": false,
+          "fallback_used": false,
+          "primary_failure_category": null,
+          "report_year": 2024,
+          "source_metadata_present": true,
+          "pdf_cache_hit": true,
+          "parsed_cache_hit": false,
+          "cache_schema_version": 1
+        },
+        "error": null
+      },
+      "match_strategy": "table_page",
+      "proof_level": "repository_table_page_cell_or_row_match",
+      "normalized_source_match_count": 1,
+      "source_excerpt": "2．托管费 |  | 1,635,922.43 | 158,967.54",
+      "source_excerpt_samples": [
+        "2．托管费 |  | 1,635,922.43 | 158,967.54"
+      ],
+      "row_disposition": "source_body_match",
+      "residual_reason": null
+    },
+    {
+      "sample_id": "S5",
+      "fact_id": "S5-F031",
+      "fund_code": "017641",
+      "document_year": 2024,
+      "family": "expense_costs",
+      "field_name": "sales_service_fee_current_year",
+      "candidate_anchor": {
+        "section_id": "§7",
+        "page_number": 24,
+        "table_id": "docling_table_19",
+        "row_locator": "cell:r15:c2:idx52",
+        "candidate_only": true
+      },
+      "candidate_value": "882,956.51",
+      "candidate_excerpt": "3 ．销售服务费 | 882,956.51 | 6,821.78",
+      "normalized_candidate": "882956.51",
+      "not_baseline_promotion": true,
+      "not_parser_replacement": true,
+      "not_release_readiness": true,
+      "not_full_field_correctness": true,
+      "repository_load_status": {
+        "status": "loaded",
+        "metadata_ok": true,
+        "metadata_reason": null,
+        "metadata": {
+          "source": "eid",
+          "selected_source": "eid",
+          "source_mode": "single_source_only",
+          "fallback_enabled": false,
+          "fallback_used": false,
+          "primary_failure_category": null,
+          "report_year": 2024,
+          "source_metadata_present": true,
+          "pdf_cache_hit": true,
+          "parsed_cache_hit": false,
+          "cache_schema_version": 1
+        },
+        "error": null
+      },
+      "match_strategy": "table_page",
+      "proof_level": "repository_table_page_cell_or_row_match",
+      "normalized_source_match_count": 1,
+      "source_excerpt": "3．销售服务费 |  | 882,956.51 | 6,821.78",
+      "source_excerpt_samples": [
+        "3．销售服务费 |  | 882,956.51 | 6,821.78"
+      ],
+      "row_disposition": "source_body_match",
+      "residual_reason": null
+    },
+    {
+      "sample_id": "S5",
+      "fact_id": "S5-F032",
+      "fund_code": "017641",
+      "document_year": 2024,
+      "family": "portfolio_structure",
+      "field_name": "equity_investment_amount",
+      "candidate_anchor": {
+        "section_id": "§8",
+        "page_number": 58,
+        "table_id": "docling_table_58",
+        "row_locator": "cell:r1:c2:idx6",
+        "candidate_only": true
+      },
+      "candidate_value": "1,818,456,375.25",
+      "candidate_excerpt": "1 | 权益投资 | 1,818,456,375.25 | 92.45",
+      "normalized_candidate": "1818456375.25",
+      "not_baseline_promotion": true,
+      "not_parser_replacement": true,
+      "not_release_readiness": true,
+      "not_full_field_correctness": true,
+      "repository_load_status": {
+        "status": "loaded",
+        "metadata_ok": true,
+        "metadata_reason": null,
+        "metadata": {
+          "source": "eid",
+          "selected_source": "eid",
+          "source_mode": "single_source_only",
+          "fallback_enabled": false,
+          "fallback_used": false,
+          "primary_failure_category": null,
+          "report_year": 2024,
+          "source_metadata_present": true,
+          "pdf_cache_hit": true,
+          "parsed_cache_hit": false,
+          "cache_schema_version": 1
+        },
+        "error": null
+      },
+      "match_strategy": "table_page",
+      "proof_level": "repository_table_page_cell_or_row_match",
+      "normalized_source_match_count": 4,
+      "source_excerpt": "1 | 权益投资 | 1,818,456,375.25 | 92.45",
+      "source_excerpt_samples": [
+        "1 | 权益投资 | 1,818,456,375.25 | 92.45",
+        " | 其中：普通股 | 1,818,456,375.25 | 92.45",
+        "美国 | 1,818,456,375.25 | 93.75"
+      ],
+      "row_disposition": "ambiguous_source_body_match",
+      "residual_reason": "multiple_normalized_source_body_matches_in_allowed_scope"
+    },
+    {
+      "sample_id": "S5",
+      "fact_id": "S5-F033",
+      "fund_code": "017641",
+      "document_year": 2024,
+      "family": "portfolio_structure",
+      "field_name": "bank_deposit_and_settlement_reserve",
+      "candidate_anchor": {
+        "section_id": "§8",
+        "page_number": 58,
+        "table_id": "docling_table_58",
+        "row_locator": "cell:r18:c2:idx63",
+        "candidate_only": true
+      },
+      "candidate_value": "132,054,833.82",
+      "candidate_excerpt": "7 | 银行存款和结算备付金合计 | 132,054,833.82 | 6.71",
+      "normalized_candidate": "132054833.82",
+      "not_baseline_promotion": true,
+      "not_parser_replacement": true,
+      "not_release_readiness": true,
+      "not_full_field_correctness": true,
+      "repository_load_status": {
+        "status": "loaded",
+        "metadata_ok": true,
+        "metadata_reason": null,
+        "metadata": {
+          "source": "eid",
+          "selected_source": "eid",
+          "source_mode": "single_source_only",
+          "fallback_enabled": false,
+          "fallback_used": false,
+          "primary_failure_category": null,
+          "report_year": 2024,
+          "source_metadata_present": true,
+          "pdf_cache_hit": true,
+          "parsed_cache_hit": false,
+          "cache_schema_version": 1
+        },
+        "error": null
+      },
+      "match_strategy": "table_page",
+      "proof_level": "repository_table_page_cell_or_row_match",
+      "normalized_source_match_count": 1,
+      "source_excerpt": "7 | 银行存款和结算备付金合计 | 132,054,833.82 | 6.71",
+      "source_excerpt_samples": [
+        "7 | 银行存款和结算备付金合计 | 132,054,833.82 | 6.71"
+      ],
+      "row_disposition": "source_body_match",
+      "residual_reason": null
+    },
+    {
+      "sample_id": "S5",
+      "fact_id": "S5-F034",
+      "fund_code": "017641",
+      "document_year": 2024,
+      "family": "portfolio_structure",
+      "field_name": "total_assets",
+      "candidate_anchor": {
+        "section_id": "§8",
+        "page_number": 58,
+        "table_id": "docling_table_58",
+        "row_locator": "cell:r18:c2:idx63",
+        "candidate_only": true
+      },
+      "candidate_value": "132,054,833.82",
+      "candidate_excerpt": "7 | 银行存款和结算备付金合计 | 132,054,833.82 | 6.71",
+      "normalized_candidate": "132054833.82",
+      "not_baseline_promotion": true,
+      "not_parser_replacement": true,
+      "not_release_readiness": true,
+      "not_full_field_correctness": true,
+      "repository_load_status": {
+        "status": "loaded",
+        "metadata_ok": true,
+        "metadata_reason": null,
+        "metadata": {
+          "source": "eid",
+          "selected_source": "eid",
+          "source_mode": "single_source_only",
+          "fallback_enabled": false,
+          "fallback_used": false,
+          "primary_failure_category": null,
+          "report_year": 2024,
+          "source_metadata_present": true,
+          "pdf_cache_hit": true,
+          "parsed_cache_hit": false,
+          "cache_schema_version": 1
+        },
+        "error": null
+      },
+      "match_strategy": "table_page",
+      "proof_level": "repository_table_page_cell_or_row_match",
+      "normalized_source_match_count": 1,
+      "source_excerpt": "7 | 银行存款和结算备付金合计 | 132,054,833.82 | 6.71",
+      "source_excerpt_samples": [
+        "7 | 银行存款和结算备付金合计 | 132,054,833.82 | 6.71"
+      ],
+      "row_disposition": "source_body_match",
+      "residual_reason": null
+    },
+    {
+      "sample_id": "S6",
+      "fact_id": "S6-F035",
+      "fund_code": "110020",
+      "document_year": 2024,
+      "family": "fund_identity_profile",
+      "field_name": "fund_name",
+      "candidate_anchor": {
+        "section_id": "§2",
+        "page_number": 5,
+        "table_id": "docling_table_2",
+        "row_locator": "cell:r0:c1:idx1",
+        "candidate_only": true
+      },
+      "candidate_value": "易方达沪深 300 交易型开放式指数发起式证券投资基金 联接基金",
+      "candidate_excerpt": "基金名称 | 易方达沪深 300 交易型开放式指数发起式证券投资基金 联接基金",
+      "normalized_candidate": "易方达沪深300交易型开放式指数发起式证券投资基金联接基金",
+      "not_baseline_promotion": true,
+      "not_parser_replacement": true,
+      "not_release_readiness": true,
+      "not_full_field_correctness": true,
+      "repository_load_status": {
+        "status": "loaded",
+        "metadata_ok": true,
+        "metadata_reason": null,
+        "metadata": {
+          "source": "eid",
+          "selected_source": "eid",
+          "source_mode": "single_source_only",
+          "fallback_enabled": false,
+          "fallback_used": false,
+          "primary_failure_category": null,
+          "report_year": 2024,
+          "source_metadata_present": true,
+          "pdf_cache_hit": false,
+          "parsed_cache_hit": true,
+          "cache_schema_version": 1
+        },
+        "error": null
+      },
+      "match_strategy": "section_text",
+      "proof_level": "repository_section_text_match",
+      "normalized_source_match_count": 3,
+      "source_excerpt": "指数发起式证券投资基金 基金主代码 510310 基金运作方式 交易型开放式（ETF）、发起式 基金合同生效日 2013年3月6日 基金份额上市的证券交易所 上海证券交易所 上市日期 2013年3月25日 基金管理人名称 易方达基金管理有限公司 基金托管人名称 中国建设银行股份有限公司 第5页共84页 易方达沪深300...",
+      "source_excerpt_samples": [
+        "指数发起式证券投资基金 基金主代码 510310 基金运作方式 交易型开放式（ETF）、发起式 基金合同生效日 2013年3月6日 基金份额上市的证券交易所 上海证券交易所 上市日期 2013年3月25日 基金管理人名称 易方达基金管理有限公司 基金托管人名称 中国建设银行股份有限公司 第5页共84页 易方达沪深300..."
+      ],
+      "row_disposition": "ambiguous_source_body_match",
+      "residual_reason": "multiple_normalized_source_body_matches_in_allowed_scope"
+    },
+    {
+      "sample_id": "S6",
+      "fact_id": "S6-F036",
+      "fund_code": "110020",
+      "document_year": 2024,
+      "family": "fund_identity_profile",
+      "field_name": "fund_code",
+      "candidate_anchor": {
+        "section_id": "§2",
+        "page_number": 5,
+        "table_id": "docling_table_2",
+        "row_locator": "cell:r2:c1:idx5",
+        "candidate_only": true
+      },
+      "candidate_value": "110020",
+      "candidate_excerpt": "基金主代码 | 110020",
+      "normalized_candidate": "110020",
+      "not_baseline_promotion": true,
+      "not_parser_replacement": true,
+      "not_release_readiness": true,
+      "not_full_field_correctness": true,
+      "repository_load_status": {
+        "status": "loaded",
+        "metadata_ok": true,
+        "metadata_reason": null,
+        "metadata": {
+          "source": "eid",
+          "selected_source": "eid",
+          "source_mode": "single_source_only",
+          "fallback_enabled": false,
+          "fallback_used": false,
+          "primary_failure_category": null,
+          "report_year": 2024,
+          "source_metadata_present": true,
+          "pdf_cache_hit": false,
+          "parsed_cache_hit": true,
+          "cache_schema_version": 1
+        },
+        "error": null
+      },
+      "match_strategy": "table_page",
+      "proof_level": "repository_table_page_cell_or_row_match",
+      "normalized_source_match_count": 2,
+      "source_excerpt": "基金主代码 | 110020 |  | ",
+      "source_excerpt_samples": [
+        "基金主代码 | 110020 |  | ",
+        "下属分级基金的交易代码 | 110020 | 007339 | 022928"
+      ],
+      "row_disposition": "ambiguous_source_body_match",
+      "residual_reason": "multiple_normalized_source_body_matches_in_allowed_scope"
+    },
+    {
+      "sample_id": "S6",
+      "fact_id": "S6-F037",
+      "fund_code": "110020",
+      "document_year": 2024,
+      "family": "fund_identity_profile",
+      "field_name": "manager",
+      "candidate_anchor": {
+        "section_id": "§2",
+        "page_number": 5,
+        "table_id": "docling_table_2",
+        "row_locator": "cell:r5:c1:idx11",
+        "candidate_only": true
+      },
+      "candidate_value": "易方达基金管理有限公司",
+      "candidate_excerpt": "基金管理人 | 易方达基金管理有限公司",
+      "normalized_candidate": "易方达基金管理有限公司",
+      "not_baseline_promotion": true,
+      "not_parser_replacement": true,
+      "not_release_readiness": true,
+      "not_full_field_correctness": true,
+      "repository_load_status": {
+        "status": "loaded",
+        "metadata_ok": true,
+        "metadata_reason": null,
+        "metadata": {
+          "source": "eid",
+          "selected_source": "eid",
+          "source_mode": "single_source_only",
+          "fallback_enabled": false,
+          "fallback_used": false,
+          "primary_failure_category": null,
+          "report_year": 2024,
+          "source_metadata_present": true,
+          "pdf_cache_hit": false,
+          "parsed_cache_hit": true,
+          "cache_schema_version": 1
+        },
+        "error": null
+      },
+      "match_strategy": "table_page",
+      "proof_level": "repository_table_page_cell_or_row_match",
+      "normalized_source_match_count": 2,
+      "source_excerpt": "基金管理人 | 易方达基金管理有限公司 |  | ",
+      "source_excerpt_samples": [
+        "基金管理人 | 易方达基金管理有限公司 |  | ",
+        "基金管理人名称 | 易方达基金管理有限公司"
+      ],
+      "row_disposition": "ambiguous_source_body_match",
+      "residual_reason": "multiple_normalized_source_body_matches_in_allowed_scope"
+    },
+    {
+      "sample_id": "S6",
+      "fact_id": "S6-F038",
+      "fund_code": "110020",
+      "document_year": 2024,
+      "family": "fund_identity_profile",
+      "field_name": "custodian",
+      "candidate_anchor": {
+        "section_id": "§2",
+        "page_number": 5,
+        "table_id": "docling_table_2",
+        "row_locator": "cell:r6:c1:idx13",
+        "candidate_only": true
+      },
+      "candidate_value": "中国建设银行股份有限公司",
+      "candidate_excerpt": "基金托管人 | 中国建设银行股份有限公司",
+      "normalized_candidate": "中国建设银行股份有限公司",
+      "not_baseline_promotion": true,
+      "not_parser_replacement": true,
+      "not_release_readiness": true,
+      "not_full_field_correctness": true,
+      "repository_load_status": {
+        "status": "loaded",
+        "metadata_ok": true,
+        "metadata_reason": null,
+        "metadata": {
+          "source": "eid",
+          "selected_source": "eid",
+          "source_mode": "single_source_only",
+          "fallback_enabled": false,
+          "fallback_used": false,
+          "primary_failure_category": null,
+          "report_year": 2024,
+          "source_metadata_present": true,
+          "pdf_cache_hit": false,
+          "parsed_cache_hit": true,
+          "cache_schema_version": 1
+        },
+        "error": null
+      },
+      "match_strategy": "table_page",
+      "proof_level": "repository_table_page_cell_or_row_match",
+      "normalized_source_match_count": 2,
+      "source_excerpt": "基金托管人 | 中国建设银行股份有限公司 |  | ",
+      "source_excerpt_samples": [
+        "基金托管人 | 中国建设银行股份有限公司 |  | ",
+        "基金托管人名称 | 中国建设银行股份有限公司"
+      ],
+      "row_disposition": "ambiguous_source_body_match",
+      "residual_reason": "multiple_normalized_source_body_matches_in_allowed_scope"
+    },
+    {
+      "sample_id": "S6",
+      "fact_id": "S6-F039",
+      "fund_code": "110020",
+      "document_year": 2024,
+      "family": "fund_identity_profile",
+      "field_name": "contract_effective_date",
+      "candidate_anchor": {
+        "section_id": "§2",
+        "page_number": 5,
+        "table_id": "docling_table_2",
+        "row_locator": "cell:r4:c1:idx9",
+        "candidate_only": true
+      },
+      "candidate_value": "2009 年 8 月 26 日",
+      "candidate_excerpt": "基金合同生效日 | 2009 年 8 月 26 日",
+      "normalized_candidate": "2009年8月26日",
+      "not_baseline_promotion": true,
+      "not_parser_replacement": true,
+      "not_release_readiness": true,
+      "not_full_field_correctness": true,
+      "repository_load_status": {
+        "status": "loaded",
+        "metadata_ok": true,
+        "metadata_reason": null,
+        "metadata": {
+          "source": "eid",
+          "selected_source": "eid",
+          "source_mode": "single_source_only",
+          "fallback_enabled": false,
+          "fallback_used": false,
+          "primary_failure_category": null,
+          "report_year": 2024,
+          "source_metadata_present": true,
+          "pdf_cache_hit": false,
+          "parsed_cache_hit": true,
+          "cache_schema_version": 1
+        },
+        "error": null
+      },
+      "match_strategy": "table_page",
+      "proof_level": "repository_table_page_cell_or_row_match",
+      "normalized_source_match_count": 1,
+      "source_excerpt": "基金合同生效日 | 2009年8月26日 |  | ",
+      "source_excerpt_samples": [
+        "基金合同生效日 | 2009年8月26日 |  | "
+      ],
+      "row_disposition": "source_body_match",
+      "residual_reason": null
+    },
+    {
+      "sample_id": "S6",
+      "fact_id": "S6-F040",
+      "fund_code": "110020",
+      "document_year": 2024,
+      "family": "product_contract_profile",
+      "field_name": "investment_objective",
+      "candidate_anchor": {
+        "section_id": "§2",
+        "page_number": 6,
+        "table_id": "docling_table_4",
+        "row_locator": "cell:r0:c1:idx1",
+        "candidate_only": true
+      },
+      "candidate_value": "紧密跟踪业绩比较基准，追求跟踪偏离度及跟踪误差的最小化。",
+      "candidate_excerpt": "投资目标 | 紧密跟踪业绩比较基准，追求跟踪偏离度及跟踪误差的最小化。",
+      "normalized_candidate": "紧密跟踪业绩比较基准,追求跟踪偏离度及跟踪误差的最小化.",
+      "not_baseline_promotion": true,
+      "not_parser_replacement": true,
+      "not_release_readiness": true,
+      "not_full_field_correctness": true,
+      "repository_load_status": {
+        "status": "loaded",
+        "metadata_ok": true,
+        "metadata_reason": null,
+        "metadata": {
+          "source": "eid",
+          "selected_source": "eid",
+          "source_mode": "single_source_only",
+          "fallback_enabled": false,
+          "fallback_used": false,
+          "primary_failure_category": null,
+          "report_year": 2024,
+          "source_metadata_present": true,
+          "pdf_cache_hit": false,
+          "parsed_cache_hit": true,
+          "cache_schema_version": 1
+        },
+        "error": null
+      },
+      "match_strategy": "section_text",
+      "proof_level": "repository_section_text_match",
+      "normalized_source_match_count": 1,
+      "source_excerpt": "同生效日 2013年3月6日 基金份额上市的证券交易所 上海证券交易所 上市日期 2013年3月25日 基金管理人名称 易方达基金管理有限公司 基金托管人名称 中国建设银行股份有限公司 第5页共84页 易方达沪深300交易型开放式指数发起式证券投资基金联接基金2024年年度报告 2.2 基金产品说明 投资目标 紧密跟踪...",
+      "source_excerpt_samples": [
+        "同生效日 2013年3月6日 基金份额上市的证券交易所 上海证券交易所 上市日期 2013年3月25日 基金管理人名称 易方达基金管理有限公司 基金托管人名称 中国建设银行股份有限公司 第5页共84页 易方达沪深300交易型开放式指数发起式证券投资基金联接基金2024年年度报告 2.2 基金产品说明 投资目标 紧密跟踪..."
+      ],
+      "row_disposition": "source_body_match",
+      "residual_reason": null
+    },
+    {
+      "sample_id": "S6",
+      "fact_id": "S6-F041",
+      "fund_code": "110020",
+      "document_year": 2024,
+      "family": "product_contract_profile",
+      "field_name": "benchmark",
+      "candidate_anchor": {
+        "section_id": "§2",
+        "page_number": 6,
+        "table_id": "docling_table_4",
+        "row_locator": "cell:r0:c1:idx1",
+        "candidate_only": true
+      },
+      "candidate_value": "紧密跟踪业绩比较基准，追求跟踪偏离度及跟踪误差的最小化。",
+      "candidate_excerpt": "投资目标 | 紧密跟踪业绩比较基准，追求跟踪偏离度及跟踪误差的最小化。",
+      "normalized_candidate": "紧密跟踪业绩比较基准,追求跟踪偏离度及跟踪误差的最小化.",
+      "not_baseline_promotion": true,
+      "not_parser_replacement": true,
+      "not_release_readiness": true,
+      "not_full_field_correctness": true,
+      "repository_load_status": {
+        "status": "loaded",
+        "metadata_ok": true,
+        "metadata_reason": null,
+        "metadata": {
+          "source": "eid",
+          "selected_source": "eid",
+          "source_mode": "single_source_only",
+          "fallback_enabled": false,
+          "fallback_used": false,
+          "primary_failure_category": null,
+          "report_year": 2024,
+          "source_metadata_present": true,
+          "pdf_cache_hit": false,
+          "parsed_cache_hit": true,
+          "cache_schema_version": 1
+        },
+        "error": null
+      },
+      "match_strategy": "semantic_guard",
+      "proof_level": "none",
+      "normalized_source_match_count": 0,
+      "source_excerpt": null,
+      "row_disposition": "semantic_assignment_residual",
+      "residual_reason": "benchmark semantics requires benchmark-labeled source context; shared investment-objective candidate locator is insufficient"
+    },
+    {
+      "sample_id": "S6",
+      "fact_id": "S6-F042",
+      "fund_code": "110020",
+      "document_year": 2024,
+      "family": "product_contract_profile",
+      "field_name": "risk_characteristic",
+      "candidate_anchor": {
+        "section_id": "§2",
+        "page_number": 6,
+        "table_id": "docling_table_4",
+        "row_locator": "cell:r3:c1:idx7",
+        "candidate_only": true
+      },
+      "candidate_value": "本基金为沪深 300ETF 的联接基金，其预期风险收益水平高于混合型基 金、债券基金和货币市场基金；本基金主要通过投资沪深 300ETF 实现对 业绩比较基准的紧密跟踪，具有与业绩比较基准相似的风险收益特征。",
+      "candidate_excerpt": "风险收益特征 | 本基金为沪深 300ETF 的联接基金，其预期风险收益水平高于混合型基 金、债券基金和货币市场基金；本基金主要通过投资沪深 300ETF 实现对 业绩比较基准的紧密跟踪，具有与业绩比较基准相似的风险收益特征。",
+      "normalized_candidate": "本基金为沪深300etf的联接基金,其预期风险收益水平高于混合型基金、债券基金和货币市场基金;本基金主要通过投资沪深300etf实现对业绩比较基准的紧密跟踪,具有与业绩比较基准相似的风险收益特征.",
+      "not_baseline_promotion": true,
+      "not_parser_replacement": true,
+      "not_release_readiness": true,
+      "not_full_field_correctness": true,
+      "repository_load_status": {
+        "status": "loaded",
+        "metadata_ok": true,
+        "metadata_reason": null,
+        "metadata": {
+          "source": "eid",
+          "selected_source": "eid",
+          "source_mode": "single_source_only",
+          "fallback_enabled": false,
+          "fallback_used": false,
+          "primary_failure_category": null,
+          "report_year": 2024,
+          "source_metadata_present": true,
+          "pdf_cache_hit": false,
+          "parsed_cache_hit": true,
+          "cache_schema_version": 1
+        },
+        "error": null
+      },
+      "match_strategy": "table_page",
+      "proof_level": "repository_table_page_cell_or_row_match",
+      "normalized_source_match_count": 1,
+      "source_excerpt": "风险收益特征 | 本基金为沪深 300ETF 的联接基金，其预期风险收益水平高于混合型基\n金、债券基金和货币市场基金；本基金主要通过投资沪深300ETF实现对\n业绩比较基准的紧密跟踪，具有与业绩比较基准相似的风险收益特征。",
+      "source_excerpt_samples": [
+        "风险收益特征 | 本基金为沪深 300ETF 的联接基金，其预期风险收益水平高于混合型基\n金、债券基金和货币市场基金；本基金主要通过投资沪深300ETF实现对\n业绩比较基准的紧密跟踪，具有与业绩比较基准相似的风险收益特征。"
+      ],
+      "row_disposition": "source_body_match",
+      "residual_reason": null
+    },
+    {
+      "sample_id": "S6",
+      "fact_id": "S6-F043",
+      "fund_code": "110020",
+      "document_year": 2024,
+      "family": "performance_indicators",
+      "field_name": "undistributed_profit_total",
+      "candidate_anchor": {
+        "section_id": "§7",
+        "page_number": 40,
+        "table_id": "docling_table_37",
+        "row_locator": "cell:r3:c3:idx15",
+        "candidate_only": true
+      },
+      "candidate_value": "1,781,264,170.72",
+      "candidate_excerpt": "本期利润 | 147,141,599.89 | 1,634,122,570.83 | 1,781,264,170.72",
+      "normalized_candidate": "1781264170.72",
+      "not_baseline_promotion": true,
+      "not_parser_replacement": true,
+      "not_release_readiness": true,
+      "not_full_field_correctness": true,
+      "repository_load_status": {
+        "status": "loaded",
+        "metadata_ok": true,
+        "metadata_reason": null,
+        "metadata": {
+          "source": "eid",
+          "selected_source": "eid",
+          "source_mode": "single_source_only",
+          "fallback_enabled": false,
+          "fallback_used": false,
+          "primary_failure_category": null,
+          "report_year": 2024,
+          "source_metadata_present": true,
+          "pdf_cache_hit": false,
+          "parsed_cache_hit": true,
+          "cache_schema_version": 1
+        },
+        "error": null
+      },
+      "match_strategy": "table_page",
+      "proof_level": "repository_table_page_cell_or_row_match",
+      "normalized_source_match_count": 1,
+      "source_excerpt": "本期利润 | 147,141,599.89 | 1,634,122,570.83 | 1,781,264,170.72",
+      "source_excerpt_samples": [
+        "本期利润 | 147,141,599.89 | 1,634,122,570.83 | 1,781,264,170.72"
+      ],
+      "row_disposition": "source_body_match",
+      "residual_reason": null
+    },
+    {
+      "sample_id": "S6",
+      "fact_id": "S6-F044",
+      "fund_code": "110020",
+      "document_year": 2024,
+      "family": "performance_indicators",
+      "field_name": "investment_income_current_year",
+      "candidate_anchor": {
+        "section_id": "§7",
+        "page_number": 25,
+        "table_id": "docling_table_19",
+        "row_locator": "cell:r8:c2:idx27",
+        "candidate_only": true
+      },
+      "candidate_value": "245,498,681.30",
+      "candidate_excerpt": "2. 投资收益（损失以 '-' 填列） | 245,498,681.30 | -31,036,368.08",
+      "normalized_candidate": "245498681.30",
+      "not_baseline_promotion": true,
+      "not_parser_replacement": true,
+      "not_release_readiness": true,
+      "not_full_field_correctness": true,
+      "repository_load_status": {
+        "status": "loaded",
+        "metadata_ok": true,
+        "metadata_reason": null,
+        "metadata": {
+          "source": "eid",
+          "selected_source": "eid",
+          "source_mode": "single_source_only",
+          "fallback_enabled": false,
+          "fallback_used": false,
+          "primary_failure_category": null,
+          "report_year": 2024,
+          "source_metadata_present": true,
+          "pdf_cache_hit": false,
+          "parsed_cache_hit": true,
+          "cache_schema_version": 1
+        },
+        "error": null
+      },
+      "match_strategy": "table_page",
+      "proof_level": "repository_table_page_cell_or_row_match",
+      "normalized_source_match_count": 1,
+      "source_excerpt": "2.投资收益（损失以“-”填列） |  | 245,498,681.30 | -31,036,368.08",
+      "source_excerpt_samples": [
+        "2.投资收益（损失以“-”填列） |  | 245,498,681.30 | -31,036,368.08"
+      ],
+      "row_disposition": "source_body_match",
+      "residual_reason": null
+    },
+    {
+      "sample_id": "S6",
+      "fact_id": "S6-F045",
+      "fund_code": "110020",
+      "document_year": 2024,
+      "family": "performance_indicators",
+      "field_name": "fair_value_change_current_year",
+      "candidate_anchor": {
+        "section_id": "§7",
+        "page_number": 25,
+        "table_id": "docling_table_19",
+        "row_locator": "cell:r17:c2:idx61",
+        "candidate_only": true
+      },
+      "candidate_value": "2,200,111,689.25",
+      "candidate_excerpt": "3. 公允价值变动收益（损失以 '-' 号 填列） | 7.4.7.16 | 2,200,111,689.25 | -1,291,554,912.10",
+      "normalized_candidate": "2200111689.25",
+      "not_baseline_promotion": true,
+      "not_parser_replacement": true,
+      "not_release_readiness": true,
+      "not_full_field_correctness": true,
+      "repository_load_status": {
+        "status": "loaded",
+        "metadata_ok": true,
+        "metadata_reason": null,
+        "metadata": {
+          "source": "eid",
+          "selected_source": "eid",
+          "source_mode": "single_source_only",
+          "fallback_enabled": false,
+          "fallback_used": false,
+          "primary_failure_category": null,
+          "report_year": 2024,
+          "source_metadata_present": true,
+          "pdf_cache_hit": false,
+          "parsed_cache_hit": true,
+          "cache_schema_version": 1
+        },
+        "error": null
+      },
+      "match_strategy": "table_page",
+      "proof_level": "repository_table_page_cell_or_row_match",
+      "normalized_source_match_count": 1,
+      "source_excerpt": "3.公允价值变动收益（损失以“-”号\n填列） | 7.4.7.16 | 2,200,111,689.25 | -1,291,554,912.10",
+      "source_excerpt_samples": [
+        "3.公允价值变动收益（损失以“-”号\n填列） | 7.4.7.16 | 2,200,111,689.25 | -1,291,554,912.10"
+      ],
+      "row_disposition": "source_body_match",
+      "residual_reason": null
+    },
+    {
+      "sample_id": "S6",
+      "fact_id": "S6-F046",
+      "fund_code": "110020",
+      "document_year": 2024,
+      "family": "expense_costs",
+      "field_name": "manager_fee_current_year",
+      "candidate_anchor": {
+        "section_id": "§7",
+        "page_number": 25,
+        "table_id": "docling_table_19",
+        "row_locator": "cell:r21:c2:idx74",
+        "candidate_only": true
+      },
+      "candidate_value": "1,601,454.92",
+      "candidate_excerpt": "1 ．管理人报酬 | 1,601,454.92 | 1,239,069.76",
+      "normalized_candidate": "1601454.92",
+      "not_baseline_promotion": true,
+      "not_parser_replacement": true,
+      "not_release_readiness": true,
+      "not_full_field_correctness": true,
+      "repository_load_status": {
+        "status": "loaded",
+        "metadata_ok": true,
+        "metadata_reason": null,
+        "metadata": {
+          "source": "eid",
+          "selected_source": "eid",
+          "source_mode": "single_source_only",
+          "fallback_enabled": false,
+          "fallback_used": false,
+          "primary_failure_category": null,
+          "report_year": 2024,
+          "source_metadata_present": true,
+          "pdf_cache_hit": false,
+          "parsed_cache_hit": true,
+          "cache_schema_version": 1
+        },
+        "error": null
+      },
+      "match_strategy": "table_page",
+      "proof_level": "repository_table_page_cell_or_row_match",
+      "normalized_source_match_count": 1,
+      "source_excerpt": "1．管理人报酬 |  | 1,601,454.92 | 1,239,069.76",
+      "source_excerpt_samples": [
+        "1．管理人报酬 |  | 1,601,454.92 | 1,239,069.76"
+      ],
+      "row_disposition": "source_body_match",
+      "residual_reason": null
+    },
+    {
+      "sample_id": "S6",
+      "fact_id": "S6-F047",
+      "fund_code": "110020",
+      "document_year": 2024,
+      "family": "expense_costs",
+      "field_name": "custodian_fee_current_year",
+      "candidate_anchor": {
+        "section_id": "§7",
+        "page_number": 25,
+        "table_id": "docling_table_19",
+        "row_locator": "cell:r22:c2:idx77",
+        "candidate_only": true
+      },
+      "candidate_value": "533,818.40",
+      "candidate_excerpt": "2 ．托管费 | 533,818.40 | 413,023.23",
+      "normalized_candidate": "533818.40",
+      "not_baseline_promotion": true,
+      "not_parser_replacement": true,
+      "not_release_readiness": true,
+      "not_full_field_correctness": true,
+      "repository_load_status": {
+        "status": "loaded",
+        "metadata_ok": true,
+        "metadata_reason": null,
+        "metadata": {
+          "source": "eid",
+          "selected_source": "eid",
+          "source_mode": "single_source_only",
+          "fallback_enabled": false,
+          "fallback_used": false,
+          "primary_failure_category": null,
+          "report_year": 2024,
+          "source_metadata_present": true,
+          "pdf_cache_hit": false,
+          "parsed_cache_hit": true,
+          "cache_schema_version": 1
+        },
+        "error": null
+      },
+      "match_strategy": "table_page",
+      "proof_level": "repository_table_page_cell_or_row_match",
+      "normalized_source_match_count": 1,
+      "source_excerpt": "2．托管费 |  | 533,818.40 | 413,023.23",
+      "source_excerpt_samples": [
+        "2．托管费 |  | 533,818.40 | 413,023.23"
+      ],
+      "row_disposition": "source_body_match",
+      "residual_reason": null
+    },
+    {
+      "sample_id": "S6",
+      "fact_id": "S6-F048",
+      "fund_code": "110020",
+      "document_year": 2024,
+      "family": "expense_costs",
+      "field_name": "sales_service_fee_current_year",
+      "candidate_anchor": {
+        "section_id": "§7",
+        "page_number": 25,
+        "table_id": "docling_table_19",
+        "row_locator": "cell:r23:c2:idx80",
+        "candidate_only": true
+      },
+      "candidate_value": "9,889,454.30",
+      "candidate_excerpt": "3 ．销售服务费 | 9,889,454.30 | 7,397,220.09",
+      "normalized_candidate": "9889454.30",
+      "not_baseline_promotion": true,
+      "not_parser_replacement": true,
+      "not_release_readiness": true,
+      "not_full_field_correctness": true,
+      "repository_load_status": {
+        "status": "loaded",
+        "metadata_ok": true,
+        "metadata_reason": null,
+        "metadata": {
+          "source": "eid",
+          "selected_source": "eid",
+          "source_mode": "single_source_only",
+          "fallback_enabled": false,
+          "fallback_used": false,
+          "primary_failure_category": null,
+          "report_year": 2024,
+          "source_metadata_present": true,
+          "pdf_cache_hit": false,
+          "parsed_cache_hit": true,
+          "cache_schema_version": 1
+        },
+        "error": null
+      },
+      "match_strategy": "table_page",
+      "proof_level": "repository_table_page_cell_or_row_match",
+      "normalized_source_match_count": 1,
+      "source_excerpt": "3．销售服务费 |  | 9,889,454.30 | 7,397,220.09",
+      "source_excerpt_samples": [
+        "3．销售服务费 |  | 9,889,454.30 | 7,397,220.09"
+      ],
+      "row_disposition": "source_body_match",
+      "residual_reason": null
+    },
+    {
+      "sample_id": "S6",
+      "fact_id": "S6-F049",
+      "fund_code": "110020",
+      "document_year": 2024,
+      "family": "portfolio_structure",
+      "field_name": "equity_investment_amount",
+      "candidate_anchor": {
+        "section_id": "§8",
+        "page_number": 63,
+        "table_id": "docling_table_91",
+        "row_locator": "cell:r1:c2:idx6",
+        "candidate_only": true
+      },
+      "candidate_value": "149,698,325.51",
+      "candidate_excerpt": "1 | 权益投资 | 149,698,325.51 | 0.73",
+      "normalized_candidate": "149698325.51",
+      "not_baseline_promotion": true,
+      "not_parser_replacement": true,
+      "not_release_readiness": true,
+      "not_full_field_correctness": true,
+      "repository_load_status": {
+        "status": "loaded",
+        "metadata_ok": true,
+        "metadata_reason": null,
+        "metadata": {
+          "source": "eid",
+          "selected_source": "eid",
+          "source_mode": "single_source_only",
+          "fallback_enabled": false,
+          "fallback_used": false,
+          "primary_failure_category": null,
+          "report_year": 2024,
+          "source_metadata_present": true,
+          "pdf_cache_hit": false,
+          "parsed_cache_hit": true,
+          "cache_schema_version": 1
+        },
+        "error": null
+      },
+      "match_strategy": "table_page",
+      "proof_level": "repository_table_page_cell_or_row_match",
+      "normalized_source_match_count": 2,
+      "source_excerpt": "1 | 权益投资 | 149,698,325.51 | 0.73",
+      "source_excerpt_samples": [
+        "1 | 权益投资 | 149,698,325.51 | 0.73",
+        " | 其中：股票 | 149,698,325.51 | 0.73"
+      ],
+      "row_disposition": "ambiguous_source_body_match",
+      "residual_reason": "multiple_normalized_source_body_matches_in_allowed_scope"
+    },
+    {
+      "sample_id": "S6",
+      "fact_id": "S6-F050",
+      "fund_code": "110020",
+      "document_year": 2024,
+      "family": "portfolio_structure",
+      "field_name": "stock_investment_amount",
+      "candidate_anchor": {
+        "section_id": "§8",
+        "page_number": 63,
+        "table_id": "docling_table_91",
+        "row_locator": "cell:r2:c2:idx9",
+        "candidate_only": true
+      },
+      "candidate_value": "149,698,325.51",
+      "candidate_excerpt": "其中：股票 | 149,698,325.51 | 0.73",
+      "normalized_candidate": "149698325.51",
+      "not_baseline_promotion": true,
+      "not_parser_replacement": true,
+      "not_release_readiness": true,
+      "not_full_field_correctness": true,
+      "repository_load_status": {
+        "status": "loaded",
+        "metadata_ok": true,
+        "metadata_reason": null,
+        "metadata": {
+          "source": "eid",
+          "selected_source": "eid",
+          "source_mode": "single_source_only",
+          "fallback_enabled": false,
+          "fallback_used": false,
+          "primary_failure_category": null,
+          "report_year": 2024,
+          "source_metadata_present": true,
+          "pdf_cache_hit": false,
+          "parsed_cache_hit": true,
+          "cache_schema_version": 1
+        },
+        "error": null
+      },
+      "match_strategy": "table_page",
+      "proof_level": "repository_table_page_cell_or_row_match",
+      "normalized_source_match_count": 2,
+      "source_excerpt": "1 | 权益投资 | 149,698,325.51 | 0.73",
+      "source_excerpt_samples": [
+        "1 | 权益投资 | 149,698,325.51 | 0.73",
+        " | 其中：股票 | 149,698,325.51 | 0.73"
+      ],
+      "row_disposition": "ambiguous_source_body_match",
+      "residual_reason": "multiple_normalized_source_body_matches_in_allowed_scope"
+    },
+    {
+      "sample_id": "S6",
+      "fact_id": "S6-F051",
+      "fund_code": "110020",
+      "document_year": 2024,
+      "family": "portfolio_structure",
+      "field_name": "fund_investment_amount",
+      "candidate_anchor": {
+        "section_id": "§8",
+        "page_number": 63,
+        "table_id": "docling_table_91",
+        "row_locator": "cell:r3:c2:idx13",
+        "candidate_only": true
+      },
+      "candidate_value": "19,085,355,845.40",
+      "candidate_excerpt": "2 | 基金投资 | 19,085,355,845.40 | 92.65",
+      "normalized_candidate": "19085355845.40",
+      "not_baseline_promotion": true,
+      "not_parser_replacement": true,
+      "not_release_readiness": true,
+      "not_full_field_correctness": true,
+      "repository_load_status": {
+        "status": "loaded",
+        "metadata_ok": true,
+        "metadata_reason": null,
+        "metadata": {
+          "source": "eid",
+          "selected_source": "eid",
+          "source_mode": "single_source_only",
+          "fallback_enabled": false,
+          "fallback_used": false,
+          "primary_failure_category": null,
+          "report_year": 2024,
+          "source_metadata_present": true,
+          "pdf_cache_hit": false,
+          "parsed_cache_hit": true,
+          "cache_schema_version": 1
+        },
+        "error": null
+      },
+      "match_strategy": "table_page",
+      "proof_level": "repository_table_page_cell_or_row_match",
+      "normalized_source_match_count": 1,
+      "source_excerpt": "2 | 基金投资 | 19,085,355,845.40 | 92.65",
+      "source_excerpt_samples": [
+        "2 | 基金投资 | 19,085,355,845.40 | 92.65"
+      ],
+      "row_disposition": "source_body_match",
+      "residual_reason": null
+    }
+  ],
+  "residuals": [
+    {
+      "sample_id": "S1",
+      "fact_id": "F002",
+      "fund_code": "004393",
+      "document_year": 2025,
+      "family": "fund_identity_profile",
+      "field_name": "fund_code",
+      "candidate_anchor": {
+        "section_id": "§2",
+        "page_number": 5,
+        "table_id": "#/tables/2",
+        "row_locator": "cell:r2:c1:idx5",
+        "candidate_only": true
+      },
+      "candidate_value": "004393",
+      "candidate_excerpt": "004393",
+      "normalized_candidate": "004393",
+      "not_baseline_promotion": true,
+      "not_parser_replacement": true,
+      "not_release_readiness": true,
+      "not_full_field_correctness": true,
+      "repository_load_status": {
+        "status": "loaded",
+        "metadata_ok": true,
+        "metadata_reason": null,
+        "metadata": {
+          "source": "eid",
+          "selected_source": "eid",
+          "source_mode": "single_source_only",
+          "fallback_enabled": false,
+          "fallback_used": false,
+          "primary_failure_category": null,
+          "report_year": 2025,
+          "source_metadata_present": true,
+          "pdf_cache_hit": false,
+          "parsed_cache_hit": true,
+          "cache_schema_version": 1
+        },
+        "error": null
+      },
+      "match_strategy": "table_page",
+      "proof_level": "repository_table_page_cell_or_row_match",
+      "normalized_source_match_count": 2,
+      "source_excerpt": "基金主代码 | 004393 | ",
+      "source_excerpt_samples": [
+        "基金主代码 | 004393 | ",
+        "下属分级基金的交\n易代码 | 004393 | 020964"
+      ],
+      "row_disposition": "ambiguous_source_body_match",
+      "residual_reason": "multiple_normalized_source_body_matches_in_allowed_scope"
+    },
+    {
+      "sample_id": "S1",
+      "fact_id": "F015",
+      "fund_code": "004393",
+      "document_year": 2025,
+      "family": "expense_costs",
+      "field_name": "sales_service_fee_C_current_year",
+      "candidate_anchor": {
+        "section_id": "§7",
+        "page_number": 38,
+        "table_id": "#/tables/51",
+        "row_locator": "cell:r2:c2:idx7",
+        "candidate_only": true
+      },
+      "candidate_value": "75,815.59",
+      "candidate_excerpt": "75,815.59",
+      "normalized_candidate": "75815.59",
+      "not_baseline_promotion": true,
+      "not_parser_replacement": true,
+      "not_release_readiness": true,
+      "not_full_field_correctness": true,
+      "repository_load_status": {
+        "status": "loaded",
+        "metadata_ok": true,
+        "metadata_reason": null,
+        "metadata": {
+          "source": "eid",
+          "selected_source": "eid",
+          "source_mode": "single_source_only",
+          "fallback_enabled": false,
+          "fallback_used": false,
+          "primary_failure_category": null,
+          "report_year": 2025,
+          "source_metadata_present": true,
+          "pdf_cache_hit": false,
+          "parsed_cache_hit": true,
+          "cache_schema_version": 1
+        },
+        "error": null
+      },
+      "match_strategy": "table_page",
+      "proof_level": "repository_table_page_cell_or_row_match",
+      "normalized_source_match_count": 4,
+      "source_excerpt": "安信基金 | - | 75,815.59 | 75,815.59",
+      "source_excerpt_samples": [
+        "安信基金 | - | 75,815.59 | 75,815.59",
+        "合计 | - | 75,815.59 | 75,815.59"
+      ],
+      "row_disposition": "ambiguous_source_body_match",
+      "residual_reason": "multiple_normalized_source_body_matches_in_allowed_scope"
+    },
+    {
+      "sample_id": "S1",
+      "fact_id": "F020",
+      "fund_code": "004393",
+      "document_year": 2025,
+      "family": "manager_alignment",
+      "field_name": "manager_holding_range_A",
+      "candidate_anchor": {
+        "section_id": "§10",
+        "page_number": 60,
+        "table_id": "#/tables/86",
+        "row_locator": "cell:r4:c2:idx12",
+        "candidate_only": true
+      },
+      "candidate_value": "50~100",
+      "candidate_excerpt": "50~100",
+      "normalized_candidate": "50~100",
+      "not_baseline_promotion": true,
+      "not_parser_replacement": true,
+      "not_release_readiness": true,
+      "not_full_field_correctness": true,
+      "repository_load_status": {
+        "status": "loaded",
+        "metadata_ok": true,
+        "metadata_reason": null,
+        "metadata": {
+          "source": "eid",
+          "selected_source": "eid",
+          "source_mode": "single_source_only",
+          "fallback_enabled": false,
+          "fallback_used": false,
+          "primary_failure_category": null,
+          "report_year": 2025,
+          "source_metadata_present": true,
+          "pdf_cache_hit": false,
+          "parsed_cache_hit": true,
+          "cache_schema_version": 1
+        },
+        "error": null
+      },
+      "match_strategy": "table_page",
+      "proof_level": "repository_table_page_cell_or_row_match",
+      "normalized_source_match_count": 2,
+      "source_excerpt": "本基金基金经理持有\n本开放式基金 | 安信企业价值优选混合A | 50~100",
+      "source_excerpt_samples": [
+        "本基金基金经理持有\n本开放式基金 | 安信企业价值优选混合A | 50~100",
+        " | 合计 | 50~100"
+      ],
+      "row_disposition": "ambiguous_source_body_match",
+      "residual_reason": "multiple_normalized_source_body_matches_in_allowed_scope"
+    },
+    {
+      "sample_id": "S4",
+      "fact_id": "S4-F001",
+      "fund_code": "006597",
+      "document_year": 2024,
+      "family": "fund_identity_profile",
+      "field_name": "fund_name",
+      "candidate_anchor": {
+        "section_id": "§2",
+        "page_number": 5,
+        "table_id": "docling_table_2",
+        "row_locator": "cell:r0:c1:idx1",
+        "candidate_only": true
+      },
+      "candidate_value": "国泰利享中短债债券型证券投资基金",
+      "candidate_excerpt": "基金名称 | 国泰利享中短债债券型证券投资基金",
+      "normalized_candidate": "国泰利享中短债债券型证券投资基金",
+      "not_baseline_promotion": true,
+      "not_parser_replacement": true,
+      "not_release_readiness": true,
+      "not_full_field_correctness": true,
+      "repository_load_status": {
+        "status": "loaded",
+        "metadata_ok": true,
+        "metadata_reason": null,
+        "metadata": {
+          "source": "eid",
+          "selected_source": "eid",
+          "source_mode": "single_source_only",
+          "fallback_enabled": false,
+          "fallback_used": false,
+          "primary_failure_category": null,
+          "report_year": 2024,
+          "source_metadata_present": true,
+          "pdf_cache_hit": false,
+          "parsed_cache_hit": true,
+          "cache_schema_version": 1
+        },
+        "error": null
+      },
+      "match_strategy": "section_text",
+      "proof_level": "repository_section_text_match",
+      "normalized_source_match_count": 3,
+      "source_excerpt": "§2 基金简介 2.1 基金基本情况 基金名称 国泰利享中短债债券型证券投资基金 基金简称 国泰利享中短债债券 基金主代码 006597 交易代码 006597 基金运作方式 契约型开放式 基金合同生效日 2018年12月3日 基金管理人 国泰基金管理有限公司 基金托管人 招商银行股份有限公司 报告期末基金份额总额 1...",
+      "source_excerpt_samples": [
+        "§2 基金简介 2.1 基金基本情况 基金名称 国泰利享中短债债券型证券投资基金 基金简称 国泰利享中短债债券 基金主代码 006597 交易代码 006597 基金运作方式 契约型开放式 基金合同生效日 2018年12月3日 基金管理人 国泰基金管理有限公司 基金托管人 招商银行股份有限公司 报告期末基金份额总额 1..."
+      ],
+      "row_disposition": "ambiguous_source_body_match",
+      "residual_reason": "multiple_normalized_source_body_matches_in_allowed_scope"
+    },
+    {
+      "sample_id": "S4",
+      "fact_id": "S4-F002",
+      "fund_code": "006597",
+      "document_year": 2024,
+      "family": "fund_identity_profile",
+      "field_name": "fund_code",
+      "candidate_anchor": {
+        "section_id": "§2",
+        "page_number": 5,
+        "table_id": "docling_table_2",
+        "row_locator": "cell:r2:c1:idx5",
+        "candidate_only": true
+      },
+      "candidate_value": "006597",
+      "candidate_excerpt": "基金主代码 | 006597",
+      "normalized_candidate": "006597",
+      "not_baseline_promotion": true,
+      "not_parser_replacement": true,
+      "not_release_readiness": true,
+      "not_full_field_correctness": true,
+      "repository_load_status": {
+        "status": "loaded",
+        "metadata_ok": true,
+        "metadata_reason": null,
+        "metadata": {
+          "source": "eid",
+          "selected_source": "eid",
+          "source_mode": "single_source_only",
+          "fallback_enabled": false,
+          "fallback_used": false,
+          "primary_failure_category": null,
+          "report_year": 2024,
+          "source_metadata_present": true,
+          "pdf_cache_hit": false,
+          "parsed_cache_hit": true,
+          "cache_schema_version": 1
+        },
+        "error": null
+      },
+      "match_strategy": "table_page",
+      "proof_level": "repository_table_page_cell_or_row_match",
+      "normalized_source_match_count": 3,
+      "source_excerpt": "基金主代码 | 006597 |  |  | ",
+      "source_excerpt_samples": [
+        "基金主代码 | 006597 |  |  | ",
+        "交易代码 | 006597 |  |  | ",
+        "下属分级基金的交易代码 | 006597 | 006598 | 014217 | 022176"
+      ],
+      "row_disposition": "ambiguous_source_body_match",
+      "residual_reason": "multiple_normalized_source_body_matches_in_allowed_scope"
+    },
+    {
+      "sample_id": "S4",
+      "fact_id": "S4-F015",
+      "fund_code": "006597",
+      "document_year": 2024,
+      "family": "portfolio_structure",
+      "field_name": "fixed_income_investment_amount",
+      "candidate_anchor": {
+        "section_id": "§8",
+        "page_number": 59,
+        "table_id": "docling_table_77",
+        "row_locator": "cell:r4:c2:idx17",
+        "candidate_only": true
+      },
+      "candidate_value": "12,106,715,596.39",
+      "candidate_excerpt": "3 | 固定收益投资 | 12,106,715,596.39 | 94.97",
+      "normalized_candidate": "12106715596.39",
+      "not_baseline_promotion": true,
+      "not_parser_replacement": true,
+      "not_release_readiness": true,
+      "not_full_field_correctness": true,
+      "repository_load_status": {
+        "status": "loaded",
+        "metadata_ok": true,
+        "metadata_reason": null,
+        "metadata": {
+          "source": "eid",
+          "selected_source": "eid",
+          "source_mode": "single_source_only",
+          "fallback_enabled": false,
+          "fallback_used": false,
+          "primary_failure_category": null,
+          "report_year": 2024,
+          "source_metadata_present": true,
+          "pdf_cache_hit": false,
+          "parsed_cache_hit": true,
+          "cache_schema_version": 1
+        },
+        "error": null
+      },
+      "match_strategy": "table_page",
+      "proof_level": "repository_table_page_cell_or_row_match",
+      "normalized_source_match_count": 3,
+      "source_excerpt": "第二层次 | 12,106,715,596.39 | 17,967,215,359.10",
+      "source_excerpt_samples": [
+        "第二层次 | 12,106,715,596.39 | 17,967,215,359.10",
+        "合计 | 12,106,715,596.39 | 17,967,215,359.10",
+        "3 | 固定收益投资 | 12,106,715,596.39 | 94.97"
+      ],
+      "row_disposition": "ambiguous_source_body_match",
+      "residual_reason": "multiple_normalized_source_body_matches_in_allowed_scope"
+    },
+    {
+      "sample_id": "S5",
+      "fact_id": "S5-F018",
+      "fund_code": "017641",
+      "document_year": 2024,
+      "family": "fund_identity_profile",
+      "field_name": "fund_name",
+      "candidate_anchor": {
+        "section_id": "§2",
+        "page_number": 5,
+        "table_id": "docling_table_2",
+        "row_locator": "cell:r0:c1:idx1",
+        "candidate_only": true
+      },
+      "candidate_value": "摩根标普 500 指数型发起式证券投资基金 (QDII)",
+      "candidate_excerpt": "基金名称 | 摩根标普 500 指数型发起式证券投资基金 (QDII)",
+      "normalized_candidate": "摩根标普500指数型发起式证券投资基金(qdii)",
+      "not_baseline_promotion": true,
+      "not_parser_replacement": true,
+      "not_release_readiness": true,
+      "not_full_field_correctness": true,
+      "repository_load_status": {
+        "status": "loaded",
+        "metadata_ok": true,
+        "metadata_reason": null,
+        "metadata": {
+          "source": "eid",
+          "selected_source": "eid",
+          "source_mode": "single_source_only",
+          "fallback_enabled": false,
+          "fallback_used": false,
+          "primary_failure_category": null,
+          "report_year": 2024,
+          "source_metadata_present": true,
+          "pdf_cache_hit": true,
+          "parsed_cache_hit": false,
+          "cache_schema_version": 1
+        },
+        "error": null
+      },
+      "match_strategy": "section_text",
+      "proof_level": "repository_section_text_match",
+      "normalized_source_match_count": 4,
+      "source_excerpt": "§2 基金简介 2.1基金基本情况 基金名称 摩根标普500指数型发起式证券投资基金(QDII) 基金简称 摩根标普500指数(QDII) 基金主代码 017641 交易代码 017641 基金运作方式 契约型开放式 基金合同生效日 2023年4月6日 基金管理人 摩根基金管理（中国）有限公司 基金托管人 招商银行股份...",
+      "source_excerpt_samples": [
+        "§2 基金简介 2.1基金基本情况 基金名称 摩根标普500指数型发起式证券投资基金(QDII) 基金简称 摩根标普500指数(QDII) 基金主代码 017641 交易代码 017641 基金运作方式 契约型开放式 基金合同生效日 2023年4月6日 基金管理人 摩根基金管理（中国）有限公司 基金托管人 招商银行股份..."
+      ],
+      "row_disposition": "ambiguous_source_body_match",
+      "residual_reason": "multiple_normalized_source_body_matches_in_allowed_scope"
+    },
+    {
+      "sample_id": "S5",
+      "fact_id": "S5-F019",
+      "fund_code": "017641",
+      "document_year": 2024,
+      "family": "fund_identity_profile",
+      "field_name": "fund_code",
+      "candidate_anchor": {
+        "section_id": "§2",
+        "page_number": 5,
+        "table_id": "docling_table_2",
+        "row_locator": "cell:r2:c1:idx5",
+        "candidate_only": true
+      },
+      "candidate_value": "017641",
+      "candidate_excerpt": "基金主代码 | 017641",
+      "normalized_candidate": "017641",
+      "not_baseline_promotion": true,
+      "not_parser_replacement": true,
+      "not_release_readiness": true,
+      "not_full_field_correctness": true,
+      "repository_load_status": {
+        "status": "loaded",
+        "metadata_ok": true,
+        "metadata_reason": null,
+        "metadata": {
+          "source": "eid",
+          "selected_source": "eid",
+          "source_mode": "single_source_only",
+          "fallback_enabled": false,
+          "fallback_used": false,
+          "primary_failure_category": null,
+          "report_year": 2024,
+          "source_metadata_present": true,
+          "pdf_cache_hit": true,
+          "parsed_cache_hit": false,
+          "cache_schema_version": 1
+        },
+        "error": null
+      },
+      "match_strategy": "table_page",
+      "proof_level": "repository_table_page_cell_or_row_match",
+      "normalized_source_match_count": 3,
+      "source_excerpt": "基金主代码 | 017641 | ",
+      "source_excerpt_samples": [
+        "基金主代码 | 017641 | ",
+        "交易代码 | 017641 | ",
+        "下属分级基金的交易代码 | 017641 | 019305"
+      ],
+      "row_disposition": "ambiguous_source_body_match",
+      "residual_reason": "multiple_normalized_source_body_matches_in_allowed_scope"
+    },
+    {
+      "sample_id": "S5",
+      "fact_id": "S5-F023",
+      "fund_code": "017641",
+      "document_year": 2024,
+      "family": "product_contract_profile",
+      "field_name": "investment_objective",
+      "candidate_anchor": {
+        "section_id": "§2",
+        "page_number": 5,
+        "table_id": "docling_table_3",
+        "row_locator": "cell:r0:c1:idx1",
+        "candidate_only": true
+      },
+      "candidate_value": "本基金进行被动指数化投资，紧密跟踪标的指数，追求跟踪偏离度和跟踪 误差最小化。",
+      "candidate_excerpt": "投资目标 | 本基金进行被动指数化投资，紧密跟踪标的指数，追求跟踪偏离度和跟踪 误差最小化。",
+      "normalized_candidate": "本基金进行被动指数化投资,紧密跟踪标的指数,追求跟踪偏离度和跟踪误差最小化.",
+      "not_baseline_promotion": true,
+      "not_parser_replacement": true,
+      "not_release_readiness": true,
+      "not_full_field_correctness": true,
+      "repository_load_status": {
+        "status": "loaded",
+        "metadata_ok": true,
+        "metadata_reason": null,
+        "metadata": {
+          "source": "eid",
+          "selected_source": "eid",
+          "source_mode": "single_source_only",
+          "fallback_enabled": false,
+          "fallback_used": false,
+          "primary_failure_category": null,
+          "report_year": 2024,
+          "source_metadata_present": true,
+          "pdf_cache_hit": true,
+          "parsed_cache_hit": false,
+          "cache_schema_version": 1
+        },
+        "error": null
+      },
+      "match_strategy": "section_text",
+      "proof_level": "repository_section_text_match",
+      "normalized_source_match_count": 0,
+      "source_excerpt": null,
+      "source_excerpt_samples": [],
+      "row_disposition": "source_body_mismatch",
+      "residual_reason": "no_normalized_source_body_match_in_allowed_scope"
+    },
+    {
+      "sample_id": "S5",
+      "fact_id": "S5-F032",
+      "fund_code": "017641",
+      "document_year": 2024,
+      "family": "portfolio_structure",
+      "field_name": "equity_investment_amount",
+      "candidate_anchor": {
+        "section_id": "§8",
+        "page_number": 58,
+        "table_id": "docling_table_58",
+        "row_locator": "cell:r1:c2:idx6",
+        "candidate_only": true
+      },
+      "candidate_value": "1,818,456,375.25",
+      "candidate_excerpt": "1 | 权益投资 | 1,818,456,375.25 | 92.45",
+      "normalized_candidate": "1818456375.25",
+      "not_baseline_promotion": true,
+      "not_parser_replacement": true,
+      "not_release_readiness": true,
+      "not_full_field_correctness": true,
+      "repository_load_status": {
+        "status": "loaded",
+        "metadata_ok": true,
+        "metadata_reason": null,
+        "metadata": {
+          "source": "eid",
+          "selected_source": "eid",
+          "source_mode": "single_source_only",
+          "fallback_enabled": false,
+          "fallback_used": false,
+          "primary_failure_category": null,
+          "report_year": 2024,
+          "source_metadata_present": true,
+          "pdf_cache_hit": true,
+          "parsed_cache_hit": false,
+          "cache_schema_version": 1
+        },
+        "error": null
+      },
+      "match_strategy": "table_page",
+      "proof_level": "repository_table_page_cell_or_row_match",
+      "normalized_source_match_count": 4,
+      "source_excerpt": "1 | 权益投资 | 1,818,456,375.25 | 92.45",
+      "source_excerpt_samples": [
+        "1 | 权益投资 | 1,818,456,375.25 | 92.45",
+        " | 其中：普通股 | 1,818,456,375.25 | 92.45",
+        "美国 | 1,818,456,375.25 | 93.75"
+      ],
+      "row_disposition": "ambiguous_source_body_match",
+      "residual_reason": "multiple_normalized_source_body_matches_in_allowed_scope"
+    },
+    {
+      "sample_id": "S6",
+      "fact_id": "S6-F035",
+      "fund_code": "110020",
+      "document_year": 2024,
+      "family": "fund_identity_profile",
+      "field_name": "fund_name",
+      "candidate_anchor": {
+        "section_id": "§2",
+        "page_number": 5,
+        "table_id": "docling_table_2",
+        "row_locator": "cell:r0:c1:idx1",
+        "candidate_only": true
+      },
+      "candidate_value": "易方达沪深 300 交易型开放式指数发起式证券投资基金 联接基金",
+      "candidate_excerpt": "基金名称 | 易方达沪深 300 交易型开放式指数发起式证券投资基金 联接基金",
+      "normalized_candidate": "易方达沪深300交易型开放式指数发起式证券投资基金联接基金",
+      "not_baseline_promotion": true,
+      "not_parser_replacement": true,
+      "not_release_readiness": true,
+      "not_full_field_correctness": true,
+      "repository_load_status": {
+        "status": "loaded",
+        "metadata_ok": true,
+        "metadata_reason": null,
+        "metadata": {
+          "source": "eid",
+          "selected_source": "eid",
+          "source_mode": "single_source_only",
+          "fallback_enabled": false,
+          "fallback_used": false,
+          "primary_failure_category": null,
+          "report_year": 2024,
+          "source_metadata_present": true,
+          "pdf_cache_hit": false,
+          "parsed_cache_hit": true,
+          "cache_schema_version": 1
+        },
+        "error": null
+      },
+      "match_strategy": "section_text",
+      "proof_level": "repository_section_text_match",
+      "normalized_source_match_count": 3,
+      "source_excerpt": "指数发起式证券投资基金 基金主代码 510310 基金运作方式 交易型开放式（ETF）、发起式 基金合同生效日 2013年3月6日 基金份额上市的证券交易所 上海证券交易所 上市日期 2013年3月25日 基金管理人名称 易方达基金管理有限公司 基金托管人名称 中国建设银行股份有限公司 第5页共84页 易方达沪深300...",
+      "source_excerpt_samples": [
+        "指数发起式证券投资基金 基金主代码 510310 基金运作方式 交易型开放式（ETF）、发起式 基金合同生效日 2013年3月6日 基金份额上市的证券交易所 上海证券交易所 上市日期 2013年3月25日 基金管理人名称 易方达基金管理有限公司 基金托管人名称 中国建设银行股份有限公司 第5页共84页 易方达沪深300..."
+      ],
+      "row_disposition": "ambiguous_source_body_match",
+      "residual_reason": "multiple_normalized_source_body_matches_in_allowed_scope"
+    },
+    {
+      "sample_id": "S6",
+      "fact_id": "S6-F036",
+      "fund_code": "110020",
+      "document_year": 2024,
+      "family": "fund_identity_profile",
+      "field_name": "fund_code",
+      "candidate_anchor": {
+        "section_id": "§2",
+        "page_number": 5,
+        "table_id": "docling_table_2",
+        "row_locator": "cell:r2:c1:idx5",
+        "candidate_only": true
+      },
+      "candidate_value": "110020",
+      "candidate_excerpt": "基金主代码 | 110020",
+      "normalized_candidate": "110020",
+      "not_baseline_promotion": true,
+      "not_parser_replacement": true,
+      "not_release_readiness": true,
+      "not_full_field_correctness": true,
+      "repository_load_status": {
+        "status": "loaded",
+        "metadata_ok": true,
+        "metadata_reason": null,
+        "metadata": {
+          "source": "eid",
+          "selected_source": "eid",
+          "source_mode": "single_source_only",
+          "fallback_enabled": false,
+          "fallback_used": false,
+          "primary_failure_category": null,
+          "report_year": 2024,
+          "source_metadata_present": true,
+          "pdf_cache_hit": false,
+          "parsed_cache_hit": true,
+          "cache_schema_version": 1
+        },
+        "error": null
+      },
+      "match_strategy": "table_page",
+      "proof_level": "repository_table_page_cell_or_row_match",
+      "normalized_source_match_count": 2,
+      "source_excerpt": "基金主代码 | 110020 |  | ",
+      "source_excerpt_samples": [
+        "基金主代码 | 110020 |  | ",
+        "下属分级基金的交易代码 | 110020 | 007339 | 022928"
+      ],
+      "row_disposition": "ambiguous_source_body_match",
+      "residual_reason": "multiple_normalized_source_body_matches_in_allowed_scope"
+    },
+    {
+      "sample_id": "S6",
+      "fact_id": "S6-F037",
+      "fund_code": "110020",
+      "document_year": 2024,
+      "family": "fund_identity_profile",
+      "field_name": "manager",
+      "candidate_anchor": {
+        "section_id": "§2",
+        "page_number": 5,
+        "table_id": "docling_table_2",
+        "row_locator": "cell:r5:c1:idx11",
+        "candidate_only": true
+      },
+      "candidate_value": "易方达基金管理有限公司",
+      "candidate_excerpt": "基金管理人 | 易方达基金管理有限公司",
+      "normalized_candidate": "易方达基金管理有限公司",
+      "not_baseline_promotion": true,
+      "not_parser_replacement": true,
+      "not_release_readiness": true,
+      "not_full_field_correctness": true,
+      "repository_load_status": {
+        "status": "loaded",
+        "metadata_ok": true,
+        "metadata_reason": null,
+        "metadata": {
+          "source": "eid",
+          "selected_source": "eid",
+          "source_mode": "single_source_only",
+          "fallback_enabled": false,
+          "fallback_used": false,
+          "primary_failure_category": null,
+          "report_year": 2024,
+          "source_metadata_present": true,
+          "pdf_cache_hit": false,
+          "parsed_cache_hit": true,
+          "cache_schema_version": 1
+        },
+        "error": null
+      },
+      "match_strategy": "table_page",
+      "proof_level": "repository_table_page_cell_or_row_match",
+      "normalized_source_match_count": 2,
+      "source_excerpt": "基金管理人 | 易方达基金管理有限公司 |  | ",
+      "source_excerpt_samples": [
+        "基金管理人 | 易方达基金管理有限公司 |  | ",
+        "基金管理人名称 | 易方达基金管理有限公司"
+      ],
+      "row_disposition": "ambiguous_source_body_match",
+      "residual_reason": "multiple_normalized_source_body_matches_in_allowed_scope"
+    },
+    {
+      "sample_id": "S6",
+      "fact_id": "S6-F038",
+      "fund_code": "110020",
+      "document_year": 2024,
+      "family": "fund_identity_profile",
+      "field_name": "custodian",
+      "candidate_anchor": {
+        "section_id": "§2",
+        "page_number": 5,
+        "table_id": "docling_table_2",
+        "row_locator": "cell:r6:c1:idx13",
+        "candidate_only": true
+      },
+      "candidate_value": "中国建设银行股份有限公司",
+      "candidate_excerpt": "基金托管人 | 中国建设银行股份有限公司",
+      "normalized_candidate": "中国建设银行股份有限公司",
+      "not_baseline_promotion": true,
+      "not_parser_replacement": true,
+      "not_release_readiness": true,
+      "not_full_field_correctness": true,
+      "repository_load_status": {
+        "status": "loaded",
+        "metadata_ok": true,
+        "metadata_reason": null,
+        "metadata": {
+          "source": "eid",
+          "selected_source": "eid",
+          "source_mode": "single_source_only",
+          "fallback_enabled": false,
+          "fallback_used": false,
+          "primary_failure_category": null,
+          "report_year": 2024,
+          "source_metadata_present": true,
+          "pdf_cache_hit": false,
+          "parsed_cache_hit": true,
+          "cache_schema_version": 1
+        },
+        "error": null
+      },
+      "match_strategy": "table_page",
+      "proof_level": "repository_table_page_cell_or_row_match",
+      "normalized_source_match_count": 2,
+      "source_excerpt": "基金托管人 | 中国建设银行股份有限公司 |  | ",
+      "source_excerpt_samples": [
+        "基金托管人 | 中国建设银行股份有限公司 |  | ",
+        "基金托管人名称 | 中国建设银行股份有限公司"
+      ],
+      "row_disposition": "ambiguous_source_body_match",
+      "residual_reason": "multiple_normalized_source_body_matches_in_allowed_scope"
+    },
+    {
+      "sample_id": "S6",
+      "fact_id": "S6-F041",
+      "fund_code": "110020",
+      "document_year": 2024,
+      "family": "product_contract_profile",
+      "field_name": "benchmark",
+      "candidate_anchor": {
+        "section_id": "§2",
+        "page_number": 6,
+        "table_id": "docling_table_4",
+        "row_locator": "cell:r0:c1:idx1",
+        "candidate_only": true
+      },
+      "candidate_value": "紧密跟踪业绩比较基准，追求跟踪偏离度及跟踪误差的最小化。",
+      "candidate_excerpt": "投资目标 | 紧密跟踪业绩比较基准，追求跟踪偏离度及跟踪误差的最小化。",
+      "normalized_candidate": "紧密跟踪业绩比较基准,追求跟踪偏离度及跟踪误差的最小化.",
+      "not_baseline_promotion": true,
+      "not_parser_replacement": true,
+      "not_release_readiness": true,
+      "not_full_field_correctness": true,
+      "repository_load_status": {
+        "status": "loaded",
+        "metadata_ok": true,
+        "metadata_reason": null,
+        "metadata": {
+          "source": "eid",
+          "selected_source": "eid",
+          "source_mode": "single_source_only",
+          "fallback_enabled": false,
+          "fallback_used": false,
+          "primary_failure_category": null,
+          "report_year": 2024,
+          "source_metadata_present": true,
+          "pdf_cache_hit": false,
+          "parsed_cache_hit": true,
+          "cache_schema_version": 1
+        },
+        "error": null
+      },
+      "match_strategy": "semantic_guard",
+      "proof_level": "none",
+      "normalized_source_match_count": 0,
+      "source_excerpt": null,
+      "row_disposition": "semantic_assignment_residual",
+      "residual_reason": "benchmark semantics requires benchmark-labeled source context; shared investment-objective candidate locator is insufficient"
+    },
+    {
+      "sample_id": "S6",
+      "fact_id": "S6-F049",
+      "fund_code": "110020",
+      "document_year": 2024,
+      "family": "portfolio_structure",
+      "field_name": "equity_investment_amount",
+      "candidate_anchor": {
+        "section_id": "§8",
+        "page_number": 63,
+        "table_id": "docling_table_91",
+        "row_locator": "cell:r1:c2:idx6",
+        "candidate_only": true
+      },
+      "candidate_value": "149,698,325.51",
+      "candidate_excerpt": "1 | 权益投资 | 149,698,325.51 | 0.73",
+      "normalized_candidate": "149698325.51",
+      "not_baseline_promotion": true,
+      "not_parser_replacement": true,
+      "not_release_readiness": true,
+      "not_full_field_correctness": true,
+      "repository_load_status": {
+        "status": "loaded",
+        "metadata_ok": true,
+        "metadata_reason": null,
+        "metadata": {
+          "source": "eid",
+          "selected_source": "eid",
+          "source_mode": "single_source_only",
+          "fallback_enabled": false,
+          "fallback_used": false,
+          "primary_failure_category": null,
+          "report_year": 2024,
+          "source_metadata_present": true,
+          "pdf_cache_hit": false,
+          "parsed_cache_hit": true,
+          "cache_schema_version": 1
+        },
+        "error": null
+      },
+      "match_strategy": "table_page",
+      "proof_level": "repository_table_page_cell_or_row_match",
+      "normalized_source_match_count": 2,
+      "source_excerpt": "1 | 权益投资 | 149,698,325.51 | 0.73",
+      "source_excerpt_samples": [
+        "1 | 权益投资 | 149,698,325.51 | 0.73",
+        " | 其中：股票 | 149,698,325.51 | 0.73"
+      ],
+      "row_disposition": "ambiguous_source_body_match",
+      "residual_reason": "multiple_normalized_source_body_matches_in_allowed_scope"
+    },
+    {
+      "sample_id": "S6",
+      "fact_id": "S6-F050",
+      "fund_code": "110020",
+      "document_year": 2024,
+      "family": "portfolio_structure",
+      "field_name": "stock_investment_amount",
+      "candidate_anchor": {
+        "section_id": "§8",
+        "page_number": 63,
+        "table_id": "docling_table_91",
+        "row_locator": "cell:r2:c2:idx9",
+        "candidate_only": true
+      },
+      "candidate_value": "149,698,325.51",
+      "candidate_excerpt": "其中：股票 | 149,698,325.51 | 0.73",
+      "normalized_candidate": "149698325.51",
+      "not_baseline_promotion": true,
+      "not_parser_replacement": true,
+      "not_release_readiness": true,
+      "not_full_field_correctness": true,
+      "repository_load_status": {
+        "status": "loaded",
+        "metadata_ok": true,
+        "metadata_reason": null,
+        "metadata": {
+          "source": "eid",
+          "selected_source": "eid",
+          "source_mode": "single_source_only",
+          "fallback_enabled": false,
+          "fallback_used": false,
+          "primary_failure_category": null,
+          "report_year": 2024,
+          "source_metadata_present": true,
+          "pdf_cache_hit": false,
+          "parsed_cache_hit": true,
+          "cache_schema_version": 1
+        },
+        "error": null
+      },
+      "match_strategy": "table_page",
+      "proof_level": "repository_table_page_cell_or_row_match",
+      "normalized_source_match_count": 2,
+      "source_excerpt": "1 | 权益投资 | 149,698,325.51 | 0.73",
+      "source_excerpt_samples": [
+        "1 | 权益投资 | 149,698,325.51 | 0.73",
+        " | 其中：股票 | 149,698,325.51 | 0.73"
+      ],
+      "row_disposition": "ambiguous_source_body_match",
+      "residual_reason": "multiple_normalized_source_body_matches_in_allowed_scope"
+    }
+  ],
+  "negative_guards": {
+    "not_baseline_promotion": true,
+    "not_parser_replacement": true,
+    "not_release_readiness": true,
+    "not_full_field_correctness": true,
+    "not_raw_pdf_bbox_truth": true
+  },
+  "verdict": "SOURCE_TRUTH_EVIDENCE_PARTIAL_NOT_READY"
+}

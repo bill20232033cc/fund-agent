@@ -30,7 +30,10 @@ def test_default_public_source_provenance_is_not_applicable() -> None:
     provenance = default_public_source_provenance()
 
     assert provenance.source_provenance_schema_version == PUBLIC_SOURCE_PROVENANCE_SCHEMA_VERSION
-    assert provenance.source_strategy == "primary_then_fallback"
+    assert provenance.source_strategy == "legacy_or_unknown"
+    assert provenance.selected_source is None
+    assert provenance.source_mode == "legacy_or_unknown"
+    assert provenance.fallback_enabled is None
     assert provenance.resolved_source_name is None
     assert provenance.fallback_used is False
     assert provenance.primary_failure_category is None
@@ -57,6 +60,43 @@ def test_primary_metadata_without_fallback_remains_not_applicable() -> None:
     )
 
     assert provenance.resolved_source_name == "eid"
+    assert provenance.selected_source is None
+    assert provenance.source_mode == "legacy_or_unknown"
+    assert provenance.fallback_enabled is None
+    assert provenance.fallback_used is False
+    assert provenance.fallback_eligibility == "not_applicable"
+    assert provenance.source_provenance_status == "not_applicable"
+
+
+def test_eid_single_source_metadata_projects_current_policy_fields() -> None:
+    """验证当前 EID single-source 元数据投影公共策略字段。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当当前 EID 策略字段没有进入公共 provenance 时抛出。
+    """
+
+    provenance = project_public_source_provenance(
+        AnnualReportSourceMetadata(
+            source="eid",
+            fallback_used=False,
+            selected_source="eid",
+            source_mode="single_source_only",
+            fallback_enabled=False,
+        )
+    )
+
+    assert provenance.source_provenance_schema_version == "repository_source_provenance.v2"
+    assert provenance.source_strategy == "single_source_only"
+    assert provenance.selected_source == "eid"
+    assert provenance.source_mode == "single_source_only"
+    assert provenance.fallback_enabled is False
+    assert provenance.resolved_source_name == "eid"
     assert provenance.fallback_used is False
     assert provenance.fallback_eligibility == "not_applicable"
     assert provenance.source_provenance_status == "not_applicable"
@@ -81,6 +121,9 @@ def test_eastmoney_source_name_alone_does_not_imply_fallback() -> None:
     )
 
     assert provenance.resolved_source_name == "eastmoney"
+    assert provenance.selected_source is None
+    assert provenance.source_mode == "legacy_or_unknown"
+    assert provenance.fallback_enabled is None
     assert provenance.fallback_used is False
     assert provenance.fallback_eligibility == "not_applicable"
     assert provenance.source_provenance_status == "not_applicable"
@@ -104,6 +147,9 @@ def test_fallback_without_public_failure_category_is_incomplete_unknown() -> Non
     )
 
     assert provenance.resolved_source_name == "eastmoney"
+    assert provenance.selected_source is None
+    assert provenance.source_mode == "legacy_or_unknown"
+    assert provenance.fallback_enabled is None
     assert provenance.fallback_used is True
     assert provenance.primary_failure_category is None
     assert provenance.fallback_eligibility == "unknown_public_metadata_absent"
@@ -136,6 +182,9 @@ def test_fallback_with_metadata_owned_eligible_category_is_complete(
     )
 
     assert provenance.primary_failure_category == category
+    assert provenance.selected_source is None
+    assert provenance.source_mode == "legacy_or_unknown"
+    assert provenance.fallback_enabled is None
     assert provenance.fallback_eligibility == "eligible"
     assert provenance.source_provenance_status == "complete"
 
@@ -160,6 +209,9 @@ def test_fallback_with_eligible_category_is_complete(category: PrimaryFailureCat
     )
 
     assert provenance.primary_failure_category == category
+    assert provenance.selected_source is None
+    assert provenance.source_mode == "legacy_or_unknown"
+    assert provenance.fallback_enabled is None
     assert provenance.fallback_eligibility == "eligible"
     assert provenance.source_provenance_status == "complete"
 
@@ -189,6 +241,9 @@ def test_fallback_with_metadata_owned_fail_closed_category_is_incomplete(
     )
 
     assert provenance.primary_failure_category == category
+    assert provenance.selected_source is None
+    assert provenance.source_mode == "legacy_or_unknown"
+    assert provenance.fallback_enabled is None
     assert provenance.fallback_eligibility == "fail_closed"
     assert provenance.source_provenance_status == "incomplete"
 
@@ -215,6 +270,9 @@ def test_fallback_with_fail_closed_category_is_incomplete(
     )
 
     assert provenance.primary_failure_category == category
+    assert provenance.selected_source is None
+    assert provenance.source_mode == "legacy_or_unknown"
+    assert provenance.fallback_enabled is None
     assert provenance.fallback_eligibility == "fail_closed"
     assert provenance.source_provenance_status == "incomplete"
     assert provenance.source_provenance_status != "not_applicable"
@@ -243,6 +301,9 @@ def test_metadata_failure_category_wins_over_keyword_override() -> None:
     )
 
     assert provenance.primary_failure_category == "schema_drift"
+    assert provenance.selected_source is None
+    assert provenance.source_mode == "legacy_or_unknown"
+    assert provenance.fallback_enabled is None
     assert provenance.fallback_eligibility == "fail_closed"
     assert provenance.source_provenance_reason == "fallback_used_primary_failure_category_fail_closed"
 
@@ -266,8 +327,37 @@ def test_keyword_failure_category_still_applies_when_metadata_category_missing()
     )
 
     assert provenance.primary_failure_category == "unavailable"
+    assert provenance.selected_source is None
+    assert provenance.source_mode == "legacy_or_unknown"
+    assert provenance.fallback_enabled is None
     assert provenance.fallback_eligibility == "eligible"
     assert provenance.source_provenance_status == "complete"
+
+
+def test_source_provenance_no_primary_then_fallback_value_in_current_eid_path() -> None:
+    """验证当前 EID 路径不会输出旧 fallback 策略值。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当当前 EID payload 仍暴露旧策略值时抛出。
+    """
+
+    provenance = project_public_source_provenance(
+        AnnualReportSourceMetadata(
+            source="eid",
+            fallback_used=False,
+            selected_source="eid",
+            source_mode="single_source_only",
+            fallback_enabled=False,
+        )
+    )
+
+    assert "primary_then_fallback" not in source_provenance_to_dict(provenance).values()
 
 
 def test_source_provenance_to_dict_serializes_stable_keys() -> None:
@@ -286,8 +376,11 @@ def test_source_provenance_to_dict_serializes_stable_keys() -> None:
     payload = source_provenance_to_dict(default_public_source_provenance())
 
     assert payload == {
-        "source_provenance_schema_version": "repository_source_provenance.v1",
-        "source_strategy": "primary_then_fallback",
+        "source_provenance_schema_version": "repository_source_provenance.v2",
+        "source_strategy": "legacy_or_unknown",
+        "selected_source": None,
+        "source_mode": "legacy_or_unknown",
+        "fallback_enabled": None,
         "resolved_source_name": None,
         "fallback_used": False,
         "primary_failure_category": None,

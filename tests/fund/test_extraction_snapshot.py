@@ -39,6 +39,9 @@ from fund_agent.fund.source_provenance import PublicSourceProvenance
 _SOURCE_PROVENANCE_FIELDS = {
     "source_provenance_schema_version",
     "source_strategy",
+    "selected_source",
+    "source_mode",
+    "fallback_enabled",
     "resolved_source_name",
     "fallback_used",
     "primary_failure_category",
@@ -194,8 +197,11 @@ def test_build_snapshot_records_contains_required_schema_and_all_fields() -> Non
         *_SOURCE_PROVENANCE_FIELDS,
         *_BOND_RISK_SNAPSHOT_FIELDS,
     }
-    assert first_payload["source_provenance_schema_version"] == "repository_source_provenance.v1"
-    assert first_payload["source_strategy"] == "primary_then_fallback"
+    assert first_payload["source_provenance_schema_version"] == "repository_source_provenance.v2"
+    assert first_payload["source_strategy"] == "legacy_or_unknown"
+    assert first_payload["selected_source"] is None
+    assert first_payload["source_mode"] == "legacy_or_unknown"
+    assert first_payload["fallback_enabled"] is None
     assert first_payload["resolved_source_name"] is None
     assert first_payload["fallback_used"] is False
     assert first_payload["primary_failure_category"] is None
@@ -227,6 +233,14 @@ def test_build_snapshot_records_contains_required_schema_and_all_fields() -> Non
     assert records_by_name["classified_fund_type"].comparable_values == {
         "fund_type": "active_fund"
     }
+    assert records_by_name["portfolio_managers"].comparable_values == {
+        "schema_version": "portfolio_manager_tenure_list.v1",
+        "manager_count": "1",
+    }
+    assert records_by_name["risk_characteristic_text"].comparable_values == {
+        "schema_version": "risk_characteristic_text.v1",
+        "risk_characteristic_text": "本基金为混合型基金，风险收益特征高于债券型基金。",
+    }
     assert records_by_name["index_profile"].comparable_values == {}
     assert records_by_name["tracking_error"].comparable_values == {}
     assert records_by_name["product_profile"].comparable_values == {}
@@ -239,7 +253,7 @@ def test_build_snapshot_records_contains_required_schema_and_all_fields() -> Non
     assert "bond_risk_evidence" not in COMPARABLE_SUB_FIELDS_BY_FIELD
     assert (
         list(SNAPSHOT_FIELD_ORDER).index(("risk", "bond_risk_evidence"))
-        == list(SNAPSHOT_FIELD_ORDER).index(("holdings", "holdings_snapshot")) + 1
+        == list(SNAPSHOT_FIELD_ORDER).index(("risk", "risk_characteristic_text")) + 1
     )
 
 
@@ -497,8 +511,11 @@ def test_build_snapshot_records_copies_identical_bundle_source_provenance_to_all
     """
 
     provenance = PublicSourceProvenance(
-        source_provenance_schema_version="repository_source_provenance.v1",
-        source_strategy="primary_then_fallback",
+        source_provenance_schema_version="repository_source_provenance.v2",
+        source_strategy="legacy_or_unknown",
+        selected_source=None,
+        source_mode="legacy_or_unknown",
+        fallback_enabled=None,
         resolved_source_name="eastmoney",
         fallback_used=True,
         primary_failure_category="not_found",
@@ -528,6 +545,9 @@ def test_build_snapshot_records_copies_identical_bundle_source_provenance_to_all
     }
     assert len(provenance_payloads) == 1
     first_record = records[0]
+    assert first_record.selected_source is None
+    assert first_record.source_mode == "legacy_or_unknown"
+    assert first_record.fallback_enabled is None
     assert first_record.resolved_source_name == "eastmoney"
     assert first_record.fallback_used is True
     assert first_record.primary_failure_category == "not_found"
@@ -564,8 +584,10 @@ def test_build_snapshot_records_preserves_unavailable_nav_reason() -> None:
         share_change=bundle.share_change,
         manager_alignment=bundle.manager_alignment,
         manager_strategy_text=bundle.manager_strategy_text,
+        portfolio_managers=bundle.portfolio_managers,
         holdings_snapshot=bundle.holdings_snapshot,
         holder_structure=bundle.holder_structure,
+        risk_characteristic_text=bundle.risk_characteristic_text,
         nav_data=unavailable_nav_data_result(
             "110011",
             reason="RuntimeError: network down",
@@ -748,7 +770,10 @@ async def test_run_snapshot_summary_highlights_duplicates_and_continues_failures
     assert result.record_count == len(SNAPSHOT_FIELD_ORDER)
     assert len(snapshot_lines) == len(SNAPSHOT_FIELD_ORDER)
     first_snapshot_payload = json.loads(snapshot_lines[0])
-    assert first_snapshot_payload["source_provenance_schema_version"] == "repository_source_provenance.v1"
+    assert first_snapshot_payload["source_provenance_schema_version"] == "repository_source_provenance.v2"
+    assert first_snapshot_payload["selected_source"] is None
+    assert first_snapshot_payload["source_mode"] == "legacy_or_unknown"
+    assert first_snapshot_payload["fallback_enabled"] is None
     assert first_snapshot_payload["fallback_eligibility"] == "not_applicable"
     assert len(error_lines) == 1
     assert json.loads(error_lines[0])["error_message"] == "fixture failure"
@@ -756,17 +781,18 @@ async def test_run_snapshot_summary_highlights_duplicates_and_continues_failures
     assert "failed_funds: 1" in summary_text
     assert "## Source Provenance" in summary_text
     assert (
-        "| fund_code | resolved_source_name | fallback_used | fallback_eligibility | "
+        "| fund_code | selected_source | source_mode | fallback_enabled | resolved_source_name | "
+        "fallback_used | fallback_eligibility | "
         "source_provenance_status | source_provenance_reason |"
     ) in summary_text
     assert (
-        "| 004393 | null | false | not_applicable | not_applicable | "
+        "| 004393 | null | legacy_or_unknown | null | null | false | not_applicable | not_applicable | "
         "source_metadata_absent_no_fallback_evidence |"
     ) in summary_text
     source_provenance_section = summary_text.split("## Source Provenance", maxsplit=1)[1].split(
         "## Fund Results", maxsplit=1
     )[0]
-    assert "Failed funds without snapshot records are omitted from Source Provenance v1." in summary_text
+    assert "Failed funds without snapshot records are omitted from Source Provenance v2." in summary_text
     assert "| 000001 |" not in source_provenance_section
 
 
@@ -980,6 +1006,14 @@ def _build_bundle(
         share_change=_field({"beginning_share": "1", "ending_share": "2", "net_change": "1"}, "share_change"),
         manager_alignment=_field(None, "manager_alignment", extraction_mode="missing", note="fixture missing"),
         manager_strategy_text=_field({"strategy_summary": "精选个股"}, "manager_strategy_text"),
+        portfolio_managers=_field(
+            {
+                "schema_version": "portfolio_manager_tenure_list.v1",
+                "manager_count": 1,
+                "portfolio_managers": [{"name": "张三", "role": "基金经理"}],
+            },
+            "portfolio_managers",
+        ),
         holdings_snapshot=_field(
             {
                 "top_holdings": [{"name": "A"}],
@@ -990,6 +1024,13 @@ def _build_bundle(
             "holdings_snapshot",
         ),
         holder_structure=_field({"institutional_holder": "10%", "individual_holder": "90%"}, "holder_structure"),
+        risk_characteristic_text=_field(
+            {
+                "schema_version": "risk_characteristic_text.v1",
+                "risk_characteristic_text": "本基金为混合型基金，风险收益特征高于债券型基金。",
+            },
+            "risk_characteristic_text",
+        ),
         nav_data=NavDataResult(
             fund_code=fund_code,
             records=[{"date": "2024-12-31", "nav": "1.00"}],

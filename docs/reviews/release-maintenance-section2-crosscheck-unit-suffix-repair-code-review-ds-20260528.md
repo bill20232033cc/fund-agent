@@ -85,4 +85,3 @@ Result: `5711224267.09`, `5711224267.09`, `None`, `None`
 - Scope boundary: reviewed only the specified increment and regression surface; did not modify source, tests, score policy, quality gate, schema, Service/UI/Host/Agent/dayu, golden, release, git state, PR, push, or merge.
 - Evidence and validation: required artifacts/diff were read; targeted ruff, pytest, and parse probe passed.
 - Completion signal: durable review artifact written at `docs/reviews/release-maintenance-section2-crosscheck-unit-suffix-repair-code-review-ds-20260528.md`.
-

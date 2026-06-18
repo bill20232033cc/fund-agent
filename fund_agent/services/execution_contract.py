@@ -33,6 +33,7 @@ AnalyzeMode = Literal["product", "developer_override"]
 ValuationState = Literal["low", "fair", "high", "unavailable"]
 PromptPayloadMode = Literal["compact", "full"]
 SafeDiagnosticPolicySchemaVersion = Literal["safe_diagnostic_policy.v1"]
+TypedTemplatePathMode = Literal["legacy_contract", "typed_template_contract"]
 
 FUND_LLM_EXECUTION_CONTRACT_SCHEMA_VERSION: FundLLMExecutionContractSchemaVersion = (
     "fund_llm_execution_contract.v1"
@@ -43,6 +44,9 @@ SAFE_DIAGNOSTIC_POLICY_SCHEMA_VERSION: SafeDiagnosticPolicySchemaVersion = (
 _ALLOWED_QUALITY_GATE_POLICIES = frozenset(("off", "warn", "block"))
 _ALLOWED_PROMPT_PAYLOAD_MODES = frozenset(("compact", "full"))
 _ALLOWED_RUNTIME_CHAPTER_IDS = frozenset((1, 2, 3, 4, 5, 6))
+_ALLOWED_TYPED_TEMPLATE_PATH_MODES = frozenset(
+    ("legacy_contract", "typed_template_contract")
+)
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -273,6 +277,7 @@ class FundLLMRuntimePlan:
         provider_runtime_budget: provider runtime 预算。
         quality_fail_closed_policy: fail-closed 策略。
         safe_diagnostic_policy: 安全诊断策略。
+        typed_template_path: Service 显式选择的模板契约路径。
         host_timeout_seconds: Host 可读取的唯一 runtime deadline 标量。
     """
 
@@ -281,6 +286,7 @@ class FundLLMRuntimePlan:
     provider_runtime_budget: ProviderRuntimeBudget
     quality_fail_closed_policy: QualityFailClosedPolicy
     safe_diagnostic_policy: SafeDiagnosticPolicy
+    typed_template_path: TypedTemplatePathMode = "legacy_contract"
     host_timeout_seconds: int
 
     def __post_init__(self) -> None:
@@ -299,6 +305,10 @@ class FundLLMRuntimePlan:
         if self.host_timeout_seconds <= 0:
             raise ValueError("host_timeout_seconds 必须为正整数")
         _validate_runtime_chapter_ids(self.chapter_policy)
+        if self.typed_template_path not in _ALLOWED_TYPED_TEMPLATE_PATH_MODES:
+            raise ValueError("typed_template_path 必须为 legacy_contract / typed_template_contract")
+        if self.chapter_policy.typed_template_path != self.typed_template_path:
+            raise ValueError("runtime_plan.typed_template_path 必须与 chapter_policy 一致")
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -363,11 +373,32 @@ class FundLLMExecutionRequest:
         contract: 稳定业务契约，只包含业务事实和质量声明。
         runtime_plan: Service 内部 runtime plan，包含章节、总装、预算和安全诊断策略。
         llm_clients: Service 构造或显式注入的章节 LLM clients。
+        typed_template_path: Service façade 的显式 typed path 选择；开启后
+            ChapterOrchestrator 才消费 typed contract / EvidenceAvailability / audit_focus。
     """
 
     contract: FundLLMExecutionContract
     runtime_plan: FundLLMRuntimePlan
     llm_clients: ChapterOrchestratorLLMClients
+    typed_template_path: TypedTemplatePathMode = "legacy_contract"
+
+    def __post_init__(self) -> None:
+        """校验 Service 内部 LLM 执行请求。
+
+        Args:
+            无。
+
+        Returns:
+            无返回值。
+
+        Raises:
+            ValueError: 当 typed path 选择非法或与 runtime plan 不一致时抛出。
+        """
+
+        if self.typed_template_path not in _ALLOWED_TYPED_TEMPLATE_PATH_MODES:
+            raise ValueError("typed_template_path 必须为 legacy_contract / typed_template_contract")
+        if self.typed_template_path != self.runtime_plan.typed_template_path:
+            raise ValueError("execution_request.typed_template_path 必须与 runtime_plan 一致")
 
 
 def normalize_fund_llm_analysis_input(

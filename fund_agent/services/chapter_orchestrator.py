@@ -1,30 +1,31 @@
 """Service 层章节编排器，见基金分析模板第 1-6 章。
 
-本模块只负责编排 Route C Gate 3 的 write-audit-repair policy：调用 Gate 1
-`ChapterFactProvider` 投影和 Gate 2 `chapter_writer` / `chapter_auditor`
-primitive。它不读取年报仓库、PDF、cache、source helper、下载器或 parser，
-不构造真实 LLM provider，不接入 Host/Agent/dayu，也不生成第 0/7 章正文。
+本模块负责 Service 层章节编排入口：解析输入、执行早期 fail-closed 校验，
+再委托 Service bridge 调用 Agent body runner。它不读取年报仓库、PDF、cache、
+source helper、下载器或 parser，不构造真实 LLM provider；Host cancel/deadline
+只透传给 bridge 翻译，不由本模块解释基金业务语义。
 """
 
 from __future__ import annotations
 
-import time
 from dataclasses import dataclass, field
 from typing import Final, Literal, get_args
 
 from fund_agent.fund.chapter_auditor import (
-    ChapterAuditInput,
     ChapterAuditIssue,
     ChapterAuditLLMClient,
     ChapterAuditRepairHint,
     ChapterAuditResult,
     ChapterAuditRuleCode,
-    audit_chapter,
 )
 from fund_agent.fund.chapter_facts import (
     ChapterFactMissingReason,
     ChapterFactProjection,
     ChapterFactProvider,
+)
+from fund_agent.fund.evidence_availability import (
+    EvidenceAvailability,
+    derive_evidence_availability,
 )
 from fund_agent.fund.chapter_writer import (
     ChapterRepairContext,
@@ -32,10 +33,13 @@ from fund_agent.fund.chapter_writer import (
     ChapterLLMClient,
     ChapterWriteResult,
     ChapterWriteStopReason,
-    build_chapter_writer_input,
-    write_chapter,
 )
 from fund_agent.fund.data_extractor import StructuredFundDataBundle
+from fund_agent.fund.template.typed_contracts import (
+    RequiredOutputItem,
+    TypedChapterContract,
+    get_typed_chapter_contract,
+)
 from fund_agent.host import HostRunContext
 
 ChapterOrchestratorSchemaVersion = Literal["chapter_orchestrator.v1"]
@@ -65,9 +69,12 @@ ChapterRunStopReason = Literal[
     "llm_malformed_response",
     "llm_network_error",
     "llm_exception",
+    "scheduler_cancelled",
+    "scheduler_deadline_exceeded",
 ]
 ChapterRepairAction = Literal["none", "regenerate", "needs_more_facts", "stop"]
 ChapterOrchestrationInputKind = Literal["structured_bundle", "chapter_projection"]
+TypedTemplatePathMode = Literal["legacy_contract", "typed_template_contract"]
 AcceptedChapterConclusionSource = Literal["heading", "fallback_lines"]
 ProviderOperation = Literal["writer", "auditor"]
 TimeoutBudgetKind = Literal["writer_initial", "auditor", "writer_repair"]
@@ -86,6 +93,12 @@ ProviderRuntimeCategory = Literal[
     "network",
     "http_error",
 ]
+DiagnosticConsistencyStatus = Literal[
+    "consistent",
+    "missing_terminal_runtime_diagnostic",
+    "terminal_category_conflict",
+    "non_runtime_terminal_without_scalar",
+]
 ChapterFailureCategory = Literal[
     "provider_runtime",
     "llm_timeout",
@@ -94,6 +107,8 @@ ChapterFailureCategory = Literal[
     "audit_rule_too_strict",
     "fact_gap",
     "code_bug",
+    "scheduler_cancelled",
+    "scheduler_deadline_exceeded",
 ]
 ChapterFailureSubcategory = Literal[
     "missing_structure",
@@ -113,6 +128,9 @@ CHAPTER_ORCHESTRATOR_SCHEMA_VERSION: ChapterOrchestratorSchemaVersion = (
 DEFAULT_TARGET_CHAPTER_IDS: Final[tuple[int, ...]] = (1, 2, 3, 4, 5, 6)
 MAX_ACCEPTED_CONCLUSION_CHARS: Final[int] = 500
 _TARGET_CHAPTER_ID_SET: Final[frozenset[int]] = frozenset(DEFAULT_TARGET_CHAPTER_IDS)
+_ALLOWED_TYPED_TEMPLATE_PATH_MODES: Final[frozenset[str]] = frozenset(
+    ("legacy_contract", "typed_template_contract")
+)
 _CONCLUSION_HEADINGS: Final[tuple[str, ...]] = ("### 结论要点", "## 结论要点")
 _WRITER_STOP_REASON_MAPPING: Final[
     dict[ChapterWriteStopReason, tuple[ChapterRunStatus, ChapterRunStopReason]]
@@ -160,6 +178,23 @@ _SUBCATEGORY_PRECEDENCE: Final[tuple[ChapterFailureSubcategory, ...]] = (
     "l1_numerical_closure",
     "code_bug_other",
 )
+_RUNTIME_TERMINAL_STOP_REASONS: Final[frozenset[ChapterRunStopReason]] = frozenset(
+    (
+        "llm_timeout",
+        "llm_rate_limited",
+        "llm_malformed_response",
+        "llm_network_error",
+        "llm_exception",
+    )
+)
+_RUNTIME_STOP_REASON_CATEGORY: Final[
+    dict[ChapterRunStopReason, ProviderRuntimeCategory]
+] = {
+    "llm_timeout": "timeout",
+    "llm_rate_limited": "rate_limit",
+    "llm_malformed_response": "malformed",
+    "llm_network_error": "network",
+}
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -308,6 +343,7 @@ class ChapterOrchestrationPolicy:
         fail_fast: 兼容旧调用方的遗留参数；模板第 1-6 章固定独立执行，不因前章失败跳过后章。
         run_programmatic_audit: 是否执行 Gate 2 programmatic audit。
         run_llm_audit: 是否执行 Gate 2 LLM audit。
+        typed_template_path: 显式模板契约路径；默认 legacy，不消费 typed sidecar。
     """
 
     target_chapter_ids: tuple[int, ...] = DEFAULT_TARGET_CHAPTER_IDS
@@ -317,6 +353,7 @@ class ChapterOrchestrationPolicy:
     fail_fast: bool = False
     run_programmatic_audit: bool = True
     run_llm_audit: bool = True
+    typed_template_path: TypedTemplatePathMode = "legacy_contract"
 
     def __post_init__(self) -> None:
         """校验章节编排策略。
@@ -499,6 +536,18 @@ class ChapterOrchestrationResult:
     schema_version: ChapterOrchestratorSchemaVersion = CHAPTER_ORCHESTRATOR_SCHEMA_VERSION
 
 
+@dataclass(frozen=True, slots=True, kw_only=True)
+class _TypedTemplateInputs:
+    """Service façade 内部 typed 模板输入。
+
+    Attributes:
+        evidence_availability: 从同源 `ChapterFactProjection` 派生的证据可用性。
+
+    """
+
+    evidence_availability: EvidenceAvailability
+
+
 class ChapterOrchestrator:
     """Service 层章节编排 façade，见模板第 1-6 章。"""
 
@@ -626,20 +675,14 @@ def orchestrate_chapters(
             issue="缺少显式注入的章节 LLM 审计 client，不能进入写作。",
         )
 
-    chapter_results: list[ChapterRunResult] = []
-    skipped_chapter_ids: tuple[int, ...] = ()
-    for chapter_id in policy.target_chapter_ids:
-        _raise_if_host_cancelled(host_context)
-        run_result = _run_single_chapter(
-            projection,
-            chapter_id=chapter_id,
-            policy=policy,
-            llm_clients=llm_clients,
-            host_context=host_context,
-        )
-        chapter_results.append(run_result)
+    from fund_agent.services.agent_bridge import run_agent_chapter_orchestration_bridge
 
-    return _orchestration_result(input_data, projection, tuple(chapter_results), skipped_chapter_ids)
+    return run_agent_chapter_orchestration_bridge(
+        input_data,
+        projection=projection,
+        llm_clients=llm_clients,
+        host_context=host_context,
+    )
 
 
 def serialize_chapter_prompt_contract_diagnostics(
@@ -731,6 +774,8 @@ def _validate_policy(policy: ChapterOrchestrationPolicy) -> None:
         raise ValueError("max_output_chars 必须为正数")
     if policy.prompt_payload_mode not in {"full", "compact"}:
         raise ValueError("prompt_payload_mode 必须为 full 或 compact")
+    if policy.typed_template_path not in _ALLOWED_TYPED_TEMPLATE_PATH_MODES:
+        raise ValueError("typed_template_path 必须为 legacy_contract / typed_template_contract")
 
 
 def _validate_orchestration_input(input_data: ChapterOrchestrationInput) -> None:
@@ -901,394 +946,98 @@ def _global_blocked_result(
     )
 
 
-def _run_single_chapter(
+def _typed_template_inputs(
     projection: ChapterFactProjection,
     *,
-    chapter_id: int,
     policy: ChapterOrchestrationPolicy,
-    llm_clients: ChapterOrchestratorLLMClients,
-    host_context: HostRunContext | None = None,
-) -> ChapterRunResult:
-    """执行单章写作、审计和有限 regenerate。
+) -> _TypedTemplateInputs | None:
+    """按显式 policy 构造 typed contract / availability 输入。
 
     Args:
-        projection: Gate 1 投影。
-        chapter_id: 模板章节编号。
-        policy: 编排策略。
-        llm_clients: 显式注入的 writer/auditor LLM client。
-        host_context: 可选 Host run 上下文；Host 不理解本模块的基金业务语义。
+        projection: Gate 1 章节事实投影。
+        policy: Service-owned 章节编排策略。
 
     Returns:
-        单章编排结果。
+        typed path 开启时返回内部 typed 输入；默认 legacy path 返回 `None`。
 
     Raises:
-        ValueError: 当 writer stop reason 未被 Gate 3 接受时抛出。
+        ValueError: 当 typed path 模式非法或 availability 派生失败时抛出。
     """
 
-    title = _chapter_title(projection, chapter_id)
-    attempts: list[ChapterAttemptRecord] = []
-    issues: list[str] = []
-    writer_input = build_chapter_writer_input(
-        projection,
-        chapter_id=chapter_id,
-        max_output_chars=policy.max_output_chars,
-        prompt_payload_mode=policy.prompt_payload_mode,  # type: ignore[arg-type]
+    if policy.typed_template_path == "legacy_contract":
+        return None
+    if policy.typed_template_path != "typed_template_contract":
+        raise ValueError("typed_template_path 必须为 legacy_contract / typed_template_contract")
+    return _TypedTemplateInputs(
+        evidence_availability=derive_evidence_availability(projection),
     )
-    attempt_index = 0
-    while True:
-        _raise_if_host_cancelled(host_context)
-        _host_phase_started(
-            host_context,
-            phase="writer",
-            chapter_id=chapter_id,
-            attempt_index=attempt_index,
-        )
-        phase_started = time.monotonic()
-        try:
-            writer_result = write_chapter(writer_input, llm_client=llm_clients.writer)
-        except Exception as exc:  # noqa: BLE001 - Service 层必须把 provider 异常 fail-closed。
-            return _exception_result(
-                projection,
-                chapter_id,
-                title,
-                attempts=tuple(attempts),
-                exc=exc,
-                operation="writer",
-                attempt_index=attempt_index,
-            )
-        finally:
-            _host_phase_completed(
-                host_context,
-                phase="writer",
-                chapter_id=chapter_id,
-                attempt_index=attempt_index,
-                phase_started=phase_started,
-            )
-        _raise_if_host_cancelled(host_context)
-
-        if writer_result.status == "blocked":
-            issues.extend(_writer_issue_messages(writer_result))
-            prompt_diagnostic = _writer_prompt_contract_diagnostic(
-                writer_result,
-                chapter_id=chapter_id,
-                attempt_index=attempt_index,
-            )
-            attempts.append(
-                ChapterAttemptRecord(
-                    attempt_index=attempt_index,
-                    writer_result=writer_result,
-                    audit_result=None,
-                    repair_decision=None,
-                    runtime_diagnostics=(
-                        _writer_runtime_diagnostic(
-                            projection,
-                            chapter_id=chapter_id,
-                            operation="writer",
-                            attempt_index=attempt_index,
-                            writer_result=writer_result,
-                        ),
-                    ),
-                )
-            )
-            status, stop_reason = _map_writer_stop_reason(writer_result.stop_reason)
-            return ChapterRunResult(
-                chapter_id=chapter_id,
-                title=title,
-                status=status,
-                stop_reason=stop_reason,
-                accepted_draft=None,
-                accepted_conclusion=None,
-                attempts=tuple(attempts),
-                issues=tuple(issues),
-                failure_category=_chapter_failure_category_from_writer_result(writer_result),
-                failure_subcategory=prompt_diagnostic.primary_subcategory
-                if prompt_diagnostic is not None
-                else None,
-                prompt_contract_diagnostics=(prompt_diagnostic,) if prompt_diagnostic is not None else (),
-            )
-
-        draft = writer_result.draft
-        if draft is None:
-            raise ValueError("writer drafted 状态必须包含 draft")
-        audit_input = ChapterAuditInput(
-            writer_input=writer_input,
-            draft=draft,
-            run_programmatic=policy.run_programmatic_audit,
-            run_llm=policy.run_llm_audit,
-        )
-        _host_phase_started(
-            host_context,
-            phase="auditor",
-            chapter_id=chapter_id,
-            attempt_index=attempt_index,
-        )
-        phase_started = time.monotonic()
-        try:
-            audit_result = audit_chapter(audit_input, llm_client=llm_clients.auditor)
-        except Exception as exc:  # noqa: BLE001 - Service 层必须把 provider 异常 fail-closed。
-            attempts.append(
-                ChapterAttemptRecord(
-                    attempt_index=attempt_index,
-                    writer_result=writer_result,
-                    audit_result=None,
-                    repair_decision=None,
-                )
-            )
-            return _exception_result(
-                projection,
-                chapter_id,
-                title,
-                attempts=tuple(attempts),
-                exc=exc,
-                operation="auditor",
-                attempt_index=attempt_index,
-            )
-        finally:
-            _host_phase_completed(
-                host_context,
-                phase="auditor",
-                chapter_id=chapter_id,
-                attempt_index=attempt_index,
-                phase_started=phase_started,
-            )
-        _raise_if_host_cancelled(host_context)
-
-        if audit_result.accepted:
-            attempts.append(
-                ChapterAttemptRecord(
-                    attempt_index=attempt_index,
-                    writer_result=writer_result,
-                    audit_result=audit_result,
-                    repair_decision=None,
-                )
-            )
-            conclusion = _accepted_conclusion(draft, audit_result)
-            return ChapterRunResult(
-                chapter_id=chapter_id,
-                title=title,
-                status="accepted",
-                stop_reason="none",
-                accepted_draft=draft,
-                accepted_conclusion=conclusion,
-                attempts=tuple(attempts),
-                issues=tuple(issues),
-                failure_category=None,
-            )
-
-        issues.extend(_audit_issue_messages(audit_result))
-        prompt_diagnostic = _audit_prompt_contract_diagnostic(
-            audit_result,
-            chapter_id=chapter_id,
-            attempt_index=attempt_index,
-        )
-        decision = _decide_repair(
-            audit_result,
-            remaining_budget=policy.max_repair_attempts - attempt_index,
-            auditor_available=llm_clients.auditor is not None,
-            run_llm_audit=policy.run_llm_audit,
-        )
-        attempts.append(
-            ChapterAttemptRecord(
-                attempt_index=attempt_index,
-                writer_result=writer_result,
-                audit_result=audit_result,
-                repair_decision=decision,
-                runtime_diagnostics=(
-                    _audit_runtime_diagnostic(
-                        projection,
-                        chapter_id=chapter_id,
-                        operation="auditor",
-                        attempt_index=attempt_index,
-                        audit_result=audit_result,
-                    ),
-                ),
-            )
-        )
-        if decision.action == "regenerate":
-            _host_phase_started(
-                host_context,
-                phase="repair",
-                chapter_id=chapter_id,
-                attempt_index=attempt_index,
-            )
-            phase_started = time.monotonic()
-            attempt_index += 1
-            writer_input = build_chapter_writer_input(
-                projection,
-                chapter_id=chapter_id,
-                max_output_chars=policy.max_output_chars,
-                repair_context=_repair_context_from_audit(
-                    audit_result,
-                    attempt_index=attempt_index,
-                ),
-                prompt_payload_mode=policy.prompt_payload_mode,  # type: ignore[arg-type]
-            )
-            _host_phase_completed(
-                host_context,
-                phase="repair",
-                chapter_id=chapter_id,
-                attempt_index=attempt_index - 1,
-                phase_started=phase_started,
-            )
-            continue
-        return ChapterRunResult(
-            chapter_id=chapter_id,
-            title=title,
-            status=_status_from_audit_stop(decision, audit_result),
-            stop_reason=_stop_reason_from_repair_decision(decision),
-            accepted_draft=None,
-            accepted_conclusion=None,
-            attempts=tuple(attempts),
-            issues=tuple(issues),
-            failure_category=_chapter_failure_category_from_audit_result(audit_result),
-            failure_subcategory=prompt_diagnostic.primary_subcategory
-            if prompt_diagnostic is not None
-            else None,
-            prompt_contract_diagnostics=(prompt_diagnostic,) if prompt_diagnostic is not None else (),
-        )
 
 
-def _exception_result(
-    projection: ChapterFactProjection,
+def _typed_chapter_contract(
     chapter_id: int,
-    title: str,
     *,
-    attempts: tuple[ChapterAttemptRecord, ...],
-    exc: Exception,
-    operation: ProviderOperation,
-    attempt_index: int,
-) -> ChapterRunResult:
-    """把 LLM client 异常转换为 fail-closed 单章结果。
+    typed_inputs: _TypedTemplateInputs | None,
+) -> TypedChapterContract | None:
+    """读取 typed path 的单章 contract。
 
     Args:
-        projection: Gate 1 投影。
         chapter_id: 模板章节编号。
-        title: 章节标题。
-        attempts: 已记录的 attempt。
-        exc: 捕获到的异常。
-        operation: 当前失败操作。
-        attempt_index: 当前章节 attempt 序号。
+        typed_inputs: typed path 内部输入；为空表示 legacy path。
 
     Returns:
-        单章 failed 结果。
+        typed 单章 contract；legacy path 返回 `None`。
+
+    Raises:
+        ValueError: 当 typed sidecar 缺失或校验失败时由 Fund 层 loader 抛出。
+    """
+
+    if typed_inputs is None:
+        return None
+    return get_typed_chapter_contract(chapter_id)
+
+
+def _typed_required_output_items(
+    chapter_id: int,
+    *,
+    typed_inputs: _TypedTemplateInputs | None,
+) -> tuple[RequiredOutputItem, ...]:
+    """读取 typed path 的 required output items。
+
+    Args:
+        chapter_id: 模板章节编号。
+        typed_inputs: typed path 内部输入；为空表示 legacy path。
+
+    Returns:
+        typed required output items；legacy path 返回空元组。
+
+    Raises:
+        ValueError: 当 typed sidecar 缺失或校验失败时由 Fund 层 loader 抛出。
+    """
+
+    typed_contract = _typed_chapter_contract(chapter_id, typed_inputs=typed_inputs)
+    if typed_contract is None:
+        return ()
+    return typed_contract.required_output_items
+
+
+def _typed_evidence_availability(
+    typed_inputs: _TypedTemplateInputs | None,
+) -> EvidenceAvailability | None:
+    """读取 typed path 的同源 EvidenceAvailability。
+
+    Args:
+        typed_inputs: typed path 内部输入；为空表示 legacy path。
+
+    Returns:
+        `EvidenceAvailability` 或 `None`。
 
     Raises:
         无显式抛出。
     """
 
-    stop_reason = _provider_runtime_stop_reason(exc)
-    runtime_diagnostics = _exception_runtime_diagnostics(
-        projection,
-        chapter_id=chapter_id,
-        operation=operation,
-        attempt_index=attempt_index,
-        exc=exc,
-    )
-    if attempts and attempts[-1].attempt_index == attempt_index and not attempts[-1].runtime_diagnostics:
-        last_attempt = attempts[-1]
-        attempts = (
-            *attempts[:-1],
-            ChapterAttemptRecord(
-                attempt_index=last_attempt.attempt_index,
-                writer_result=last_attempt.writer_result,
-                audit_result=last_attempt.audit_result,
-                repair_decision=last_attempt.repair_decision,
-                runtime_diagnostics=runtime_diagnostics,
-            ),
-        )
-    return ChapterRunResult(
-        chapter_id=chapter_id,
-        title=title,
-        status="failed",
-        stop_reason=stop_reason,
-        accepted_draft=None,
-        accepted_conclusion=None,
-        attempts=attempts,
-        issues=(f"LLM client exception category={stop_reason}: {type(exc).__name__}: {_safe_exception_message(exc)}",),
-        failure_category=_chapter_failure_category_from_exception(exc),
-        runtime_diagnostics=runtime_diagnostics if not attempts else (),
-    )
-
-
-def _raise_if_host_cancelled(host_context: HostRunContext | None) -> None:
-    """在章节 phase 边界传播 Host deadline/cancel。
-
-    Args:
-        host_context: 可选 Host run 上下文。
-
-    Returns:
-        无返回值。
-
-    Raises:
-        HostRuntimeError: 当 Host run 已取消或超过 deadline 时抛出。
-    """
-
-    if host_context is None:
-        return
-    host_context.raise_if_cancelled_or_deadline_exceeded()
-
-
-def _host_phase_started(
-    host_context: HostRunContext | None,
-    *,
-    phase: str,
-    chapter_id: int,
-    attempt_index: int,
-) -> None:
-    """记录章节 phase_started 安全事件。"""
-
-    if host_context is None:
-        return
-    host_context.record_phase_started(
-        phase=phase,
-        chapter_id=chapter_id,
-        attempt=attempt_index,
-    )
-
-
-def _host_phase_completed(
-    host_context: HostRunContext | None,
-    *,
-    phase: str,
-    chapter_id: int,
-    attempt_index: int,
-    phase_started: float,
-) -> None:
-    """记录章节 phase_completed 安全事件。"""
-
-    if host_context is None:
-        return
-    host_context.record_phase_completed(
-        phase=phase,
-        chapter_id=chapter_id,
-        attempt=attempt_index,
-        elapsed_ms=max(0, int((time.monotonic() - phase_started) * 1000)),
-    )
-
-
-def _provider_runtime_stop_reason(exc: Exception) -> ChapterRunStopReason:
-    """把 provider runtime 异常映射为 Service stop reason。
-
-    Args:
-        exc: 捕获到的异常。
-
-    Returns:
-        精确 Service stop reason；未知异常返回 `llm_exception`。
-
-    Raises:
-        无显式抛出。
-    """
-
-    type_name = type(exc).__name__
-    if type_name == "LLMProviderTimeoutError":
-        return "llm_timeout"
-    if type_name == "LLMProviderRateLimitError":
-        return "llm_rate_limited"
-    if type_name == "LLMProviderMalformedResponseError":
-        return "llm_malformed_response"
-    if type_name == "LLMProviderNetworkError":
-        return "llm_network_error"
-    return "llm_exception"
+    if typed_inputs is None:
+        return None
+    return typed_inputs.evidence_availability
 
 
 def _exception_runtime_diagnostics(
@@ -1298,6 +1047,7 @@ def _exception_runtime_diagnostics(
     operation: ProviderOperation,
     attempt_index: int,
     exc: Exception,
+    max_output_chars: int | None = None,
 ) -> tuple[ChapterLLMRuntimeDiagnostic, ...]:
     """从 provider 或未知异常构造章节级安全诊断。
 
@@ -1307,6 +1057,8 @@ def _exception_runtime_diagnostics(
         operation: writer 或 auditor。
         attempt_index: 章节 attempt 序号。
         exc: 捕获到的异常。
+        max_output_chars: pre-provider writer 输出字符上限；provider diagnostics
+            已有自身 cap 时不覆盖。
 
     Returns:
         已补齐章节 identity 和 failure category 的安全诊断。
@@ -1344,6 +1096,7 @@ def _exception_runtime_diagnostics(
             finish_reason=None,
             response_chars=None,
             error_type=type(exc).__name__,
+            max_output_chars=max_output_chars,
             message=_safe_exception_message(exc),
         ),
     )
@@ -1585,6 +1338,8 @@ def _chapter_failure_category_from_stop_reason(
 
     if stop_reason == "llm_timeout":
         return "llm_timeout"
+    if stop_reason in ("scheduler_cancelled", "scheduler_deadline_exceeded"):
+        return stop_reason
     if stop_reason in ("fund_type_unknown", "missing_required_facts", "needs_more_facts", "dependency_missing"):
         return "fact_gap"
     if stop_reason in (
@@ -2242,18 +1997,29 @@ def _required_correction_from_issue(issue: ChapterAuditIssue) -> str:
             "为对应 required output item 补齐 <!-- required_output:<item> --> marker，"
             "并在 marker 后只写有同源证据或明确缺口的内容。"
         )
+    if issue.rule_code == "C2" and issue.item_rule_ids:
+        return (
+            "删除 ITEM_RULE 要求删除的 optional/conditional 段落标题和专属段落；"
+            "不得删除 required output marker，若相关语义属于 required output，"
+            "只能在 required output 下用同源证据或缺口措辞简短说明。"
+        )
     if issue.rule_code == "C2" and "候选 facet" in message:
         return "将候选 facet 改写为候选/未断言信息，不得使用 是/为/属于/定位为/可判定为 等断言动词。"
     if issue.rule_code == "L1" or _audit_issue_id_prefix(issue.issue_id) == _PROGRAMMATIC_L1_PREFIX:
         return (
             "修复模板第2章 R=A+B-C 数字闭环：公式/百分比闭合断言必须在同一句或上下2行内放入"
             " allowed anchor marker；若没有同源事实支撑 R、A、B、C 或 A-C 数值关系，删除具体数值闭合断言，"
-            "改写为未披露/数据不足/下一步最小验证问题；不得编造 Alpha、Beta、Cost 或 R 数值。"
+            "改写为未披露/数据不足/下一步最小验证问题；同时检查 ### 结论要点 与 ### 证据与出处，"
+            "不得在这些段落无锚点复述 R/A/B/C/A-C 具体百分比；不得编造 Alpha、Beta、Cost 或 R 数值。"
         )
     if issue.rule_code == "E1" or "anchor" in message.lower() or "锚点" in message:
         return "只使用 allowed anchor marker，删除未知 anchor 或改用 allowed anchor。"
     if issue.issue_id == "llm:parse_failure":
-        return "按 auditor 行协议修复：PASS|chapter|no issues 或 SEVERITY|LOCATION|MESSAGE，禁止解释性文本。"
+        return (
+            "按 auditor 原始行协议修复：无问题时只能输出一行 PASS|chapter|no issues；"
+            "有问题时每行只能以 BLOCKING、REVIEWABLE 或 INFO 开头并恰好三段，"
+            "禁止 SEVERITY 占位词、解释性前缀、Markdown、JSON、标题、总结句或额外 `|`。"
+        )
     return _sanitize_text(message)
 
 
@@ -2574,47 +2340,82 @@ def _first_failed_runtime_diagnostic(
         if result.status == "accepted":
             continue
         diagnostics = _runtime_diagnostics_for_run(result)
+        terminal_diagnostic = _terminal_runtime_diagnostic(result, diagnostics)
+        representative_diagnostics = _representative_runtime_diagnostics(
+            result,
+            diagnostics,
+            terminal_diagnostic,
+        )
         return {
             "chapter_id": result.chapter_id,
             "status": result.status,
             "stop_reason": result.stop_reason,
             "category": result.failure_category,
             "subcategory": result.failure_subcategory,
-            "runtime_operation": _first_runtime_operation(diagnostics),
-            "repair_attempt_index": _first_repair_attempt_index(diagnostics),
-        "provider_attempt_count": _provider_attempt_count(diagnostics),
-        "provider_max_attempts": _provider_max_attempts(diagnostics),
-        "provider_runtime_categories": _provider_runtime_categories(diagnostics),
-        "timeout_seconds": _max_optional_float(
-            diagnostic.timeout_seconds for diagnostic in diagnostics
-        ),
-        "timeout_max_attempts": _max_optional_int(
-            diagnostic.timeout_max_attempts for diagnostic in diagnostics
-        ),
-        "timeout_backoff_seconds": _max_optional_float(
-            diagnostic.timeout_backoff_seconds for diagnostic in diagnostics
-        ),
-        "timeout_budget_kind": _first_timeout_budget_kind(diagnostics),
-        "timeout_root_cause_hint": _first_timeout_root_cause_hint(diagnostics),
-        "system_prompt_chars": _max_optional_int(
-            diagnostic.system_prompt_chars for diagnostic in diagnostics
-        ),
-        "user_prompt_chars": _max_optional_int(
-            diagnostic.user_prompt_chars for diagnostic in diagnostics
-        ),
-        "approx_prompt_tokens": _max_optional_int(
-            diagnostic.approx_prompt_tokens for diagnostic in diagnostics
-        ),
-        "allowed_fact_count": _max_optional_int(
-            diagnostic.allowed_fact_count for diagnostic in diagnostics
-        ),
-        "allowed_anchor_count": _max_optional_int(
-            diagnostic.allowed_anchor_count for diagnostic in diagnostics
-        ),
-        "max_output_chars": _max_optional_int(
-            diagnostic.max_output_chars for diagnostic in diagnostics
-        ),
-    }
+            "diagnostic_consistency_status": _diagnostic_consistency_status(
+                result,
+                diagnostics,
+                terminal_diagnostic,
+            ),
+            "terminal_runtime_diagnostic_present": terminal_diagnostic is not None,
+            "terminal_stop_reason": result.stop_reason,
+            "terminal_failure_category": result.failure_category,
+            "terminal_runtime_operation": terminal_diagnostic.operation
+            if terminal_diagnostic is not None
+            else None,
+            "terminal_repair_attempt_index": terminal_diagnostic.repair_attempt_index
+            if terminal_diagnostic is not None
+            else None,
+            "terminal_issue_class": _terminal_issue_class(result),
+            "runtime_operation": _first_runtime_operation(representative_diagnostics),
+            "repair_attempt_index": _first_repair_attempt_index(
+                representative_diagnostics
+            ),
+            "provider_attempt_count": _provider_attempt_count(representative_diagnostics),
+            "provider_max_attempts": _provider_max_attempts(representative_diagnostics),
+            "provider_runtime_categories": _provider_runtime_categories(
+                representative_diagnostics
+            ),
+            "timeout_seconds": _max_optional_float(
+                diagnostic.timeout_seconds for diagnostic in representative_diagnostics
+            ),
+            "timeout_max_attempts": _max_optional_int(
+                diagnostic.timeout_max_attempts
+                for diagnostic in representative_diagnostics
+            ),
+            "timeout_backoff_seconds": _max_optional_float(
+                diagnostic.timeout_backoff_seconds
+                for diagnostic in representative_diagnostics
+            ),
+            "timeout_budget_kind": _first_timeout_budget_kind(
+                representative_diagnostics
+            ),
+            "timeout_root_cause_hint": _first_timeout_root_cause_hint(
+                representative_diagnostics
+            ),
+            "system_prompt_chars": _max_optional_int(
+                diagnostic.system_prompt_chars
+                for diagnostic in representative_diagnostics
+            ),
+            "user_prompt_chars": _max_optional_int(
+                diagnostic.user_prompt_chars for diagnostic in representative_diagnostics
+            ),
+            "approx_prompt_tokens": _max_optional_int(
+                diagnostic.approx_prompt_tokens
+                for diagnostic in representative_diagnostics
+            ),
+            "allowed_fact_count": _max_optional_int(
+                diagnostic.allowed_fact_count
+                for diagnostic in representative_diagnostics
+            ),
+            "allowed_anchor_count": _max_optional_int(
+                diagnostic.allowed_anchor_count
+                for diagnostic in representative_diagnostics
+            ),
+            "max_output_chars": _max_optional_int(
+                diagnostic.max_output_chars for diagnostic in representative_diagnostics
+            ),
+        }
     return None
 
 
@@ -2658,6 +2459,8 @@ def _chapter_runtime_diagnostic_row(result: ChapterRunResult) -> dict[str, objec
         无显式抛出。
     """
 
+    diagnostics = _runtime_diagnostics_for_run(result)
+    terminal_diagnostic = _terminal_runtime_diagnostic(result, diagnostics)
     return {
         "chapter_id": result.chapter_id,
         "status": result.status,
@@ -2665,9 +2468,23 @@ def _chapter_runtime_diagnostic_row(result: ChapterRunResult) -> dict[str, objec
         "failure_category": result.failure_category,
         "failure_subcategory": result.failure_subcategory,
         "attempt_count": len(result.attempts),
+        "diagnostic_consistency_status": _diagnostic_consistency_status(
+            result,
+            diagnostics,
+            terminal_diagnostic,
+        ),
+        "terminal_runtime_diagnostic_present": terminal_diagnostic is not None,
+        "terminal_stop_reason": result.stop_reason,
+        "terminal_failure_category": result.failure_category,
+        "terminal_runtime_operation": terminal_diagnostic.operation
+        if terminal_diagnostic is not None
+        else None,
+        "terminal_repair_attempt_index": terminal_diagnostic.repair_attempt_index
+        if terminal_diagnostic is not None
+        else None,
+        "terminal_issue_class": _terminal_issue_class(result),
         "runtime_diagnostics": tuple(
-            _runtime_diagnostic_payload(diagnostic)
-            for diagnostic in _runtime_diagnostics_for_run(result)
+            _runtime_diagnostic_payload(diagnostic) for diagnostic in diagnostics
         ),
     }
 
@@ -2693,6 +2510,371 @@ def _runtime_diagnostics_for_run(
     )
 
 
+def runtime_diagnostic_consistency_payload(
+    result: ChapterRunResult,
+    diagnostics: tuple[ChapterLLMRuntimeDiagnostic, ...] | None = None,
+) -> dict[str, object]:
+    """构造单章 terminal runtime lineage 安全摘要。
+
+    Args:
+        result: 单章编排结果。
+        diagnostics: 可选 runtime 诊断序列；缺省时从 result 收集。
+
+    Returns:
+        只含 allowlisted scalar 的 terminal consistency payload。
+
+    Raises:
+        无显式抛出。
+    """
+
+    collected = diagnostics if diagnostics is not None else _runtime_diagnostics_for_run(result)
+    terminal_diagnostic = _terminal_runtime_diagnostic(result, collected)
+    return {
+        "diagnostic_consistency_status": _diagnostic_consistency_status(
+            result,
+            collected,
+            terminal_diagnostic,
+        ),
+        "terminal_runtime_diagnostic_present": terminal_diagnostic is not None,
+        "terminal_stop_reason": result.stop_reason,
+        "terminal_failure_category": result.failure_category,
+        "terminal_runtime_operation": terminal_diagnostic.operation
+        if terminal_diagnostic is not None
+        else None,
+        "terminal_repair_attempt_index": terminal_diagnostic.repair_attempt_index
+        if terminal_diagnostic is not None
+        else None,
+        "terminal_issue_class": _terminal_issue_class(result),
+    }
+
+
+def attempt_runtime_diagnostic_consistency_payload(
+    result: ChapterRunResult,
+    attempt: ChapterAttemptRecord,
+) -> dict[str, object]:
+    """构造 attempt-level terminal runtime lineage 安全摘要。
+
+    Args:
+        result: 单章编排结果。
+        attempt: 单次 write/audit attempt 记录。
+
+    Returns:
+        只含 allowlisted scalar 的 attempt terminal consistency payload。
+
+    Raises:
+        无显式抛出。
+    """
+
+    diagnostics = attempt.runtime_diagnostics
+    terminal_diagnostic = _terminal_runtime_diagnostic(result, diagnostics)
+    return {
+        "diagnostic_consistency_status": _diagnostic_consistency_status(
+            result,
+            diagnostics,
+            terminal_diagnostic,
+        ),
+        "terminal_runtime_diagnostic_present": terminal_diagnostic is not None,
+        "terminal_stop_reason": result.stop_reason,
+        "terminal_failure_category": result.failure_category,
+        "terminal_runtime_operation": terminal_diagnostic.operation
+        if terminal_diagnostic is not None
+        else None,
+        "terminal_repair_attempt_index": terminal_diagnostic.repair_attempt_index
+        if terminal_diagnostic is not None
+        else None,
+        "terminal_issue_class": _terminal_issue_class(result),
+    }
+
+
+def _terminal_runtime_diagnostic(
+    result: ChapterRunResult,
+    diagnostics: tuple[ChapterLLMRuntimeDiagnostic, ...],
+) -> ChapterLLMRuntimeDiagnostic | None:
+    """按终态 stop reason 匹配 terminal runtime diagnostic。
+
+    Args:
+        result: 单章编排结果。
+        diagnostics: runtime 诊断序列。
+
+    Returns:
+        匹配终态的 runtime diagnostic；没有匹配时返回 `None`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if result.stop_reason not in _RUNTIME_TERMINAL_STOP_REASONS:
+        return None
+    if result.stop_reason == "llm_timeout":
+        for diagnostic in diagnostics:
+            if _is_timeout_runtime_diagnostic(diagnostic):
+                return diagnostic
+        return None
+    expected_category = _RUNTIME_STOP_REASON_CATEGORY.get(result.stop_reason)
+    if expected_category is None:
+        for diagnostic in diagnostics:
+            if _is_code_bug_runtime_diagnostic(result, diagnostic):
+                return diagnostic
+        for diagnostic in diagnostics:
+            if diagnostic.provider_runtime_category is not None:
+                return diagnostic
+        return None
+    for diagnostic in diagnostics:
+        if diagnostic.provider_runtime_category == expected_category:
+            return diagnostic
+    return None
+
+
+def _representative_runtime_diagnostics(
+    result: ChapterRunResult,
+    diagnostics: tuple[ChapterLLMRuntimeDiagnostic, ...],
+    terminal_diagnostic: ChapterLLMRuntimeDiagnostic | None,
+) -> tuple[ChapterLLMRuntimeDiagnostic, ...]:
+    """选择 first-failed 摘要使用的代表 runtime diagnostic 序列。
+
+    Args:
+        result: 单章编排结果。
+        diagnostics: 全量 runtime 诊断序列。
+        terminal_diagnostic: 已匹配的 terminal diagnostic。
+
+    Returns:
+        代表性 runtime 诊断序列。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if terminal_diagnostic is None:
+        if result.stop_reason in _RUNTIME_TERMINAL_STOP_REASONS:
+            return ()
+        return diagnostics
+    return tuple(
+        diagnostic
+        for diagnostic in diagnostics
+        if _diagnostic_matches_terminal(result, diagnostic, terminal_diagnostic)
+    )
+
+
+def _diagnostic_matches_terminal(
+    result: ChapterRunResult,
+    diagnostic: ChapterLLMRuntimeDiagnostic,
+    terminal_diagnostic: ChapterLLMRuntimeDiagnostic,
+) -> bool:
+    """判断 diagnostic 是否属于同一个 terminal runtime failure。
+
+    Args:
+        result: 单章编排结果。
+        diagnostic: 候选 runtime diagnostic。
+        terminal_diagnostic: 已匹配的 terminal diagnostic。
+
+    Returns:
+        同一 terminal runtime failure 返回 `True`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if diagnostic.operation != terminal_diagnostic.operation:
+        return False
+    if diagnostic.repair_attempt_index != terminal_diagnostic.repair_attempt_index:
+        return False
+    if result.stop_reason == "llm_timeout":
+        return _is_timeout_runtime_diagnostic(diagnostic)
+    expected_category = _RUNTIME_STOP_REASON_CATEGORY.get(result.stop_reason)
+    if expected_category is None:
+        if _is_code_bug_runtime_diagnostic(result, diagnostic):
+            return True
+        return diagnostic.provider_runtime_category is not None
+    return diagnostic.provider_runtime_category == expected_category
+
+
+def _is_code_bug_runtime_diagnostic(
+    result: ChapterRunResult,
+    diagnostic: ChapterLLMRuntimeDiagnostic,
+) -> bool:
+    """判断 diagnostic 是否是 pre-provider code-bug terminal 诊断。
+
+    Args:
+        result: 单章运行结果。
+        diagnostic: 候选 runtime diagnostic。
+
+    Returns:
+        仅当 Service 终态和 diagnostic 都指向非 provider code_bug 时返回
+        `True`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return (
+        result.stop_reason == "llm_exception"
+        and result.failure_category == "code_bug"
+        and diagnostic.chapter_failure_category == "code_bug"
+        and diagnostic.provider_runtime_category is None
+    )
+
+
+def _diagnostic_consistency_status(
+    result: ChapterRunResult,
+    diagnostics: tuple[ChapterLLMRuntimeDiagnostic, ...],
+    terminal_diagnostic: ChapterLLMRuntimeDiagnostic | None,
+) -> DiagnosticConsistencyStatus:
+    """计算 terminal diagnostic consistency 状态。
+
+    Args:
+        result: 单章编排结果。
+        diagnostics: runtime 诊断序列。
+        terminal_diagnostic: 已匹配的 terminal diagnostic。
+
+    Returns:
+        allowlisted consistency status。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if result.stop_reason not in _RUNTIME_TERMINAL_STOP_REASONS:
+        if _has_provider_runtime_scalar(diagnostics):
+            return "non_runtime_terminal_without_scalar"
+        return "consistent"
+    if terminal_diagnostic is None:
+        return "missing_terminal_runtime_diagnostic"
+    expected_category = _RUNTIME_STOP_REASON_CATEGORY.get(result.stop_reason)
+    if expected_category is not None and result.stop_reason != "llm_timeout":
+        if terminal_diagnostic.provider_runtime_category != expected_category:
+            return "terminal_category_conflict"
+    if result.stop_reason == "llm_timeout" and not _is_timeout_runtime_diagnostic(
+        terminal_diagnostic
+    ):
+        return "terminal_category_conflict"
+    return "consistent"
+
+
+def _is_timeout_runtime_diagnostic(diagnostic: ChapterLLMRuntimeDiagnostic) -> bool:
+    """判断 runtime diagnostic 是否明确表示 provider timeout。
+
+    Args:
+        diagnostic: runtime 诊断。
+
+    Returns:
+        明确 timeout 返回 `True`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return (
+        diagnostic.provider_runtime_category == "timeout"
+        or diagnostic.timeout_budget_kind is not None
+    )
+
+
+def _has_provider_runtime_scalar(
+    diagnostics: tuple[ChapterLLMRuntimeDiagnostic, ...],
+) -> bool:
+    """判断非 runtime terminal 是否意外携带 provider runtime scalar。
+
+    Args:
+        diagnostics: runtime 诊断序列。
+
+    Returns:
+        存在 provider runtime scalar 返回 `True`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return any(
+        diagnostic.provider_runtime_category is not None
+        or diagnostic.provider_attempt_index is not None
+        or diagnostic.timeout_budget_kind is not None
+        for diagnostic in diagnostics
+    )
+
+
+def _terminal_issue_class(result: ChapterRunResult) -> str | None:
+    """提取安全 terminal issue class。
+
+    Args:
+        result: 单章编排结果。
+
+    Returns:
+        异常类型或 issue id prefix；缺失时返回 `None`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    for diagnostic in result.runtime_diagnostics:
+        if diagnostic.error_type:
+            return diagnostic.error_type
+    for attempt in result.attempts:
+        for diagnostic in attempt.runtime_diagnostics:
+            if diagnostic.error_type:
+                return diagnostic.error_type
+    if result.stop_reason in _RUNTIME_TERMINAL_STOP_REASONS:
+        for issue in result.issues:
+            issue_text = str(issue)
+            if "LLMProviderTimeoutError" in issue_text:
+                return "LLMProviderTimeoutError"
+            if "LLMProviderRateLimitError" in issue_text:
+                return "LLMProviderRateLimitError"
+            if "LLMProviderMalformedResponseError" in issue_text:
+                return "LLMProviderMalformedResponseError"
+            if "LLMProviderNetworkError" in issue_text:
+                return "LLMProviderNetworkError"
+    return _first_safe_issue_prefix(result.issues)
+
+
+def _first_safe_issue_prefix(issues: tuple[str, ...]) -> str | None:
+    """提取首个安全 issue prefix。
+
+    Args:
+        issues: issue 文本序列。
+
+    Returns:
+        安全 issue prefix；没有时返回 `None`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    for issue in issues:
+        raw_prefix = str(issue).split(":", 2)
+        if len(raw_prefix) >= 2:
+            prefix = f"{raw_prefix[0]}:{raw_prefix[1]}"
+        else:
+            continue
+        safe = "".join(
+            ch for ch in prefix if ch.isascii() and (ch.isalnum() or ch in "_:-")
+        )
+        if not safe.startswith(("writer:", "programmatic:", "llm:", "audit:")):
+            continue
+        if safe:
+            return safe[:80]
+    return None
+
+
+def _safe_status_code(status_code: int | None) -> int | None:
+    """过滤非标准 HTTP 状态码。
+
+    Args:
+        status_code: provider 诊断中的状态码。
+
+    Returns:
+        标准 HTTP 状态码整数；其他值返回 `None`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if isinstance(status_code, bool) or not isinstance(status_code, int):
+        return None
+    if 100 <= status_code <= 599:
+        return status_code
+    return None
+
+
 def _runtime_diagnostic_payload(
     diagnostic: ChapterLLMRuntimeDiagnostic,
 ) -> dict[str, object]:
@@ -2716,7 +2898,7 @@ def _runtime_diagnostic_payload(
         "provider_runtime_category": diagnostic.provider_runtime_category,
         "chapter_failure_category": diagnostic.chapter_failure_category,
         "elapsed_ms": diagnostic.elapsed_ms,
-        "status_code": diagnostic.status_code,
+        "status_code": _safe_status_code(diagnostic.status_code),
         "request_id": diagnostic.request_id,
         "finish_reason": diagnostic.finish_reason,
         "response_chars": diagnostic.response_chars,

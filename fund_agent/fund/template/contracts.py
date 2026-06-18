@@ -1,28 +1,99 @@
 """基金分析模板 CHAPTER_CONTRACT 机器契约。
 
 本模块在 Agent 层基金能力维护可机器消费的模板章节契约，覆盖模板第 0-7 章。
-契约内容来自 `docs/fund-analysis-template-draft.md` 的 CHAPTER_CONTRACT，
-章节标题与 `docs/design.md` 第 3.1 节保持一致。本模块不在运行时解析
-Markdown 注释，也不依赖模板渲染器的私有常量。
+契约内容来自 `docs/fund-analysis-template-draft.md` 中唯一的
+`TEMPLATE_CONTRACT_MANIFEST_JSON` 区块。本模块只负责严格解析、校验并投影为
+当前未类型化的 `TemplateContractManifest`，不再以 Python 常量维护章节契约正文。
 """
 
 from __future__ import annotations
 
+import argparse
+import json
 from dataclasses import dataclass
-from typing import Final, Literal, Mapping, get_args
+from functools import lru_cache
+from pathlib import Path
+from typing import Any, Final, Literal, Mapping, get_args
 
 from fund_agent.fund.fund_type import FundType
 
 LensKey = FundType | Literal["default"]
 
 _TEMPLATE_ID: Final[str] = "fund-analysis-template-v1"
+_TYPED_TEMPLATE_ID: Final[str] = "fund-analysis-template-typed-v1"
+_SCHEMA_VERSION: Final[str] = "typed_chapter_contract.v1"
 _SOURCE_PATH: Final[str] = "docs/fund-analysis-template-draft.md"
+_REPO_ROOT: Final[Path] = Path(__file__).resolve().parents[3]
+_DEFAULT_TEMPLATE_PATH: Final[Path] = _REPO_ROOT / _SOURCE_PATH
 _EXPECTED_CHAPTER_IDS: Final[tuple[int, ...]] = tuple(range(8))
+_EXPECTED_PUBLIC_CHAPTER_IDS: Final[list[int]] = list(_EXPECTED_CHAPTER_IDS)
 _SUPPORTED_FUND_TYPES: Final[tuple[FundType, ...]] = get_args(FundType)
 _SUPPORTED_LENS_KEYS: Final[frozenset[str]] = frozenset((*_SUPPORTED_FUND_TYPES, "default"))
 _SUPPORTED_LENS_PRIORITIES: Final[frozenset[str]] = frozenset(
     ("core", "high", "medium", "low")
 )
+_TEMPLATE_BLOCK_START: Final[str] = "TEMPLATE_CONTRACT_MANIFEST_JSON"
+_TEMPLATE_BLOCK_END: Final[str] = "END_TEMPLATE_CONTRACT_MANIFEST_JSON"
+_REQUIRED_OUTPUT_MISSING_BEHAVIORS: Final[frozenset[str]] = frozenset(
+    (
+        "render_evidence_gap",
+        "render_minimum_verification_question",
+        "delete_if_not_applicable",
+        "block",
+    )
+)
+_EVIDENCE_STATUSES: Final[frozenset[str]] = frozenset(
+    ("available", "missing", "unavailable", "not_applicable", "unreviewed")
+)
+_ALLOWED_CONTEXTS: Final[frozenset[str]] = frozenset(
+    ("required_label", "evidence_gap_statement", "quote", "anchor_caption")
+)
+_TOP_LEVEL_KEYS: Final[frozenset[str]] = frozenset(
+    (
+        "schema_version",
+        "template_id",
+        "source_template_id",
+        "source_path",
+        "public_chapter_ids",
+        "chapters",
+    )
+)
+_CHAPTER_KEYS: Final[frozenset[str]] = frozenset(
+    (
+        "chapter_id",
+        "title",
+        "narrative_mode",
+        "must_answer",
+        "must_not_cover",
+        "required_output_items",
+        "preferred_lens",
+        "audit_focus",
+        "consumes_chapter_conclusions",
+        "independent_action_source",
+        "internal_subcontracts",
+    )
+)
+_CLAUSE_KEYS: Final[frozenset[str]] = frozenset(("id", "text"))
+_MUST_NOT_COVER_KEYS: Final[frozenset[str]] = frozenset(
+    ("id", "text", "applies_when", "allowed_contexts")
+)
+_REQUIRED_OUTPUT_ITEM_KEYS: Final[frozenset[str]] = frozenset(
+    ("id", "text", "when_evidence_missing", "missing_evidence_reason")
+)
+_LENS_RULE_KEYS: Final[frozenset[str]] = frozenset(
+    ("fund_type", "statements", "facets_any", "priority")
+)
+_EVIDENCE_PREDICATE_KEYS: Final[frozenset[str]] = frozenset(
+    ("predicate_id", "requirement_ids", "required_statuses", "description")
+)
+_INTERNAL_SUBCONTRACT_KEYS: Final[frozenset[str]] = frozenset(
+    ("subcontract_id", "title", "requirement_ids", "public_chapter_id")
+)
+_FIELD_ID_SEGMENTS: Final[Mapping[str, str]] = {
+    "must_answer": "must_answer",
+    "must_not_cover": "must_not_cover",
+    "required_output_items": "required_output",
+}
 
 
 @dataclass(frozen=True, slots=True)
@@ -48,7 +119,7 @@ class ChapterContract:
 
     Attributes:
         chapter_id: 模板章节编号，必须为 0-7。
-        title: 章节标题，见 `docs/design.md` 第 3.1 节。
+        title: 章节标题，见模板第 0-7 章。
         narrative_mode: 叙事模式。
         must_answer: 本章必须回答的问题列表。
         must_not_cover: 本章禁止覆盖的内容。
@@ -80,687 +151,6 @@ class TemplateContractManifest:
     chapters: tuple[ChapterContract, ...]
 
 
-def _lens(
-    fund_type: LensKey,
-    statements: tuple[str, ...],
-    *,
-    facets_any: tuple[str, ...] = (),
-    priority: str | None = None,
-) -> TemplateLensRule:
-    """构造 preferred_lens 规则。
-
-    Args:
-        fund_type: 标准基金类型或 `default`。
-        statements: lens 说明文本。
-        facets_any: 适用细分标签。
-        priority: lens 优先级。
-
-    Returns:
-        构造后的 `TemplateLensRule`。
-
-    Raises:
-        无显式抛出；统一由 `validate_template_contract_manifest()` 校验。
-    """
-
-    return TemplateLensRule(
-        fund_type=fund_type,
-        statements=statements,
-        facets_any=facets_any,
-        priority=priority,
-    )
-
-
-def _chapter(
-    chapter_id: int,
-    title: str,
-    narrative_mode: str,
-    must_answer: tuple[str, ...],
-    must_not_cover: tuple[str, ...],
-    required_output_items: tuple[str, ...],
-    preferred_lens: Mapping[str, TemplateLensRule],
-) -> ChapterContract:
-    """构造单章契约。
-
-    Args:
-        chapter_id: 模板章节编号。
-        title: 章节标题。
-        narrative_mode: 叙事模式。
-        must_answer: 必须回答的问题。
-        must_not_cover: 禁止覆盖的内容。
-        required_output_items: 必须输出的条目。
-        preferred_lens: 基金类型视角规则。
-
-    Returns:
-        构造后的 `ChapterContract`。
-
-    Raises:
-        无显式抛出；统一由 `validate_template_contract_manifest()` 校验。
-    """
-
-    return ChapterContract(
-        chapter_id=chapter_id,
-        title=title,
-        narrative_mode=narrative_mode,
-        must_answer=must_answer,
-        must_not_cover=must_not_cover,
-        required_output_items=required_output_items,
-        preferred_lens=preferred_lens,
-    )
-
-
-_CHAPTERS: Final[tuple[ChapterContract, ...]] = (
-    _chapter(
-        0,
-        "投资要点概览",
-        "封面→动作→验证",
-        (
-            "用一句话定义这只基金到底是什么产品。",
-            "给出一个极简基金简介，帮助第一次接触这只基金的读者快速建立产品画像；只保留基金类型、基金经理、管理规模、成立时间中最必要的信息。",
-            "回答当前判断应是值得持有、需要关注还是建议替换。",
-            "回答这只基金当前业绩和运作处在什么状态，但只保留最能支撑当前动作判断的净值表现、超额收益或风险指标。",
-            "回答支撑当前动作的最主要理由，默认压缩成 1 条；只有在第二条判断彼此独立且缺一不可时才允许写第 2 条。",
-            "回答当前最值得盯住的变量是什么；先点出看这类基金时通常最先要看的东西；如果基金还有一个更能决定整份报告判断的特别情况，就把它放到最前面来写。",
-            "回答当前最大的风险是什么，默认只保留一个主要风险。",
-            "回答下一步最小验证问题是什么，默认先写 1 个最关键问题。",
-            "回答什么变化会升级、降级或终止当前动作，优先压缩成 1 个升级阈值和 1 个降级或终止阈值。",
-        ),
-        (
-            "不把本章写成后续章节的摘要、材料摘抄、按顺序复述，或信息罗列式导读。",
-            "不把“基金简介 / 业绩概览 / 风险提示”拆成并列分栏。",
-            "不把本章写成优点/缺点清单、投资亮点清单。",
-            "不把“最主要的理由”写成多条优点堆砌；默认只保留 1 条。",
-            "不把“最大风险”写成并列风险列表；默认只写一个主要风险。",
-            "不把“下一步最小验证问题”写成愿望清单；默认先写 1 个。",
-            "不把本章拆成“结论要点 / 详细情况 / 证据与出处”三段结构；第 0 章是封面页。",
-            "不输出“证据与出处”小节。",
-        ),
-        (
-            "一句话这是什么基金",
-            "基金简介",
-            "当前动作（🟢 值得持有 / 🟡 需要关注 / 🔴 建议替换）",
-            "当前业绩与运作状态",
-            "支撑当前动作的最主要理由",
-            "当前最值得盯住的变量",
-            "当前最大的风险",
-            "下一步最小验证问题",
-            "什么变化会升级、降级或终止当前动作",
-        ),
-        {
-            "default": _lens(
-                "default",
-                (
-                    "把本章当成基金体检封面页，读者应在最短时间内知道“这是什么基金、好不好、该不该继续持有”。",
-                    "默认写成三层封面：先给“一眼看懂”，再回答“为什么现在是这个动作”，最后回答“下一步怎么验证”。",
-                    "当前业绩状态要像给朋友的首屏导语，而不是迷你数据摘要。",
-                    "默认只保留 1 条最主要的理由、1 个主要风险、1 个最关键验证问题和 2 个阈值事件。",
-                ),
-            ),
-            "index_fund": _lens(
-                "index_fund",
-                ("指数基金优先回答：跟踪误差多大？费率多少？规模和流动性如何？",),
-                facets_any=("宽基指数基金", "行业/主题指数基金", "策略指数基金"),
-                priority="core",
-            ),
-            "active_fund": _lens(
-                "active_fund",
-                ("主动基金优先回答：超额收益是否稳定？基金经理是否靠谱？言行是否一致？",),
-                facets_any=("主动权益基金（价值风格）", "主动权益基金（均衡风格）", "主动权益基金（成长风格）"),
-                priority="core",
-            ),
-            "bond_fund": _lens(
-                "bond_fund",
-                ("债券基金优先回答：信用风险如何？久期多长？最大回撤多少？",),
-                facets_any=("纯债基金", "二级债基/混合债基", "偏债混合基金"),
-                priority="core",
-            ),
-            "enhanced_index": _lens(
-                "enhanced_index",
-                ("增强基金优先回答：超额收益是否稳定？跟踪误差多大？增强策略是什么？",),
-                facets_any=("指数增强基金",),
-                priority="core",
-            ),
-            "qdii_fund": _lens(
-                "qdii_fund",
-                ("QDII基金优先回答：投资哪个市场？汇率风险多大？费率是否合理？",),
-                facets_any=("QDII 基金",),
-                priority="core",
-            ),
-            "fof_fund": _lens(
-                "fof_fund",
-                ("FOF基金优先回答：底层基金配置策略是什么？双重收费问题如何？总费率多少？",),
-                facets_any=("FOF 基金",),
-                priority="core",
-            ),
-        },
-    ),
-    _chapter(
-        1,
-        "这只基金到底是什么产品",
-        "定义→策略→基准",
-        (
-            "用最低认知负担定义这只基金到底是什么产品。",
-            "说明基金的投资目标和投资策略（从招募说明书和年报§2提取）。",
-            "说明基金的业绩基准是什么，为什么选这个基准。",
-            "说明基金的类型分类（按有知有行三维标签：市值×风格×管理方式）。",
-            "回答看这类基金时，通常最先要看什么。",
-            "如果基金有一个不太符合常规、却会直接改变你对“这是什么产品”理解的特别情况，要说明它为什么重要。",
-        ),
-        (
-            "不展开基金经理选股能力的分析（属于第 3 章）。",
-            "不展开收益率的详细计算（属于第 2 章）。",
-            "不分析市场竞争或同业比较（属于横向比较模块，不在本报告范围内）。",
-        ),
-        (
-            "基金类型与分类标签",
-            "投资目标（一句话）",
-            "投资策略概述",
-            "业绩基准及合理性",
-            "看这类基金最先看什么",
-            "会改变产品理解的特别情况（如有）",
-        ),
-        {
-            "index_fund": _lens(
-                "index_fund",
-                (
-                    "指数基金优先回答：跟踪什么指数？指数编制规则是什么？成分股定期调整机制？",
-                    "lens: 指数基金的核心是“跟踪精度”和“费率”，先回答这两个问题。",
-                ),
-                facets_any=("宽基指数基金", "行业/主题指数基金", "策略指数基金"),
-                priority="core",
-            ),
-            "active_fund": _lens(
-                "active_fund",
-                (
-                    "主动基金优先回答：基金经理的投资哲学是什么？选股标准是什么？仓位管理策略是什么？",
-                    "lens: 主动基金的核心是“基金经理”，先回答“这个人怎么想、怎么做”。",
-                ),
-                facets_any=("主动权益基金（价值风格）", "主动权益基金（均衡风格）", "主动权益基金（成长风格）"),
-                priority="core",
-            ),
-            "bond_fund": _lens(
-                "bond_fund",
-                (
-                    "债券基金优先回答：久期策略是什么？信用下沉程度如何？是否有转债/股票仓位？",
-                    "lens: 债券基金的核心是“风险收益定位”，先回答“它到底有多安全”。",
-                ),
-                facets_any=("纯债基金", "二级债基/混合债基", "偏债混合基金"),
-                priority="core",
-            ),
-            "enhanced_index": _lens(
-                "enhanced_index",
-                (
-                    "增强基金优先回答：增强策略是什么（打新/量化/主观）？历史超额收益稳定性如何？跟踪误差多大？",
-                    "lens: 增强基金的核心是“超额收益的来源和稳定性”，先回答“多出来的收益从哪来”。",
-                ),
-                facets_any=("指数增强基金",),
-                priority="core",
-            ),
-            "qdii_fund": _lens(
-                "qdii_fund",
-                (
-                    "QDII基金优先回答：投资哪个市场/地区？跟踪什么指数？汇率对冲策略是什么？",
-                    "lens: QDII基金的核心是“跨境投资风险”，先回答“汇率风险和费率”。",
-                ),
-                facets_any=("QDII 基金",),
-                priority="core",
-            ),
-            "fof_fund": _lens(
-                "fof_fund",
-                (
-                    "FOF基金优先回答：资产配置策略是什么？底层基金筛选标准是什么？",
-                    "lens: FOF基金的核心是“配置能力”，先回答“如何选基金、如何配比例”。",
-                ),
-                facets_any=("FOF 基金",),
-                priority="core",
-            ),
-        },
-    ),
-    _chapter(
-        2,
-        "R=A+B-C 收益归因",
-        "拆解→判断→成本",
-        (
-            "近 1 年、3 年、5 年的基金净值增长率（R）。",
-            "同期业绩基准收益率（B）。",
-            "计算超额收益（A = R - B）。",
-            "判断超额收益是结构性的还是阶段性的。",
-            "拆解成本 C：管理费 + 托管费 + 销售服务费 + 交易成本（估算）。",
-            "判断超额收益是否为正且稳定、是否覆盖成本。",
-        ),
-        (
-            "不展开基金经理选股能力的详细归因（属于第 3 章）。",
-            "不展开市场走势分析（不属于本报告范围）。",
-            "不做未来收益预测。",
-        ),
-        (
-            "近 1/3/5 年净值增长率",
-            "近 1/3/5 年业绩基准收益率",
-            "超额收益（A = R - B）及稳定性",
-            "超额收益性质判断（结构性 vs 阶段性）",
-            "成本拆解（管理费、托管费、交易成本）",
-            "成本合理性判断（同类对比）",
-            "R=A+B-C 综合评估",
-        ),
-        {
-            "default": _lens(
-                "default",
-                (
-                    "核心区分：结构性超额（可持续的能力）vs 阶段性超额（风格顺风/运气）。",
-                    "结构性超额的特征：多年度为正、不同市场环境都为正、超额收益来源可解释。",
-                    "阶段性超额的特征：集中在某一年、与特定市场风格高度相关、无法解释来源。",
-                ),
-            ),
-            "index_fund": _lens(
-                "index_fund",
-                ("指数基金的核心不是超额收益，而是跟踪误差和费率。本章重点回答：跟踪误差多大？费率是否合理？",),
-                facets_any=("宽基指数基金", "行业/主题指数基金", "策略指数基金"),
-                priority="core",
-            ),
-        },
-    ),
-    _chapter(
-        3,
-        "基金经理画像与言行一致性",
-        "画像→验证→判断",
-        (
-            "基金经理的基本信息（从业年限、管理本基金时间、管理规模）。",
-            "基金经理宣称的投资策略和风格（从年报§4提取）。",
-            "基金经理实际的投资行为（从年报§8提取：行业配置、持仓集中度、换手率）。",
-            "言行一致性判断：说的和做的一样吗？主动基金如缺少已复核的换手率或风格变化证据，不得据此判断言行一致。",
-            "风格稳定性判断：跨期风格是否漂移？主动基金必须基于已复核的换手率或风格变化证据。",
-            "利益一致性判断：基金经理是否持有本基金？",
-        ),
-        (
-            "不做基金经理性格或人品的主观评价。",
-            "不猜测基金经理的动机。",
-            "不展开选股能力的量化分析（属于第 2 章超额收益范畴）。",
-            "不在换手率或风格变化证据缺失、不可用、未复核时，推断主动基金风格稳定、风格一致或言行一致。",
-        ),
-        (
-            "基金经理基本信息",
-            "宣称的投资策略（§4）",
-            "实际投资行为（§8）",
-            "言行一致性判断",
-            "风格稳定性判断",
-            "利益一致性判断",
-        ),
-        {
-            "default": _lens(
-                "default",
-                (
-                    "核心区分：利益一致 vs 利益冲突。",
-                    "✅ 一致信号：持有本基金、管理年限长、风格稳定、言行一致。",
-                    "⚠️ 冲突信号：不持有本基金、频繁变更、风格漂移、言行不一致。",
-                ),
-            ),
-            "index_fund": _lens(
-                "index_fund",
-                (
-                    "指数基金对基金经理依赖度低，重点回答：跟踪误差是否稳定？规模是否稳定？",
-                    "基金经理变更对指数基金影响较小，除非导致费率调整或清盘风险。",
-                ),
-                facets_any=("宽基指数基金", "行业/主题指数基金", "策略指数基金"),
-                priority="low",
-            ),
-            "active_fund": _lens(
-                "active_fund",
-                (
-                    "主动基金的核心是“基金经理”，本章是最关键章节。",
-                    "重点回答：这个人怎么想？怎么做？说和做一样吗？利益绑定了吗？",
-                ),
-                facets_any=("主动权益基金（价值风格）", "主动权益基金（均衡风格）", "主动权益基金（成长风格）"),
-                priority="core",
-            ),
-            "bond_fund": _lens(
-                "bond_fund",
-                ("债券基金重点回答：久期管理是否稳定？信用下沉程度是否与宣称一致？",),
-                facets_any=("纯债基金", "二级债基/混合债基", "偏债混合基金"),
-                priority="high",
-            ),
-            "enhanced_index": _lens(
-                "enhanced_index",
-                ("增强基金重点回答：增强策略是否稳定？基金经理是否过度偏离指数？",),
-                facets_any=("指数增强基金",),
-                priority="high",
-            ),
-            "qdii_fund": _lens(
-                "qdii_fund",
-                ("QDII基金重点回答：汇率风险管理是否稳定？投资地区配置是否与宣称一致？",),
-                facets_any=("QDII 基金",),
-                priority="high",
-            ),
-            "fof_fund": _lens(
-                "fof_fund",
-                ("FOF基金重点回答：底层基金配置是否稳定？是否频繁更换子基金？",),
-                facets_any=("FOF 基金",),
-                priority="high",
-            ),
-        },
-    ),
-    _chapter(
-        4,
-        "投资者获得感",
-        "数据→对比→判断",
-        (
-            "基金产品收益（净值增长率）。",
-            "投资者实际收益（盈利投资者占比、加权平均收益率）。",
-            "行为损益 = 投资者实际收益 - 基金产品收益。",
-            "份额变动趋势（资金是在追涨还是在抄底？）。",
-        ),
-        (
-            "不分析具体投资者的交易行为。",
-            "不做未来投资者行为预测。",
-        ),
-        (
-            "基金产品收益 vs 投资者实际收益",
-            "盈利投资者占比",
-            "行为损益估算",
-            "份额变动趋势",
-        ),
-        {
-            "default": _lens(
-                "default",
-                (
-                    "核心公式：投资者回报 = 基金产品收益 × 基民资金进出结构。",
-                    "即使基金好，如果投资者追涨杀跌，实际回报也会大打折扣。",
-                ),
-            ),
-            "index_fund": _lens(
-                "index_fund",
-                (
-                    "指数基金投资者行为模式：通常在市场大跌时赎回（恐慌）、大涨时申购（追涨）。",
-                    "重点回答：投资者是否在低点逃离？行为损益有多大？",
-                ),
-                facets_any=("宽基指数基金", "行业/主题指数基金", "策略指数基金"),
-                priority="high",
-            ),
-            "active_fund": _lens(
-                "active_fund",
-                (
-                    "主动基金投资者行为模式：受业绩排名影响大，容易追逐短期冠军。",
-                    "重点回答：投资者是否在业绩高点追入？是否在业绩低谷逃离？",
-                ),
-                facets_any=("主动权益基金（价值风格）", "主动权益基金（均衡风格）", "主动权益基金（成长风格）"),
-                priority="core",
-            ),
-            "bond_fund": _lens(
-                "bond_fund",
-                (
-                    "债券基金投资者行为模式：通常较稳定，但在信用风险事件时可能集中赎回。",
-                    "重点回答：是否有大额申赎波动？是否与债券市场波动相关？",
-                ),
-                facets_any=("纯债基金", "二级债基/混合债基", "偏债混合基金"),
-                priority="medium",
-            ),
-        },
-    ),
-    _chapter(
-        5,
-        "当前阶段与关键变化",
-        "变化→阶段→判断",
-        (
-            "当前阶段是什么（建仓期/稳定期/膨胀期/萎缩期/转型期）。",
-            "相比上一期或历史，过去一年最关键的 1-3 个变化是什么（基金经理、规模、策略、费率、仓位或大额申赎）。",
-            "这些变化是否影响原始投资假设或第 1-4 章判断。",
-            "为什么偏偏是现在需要关注这只基金。",
-            "下一步最小验证问题是什么。",
-        ),
-        (
-            "不做市场整体走势预测。",
-            "不罗列所有变化，只保留最关键的 1-3 个。",
-            "不给最终持有/替换结论。",
-            "不展开风险清单；变化事实只有转译为风险或否决项时才进入第 6 章。",
-            "不重复基金经理长期画像或成本收益总评。",
-        ),
-        (
-            "过去一年最关键的变化（1-3 个）",
-            "基金当前所处阶段",
-            "变化是否改变前文判断",
-            "接下来最该跟踪的变量",
-        ),
-        {
-            "default": _lens(
-                "default",
-                (
-                    "核心区分：结构性变化 vs 阶段性变化。",
-                    "结构性变化：基金经理变更、策略调整、费率调整、清盘风险。",
-                    "阶段性变化：规模波动、市场环境变化、短期业绩波动。",
-                ),
-            ),
-            "index_fund": _lens(
-                "index_fund",
-                (
-                    "指数基金重点跟踪：规模变化（影响流动性）、跟踪误差变化、费率调整。",
-                    "基金经理变更影响较小，除非导致清盘风险。",
-                ),
-                facets_any=("宽基指数基金", "行业/主题指数基金", "策略指数基金"),
-                priority="high",
-            ),
-            "active_fund": _lens(
-                "active_fund",
-                ("主动基金重点跟踪：基金经理变更（最关键）、规模剧变（影响策略执行）、风格漂移。",),
-                facets_any=("主动权益基金（价值风格）", "主动权益基金（均衡风格）", "主动权益基金（成长风格）"),
-                priority="core",
-            ),
-            "bond_fund": _lens(
-                "bond_fund",
-                ("债券基金重点跟踪：久期调整、信用下沉程度变化、规模剧变（影响配置能力）。",),
-                facets_any=("纯债基金", "二级债基/混合债基", "偏债混合基金"),
-                priority="high",
-            ),
-            "enhanced_index": _lens(
-                "enhanced_index",
-                ("增强基金重点跟踪：增强策略调整、跟踪误差变化、基金经理变更。",),
-                facets_any=("指数增强基金",),
-                priority="core",
-            ),
-            "qdii_fund": _lens(
-                "qdii_fund",
-                ("QDII基金重点跟踪：汇率政策变化、投资地区配置变化、跨境政策风险。",),
-                facets_any=("QDII 基金",),
-                priority="high",
-            ),
-            "fof_fund": _lens(
-                "fof_fund",
-                ("FOF基金重点跟踪：底层基金更换、配置策略调整、双重费率变化。",),
-                facets_any=("FOF 基金",),
-                priority="high",
-            ),
-        },
-    ),
-    _chapter(
-        6,
-        "核心风险与否决项",
-        "风险→否决→跟踪",
-        (
-            "核心风险是什么，其中哪些是结构性风险、哪些是阶段性风险。",
-            "最关键的风险或否决项（1-2 个最致命的风险）。",
-            "为什么足以改变结论——这个风险推翻了哪条核心假设。",
-            "是否触发一票否决，还是仍可跟踪。",
-            "压力测试结论是什么。",
-            "哪个信息缺口最可能改变最终判断，下一轮先验证什么。",
-        ),
-        (
-            "不把本章写成所有可能风险的罗列。",
-            "不把“最大风险”写成并列列表；默认只写 1 个最致命的。",
-            "不做风险发生概率的定量预测。",
-            "不复述当前阶段事实，除非明确转译为风险、压力测试或否决项。",
-            "不给最终持有/替换结论。",
-            "不预测收益或市场走势。",
-        ),
-        (
-            "最关键的风险或否决项",
-            "为什么足以改变结论",
-            "否决 vs 跟踪判断",
-            "下一轮先验证什么",
-        ),
-        {
-            "default": _lens(
-                "default",
-                (
-                    "核心区分：否决项（一票否决）vs 跟踪项（持续关注）vs 一般风险（正常承受）。",
-                    "否决项：清盘风险、基金经理离职、严重风格漂移、费率远超同类。",
-                    "跟踪项：规模波动、换手率变化、集中度变化。",
-                ),
-            ),
-            "index_fund": _lens(
-                "index_fund",
-                (
-                    "指数基金否决项：清盘风险（规模<5000万）、跟踪误差>3%、费率远超同类。",
-                    "指数基金跟踪项：规模变化、流动性变化、成分股调整。",
-                    "压力测试默认阈值：-30%（正常）/ -50%（极端）/ -70%（历史最差）。",
-                ),
-                facets_any=("宽基指数基金", "行业/主题指数基金", "策略指数基金"),
-                priority="core",
-            ),
-            "active_fund": _lens(
-                "active_fund",
-                (
-                    "主动基金否决项：基金经理离职、严重风格漂移、清盘风险、费率>2%/年。",
-                    "主动基金跟踪项：规模剧变、换手率异常、集中度变化。",
-                    "压力测试默认阈值：-25%（正常）/ -45%（极端）/ -65%（历史最差）。",
-                ),
-                facets_any=("主动权益基金（价值风格）", "主动权益基金（均衡风格）", "主动权益基金（成长风格）"),
-                priority="core",
-            ),
-            "bond_fund": _lens(
-                "bond_fund",
-                (
-                    "债券基金否决项：信用风险事件、清盘风险、久期严重偏离宣称。",
-                    "债券基金跟踪项：久期变化、信用下沉程度、规模变化。",
-                    "压力测试默认阈值：-5%（正常）/ -10%（极端）/ -20%（历史最差）。",
-                ),
-                facets_any=("纯债基金", "二级债基/混合债基", "偏债混合基金"),
-                priority="core",
-            ),
-            "enhanced_index": _lens(
-                "enhanced_index",
-                (
-                    "增强基金否决项：清盘风险、跟踪误差>4%、增强策略失效（连续2年负超额）。",
-                    "增强基金跟踪项：超额收益稳定性、规模变化、基金经理变更。",
-                    "压力测试默认阈值：-25%（正常）/ -45%（极端）/ -60%（历史最差）。",
-                ),
-                facets_any=("指数增强基金",),
-                priority="core",
-            ),
-            "qdii_fund": _lens(
-                "qdii_fund",
-                (
-                    "QDII基金否决项：清盘风险、汇率严重不利、跨境政策限制、费率>2.5%/年。",
-                    "QDII基金跟踪项：汇率变化、投资地区配置、流动性变化。",
-                    "压力测试默认阈值：-35%（正常）/ -55%（极端）/ -75%（历史最差）。",
-                ),
-                facets_any=("QDII 基金",),
-                priority="core",
-            ),
-            "fof_fund": _lens(
-                "fof_fund",
-                (
-                    "FOF基金否决项：清盘风险、双重费率过高（>2%/年）、底层基金频繁更换。",
-                    "FOF基金跟踪项：配置策略变化、底层基金表现、总费率变化。",
-                    "压力测试默认阈值：-20%（正常）/ -40%（极端）/ -55%（历史最差）。",
-                ),
-                facets_any=("FOF 基金",),
-                priority="core",
-            ),
-        },
-    ),
-    _chapter(
-        7,
-        "是否值得持有——最终判断",
-        "判断→依据→验证",
-        (
-            "三选一明确立场：值得持有、需要关注、建议替换。",
-            "为什么现在更适合这个判断，而不是另外两个。",
-            "当前最容易看错的地方是什么。",
-            "下一轮先核实什么（1-2 个最小验证问题）。",
-            "什么变化会升级、降级或终止当前判断。",
-        ),
-        (
-            "不输出具体的买入金额、卖出时机或仓位比例。",
-            "不把本章写成前 6 章的摘要复述。",
-            "不把“为什么”写成多条理由堆砌；默认只保留 1-2 条核心依据。",
-        ),
-        (
-            "最终判断（🟢 值得持有 / 🟡 需要关注 / 🔴 建议替换）",
-            "支撑判断的核心依据（1-2 条）",
-            "当前最容易看错的地方",
-            "下一轮最小验证计划",
-            "危级/降级阈值",
-        ),
-        {
-            "default": _lens(
-                "default",
-                (
-                    "三选一明确立场：值得持有、需要关注、建议替换。",
-                    "判断依据优先级：否决项 > 核心优势 > 一般特征。",
-                ),
-            ),
-            "index_fund": _lens(
-                "index_fund",
-                (
-                    "指数基金判断依据优先级：费率 > 跟踪误差 > 规模/流动性 > 基金公司。",
-                    "“值得持有”的典型条件：费率低于同类中位数、跟踪误差<1%、规模>2亿。",
-                ),
-                facets_any=("宽基指数基金", "行业/主题指数基金", "策略指数基金"),
-                priority="core",
-            ),
-            "active_fund": _lens(
-                "active_fund",
-                (
-                    "主动基金判断依据优先级：基金经理 > 超额收益稳定性 > 言行一致性 > 费率。",
-                    "“值得持有”的典型条件：基金经理任职>3年、超额收益稳定为正、言行一致、持有本基金。",
-                ),
-                facets_any=("主动权益基金（价值风格）", "主动权益基金（均衡风格）", "主动权益基金（成长风格）"),
-                priority="core",
-            ),
-            "bond_fund": _lens(
-                "bond_fund",
-                (
-                    "债券基金判断依据优先级：信用风险 > 久期稳定性 > 最大回撤 > 费率。",
-                    "“值得持有”的典型条件：无信用风险事件、久期稳定、最大回撤可控、费率合理。",
-                ),
-                facets_any=("纯债基金", "二级债基/混合债基", "偏债混合基金"),
-                priority="core",
-            ),
-            "enhanced_index": _lens(
-                "enhanced_index",
-                (
-                    "增强基金判断依据优先级：超额收益稳定性 > 跟踪误差 > 费率 > 基金经理。",
-                    "“值得持有”的典型条件：连续3年正超额、跟踪误差<2%、费率合理。",
-                ),
-                facets_any=("指数增强基金",),
-                priority="core",
-            ),
-            "qdii_fund": _lens(
-                "qdii_fund",
-                (
-                    "QDII基金判断依据优先级：费率 > 跟踪误差 > 汇率风险 > 规模/流动性。",
-                    "“值得持有”的典型条件：费率合理、跟踪误差可控、汇率风险可承受、规模稳定。",
-                ),
-                facets_any=("QDII 基金",),
-                priority="core",
-            ),
-            "fof_fund": _lens(
-                "fof_fund",
-                (
-                    "FOF基金判断依据优先级：配置策略 > 总费率 > 底层基金质量 > 基金经理。",
-                    "“值得持有”的典型条件：配置策略清晰、总费率<1.5%、底层基金质量稳定。",
-                ),
-                facets_any=("FOF 基金",),
-                priority="core",
-            ),
-        },
-    ),
-)
-
-_MANIFEST: Final[TemplateContractManifest] = TemplateContractManifest(
-    template_id=_TEMPLATE_ID,
-    source_path=_SOURCE_PATH,
-    chapters=_CHAPTERS,
-)
-
-
 def load_template_contract_manifest() -> TemplateContractManifest:
     """读取基金分析模板契约清单。
 
@@ -768,11 +158,11 @@ def load_template_contract_manifest() -> TemplateContractManifest:
         覆盖模板第 0-7 章的 `TemplateContractManifest`。
 
     Raises:
-        ValueError: 内置 manifest 不满足章节数量、字段完整性或 lens 可解析性时抛出。
+        ValueError: 模板文档缺失、JSON 区块不唯一、JSON 非法、结构漂移或
+            manifest 不满足章节数量、字段完整性、lens 可解析性时抛出。
     """
 
-    validate_template_contract_manifest(_MANIFEST)
-    return _MANIFEST
+    return _load_template_contract_manifest_from_path(_DEFAULT_TEMPLATE_PATH)
 
 
 def get_chapter_contract(chapter_id: int) -> ChapterContract:
@@ -857,6 +247,546 @@ def validate_template_contract_manifest(manifest: TemplateContractManifest) -> N
                 )
 
 
+def _load_template_contract_manifest_from_path(path: str | Path) -> TemplateContractManifest:
+    """从指定模板文档路径读取未类型化章节契约。
+
+    Args:
+        path: 包含唯一 `TEMPLATE_CONTRACT_MANIFEST_JSON` 区块的 Markdown 文件路径。
+
+    Returns:
+        从模板 JSON 投影得到的 `TemplateContractManifest`。
+
+    Raises:
+        ValueError: 文件读取失败、JSON 区块或 manifest 结构不满足 fail-closed 约束时抛出。
+    """
+
+    path_key = str(Path(path).resolve())
+    return _load_template_contract_manifest_from_path_cached(path_key)
+
+
+@lru_cache(maxsize=16)
+def _load_template_contract_manifest_from_path_cached(path_key: str) -> TemplateContractManifest:
+    """带路径键缓存地读取模板契约。
+
+    Args:
+        path_key: 已解析为绝对路径字符串的模板文件路径。
+
+    Returns:
+        从模板 JSON 投影得到的 `TemplateContractManifest`。
+
+    Raises:
+        ValueError: 文件读取失败、JSON 区块或 manifest 结构不满足 fail-closed 约束时抛出。
+    """
+
+    template_path = Path(path_key)
+    try:
+        template_text = template_path.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise ValueError(f"读取模板契约文档失败：{template_path}") from exc
+
+    raw_manifest = _parse_template_contract_manifest_json(template_text)
+    manifest = _project_untyped_manifest(raw_manifest)
+    validate_template_contract_manifest(manifest)
+    return manifest
+
+
+def _clear_template_contract_manifest_cache() -> None:
+    """清理模板契约路径缓存，供测试隔离临时模板文件。
+
+    Returns:
+        无。
+
+    Raises:
+        无显式抛出。
+    """
+
+    _load_template_contract_manifest_from_path_cached.cache_clear()
+
+
+def _parse_template_contract_manifest_json(template_text: str) -> Mapping[str, Any]:
+    """从 Markdown 文本中提取并解析唯一模板契约 JSON 区块。
+
+    Args:
+        template_text: 模板 Markdown 完整文本。
+
+    Returns:
+        解析后的 JSON object。
+
+    Raises:
+        ValueError: 区块缺失、重复、为空、非 JSON object 或包含未知顶层字段时抛出。
+    """
+
+    blocks = _extract_template_manifest_blocks(template_text)
+    if not blocks:
+        raise ValueError("缺少 TEMPLATE_CONTRACT_MANIFEST_JSON 区块")
+    if len(blocks) > 1:
+        raise ValueError("TEMPLATE_CONTRACT_MANIFEST_JSON 区块必须 exactly one")
+
+    block = blocks[0].strip()
+    if not block:
+        raise ValueError("TEMPLATE_CONTRACT_MANIFEST_JSON 区块不能为空")
+
+    try:
+        parsed = json.loads(block)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"TEMPLATE_CONTRACT_MANIFEST_JSON 不是合法 JSON：{exc.msg}") from exc
+
+    if not isinstance(parsed, dict):
+        raise ValueError("TEMPLATE_CONTRACT_MANIFEST_JSON 顶层必须是 JSON object")
+    _reject_unknown_keys(parsed, _TOP_LEVEL_KEYS, "manifest")
+    return parsed
+
+
+def _extract_template_manifest_blocks(template_text: str) -> tuple[str, ...]:
+    """提取所有模板契约 JSON 区块正文。
+
+    Args:
+        template_text: 模板 Markdown 完整文本。
+
+    Returns:
+        所有匹配区块正文组成的元组。
+
+    Raises:
+        ValueError: 起止 marker 不配对时抛出。
+    """
+
+    blocks: list[str] = []
+    current_block_lines: list[str] | None = None
+    for line_number, line in enumerate(template_text.splitlines(), start=1):
+        stripped_line = line.strip()
+        if stripped_line == _TEMPLATE_BLOCK_START:
+            if current_block_lines is not None:
+                raise ValueError("TEMPLATE_CONTRACT_MANIFEST_JSON 区块嵌套或重复开始")
+            current_block_lines = []
+            continue
+        if stripped_line == _TEMPLATE_BLOCK_END:
+            if current_block_lines is None:
+                raise ValueError(
+                    f"TEMPLATE_CONTRACT_MANIFEST_JSON 区块 END marker 没有开始：line={line_number}"
+                )
+            blocks.append("\n".join(current_block_lines))
+            current_block_lines = None
+            continue
+        if current_block_lines is not None:
+            current_block_lines.append(line)
+    if current_block_lines is not None:
+        raise ValueError("TEMPLATE_CONTRACT_MANIFEST_JSON 区块缺少 END marker")
+    return tuple(blocks)
+
+
+def _project_untyped_manifest(raw_manifest: Mapping[str, Any]) -> TemplateContractManifest:
+    """把模板 JSON object 投影为当前未类型化 manifest。
+
+    Args:
+        raw_manifest: 已通过 JSON 解析的模板契约 object。
+
+    Returns:
+        `TemplateContractManifest` 未类型化投影。
+
+    Raises:
+        ValueError: 顶层字段、章节字段或嵌套契约字段漂移时抛出。
+    """
+
+    _validate_top_level_manifest(raw_manifest)
+    chapters_value = raw_manifest["chapters"]
+    if not isinstance(chapters_value, list):
+        raise ValueError("manifest.chapters 必须是 array")
+
+    chapters = tuple(
+        _project_chapter_contract(chapter_value, index)
+        for index, chapter_value in enumerate(chapters_value)
+    )
+    manifest = TemplateContractManifest(
+        template_id=_read_required_string(raw_manifest, "source_template_id", "manifest.source_template_id"),
+        source_path=_read_required_string(raw_manifest, "source_path", "manifest.source_path"),
+        chapters=chapters,
+    )
+    return manifest
+
+
+def _validate_top_level_manifest(raw_manifest: Mapping[str, Any]) -> None:
+    """校验模板 JSON 顶层字段。
+
+    Args:
+        raw_manifest: 已通过 JSON 解析的模板契约 object。
+
+    Returns:
+        校验通过时返回 `None`。
+
+    Raises:
+        ValueError: 顶层字段缺失、空值或固定值漂移时抛出。
+    """
+
+    _require_exact_keys(raw_manifest, _TOP_LEVEL_KEYS, "manifest")
+    _require_exact_string(raw_manifest, "schema_version", _SCHEMA_VERSION, "manifest.schema_version")
+    _require_exact_string(raw_manifest, "template_id", _TYPED_TEMPLATE_ID, "manifest.template_id")
+    _require_exact_string(
+        raw_manifest,
+        "source_template_id",
+        _TEMPLATE_ID,
+        "manifest.source_template_id",
+    )
+    _require_exact_string(raw_manifest, "source_path", _SOURCE_PATH, "manifest.source_path")
+    public_chapter_ids = raw_manifest["public_chapter_ids"]
+    if public_chapter_ids != _EXPECTED_PUBLIC_CHAPTER_IDS:
+        raise ValueError("manifest.public_chapter_ids 必须 exactly [0,1,2,3,4,5,6,7]")
+
+
+def _project_chapter_contract(raw_chapter: Any, index: int) -> ChapterContract:
+    """把单个章节 JSON object 投影为 `ChapterContract`。
+
+    Args:
+        raw_chapter: 单章 JSON object。
+        index: 当前章节在 chapters array 中的位置，用于错误路径。
+
+    Returns:
+        投影后的 `ChapterContract`。
+
+    Raises:
+        ValueError: 单章字段缺失、未知或嵌套字段结构不满足契约时抛出。
+    """
+
+    path = f"chapters[{index}]"
+    if not isinstance(raw_chapter, dict):
+        raise ValueError(f"{path} 必须是 object")
+    _require_exact_keys(raw_chapter, _CHAPTER_KEYS, path)
+
+    chapter_id = _read_required_int(raw_chapter, "chapter_id", f"{path}.chapter_id")
+    if chapter_id != index:
+        raise ValueError(f"{path}.chapter_id 必须等于当前位置 {index}")
+
+    must_answer = _project_text_entries(
+        raw_chapter["must_answer"],
+        chapter_id,
+        "must_answer",
+        f"{path}.must_answer",
+        _CLAUSE_KEYS,
+    )
+    must_not_cover = _project_must_not_cover_entries(
+        raw_chapter["must_not_cover"],
+        chapter_id,
+        f"{path}.must_not_cover",
+    )
+    required_output_items = _project_required_output_items(
+        raw_chapter["required_output_items"],
+        chapter_id,
+        f"{path}.required_output_items",
+    )
+    preferred_lens = _project_preferred_lens(
+        raw_chapter["preferred_lens"],
+        chapter_id,
+        f"{path}.preferred_lens",
+    )
+    _validate_chapter_sidecar_fields(raw_chapter, chapter_id, path)
+
+    return ChapterContract(
+        chapter_id=chapter_id,
+        title=_read_required_string(raw_chapter, "title", f"{path}.title"),
+        narrative_mode=_read_required_string(
+            raw_chapter,
+            "narrative_mode",
+            f"{path}.narrative_mode",
+        ),
+        must_answer=must_answer,
+        must_not_cover=must_not_cover,
+        required_output_items=required_output_items,
+        preferred_lens=preferred_lens,
+    )
+
+
+def _project_text_entries(
+    raw_entries: Any,
+    chapter_id: int,
+    field_name: str,
+    path: str,
+    expected_keys: frozenset[str],
+) -> tuple[str, ...]:
+    """投影带 stable id 和 text 的条目数组。
+
+    Args:
+        raw_entries: JSON array。
+        chapter_id: 当前章节编号。
+        field_name: 当前字段名。
+        path: 错误路径。
+        expected_keys: 当前条目允许出现的字段集合。
+
+    Returns:
+        按原顺序投影得到的文本元组。
+
+    Raises:
+        ValueError: 条目数组为空、条目不是 object、unknown keys、stable id 或 text 无效时抛出。
+    """
+
+    entries = _read_non_empty_array(raw_entries, path)
+    texts: list[str] = []
+    for index, raw_entry in enumerate(entries):
+        entry_path = f"{path}[{index}]"
+        if not isinstance(raw_entry, dict):
+            raise ValueError(f"{entry_path} 必须是 object")
+        _require_exact_keys(raw_entry, expected_keys, entry_path)
+        _validate_entry_id(
+            _read_required_string(raw_entry, "id", f"{entry_path}.id"),
+            chapter_id,
+            field_name,
+            index,
+            f"{entry_path}.id",
+        )
+        texts.append(_read_required_string(raw_entry, "text", f"{entry_path}.text"))
+    return tuple(texts)
+
+
+def _project_must_not_cover_entries(
+    raw_entries: Any,
+    chapter_id: int,
+    path: str,
+) -> tuple[str, ...]:
+    """投影 must_not_cover 条目并校验条件谓词结构。
+
+    Args:
+        raw_entries: `must_not_cover` JSON array。
+        chapter_id: 当前章节编号。
+        path: 错误路径。
+
+    Returns:
+        按原顺序投影得到的 must_not_cover 文本元组。
+
+    Raises:
+        ValueError: 条目、`applies_when` 或 `allowed_contexts` 结构无效时抛出。
+    """
+
+    entries = _read_non_empty_array(raw_entries, path)
+    texts: list[str] = []
+    for index, raw_entry in enumerate(entries):
+        entry_path = f"{path}[{index}]"
+        if not isinstance(raw_entry, dict):
+            raise ValueError(f"{entry_path} 必须是 object")
+        _require_exact_keys(raw_entry, _MUST_NOT_COVER_KEYS, entry_path)
+        _validate_entry_id(
+            _read_required_string(raw_entry, "id", f"{entry_path}.id"),
+            chapter_id,
+            "must_not_cover",
+            index,
+            f"{entry_path}.id",
+        )
+        _validate_applies_when(raw_entry["applies_when"], f"{entry_path}.applies_when")
+        allowed_contexts = _read_string_array(
+            raw_entry["allowed_contexts"],
+            f"{entry_path}.allowed_contexts",
+            allow_empty=True,
+        )
+        if raw_entry["applies_when"] is None and allowed_contexts:
+            raise ValueError(f"{entry_path}.allowed_contexts 在 applies_when 为 null 时必须为空")
+        if raw_entry["applies_when"] is not None and not allowed_contexts:
+            raise ValueError(f"{entry_path}.allowed_contexts 在 applies_when 非空时不能为空")
+        for allowed_context in allowed_contexts:
+            if allowed_context not in _ALLOWED_CONTEXTS:
+                raise ValueError(f"{entry_path}.allowed_contexts 存在不支持的上下文：{allowed_context}")
+        texts.append(_read_required_string(raw_entry, "text", f"{entry_path}.text"))
+    return tuple(texts)
+
+
+def _project_required_output_items(
+    raw_entries: Any,
+    chapter_id: int,
+    path: str,
+) -> tuple[str, ...]:
+    """投影 required_output_items 条目并校验缺证处理策略。
+
+    Args:
+        raw_entries: `required_output_items` JSON array。
+        chapter_id: 当前章节编号。
+        path: 错误路径。
+
+    Returns:
+        按原顺序投影得到的 required output 文本元组。
+
+    Raises:
+        ValueError: 条目 stable id、text、缺证策略或缺证原因无效时抛出。
+    """
+
+    entries = _read_non_empty_array(raw_entries, path)
+    texts: list[str] = []
+    for index, raw_entry in enumerate(entries):
+        entry_path = f"{path}[{index}]"
+        if not isinstance(raw_entry, dict):
+            raise ValueError(f"{entry_path} 必须是 object")
+        _require_exact_keys(raw_entry, _REQUIRED_OUTPUT_ITEM_KEYS, entry_path)
+        _validate_entry_id(
+            _read_required_string(raw_entry, "id", f"{entry_path}.id"),
+            chapter_id,
+            "required_output_items",
+            index,
+            f"{entry_path}.id",
+        )
+        behavior = raw_entry["when_evidence_missing"]
+        if behavior is not None:
+            if not isinstance(behavior, str) or not behavior.strip():
+                raise ValueError(f"{entry_path}.when_evidence_missing 必须是非空字符串或 null")
+            if behavior not in _REQUIRED_OUTPUT_MISSING_BEHAVIORS:
+                raise ValueError(f"{entry_path}.when_evidence_missing 不受支持：{behavior}")
+            _read_required_string(
+                raw_entry,
+                "missing_evidence_reason",
+                f"{entry_path}.missing_evidence_reason",
+            )
+        elif raw_entry["missing_evidence_reason"] is not None:
+            raise ValueError(f"{entry_path}.missing_evidence_reason 在策略为 null 时必须为 null")
+        texts.append(_read_required_string(raw_entry, "text", f"{entry_path}.text"))
+    return tuple(texts)
+
+
+def _project_preferred_lens(
+    raw_lens: Any,
+    chapter_id: int,
+    path: str,
+) -> Mapping[str, TemplateLensRule]:
+    """投影 preferred_lens object。
+
+    Args:
+        raw_lens: `preferred_lens` JSON object。
+        chapter_id: 当前章节编号。
+        path: 错误路径。
+
+    Returns:
+        以 lens key 为键的 `TemplateLensRule` 映射。
+
+    Raises:
+        ValueError: lens 不是 object、为空、key 不受支持、fund_type 不一致或字段无效时抛出。
+    """
+
+    if not isinstance(raw_lens, dict):
+        raise ValueError(f"{path} 必须是 object")
+    if not raw_lens:
+        raise ValueError(f"{path} 不能为空")
+
+    projected: dict[str, TemplateLensRule] = {}
+    for lens_key, raw_rule in raw_lens.items():
+        rule_path = f"{path}.{lens_key}"
+        if lens_key not in _SUPPORTED_LENS_KEYS:
+            raise ValueError(f"{path} 存在不支持的 lens key：{lens_key}")
+        if not isinstance(raw_rule, dict):
+            raise ValueError(f"{rule_path} 必须是 object")
+        _require_exact_keys(raw_rule, _LENS_RULE_KEYS, rule_path)
+        fund_type = _read_required_string(raw_rule, "fund_type", f"{rule_path}.fund_type")
+        if fund_type != lens_key:
+            raise ValueError(f"{rule_path}.fund_type 必须等于 lens key")
+        statements = tuple(
+            _read_string_array(raw_rule["statements"], f"{rule_path}.statements", allow_empty=False)
+        )
+        facets_any = tuple(
+            _read_string_array(raw_rule["facets_any"], f"{rule_path}.facets_any", allow_empty=True)
+        )
+        priority = _read_optional_priority(raw_rule["priority"], f"{rule_path}.priority")
+        projected[lens_key] = TemplateLensRule(
+            fund_type=fund_type,
+            statements=statements,
+            facets_any=facets_any,
+            priority=priority,
+        )
+
+    return projected
+
+
+def _validate_chapter_sidecar_fields(raw_chapter: Mapping[str, Any], chapter_id: int, path: str) -> None:
+    """校验当前 untyped 投影不消费但属于 canonical JSON 的章节侧字段。
+
+    Args:
+        raw_chapter: 单章 JSON object。
+        chapter_id: 当前章节编号。
+        path: 错误路径。
+
+    Returns:
+        校验通过时返回 `None`。
+
+    Raises:
+        ValueError: 侧字段类型、空值或章节引用无效时抛出。
+    """
+
+    _read_string_array(raw_chapter["audit_focus"], f"{path}.audit_focus", allow_empty=False)
+    consumes = raw_chapter["consumes_chapter_conclusions"]
+    if not isinstance(consumes, list):
+        raise ValueError(f"{path}.consumes_chapter_conclusions 必须是 array")
+    for index, consumed_chapter_id in enumerate(consumes):
+        if consumed_chapter_id not in _EXPECTED_CHAPTER_IDS:
+            raise ValueError(
+                f"{path}.consumes_chapter_conclusions[{index}] 必须是 0..7 的章节 id"
+            )
+    if not isinstance(raw_chapter["independent_action_source"], bool):
+        raise ValueError(f"{path}.independent_action_source 必须是 boolean")
+    _validate_internal_subcontracts(
+        raw_chapter["internal_subcontracts"],
+        chapter_id,
+        f"{path}.internal_subcontracts",
+    )
+
+
+def _validate_internal_subcontracts(raw_subcontracts: Any, chapter_id: int, path: str) -> None:
+    """校验内部 subcontract 数组结构。
+
+    Args:
+        raw_subcontracts: `internal_subcontracts` JSON array。
+        chapter_id: 当前章节编号。
+        path: 错误路径。
+
+    Returns:
+        校验通过时返回 `None`。
+
+    Raises:
+        ValueError: subcontract 不是 object、含 unknown keys、空字段或 public chapter 泄漏时抛出。
+    """
+
+    if not isinstance(raw_subcontracts, list):
+        raise ValueError(f"{path} 必须是 array")
+    for index, raw_subcontract in enumerate(raw_subcontracts):
+        subcontract_path = f"{path}[{index}]"
+        if not isinstance(raw_subcontract, dict):
+            raise ValueError(f"{subcontract_path} 必须是 object")
+        _require_exact_keys(raw_subcontract, _INTERNAL_SUBCONTRACT_KEYS, subcontract_path)
+        _read_required_string(raw_subcontract, "subcontract_id", f"{subcontract_path}.subcontract_id")
+        _read_required_string(raw_subcontract, "title", f"{subcontract_path}.title")
+        _read_string_array(
+            raw_subcontract["requirement_ids"],
+            f"{subcontract_path}.requirement_ids",
+            allow_empty=False,
+        )
+        if raw_subcontract["public_chapter_id"] is not None:
+            raise ValueError(f"{subcontract_path}.public_chapter_id 必须为 null")
+    if chapter_id != 2 and raw_subcontracts:
+        raise ValueError(f"{path} 仅允许第 2 章声明内部 subcontract")
+
+
+def _validate_applies_when(raw_predicate: Any, path: str) -> None:
+    """校验 evidence predicate 结构。
+
+    Args:
+        raw_predicate: `applies_when` JSON value。
+        path: 错误路径。
+
+    Returns:
+        校验通过时返回 `None`。
+
+    Raises:
+        ValueError: predicate 字段缺失、unknown keys、数组为空或状态值不受支持时抛出。
+    """
+
+    if raw_predicate is None:
+        return
+    if not isinstance(raw_predicate, dict):
+        raise ValueError(f"{path} 必须是 object 或 null")
+    _require_exact_keys(raw_predicate, _EVIDENCE_PREDICATE_KEYS, path)
+    _read_required_string(raw_predicate, "predicate_id", f"{path}.predicate_id")
+    _read_string_array(raw_predicate["requirement_ids"], f"{path}.requirement_ids", allow_empty=False)
+    statuses = _read_string_array(
+        raw_predicate["required_statuses"],
+        f"{path}.required_statuses",
+        allow_empty=False,
+    )
+    for status in statuses:
+        if status not in _EVIDENCE_STATUSES:
+            raise ValueError(f"{path}.required_statuses 存在不支持的状态：{status}")
+    _read_required_string(raw_predicate, "description", f"{path}.description")
+
+
 def _validate_chapter_contract(chapter: ChapterContract) -> None:
     """校验单章契约字段。
 
@@ -938,3 +868,249 @@ def _validate_non_empty_text_tuple(values: tuple[str, ...], field_name: str, cha
         raise ValueError(f"章节 {chapter_id} {field_name} 不能为空")
     if any(not value.strip() for value in values):
         raise ValueError(f"章节 {chapter_id} {field_name} 存在空值")
+
+
+def _validate_entry_id(
+    entry_id: str,
+    chapter_id: int,
+    field_name: str,
+    index: int,
+    path: str,
+) -> None:
+    """校验 stable id 是否匹配章节、字段和顺序。
+
+    Args:
+        entry_id: 条目 stable id。
+        chapter_id: 当前章节编号。
+        field_name: 当前字段名。
+        index: 条目位置，从 0 开始。
+        path: 错误路径。
+
+    Returns:
+        校验通过时返回 `None`。
+
+    Raises:
+        ValueError: stable id 与 `chN.<field>.item_XX` 形状不一致时抛出。
+    """
+
+    field_segment = _FIELD_ID_SEGMENTS[field_name]
+    expected_id = f"ch{chapter_id}.{field_segment}.item_{index + 1:02d}"
+    if entry_id != expected_id:
+        raise ValueError(f"{path} stable id 必须为 {expected_id}，实际为 {entry_id}")
+
+
+def _read_required_string(data: Mapping[str, Any], key: str, path: str) -> str:
+    """读取必需非空字符串字段。
+
+    Args:
+        data: JSON object。
+        key: 字段名。
+        path: 错误路径。
+
+    Returns:
+        去除首尾空白后的原字符串值。
+
+    Raises:
+        ValueError: 字段不是非空字符串时抛出。
+    """
+
+    value = data[key]
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"{path} 必须是非空字符串")
+    return value
+
+
+def _read_required_int(data: Mapping[str, Any], key: str, path: str) -> int:
+    """读取必需整数字段。
+
+    Args:
+        data: JSON object。
+        key: 字段名。
+        path: 错误路径。
+
+    Returns:
+        整数字段值。
+
+    Raises:
+        ValueError: 字段不是整数或是 boolean 时抛出。
+    """
+
+    value = data[key]
+    if not isinstance(value, int) or isinstance(value, bool):
+        raise ValueError(f"{path} 必须是 integer")
+    return value
+
+
+def _read_non_empty_array(value: Any, path: str) -> list[Any]:
+    """读取非空 JSON array。
+
+    Args:
+        value: 待检查 JSON value。
+        path: 错误路径。
+
+    Returns:
+        原始 list 值。
+
+    Raises:
+        ValueError: 值不是 array 或为空时抛出。
+    """
+
+    if not isinstance(value, list):
+        raise ValueError(f"{path} 必须是 array")
+    if not value:
+        raise ValueError(f"{path} 不能为空")
+    return value
+
+
+def _read_string_array(value: Any, path: str, *, allow_empty: bool) -> tuple[str, ...]:
+    """读取字符串数组。
+
+    Args:
+        value: 待检查 JSON value。
+        path: 错误路径。
+        allow_empty: 是否允许空数组。
+
+    Returns:
+        字符串元组。
+
+    Raises:
+        ValueError: 值不是 array、空数组不被允许或成员不是非空字符串时抛出。
+    """
+
+    if not isinstance(value, list):
+        raise ValueError(f"{path} 必须是 array")
+    if not allow_empty and not value:
+        raise ValueError(f"{path} 不能为空")
+    for index, item in enumerate(value):
+        if not isinstance(item, str) or not item.strip():
+            raise ValueError(f"{path}[{index}] 必须是非空字符串")
+    return tuple(value)
+
+
+def _read_optional_priority(value: Any, path: str) -> str | None:
+    """读取 preferred_lens priority 字段。
+
+    Args:
+        value: JSON priority value。
+        path: 错误路径。
+
+    Returns:
+        `None` 或闭集内 priority 字符串。
+
+    Raises:
+        ValueError: priority 类型错误、空字符串或不在闭集内时抛出。
+    """
+
+    if value is None:
+        return None
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"{path} 必须是非空字符串或 null")
+    if value not in _SUPPORTED_LENS_PRIORITIES:
+        raise ValueError(f"{path} 不受支持：{value}")
+    return value
+
+
+def _require_exact_string(
+    data: Mapping[str, Any],
+    key: str,
+    expected: str,
+    path: str,
+) -> None:
+    """校验字符串字段等于固定值。
+
+    Args:
+        data: JSON object。
+        key: 字段名。
+        expected: 期望值。
+        path: 错误路径。
+
+    Returns:
+        校验通过时返回 `None`。
+
+    Raises:
+        ValueError: 字段不是非空字符串或不等于期望值时抛出。
+    """
+
+    actual = _read_required_string(data, key, path)
+    if actual != expected:
+        raise ValueError(f"{path} 必须为 {expected}，实际为 {actual}")
+
+
+def _require_exact_keys(data: Mapping[str, Any], expected_keys: frozenset[str], path: str) -> None:
+    """校验 JSON object 的 key 集合与契约完全一致。
+
+    Args:
+        data: JSON object。
+        expected_keys: 允许且必需的 key 集合。
+        path: 错误路径。
+
+    Returns:
+        校验通过时返回 `None`。
+
+    Raises:
+        ValueError: 字段缺失或存在未知字段时抛出。
+    """
+
+    _reject_unknown_keys(data, expected_keys, path)
+    missing_keys = expected_keys - data.keys()
+    if missing_keys:
+        raise ValueError(f"{path} 缺少必需字段：{sorted(missing_keys)}")
+
+
+def _reject_unknown_keys(data: Mapping[str, Any], expected_keys: frozenset[str], path: str) -> None:
+    """拒绝 JSON object 中的未知字段。
+
+    Args:
+        data: JSON object。
+        expected_keys: 允许的 key 集合。
+        path: 错误路径。
+
+    Returns:
+        校验通过时返回 `None`。
+
+    Raises:
+        ValueError: 存在未知字段时抛出。
+    """
+
+    unknown_keys = data.keys() - expected_keys
+    if unknown_keys:
+        raise ValueError(f"{path} 存在未知字段：{sorted(unknown_keys)}")
+
+
+def _main(argv: list[str] | None = None) -> int:
+    """执行本地模板契约校验命令。
+
+    Args:
+        argv: 命令行参数；为 `None` 时读取进程参数。
+
+    Returns:
+        校验成功返回 `0`。
+
+    Raises:
+        ValueError: 模板解析或校验失败时抛出。
+    """
+
+    parser = argparse.ArgumentParser(description="校验基金分析模板契约 JSON block")
+    parser.add_argument(
+        "--validate-template-doc",
+        action="store_true",
+        help="校验 docs/fund-analysis-template-draft.md 中的 TEMPLATE_CONTRACT_MANIFEST_JSON",
+    )
+    parser.add_argument(
+        "--template-path",
+        default=str(_DEFAULT_TEMPLATE_PATH),
+        help="待校验的模板 Markdown 路径",
+    )
+    args = parser.parse_args(argv)
+    if not args.validate_template_doc:
+        parser.error("必须传入 --validate-template-doc")
+    manifest = _load_template_contract_manifest_from_path(args.template_path)
+    print(
+        "template_contract_manifest=valid "
+        f"template_id={manifest.template_id} chapters={len(manifest.chapters)}"
+    )
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(_main())

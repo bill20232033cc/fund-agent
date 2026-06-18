@@ -1,8 +1,8 @@
 # 110020 Reviewed Coverage Candidate Decision Plan — Controller Judgment
 
-> Controller: Codex  
-> Date: 2026-05-27  
-> Gate: `110020 reviewed coverage candidate decision gate`  
+> Controller: Codex
+> Date: 2026-05-27
+> Gate: `110020 reviewed coverage candidate decision gate`
 > Latest prior accepted checkpoint: `188f150 docs: accept post provenance recovery plan`
 
 ## Startup Alignment

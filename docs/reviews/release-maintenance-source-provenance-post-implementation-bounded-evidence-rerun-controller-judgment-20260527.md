@@ -1,8 +1,8 @@
 # Source Provenance Post-Implementation Bounded Evidence Rerun — Controller Judgment
 
-> Controller: Codex  
-> Date: 2026-05-27  
-> Gate: `source provenance post-implementation bounded evidence rerun`  
+> Controller: Codex
+> Date: 2026-05-27
+> Gate: `source provenance post-implementation bounded evidence rerun`
 > Latest prior accepted checkpoint: `0d43ee4 docs: accept provenance rerun plan`
 
 ## Decision

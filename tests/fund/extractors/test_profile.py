@@ -242,6 +242,10 @@ def test_extract_profile_classifies_before_general_field_builders(
         call_order.append("product")
         return _dummy_field()
 
+    def _fake_build_risk_characteristic_text(_report: ParsedAnnualReport) -> ExtractedField[dict[str, object]]:
+        call_order.append("risk")
+        return _dummy_field()
+
     def _fake_build_benchmark(_report: ParsedAnnualReport) -> ExtractedField[dict[str, object]]:
         call_order.append("benchmark")
         return _dummy_field()
@@ -260,6 +264,7 @@ def test_extract_profile_classifies_before_general_field_builders(
     monkeypatch.setattr(profile_module, "classify_fund_type", _fake_classify)
     monkeypatch.setattr(profile_module, "_build_basic_identity", _fake_build_basic_identity)
     monkeypatch.setattr(profile_module, "_build_product_profile", _fake_build_product_profile)
+    monkeypatch.setattr(profile_module, "_build_risk_characteristic_text", _fake_build_risk_characteristic_text)
     monkeypatch.setattr(profile_module, "_build_benchmark", _fake_build_benchmark)
     monkeypatch.setattr(profile_module, "_build_index_profile", _fake_build_index_profile)
     monkeypatch.setattr(profile_module, "_build_fee_schedule", _fake_build_fee_schedule)
@@ -267,7 +272,7 @@ def test_extract_profile_classifies_before_general_field_builders(
     result = extract_profile(report)
 
     assert isinstance(result, ProfileExtractionResult)
-    assert call_order == ["classify", "benchmark", "basic", "product", "index_profile", "fee"]
+    assert call_order == ["classify", "benchmark", "basic", "product", "risk", "index_profile", "fee"]
 
 
 def test_extract_profile_outputs_classification_basis_and_anchors_for_active_fund() -> None:
@@ -606,6 +611,20 @@ def test_extract_profile_reads_real_section_two_key_value_tables() -> None:
         "investment_scope": "投资于沪深300指数成份股。",
         "investment_strategy": "采用完全复制法。",
     }
+    assert result.risk_characteristic_text.value == {
+        "schema_version": "risk_characteristic_text.v1",
+        "fund_code": "510300",
+        "report_year": 2024,
+        "risk_characteristic_text": "被动指数型产品，跟踪沪深300指数。",
+        "source_anchors": [
+            {
+                "section_id": "§2",
+                "page_number": 5,
+                "table_id": "page-5-table-1",
+                "row_locator": "risk_characteristic_text",
+            }
+        ],
+    }
     assert result.benchmark.value == {"benchmark_text": "沪深300指数"}
     assert result.fee_schedule.value == {
         "management_fee": "0.50%",
@@ -614,6 +633,30 @@ def test_extract_profile_reads_real_section_two_key_value_tables() -> None:
     anchor_table_ids = {anchor.table_id for anchor in result.basic_identity.anchors}
     assert "page-5-table-0" in anchor_table_ids
     assert result.product_profile.anchors[0].table_id == "page-5-table-1"
+    assert result.risk_characteristic_text.extraction_mode == "direct"
+    assert result.risk_characteristic_text.anchors[0].table_id == "page-5-table-1"
+
+
+def test_extract_profile_marks_risk_characteristic_text_missing_without_explicit_label() -> None:
+    """验证未披露显式风险收益特征时不从基金类型或产品定位间接推断。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当风险收益特征未 fail-closed 为 missing 时抛出。
+    """
+
+    report = _build_report_from_fixture("active_fund_profile.txt", "110011")
+
+    result = extract_profile(report)
+
+    assert result.risk_characteristic_text.extraction_mode == "missing"
+    assert result.risk_characteristic_text.value is None
+    assert result.risk_characteristic_text.anchors == ()
 
 
 def test_extract_profile_outputs_basic_identity_company_custodian_inception_with_anchors() -> None:

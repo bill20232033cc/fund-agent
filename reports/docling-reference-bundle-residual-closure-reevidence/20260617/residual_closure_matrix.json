@@ -1,0 +1,1635 @@
+{
+  "schema_version": "docling_reference_bundle_residual_closure_reevidence.v1",
+  "gate": "Docling Reference Bundle Residual Closure Re-evidence Gate",
+  "accepted_plan_commit": "6fa6f2a",
+  "no_live": true,
+  "candidate_only": true,
+  "source_truth_status": "not_proven",
+  "producer_contract_version": "docling_reference_bundle_producer_contract.v1",
+  "verdict": "DIAGNOSTIC_MISSING_NOT_READY",
+  "input_artifacts": [
+    "docs/reviews/docling-reference-bundle-residual-closure-reevidence-plan-20260617.md",
+    "docs/reviews/docling-reference-bundle-residual-closure-reevidence-plan-controller-judgment-20260617.md",
+    "reports/docling-reference-bundle-enrichment-residual-closure/20260617/residual_closure_matrix.json",
+    "reports/docling-reference-bundle-producer-row-hierarchy-benchmark-semantic-label-reevidence/20260617/residual_closure_matrix.json",
+    "reports/docling-reference-bundle-comparability-diagnostic/20260617/comparability_matrix.json",
+    "reports/docling-reference-bundle-producer-determinism/20260617/producer_determinism_matrix.json",
+    "docs/reviews/docling-reference-bundle-producer-determinism-evidence-controller-judgment-20260617.md",
+    "docs/reviews/docling-reference-bundle-producer-determinism-no-live-implementation-controller-judgment-20260617.md"
+  ],
+  "summary": {
+    "rows_total": 17,
+    "samples_total": 4,
+    "prior_closed_rows_total": 13,
+    "prior_residual_rows_total": 4,
+    "prior_closure_dispositions": {
+      "disambiguated_source_body_match": 13,
+      "semantic_assignment_residual": 4
+    },
+    "current_closed_rows_total": 10,
+    "current_residual_rows_total": 7,
+    "current_closure_dispositions": {
+      "disambiguated_source_body_match": 10,
+      "semantic_assignment_residual": 5,
+      "source_body_mismatch": 2
+    },
+    "delta_closed_rows_observed_but_not_interpreted": -3,
+    "target_residual_seven_fact_ids": [
+      "F015",
+      "S5-F023",
+      "S5-F032",
+      "S6-F035",
+      "S6-F041",
+      "S6-F049",
+      "S6-F050"
+    ],
+    "target_residual_seven_covered": true,
+    "regression_fact_ids": [
+      "F015",
+      "S5-F023",
+      "S6-F035"
+    ],
+    "regression_rows_covered": true,
+    "fail_closed_lock_fact_ids": [
+      "S6-F041",
+      "S6-F049",
+      "S6-F050"
+    ],
+    "fail_closed_locks_covered": true,
+    "row_diagnostic_payload_available": false,
+    "sample_bundle_fingerprints_available": false,
+    "diagnostic_payload_available": false,
+    "verdict": "DIAGNOSTIC_MISSING_NOT_READY"
+  },
+  "comparability": {
+    "decision": "not_evaluable_due_to_missing_producer_diagnostics",
+    "diagnostic_payload_available": false,
+    "diagnostic_payload_unavailable_reason": "accepted real-artifact residual-closure matrices predate the accepted producer diagnostics contract; they do not contain sample-level bundle_content_fingerprint or row-level diagnostic_payload, and generating them would require repository reload/fresh source/direct PDF/cache/helper access outside this gate",
+    "delta_interpretation_allowed": false,
+    "helper_improvement_interpreted": false,
+    "helper_regression_interpreted": false,
+    "comparison_basis": "committed_json_artifacts_only",
+    "sample_identity": {
+      "passed": true,
+      "reason": "exact 17-row sample set is represented from accepted residual-closure matrices",
+      "sample_ids": [
+        "S1",
+        "S4",
+        "S5",
+        "S6"
+      ]
+    },
+    "row_identity": {
+      "passed": true,
+      "row_count": 17,
+      "row_keys": [
+        "S1/F002/fund_code",
+        "S1/F015/sales_service_fee_C_current_year",
+        "S1/F020/manager_holding_range_A",
+        "S4/S4-F001/fund_name",
+        "S4/S4-F002/fund_code",
+        "S4/S4-F015/fixed_income_investment_amount",
+        "S5/S5-F018/fund_name",
+        "S5/S5-F019/fund_code",
+        "S5/S5-F023/investment_objective",
+        "S5/S5-F032/equity_investment_amount",
+        "S6/S6-F035/fund_name",
+        "S6/S6-F036/fund_code",
+        "S6/S6-F037/manager",
+        "S6/S6-F038/custodian",
+        "S6/S6-F041/benchmark",
+        "S6/S6-F049/equity_investment_amount",
+        "S6/S6-F050/stock_investment_amount"
+      ]
+    },
+    "repository_metadata": {
+      "passed": true,
+      "reason": "accepted comparability matrix reports no metadata drift"
+    },
+    "producer_diagnostics_availability": {
+      "passed": false,
+      "reason": "accepted real-artifact residual-closure matrices predate the accepted producer diagnostics contract; they do not contain sample-level bundle_content_fingerprint or row-level diagnostic_payload, and generating them would require repository reload/fresh source/direct PDF/cache/helper access outside this gate"
+    },
+    "producer_counts": {
+      "passed": false,
+      "reason": "accepted comparability matrix reports count drift and section inference drift; producer fingerprint diagnostics are unavailable",
+      "samples_with_count_drift": [
+        "S1",
+        "S4",
+        "S5",
+        "S6"
+      ],
+      "samples_with_section_inference_drift": [
+        "S1",
+        "S4",
+        "S5",
+        "S6"
+      ]
+    },
+    "bundle_content_fingerprint": {
+      "passed": false,
+      "reason": "not present in accepted real-artifact residual-closure matrices"
+    },
+    "producer_contract_version": {
+      "passed": false,
+      "expected": "docling_reference_bundle_producer_contract.v1",
+      "reason": "contract is accepted prospectively, but old real-artifact matrices do not expose per-sample producer contract diagnostics"
+    },
+    "row_level_matched_diagnostics": {
+      "passed": false,
+      "target_seven_covered": true,
+      "regression_rows_covered": true,
+      "reason": "row-level diagnostic_payload absent in accepted real-artifact matrices"
+    },
+    "accepted_comparability_diagnostic_summary": {
+      "current_closed_rows_total": 10,
+      "current_closure_dispositions": {
+        "disambiguated_source_body_match": 10,
+        "semantic_assignment_residual": 5,
+        "source_body_mismatch": 2
+      },
+      "current_residual_rows_total": 7,
+      "delta_closed_rows": -3,
+      "prior_closed_rows_total": 13,
+      "prior_closure_dispositions": {
+        "disambiguated_source_body_match": 13,
+        "semantic_assignment_residual": 4
+      },
+      "prior_residual_rows_total": 4,
+      "regression_fact_ids": [
+        "F015",
+        "S5-F023",
+        "S6-F035"
+      ],
+      "regression_rows_total": 3,
+      "rows_total": 17,
+      "samples_with_count_drift": [
+        "S1",
+        "S4",
+        "S5",
+        "S6"
+      ],
+      "samples_with_section_inference_drift": [
+        "S1",
+        "S4",
+        "S5",
+        "S6"
+      ],
+      "target_seven_current_closed": 2,
+      "target_seven_prior_closed": 3,
+      "verdict": "COMPARABILITY_DIAGNOSTIC_WRAPPER_DRIFT_IDENTIFIED_NOT_READY"
+    },
+    "accepted_comparability_diagnostic_findings": [
+      "repository_load_count_drift",
+      "section_inference_drift",
+      "text_span_count_drift",
+      "matched_context_drift",
+      "source_layer_status_drift",
+      "json_artifacts_insufficient_for_exact_producer_line",
+      "current_10_7_artifact_remains_valid_blocked_regression_evidence"
+    ]
+  },
+  "samples": [
+    {
+      "sample_id": "S1",
+      "fund_code": "004393",
+      "document_year": 2025,
+      "repository_source_name": "eid",
+      "source_mode": "single_source_only",
+      "fallback_used": false,
+      "metadata_ok": true,
+      "metadata_reason": null,
+      "reference_generation_status": "accepted_real_artifact_without_producer_diagnostics",
+      "producer_contract_version": "docling_reference_bundle_producer_contract.v1",
+      "producer_input_mode": "real_artifact_missing_diagnostics",
+      "diagnostic_payload_available": false,
+      "diagnostic_payload_unavailable_reason": "accepted real-artifact residual-closure matrices predate the accepted producer diagnostics contract; they do not contain sample-level bundle_content_fingerprint or row-level diagnostic_payload, and generating them would require repository reload/fresh source/direct PDF/cache/helper access outside this gate",
+      "bundle_content_fingerprint": null,
+      "cell_count": 3247,
+      "text_span_count": 6,
+      "table_count": 88,
+      "section_count": 8,
+      "table_family_counts": null,
+      "section_inference_counts": {
+        "unknown": 58,
+        "§10": 2,
+        "§2": 8,
+        "§7": 8,
+        "§8": 12
+      },
+      "section_inference_reason_counts": {
+        "no deterministic section label from ParsedTable text": 58,
+        "table text contains fee-accounting label": 8,
+        "table text contains manager-holding label": 2,
+        "table text contains portfolio/fair-value/financial-statement label": 12,
+        "table text contains profile/objective label": 8
+      },
+      "row_hierarchy_role_counts": null,
+      "text_semantic_context_counts": null,
+      "prior_counts": {
+        "cell_count": 3201,
+        "text_span_count": 8,
+        "table_count": 88,
+        "section_count": 8
+      },
+      "count_comparison": {
+        "cell_reference_count": {
+          "changed": true,
+          "current": 3247,
+          "delta": 46,
+          "prior": 3201
+        },
+        "section_count": {
+          "changed": false,
+          "current": 8,
+          "delta": 0,
+          "prior": 8
+        },
+        "table_count": {
+          "changed": false,
+          "current": 88,
+          "delta": 0,
+          "prior": 88
+        },
+        "text_span_count": {
+          "changed": true,
+          "current": 6,
+          "delta": -2,
+          "prior": 8
+        }
+      },
+      "section_inference_counts_comparison": {
+        "unknown": {
+          "changed": true,
+          "current": 58,
+          "delta": 4,
+          "prior": 54
+        },
+        "§10": {
+          "changed": true,
+          "current": 2,
+          "delta": 1,
+          "prior": 1
+        },
+        "§2": {
+          "changed": true,
+          "current": 8,
+          "delta": 1,
+          "prior": 7
+        },
+        "§7": {
+          "changed": true,
+          "current": 8,
+          "delta": 3,
+          "prior": 5
+        },
+        "§8": {
+          "changed": true,
+          "current": 12,
+          "delta": -9,
+          "prior": 21
+        }
+      },
+      "section_inference_reason_counts_comparison": {
+        "no deterministic section label from ParsedTable text": {
+          "changed": true,
+          "current": 58,
+          "delta": 4,
+          "prior": 54
+        },
+        "table text contains fee-accounting label": {
+          "changed": true,
+          "current": 8,
+          "delta": 3,
+          "prior": 5
+        },
+        "table text contains manager-holding label": {
+          "changed": true,
+          "current": 2,
+          "delta": 1,
+          "prior": 1
+        },
+        "table text contains portfolio/fair-value/financial-statement label": {
+          "changed": true,
+          "current": 12,
+          "delta": -9,
+          "prior": 21
+        },
+        "table text contains profile/objective label": {
+          "changed": true,
+          "current": 8,
+          "delta": 1,
+          "prior": 7
+        }
+      },
+      "has_count_drift": true,
+      "has_metadata_drift": false,
+      "has_section_inference_drift": true
+    },
+    {
+      "sample_id": "S4",
+      "fund_code": "006597",
+      "document_year": 2024,
+      "repository_source_name": "eid",
+      "source_mode": "single_source_only",
+      "fallback_used": false,
+      "metadata_ok": true,
+      "metadata_reason": null,
+      "reference_generation_status": "accepted_real_artifact_without_producer_diagnostics",
+      "producer_contract_version": "docling_reference_bundle_producer_contract.v1",
+      "producer_input_mode": "real_artifact_missing_diagnostics",
+      "diagnostic_payload_available": false,
+      "diagnostic_payload_unavailable_reason": "accepted real-artifact residual-closure matrices predate the accepted producer diagnostics contract; they do not contain sample-level bundle_content_fingerprint or row-level diagnostic_payload, and generating them would require repository reload/fresh source/direct PDF/cache/helper access outside this gate",
+      "bundle_content_fingerprint": null,
+      "cell_count": 2561,
+      "text_span_count": 6,
+      "table_count": 85,
+      "section_count": 8,
+      "table_family_counts": null,
+      "section_inference_counts": {
+        "unknown": 56,
+        "§10": 2,
+        "§2": 8,
+        "§7": 9,
+        "§8": 10
+      },
+      "section_inference_reason_counts": {
+        "no deterministic section label from ParsedTable text": 56,
+        "table text contains fee-accounting label": 9,
+        "table text contains manager-holding label": 2,
+        "table text contains portfolio/fair-value/financial-statement label": 10,
+        "table text contains profile/objective label": 8
+      },
+      "row_hierarchy_role_counts": null,
+      "text_semantic_context_counts": null,
+      "prior_counts": {
+        "cell_count": 2529,
+        "text_span_count": 8,
+        "table_count": 85,
+        "section_count": 8
+      },
+      "count_comparison": {
+        "cell_reference_count": {
+          "changed": true,
+          "current": 2561,
+          "delta": 32,
+          "prior": 2529
+        },
+        "section_count": {
+          "changed": false,
+          "current": 8,
+          "delta": 0,
+          "prior": 8
+        },
+        "table_count": {
+          "changed": false,
+          "current": 85,
+          "delta": 0,
+          "prior": 85
+        },
+        "text_span_count": {
+          "changed": true,
+          "current": 6,
+          "delta": -2,
+          "prior": 8
+        }
+      },
+      "section_inference_counts_comparison": {
+        "unknown": {
+          "changed": true,
+          "current": 56,
+          "delta": -8,
+          "prior": 64
+        },
+        "§10": {
+          "changed": true,
+          "current": 2,
+          "delta": 1,
+          "prior": 1
+        },
+        "§2": {
+          "changed": true,
+          "current": 8,
+          "delta": 4,
+          "prior": 4
+        },
+        "§7": {
+          "changed": true,
+          "current": 9,
+          "delta": 2,
+          "prior": 7
+        },
+        "§8": {
+          "changed": true,
+          "current": 10,
+          "delta": 1,
+          "prior": 9
+        }
+      },
+      "section_inference_reason_counts_comparison": {
+        "no deterministic section label from ParsedTable text": {
+          "changed": true,
+          "current": 56,
+          "delta": -8,
+          "prior": 64
+        },
+        "table text contains fee-accounting label": {
+          "changed": true,
+          "current": 9,
+          "delta": 2,
+          "prior": 7
+        },
+        "table text contains manager-holding label": {
+          "changed": true,
+          "current": 2,
+          "delta": 1,
+          "prior": 1
+        },
+        "table text contains portfolio/fair-value/financial-statement label": {
+          "changed": true,
+          "current": 10,
+          "delta": 1,
+          "prior": 9
+        },
+        "table text contains profile/objective label": {
+          "changed": true,
+          "current": 8,
+          "delta": 4,
+          "prior": 4
+        }
+      },
+      "has_count_drift": true,
+      "has_metadata_drift": false,
+      "has_section_inference_drift": true
+    },
+    {
+      "sample_id": "S5",
+      "fund_code": "017641",
+      "document_year": 2024,
+      "repository_source_name": "eid",
+      "source_mode": "single_source_only",
+      "fallback_used": false,
+      "metadata_ok": true,
+      "metadata_reason": null,
+      "reference_generation_status": "accepted_real_artifact_without_producer_diagnostics",
+      "producer_contract_version": "docling_reference_bundle_producer_contract.v1",
+      "producer_input_mode": "real_artifact_missing_diagnostics",
+      "diagnostic_payload_available": false,
+      "diagnostic_payload_unavailable_reason": "accepted real-artifact residual-closure matrices predate the accepted producer diagnostics contract; they do not contain sample-level bundle_content_fingerprint or row-level diagnostic_payload, and generating them would require repository reload/fresh source/direct PDF/cache/helper access outside this gate",
+      "bundle_content_fingerprint": null,
+      "cell_count": 6805,
+      "text_span_count": 6,
+      "table_count": 114,
+      "section_count": 6,
+      "table_family_counts": null,
+      "section_inference_counts": {
+        "unknown": 85,
+        "§10": 2,
+        "§2": 10,
+        "§7": 7,
+        "§8": 10
+      },
+      "section_inference_reason_counts": {
+        "no deterministic section label from ParsedTable text": 85,
+        "table text contains fee-accounting label": 7,
+        "table text contains manager-holding label": 2,
+        "table text contains portfolio/fair-value/financial-statement label": 10,
+        "table text contains profile/objective label": 10
+      },
+      "row_hierarchy_role_counts": null,
+      "text_semantic_context_counts": null,
+      "prior_counts": {
+        "cell_count": 6739,
+        "text_span_count": 6,
+        "table_count": 114,
+        "section_count": 6
+      },
+      "count_comparison": {
+        "cell_reference_count": {
+          "changed": true,
+          "current": 6805,
+          "delta": 66,
+          "prior": 6739
+        },
+        "section_count": {
+          "changed": false,
+          "current": 6,
+          "delta": 0,
+          "prior": 6
+        },
+        "table_count": {
+          "changed": false,
+          "current": 114,
+          "delta": 0,
+          "prior": 114
+        },
+        "text_span_count": {
+          "changed": false,
+          "current": 6,
+          "delta": 0,
+          "prior": 6
+        }
+      },
+      "section_inference_counts_comparison": {
+        "unknown": {
+          "changed": true,
+          "current": 85,
+          "delta": 2,
+          "prior": 83
+        },
+        "§10": {
+          "changed": true,
+          "current": 2,
+          "delta": 1,
+          "prior": 1
+        },
+        "§2": {
+          "changed": true,
+          "current": 10,
+          "delta": 1,
+          "prior": 9
+        },
+        "§7": {
+          "changed": false,
+          "current": 7,
+          "delta": 0,
+          "prior": 7
+        },
+        "§8": {
+          "changed": true,
+          "current": 10,
+          "delta": -4,
+          "prior": 14
+        }
+      },
+      "section_inference_reason_counts_comparison": {
+        "no deterministic section label from ParsedTable text": {
+          "changed": true,
+          "current": 85,
+          "delta": 2,
+          "prior": 83
+        },
+        "table text contains fee-accounting label": {
+          "changed": false,
+          "current": 7,
+          "delta": 0,
+          "prior": 7
+        },
+        "table text contains manager-holding label": {
+          "changed": true,
+          "current": 2,
+          "delta": 1,
+          "prior": 1
+        },
+        "table text contains portfolio/fair-value/financial-statement label": {
+          "changed": true,
+          "current": 10,
+          "delta": -4,
+          "prior": 14
+        },
+        "table text contains profile/objective label": {
+          "changed": true,
+          "current": 10,
+          "delta": 1,
+          "prior": 9
+        }
+      },
+      "has_count_drift": true,
+      "has_metadata_drift": false,
+      "has_section_inference_drift": true
+    },
+    {
+      "sample_id": "S6",
+      "fund_code": "110020",
+      "document_year": 2024,
+      "repository_source_name": "eid",
+      "source_mode": "single_source_only",
+      "fallback_used": false,
+      "metadata_ok": true,
+      "metadata_reason": null,
+      "reference_generation_status": "accepted_real_artifact_without_producer_diagnostics",
+      "producer_contract_version": "docling_reference_bundle_producer_contract.v1",
+      "producer_input_mode": "real_artifact_missing_diagnostics",
+      "diagnostic_payload_available": false,
+      "diagnostic_payload_unavailable_reason": "accepted real-artifact residual-closure matrices predate the accepted producer diagnostics contract; they do not contain sample-level bundle_content_fingerprint or row-level diagnostic_payload, and generating them would require repository reload/fresh source/direct PDF/cache/helper access outside this gate",
+      "bundle_content_fingerprint": null,
+      "cell_count": 5633,
+      "text_span_count": 6,
+      "table_count": 118,
+      "section_count": 8,
+      "table_family_counts": null,
+      "section_inference_counts": {
+        "unknown": 78,
+        "§10": 2,
+        "§2": 14,
+        "§7": 12,
+        "§8": 12
+      },
+      "section_inference_reason_counts": {
+        "no deterministic section label from ParsedTable text": 78,
+        "table text contains fee-accounting label": 12,
+        "table text contains manager-holding label": 2,
+        "table text contains portfolio/fair-value/financial-statement label": 12,
+        "table text contains profile/objective label": 14
+      },
+      "row_hierarchy_role_counts": null,
+      "text_semantic_context_counts": null,
+      "prior_counts": {
+        "cell_count": 5665,
+        "text_span_count": 8,
+        "table_count": 118,
+        "section_count": 8
+      },
+      "count_comparison": {
+        "cell_reference_count": {
+          "changed": true,
+          "current": 5633,
+          "delta": -32,
+          "prior": 5665
+        },
+        "section_count": {
+          "changed": false,
+          "current": 8,
+          "delta": 0,
+          "prior": 8
+        },
+        "table_count": {
+          "changed": false,
+          "current": 118,
+          "delta": 0,
+          "prior": 118
+        },
+        "text_span_count": {
+          "changed": true,
+          "current": 6,
+          "delta": -2,
+          "prior": 8
+        }
+      },
+      "section_inference_counts_comparison": {
+        "unknown": {
+          "changed": true,
+          "current": 78,
+          "delta": -5,
+          "prior": 83
+        },
+        "§10": {
+          "changed": true,
+          "current": 2,
+          "delta": 1,
+          "prior": 1
+        },
+        "§2": {
+          "changed": true,
+          "current": 14,
+          "delta": 5,
+          "prior": 9
+        },
+        "§7": {
+          "changed": true,
+          "current": 12,
+          "delta": 4,
+          "prior": 8
+        },
+        "§8": {
+          "changed": true,
+          "current": 12,
+          "delta": -5,
+          "prior": 17
+        }
+      },
+      "section_inference_reason_counts_comparison": {
+        "no deterministic section label from ParsedTable text": {
+          "changed": true,
+          "current": 78,
+          "delta": -5,
+          "prior": 83
+        },
+        "table text contains fee-accounting label": {
+          "changed": true,
+          "current": 12,
+          "delta": 4,
+          "prior": 8
+        },
+        "table text contains manager-holding label": {
+          "changed": true,
+          "current": 2,
+          "delta": 1,
+          "prior": 1
+        },
+        "table text contains portfolio/fair-value/financial-statement label": {
+          "changed": true,
+          "current": 12,
+          "delta": -5,
+          "prior": 17
+        },
+        "table text contains profile/objective label": {
+          "changed": true,
+          "current": 14,
+          "delta": 5,
+          "prior": 9
+        }
+      },
+      "has_count_drift": true,
+      "has_metadata_drift": false,
+      "has_section_inference_drift": true
+    }
+  ],
+  "rows": [
+    {
+      "row_key": "S1/F002/fund_code",
+      "sample_id": "S1",
+      "fact_id": "F002",
+      "field_name": "fund_code",
+      "fund_code": "004393",
+      "document_year": 2025,
+      "current_disposition": "disambiguated_source_body_match",
+      "prior_disposition": "disambiguated_source_body_match",
+      "closure_disposition": "disambiguated_source_body_match",
+      "source_layer_status": "same_source_reference_loaded",
+      "processed_layer_status": "locator_context_available",
+      "fund_layer_status": "semantic_rule_satisfied",
+      "source_truth_status": "not_proven",
+      "candidate_only": true,
+      "matched_context": {
+        "reference_kind": "fund_document_repository_section_text",
+        "section_id": null,
+        "table_id": null,
+        "row_index": null,
+        "column_index": null,
+        "row_label_path": [
+          "基金主代码"
+        ],
+        "column_header_path": [],
+        "table_context": [
+          "基金主代码"
+        ],
+        "table_family": null,
+        "row_hierarchy_path": [],
+        "row_hierarchy_role": null,
+        "share_class_context": null,
+        "period_context": null,
+        "semantic_context_label": null,
+        "normalized_text_hash": null
+      },
+      "diagnostic_payload_available": false,
+      "diagnostic_payload_unavailable_reason": "accepted real-artifact residual-closure matrices predate the accepted producer diagnostics contract; they do not contain sample-level bundle_content_fingerprint or row-level diagnostic_payload, and generating them would require repository reload/fresh source/direct PDF/cache/helper access outside this gate",
+      "diagnostic_payload": null,
+      "comparability_class": "matched_context_drift_only",
+      "closure_disposition_changed": false,
+      "matched_context_changed": true,
+      "source_status_changed": false,
+      "fund_status_changed": false,
+      "regression_flag": false,
+      "improvement_flag": false,
+      "target_residual_seven": false,
+      "regression_row": false,
+      "fail_closed_lock": false,
+      "fail_closed_lock_reason": null,
+      "non_interpretation_reason": "diagnostic payload/fingerprint missing; no helper improvement or regression interpretation is made"
+    },
+    {
+      "row_key": "S1/F015/sales_service_fee_C_current_year",
+      "sample_id": "S1",
+      "fact_id": "F015",
+      "field_name": "sales_service_fee_C_current_year",
+      "fund_code": "004393",
+      "document_year": 2025,
+      "current_disposition": "semantic_assignment_residual",
+      "prior_disposition": "disambiguated_source_body_match",
+      "closure_disposition": "semantic_assignment_residual",
+      "source_layer_status": "same_source_reference_loaded",
+      "processed_layer_status": "locator_context_available",
+      "fund_layer_status": "semantic_rule_rejected",
+      "source_truth_status": "not_proven",
+      "candidate_only": true,
+      "matched_context": {
+        "reference_kind": null,
+        "section_id": null,
+        "table_id": null,
+        "row_index": null,
+        "column_index": null,
+        "row_label_path": [],
+        "column_header_path": [],
+        "table_context": [],
+        "table_family": null,
+        "row_hierarchy_path": [],
+        "row_hierarchy_role": null,
+        "share_class_context": null,
+        "period_context": null,
+        "semantic_context_label": null,
+        "normalized_text_hash": null
+      },
+      "diagnostic_payload_available": false,
+      "diagnostic_payload_unavailable_reason": "accepted real-artifact residual-closure matrices predate the accepted producer diagnostics contract; they do not contain sample-level bundle_content_fingerprint or row-level diagnostic_payload, and generating them would require repository reload/fresh source/direct PDF/cache/helper access outside this gate",
+      "diagnostic_payload": null,
+      "comparability_class": "regression_with_context_or_source_status_drift",
+      "closure_disposition_changed": true,
+      "matched_context_changed": true,
+      "source_status_changed": false,
+      "fund_status_changed": true,
+      "regression_flag": true,
+      "improvement_flag": false,
+      "target_residual_seven": true,
+      "regression_row": true,
+      "fail_closed_lock": false,
+      "fail_closed_lock_reason": null,
+      "non_interpretation_reason": "diagnostic payload/fingerprint missing; no helper improvement or regression interpretation is made"
+    },
+    {
+      "row_key": "S1/F020/manager_holding_range_A",
+      "sample_id": "S1",
+      "fact_id": "F020",
+      "field_name": "manager_holding_range_A",
+      "fund_code": "004393",
+      "document_year": 2025,
+      "current_disposition": "disambiguated_source_body_match",
+      "prior_disposition": "disambiguated_source_body_match",
+      "closure_disposition": "disambiguated_source_body_match",
+      "source_layer_status": "same_source_reference_loaded",
+      "processed_layer_status": "locator_context_available",
+      "fund_layer_status": "semantic_rule_satisfied",
+      "source_truth_status": "not_proven",
+      "candidate_only": true,
+      "matched_context": {
+        "reference_kind": "fund_document_repository_parsed_table",
+        "section_id": null,
+        "table_id": null,
+        "row_index": null,
+        "column_index": null,
+        "row_label_path": [
+          "本基金基金经理持有 本开放式基金",
+          "安信企业价值优选混合A"
+        ],
+        "column_header_path": [
+          "持有基金份额总量的数量区间（万份）"
+        ],
+        "table_context": [
+          "§10",
+          "table text contains manager-holding label",
+          "项目",
+          "份额级别",
+          "持有基金份额总量的数量区间（万份）"
+        ],
+        "table_family": null,
+        "row_hierarchy_path": [],
+        "row_hierarchy_role": null,
+        "share_class_context": null,
+        "period_context": null,
+        "semantic_context_label": null,
+        "normalized_text_hash": null
+      },
+      "diagnostic_payload_available": false,
+      "diagnostic_payload_unavailable_reason": "accepted real-artifact residual-closure matrices predate the accepted producer diagnostics contract; they do not contain sample-level bundle_content_fingerprint or row-level diagnostic_payload, and generating them would require repository reload/fresh source/direct PDF/cache/helper access outside this gate",
+      "diagnostic_payload": null,
+      "comparability_class": "matched_context_drift_only",
+      "closure_disposition_changed": false,
+      "matched_context_changed": true,
+      "source_status_changed": false,
+      "fund_status_changed": false,
+      "regression_flag": false,
+      "improvement_flag": false,
+      "target_residual_seven": false,
+      "regression_row": false,
+      "fail_closed_lock": false,
+      "fail_closed_lock_reason": null,
+      "non_interpretation_reason": "diagnostic payload/fingerprint missing; no helper improvement or regression interpretation is made"
+    },
+    {
+      "row_key": "S4/S4-F001/fund_name",
+      "sample_id": "S4",
+      "fact_id": "S4-F001",
+      "field_name": "fund_name",
+      "fund_code": "006597",
+      "document_year": 2024,
+      "current_disposition": "disambiguated_source_body_match",
+      "prior_disposition": "disambiguated_source_body_match",
+      "closure_disposition": "disambiguated_source_body_match",
+      "source_layer_status": "same_source_reference_loaded",
+      "processed_layer_status": "locator_context_available",
+      "fund_layer_status": "semantic_rule_satisfied",
+      "source_truth_status": "not_proven",
+      "candidate_only": true,
+      "matched_context": {
+        "reference_kind": "fund_document_repository_section_text",
+        "section_id": null,
+        "table_id": null,
+        "row_index": null,
+        "column_index": null,
+        "row_label_path": [
+          "基金名称"
+        ],
+        "column_header_path": [],
+        "table_context": [
+          "基金名称"
+        ],
+        "table_family": null,
+        "row_hierarchy_path": [],
+        "row_hierarchy_role": null,
+        "share_class_context": null,
+        "period_context": null,
+        "semantic_context_label": null,
+        "normalized_text_hash": null
+      },
+      "diagnostic_payload_available": false,
+      "diagnostic_payload_unavailable_reason": "accepted real-artifact residual-closure matrices predate the accepted producer diagnostics contract; they do not contain sample-level bundle_content_fingerprint or row-level diagnostic_payload, and generating them would require repository reload/fresh source/direct PDF/cache/helper access outside this gate",
+      "diagnostic_payload": null,
+      "comparability_class": "matched_context_drift_only",
+      "closure_disposition_changed": false,
+      "matched_context_changed": true,
+      "source_status_changed": false,
+      "fund_status_changed": false,
+      "regression_flag": false,
+      "improvement_flag": false,
+      "target_residual_seven": false,
+      "regression_row": false,
+      "fail_closed_lock": false,
+      "fail_closed_lock_reason": null,
+      "non_interpretation_reason": "diagnostic payload/fingerprint missing; no helper improvement or regression interpretation is made"
+    },
+    {
+      "row_key": "S4/S4-F002/fund_code",
+      "sample_id": "S4",
+      "fact_id": "S4-F002",
+      "field_name": "fund_code",
+      "fund_code": "006597",
+      "document_year": 2024,
+      "current_disposition": "disambiguated_source_body_match",
+      "prior_disposition": "disambiguated_source_body_match",
+      "closure_disposition": "disambiguated_source_body_match",
+      "source_layer_status": "same_source_reference_loaded",
+      "processed_layer_status": "locator_context_available",
+      "fund_layer_status": "semantic_rule_satisfied",
+      "source_truth_status": "not_proven",
+      "candidate_only": true,
+      "matched_context": {
+        "reference_kind": "fund_document_repository_section_text",
+        "section_id": null,
+        "table_id": null,
+        "row_index": null,
+        "column_index": null,
+        "row_label_path": [
+          "基金主代码"
+        ],
+        "column_header_path": [],
+        "table_context": [
+          "基金主代码"
+        ],
+        "table_family": null,
+        "row_hierarchy_path": [],
+        "row_hierarchy_role": null,
+        "share_class_context": null,
+        "period_context": null,
+        "semantic_context_label": null,
+        "normalized_text_hash": null
+      },
+      "diagnostic_payload_available": false,
+      "diagnostic_payload_unavailable_reason": "accepted real-artifact residual-closure matrices predate the accepted producer diagnostics contract; they do not contain sample-level bundle_content_fingerprint or row-level diagnostic_payload, and generating them would require repository reload/fresh source/direct PDF/cache/helper access outside this gate",
+      "diagnostic_payload": null,
+      "comparability_class": "matched_context_drift_only",
+      "closure_disposition_changed": false,
+      "matched_context_changed": true,
+      "source_status_changed": false,
+      "fund_status_changed": false,
+      "regression_flag": false,
+      "improvement_flag": false,
+      "target_residual_seven": false,
+      "regression_row": false,
+      "fail_closed_lock": false,
+      "fail_closed_lock_reason": null,
+      "non_interpretation_reason": "diagnostic payload/fingerprint missing; no helper improvement or regression interpretation is made"
+    },
+    {
+      "row_key": "S4/S4-F015/fixed_income_investment_amount",
+      "sample_id": "S4",
+      "fact_id": "S4-F015",
+      "field_name": "fixed_income_investment_amount",
+      "fund_code": "006597",
+      "document_year": 2024,
+      "current_disposition": "disambiguated_source_body_match",
+      "prior_disposition": "disambiguated_source_body_match",
+      "closure_disposition": "disambiguated_source_body_match",
+      "source_layer_status": "same_source_reference_loaded",
+      "processed_layer_status": "locator_context_available",
+      "fund_layer_status": "semantic_rule_satisfied",
+      "source_truth_status": "not_proven",
+      "candidate_only": true,
+      "matched_context": {
+        "reference_kind": "fund_document_repository_parsed_table",
+        "section_id": null,
+        "table_id": null,
+        "row_index": null,
+        "column_index": null,
+        "row_label_path": [
+          "3",
+          "固定收益投资"
+        ],
+        "column_header_path": [
+          "金额"
+        ],
+        "table_context": [
+          "§8",
+          "table text contains portfolio/fair-value/financial-statement label",
+          "序号",
+          "项目",
+          "金额",
+          "占基金总资产的比例（%）"
+        ],
+        "table_family": null,
+        "row_hierarchy_path": [],
+        "row_hierarchy_role": null,
+        "share_class_context": null,
+        "period_context": null,
+        "semantic_context_label": null,
+        "normalized_text_hash": null
+      },
+      "diagnostic_payload_available": false,
+      "diagnostic_payload_unavailable_reason": "accepted real-artifact residual-closure matrices predate the accepted producer diagnostics contract; they do not contain sample-level bundle_content_fingerprint or row-level diagnostic_payload, and generating them would require repository reload/fresh source/direct PDF/cache/helper access outside this gate",
+      "diagnostic_payload": null,
+      "comparability_class": "matched_context_drift_only",
+      "closure_disposition_changed": false,
+      "matched_context_changed": true,
+      "source_status_changed": false,
+      "fund_status_changed": false,
+      "regression_flag": false,
+      "improvement_flag": false,
+      "target_residual_seven": false,
+      "regression_row": false,
+      "fail_closed_lock": false,
+      "fail_closed_lock_reason": null,
+      "non_interpretation_reason": "diagnostic payload/fingerprint missing; no helper improvement or regression interpretation is made"
+    },
+    {
+      "row_key": "S5/S5-F018/fund_name",
+      "sample_id": "S5",
+      "fact_id": "S5-F018",
+      "field_name": "fund_name",
+      "fund_code": "017641",
+      "document_year": 2024,
+      "current_disposition": "disambiguated_source_body_match",
+      "prior_disposition": "disambiguated_source_body_match",
+      "closure_disposition": "disambiguated_source_body_match",
+      "source_layer_status": "same_source_reference_loaded",
+      "processed_layer_status": "locator_context_available",
+      "fund_layer_status": "semantic_rule_satisfied",
+      "source_truth_status": "not_proven",
+      "candidate_only": true,
+      "matched_context": {
+        "reference_kind": "fund_document_repository_section_text",
+        "section_id": null,
+        "table_id": null,
+        "row_index": null,
+        "column_index": null,
+        "row_label_path": [
+          "基金名称"
+        ],
+        "column_header_path": [],
+        "table_context": [
+          "基金名称"
+        ],
+        "table_family": null,
+        "row_hierarchy_path": [],
+        "row_hierarchy_role": null,
+        "share_class_context": null,
+        "period_context": null,
+        "semantic_context_label": null,
+        "normalized_text_hash": null
+      },
+      "diagnostic_payload_available": false,
+      "diagnostic_payload_unavailable_reason": "accepted real-artifact residual-closure matrices predate the accepted producer diagnostics contract; they do not contain sample-level bundle_content_fingerprint or row-level diagnostic_payload, and generating them would require repository reload/fresh source/direct PDF/cache/helper access outside this gate",
+      "diagnostic_payload": null,
+      "comparability_class": "matched_context_drift_only",
+      "closure_disposition_changed": false,
+      "matched_context_changed": true,
+      "source_status_changed": false,
+      "fund_status_changed": false,
+      "regression_flag": false,
+      "improvement_flag": false,
+      "target_residual_seven": false,
+      "regression_row": false,
+      "fail_closed_lock": false,
+      "fail_closed_lock_reason": null,
+      "non_interpretation_reason": "diagnostic payload/fingerprint missing; no helper improvement or regression interpretation is made"
+    },
+    {
+      "row_key": "S5/S5-F019/fund_code",
+      "sample_id": "S5",
+      "fact_id": "S5-F019",
+      "field_name": "fund_code",
+      "fund_code": "017641",
+      "document_year": 2024,
+      "current_disposition": "disambiguated_source_body_match",
+      "prior_disposition": "disambiguated_source_body_match",
+      "closure_disposition": "disambiguated_source_body_match",
+      "source_layer_status": "same_source_reference_loaded",
+      "processed_layer_status": "locator_context_available",
+      "fund_layer_status": "semantic_rule_satisfied",
+      "source_truth_status": "not_proven",
+      "candidate_only": true,
+      "matched_context": {
+        "reference_kind": "fund_document_repository_section_text",
+        "section_id": null,
+        "table_id": null,
+        "row_index": null,
+        "column_index": null,
+        "row_label_path": [
+          "基金主代码"
+        ],
+        "column_header_path": [],
+        "table_context": [
+          "基金主代码"
+        ],
+        "table_family": null,
+        "row_hierarchy_path": [],
+        "row_hierarchy_role": null,
+        "share_class_context": null,
+        "period_context": null,
+        "semantic_context_label": null,
+        "normalized_text_hash": null
+      },
+      "diagnostic_payload_available": false,
+      "diagnostic_payload_unavailable_reason": "accepted real-artifact residual-closure matrices predate the accepted producer diagnostics contract; they do not contain sample-level bundle_content_fingerprint or row-level diagnostic_payload, and generating them would require repository reload/fresh source/direct PDF/cache/helper access outside this gate",
+      "diagnostic_payload": null,
+      "comparability_class": "matched_context_drift_only",
+      "closure_disposition_changed": false,
+      "matched_context_changed": true,
+      "source_status_changed": false,
+      "fund_status_changed": false,
+      "regression_flag": false,
+      "improvement_flag": false,
+      "target_residual_seven": false,
+      "regression_row": false,
+      "fail_closed_lock": false,
+      "fail_closed_lock_reason": null,
+      "non_interpretation_reason": "diagnostic payload/fingerprint missing; no helper improvement or regression interpretation is made"
+    },
+    {
+      "row_key": "S5/S5-F023/investment_objective",
+      "sample_id": "S5",
+      "fact_id": "S5-F023",
+      "field_name": "investment_objective",
+      "fund_code": "017641",
+      "document_year": 2024,
+      "current_disposition": "source_body_mismatch",
+      "prior_disposition": "disambiguated_source_body_match",
+      "closure_disposition": "source_body_mismatch",
+      "source_layer_status": "same_source_text_absent",
+      "processed_layer_status": "locator_context_available",
+      "fund_layer_status": "semantic_rule_unresolved",
+      "source_truth_status": "not_proven",
+      "candidate_only": true,
+      "matched_context": {
+        "reference_kind": null,
+        "section_id": null,
+        "table_id": null,
+        "row_index": null,
+        "column_index": null,
+        "row_label_path": [],
+        "column_header_path": [],
+        "table_context": [],
+        "table_family": null,
+        "row_hierarchy_path": [],
+        "row_hierarchy_role": null,
+        "share_class_context": null,
+        "period_context": null,
+        "semantic_context_label": null,
+        "normalized_text_hash": null
+      },
+      "diagnostic_payload_available": false,
+      "diagnostic_payload_unavailable_reason": "accepted real-artifact residual-closure matrices predate the accepted producer diagnostics contract; they do not contain sample-level bundle_content_fingerprint or row-level diagnostic_payload, and generating them would require repository reload/fresh source/direct PDF/cache/helper access outside this gate",
+      "diagnostic_payload": null,
+      "comparability_class": "regression_with_context_or_source_status_drift",
+      "closure_disposition_changed": true,
+      "matched_context_changed": true,
+      "source_status_changed": true,
+      "fund_status_changed": true,
+      "regression_flag": true,
+      "improvement_flag": false,
+      "target_residual_seven": true,
+      "regression_row": true,
+      "fail_closed_lock": false,
+      "fail_closed_lock_reason": null,
+      "non_interpretation_reason": "diagnostic payload/fingerprint missing; no helper improvement or regression interpretation is made"
+    },
+    {
+      "row_key": "S5/S5-F032/equity_investment_amount",
+      "sample_id": "S5",
+      "fact_id": "S5-F032",
+      "field_name": "equity_investment_amount",
+      "fund_code": "017641",
+      "document_year": 2024,
+      "current_disposition": "semantic_assignment_residual",
+      "prior_disposition": "semantic_assignment_residual",
+      "closure_disposition": "semantic_assignment_residual",
+      "source_layer_status": "same_source_reference_loaded",
+      "processed_layer_status": "locator_context_available",
+      "fund_layer_status": "semantic_rule_rejected",
+      "source_truth_status": "not_proven",
+      "candidate_only": true,
+      "matched_context": {
+        "reference_kind": null,
+        "section_id": null,
+        "table_id": null,
+        "row_index": null,
+        "column_index": null,
+        "row_label_path": [],
+        "column_header_path": [],
+        "table_context": [],
+        "table_family": null,
+        "row_hierarchy_path": [],
+        "row_hierarchy_role": null,
+        "share_class_context": null,
+        "period_context": null,
+        "semantic_context_label": null,
+        "normalized_text_hash": null
+      },
+      "diagnostic_payload_available": false,
+      "diagnostic_payload_unavailable_reason": "accepted real-artifact residual-closure matrices predate the accepted producer diagnostics contract; they do not contain sample-level bundle_content_fingerprint or row-level diagnostic_payload, and generating them would require repository reload/fresh source/direct PDF/cache/helper access outside this gate",
+      "diagnostic_payload": null,
+      "comparability_class": "comparable_no_observed_row_drift",
+      "closure_disposition_changed": false,
+      "matched_context_changed": false,
+      "source_status_changed": false,
+      "fund_status_changed": false,
+      "regression_flag": false,
+      "improvement_flag": false,
+      "target_residual_seven": true,
+      "regression_row": false,
+      "fail_closed_lock": false,
+      "fail_closed_lock_reason": null,
+      "non_interpretation_reason": "diagnostic payload/fingerprint missing; no helper improvement or regression interpretation is made"
+    },
+    {
+      "row_key": "S6/S6-F035/fund_name",
+      "sample_id": "S6",
+      "fact_id": "S6-F035",
+      "field_name": "fund_name",
+      "fund_code": "110020",
+      "document_year": 2024,
+      "current_disposition": "semantic_assignment_residual",
+      "prior_disposition": "disambiguated_source_body_match",
+      "closure_disposition": "semantic_assignment_residual",
+      "source_layer_status": "same_source_reference_loaded",
+      "processed_layer_status": "locator_context_available",
+      "fund_layer_status": "semantic_rule_rejected",
+      "source_truth_status": "not_proven",
+      "candidate_only": true,
+      "matched_context": {
+        "reference_kind": null,
+        "section_id": null,
+        "table_id": null,
+        "row_index": null,
+        "column_index": null,
+        "row_label_path": [],
+        "column_header_path": [],
+        "table_context": [],
+        "table_family": null,
+        "row_hierarchy_path": [],
+        "row_hierarchy_role": null,
+        "share_class_context": null,
+        "period_context": null,
+        "semantic_context_label": null,
+        "normalized_text_hash": null
+      },
+      "diagnostic_payload_available": false,
+      "diagnostic_payload_unavailable_reason": "accepted real-artifact residual-closure matrices predate the accepted producer diagnostics contract; they do not contain sample-level bundle_content_fingerprint or row-level diagnostic_payload, and generating them would require repository reload/fresh source/direct PDF/cache/helper access outside this gate",
+      "diagnostic_payload": null,
+      "comparability_class": "regression_with_context_or_source_status_drift",
+      "closure_disposition_changed": true,
+      "matched_context_changed": true,
+      "source_status_changed": false,
+      "fund_status_changed": true,
+      "regression_flag": true,
+      "improvement_flag": false,
+      "target_residual_seven": true,
+      "regression_row": true,
+      "fail_closed_lock": false,
+      "fail_closed_lock_reason": null,
+      "non_interpretation_reason": "diagnostic payload/fingerprint missing; no helper improvement or regression interpretation is made"
+    },
+    {
+      "row_key": "S6/S6-F036/fund_code",
+      "sample_id": "S6",
+      "fact_id": "S6-F036",
+      "field_name": "fund_code",
+      "fund_code": "110020",
+      "document_year": 2024,
+      "current_disposition": "disambiguated_source_body_match",
+      "prior_disposition": "disambiguated_source_body_match",
+      "closure_disposition": "disambiguated_source_body_match",
+      "source_layer_status": "same_source_reference_loaded",
+      "processed_layer_status": "locator_context_available",
+      "fund_layer_status": "semantic_rule_satisfied",
+      "source_truth_status": "not_proven",
+      "candidate_only": true,
+      "matched_context": {
+        "reference_kind": "fund_document_repository_section_text",
+        "section_id": null,
+        "table_id": null,
+        "row_index": null,
+        "column_index": null,
+        "row_label_path": [
+          "基金主代码"
+        ],
+        "column_header_path": [],
+        "table_context": [
+          "基金主代码"
+        ],
+        "table_family": null,
+        "row_hierarchy_path": [],
+        "row_hierarchy_role": null,
+        "share_class_context": null,
+        "period_context": null,
+        "semantic_context_label": null,
+        "normalized_text_hash": null
+      },
+      "diagnostic_payload_available": false,
+      "diagnostic_payload_unavailable_reason": "accepted real-artifact residual-closure matrices predate the accepted producer diagnostics contract; they do not contain sample-level bundle_content_fingerprint or row-level diagnostic_payload, and generating them would require repository reload/fresh source/direct PDF/cache/helper access outside this gate",
+      "diagnostic_payload": null,
+      "comparability_class": "matched_context_drift_only",
+      "closure_disposition_changed": false,
+      "matched_context_changed": true,
+      "source_status_changed": false,
+      "fund_status_changed": false,
+      "regression_flag": false,
+      "improvement_flag": false,
+      "target_residual_seven": false,
+      "regression_row": false,
+      "fail_closed_lock": false,
+      "fail_closed_lock_reason": null,
+      "non_interpretation_reason": "diagnostic payload/fingerprint missing; no helper improvement or regression interpretation is made"
+    },
+    {
+      "row_key": "S6/S6-F037/manager",
+      "sample_id": "S6",
+      "fact_id": "S6-F037",
+      "field_name": "manager",
+      "fund_code": "110020",
+      "document_year": 2024,
+      "current_disposition": "disambiguated_source_body_match",
+      "prior_disposition": "disambiguated_source_body_match",
+      "closure_disposition": "disambiguated_source_body_match",
+      "source_layer_status": "same_source_reference_loaded",
+      "processed_layer_status": "locator_context_available",
+      "fund_layer_status": "semantic_rule_satisfied",
+      "source_truth_status": "not_proven",
+      "candidate_only": true,
+      "matched_context": {
+        "reference_kind": "fund_document_repository_parsed_table",
+        "section_id": null,
+        "table_id": null,
+        "row_index": null,
+        "column_index": null,
+        "row_label_path": [
+          "基金管理人名称"
+        ],
+        "column_header_path": [
+          "易方达沪深300交易型开放式指数发起式证券投资基金"
+        ],
+        "table_context": [
+          "§2",
+          "table text contains profile/objective label",
+          "基金名称",
+          "易方达沪深300交易型开放式指数发起式证券投资基金"
+        ],
+        "table_family": null,
+        "row_hierarchy_path": [],
+        "row_hierarchy_role": null,
+        "share_class_context": null,
+        "period_context": null,
+        "semantic_context_label": null,
+        "normalized_text_hash": null
+      },
+      "diagnostic_payload_available": false,
+      "diagnostic_payload_unavailable_reason": "accepted real-artifact residual-closure matrices predate the accepted producer diagnostics contract; they do not contain sample-level bundle_content_fingerprint or row-level diagnostic_payload, and generating them would require repository reload/fresh source/direct PDF/cache/helper access outside this gate",
+      "diagnostic_payload": null,
+      "comparability_class": "matched_context_drift_only",
+      "closure_disposition_changed": false,
+      "matched_context_changed": true,
+      "source_status_changed": false,
+      "fund_status_changed": false,
+      "regression_flag": false,
+      "improvement_flag": false,
+      "target_residual_seven": false,
+      "regression_row": false,
+      "fail_closed_lock": false,
+      "fail_closed_lock_reason": null,
+      "non_interpretation_reason": "diagnostic payload/fingerprint missing; no helper improvement or regression interpretation is made"
+    },
+    {
+      "row_key": "S6/S6-F038/custodian",
+      "sample_id": "S6",
+      "fact_id": "S6-F038",
+      "field_name": "custodian",
+      "fund_code": "110020",
+      "document_year": 2024,
+      "current_disposition": "disambiguated_source_body_match",
+      "prior_disposition": "disambiguated_source_body_match",
+      "closure_disposition": "disambiguated_source_body_match",
+      "source_layer_status": "same_source_reference_loaded",
+      "processed_layer_status": "locator_context_available",
+      "fund_layer_status": "semantic_rule_satisfied",
+      "source_truth_status": "not_proven",
+      "candidate_only": true,
+      "matched_context": {
+        "reference_kind": "fund_document_repository_parsed_table",
+        "section_id": null,
+        "table_id": null,
+        "row_index": null,
+        "column_index": null,
+        "row_label_path": [
+          "基金托管人名称"
+        ],
+        "column_header_path": [
+          "易方达沪深300交易型开放式指数发起式证券投资基金"
+        ],
+        "table_context": [
+          "§2",
+          "table text contains profile/objective label",
+          "基金名称",
+          "易方达沪深300交易型开放式指数发起式证券投资基金"
+        ],
+        "table_family": null,
+        "row_hierarchy_path": [],
+        "row_hierarchy_role": null,
+        "share_class_context": null,
+        "period_context": null,
+        "semantic_context_label": null,
+        "normalized_text_hash": null
+      },
+      "diagnostic_payload_available": false,
+      "diagnostic_payload_unavailable_reason": "accepted real-artifact residual-closure matrices predate the accepted producer diagnostics contract; they do not contain sample-level bundle_content_fingerprint or row-level diagnostic_payload, and generating them would require repository reload/fresh source/direct PDF/cache/helper access outside this gate",
+      "diagnostic_payload": null,
+      "comparability_class": "matched_context_drift_only",
+      "closure_disposition_changed": false,
+      "matched_context_changed": true,
+      "source_status_changed": false,
+      "fund_status_changed": false,
+      "regression_flag": false,
+      "improvement_flag": false,
+      "target_residual_seven": false,
+      "regression_row": false,
+      "fail_closed_lock": false,
+      "fail_closed_lock_reason": null,
+      "non_interpretation_reason": "diagnostic payload/fingerprint missing; no helper improvement or regression interpretation is made"
+    },
+    {
+      "row_key": "S6/S6-F041/benchmark",
+      "sample_id": "S6",
+      "fact_id": "S6-F041",
+      "field_name": "benchmark",
+      "fund_code": "110020",
+      "document_year": 2024,
+      "current_disposition": "source_body_mismatch",
+      "prior_disposition": "semantic_assignment_residual",
+      "closure_disposition": "source_body_mismatch",
+      "source_layer_status": "same_source_text_absent",
+      "processed_layer_status": "locator_context_available",
+      "fund_layer_status": "semantic_rule_unresolved",
+      "source_truth_status": "not_proven",
+      "candidate_only": true,
+      "matched_context": {
+        "reference_kind": null,
+        "section_id": null,
+        "table_id": null,
+        "row_index": null,
+        "column_index": null,
+        "row_label_path": [],
+        "column_header_path": [],
+        "table_context": [],
+        "table_family": null,
+        "row_hierarchy_path": [],
+        "row_hierarchy_role": null,
+        "share_class_context": null,
+        "period_context": null,
+        "semantic_context_label": null,
+        "normalized_text_hash": null
+      },
+      "diagnostic_payload_available": false,
+      "diagnostic_payload_unavailable_reason": "accepted real-artifact residual-closure matrices predate the accepted producer diagnostics contract; they do not contain sample-level bundle_content_fingerprint or row-level diagnostic_payload, and generating them would require repository reload/fresh source/direct PDF/cache/helper access outside this gate",
+      "diagnostic_payload": null,
+      "comparability_class": "status_drift_only",
+      "closure_disposition_changed": true,
+      "matched_context_changed": false,
+      "source_status_changed": true,
+      "fund_status_changed": true,
+      "regression_flag": false,
+      "improvement_flag": false,
+      "target_residual_seven": true,
+      "regression_row": false,
+      "fail_closed_lock": true,
+      "fail_closed_lock_reason": "benchmark semantic context not proven; investment-objective text is insufficient",
+      "non_interpretation_reason": "diagnostic payload/fingerprint missing; no helper improvement or regression interpretation is made"
+    },
+    {
+      "row_key": "S6/S6-F049/equity_investment_amount",
+      "sample_id": "S6",
+      "fact_id": "S6-F049",
+      "field_name": "equity_investment_amount",
+      "fund_code": "110020",
+      "document_year": 2024,
+      "current_disposition": "semantic_assignment_residual",
+      "prior_disposition": "semantic_assignment_residual",
+      "closure_disposition": "semantic_assignment_residual",
+      "source_layer_status": "same_source_reference_loaded",
+      "processed_layer_status": "locator_context_available",
+      "fund_layer_status": "semantic_rule_rejected",
+      "source_truth_status": "not_proven",
+      "candidate_only": true,
+      "matched_context": {
+        "reference_kind": null,
+        "section_id": null,
+        "table_id": null,
+        "row_index": null,
+        "column_index": null,
+        "row_label_path": [],
+        "column_header_path": [],
+        "table_context": [],
+        "table_family": null,
+        "row_hierarchy_path": [],
+        "row_hierarchy_role": null,
+        "share_class_context": null,
+        "period_context": null,
+        "semantic_context_label": null,
+        "normalized_text_hash": null
+      },
+      "diagnostic_payload_available": false,
+      "diagnostic_payload_unavailable_reason": "accepted real-artifact residual-closure matrices predate the accepted producer diagnostics contract; they do not contain sample-level bundle_content_fingerprint or row-level diagnostic_payload, and generating them would require repository reload/fresh source/direct PDF/cache/helper access outside this gate",
+      "diagnostic_payload": null,
+      "comparability_class": "comparable_no_observed_row_drift",
+      "closure_disposition_changed": false,
+      "matched_context_changed": false,
+      "source_status_changed": false,
+      "fund_status_changed": false,
+      "regression_flag": false,
+      "improvement_flag": false,
+      "target_residual_seven": true,
+      "regression_row": false,
+      "fail_closed_lock": true,
+      "fail_closed_lock_reason": "equity aggregate hierarchy not proven; value equality alone is insufficient",
+      "non_interpretation_reason": "diagnostic payload/fingerprint missing; no helper improvement or regression interpretation is made"
+    },
+    {
+      "row_key": "S6/S6-F050/stock_investment_amount",
+      "sample_id": "S6",
+      "fact_id": "S6-F050",
+      "field_name": "stock_investment_amount",
+      "fund_code": "110020",
+      "document_year": 2024,
+      "current_disposition": "semantic_assignment_residual",
+      "prior_disposition": "semantic_assignment_residual",
+      "closure_disposition": "semantic_assignment_residual",
+      "source_layer_status": "same_source_reference_loaded",
+      "processed_layer_status": "locator_context_available",
+      "fund_layer_status": "semantic_rule_rejected",
+      "source_truth_status": "not_proven",
+      "candidate_only": true,
+      "matched_context": {
+        "reference_kind": null,
+        "section_id": null,
+        "table_id": null,
+        "row_index": null,
+        "column_index": null,
+        "row_label_path": [],
+        "column_header_path": [],
+        "table_context": [],
+        "table_family": null,
+        "row_hierarchy_path": [],
+        "row_hierarchy_role": null,
+        "share_class_context": null,
+        "period_context": null,
+        "semantic_context_label": null,
+        "normalized_text_hash": null
+      },
+      "diagnostic_payload_available": false,
+      "diagnostic_payload_unavailable_reason": "accepted real-artifact residual-closure matrices predate the accepted producer diagnostics contract; they do not contain sample-level bundle_content_fingerprint or row-level diagnostic_payload, and generating them would require repository reload/fresh source/direct PDF/cache/helper access outside this gate",
+      "diagnostic_payload": null,
+      "comparability_class": "comparable_no_observed_row_drift",
+      "closure_disposition_changed": false,
+      "matched_context_changed": false,
+      "source_status_changed": false,
+      "fund_status_changed": false,
+      "regression_flag": false,
+      "improvement_flag": false,
+      "target_residual_seven": true,
+      "regression_row": false,
+      "fail_closed_lock": true,
+      "fail_closed_lock_reason": "stock child row hierarchy not proven; value equality alone is insufficient",
+      "non_interpretation_reason": "diagnostic payload/fingerprint missing; no helper improvement or regression interpretation is made"
+    }
+  ],
+  "non_claims": {
+    "source_truth_acceptance": false,
+    "baseline_promotion": false,
+    "parser_replacement": false,
+    "full_field_correctness": false,
+    "golden_readiness": false,
+    "release_readiness": false,
+    "pr_readiness": false
+  },
+  "validation_expectations": {
+    "json_tool": "python -m json.tool reports/docling-reference-bundle-residual-closure-reevidence/20260617/residual_closure_matrix.json",
+    "assertions": "schema_version, candidate_only, source_truth_status, exact row count 17, residual seven coverage, regression rows, fail-closed locks, non_claims, verdict taxonomy",
+    "diff_check": "git diff --check -- reports/docling-reference-bundle-residual-closure-reevidence/20260617/residual_closure_matrix.json docs/reviews/docling-reference-bundle-residual-closure-reevidence-20260617.md"
+  }
+}

@@ -38,10 +38,12 @@ SNAPSHOT_FIELD_ORDER: Final[tuple[tuple[str, str], ...]] = (
     ("performance", "investor_return"),
     ("performance", "tracking_error"),
     ("manager", "manager_strategy_text"),
+    ("manager", "portfolio_managers"),
     ("manager", "turnover_rate"),
     ("manager", "manager_alignment"),
     ("holder", "holder_structure"),
     ("holdings", "holdings_snapshot"),
+    ("risk", "risk_characteristic_text"),
     ("risk", "bond_risk_evidence"),
     ("share_change", "share_change"),
     ("nav", "nav_data"),
@@ -80,6 +82,8 @@ COMPARABLE_SUB_FIELDS_BY_FIELD: Final[dict[str, tuple[str, ...]]] = {
         "input_period_complete",
     ),
     "classified_fund_type": ("fund_type",),
+    "portfolio_managers": ("schema_version", "manager_count"),
+    "risk_characteristic_text": ("schema_version", "risk_characteristic_text"),
     "holdings_snapshot": ("top_holdings_status", "top_holdings_source"),
 }
 _EXTRACTION_MODE_DIRECT: Final[str] = "direct"
@@ -191,7 +195,10 @@ class SnapshotRecord:
         comparable_values: correctness 可直接比较的白名单子字段值。
         note: 缺失、降级或异常说明。
         source_provenance_schema_version: 公共来源 provenance schema 版本。
-        source_strategy: 公共来源策略标签。
+        source_strategy: 公共来源兼容 alias；不是 fallback 授权。
+        selected_source: 当前来源策略选中的来源。
+        source_mode: 当前公共来源模式。
+        fallback_enabled: 当前来源策略是否启用 fallback。
         resolved_source_name: 解析出的公开来源名。
         fallback_used: 是否使用 fallback 来源。
         primary_failure_category: 主来源失败分类；缺失时为 `None`。
@@ -227,6 +234,9 @@ class SnapshotRecord:
     note: str | None
     source_provenance_schema_version: str
     source_strategy: str
+    selected_source: str | None
+    source_mode: str
+    fallback_enabled: bool | None
     resolved_source_name: str | None
     fallback_used: bool
     primary_failure_category: str | None
@@ -1154,6 +1164,9 @@ def _snapshot_record(
         note=note,
         source_provenance_schema_version=provenance.source_provenance_schema_version,
         source_strategy=provenance.source_strategy,
+        selected_source=provenance.selected_source,
+        source_mode=provenance.source_mode,
+        fallback_enabled=provenance.fallback_enabled,
         resolved_source_name=provenance.resolved_source_name,
         fallback_used=provenance.fallback_used,
         primary_failure_category=provenance.primary_failure_category,
@@ -1179,7 +1192,7 @@ def _source_provenance_summary_lines(
         errors: 单基金失败记录。
 
     Returns:
-        Markdown 行列表；失败基金 v1 不进入表格，只输出简短说明。
+        Markdown 行列表；失败基金 v2 不进入表格，只输出简短说明。
 
     Raises:
         无显式抛出。
@@ -1193,14 +1206,17 @@ def _source_provenance_summary_lines(
         "",
         "## Source Provenance",
         "",
-        "| fund_code | resolved_source_name | fallback_used | fallback_eligibility | source_provenance_status | source_provenance_reason |",
-        "|---|---|---|---|---|---|",
+        "| fund_code | selected_source | source_mode | fallback_enabled | resolved_source_name | fallback_used | fallback_eligibility | source_provenance_status | source_provenance_reason |",
+        "|---|---|---|---|---|---|---|---|---|",
     ]
     for fund_code in sorted(first_records_by_fund):
         record = first_records_by_fund[fund_code]
         lines.append(
             "| "
             f"{record.fund_code} | "
+            f"{_summary_nullable_text(record.selected_source)} | "
+            f"{record.source_mode} | "
+            f"{_summary_nullable_bool_text(record.fallback_enabled)} | "
             f"{_summary_nullable_text(record.resolved_source_name)} | "
             f"{_summary_bool_text(record.fallback_used)} | "
             f"{record.fallback_eligibility} | "
@@ -1211,7 +1227,7 @@ def _source_provenance_summary_lines(
         lines.extend(
             [
                 "",
-                "_Failed funds without snapshot records are omitted from Source Provenance v1._",
+                "_Failed funds without snapshot records are omitted from Source Provenance v2._",
             ]
         )
     return lines
@@ -1247,6 +1263,22 @@ def _summary_bool_text(value: bool) -> str:
     """
 
     return "true" if value else "false"
+
+
+def _summary_nullable_bool_text(value: bool | None) -> str:
+    """把 summary 表中的可选布尔值格式化为稳定文本。
+
+    Args:
+        value: 可选布尔值。
+
+    Returns:
+        `true`、`false` 或 `null`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return _summary_bool_text(value) if value is not None else "null"
 
 
 def _comparable_values_for_field(

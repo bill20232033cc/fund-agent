@@ -17,6 +17,7 @@ from fund_agent.fund.documents.models import (
     AnnualReportCacheProvenance,
     AnnualReportMetadata,
     AnnualReportPdfFetchResult,
+    AnnualReportReferenceMetadataResult,
     AnnualReportSourceMetadata,
     DocumentKey,
     ParsedAnnualReport,
@@ -264,6 +265,33 @@ def _with_annual_report_metadata(
     )
 
 
+def _is_current_eid_single_source_metadata(
+    metadata: AnnualReportSourceMetadata | None,
+) -> bool:
+    """判断来源元数据是否满足当前 EID single-source cache policy。
+
+    Args:
+        metadata: 待检查的来源元数据。
+
+    Returns:
+        元数据证明当前 EID single-source policy 时返回 ``True``。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if metadata is None:
+        return False
+    return (
+        metadata.source == "eid"
+        and metadata.fallback_used is False
+        and metadata.primary_failure_category is None
+        and metadata.selected_source == "eid"
+        and metadata.source_mode == "single_source_only"
+        and metadata.fallback_enabled is False
+    )
+
+
 class FundDocumentRepository:
     """基金文档仓库。
 
@@ -322,7 +350,10 @@ class FundDocumentRepository:
         document_key = self._build_document_key(normalized_fund_code, normalized_year)
         if not force_refresh:
             cached_report = await self._cache.load_parsed_report(document_key)
-            if cached_report is not None:
+            if (
+                cached_report is not None
+                and _is_current_eid_single_source_metadata(cached_report.metadata.source)
+            ):
                 return _with_annual_report_metadata(
                     cached_report,
                     source_metadata=cached_report.metadata.source,
@@ -338,7 +369,10 @@ class FundDocumentRepository:
         pdf_cache_hit = False
         if not force_refresh:
             pdf_entry = await self._cache.get_pdf_entry(document_key)
-            if pdf_entry is not None:
+            if (
+                pdf_entry is not None
+                and _is_current_eid_single_source_metadata(pdf_entry.source_metadata)
+            ):
                 pdf_path = pdf_entry.pdf_path
                 source_metadata = pdf_entry.source_metadata
                 pdf_cache_hit = True
@@ -383,6 +417,34 @@ class FundDocumentRepository:
             source_metadata=source_metadata,
         )
         return parsed_report
+
+    async def get_annual_report_reference_metadata(
+        self,
+        fund_code: str,
+        year: int,
+    ) -> AnnualReportReferenceMetadataResult:
+        """读取不含正文和路径的年报同源引用元数据。
+
+        该方法用于模板第 1-6 章后续证据准入前的 metadata-only 检查，只查询
+        documents 表中的身份与来源策略元数据，不调用 ``load_annual_report()``、
+        下载器、解析器或 source adapter。
+
+        Args:
+            fund_code: 基金代码。
+            year: 年报年份。
+
+        Returns:
+            不包含 PDF 路径、正文、表格、章节和来源 URL 的引用元数据结果。
+
+        Raises:
+            ValueError: 输入参数非法时抛出。
+            sqlite3.Error: 底层缓存查询 SQLite 失败时抛出。
+        """
+
+        normalized_fund_code = _validate_fund_code(fund_code)
+        normalized_year = _validate_year(year)
+        document_key = self._build_document_key(normalized_fund_code, normalized_year)
+        return await self._cache.get_reference_metadata(document_key)
 
     def _build_document_key(self, fund_code: str, year: int) -> DocumentKey:
         """构造当前仓库使用的文档主键。

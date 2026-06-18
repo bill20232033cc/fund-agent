@@ -58,15 +58,28 @@ def test_projects_eight_chapter_inputs_from_structured_bundle() -> None:
     assert projection.chapters[2].title == "R=A+B-C 收益归因"
     chapter_1_fields = _field_names(projection.chapters[1])
     chapter_3_fields = _field_names(projection.chapters[3])
-    assert {"basic_identity", "product_profile", "benchmark", "index_profile"}.issubset(
-        chapter_1_fields
-    )
+    assert {
+        "basic_identity",
+        "portfolio_managers",
+        "product_profile",
+        "risk_characteristic_text",
+        "benchmark",
+        "index_profile",
+    }.issubset(chapter_1_fields)
     assert {
         "manager_strategy_text",
+        "portfolio_managers",
         "holdings_snapshot",
         "turnover_rate",
         "manager_alignment",
     }.issubset(chapter_3_fields)
+    assert "risk_characteristic_text" in _field_names(projection.chapters[6])
+    assert _fact(projection.chapters[1], "portfolio_managers").source_field_id == "structured.portfolio_managers"
+    assert (
+        _fact(projection.chapters[1], "risk_characteristic_text").source_field_id
+        == "structured.risk_characteristic_text"
+    )
+    assert _fact(projection.chapters[3], "holdings_snapshot").source_field_id == "structured.holdings_snapshot"
 
 
 def test_chapter_fact_provider_delegates_to_project_chapter_facts() -> None:
@@ -512,10 +525,25 @@ def _bundle(
         share_change=_field({"beginning_share": "1", "ending_share": "2"}, "share_change"),
         manager_alignment=_field({"manager_holding": "0"}, "manager_alignment"),
         manager_strategy_text=_field({"strategy_summary": "精选个股"}, "manager_strategy_text"),
+        portfolio_managers=_field(
+            {
+                "schema_version": "portfolio_manager_tenure_list.v1",
+                "manager_count": 1,
+                "portfolio_managers": [{"name": "张三", "role": "基金经理"}],
+            },
+            "portfolio_managers",
+        ),
         holdings_snapshot=_field({"top_holdings": [{"name": "A"}]}, "holdings_snapshot"),
         holder_structure=_field(
             {"institutional_holder": "10%", "individual_holder": "90%"},
             "holder_structure",
+        ),
+        risk_characteristic_text=_field(
+            {
+                "schema_version": "risk_characteristic_text.v1",
+                "risk_characteristic_text": "本基金为混合型基金，风险收益特征高于债券型基金。",
+            },
+            "risk_characteristic_text",
         ),
         nav_data=NavDataResult(
             fund_code="110011",

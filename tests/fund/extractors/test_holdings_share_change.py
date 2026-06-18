@@ -146,6 +146,29 @@ def _all_stock_details_table(row_count: int = 12) -> ParsedTable:
     )
 
 
+def _target_fund_holding_table() -> ParsedTable:
+    """构造期末投资目标基金明细表。
+
+    Args:
+        无。
+
+    Returns:
+        目标基金持仓表格。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return ParsedTable(
+        page_number=64,
+        table_index=4,
+        headers=("基金名称", "公允价值", "占基金资产净值比例"),
+        rows=(
+            ("易方达恒生中国企业交易型开放式指数证券投资基金", "7,611,716.80", "93.94%"),
+        ),
+    )
+
+
 def _share_change_table() -> ParsedTable:
     """构造份额变动表。
 
@@ -669,6 +692,51 @@ def test_extract_holdings_share_change_outputs_tables_with_table_anchors() -> No
     assert result.share_change.anchors[0].page_number == 58
     assert result.share_change.anchors[0].table_id == "page-58-table-0"
     assert result.share_change.anchors[0].row_locator == "share_change"
+
+
+def test_extract_holdings_share_change_outputs_target_fund_holdings() -> None:
+    """验证目标基金持仓表输出独立 `target_fund_holdings` 子形态。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当目标基金持仓字段或锚点不符合契约时抛出。
+    """
+
+    report = _build_report((_target_fund_holding_table(),), fund_code="110020")
+
+    result = extract_holdings_share_change(report)
+
+    assert result.holdings_snapshot.extraction_mode == "direct"
+    assert result.holdings_snapshot.value is not None
+    assert result.holdings_snapshot.value["schema_version"] == "target_fund_holding_row.v1"
+    assert result.holdings_snapshot.value["fund_code"] == "110020"
+    assert result.holdings_snapshot.value["report_year"] == 2024
+    target_fund_holdings = result.holdings_snapshot.value["target_fund_holdings"]
+    assert isinstance(target_fund_holdings, list)
+    assert target_fund_holdings == [
+        {
+            "name": "易方达恒生中国企业交易型开放式指数证券投资基金",
+            "fair_value_cny": "7,611,716.80",
+            "net_asset_ratio": "93.94%",
+            "source_anchor": {
+                "section_id": "§8",
+                "section_title": "§8.2 期末投资目标基金明细",
+                "page_number": 64,
+                "table_id": "page-64-table-4",
+                "row_locator": "target_fund_holding:易方达恒生中国企业交易型开放式指数证券投资基金",
+            },
+        }
+    ]
+    assert "code" not in target_fund_holdings[0]
+    assert result.holdings_snapshot.value["top_holdings"] is None
+    assert result.holdings_snapshot.value["top_holdings_status"] == "missing"
+    assert result.holdings_snapshot.value["top_holdings_source"] == "none"
+    assert result.holdings_snapshot.anchors[0].row_locator == "target_fund_holdings"
 
 
 def test_extract_holdings_share_change_outputs_share_change_from_subscription_redemption_table() -> None:

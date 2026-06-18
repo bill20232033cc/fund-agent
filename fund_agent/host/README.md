@@ -6,10 +6,12 @@
 
 稳定边界：
 
-- Host 管 run lifecycle、cancel、deadline、terminal state、safe diagnostics、event/outbox boundary；当前 API 只接收 `operation_name`、同步 `operation`、`timeout_seconds` 和可选 `session_id`。
+- Host 管 run lifecycle、cancel、deadline、terminal state、safe diagnostics、event/outbox boundary；当前 API 只接收 `operation_name`、同步 `operation`、`timeout_seconds`、可选 `session_id` 和可选通用 `event_sink`。
 - Service 管业务语义、prompt/ExecutionContract、provider clients、chapter policy 和 final assembly；`--use-llm` 的 typed request 和 runtime plan 均由 Service 准备。
 - Fund 管基金领域规则、CHAPTER_CONTRACT、证据锚点、writer/auditor 和审计。
 - CLI/UI 负责把 async Service 调用包成同步 operation closure，并只把 Service runtime plan 中的 `host_timeout_seconds` 作为 Host deadline 标量；Host runner 不管理 asyncio event loop。
+
+`event_sink` 是通用 Host 事件投递钩子：Host 先构造安全 `HostRunEvent`，追加到 `HostRunResult.events`，再把同一个事件对象传给 sink。Host 不捕获或翻译 sink 异常；CLI 若用于 progress，必须在自己的 sink wrapper 内捕获异常并关闭后续 progress。Host 不格式化 progress 文案，也不理解基金业务 phase 之外的语义。
 
 Host 禁止事项：
 

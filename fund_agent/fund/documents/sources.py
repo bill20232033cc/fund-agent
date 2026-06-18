@@ -40,6 +40,9 @@ PDF_MAGIC_BYTES = b"%PDF-"
 _FALLBACK_ELIGIBLE_CATEGORIES: Final[frozenset[AnnualReportSourceFailureCategory]] = frozenset(
     {"not_found", "unavailable"}
 )
+EID_SELECTED_SOURCE: Final[Literal["eid"]] = "eid"
+EID_SINGLE_SOURCE_MODE: Final[Literal["single_source_only"]] = "single_source_only"
+EID_DISCOVERY_CONTRACT_VERSION: Final[str] = "eid_annual_report_discovery.v1"
 _EID_DISPLAY_START = 0
 _EID_DISPLAY_LENGTH = 20
 _EID_HEADERS = {
@@ -499,7 +502,8 @@ class EidAnnualReportSource:
 class EastmoneyAnnualReportSource:
     """Eastmoney/akshare 年报来源包装器。
 
-    该类保持当前生产默认行为，只把既有下载 helper 包装成统一来源协议。
+    该类当前仅保留为 deferred future source candidate，不在 EID single-source
+    生产默认路径中使用。不要在本 gate 中把它重新接入 production fallback。
     """
 
     name: AnnualReportSourceName = "eastmoney"
@@ -564,7 +568,8 @@ class EastmoneyAnnualReportSource:
 class AnnualReportSourceOrchestrator:
     """年报来源编排器。
 
-    编排器负责按顺序尝试来源，并按失败类别决定是否继续 fallback。
+    当前生产策略是 EID single-source only。编排器只接受一个来源；
+    `not_found` / `unavailable` 在单源模式下是终态失败，不触发 fallback。
     """
 
     def __init__(
@@ -576,24 +581,27 @@ class AnnualReportSourceOrchestrator:
         """初始化来源编排器。
 
         Args:
-            sources: 按优先级排列的年报来源；未提供时使用 EID 主源与 Eastmoney fallback。
+            sources: 年报来源；未提供时仅使用 EID single-source，Eastmoney 不在
+                当前 production fallback 中。
             config: 来源访问配置。
 
         Returns:
             无返回值。
 
         Raises:
-            ValueError: 来源列表为空时抛出。
+            ValueError: 来源列表为空或包含多个来源时抛出。
         """
 
         self.config = config or AnnualReportSourceConfig()
         self.sources = (
-            (EidAnnualReportSource(config=self.config), EastmoneyAnnualReportSource())
+            (EidAnnualReportSource(config=self.config),)
             if sources is None
             else sources
         )
         if not self.sources:
             raise ValueError("sources 不能为空")
+        if len(self.sources) != 1:
+            raise ValueError("EID single-source 模式只允许一个年报来源")
 
     async def fetch_annual_report_pdf(
         self,
@@ -1265,6 +1273,10 @@ def _build_eid_metadata(
         report_send_date=candidate.report_send_date,
         operation_upload_type=candidate.operation_upload_type,
         corrections_num=candidate.corrections_num,
+        selected_source=EID_SELECTED_SOURCE,
+        source_mode=EID_SINGLE_SOURCE_MODE,
+        fallback_enabled=False,
+        discovery_contract_version=EID_DISCOVERY_CONTRACT_VERSION,
     )
 
 
