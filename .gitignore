@@ -16,12 +16,20 @@ cache/
 # Generated analysis outputs.
 report.md
 report-*.md
+.mimocode/
+基金年报/
 reports/extraction-snapshots/
 reports/quality-gate-runs/
 reports/smoke/
 reports/scoring-runs/
 reports/writing-runs/
 reports/data-source-runs/
+reports/docling-dedicated-extractor-residual-table-shape-diagnostic/
+reports/docling-field-correctness-anchor-coverage-root-cause/
+reports/docling-field-correctness-comparative/
+reports/docling-route-a/
+reports/live-evidence/
+reports/manual-llm-smoke/
 reports/mvp-local-acceptance/
 reports/mvp-provider-runtime-budget-prompt-cost-root-cause-calibration/
 reports/mvp-real-provider-smoke-rerun/
