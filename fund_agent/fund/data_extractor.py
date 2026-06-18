@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import date
-from typing import Protocol
+from typing import Any, Protocol
 
 from fund_agent.fund.data.nav_data import (
     FundNavDataAdapter,
@@ -28,6 +28,13 @@ from fund_agent.fund.extractors import (
     extract_profile,
 )
 from fund_agent.fund.fund_type import FundType
+from fund_agent.fund.processors.contracts import (
+    FundFieldFamilyResult,
+    FundProcessorDispatchKey,
+    FundProcessorInput,
+    FundProcessorResult,
+)
+from fund_agent.fund.processors.registry import FundProcessorRegistry
 from fund_agent.fund.source_provenance import (
     PublicSourceProvenance,
     default_public_source_provenance,
@@ -248,6 +255,7 @@ class FundDataExtractor:
         repository: _AnnualReportRepository | None = None,
         nav_provider: _NavDataProvider | None = None,
         nav_series_repository: _NavSeriesRepository | None = None,
+        processor_registry: FundProcessorRegistry | None = None,
     ) -> None:
         """初始化结构化数据 façade。
 
@@ -255,6 +263,7 @@ class FundDataExtractor:
             repository: 年报仓库；未提供时使用 `FundDocumentRepository`。
             nav_provider: 净值数据提供者；未提供时使用 `FundNavDataAdapter`。
             nav_series_repository: typed NAV 序列仓库；未提供时使用 `FundNavRepository`。
+            processor_registry: processor 注册表；未提供时使用默认注册表。
 
         Returns:
             无返回值。
@@ -266,6 +275,7 @@ class FundDataExtractor:
         self._repository = repository or FundDocumentRepository()
         self._nav_provider = nav_provider or FundNavDataAdapter()
         self._nav_series_repository = nav_series_repository or FundNavRepository()
+        self._processor_registry = processor_registry or FundProcessorRegistry.create_default()
 
     async def extract(
         self,
@@ -286,6 +296,8 @@ class FundDataExtractor:
 
         Raises:
             Exception: 允许仓库或年报 extractor 异常向上抛出；净值外部数据异常会降级为不可用结果。
+            UnsupportedFundProcessorError: 当 active fund 无可用 processor 时 fail-closed。
+            RuntimeError: 当 active fund processor 结果状态为 unsupported 或 blocked 时 fail-closed。
         """
 
         report = await self._repository.load_annual_report(
@@ -293,16 +305,84 @@ class FundDataExtractor:
             report_year,
             force_refresh=force_refresh,
         )
+        if report.key.fund_code != fund_code or report.key.year != report_year:
+            raise RuntimeError(
+                f"Report identity mismatch: requested {fund_code}/{report_year}, "
+                f"loaded {report.key.fund_code}/{report.key.year}"
+            )
         nav_data = await _load_nav_data_or_unavailable(
             self._nav_provider,
             fund_code,
             force_refresh=force_refresh,
         )
         profile_result = extract_profile(report)
-        performance_result = extract_performance(report)
-        manager_ownership_result = extract_manager_ownership(report)
-        holdings_share_change_result = extract_holdings_share_change(report)
         classified_fund_type = _classified_fund_type(profile_result.basic_identity)
+
+        if classified_fund_type == "active_fund":
+            return await self._extract_active_fund_via_processor(
+                report=report,
+                fund_code=fund_code,
+                report_year=report_year,
+                nav_data=nav_data,
+                profile_result=profile_result,
+                classified_fund_type=classified_fund_type,
+                force_refresh=force_refresh,
+            )
+
+        return await _extract_bundle_direct_legacy_path(
+            report=report,
+            nav_data=nav_data,
+            profile_result=profile_result,
+            classified_fund_type=classified_fund_type,
+            nav_series_repository=self._nav_series_repository,
+            force_refresh=force_refresh,
+        )
+
+    async def _extract_active_fund_via_processor(
+        self,
+        *,
+        report: ParsedAnnualReport,
+        fund_code: str,
+        report_year: int,
+        nav_data: NavDataResult,
+        profile_result: Any,
+        classified_fund_type: FundType,
+        force_refresh: bool,
+    ) -> StructuredFundDataBundle:
+        """通过 processor registry 路径抽取 active fund 结构化数据。
+
+        S2 接入：只覆盖 active_fund + annual_report + parsed_annual_report.v1。
+        非 active fund 不得进入此路径。
+
+        Raises:
+            UnsupportedFundProcessorError: registry 无可用 processor。
+            RuntimeError: processor 结果 unsupported 或 blocked。
+        """
+
+        dispatch_key = FundProcessorDispatchKey(
+            fund_type="active_fund",
+            report_type="annual_report",
+            intermediate_kind="parsed_annual_report.v1",
+            source_kind="annual_report",
+            document_year=report.key.year,
+            fund_code=report.key.fund_code,
+        )
+        source_provenance = project_public_source_provenance(report.metadata.source)
+        processor = self._processor_registry.resolve(dispatch_key)
+        processor_input = FundProcessorInput(
+            context=dispatch_key,
+            intermediate=report,
+            source_provenance=source_provenance,
+        )
+        result = processor.extract(processor_input)
+        if result.contract_status in ("unsupported", "blocked"):
+            raise RuntimeError(
+                f"active_fund processor {result.processor_id} returned "
+                f"{result.contract_status}: {result.gaps}"
+            )
+
+        _validate_processor_result_identity(result, dispatch_key)
+
         drawdown_metric, drawdown_metric_error = await _load_drawdown_metric_for_bond_fund(
             self._nav_series_repository,
             fund_code=report.key.fund_code,
@@ -317,32 +397,249 @@ class FundDataExtractor:
             drawdown_metric_error=drawdown_metric_error,
         )
 
-        return StructuredFundDataBundle(
-            fund_code=report.key.fund_code,
-            report_year=report.key.year,
-            basic_identity=profile_result.basic_identity,
-            product_profile=profile_result.product_profile,
-            benchmark=profile_result.benchmark,
-            index_profile=profile_result.index_profile,
-            fee_schedule=profile_result.fee_schedule,
-            turnover_rate=manager_ownership_result.turnover_rate,
-            nav_benchmark_performance=performance_result.nav_benchmark_performance,
-            investor_return=performance_result.investor_return,
-            tracking_error=_tracking_error_for_fund_type(
-                performance_result.tracking_error,
-                classified_fund_type,
-            ),
-            share_change=holdings_share_change_result.share_change,
-            manager_alignment=manager_ownership_result.manager_alignment,
-            manager_strategy_text=manager_ownership_result.manager_strategy_text,
-            holdings_snapshot=holdings_share_change_result.holdings_snapshot,
-            holder_structure=manager_ownership_result.holder_structure,
+        return _active_processor_result_to_bundle(
+            result,
             nav_data=nav_data,
-            source_provenance=project_public_source_provenance(report.metadata.source),
+            profile_result=profile_result,
+            classified_fund_type=classified_fund_type,
             bond_risk_evidence=bond_risk_evidence,
-            portfolio_managers=manager_ownership_result.portfolio_managers,
-            risk_characteristic_text=profile_result.risk_characteristic_text,
+            source_provenance=source_provenance,
         )
+
+
+async def _extract_bundle_direct_legacy_path(
+    *,
+    report: ParsedAnnualReport,
+    nav_data: NavDataResult,
+    profile_result: Any,
+    classified_fund_type: FundType | None,
+    nav_series_repository: _NavSeriesRepository,
+    force_refresh: bool,
+) -> StructuredFundDataBundle:
+    """S2 residual：非 active fund 直接窄 extractor 编排路径。
+
+    该路径仅在 S2 未实现 processor 的基金类型（index、enhanced_index、bond、QDII、
+    FOF 及未分类）上保留现有行为。每类基金后续需独立 planning/implementation gate
+    接入对应 processor。不得被 Service/UI/Host/renderer/quality gate 直接消费。
+    """
+
+    performance_result = extract_performance(report)
+    manager_ownership_result = extract_manager_ownership(report)
+    holdings_share_change_result = extract_holdings_share_change(report)
+    drawdown_metric, drawdown_metric_error = await _load_drawdown_metric_for_bond_fund(
+        nav_series_repository,
+        fund_code=report.key.fund_code,
+        report_year=report.key.year,
+        classified_fund_type=classified_fund_type,
+        force_refresh=force_refresh,
+    )
+    bond_risk_evidence = extract_bond_risk_evidence(
+        report,
+        classified_fund_type=classified_fund_type,
+        drawdown_metric=drawdown_metric,
+        drawdown_metric_error=drawdown_metric_error,
+    )
+
+    return StructuredFundDataBundle(
+        fund_code=report.key.fund_code,
+        report_year=report.key.year,
+        basic_identity=profile_result.basic_identity,
+        product_profile=profile_result.product_profile,
+        benchmark=profile_result.benchmark,
+        index_profile=profile_result.index_profile,
+        fee_schedule=profile_result.fee_schedule,
+        turnover_rate=manager_ownership_result.turnover_rate,
+        nav_benchmark_performance=performance_result.nav_benchmark_performance,
+        investor_return=performance_result.investor_return,
+        tracking_error=_tracking_error_for_fund_type(
+            performance_result.tracking_error,
+            classified_fund_type,
+        ),
+        share_change=holdings_share_change_result.share_change,
+        manager_alignment=manager_ownership_result.manager_alignment,
+        manager_strategy_text=manager_ownership_result.manager_strategy_text,
+        holdings_snapshot=holdings_share_change_result.holdings_snapshot,
+        holder_structure=manager_ownership_result.holder_structure,
+        nav_data=nav_data,
+        source_provenance=project_public_source_provenance(report.metadata.source),
+        bond_risk_evidence=bond_risk_evidence,
+        portfolio_managers=manager_ownership_result.portfolio_managers,
+        risk_characteristic_text=profile_result.risk_characteristic_text,
+    )
+
+
+def _field_family_by_id(
+    field_families: tuple[FundFieldFamilyResult, ...],
+) -> dict[str, FundFieldFamilyResult]:
+    """按 field_family_id 索引字段族结果。"""
+
+    return {ff.field_family_id: ff for ff in field_families}
+
+
+def _field_from_family(
+    family_result: FundFieldFamilyResult | None,
+    field_name: str,
+) -> ExtractedField[Any]:
+    """从字段族 value 投影单个 ExtractedField。
+
+    字段缺失时返回 extraction_mode="missing" 且 note 含 source family/gap 信息。
+    """
+
+    if family_result is None:
+        return ExtractedField(
+            value=None,
+            anchors=(),
+            extraction_mode="missing",
+            note=f"field_family_absent:{field_name}",
+        )
+    value = family_result.value.get(field_name)
+    if value is None:
+        return ExtractedField(
+            value=None,
+            anchors=(),
+            extraction_mode="missing",
+            note=f"field_not_in_family:{family_result.field_family_id}:{field_name}",
+        )
+    return ExtractedField(
+        value=value,
+        anchors=family_result.anchors,
+        extraction_mode=family_result.extraction_mode,
+        note=None,
+    )
+
+
+def _validate_processor_result_identity(
+    result: FundProcessorResult,
+    dispatch_key: FundProcessorDispatchKey,
+) -> None:
+    """校验 processor 结果身份与 dispatch key 一致。
+
+    Args:
+        result: processor 提取结果。
+        dispatch_key: 本次 dispatch key。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        RuntimeError: 任一身份字段不匹配时 fail-closed。
+    """
+
+    mismatches: list[str] = []
+    if result.fund_code != dispatch_key.fund_code:
+        mismatches.append(
+            f"fund_code: result={result.fund_code} dispatch={dispatch_key.fund_code}"
+        )
+    if result.report_year != dispatch_key.document_year:
+        mismatches.append(
+            f"report_year: result={result.report_year} dispatch={dispatch_key.document_year}"
+        )
+    if result.fund_type != dispatch_key.fund_type:
+        mismatches.append(
+            f"fund_type: result={result.fund_type} dispatch={dispatch_key.fund_type}"
+        )
+    if result.report_type != dispatch_key.report_type:
+        mismatches.append(
+            f"report_type: result={result.report_type} dispatch={dispatch_key.report_type}"
+        )
+    if result.input_intermediate_kind != dispatch_key.intermediate_kind:
+        mismatches.append(
+            f"input_intermediate_kind: result={result.input_intermediate_kind} "
+            f"dispatch={dispatch_key.intermediate_kind}"
+        )
+    if mismatches:
+        raise RuntimeError(
+            f"Processor result identity mismatch for {result.processor_id}: "
+            + "; ".join(mismatches)
+        )
+
+
+def _active_processor_result_to_bundle(
+    result: FundProcessorResult,
+    *,
+    nav_data: NavDataResult,
+    profile_result: Any,
+    classified_fund_type: FundType,
+    bond_risk_evidence: ExtractedField[BondRiskEvidenceValue],
+    source_provenance: PublicSourceProvenance,
+) -> StructuredFundDataBundle:
+    """从 active_fund processor 结果投影 StructuredFundDataBundle。
+
+    投影规则：
+    - product_essence.v1 → basic_identity, product_profile, benchmark, risk_characteristic_text
+    - return_attribution.v1 → fee_schedule, nav_benchmark_performance, tracking_error
+    - manager_profile.v1 → portfolio_managers, turnover_rate, manager_alignment, manager_strategy_text, holdings_snapshot
+    - investor_experience.v1 → investor_return, holder_structure, share_change
+    - core_risk.v1 → 仅 risk_characteristic_text fallback
+    - current_stage.v1 → informational/redundant，不投影
+    - index_profile → 来自 bootstrap profile_result（S2 residual）
+    """
+
+    families = _field_family_by_id(result.field_families)
+    product_essence = families.get("product_essence.v1")
+    return_attribution = families.get("return_attribution.v1")
+    manager_profile = families.get("manager_profile.v1")
+    investor_experience = families.get("investor_experience.v1")
+    core_risk = families.get("core_risk.v1")
+
+    basic_identity = _field_from_family(product_essence, "basic_identity")
+    product_profile = _field_from_family(product_essence, "product_profile")
+    benchmark = _field_from_family(product_essence, "benchmark")
+    risk_characteristic_text = _field_from_family(product_essence, "risk_characteristic_text")
+
+    # core_risk.v1 fallback：仅 risk_characteristic_text
+    if (
+        risk_characteristic_text.extraction_mode == "missing"
+        and risk_characteristic_text.value is None
+        and core_risk is not None
+    ):
+        core_risk_text = core_risk.value.get("risk_characteristic_text")
+        if core_risk_text is not None:
+            risk_characteristic_text = ExtractedField(
+                value=core_risk_text,
+                anchors=core_risk.anchors,
+                extraction_mode=core_risk.extraction_mode,
+                note="fallback_from_core_risk.v1",
+            )
+
+    fee_schedule = _field_from_family(return_attribution, "fee_schedule")
+    nav_benchmark_performance = _field_from_family(return_attribution, "nav_benchmark_performance")
+    raw_tracking_error = _field_from_family(return_attribution, "tracking_error")
+    tracking_error = _tracking_error_for_fund_type(raw_tracking_error, classified_fund_type)  # type: ignore[arg-type]
+
+    portfolio_managers = _field_from_family(manager_profile, "portfolio_managers")
+    turnover_rate = _field_from_family(manager_profile, "turnover_rate")
+    manager_alignment = _field_from_family(manager_profile, "manager_alignment")
+    manager_strategy_text = _field_from_family(manager_profile, "manager_strategy_text")
+    holdings_snapshot = _field_from_family(manager_profile, "holdings_snapshot")
+
+    investor_return = _field_from_family(investor_experience, "investor_return")
+    holder_structure = _field_from_family(investor_experience, "holder_structure")
+    share_change = _field_from_family(investor_experience, "share_change")
+
+    return StructuredFundDataBundle(
+        fund_code=result.fund_code,
+        report_year=result.report_year,
+        basic_identity=basic_identity,  # type: ignore[arg-type]
+        product_profile=product_profile,  # type: ignore[arg-type]
+        benchmark=benchmark,  # type: ignore[arg-type]
+        index_profile=profile_result.index_profile,
+        fee_schedule=fee_schedule,  # type: ignore[arg-type]
+        turnover_rate=turnover_rate,  # type: ignore[arg-type]
+        nav_benchmark_performance=nav_benchmark_performance,  # type: ignore[arg-type]
+        investor_return=investor_return,  # type: ignore[arg-type]
+        tracking_error=tracking_error,
+        share_change=share_change,  # type: ignore[arg-type]
+        manager_alignment=manager_alignment,  # type: ignore[arg-type]
+        manager_strategy_text=manager_strategy_text,  # type: ignore[arg-type]
+        holdings_snapshot=holdings_snapshot,  # type: ignore[arg-type]
+        holder_structure=holder_structure,  # type: ignore[arg-type]
+        nav_data=nav_data,
+        source_provenance=source_provenance,
+        bond_risk_evidence=bond_risk_evidence,
+        portfolio_managers=portfolio_managers,  # type: ignore[arg-type]
+        risk_characteristic_text=risk_characteristic_text,  # type: ignore[arg-type]
+    )
 
 
 async def _load_drawdown_metric_for_bond_fund(

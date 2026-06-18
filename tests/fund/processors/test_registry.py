@@ -112,6 +112,29 @@ def _dispatch_key() -> FundProcessorDispatchKey:
     )
 
 
+def _fund_disclosure_dispatch_key() -> FundProcessorDispatchKey:
+    """构造 FundDisclosureDocument 中间态 dispatch key。
+
+    Args:
+        无。
+
+    Returns:
+        主动基金年报 FundDisclosureDocument processor 路由键。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return FundProcessorDispatchKey(
+        fund_type="active_fund",
+        report_type="annual_report",
+        intermediate_kind="fund_disclosure_document.v1",
+        source_kind="annual_report",
+        document_year=2024,
+        fund_code="110011",
+    )
+
+
 def test_registry_resolves_priority_descending() -> None:
     """验证 registry 按 priority 降序解析。
 
@@ -217,6 +240,26 @@ def test_registry_create_default_resolves_active_annual_processor() -> None:
     processor = registry.resolve(_dispatch_key())
 
     assert processor.processor_id == "active_fund_annual.parsed_annual_report.v1"
+
+
+def test_registry_default_supports_fund_disclosure_document_intermediate() -> None:
+    """验证 S4 默认 registry 已注册 FundDisclosureDocumentProcessor。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当默认 registry 未注册 S4 processor 时抛出。
+    """
+
+    registry = FundProcessorRegistry.create_default()
+
+    processor = registry.resolve(_fund_disclosure_dispatch_key())
+
+    assert processor.processor_id == "fund_disclosure_document.fund_disclosure_document.v1"
 
 
 def test_dispatch_key_rejects_invalid_values_and_has_no_extra_payload() -> None:
