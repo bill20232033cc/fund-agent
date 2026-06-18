@@ -9,9 +9,13 @@ Service/UI/Host。
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import ClassVar, Literal, Protocol
+from typing import ClassVar, Literal, Protocol, runtime_checkable
 
-from fund_agent.fund.documents.models import AnnualReportReferenceMetadata, ParsedAnnualReport
+from fund_agent.fund.documents.models import (
+    AnnualReportReferenceMetadata,
+    AnnualReportSourceFailureCategory,
+    ParsedAnnualReport,
+)
 from fund_agent.fund.extractors.models import EvidenceAnchor
 from fund_agent.fund.fund_type import FundType
 from fund_agent.fund.source_provenance import PublicSourceProvenance
@@ -176,6 +180,114 @@ class CandidateBoundaryStatus:
             raise ValueError("候选边界不得授权 parser replacement")
         if self.readiness_status != "not_ready":
             raise ValueError("候选边界不得声明 readiness")
+
+
+@runtime_checkable
+class FundDisclosureDocumentIntermediate(Protocol):
+    """受控文档表示中间态协议。
+
+    任何进入 Processor 边界的 `FundDisclosureDocument`-like 对象都必须实现该协议。
+    本协议只描述报告身份、受控中间态类型、公共来源 provenance 与失败分类；不描述
+    完整文档内容，也不暴露 Docling、PDF/cache/source helper 或 parser 原始产物。
+    """
+
+    @property
+    def document_kind(self) -> FundReportType:
+        """返回报告类型。
+
+        Args:
+            无。
+
+        Returns:
+            当前只允许 `annual_report`。
+
+        Raises:
+            无显式抛出。
+        """
+
+    @property
+    def fund_code(self) -> str:
+        """返回基金代码。
+
+        Args:
+            无。
+
+        Returns:
+            6 位基金代码字符串。
+
+        Raises:
+            无显式抛出。
+        """
+
+    @property
+    def report_year(self) -> int:
+        """返回年报年份。
+
+        Args:
+            无。
+
+        Returns:
+            年报年份。
+
+        Raises:
+            无显式抛出。
+        """
+
+    @property
+    def intermediate_kind(self) -> FundIntermediateKind:
+        """返回受控中间态类型。
+
+        Args:
+            无。
+
+        Returns:
+            当前中间态类型。
+
+        Raises:
+            无显式抛出。
+        """
+
+    @property
+    def source_provenance(self) -> PublicSourceProvenance | None:
+        """返回公共来源 provenance。
+
+        Args:
+            无。
+
+        Returns:
+            可安全公开的来源 provenance；缺失时 admission helper 必须 fail-closed。
+
+        Raises:
+            无显式抛出。
+        """
+
+    @property
+    def candidate_boundary(self) -> CandidateBoundaryStatus | None:
+        """返回候选边界状态。
+
+        Args:
+            无。
+
+        Returns:
+            候选中间态的 fail-closed 边界；非候选中间态为 `None`。
+
+        Raises:
+            无显式抛出。
+        """
+
+    @property
+    def failure_class(self) -> AnnualReportSourceFailureCategory | None:
+        """返回来源失败分类。
+
+        Args:
+            无。
+
+        Returns:
+            五类标准年报来源失败分类；没有失败时为 `None`。
+
+        Raises:
+            无显式抛出。
+        """
 
 
 @dataclass(frozen=True, slots=True)
