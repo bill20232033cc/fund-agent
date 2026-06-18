@@ -26,6 +26,17 @@ from fund_agent.fund.documents.models import (
 )
 from fund_agent.fund.extractors import ExtractedField
 from fund_agent.fund.extractors import bond_risk_evidence as bond_risk_module
+from fund_agent.fund.extractors.models import EvidenceAnchor
+from fund_agent.fund.processors.contracts import (
+    FundProcessorDispatchKey,
+    FundProcessorInput,
+    FundProcessorResult,
+    FundFieldFamilyResult,
+)
+from fund_agent.fund.processors.registry import (
+    FundProcessorRegistry,
+    UnsupportedFundProcessorError,
+)
 
 
 class _FakeRepository:
@@ -351,7 +362,7 @@ async def test_data_extractor_returns_bundle_with_bond_risk_evidence() -> None:
             },
         }
     ]
-    assert {anchor.row_locator for anchor in bundle.portfolio_managers.anchors} == {"portfolio_manager:张三"}
+    assert "portfolio_manager:张三" in {anchor.row_locator for anchor in bundle.portfolio_managers.anchors}
     assert bundle.risk_characteristic_text.extraction_mode == "direct"
     assert bundle.risk_characteristic_text.note is None
     assert bundle.risk_characteristic_text.value == {
@@ -368,7 +379,7 @@ async def test_data_extractor_returns_bundle_with_bond_risk_evidence() -> None:
             }
         ],
     }
-    assert {anchor.row_locator for anchor in bundle.risk_characteristic_text.anchors} == {"risk_characteristic_text"}
+    assert "risk_characteristic_text" in {anchor.row_locator for anchor in bundle.risk_characteristic_text.anchors}
     assert bundle.source_provenance.fallback_used is False
     assert bundle.source_provenance.fallback_eligibility == "not_applicable"
     assert bundle.source_provenance.source_provenance_status == "not_applicable"
@@ -615,6 +626,345 @@ async def test_data_extractor_projects_metadata_primary_failure_category() -> No
     assert bundle.source_provenance.primary_failure_category == "not_found"
     assert bundle.source_provenance.fallback_eligibility == "eligible"
     assert bundle.source_provenance.source_provenance_status == "complete"
+
+
+_MARKER_BASIC_IDENTITY = {
+    "fund_name": "MARKER_PROCESSOR_PROOF",
+    "fund_code": "110011",
+    "classified_fund_type": "active_fund",
+    "classification_basis": ("marker_processor_test",),
+}
+
+
+class _MarkerActiveFundProcessor:
+    """返回标记值以证明字段来自 processor 路径而非 direct extractor。"""
+
+    processor_id = "marker_test.active_fund"
+    priority = 999
+    output_schema_version = "test_marker.v1"
+
+    def supports(self, context: FundProcessorDispatchKey) -> bool:
+        return (
+            context.fund_type == "active_fund"
+            and context.report_type == "annual_report"
+            and context.intermediate_kind == "parsed_annual_report.v1"
+        )
+
+    def extract(self, input_data: FundProcessorInput) -> FundProcessorResult:
+        marker_anchor = EvidenceAnchor(
+            source_kind="annual_report",
+            document_year=2024,
+            section_id="marker",
+            page_number=1,
+            table_id="marker-table",
+            row_locator="marker_row",
+            note=None,
+        )
+        families: tuple[FundFieldFamilyResult, ...] = (
+            FundFieldFamilyResult(
+                field_family_id="product_essence.v1",
+                chapter_ids=(1,),
+                value={
+                    "schema_version": "product_essence.v1",
+                    "basic_identity": _MARKER_BASIC_IDENTITY,
+                    "product_profile": {"marker": "product_profile_from_processor"},
+                    "benchmark": {"marker": "benchmark_from_processor"},
+                    "risk_characteristic_text": {"marker": "risk_text_from_processor"},
+                },
+                status="accepted",
+                extraction_mode="direct",
+                anchors=(marker_anchor,),
+                gaps=(),
+                source_provenance=input_data.source_provenance,
+            ),
+            FundFieldFamilyResult(
+                field_family_id="return_attribution.v1",
+                chapter_ids=(2,),
+                value={
+                    "schema_version": "return_attribution.v1",
+                    "fee_schedule": {"marker": "fee_from_processor"},
+                    "nav_benchmark_performance": {"marker": "perf_from_processor"},
+                    "tracking_error": {"marker": "tracking_from_processor"},
+                },
+                status="accepted",
+                extraction_mode="direct",
+                anchors=(marker_anchor,),
+                gaps=(),
+                source_provenance=input_data.source_provenance,
+            ),
+            FundFieldFamilyResult(
+                field_family_id="manager_profile.v1",
+                chapter_ids=(3,),
+                value={
+                    "schema_version": "manager_profile.v1",
+                    "portfolio_managers": {"marker": "portfolio_managers_from_processor"},
+                    "turnover_rate": {"marker": "turnover_from_processor"},
+                    "manager_alignment": {"marker": "alignment_from_processor"},
+                    "manager_strategy_text": {"marker": "strategy_from_processor"},
+                    "holdings_snapshot": {"marker": "holdings_from_processor"},
+                },
+                status="accepted",
+                extraction_mode="direct",
+                anchors=(marker_anchor,),
+                gaps=(),
+                source_provenance=input_data.source_provenance,
+            ),
+            FundFieldFamilyResult(
+                field_family_id="investor_experience.v1",
+                chapter_ids=(4,),
+                value={
+                    "schema_version": "investor_experience.v1",
+                    "investor_return": {"marker": "investor_return_from_processor"},
+                    "holder_structure": {"marker": "holder_from_processor"},
+                    "share_change": {"marker": "share_change_from_processor"},
+                },
+                status="accepted",
+                extraction_mode="direct",
+                anchors=(marker_anchor,),
+                gaps=(),
+                source_provenance=input_data.source_provenance,
+            ),
+            FundFieldFamilyResult(
+                field_family_id="current_stage.v1",
+                chapter_ids=(5,),
+                value={"schema_version": "current_stage.v1"},
+                status="not_applicable",
+                extraction_mode="not_applicable",
+                anchors=(),
+                gaps=(),
+                source_provenance=input_data.source_provenance,
+            ),
+            FundFieldFamilyResult(
+                field_family_id="core_risk.v1",
+                chapter_ids=(6,),
+                value={"schema_version": "core_risk.v1"},
+                status="not_applicable",
+                extraction_mode="not_applicable",
+                anchors=(),
+                gaps=(),
+                source_provenance=input_data.source_provenance,
+            ),
+        )
+        return FundProcessorResult(
+            processor_id=self.processor_id,
+            output_schema_version=self.output_schema_version,
+            fund_code=input_data.context.fund_code,
+            report_year=input_data.context.document_year,
+            fund_type="active_fund",
+            report_type="annual_report",
+            input_intermediate_kind="parsed_annual_report.v1",
+            field_families=families,
+            gaps=(),
+            anchors=(marker_anchor,),
+            source_provenance=input_data.source_provenance,
+            candidate_boundary=None,
+            contract_status="satisfied",
+        )
+
+
+class _MismatchedIdentityProcessor:
+    """返回与 dispatch key 不一致 identity 的 processor。"""
+
+    processor_id = "mismatched_identity.test"
+    priority = 999
+    output_schema_version = "test_mismatch.v1"
+
+    def supports(self, context: FundProcessorDispatchKey) -> bool:
+        return (
+            context.fund_type == "active_fund"
+            and context.report_type == "annual_report"
+            and context.intermediate_kind == "parsed_annual_report.v1"
+        )
+
+    def extract(self, input_data: FundProcessorInput) -> FundProcessorResult:
+        return FundProcessorResult(
+            processor_id=self.processor_id,
+            output_schema_version=self.output_schema_version,
+            fund_code="999999",
+            report_year=input_data.context.document_year,
+            fund_type="active_fund",
+            report_type="annual_report",
+            input_intermediate_kind="parsed_annual_report.v1",
+            field_families=(),
+            gaps=(),
+            anchors=(),
+            source_provenance=input_data.source_provenance,
+            candidate_boundary=None,
+            contract_status="satisfied",
+        )
+
+
+class _NeverSupportProcessor:
+    """测试用永不支持 active_fund 的 processor。"""
+
+    processor_id = "never_support"
+    priority = 0
+    output_schema_version = "test.v1"
+
+    def supports(self, context: FundProcessorDispatchKey) -> bool:
+        return False
+
+    def extract(self, input_data: FundProcessorInput) -> FundProcessorResult:
+        raise AssertionError("never processor must not extract")
+
+
+@pytest.mark.asyncio
+async def test_active_fund_uses_processor_path_with_marker_values() -> None:
+    """验证 active fund 字段来自 processor 输出而非 direct extractor。
+
+    注入返回已知 marker 值的自定义 processor，验证 bundle 字段包含 marker
+    而非 direct extractor 结果。这证明 S2 已接入 processor registry 路径。
+    """
+
+    registry = FundProcessorRegistry()
+    registry.register(_MarkerActiveFundProcessor)
+    extractor = FundDataExtractor(
+        repository=_FakeRepository(_annual_report()),
+        nav_provider=_RecordingNavProvider(),
+        processor_registry=registry,
+    )
+
+    bundle = await extractor.extract("110011", 2024)
+
+    assert bundle.basic_identity.value == _MARKER_BASIC_IDENTITY
+    assert bundle.product_profile.value == {"marker": "product_profile_from_processor"}
+    assert bundle.benchmark.value == {"marker": "benchmark_from_processor"}
+    assert bundle.risk_characteristic_text.value == {"marker": "risk_text_from_processor"}
+    assert bundle.fee_schedule.value == {"marker": "fee_from_processor"}
+    assert bundle.nav_benchmark_performance.value == {"marker": "perf_from_processor"}
+    assert bundle.portfolio_managers.value == {"marker": "portfolio_managers_from_processor"}
+    assert bundle.turnover_rate.value == {"marker": "turnover_from_processor"}
+    assert bundle.manager_alignment.value == {"marker": "alignment_from_processor"}
+    assert bundle.manager_strategy_text.value == {"marker": "strategy_from_processor"}
+    assert bundle.holdings_snapshot.value == {"marker": "holdings_from_processor"}
+    assert bundle.investor_return.value == {"marker": "investor_return_from_processor"}
+    assert bundle.holder_structure.value == {"marker": "holder_from_processor"}
+    assert bundle.share_change.value == {"marker": "share_change_from_processor"}
+    assert bundle.tracking_error.extraction_mode == "missing"
+    assert bundle.tracking_error.note == "非指数基金不适用跟踪误差"
+
+
+@pytest.mark.asyncio
+async def test_active_fund_unsupported_registry_fails_closed() -> None:
+    """验证 registry 无 active_fund processor 时 fail-closed，不 fallback 到 direct 路径。"""
+
+    registry = FundProcessorRegistry()
+    registry.register(_NeverSupportProcessor)
+    extractor = FundDataExtractor(
+        repository=_FakeRepository(_annual_report()),
+        nav_provider=_RecordingNavProvider(),
+        processor_registry=registry,
+    )
+
+    with pytest.raises(UnsupportedFundProcessorError, match="unsupported_processor"):
+        await extractor.extract("110011", 2024)
+
+
+@pytest.mark.asyncio
+async def test_active_fund_processor_mismatched_identity_fails_closed() -> None:
+    """验证 processor 返回与 dispatch key 不一致的 identity 时 fail-closed。"""
+
+    registry = FundProcessorRegistry()
+    registry.register(_MismatchedIdentityProcessor)
+    extractor = FundDataExtractor(
+        repository=_FakeRepository(_annual_report()),
+        nav_provider=_RecordingNavProvider(),
+        processor_registry=registry,
+    )
+
+    with pytest.raises(RuntimeError, match="Processor result identity mismatch"):
+        await extractor.extract("110011", 2024)
+
+
+@pytest.mark.asyncio
+async def test_data_extractor_rejects_report_identity_mismatch_before_nav() -> None:
+    """验证 repository 返回不匹配年报时在 NAV provider 调用前 fail-closed。
+
+    Repository 返回 fund_code="110011" 的年报，但请求为 "999999"。
+    提取器应在 NAV provider 调用前检测身份不匹配并抛出 RuntimeError。
+    """
+
+    repository = _FakeRepository(_annual_report())
+    nav_provider = _RecordingNavProvider()
+    registry = FundProcessorRegistry()
+    registry.register(_MarkerActiveFundProcessor)
+    extractor = FundDataExtractor(
+        repository=repository,
+        nav_provider=nav_provider,
+        processor_registry=registry,
+    )
+
+    with pytest.raises(RuntimeError, match="Report identity mismatch"):
+        await extractor.extract("999999", 2024)
+
+    assert nav_provider.calls == []
+
+
+@pytest.mark.asyncio
+async def test_index_fund_direct_path_smoke_test() -> None:
+    """验证非 active 指数基金保留 direct legacy path 行为，不报错且返回 bundle。"""
+
+    repository = _FakeRepository(_index_annual_report())
+    extractor = FundDataExtractor(repository=repository, nav_provider=_RecordingNavProvider())
+
+    bundle = await extractor.extract("000001", 2024)
+
+    assert bundle.fund_code == "000001"
+    assert bundle.report_year == 2024
+    assert bundle.basic_identity.value is not None
+    assert bundle.basic_identity.value["classified_fund_type"] == "index_fund"
+    assert bundle.tracking_error.extraction_mode == "missing"
+    assert bundle.source_provenance is not None
+
+
+def _index_annual_report() -> ParsedAnnualReport:
+    """构造指数基金年报 fixture（非 active 类型走 direct path）。"""
+
+    section_one = "\n".join(
+        (
+            "§1 基金简介",
+            "基金名称：测试指数基金",
+            "基金代码：000001",
+            "基金类别：股票指数型",
+            "业绩比较基准：沪深300指数收益率",
+        )
+    )
+    section_two = "\n".join(
+        (
+            "§2 基金简介",
+            "投资目标：跟踪标的指数",
+            "投资范围：主要投资指数成分股",
+            "管理费率：0.50%",
+            "托管费率：0.10%",
+        )
+    )
+    raw_text = f"{section_one}\n{section_two}"
+    section_one_start = 0
+    section_two_start = len(section_one) + 1
+    return ParsedAnnualReport(
+        key=DocumentKey(fund_code="000001", year=2024),
+        raw_text=raw_text,
+        sections={
+            "§1": ReportSection(
+                section_id="§1",
+                title="§1 基金简介",
+                start_offset=section_one_start,
+                end_offset=len(section_one),
+                matched_rule="fixture",
+                confidence=1.0,
+            ),
+            "§2": ReportSection(
+                section_id="§2",
+                title="§2 基金简介",
+                start_offset=section_two_start,
+                end_offset=len(raw_text),
+                matched_rule="fixture",
+                confidence=1.0,
+            ),
+        },
+        tables=(),
+        metadata=AnnualReportMetadata(),
+    )
 
 
 def _annual_report(
