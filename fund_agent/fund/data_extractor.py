@@ -11,7 +11,10 @@ from fund_agent.fund.data.nav_data import (
     NavDataResult,
     unavailable_nav_data_result,
 )
-from fund_agent.fund.data.nav_metrics import NavMaxDrawdownMetric, calculate_max_drawdown_from_nav_series
+from fund_agent.fund.data.nav_metrics import (
+    NavMaxDrawdownMetric,
+    calculate_max_drawdown_from_nav_series,
+)
 from fund_agent.fund.data.nav_models import FundNavSeries, NavDataContractError
 from fund_agent.fund.data.nav_repository import FundNavRepository
 from fund_agent.fund.documents import FundDocumentRepository
@@ -29,6 +32,7 @@ from fund_agent.fund.extractors import (
 )
 from fund_agent.fund.fund_type import FundType
 from fund_agent.fund.processors.contracts import (
+    FundDisclosureDocumentIntermediate,
     FundFieldFamilyResult,
     FundProcessorDispatchKey,
     FundProcessorInput,
@@ -283,6 +287,7 @@ class FundDataExtractor:
         report_year: int,
         *,
         force_refresh: bool = False,
+        disclosure_intermediate: FundDisclosureDocumentIntermediate | None = None,
     ) -> StructuredFundDataBundle:
         """抽取 P1 结构化基金数据。
 
@@ -290,6 +295,8 @@ class FundDataExtractor:
             fund_code: 基金代码。
             report_year: 年报年份。
             force_refresh: 是否强制刷新底层仓库和净值缓存。
+            disclosure_intermediate: 显式 opt-in 的 FundDisclosureDocument 中间态；
+                仅用于 S5 Processor/Extractor admission 路由，默认不启用。
 
         Returns:
             P1 结构化基金数据包。
@@ -310,6 +317,12 @@ class FundDataExtractor:
                 f"Report identity mismatch: requested {fund_code}/{report_year}, "
                 f"loaded {report.key.fund_code}/{report.key.year}"
             )
+        if disclosure_intermediate is not None:
+            _validate_disclosure_intermediate_identity(
+                disclosure_intermediate,
+                fund_code=fund_code,
+                report_year=report_year,
+            )
         nav_data = await _load_nav_data_or_unavailable(
             self._nav_provider,
             fund_code,
@@ -317,6 +330,16 @@ class FundDataExtractor:
         )
         profile_result = extract_profile(report)
         classified_fund_type = _classified_fund_type(profile_result.basic_identity)
+
+        if disclosure_intermediate is not None:
+            return await self._extract_active_fund_disclosure_via_processor(
+                report=report,
+                disclosure_intermediate=disclosure_intermediate,
+                nav_data=nav_data,
+                profile_result=profile_result,
+                classified_fund_type=classified_fund_type,
+                force_refresh=force_refresh,
+            )
 
         if classified_fund_type == "active_fund":
             return await self._extract_active_fund_via_processor(
@@ -382,6 +405,94 @@ class FundDataExtractor:
             )
 
         _validate_processor_result_identity(result, dispatch_key)
+
+        drawdown_metric, drawdown_metric_error = await _load_drawdown_metric_for_bond_fund(
+            self._nav_series_repository,
+            fund_code=report.key.fund_code,
+            report_year=report.key.year,
+            classified_fund_type=classified_fund_type,
+            force_refresh=force_refresh,
+        )
+        bond_risk_evidence = extract_bond_risk_evidence(
+            report,
+            classified_fund_type=classified_fund_type,
+            drawdown_metric=drawdown_metric,
+            drawdown_metric_error=drawdown_metric_error,
+        )
+
+        return _active_processor_result_to_bundle(
+            result,
+            nav_data=nav_data,
+            profile_result=profile_result,
+            classified_fund_type=classified_fund_type,
+            bond_risk_evidence=bond_risk_evidence,
+            source_provenance=source_provenance,
+        )
+
+    async def _extract_active_fund_disclosure_via_processor(
+        self,
+        *,
+        report: ParsedAnnualReport,
+        disclosure_intermediate: FundDisclosureDocumentIntermediate,
+        nav_data: NavDataResult,
+        profile_result: Any,
+        classified_fund_type: FundType | None,
+        force_refresh: bool,
+    ) -> StructuredFundDataBundle:
+        """通过 processor registry 路由显式 FundDisclosureDocument 中间态。
+
+        S5 仅允许显式 opt-in 的
+        active_fund + annual_report + fund_disclosure_document.v1；分类仍来自已加载的
+        ParsedAnnualReport，候选内容不得决定基金类型或绕过 production 年报身份校验。
+
+        Args:
+            report: 已通过 FundDocumentRepository 加载并完成身份校验的年报。
+            disclosure_intermediate: 调用方显式传入的受控文档表示协议对象。
+            nav_data: 已加载或降级后的 NAV 数据。
+            profile_result: 基于 ParsedAnnualReport 抽取的 profile 结果。
+            classified_fund_type: 从 ParsedAnnualReport 分类得到的基金类型。
+            force_refresh: 是否强制刷新 NAV 派生指标来源。
+
+        Returns:
+            由 processor 结果投影得到的结构化数据包。
+
+        Raises:
+            UnsupportedFundProcessorError: registry 无可用 FDD processor。
+            RuntimeError: 非 active fund、processor identity mismatch、blocked/unsupported
+                status 或 provenance 缺失时 fail-closed。
+        """
+
+        if classified_fund_type != "active_fund":
+            raise RuntimeError(
+                "FundDisclosureDocument route supports only active_fund annual_report; "
+                f"classified_fund_type={classified_fund_type}"
+            )
+
+        dispatch_key = FundProcessorDispatchKey(
+            fund_type="active_fund",
+            report_type="annual_report",
+            intermediate_kind="fund_disclosure_document.v1",
+            source_kind="annual_report",
+            document_year=report.key.year,
+            fund_code=report.key.fund_code,
+        )
+        source_provenance = disclosure_intermediate.source_provenance
+        processor = self._processor_registry.resolve(dispatch_key)
+        processor_input = FundProcessorInput(
+            context=dispatch_key,
+            intermediate=disclosure_intermediate,
+            candidate_boundary=disclosure_intermediate.candidate_boundary,
+            source_provenance=source_provenance,
+        )
+        result = processor.extract(processor_input)
+        _validate_processor_result_identity(result, dispatch_key)
+        if result.contract_status in ("unsupported", "blocked"):
+            raise RuntimeError(
+                f"fund_disclosure_document processor {result.processor_id} returned "
+                f"{result.contract_status}: {result.gaps}"
+            )
+        if source_provenance is None:
+            raise RuntimeError("FundDisclosureDocument source_provenance is required")
 
         drawdown_metric, drawdown_metric_error = await _load_drawdown_metric_for_bond_fund(
             self._nav_series_repository,
@@ -527,17 +638,13 @@ def _validate_processor_result_identity(
 
     mismatches: list[str] = []
     if result.fund_code != dispatch_key.fund_code:
-        mismatches.append(
-            f"fund_code: result={result.fund_code} dispatch={dispatch_key.fund_code}"
-        )
+        mismatches.append(f"fund_code: result={result.fund_code} dispatch={dispatch_key.fund_code}")
     if result.report_year != dispatch_key.document_year:
         mismatches.append(
             f"report_year: result={result.report_year} dispatch={dispatch_key.document_year}"
         )
     if result.fund_type != dispatch_key.fund_type:
-        mismatches.append(
-            f"fund_type: result={result.fund_type} dispatch={dispatch_key.fund_type}"
-        )
+        mismatches.append(f"fund_type: result={result.fund_type} dispatch={dispatch_key.fund_type}")
     if result.report_type != dispatch_key.report_type:
         mismatches.append(
             f"report_type: result={result.report_type} dispatch={dispatch_key.report_type}"
@@ -552,6 +659,50 @@ def _validate_processor_result_identity(
             f"Processor result identity mismatch for {result.processor_id}: "
             + "; ".join(mismatches)
         )
+
+
+def _validate_disclosure_intermediate_identity(
+    disclosure_intermediate: FundDisclosureDocumentIntermediate,
+    *,
+    fund_code: str,
+    report_year: int,
+) -> None:
+    """校验显式 FundDisclosureDocument 中间态身份，见模板第 1 章“产品本质”。
+
+    Args:
+        disclosure_intermediate: 显式 opt-in 的受控文档表示。
+        fund_code: 请求基金代码。
+        report_year: 请求年报年份。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        RuntimeError: 任一身份字段不匹配时，在 NAV 和 processor resolution 前 fail-closed。
+    """
+
+    mismatches: list[str] = []
+    if disclosure_intermediate.fund_code != fund_code:
+        mismatches.append(
+            f"fund_code: intermediate={disclosure_intermediate.fund_code} requested={fund_code}"
+        )
+    if disclosure_intermediate.report_year != report_year:
+        mismatches.append(
+            f"report_year: intermediate={disclosure_intermediate.report_year} "
+            f"requested={report_year}"
+        )
+    if disclosure_intermediate.document_kind != "annual_report":
+        mismatches.append(
+            f"document_kind: intermediate={disclosure_intermediate.document_kind} "
+            "required=annual_report"
+        )
+    if disclosure_intermediate.intermediate_kind != "fund_disclosure_document.v1":
+        mismatches.append(
+            f"intermediate_kind: intermediate={disclosure_intermediate.intermediate_kind} "
+            "required=fund_disclosure_document.v1"
+        )
+    if mismatches:
+        raise RuntimeError("FundDisclosureDocument identity mismatch: " + "; ".join(mismatches))
 
 
 def _active_processor_result_to_bundle(
@@ -775,7 +926,11 @@ def _tracking_error_for_fund_type(
 
     if fund_type in _TRACKING_ERROR_APPLICABLE_FUND_TYPES:
         return tracking_error
-    note = "QDII 基金当前不适用 P13 跟踪误差规则" if fund_type == "qdii_fund" else "非指数基金不适用跟踪误差"
+    note = (
+        "QDII 基金当前不适用 P13 跟踪误差规则"
+        if fund_type == "qdii_fund"
+        else "非指数基金不适用跟踪误差"
+    )
     return ExtractedField(
         value=None,
         anchors=(),

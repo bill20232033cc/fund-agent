@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
+import ast
+from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
+from pathlib import Path
+from typing import Literal
 
 import pytest
 
@@ -28,14 +32,20 @@ from fund_agent.fund.extractors import ExtractedField
 from fund_agent.fund.extractors import bond_risk_evidence as bond_risk_module
 from fund_agent.fund.extractors.models import EvidenceAnchor
 from fund_agent.fund.processors.contracts import (
+    AnnualReportSourceFailureCategory,
+    CandidateBoundaryStatus,
     FundProcessorDispatchKey,
+    FundFieldFamilyResult,
     FundProcessorInput,
     FundProcessorResult,
-    FundFieldFamilyResult,
 )
 from fund_agent.fund.processors.registry import (
     FundProcessorRegistry,
     UnsupportedFundProcessorError,
+)
+from fund_agent.fund.source_provenance import (
+    PublicSourceProvenance,
+    default_public_source_provenance,
 )
 
 
@@ -203,7 +213,9 @@ class _RecordingNavSeriesRepository:
             Exception: 当初始化传入异常时抛出。
         """
 
-        self.calls.append((fund_code, share_class, start_date, end_date, minimum_records, force_refresh))
+        self.calls.append(
+            (fund_code, share_class, start_date, end_date, minimum_records, force_refresh)
+        )
         if isinstance(self.result, Exception):
             raise self.result
         return self.result
@@ -362,7 +374,9 @@ async def test_data_extractor_returns_bundle_with_bond_risk_evidence() -> None:
             },
         }
     ]
-    assert "portfolio_manager:张三" in {anchor.row_locator for anchor in bundle.portfolio_managers.anchors}
+    assert "portfolio_manager:张三" in {
+        anchor.row_locator for anchor in bundle.portfolio_managers.anchors
+    }
     assert bundle.risk_characteristic_text.extraction_mode == "direct"
     assert bundle.risk_characteristic_text.note is None
     assert bundle.risk_characteristic_text.value == {
@@ -379,7 +393,9 @@ async def test_data_extractor_returns_bundle_with_bond_risk_evidence() -> None:
             }
         ],
     }
-    assert "risk_characteristic_text" in {anchor.row_locator for anchor in bundle.risk_characteristic_text.anchors}
+    assert "risk_characteristic_text" in {
+        anchor.row_locator for anchor in bundle.risk_characteristic_text.anchors
+    }
     assert bundle.source_provenance.fallback_used is False
     assert bundle.source_provenance.fallback_eligibility == "not_applicable"
     assert bundle.source_provenance.source_provenance_status == "not_applicable"
@@ -420,7 +436,9 @@ async def test_data_extractor_non_bond_bond_risk_evidence_does_not_scan_groups(
     extractor = FundDataExtractor(
         repository=_FakeRepository(_annual_report()),
         nav_provider=_RecordingNavProvider(),
-        nav_series_repository=_RecordingNavSeriesRepository(RuntimeError("must not call typed NAV")),
+        nav_series_repository=_RecordingNavSeriesRepository(
+            RuntimeError("must not call typed NAV")
+        ),
     )
 
     bundle = await extractor.extract("110011", 2024)
@@ -636,6 +654,35 @@ _MARKER_BASIC_IDENTITY = {
 }
 
 
+@dataclass(frozen=True, slots=True)
+class _StubDisclosureIntermediate:
+    """测试专用 FundDisclosureDocumentIntermediate stub。"""
+
+    document_kind: Literal["annual_report"] = "annual_report"
+    fund_code: str = "110011"
+    report_year: int = 2024
+    intermediate_kind: Literal["fund_disclosure_document.v1"] = "fund_disclosure_document.v1"
+    source_provenance: PublicSourceProvenance | None = None
+    candidate_boundary: CandidateBoundaryStatus | None = None
+    failure_class: AnnualReportSourceFailureCategory | None = None
+
+
+class _RecordingRegistry(FundProcessorRegistry):
+    """记录 resolve context 的测试 registry。"""
+
+    def __init__(self) -> None:
+        """初始化记录型 registry。"""
+
+        super().__init__()
+        self.resolved_contexts: list[FundProcessorDispatchKey] = []
+
+    def resolve(self, context: FundProcessorDispatchKey):
+        """记录 resolve 请求并委托父类解析。"""
+
+        self.resolved_contexts.append(context)
+        return super().resolve(context)
+
+
 class _MarkerActiveFundProcessor:
     """返回标记值以证明字段来自 processor 路径而非 direct extractor。"""
 
@@ -762,6 +809,163 @@ class _MarkerActiveFundProcessor:
         )
 
 
+class _MarkerDisclosureProcessor:
+    """返回标记值以证明 explicit disclosure route 经过 registry。"""
+
+    processor_id = "marker_test.fund_disclosure_document"
+    priority = 999
+    output_schema_version = "test_marker_disclosure.v1"
+
+    def supports(self, context: FundProcessorDispatchKey) -> bool:
+        return (
+            context.fund_type == "active_fund"
+            and context.report_type == "annual_report"
+            and context.intermediate_kind == "fund_disclosure_document.v1"
+        )
+
+    def extract(self, input_data: FundProcessorInput) -> FundProcessorResult:
+        marker_anchor = EvidenceAnchor(
+            source_kind="annual_report",
+            document_year=2024,
+            section_id="marker",
+            page_number=1,
+            table_id="marker-table",
+            row_locator="disclosure_marker_row",
+            note=None,
+        )
+        families: tuple[FundFieldFamilyResult, ...] = (
+            FundFieldFamilyResult(
+                field_family_id="product_essence.v1",
+                chapter_ids=(1,),
+                value={
+                    "schema_version": "product_essence.v1",
+                    "basic_identity": {
+                        **_MARKER_BASIC_IDENTITY,
+                        "fund_name": "DISCLOSURE_MARKER_PROCESSOR_PROOF",
+                    },
+                    "product_profile": {"marker": "product_profile_from_disclosure_processor"},
+                    "benchmark": {"marker": "benchmark_from_disclosure_processor"},
+                    "risk_characteristic_text": {"marker": "risk_text_from_disclosure_processor"},
+                },
+                status="accepted",
+                extraction_mode="direct",
+                anchors=(marker_anchor,),
+                gaps=(),
+                source_provenance=input_data.source_provenance,
+            ),
+            FundFieldFamilyResult(
+                field_family_id="return_attribution.v1",
+                chapter_ids=(2,),
+                value={
+                    "schema_version": "return_attribution.v1",
+                    "fee_schedule": {"marker": "fee_from_disclosure_processor"},
+                    "nav_benchmark_performance": {"marker": "perf_from_disclosure_processor"},
+                    "tracking_error": {"marker": "tracking_from_disclosure_processor"},
+                },
+                status="accepted",
+                extraction_mode="direct",
+                anchors=(marker_anchor,),
+                gaps=(),
+                source_provenance=input_data.source_provenance,
+            ),
+            FundFieldFamilyResult(
+                field_family_id="manager_profile.v1",
+                chapter_ids=(3,),
+                value={
+                    "schema_version": "manager_profile.v1",
+                    "portfolio_managers": {"marker": "portfolio_from_disclosure_processor"},
+                    "turnover_rate": {"marker": "turnover_from_disclosure_processor"},
+                    "manager_alignment": {"marker": "alignment_from_disclosure_processor"},
+                    "manager_strategy_text": {"marker": "strategy_from_disclosure_processor"},
+                    "holdings_snapshot": {"marker": "holdings_from_disclosure_processor"},
+                },
+                status="accepted",
+                extraction_mode="direct",
+                anchors=(marker_anchor,),
+                gaps=(),
+                source_provenance=input_data.source_provenance,
+            ),
+            FundFieldFamilyResult(
+                field_family_id="investor_experience.v1",
+                chapter_ids=(4,),
+                value={
+                    "schema_version": "investor_experience.v1",
+                    "investor_return": {"marker": "investor_from_disclosure_processor"},
+                    "holder_structure": {"marker": "holder_from_disclosure_processor"},
+                    "share_change": {"marker": "share_from_disclosure_processor"},
+                },
+                status="accepted",
+                extraction_mode="direct",
+                anchors=(marker_anchor,),
+                gaps=(),
+                source_provenance=input_data.source_provenance,
+            ),
+            FundFieldFamilyResult(
+                field_family_id="current_stage.v1",
+                chapter_ids=(5,),
+                value={"schema_version": "current_stage.v1"},
+                status="not_applicable",
+                extraction_mode="not_applicable",
+                anchors=(),
+                gaps=(),
+                source_provenance=input_data.source_provenance,
+            ),
+            FundFieldFamilyResult(
+                field_family_id="core_risk.v1",
+                chapter_ids=(6,),
+                value={"schema_version": "core_risk.v1"},
+                status="not_applicable",
+                extraction_mode="not_applicable",
+                anchors=(),
+                gaps=(),
+                source_provenance=input_data.source_provenance,
+            ),
+        )
+        return FundProcessorResult(
+            processor_id=self.processor_id,
+            output_schema_version=self.output_schema_version,
+            fund_code=input_data.context.fund_code,
+            report_year=input_data.context.document_year,
+            fund_type=input_data.context.fund_type,
+            report_type=input_data.context.report_type,
+            input_intermediate_kind=input_data.context.intermediate_kind,
+            field_families=families,
+            gaps=(),
+            anchors=(marker_anchor,),
+            source_provenance=input_data.source_provenance,
+            candidate_boundary=None,
+            contract_status="satisfied",
+        )
+
+
+class _MismatchedDisclosureIdentityProcessor:
+    """返回与 FDD dispatch key 不一致 identity 的 processor。"""
+
+    processor_id = "mismatched_identity.disclosure_test"
+    priority = 999
+    output_schema_version = "test_disclosure_mismatch.v1"
+
+    def supports(self, context: FundProcessorDispatchKey) -> bool:
+        return context.intermediate_kind == "fund_disclosure_document.v1"
+
+    def extract(self, input_data: FundProcessorInput) -> FundProcessorResult:
+        return FundProcessorResult(
+            processor_id=self.processor_id,
+            output_schema_version=self.output_schema_version,
+            fund_code="999999",
+            report_year=input_data.context.document_year,
+            fund_type=input_data.context.fund_type,
+            report_type=input_data.context.report_type,
+            input_intermediate_kind=input_data.context.intermediate_kind,
+            field_families=(),
+            gaps=(),
+            anchors=(),
+            source_provenance=input_data.source_provenance,
+            candidate_boundary=None,
+            contract_status="satisfied",
+        )
+
+
 class _MismatchedIdentityProcessor:
     """返回与 dispatch key 不一致 identity 的 processor。"""
 
@@ -845,6 +1049,344 @@ async def test_active_fund_uses_processor_path_with_marker_values() -> None:
 
 
 @pytest.mark.asyncio
+async def test_default_active_fund_still_uses_parsed_annual_report_processor_path() -> None:
+    """验证默认路径仍解析 parsed_annual_report.v1 processor，不启用 FDD。"""
+
+    registry = FundProcessorRegistry()
+    registry.register(_MarkerActiveFundProcessor)
+    extractor = FundDataExtractor(
+        repository=_FakeRepository(_annual_report()),
+        nav_provider=_RecordingNavProvider(),
+        processor_registry=registry,
+    )
+
+    bundle = await extractor.extract("110011", 2024)
+
+    assert bundle.basic_identity.value == _MARKER_BASIC_IDENTITY
+    assert bundle.product_profile.value == {"marker": "product_profile_from_processor"}
+    assert bundle.source_provenance is not None
+
+
+@pytest.mark.asyncio
+async def test_default_extract_does_not_resolve_fund_disclosure_processor() -> None:
+    """验证 disclosure_intermediate=None 时不会解析 fund_disclosure_document.v1。"""
+
+    registry = _RecordingRegistry()
+    registry.register(_MarkerActiveFundProcessor)
+    registry.register(_MarkerDisclosureProcessor)
+    extractor = FundDataExtractor(
+        repository=_FakeRepository(_annual_report()),
+        nav_provider=_RecordingNavProvider(),
+        processor_registry=registry,
+    )
+
+    bundle = await extractor.extract("110011", 2024)
+
+    assert bundle.basic_identity.value == _MARKER_BASIC_IDENTITY
+    assert [context.intermediate_kind for context in registry.resolved_contexts] == [
+        "parsed_annual_report.v1"
+    ]
+
+
+@pytest.mark.asyncio
+async def test_explicit_disclosure_intermediate_routes_to_registry() -> None:
+    """验证显式 FDD 中间态通过 registry 投影 marker 字段。"""
+
+    registry = _RecordingRegistry()
+    registry.register(_MarkerActiveFundProcessor)
+    registry.register(_MarkerDisclosureProcessor)
+    extractor = FundDataExtractor(
+        repository=_FakeRepository(_annual_report()),
+        nav_provider=_RecordingNavProvider(),
+        processor_registry=registry,
+    )
+
+    bundle = await extractor.extract(
+        "110011",
+        2024,
+        disclosure_intermediate=_disclosure_intermediate(),
+    )
+
+    assert [context.intermediate_kind for context in registry.resolved_contexts] == [
+        "fund_disclosure_document.v1"
+    ]
+    assert bundle.basic_identity.value is not None
+    assert bundle.basic_identity.value["fund_name"] == "DISCLOSURE_MARKER_PROCESSOR_PROOF"
+    assert bundle.product_profile.value == {"marker": "product_profile_from_disclosure_processor"}
+    assert bundle.portfolio_managers.value == {"marker": "portfolio_from_disclosure_processor"}
+
+
+def test_explicit_disclosure_intermediate_uses_protocol_not_candidate_import() -> None:
+    """验证 data_extractor 只导入协议，不导入 concrete candidate 模块。"""
+
+    module_path = Path(__file__).parents[2] / "fund_agent" / "fund" / "data_extractor.py"
+    tree = ast.parse(module_path.read_text(encoding="utf-8"))
+    imported_modules = {
+        node.module
+        for node in ast.walk(tree)
+        if isinstance(node, ast.ImportFrom) and node.module is not None
+    }
+    imported_names_from_contracts = {
+        alias.name
+        for node in ast.walk(tree)
+        if isinstance(node, ast.ImportFrom)
+        and node.module == "fund_agent.fund.processors.contracts"
+        for alias in node.names
+    }
+
+    assert "FundDisclosureDocumentIntermediate" in imported_names_from_contracts
+    assert not any(
+        module.startswith("fund_agent.fund.documents.candidates") for module in imported_modules
+    )
+    assert "docling" not in imported_modules
+
+
+@pytest.mark.asyncio
+async def test_explicit_disclosure_identity_mismatch_fails_before_nav() -> None:
+    """验证 FDD fund/year 身份不匹配时在 NAV 调用前 fail-closed。"""
+
+    nav_provider = _RecordingNavProvider()
+    extractor = FundDataExtractor(
+        repository=_FakeRepository(_annual_report()),
+        nav_provider=nav_provider,
+    )
+
+    with pytest.raises(RuntimeError, match="FundDisclosureDocument identity mismatch"):
+        await extractor.extract(
+            "110011",
+            2024,
+            disclosure_intermediate=_disclosure_intermediate(fund_code="999999"),
+        )
+
+    assert nav_provider.calls == []
+
+
+@pytest.mark.asyncio
+async def test_explicit_disclosure_wrong_intermediate_kind_fails_before_nav() -> None:
+    """验证非 fund_disclosure_document.v1 中间态在 NAV 调用前 fail-closed。"""
+
+    nav_provider = _RecordingNavProvider()
+    extractor = FundDataExtractor(
+        repository=_FakeRepository(_annual_report()),
+        nav_provider=nav_provider,
+    )
+
+    with pytest.raises(RuntimeError, match="intermediate_kind"):
+        await extractor.extract(
+            "110011",
+            2024,
+            disclosure_intermediate=_disclosure_intermediate(
+                intermediate_kind="parsed_annual_report.v1"
+            ),
+        )
+
+    assert nav_provider.calls == []
+
+
+@pytest.mark.asyncio
+async def test_explicit_disclosure_missing_provenance_fails_closed() -> None:
+    """验证缺失 provenance 的显式 FDD 路径 fail-closed，不返回 bundle。"""
+
+    extractor = FundDataExtractor(
+        repository=_FakeRepository(_annual_report()),
+        nav_provider=_RecordingNavProvider(),
+    )
+
+    with pytest.raises(RuntimeError, match="source_provenance_unsafe"):
+        await extractor.extract(
+            "110011",
+            2024,
+            disclosure_intermediate=_disclosure_intermediate(source_provenance=None),
+        )
+
+
+@pytest.mark.asyncio
+async def test_explicit_disclosure_candidate_boundary_fails_closed() -> None:
+    """验证 candidate_boundary 不会被提升为可用 bundle。"""
+
+    extractor = FundDataExtractor(
+        repository=_FakeRepository(_annual_report()),
+        nav_provider=_RecordingNavProvider(),
+    )
+
+    with pytest.raises(RuntimeError, match="blocked"):
+        await extractor.extract(
+            "110011",
+            2024,
+            disclosure_intermediate=_disclosure_intermediate(
+                candidate_boundary=CandidateBoundaryStatus(
+                    candidate_only=True,
+                    field_correctness_status="not_proven",
+                    source_truth_status="not_proven",
+                )
+            ),
+        )
+
+
+@pytest.mark.asyncio
+async def test_explicit_disclosure_schema_drift_fails_closed() -> None:
+    """验证 schema_drift 来源失败显式 FDD 路径 fail-closed。"""
+
+    await _assert_explicit_disclosure_failure_class_raises("schema_drift")
+
+
+@pytest.mark.asyncio
+async def test_explicit_disclosure_identity_mismatch_failure_class_fails_closed() -> None:
+    """验证 identity_mismatch 来源失败显式 FDD 路径 fail-closed。"""
+
+    await _assert_explicit_disclosure_failure_class_raises("identity_mismatch")
+
+
+@pytest.mark.asyncio
+async def test_explicit_disclosure_integrity_error_fails_closed() -> None:
+    """验证 integrity_error 来源失败显式 FDD 路径 fail-closed。"""
+
+    await _assert_explicit_disclosure_failure_class_raises("integrity_error")
+
+
+@pytest.mark.asyncio
+async def test_explicit_disclosure_unavailable_fails_closed_no_parsed_fallback() -> None:
+    """验证 unavailable 不回退到 parsed annual production route。"""
+
+    await _assert_explicit_disclosure_failure_class_raises("unavailable")
+
+
+@pytest.mark.asyncio
+async def test_explicit_disclosure_not_found_fails_closed_no_parsed_fallback() -> None:
+    """验证 not_found 不回退到 parsed annual production route。"""
+
+    await _assert_explicit_disclosure_failure_class_raises("not_found")
+
+
+@pytest.mark.asyncio
+async def test_explicit_disclosure_non_active_fund_raises_no_legacy_fallback() -> None:
+    """验证非 active 显式 FDD 路径 fail-closed，不走 direct legacy。"""
+
+    extractor = FundDataExtractor(
+        repository=_FakeRepository(_index_annual_report()),
+        nav_provider=_RecordingNavProvider(),
+    )
+
+    with pytest.raises(RuntimeError, match="supports only active_fund"):
+        await extractor.extract(
+            "000001",
+            2024,
+            disclosure_intermediate=_disclosure_intermediate(fund_code="000001"),
+        )
+
+
+@pytest.mark.asyncio
+async def test_default_non_active_without_disclosure_preserves_legacy_path() -> None:
+    """验证非 active 默认无 FDD 参数时仍保留 direct legacy path。"""
+
+    extractor = FundDataExtractor(
+        repository=_FakeRepository(_index_annual_report()),
+        nav_provider=_RecordingNavProvider(),
+    )
+
+    bundle = await extractor.extract("000001", 2024)
+
+    assert bundle.fund_code == "000001"
+    assert bundle.basic_identity.value is not None
+    assert bundle.basic_identity.value["classified_fund_type"] == "index_fund"
+
+
+@pytest.mark.asyncio
+async def test_explicit_disclosure_registry_resolution_failure_raises_no_fallback() -> None:
+    """验证 registry 无 FDD processor 时抛 UnsupportedFundProcessorError，不 fallback。"""
+
+    registry = FundProcessorRegistry()
+    registry.register(_MarkerActiveFundProcessor)
+    extractor = FundDataExtractor(
+        repository=_FakeRepository(_annual_report()),
+        nav_provider=_RecordingNavProvider(),
+        processor_registry=registry,
+    )
+
+    with pytest.raises(UnsupportedFundProcessorError, match="fund_disclosure_document.v1"):
+        await extractor.extract(
+            "110011",
+            2024,
+            disclosure_intermediate=_disclosure_intermediate(),
+        )
+
+
+@pytest.mark.asyncio
+async def test_explicit_disclosure_processor_result_identity_mismatch_fails_closed() -> None:
+    """验证 FDD processor 返回错身份时 fail-closed。"""
+
+    registry = FundProcessorRegistry()
+    registry.register(_MismatchedDisclosureIdentityProcessor)
+    extractor = FundDataExtractor(
+        repository=_FakeRepository(_annual_report()),
+        nav_provider=_RecordingNavProvider(),
+        processor_registry=registry,
+    )
+
+    with pytest.raises(RuntimeError, match="Processor result identity mismatch"):
+        await extractor.extract(
+            "110011",
+            2024,
+            disclosure_intermediate=_disclosure_intermediate(),
+        )
+
+
+@pytest.mark.asyncio
+async def test_explicit_disclosure_non_candidate_admitted_produces_missing_bundle() -> None:
+    """验证非候选 FDD stub 通过 S4 missing 路径，但不提升字段值或 anchor。"""
+
+    extractor = FundDataExtractor(
+        repository=_FakeRepository(_annual_report()),
+        nav_provider=_RecordingNavProvider(),
+    )
+
+    bundle = await extractor.extract(
+        "110011",
+        2024,
+        disclosure_intermediate=_disclosure_intermediate(),
+    )
+
+    assert bundle.product_profile.value is None
+    assert bundle.product_profile.anchors == ()
+    assert bundle.product_profile.extraction_mode == "missing"
+    assert bundle.product_profile.note == "field_not_in_family:product_essence.v1:product_profile"
+    assert bundle.fee_schedule.value is None
+    assert bundle.fee_schedule.anchors == ()
+    assert bundle.manager_strategy_text.value is None
+    assert bundle.manager_strategy_text.anchors == ()
+
+
+@pytest.mark.asyncio
+async def test_explicit_disclosure_missing_result_preserves_parsed_report_residual_fields() -> None:
+    """验证 FDD missing 结果保留 parsed-report residual 字段语义。"""
+
+    extractor = FundDataExtractor(
+        repository=_FakeRepository(_annual_report()),
+        nav_provider=_RecordingNavProvider(),
+    )
+
+    bundle = await extractor.extract(
+        "110011",
+        2024,
+        disclosure_intermediate=_disclosure_intermediate(),
+    )
+
+    assert bundle.index_profile.value is None
+    assert bundle.index_profile.anchors == ()
+    assert bundle.bond_risk_evidence.value is None
+    assert bundle.bond_risk_evidence.anchors == ()
+    assert bundle.bond_risk_evidence.note == "not_applicable_non_bond_fund"
+    assert bundle.portfolio_managers.value is None
+    assert bundle.portfolio_managers.note == (
+        "field_not_in_family:manager_profile.v1:portfolio_managers"
+    )
+    assert bundle.risk_characteristic_text.value is None
+    assert bundle.risk_characteristic_text.note == (
+        "field_not_in_family:product_essence.v1:risk_characteristic_text"
+    )
+
+
+@pytest.mark.asyncio
 async def test_active_fund_unsupported_registry_fails_closed() -> None:
     """验证 registry 无 active_fund processor 时 fail-closed，不 fallback 到 direct 路径。"""
 
@@ -915,6 +1457,70 @@ async def test_index_fund_direct_path_smoke_test() -> None:
     assert bundle.basic_identity.value["classified_fund_type"] == "index_fund"
     assert bundle.tracking_error.extraction_mode == "missing"
     assert bundle.source_provenance is not None
+
+
+def _provenance() -> PublicSourceProvenance:
+    """构造测试用安全默认公共 provenance。
+
+    Args:
+        无。
+
+    Returns:
+        公共来源 provenance fixture。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return default_public_source_provenance()
+
+
+def _disclosure_intermediate(**overrides: object) -> _StubDisclosureIntermediate:
+    """构造测试用 FundDisclosureDocumentIntermediate stub。
+
+    Args:
+        **overrides: 覆盖协议字段。
+
+    Returns:
+        本地协议 stub。
+
+    Raises:
+        无显式抛出。
+    """
+
+    kwargs: dict[str, object] = {"source_provenance": _provenance()}
+    kwargs.update(overrides)
+    return _StubDisclosureIntermediate(**kwargs)  # type: ignore[arg-type]
+
+
+async def _assert_explicit_disclosure_failure_class_raises(
+    failure_class: AnnualReportSourceFailureCategory,
+) -> None:
+    """断言显式 FDD failure_class 不会 fallback 到 parsed annual 路径。
+
+    Args:
+        failure_class: 来源失败分类。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当显式 FDD 失败被吞掉或返回 bundle 时抛出。
+    """
+
+    registry = FundProcessorRegistry.create_default()
+    extractor = FundDataExtractor(
+        repository=_FakeRepository(_annual_report()),
+        nav_provider=_RecordingNavProvider(),
+        processor_registry=registry,
+    )
+
+    with pytest.raises(RuntimeError, match="fund_disclosure_document processor"):
+        await extractor.extract(
+            "110011",
+            2024,
+            disclosure_intermediate=_disclosure_intermediate(failure_class=failure_class),
+        )
 
 
 def _index_annual_report() -> ParsedAnnualReport:
