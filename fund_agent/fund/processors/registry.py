@@ -141,7 +141,11 @@ class FundProcessorRegistry:
         """
 
         from fund_agent.fund.processors.active_annual import ActiveFundAnnualProcessor
+        from fund_agent.fund.processors.fund_disclosure_processor import (
+            FundDisclosureDocumentProcessor,
+        )
 
         registry = cls()
-        registry.register(ActiveFundAnnualProcessor)
+        registry.register(ActiveFundAnnualProcessor)  # priority=100
+        registry.register(FundDisclosureDocumentProcessor)  # priority=50
         return registry

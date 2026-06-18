@@ -242,8 +242,8 @@ def test_registry_create_default_resolves_active_annual_processor() -> None:
     assert processor.processor_id == "active_fund_annual.parsed_annual_report.v1"
 
 
-def test_registry_default_does_not_support_fund_disclosure_document_intermediate() -> None:
-    """验证 S3 没有注册 FundDisclosureDocument 具体 processor。
+def test_registry_default_supports_fund_disclosure_document_intermediate() -> None:
+    """验证 S4 默认 registry 已注册 FundDisclosureDocumentProcessor。
 
     Args:
         无。
@@ -252,13 +252,14 @@ def test_registry_default_does_not_support_fund_disclosure_document_intermediate
         无返回值。
 
     Raises:
-        AssertionError: 当默认 registry 接受新中间态时抛出。
+        AssertionError: 当默认 registry 未注册 S4 processor 时抛出。
     """
 
     registry = FundProcessorRegistry.create_default()
 
-    with pytest.raises(UnsupportedFundProcessorError, match="fund_disclosure_document.v1"):
-        registry.resolve(_fund_disclosure_dispatch_key())
+    processor = registry.resolve(_fund_disclosure_dispatch_key())
+
+    assert processor.processor_id == "fund_disclosure_document.fund_disclosure_document.v1"
 
 
 def test_dispatch_key_rejects_invalid_values_and_has_no_extra_payload() -> None:
