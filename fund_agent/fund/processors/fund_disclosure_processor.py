@@ -51,6 +51,7 @@ _CHAPTER_IDS: Final[dict[FundFieldFamilyId, tuple[int, ...]]] = {
 }
 
 _PRODUCT_ESSENCE_CANDIDATE_LIMIT: Final[int] = 12
+_RETURN_ATTRIBUTION_CANDIDATE_LIMIT: Final[int] = 12
 _CANDIDATE_EXCERPT_LIMIT: Final[int] = 160
 _PRODUCT_ESSENCE_MATCH_GROUPS: Final[tuple[tuple[str, tuple[str, ...]], ...]] = (
     (
@@ -60,6 +61,36 @@ _PRODUCT_ESSENCE_MATCH_GROUPS: Final[tuple[tuple[str, tuple[str, ...]], ...]] = 
     ("investment_scope", ("投资目标", "投资范围", "投资策略")),
     ("benchmark", ("业绩比较基准", "比较基准")),
     ("risk_characteristic", ("风险收益特征", "风险特征")),
+)
+_RETURN_ATTRIBUTION_MATCH_GROUPS: Final[tuple[tuple[str, tuple[str, ...]], ...]] = (
+    (
+        "nav_benchmark_performance",
+        (
+            "基金份额净值增长率",
+            "净值增长率",
+            "基金净值表现",
+            "业绩比较基准收益率",
+            "基准收益率",
+            "业绩比较基准",
+        ),
+    ),
+    (
+        "fee_schedule",
+        (
+            "基金管理费",
+            "管理费率",
+            "管理费",
+            "基金托管费",
+            "托管费率",
+            "托管费",
+            "销售服务费率",
+            "销售服务费",
+        ),
+    ),
+    (
+        "tracking_error",
+        ("跟踪误差", "年化跟踪误差", "日均跟踪偏离度", "日均偏离度"),
+    ),
 )
 
 
@@ -282,16 +313,21 @@ def _field_families_for_intermediate(
         source_provenance: 公共来源 provenance。
 
     Returns:
-        六个字段族结果；S6-B 仅为 ``product_essence.v1`` 附加 candidate evidence。
+        六个字段族结果；S6-B/S6-C 仅为已接受字段族附加 candidate evidence。
 
     Raises:
         无显式抛出。
     """
 
     product_essence_evidence = _select_product_essence_candidate_evidence(intermediate)
+    return_attribution_evidence = _select_return_attribution_candidate_evidence(intermediate)
     return tuple(
         _candidate_missing_field_family(family_id, source_provenance, product_essence_evidence)
         if family_id == "product_essence.v1" and product_essence_evidence
+        else _candidate_missing_field_family(
+            family_id, source_provenance, return_attribution_evidence
+        )
+        if family_id == "return_attribution.v1" and return_attribution_evidence
         else _missing_field_family(family_id, source_provenance)
         for family_id in _FAMILY_ORDER
     )
@@ -523,6 +559,244 @@ def _extend_product_essence_cell_records(
         records.append(
             FundCandidateEvidenceRecord(
                 field_family_id="product_essence.v1",
+                source_boundary="candidate_only",
+                source_field_path=path,
+                section_id=cell.section_anchor,
+                table_id=cell.table_id,
+                block_id=None,
+                cell_id=cell.cell_id,
+                heading_path=cell.heading_path,
+                row_locator=row_locator,
+                excerpt=_truncate(_first_non_empty((cell.cell_text_normalized, cell.cell_text))),
+                locator_stability=cell.locator_stability,
+            )
+        )
+
+
+def _select_return_attribution_candidate_evidence(
+    intermediate: FundDisclosureDocumentIntermediate,
+) -> tuple[FundCandidateEvidenceRecord, ...]:
+    """选择收益归因字段族的 candidate-only locator evidence。
+
+    Args:
+        intermediate: FundDisclosureDocument-like 中间态。
+
+    Returns:
+        按 S6-C mapping table 排序、去重和限量后的候选证据记录。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if not isinstance(intermediate, FundDisclosureDocumentContentIntermediate):
+        return ()
+
+    records: list[FundCandidateEvidenceRecord] = []
+    seen_paths: set[str] = set()
+    for role, tokens in _RETURN_ATTRIBUTION_MATCH_GROUPS:
+        _extend_return_attribution_section_records(records, seen_paths, intermediate, role, tokens)
+        _extend_return_attribution_paragraph_records(records, seen_paths, intermediate, role, tokens)
+        _extend_return_attribution_table_records(records, seen_paths, intermediate, role, tokens)
+    return tuple(records[:_RETURN_ATTRIBUTION_CANDIDATE_LIMIT])
+
+
+def _extend_return_attribution_section_records(
+    records: list[FundCandidateEvidenceRecord],
+    seen_paths: set[str],
+    intermediate: FundDisclosureDocumentContentIntermediate,
+    role: str,
+    tokens: tuple[str, ...],
+) -> None:
+    """追加 return_attribution section locator candidate evidence。
+
+    Args:
+        records: 待追加的记录列表。
+        seen_paths: 已使用的 source path。
+        intermediate: 带正文结构的中间态。
+        role: 命中的 evidence role。
+        tokens: 当前 role 的匹配 token。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        无显式抛出。
+    """
+
+    for index, section in enumerate(intermediate.sections):
+        path = f"sections[{index}]"
+        texts = (
+            section.heading_text_normalized,
+            section.heading_text_raw,
+            *_tuple_text(section.heading_path),
+        )
+        if path in seen_paths or not _matches_any_token(texts, tokens):
+            continue
+        seen_paths.add(path)
+        records.append(
+            FundCandidateEvidenceRecord(
+                field_family_id="return_attribution.v1",
+                source_boundary="candidate_only",
+                source_field_path=path,
+                section_id=section.section_id,
+                table_id=None,
+                block_id=None,
+                cell_id=None,
+                heading_path=section.heading_path,
+                row_locator=f"role={role}; locator=section_id={section.section_id}",
+                excerpt=_truncate(_first_non_empty(texts)),
+                locator_stability=section.locator_stability,
+            )
+        )
+
+
+def _extend_return_attribution_paragraph_records(
+    records: list[FundCandidateEvidenceRecord],
+    seen_paths: set[str],
+    intermediate: FundDisclosureDocumentContentIntermediate,
+    role: str,
+    tokens: tuple[str, ...],
+) -> None:
+    """追加 return_attribution paragraph block candidate evidence。
+
+    Args:
+        records: 待追加的记录列表。
+        seen_paths: 已使用的 source path。
+        intermediate: 带正文结构的中间态。
+        role: 命中的 evidence role。
+        tokens: 当前 role 的匹配 token。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        无显式抛出。
+    """
+
+    for index, paragraph in enumerate(intermediate.paragraph_blocks):
+        path = f"paragraph_blocks[{index}]"
+        texts = (
+            paragraph.text_normalized,
+            paragraph.text_raw,
+            *_tuple_text(paragraph.heading_path),
+        )
+        if path in seen_paths or not _matches_any_token(texts, tokens):
+            continue
+        seen_paths.add(path)
+        records.append(
+            FundCandidateEvidenceRecord(
+                field_family_id="return_attribution.v1",
+                source_boundary="candidate_only",
+                source_field_path=path,
+                section_id=paragraph.section_id,
+                table_id=None,
+                block_id=paragraph.block_id,
+                cell_id=None,
+                heading_path=paragraph.heading_path,
+                row_locator=f"role={role}; locator=block_id={paragraph.block_id}",
+                excerpt=_truncate(_first_non_empty((paragraph.text_normalized, paragraph.text_raw))),
+                locator_stability=paragraph.locator_stability,
+            )
+        )
+
+
+def _extend_return_attribution_table_records(
+    records: list[FundCandidateEvidenceRecord],
+    seen_paths: set[str],
+    intermediate: FundDisclosureDocumentContentIntermediate,
+    role: str,
+    tokens: tuple[str, ...],
+) -> None:
+    """追加 return_attribution table 和 cell candidate evidence。
+
+    Args:
+        records: 待追加的记录列表。
+        seen_paths: 已使用的 source path。
+        intermediate: 带正文结构的中间态。
+        role: 命中的 evidence role。
+        tokens: 当前 role 的匹配 token。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        无显式抛出。
+    """
+
+    for table_index, table in enumerate(intermediate.table_blocks):
+        path = f"table_blocks[{table_index}]"
+        texts = (
+            table.heading_text,
+            table.table_caption_or_nearby_heading,
+            *_tuple_text(table.heading_path),
+        )
+        if path not in seen_paths and _matches_any_token(texts, tokens):
+            seen_paths.add(path)
+            records.append(
+                FundCandidateEvidenceRecord(
+                    field_family_id="return_attribution.v1",
+                    source_boundary="candidate_only",
+                    source_field_path=path,
+                    section_id=table.section_id,
+                    table_id=table.table_id,
+                    block_id=None,
+                    cell_id=None,
+                    heading_path=table.heading_path,
+                    row_locator=f"role={role}; locator=table_id={table.table_id}",
+                    excerpt=_truncate(_first_non_empty(texts)),
+                    locator_stability=table.locator_stability,
+                )
+            )
+        _extend_return_attribution_cell_records(records, seen_paths, table_index, table, role, tokens)
+
+
+def _extend_return_attribution_cell_records(
+    records: list[FundCandidateEvidenceRecord],
+    seen_paths: set[str],
+    table_index: int,
+    table: FundDisclosureTableBlockLike,
+    role: str,
+    tokens: tuple[str, ...],
+) -> None:
+    """追加 return_attribution table cell candidate evidence。
+
+    Args:
+        records: 待追加的记录列表。
+        seen_paths: 已使用的 source path。
+        table_index: table tuple 中的原始索引。
+        table: table block 结构协议对象。
+        role: 命中的 evidence role。
+        tokens: 当前 role 的匹配 token。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        无显式抛出。
+    """
+
+    indexed_cells = sorted(
+        enumerate(table.cells), key=lambda item: (item[1].row_index, item[1].column_index)
+    )
+    for cell_index, cell in indexed_cells:
+        path = f"table_blocks[{table_index}].cells[{cell_index}]"
+        texts = (
+            cell.cell_text_normalized,
+            cell.cell_text,
+            *_tuple_text(cell.row_label_path),
+            *_tuple_text(cell.column_header_path),
+            *_tuple_text(cell.heading_path),
+        )
+        if path in seen_paths or not _matches_any_token(texts, tokens):
+            continue
+        seen_paths.add(path)
+        row_locator = (
+            f"role={role}; locator=table_id={cell.table_id}; "
+            f"row={cell.row_index}; column={cell.column_index}"
+        )
+        records.append(
+            FundCandidateEvidenceRecord(
+                field_family_id="return_attribution.v1",
                 source_boundary="candidate_only",
                 source_field_path=path,
                 section_id=cell.section_anchor,

@@ -581,6 +581,403 @@ def test_product_essence_selector_preserves_candidate_boundary_blocked_status() 
     assert product.anchors == ()
 
 
+# ── S6-C return attribution candidate selector ─────────────────────────────
+
+
+def test_return_attribution_selector_adds_candidate_evidence_only() -> None:
+    """return_attribution selector 只填 candidate_evidence，不填 public value/anchor。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当候选证据泄漏到 public 字段时抛出。
+    """
+
+    processor = FundDisclosureDocumentProcessor()
+    section = _SectionStub(
+        heading_text_raw="基金净值表现",
+        heading_text_normalized="基金净值表现",
+        heading_path=("基金净值表现",),
+    )
+    paragraph = _ParagraphStub(
+        block_id="paragraph-fee",
+        section_id="section-fee",
+        heading_path=("费用",),
+        text_raw="基金管理费按前一日基金资产净值的一定年费率计提。",
+        text_normalized="基金管理费按前一日基金资产净值的一定年费率计提。",
+    )
+    cell = _CellStub(
+        cell_id="cell-tracking",
+        table_id="table-tracking",
+        section_anchor="section-tracking",
+        heading_path=("跟踪误差",),
+        row_label_path=("年化跟踪误差",),
+        column_header_path=("项目",),
+        cell_text="年化跟踪误差",
+        cell_text_normalized="年化跟踪误差",
+    )
+    table = _TableStub(
+        table_id="table-tracking",
+        section_id="section-tracking",
+        heading_text="跟踪误差说明",
+        table_caption_or_nearby_heading="跟踪误差说明",
+        heading_path=("跟踪误差",),
+        cells=(cell,),
+    )
+
+    result = processor.extract(
+        FundProcessorInput(
+            context=_dispatch_key(),
+            intermediate=_ContentIntermediateStub(
+                source_provenance=_provenance(),
+                sections=(section,),
+                paragraph_blocks=(paragraph,),
+                table_blocks=(table,),
+            ),
+        )
+    )
+
+    family = _field_family(result, "return_attribution.v1")
+    paths = {record.source_field_path for record in family.candidate_evidence}
+
+    assert family.status == "missing"
+    assert family.extraction_mode == "missing"
+    assert family.value == {}
+    assert family.anchors == ()
+    assert family.gaps[0].gap_code == "candidate_only_not_source_truth"
+    assert "sections[0]" in paths
+    assert "paragraph_blocks[0]" in paths
+    assert "table_blocks[0]" in paths
+    assert "table_blocks[0].cells[0]" in paths
+
+
+def test_return_attribution_selector_preserves_candidate_boundary_fields() -> None:
+    """return_attribution candidate records 固定保持 not_proven/not_ready。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当候选边界字段被提升时抛出。
+    """
+
+    processor = FundDisclosureDocumentProcessor()
+    section = _SectionStub(
+        heading_text_raw="业绩比较基准收益率",
+        heading_text_normalized="业绩比较基准收益率",
+        heading_path=("业绩比较基准收益率",),
+    )
+
+    result = processor.extract(
+        FundProcessorInput(
+            context=_dispatch_key(),
+            intermediate=_ContentIntermediateStub(
+                source_provenance=_provenance(),
+                sections=(section,),
+                paragraph_blocks=(),
+                table_blocks=(),
+            ),
+        )
+    )
+
+    family = _field_family(result, "return_attribution.v1")
+
+    assert family.candidate_evidence
+    for record in family.candidate_evidence:
+        assert record.field_family_id == "return_attribution.v1"
+        assert record.candidate_only
+        assert record.source_boundary == "candidate_only"
+        assert record.field_correctness_status == "not_proven"
+        assert record.source_truth_status == "not_proven"
+        assert not record.parser_replacement_authorized
+        assert record.readiness_status == "not_ready"
+        assert record.source_field_path not in family.value
+
+
+def test_return_attribution_selector_keeps_other_unimplemented_families_without_candidate_evidence() -> None:
+    """S6-C 不为其它未实现字段族生成 candidate evidence。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 selector 越界到其它字段族时抛出。
+    """
+
+    processor = FundDisclosureDocumentProcessor()
+    section = _SectionStub(
+        heading_text_raw="基金份额净值增长率",
+        heading_text_normalized="基金份额净值增长率",
+        heading_path=("基金份额净值增长率",),
+    )
+
+    result = processor.extract(
+        FundProcessorInput(
+            context=_dispatch_key(),
+            intermediate=_ContentIntermediateStub(
+                source_provenance=_provenance(),
+                sections=(section,),
+                paragraph_blocks=(),
+                table_blocks=(),
+            ),
+        )
+    )
+
+    product = _field_family(result, "product_essence.v1")
+    assert product.candidate_evidence == ()
+    assert product.gaps[0].gap_code == "field_family_missing"
+
+    for family_id in (
+        "manager_profile.v1",
+        "investor_experience.v1",
+        "current_stage.v1",
+        "core_risk.v1",
+    ):
+        family = _field_family(result, family_id)
+        assert family.status == "missing"
+        assert family.value == {}
+        assert family.anchors == ()
+        assert family.candidate_evidence == ()
+        assert family.gaps[0].gap_code == "field_family_missing"
+
+
+def test_return_attribution_selector_no_match_keeps_field_family_missing() -> None:
+    """非匹配正文不产生 return_attribution candidate evidence。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当无关正文被误命中时抛出。
+    """
+
+    processor = FundDisclosureDocumentProcessor()
+    section = _SectionStub(
+        heading_text_raw="其他章节",
+        heading_text_normalized="其他章节",
+        heading_path=("其他章节",),
+    )
+    paragraph = _ParagraphStub(
+        heading_path=("其他章节",),
+        text_raw="无关内容",
+        text_normalized="无关内容",
+    )
+    cell = _CellStub(
+        heading_path=("其他章节",),
+        row_label_path=("其他",),
+        column_header_path=("其他",),
+        cell_text="无关",
+        cell_text_normalized="无关",
+    )
+    table = _TableStub(
+        heading_text="其他表格",
+        table_caption_or_nearby_heading="其他表格",
+        heading_path=("其他章节",),
+        cells=(cell,),
+    )
+
+    result = processor.extract(
+        FundProcessorInput(
+            context=_dispatch_key(),
+            intermediate=_ContentIntermediateStub(
+                source_provenance=_provenance(),
+                sections=(section,),
+                paragraph_blocks=(paragraph,),
+                table_blocks=(table,),
+            ),
+        )
+    )
+
+    family = _field_family(result, "return_attribution.v1")
+
+    assert family.candidate_evidence == ()
+    assert family.status == "missing"
+    assert family.value == {}
+    assert family.anchors == ()
+    assert family.gaps[0].gap_code == "field_family_missing"
+
+
+def test_return_attribution_selector_preserves_candidate_boundary_blocked_status() -> None:
+    """candidate_boundary 输入即使有 return candidate evidence，整体仍 blocked。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 candidate evidence 提升 consumption status 时抛出。
+    """
+
+    processor = FundDisclosureDocumentProcessor()
+    boundary = CandidateBoundaryStatus(
+        candidate_only=True,
+        field_correctness_status="not_proven",
+        source_truth_status="not_proven",
+    )
+    section = _SectionStub(
+        heading_text_raw="基准收益率",
+        heading_text_normalized="基准收益率",
+        heading_path=("基准收益率",),
+    )
+
+    result = processor.extract(
+        FundProcessorInput(
+            context=_dispatch_key(),
+            intermediate=_ContentIntermediateStub(
+                source_provenance=_provenance(),
+                candidate_boundary=boundary,
+                sections=(section,),
+                paragraph_blocks=(),
+                table_blocks=(),
+            ),
+        )
+    )
+
+    family = _field_family(result, "return_attribution.v1")
+
+    assert result.contract_status == "blocked"
+    assert result.candidate_boundary is boundary
+    assert family.candidate_evidence
+    assert family.value == {}
+    assert family.anchors == ()
+
+
+def test_return_attribution_selector_orders_dedupes_limits_and_truncates() -> None:
+    """return_attribution selector 保持 role/source 顺序、去重和 12 条限量。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 source path、顺序、去重或限量不符合 S6-C 时抛出。
+    """
+
+    processor = FundDisclosureDocumentProcessor()
+    long_nav_text = "基金份额净值增长率" + "明细" * 100
+    sections = (
+        _SectionStub(
+            section_id="section-nav-0",
+            heading_text_raw=long_nav_text,
+            heading_text_normalized=long_nav_text,
+            heading_path=(long_nav_text,),
+        ),
+        _SectionStub(
+            section_id="section-nav-fee",
+            heading_text_raw="基金份额净值增长率与基金管理费",
+            heading_text_normalized="基金份额净值增长率与基金管理费",
+            heading_path=("基金份额净值增长率与基金管理费",),
+        ),
+    )
+    paragraphs = tuple(
+        _ParagraphStub(
+            block_id=f"paragraph-nav-{index}",
+            section_id=f"section-nav-{index + 2}",
+            heading_path=("基金净值表现",),
+            text_raw=f"第{index}段披露基金净值表现。",
+            text_normalized=f"第{index}段披露基金净值表现。",
+        )
+        for index in range(3)
+    )
+    cells = (
+        _CellStub(
+            cell_id="cell-original-0",
+            row_index=2,
+            column_index=0,
+            row_label_path=("净值增长率",),
+            cell_text="净值增长率",
+            cell_text_normalized="净值增长率",
+        ),
+        _CellStub(
+            cell_id="cell-original-1",
+            row_index=0,
+            column_index=0,
+            row_label_path=("业绩比较基准收益率",),
+            cell_text="业绩比较基准收益率",
+            cell_text_normalized="业绩比较基准收益率",
+        ),
+        _CellStub(
+            cell_id="cell-original-2",
+            row_index=1,
+            column_index=0,
+            row_label_path=("基准收益率",),
+            cell_text="基准收益率",
+            cell_text_normalized="基准收益率",
+        ),
+    )
+    nav_table = _TableStub(
+        table_id="table-nav",
+        section_id="section-table-nav",
+        heading_text="基金净值表现",
+        table_caption_or_nearby_heading="基金净值表现",
+        heading_path=("基金净值表现",),
+        cells=cells,
+    )
+    fee_paragraphs = tuple(
+        _ParagraphStub(
+            block_id=f"paragraph-fee-{index}",
+            section_id=f"section-fee-{index}",
+            heading_path=("基金费用",),
+            text_raw=f"第{index}段披露基金管理费。",
+            text_normalized=f"第{index}段披露基金管理费。",
+        )
+        for index in range(6)
+    )
+
+    result = processor.extract(
+        FundProcessorInput(
+            context=_dispatch_key(),
+            intermediate=_ContentIntermediateStub(
+                source_provenance=_provenance(),
+                sections=sections,
+                paragraph_blocks=paragraphs + fee_paragraphs,
+                table_blocks=(nav_table,),
+            ),
+        )
+    )
+
+    records = _field_family(result, "return_attribution.v1").candidate_evidence
+    paths = [record.source_field_path for record in records]
+
+    assert len(records) == 12
+    assert paths == [
+        "sections[0]",
+        "sections[1]",
+        "paragraph_blocks[0]",
+        "paragraph_blocks[1]",
+        "paragraph_blocks[2]",
+        "table_blocks[0]",
+        "table_blocks[0].cells[1]",
+        "table_blocks[0].cells[2]",
+        "table_blocks[0].cells[0]",
+        "paragraph_blocks[3]",
+        "paragraph_blocks[4]",
+        "paragraph_blocks[5]",
+    ]
+    assert len(set(paths)) == len(paths)
+    assert records[0].row_locator == "role=nav_benchmark_performance; locator=section_id=section-nav-0"
+    assert records[1].row_locator == "role=nav_benchmark_performance; locator=section_id=section-nav-fee"
+    assert all(len(record.excerpt) <= 160 for record in records)
+    assert all(record.field_family_id == "return_attribution.v1" for record in records)
+
+
 # ── Registration ────────────────────────────────────────────────────────────
 
 
