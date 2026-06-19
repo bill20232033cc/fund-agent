@@ -1569,6 +1569,836 @@ def test_manager_profile_selector_allows_generic_tokens_with_context() -> None:
     assert family.anchors == ()
 
 
+# ── S6-E investor experience candidate selector ────────────────────────────
+
+
+def test_investor_experience_selector_adds_candidate_evidence_only() -> None:
+    """investor_experience selector 只填 candidate_evidence，不填 public value/anchor。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当候选证据泄漏到 public 字段时抛出。
+    """
+
+    processor = FundDisclosureDocumentProcessor()
+    investor_section = _SectionStub(
+        section_id="section-investor-return",
+        heading_text_raw="投资者实际收益",
+        heading_text_normalized="投资者实际收益",
+        heading_path=("投资者实际收益",),
+    )
+    holder_section = _SectionStub(
+        section_id="section-holder",
+        heading_text_raw="基金份额持有人结构",
+        heading_text_normalized="基金份额持有人结构",
+        heading_path=("基金份额持有人结构",),
+    )
+    share_paragraph = _ParagraphStub(
+        block_id="paragraph-share-change",
+        section_id="section-share",
+        heading_path=("基金份额变动",),
+        text_raw="基金份额变动情况。",
+        text_normalized="基金份额变动情况。",
+    )
+    subscription_cell = _CellStub(
+        cell_id="cell-subscription",
+        table_id="table-subscription",
+        section_anchor="section-subscription",
+        heading_path=("申购赎回",),
+        row_label_path=("基金总申购份额",),
+        column_header_path=("项目",),
+        cell_text="总申购份额",
+        cell_text_normalized="总申购份额",
+    )
+    subscription_table = _TableStub(
+        table_id="table-subscription",
+        section_id="section-subscription",
+        heading_text="申购赎回",
+        table_caption_or_nearby_heading="申购赎回",
+        heading_path=("申购赎回",),
+        cells=(subscription_cell,),
+    )
+    distribution_table = _TableStub(
+        table_id="table-distribution",
+        section_id="section-distribution",
+        heading_text="基金收益分配",
+        table_caption_or_nearby_heading="基金收益分配",
+        heading_path=("基金收益分配",),
+        cells=(),
+    )
+
+    result = processor.extract(
+        FundProcessorInput(
+            context=_dispatch_key(),
+            intermediate=_ContentIntermediateStub(
+                source_provenance=_provenance(),
+                sections=(investor_section, holder_section),
+                paragraph_blocks=(share_paragraph,),
+                table_blocks=(subscription_table, distribution_table),
+            ),
+        )
+    )
+
+    family = _field_family(result, "investor_experience.v1")
+    roles = {record.row_locator.split(";")[0] for record in family.candidate_evidence}
+
+    assert family.status == "missing"
+    assert family.extraction_mode == "missing"
+    assert family.value == {}
+    assert family.anchors == ()
+    assert family.gaps[0].gap_code == "candidate_only_not_source_truth"
+    assert roles == {
+        "role=investor_return",
+        "role=holder_structure",
+        "role=share_change",
+        "role=subscription_redemption",
+        "role=income_distribution",
+    }
+
+
+def test_investor_experience_selector_preserves_candidate_boundary_fields() -> None:
+    """investor_experience candidate records 固定保持 candidate-only/not_proven/not_ready。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当候选边界字段被提升时抛出。
+    """
+
+    processor = FundDisclosureDocumentProcessor()
+    section = _SectionStub(
+        section_id="section-investor-return",
+        heading_text_raw="投资者获得感",
+        heading_text_normalized="投资者获得感",
+        heading_path=("投资者获得感",),
+    )
+
+    result = processor.extract(
+        FundProcessorInput(
+            context=_dispatch_key(),
+            intermediate=_ContentIntermediateStub(
+                source_provenance=_provenance(),
+                sections=(section,),
+                paragraph_blocks=(),
+                table_blocks=(),
+            ),
+        )
+    )
+
+    family = _field_family(result, "investor_experience.v1")
+
+    assert family.candidate_evidence
+    for record in family.candidate_evidence:
+        assert record.field_family_id == "investor_experience.v1"
+        assert record.candidate_only
+        assert record.source_boundary == "candidate_only"
+        assert record.field_correctness_status == "not_proven"
+        assert record.source_truth_status == "not_proven"
+        assert not record.parser_replacement_authorized
+        assert record.readiness_status == "not_ready"
+        assert record.source_field_path not in family.value
+
+
+def test_investor_experience_selector_keeps_other_families_without_candidate_evidence() -> None:
+    """S6-E 不为其它字段族生成 candidate evidence。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 selector 越界到其它字段族时抛出。
+    """
+
+    processor = FundDisclosureDocumentProcessor()
+    section = _SectionStub(
+        section_id="section-investor-return",
+        heading_text_raw="盈利投资者占比",
+        heading_text_normalized="盈利投资者占比",
+        heading_path=("盈利投资者占比",),
+    )
+
+    result = processor.extract(
+        FundProcessorInput(
+            context=_dispatch_key(),
+            intermediate=_ContentIntermediateStub(
+                source_provenance=_provenance(),
+                sections=(section,),
+                paragraph_blocks=(),
+                table_blocks=(),
+            ),
+        )
+    )
+
+    investor = _field_family(result, "investor_experience.v1")
+    assert investor.candidate_evidence
+
+    for family_id in (
+        "product_essence.v1",
+        "return_attribution.v1",
+        "manager_profile.v1",
+        "current_stage.v1",
+        "core_risk.v1",
+    ):
+        family = _field_family(result, family_id)
+        assert family.status == "missing"
+        assert family.value == {}
+        assert family.anchors == ()
+        assert family.candidate_evidence == ()
+        assert family.gaps[0].gap_code == "field_family_missing"
+
+
+def test_investor_experience_selector_no_match_keeps_field_family_missing() -> None:
+    """非匹配正文不产生 investor_experience candidate evidence。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当无关正文被误命中时抛出。
+    """
+
+    processor = FundDisclosureDocumentProcessor()
+    section = _SectionStub(
+        heading_text_raw="其他章节",
+        heading_text_normalized="其他章节",
+        heading_path=("其他章节",),
+    )
+    paragraph = _ParagraphStub(
+        heading_path=("其他章节",),
+        text_raw="无关内容",
+        text_normalized="无关内容",
+    )
+    cell = _CellStub(
+        heading_path=("其他章节",),
+        row_label_path=("其他",),
+        column_header_path=("其他",),
+        cell_text="无关",
+        cell_text_normalized="无关",
+    )
+    table = _TableStub(
+        heading_text="其他表格",
+        table_caption_or_nearby_heading="其他表格",
+        heading_path=("其他章节",),
+        cells=(cell,),
+    )
+
+    result = processor.extract(
+        FundProcessorInput(
+            context=_dispatch_key(),
+            intermediate=_ContentIntermediateStub(
+                source_provenance=_provenance(),
+                sections=(section,),
+                paragraph_blocks=(paragraph,),
+                table_blocks=(table,),
+            ),
+        )
+    )
+
+    family = _field_family(result, "investor_experience.v1")
+
+    assert family.candidate_evidence == ()
+    assert family.status == "missing"
+    assert family.value == {}
+    assert family.anchors == ()
+    assert family.gaps[0].gap_code == "field_family_missing"
+
+
+def test_investor_experience_selector_preserves_candidate_boundary_blocked_status() -> None:
+    """candidate_boundary 输入即使有 investor evidence，整体仍 blocked。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 candidate evidence 提升 consumption status 时抛出。
+    """
+
+    processor = FundDisclosureDocumentProcessor()
+    boundary = CandidateBoundaryStatus(
+        candidate_only=True,
+        field_correctness_status="not_proven",
+        source_truth_status="not_proven",
+    )
+    section = _SectionStub(
+        section_id="section-investor-return",
+        heading_text_raw="投资者回报",
+        heading_text_normalized="投资者回报",
+        heading_path=("投资者回报",),
+    )
+
+    result = processor.extract(
+        FundProcessorInput(
+            context=_dispatch_key(),
+            intermediate=_ContentIntermediateStub(
+                source_provenance=_provenance(),
+                candidate_boundary=boundary,
+                sections=(section,),
+                paragraph_blocks=(),
+                table_blocks=(),
+            ),
+        )
+    )
+
+    family = _field_family(result, "investor_experience.v1")
+
+    assert result.contract_status == "blocked"
+    assert result.candidate_boundary is boundary
+    assert family.candidate_evidence
+    assert family.value == {}
+    assert family.anchors == ()
+
+
+def test_investor_experience_selector_orders_dedupes_limits_and_truncates() -> None:
+    """investor_experience selector 保持 role/source 顺序、去重和 16 条限量。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 source path、顺序、去重或限量不符合 S6-E 时抛出。
+    """
+
+    processor = FundDisclosureDocumentProcessor()
+    long_heading = "投资者实际收益" + "明细" * 100
+    sections = (
+        _SectionStub(
+            section_id="section-investor",
+            heading_text_raw=f"{long_heading}与基金份额持有人结构",
+            heading_text_normalized=f"{long_heading}与基金份额持有人结构",
+            heading_path=(f"{long_heading}与基金份额持有人结构",),
+        ),
+        _SectionStub(
+            section_id="section-holder",
+            heading_text_raw="基金份额持有人情况",
+            heading_text_normalized="基金份额持有人情况",
+            heading_path=("基金份额持有人情况",),
+        ),
+        _SectionStub(
+            section_id="section-share",
+            heading_text_raw="基金份额变动",
+            heading_text_normalized="基金份额变动",
+            heading_path=("基金份额变动",),
+        ),
+        _SectionStub(
+            section_id="section-subscription",
+            heading_text_raw="申购赎回",
+            heading_text_normalized="申购赎回",
+            heading_path=("申购赎回",),
+        ),
+    )
+    paragraphs = (
+        _ParagraphStub(
+            block_id="paragraph-investor",
+            section_id="section-investor",
+            heading_path=("投资者回报",),
+            text_raw="投资者回报披露。",
+            text_normalized="投资者回报披露。",
+        ),
+        _ParagraphStub(
+            block_id="paragraph-holder",
+            section_id="section-holder",
+            heading_path=("持有人结构",),
+            text_raw="基金份额持有人信息披露。",
+            text_normalized="基金份额持有人信息披露。",
+        ),
+        _ParagraphStub(
+            block_id="paragraph-share",
+            section_id="section-share",
+            heading_path=("份额变动",),
+            text_raw="份额变动披露。",
+            text_normalized="份额变动披露。",
+        ),
+        _ParagraphStub(
+            block_id="paragraph-subscription",
+            section_id="section-subscription",
+            heading_path=("申购赎回",),
+            text_raw="本期申购披露。",
+            text_normalized="本期申购披露。",
+        ),
+        _ParagraphStub(
+            block_id="paragraph-distribution",
+            section_id="section-distribution",
+            heading_path=("收益分配",),
+            text_raw="基金收益分配披露。",
+            text_normalized="基金收益分配披露。",
+        ),
+    )
+    holder_cells = (
+        _CellStub(
+            cell_id="holder-cell-original-0",
+            row_index=2,
+            column_index=0,
+            row_label_path=("持有人户数",),
+            cell_text="持有人户数",
+            cell_text_normalized="持有人户数",
+        ),
+        _CellStub(
+            cell_id="holder-cell-original-1",
+            row_index=0,
+            column_index=0,
+            row_label_path=("机构投资者持有",),
+            cell_text="机构投资者持有",
+            cell_text_normalized="机构投资者持有",
+        ),
+        _CellStub(
+            cell_id="holder-cell-original-2",
+            row_index=1,
+            column_index=0,
+            row_label_path=("个人投资者持有",),
+            cell_text="个人投资者持有",
+            cell_text_normalized="个人投资者持有",
+        ),
+    )
+    share_cells = (
+        _CellStub(
+            cell_id="share-cell-original-0",
+            table_id="table-share",
+            row_index=2,
+            column_index=0,
+            row_label_path=("期末基金份额总额",),
+            cell_text="期末基金份额总额",
+            cell_text_normalized="期末基金份额总额",
+        ),
+        _CellStub(
+            cell_id="share-cell-original-1",
+            table_id="table-share",
+            row_index=0,
+            column_index=0,
+            row_label_path=("报告期期初基金份额总额",),
+            cell_text="报告期期初基金份额总额",
+            cell_text_normalized="报告期期初基金份额总额",
+        ),
+        _CellStub(
+            cell_id="share-cell-original-2",
+            table_id="table-share",
+            row_index=1,
+            column_index=0,
+            row_label_path=("报告期期末基金份额总额",),
+            cell_text="报告期期末基金份额总额",
+            cell_text_normalized="报告期期末基金份额总额",
+        ),
+    )
+    subscription_cells = (
+        _CellStub(
+            cell_id="subscription-cell-original-0",
+            table_id="table-subscription",
+            row_index=1,
+            column_index=0,
+            heading_path=("申购赎回",),
+            row_label_path=("总申购份额",),
+            cell_text="总申购份额",
+            cell_text_normalized="总申购份额",
+        ),
+        _CellStub(
+            cell_id="subscription-cell-original-1",
+            table_id="table-subscription",
+            row_index=0,
+            column_index=0,
+            heading_path=("申购赎回",),
+            row_label_path=("总赎回份额",),
+            cell_text="总赎回份额",
+            cell_text_normalized="总赎回份额",
+        ),
+    )
+    holder_table = _TableStub(
+        table_id="table-holder",
+        section_id="section-holder-table",
+        heading_text="基金份额持有人结构",
+        table_caption_or_nearby_heading="基金份额持有人结构",
+        heading_path=("基金份额持有人结构",),
+        cells=holder_cells,
+    )
+    share_table = _TableStub(
+        table_id="table-share",
+        section_id="section-share-table",
+        heading_text="基金份额总额变动",
+        table_caption_or_nearby_heading="基金份额总额变动",
+        heading_path=("基金份额总额变动",),
+        cells=share_cells,
+    )
+    subscription_table = _TableStub(
+        table_id="table-subscription",
+        section_id="section-subscription-table",
+        heading_text="申购赎回",
+        table_caption_or_nearby_heading="申购赎回",
+        heading_path=("申购赎回",),
+        cells=subscription_cells,
+    )
+
+    result = processor.extract(
+        FundProcessorInput(
+            context=_dispatch_key(),
+            intermediate=_ContentIntermediateStub(
+                source_provenance=_provenance(),
+                sections=sections,
+                paragraph_blocks=paragraphs,
+                table_blocks=(holder_table, share_table, subscription_table),
+            ),
+        )
+    )
+
+    records = _field_family(result, "investor_experience.v1").candidate_evidence
+    paths = [record.source_field_path for record in records]
+
+    assert len(records) == 16
+    assert paths == [
+        "sections[0]",
+        "paragraph_blocks[0]",
+        "sections[1]",
+        "paragraph_blocks[1]",
+        "table_blocks[0]",
+        "table_blocks[0].cells[1]",
+        "table_blocks[0].cells[2]",
+        "table_blocks[0].cells[0]",
+        "sections[2]",
+        "paragraph_blocks[2]",
+        "table_blocks[1]",
+        "table_blocks[1].cells[1]",
+        "table_blocks[1].cells[2]",
+        "table_blocks[1].cells[0]",
+        "sections[3]",
+        "paragraph_blocks[3]",
+    ]
+    assert "paragraph_blocks[4]" not in paths
+    assert len(set(paths)) == len(paths)
+    assert records[0].row_locator == "role=investor_return; locator=section_id=section-investor"
+    assert records[2].row_locator == "role=holder_structure; locator=section_id=section-holder"
+    assert records[8].row_locator == "role=share_change; locator=section_id=section-share"
+    assert records[14].row_locator == (
+        "role=subscription_redemption; locator=section_id=section-subscription"
+    )
+    assert all(len(record.excerpt) <= 160 for record in records)
+    assert all(record.field_family_id == "investor_experience.v1" for record in records)
+
+
+def test_investor_experience_selector_requires_context_for_generic_tokens() -> None:
+    """generic investor-experience token 缺少 context 时不得产生 evidence。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 generic token 绕过 guard 时抛出。
+    """
+
+    processor = FundDisclosureDocumentProcessor()
+    sections = (
+        _SectionStub(
+            section_id="section-return",
+            heading_text_raw="实际收益",
+            heading_text_normalized="实际收益",
+            heading_path=("实际收益",),
+        ),
+        _SectionStub(
+            section_id="section-holder",
+            heading_text_raw="机构投资者",
+            heading_text_normalized="机构投资者",
+            heading_path=("机构投资者",),
+        ),
+        _SectionStub(
+            section_id="section-share",
+            heading_text_raw="期初份额",
+            heading_text_normalized="期初份额",
+            heading_path=("期初份额",),
+        ),
+        _SectionStub(
+            section_id="section-subscription",
+            heading_text_raw="申购",
+            heading_text_normalized="申购",
+            heading_path=("申购",),
+        ),
+        _SectionStub(
+            section_id="section-distribution",
+            heading_text_raw="分红",
+            heading_text_normalized="分红",
+            heading_path=("分红",),
+        ),
+    )
+
+    result = processor.extract(
+        FundProcessorInput(
+            context=_dispatch_key(),
+            intermediate=_ContentIntermediateStub(
+                source_provenance=_provenance(),
+                sections=sections,
+                paragraph_blocks=(),
+                table_blocks=(),
+            ),
+        )
+    )
+
+    family = _field_family(result, "investor_experience.v1")
+
+    assert family.candidate_evidence == ()
+    assert family.gaps[0].gap_code == "field_family_missing"
+
+
+def test_investor_experience_selector_allows_generic_tokens_with_context() -> None:
+    """generic investor-experience token 带 context 时可产生 candidate evidence。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当正向 guard context 被过度阻断时抛出。
+    """
+
+    processor = FundDisclosureDocumentProcessor()
+    sections = (
+        _SectionStub(
+            section_id="section-return",
+            heading_text_raw="投资者的实际收益披露",
+            heading_text_normalized="投资者的实际收益披露",
+            heading_path=("投资者的实际收益披露",),
+        ),
+        _SectionStub(
+            section_id="section-holder",
+            heading_text_raw="基金份额持有人中的机构投资者占比",
+            heading_text_normalized="基金份额持有人中的机构投资者占比",
+            heading_path=("基金份额持有人中的机构投资者占比",),
+        ),
+        _SectionStub(
+            section_id="section-share",
+            heading_text_raw="基金份额期初份额披露",
+            heading_text_normalized="基金份额期初份额披露",
+            heading_path=("基金份额期初份额披露",),
+        ),
+        _SectionStub(
+            section_id="section-subscription",
+            heading_text_raw="基金总申购中的净申购为正",
+            heading_text_normalized="基金总申购中的净申购为正",
+            heading_path=("基金总申购中的净申购为正",),
+        ),
+        _SectionStub(
+            section_id="section-distribution",
+            heading_text_raw="分配方案含分红",
+            heading_text_normalized="分配方案含分红",
+            heading_path=("分配方案含分红",),
+        ),
+    )
+
+    result = processor.extract(
+        FundProcessorInput(
+            context=_dispatch_key(),
+            intermediate=_ContentIntermediateStub(
+                source_provenance=_provenance(),
+                sections=sections,
+                paragraph_blocks=(),
+                table_blocks=(),
+            ),
+        )
+    )
+
+    family = _field_family(result, "investor_experience.v1")
+    roles = [record.row_locator.split(";")[0] for record in family.candidate_evidence]
+
+    assert roles == [
+        "role=investor_return",
+        "role=holder_structure",
+        "role=share_change",
+        "role=subscription_redemption",
+        "role=income_distribution",
+    ]
+
+
+def test_investor_experience_selector_does_not_capture_return_or_manager_owned_tokens() -> None:
+    """S6-C/S6-D-owned token 不得生成 investor_experience evidence。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 S6-E 捕获其它 selector 已拥有 token 时抛出。
+    """
+
+    processor = FundDisclosureDocumentProcessor()
+    sections = tuple(
+        _SectionStub(
+            section_id=f"section-owned-{index}",
+            heading_text_raw=text,
+            heading_text_normalized=text,
+            heading_path=(text,),
+        )
+        for index, text in enumerate(
+            (
+                "净值增长率",
+                "业绩比较基准",
+                "跟踪误差",
+                "管理费",
+                "换手率",
+                "基金经理",
+                "前十名股票投资明细",
+            )
+        )
+    )
+
+    result = processor.extract(
+        FundProcessorInput(
+            context=_dispatch_key(),
+            intermediate=_ContentIntermediateStub(
+                source_provenance=_provenance(),
+                sections=sections,
+                paragraph_blocks=(),
+                table_blocks=(),
+            ),
+        )
+    )
+
+    family = _field_family(result, "investor_experience.v1")
+
+    assert family.candidate_evidence == ()
+    assert family.gaps[0].gap_code == "field_family_missing"
+
+
+def test_investor_experience_selector_blocks_subscription_redemption_self_guard() -> None:
+    """申购/赎回 generic token 不得靠同一 cell 的份额文本自守卫。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 subscription_redemption 自守卫通过时抛出。
+    """
+
+    processor = FundDisclosureDocumentProcessor()
+    paragraph = _ParagraphStub(
+        block_id="paragraph-fee",
+        section_id="section-fee",
+        heading_path=("费率说明",),
+        text_raw="申购份额的计算方式为净申购金额除以基金份额净值。",
+        text_normalized="申购份额的计算方式为净申购金额除以基金份额净值。",
+    )
+    cells = (
+        _CellStub(
+            cell_id="cell-subscription-share",
+            row_index=0,
+            column_index=0,
+            row_label_path=("计算方式",),
+            column_header_path=("费率",),
+            cell_text="申购份额",
+            cell_text_normalized="申购份额",
+        ),
+        _CellStub(
+            cell_id="cell-subscription-method",
+            row_index=1,
+            column_index=0,
+            row_label_path=("计算方式",),
+            column_header_path=("费率",),
+            cell_text="申购份额的计算方式",
+            cell_text_normalized="申购份额的计算方式",
+        ),
+    )
+    table = _TableStub(
+        heading_text="费率表",
+        table_caption_or_nearby_heading="费率表",
+        heading_path=("费率说明",),
+        cells=cells,
+    )
+
+    result = processor.extract(
+        FundProcessorInput(
+            context=_dispatch_key(),
+            intermediate=_ContentIntermediateStub(
+                source_provenance=_provenance(),
+                sections=(),
+                paragraph_blocks=(paragraph,),
+                table_blocks=(table,),
+            ),
+        )
+    )
+
+    family = _field_family(result, "investor_experience.v1")
+
+    assert family.candidate_evidence == ()
+    assert family.gaps[0].gap_code == "field_family_missing"
+
+
+def test_investor_experience_selector_allows_subscription_redemption_context_guard() -> None:
+    """申购/赎回 generic token 可由 source-level actual-flow context 通过。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 controller 允许的 guard context 被误拒时抛出。
+    """
+
+    processor = FundDisclosureDocumentProcessor()
+    cell = _CellStub(
+        cell_id="cell-net-subscription",
+        row_index=0,
+        column_index=0,
+        row_label_path=("净申购",),
+        column_header_path=("项目",),
+        cell_text="净申购",
+        cell_text_normalized="净申购",
+    )
+    table = _TableStub(
+        table_id="table-share-flow",
+        section_id="section-share-flow",
+        heading_text="基金份额总额变动",
+        table_caption_or_nearby_heading="基金份额总额变动",
+        heading_path=("基金份额总额变动",),
+        cells=(cell,),
+    )
+
+    result = processor.extract(
+        FundProcessorInput(
+            context=_dispatch_key(),
+            intermediate=_ContentIntermediateStub(
+                source_provenance=_provenance(),
+                sections=(),
+                paragraph_blocks=(),
+                table_blocks=(table,),
+            ),
+        )
+    )
+
+    family = _field_family(result, "investor_experience.v1")
+    paths_by_role = {
+        record.source_field_path: record.row_locator.split(";")[0]
+        for record in family.candidate_evidence
+    }
+
+    assert paths_by_role["table_blocks[0].cells[0]"] == "role=subscription_redemption"
+
+
 # ── Registration ────────────────────────────────────────────────────────────
 
 
