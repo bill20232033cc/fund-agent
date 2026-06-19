@@ -54,6 +54,7 @@ _PRODUCT_ESSENCE_CANDIDATE_LIMIT: Final[int] = 12
 _RETURN_ATTRIBUTION_CANDIDATE_LIMIT: Final[int] = 12
 _MANAGER_PROFILE_CANDIDATE_LIMIT: Final[int] = 16
 _INVESTOR_EXPERIENCE_CANDIDATE_LIMIT: Final[int] = 16
+_CORE_RISK_CANDIDATE_LIMIT: Final[int] = 16
 _CANDIDATE_EXCERPT_LIMIT: Final[int] = 160
 _PRODUCT_ESSENCE_MATCH_GROUPS: Final[tuple[tuple[str, tuple[str, ...]], ...]] = (
     (
@@ -240,6 +241,76 @@ _INVESTOR_EXPERIENCE_MATCH_GROUPS: Final[
         ),
         ("分红", "红利"),
         ("收益分配", "利润分配", "基金份额", "分配"),
+    ),
+)
+_CORE_RISK_MATCH_GROUPS: Final[
+    tuple[tuple[str, tuple[str, ...], tuple[str, ...], tuple[str, ...]], ...]
+] = (
+    (
+        "risk_characteristic",
+        ("风险收益特征", "风险特征", "基金风险收益特征", "产品风险收益特征"),
+        ("风险", "收益"),
+        ("风险收益特征", "风险特征", "基金产品资料概要", "基金简介"),
+    ),
+    (
+        "liquidation_or_scale_risk",
+        (
+            "基金资产净值低于五千万元",
+            "基金资产净值低于5000万元",
+            "基金份额持有人数量不满二百人",
+            "基金份额持有人数量不满200人",
+            "连续二十个工作日",
+            "连续20个工作日",
+            "基金合同终止事由",
+            "基金合同自动终止",
+            "基金财产清算",
+        ),
+        ("规模", "清盘", "持有人", "基金资产净值"),
+        (
+            "基金合同终止",
+            "基金财产清算",
+            "连续二十个工作日",
+            "连续20个工作日",
+            "五千万元",
+            "5000万元",
+            "二百人",
+            "200人",
+            "基金份额持有人数量",
+        ),
+    ),
+    (
+        "tracking_error_or_deviation_risk",
+        ("跟踪误差", "年化跟踪误差", "日均跟踪偏离度", "日均偏离度", "跟踪偏离度"),
+        ("跟踪", "偏离"),
+        ("跟踪误差", "跟踪偏离度", "业绩比较基准", "标的指数", "指数基金", "指数增强"),
+    ),
+    (
+        "turnover_or_style_drift_risk",
+        (
+            "换手率",
+            "股票换手率",
+            "报告期内股票换手率",
+            "换手率口径",
+            "换手率计算口径",
+            "投资风格发生重大变化",
+            "投资策略发生重大变化",
+            "风格漂移",
+        ),
+        ("换手", "风格", "漂移", "策略变化"),
+        ("换手率", "投资策略", "投资风格", "报告期内基金投资策略和运作分析", "运作分析", "重大变化"),
+    ),
+    (
+        "concentration_risk",
+        (
+            "持仓集中度",
+            "报告期末按行业分类的股票投资组合",
+            "期末按行业分类的股票投资组合",
+            "报告期末按公允价值占基金资产净值比例大小排序的前十名股票投资明细",
+            "前十名股票投资明细",
+            "报告期末基金资产组合情况",
+        ),
+        ("持仓", "集中", "行业集中", "前十名"),
+        ("股票投资组合", "资产组合情况", "公允价值占基金资产净值比例", "前十名股票投资明细", "行业分类", "持仓集中度"),
     ),
 )
 
@@ -463,7 +534,8 @@ def _field_families_for_intermediate(
         source_provenance: 公共来源 provenance。
 
     Returns:
-        六个字段族结果；S6-B/S6-C/S6-D 仅为已接受字段族附加 candidate evidence。
+        六个字段族结果；S6-B/S6-C/S6-D/S6-E/S6-F 仅为已接受字段族附加
+        candidate evidence。
 
     Raises:
         无显式抛出。
@@ -473,19 +545,22 @@ def _field_families_for_intermediate(
     return_attribution_evidence = _select_return_attribution_candidate_evidence(intermediate)
     manager_profile_evidence = _select_manager_profile_candidate_evidence(intermediate)
     investor_experience_evidence = _select_investor_experience_candidate_evidence(intermediate)
+    core_risk_evidence = _select_core_risk_candidate_evidence(intermediate)
+    candidate_evidence_by_family: dict[
+        FundFieldFamilyId, tuple[FundCandidateEvidenceRecord, ...]
+    ] = {
+        "product_essence.v1": product_essence_evidence,
+        "return_attribution.v1": return_attribution_evidence,
+        "manager_profile.v1": manager_profile_evidence,
+        "investor_experience.v1": investor_experience_evidence,
+        "core_risk.v1": core_risk_evidence,
+    }
+
     return tuple(
-        _candidate_missing_field_family(family_id, source_provenance, product_essence_evidence)
-        if family_id == "product_essence.v1" and product_essence_evidence
-        else _candidate_missing_field_family(
-            family_id, source_provenance, return_attribution_evidence
+        _candidate_missing_field_family(
+            family_id, source_provenance, candidate_evidence_by_family[family_id]
         )
-        if family_id == "return_attribution.v1" and return_attribution_evidence
-        else _candidate_missing_field_family(family_id, source_provenance, manager_profile_evidence)
-        if family_id == "manager_profile.v1" and manager_profile_evidence
-        else _candidate_missing_field_family(
-            family_id, source_provenance, investor_experience_evidence
-        )
-        if family_id == "investor_experience.v1" and investor_experience_evidence
+        if candidate_evidence_by_family.get(family_id)
         else _missing_field_family(family_id, source_provenance)
         for family_id in _FAMILY_ORDER
     )
@@ -1667,6 +1742,336 @@ def _investor_experience_cell_guard_context(
         *table_context,
         cell.cell_text_normalized,
         cell.cell_text,
+        *_tuple_text(cell.row_label_path),
+        *_tuple_text(cell.column_header_path),
+        *_tuple_text(cell.heading_path),
+    )
+
+
+def _select_core_risk_candidate_evidence(
+    intermediate: FundDisclosureDocumentIntermediate,
+) -> tuple[FundCandidateEvidenceRecord, ...]:
+    """选择核心风险字段族的 candidate-only locator evidence（见模板第6章）。
+
+    Args:
+        intermediate: FundDisclosureDocument-like 中间态。
+
+    Returns:
+        按 S6-F mapping table 排序、去重和限量后的候选证据记录。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if not isinstance(intermediate, FundDisclosureDocumentContentIntermediate):
+        return ()
+
+    records: list[FundCandidateEvidenceRecord] = []
+    seen_paths: set[str] = set()
+    for role, strong_tokens, generic_tokens, guard_tokens in _CORE_RISK_MATCH_GROUPS:
+        _extend_core_risk_section_records(
+            records, seen_paths, intermediate, role, strong_tokens, generic_tokens, guard_tokens
+        )
+        _extend_core_risk_paragraph_records(
+            records, seen_paths, intermediate, role, strong_tokens, generic_tokens, guard_tokens
+        )
+        _extend_core_risk_table_records(
+            records, seen_paths, intermediate, role, strong_tokens, generic_tokens, guard_tokens
+        )
+        if len(records) >= _CORE_RISK_CANDIDATE_LIMIT:
+            break
+    return tuple(records[:_CORE_RISK_CANDIDATE_LIMIT])
+
+
+def _extend_core_risk_section_records(
+    records: list[FundCandidateEvidenceRecord],
+    seen_paths: set[str],
+    intermediate: FundDisclosureDocumentContentIntermediate,
+    role: str,
+    strong_tokens: tuple[str, ...],
+    generic_tokens: tuple[str, ...],
+    guard_tokens: tuple[str, ...],
+) -> None:
+    """追加 core_risk section locator candidate evidence。
+
+    Args:
+        records: 待追加的记录列表。
+        seen_paths: 已使用的 source path。
+        intermediate: 带正文结构的中间态。
+        role: 命中的 evidence role。
+        strong_tokens: 不需要额外 context 的匹配 token。
+        generic_tokens: 需要 source-level guard 的匹配 token。
+        guard_tokens: 允许 generic token 通过的 context token。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        无显式抛出。
+    """
+
+    for index, section in enumerate(intermediate.sections):
+        path = f"sections[{index}]"
+        texts = (
+            section.heading_text_normalized,
+            section.heading_text_raw,
+            *_tuple_text(section.heading_path),
+        )
+        if path in seen_paths or not _matches_guarded_core_risk_source(
+            texts, strong_tokens, generic_tokens, texts, guard_tokens
+        ):
+            continue
+        seen_paths.add(path)
+        records.append(
+            FundCandidateEvidenceRecord(
+                field_family_id="core_risk.v1",
+                source_boundary="candidate_only",
+                source_field_path=path,
+                section_id=section.section_id,
+                table_id=None,
+                block_id=None,
+                cell_id=None,
+                heading_path=section.heading_path,
+                row_locator=f"role={role}; locator=section_id={section.section_id}",
+                excerpt=_truncate(_first_non_empty(texts)),
+                locator_stability=section.locator_stability,
+            )
+        )
+
+
+def _extend_core_risk_paragraph_records(
+    records: list[FundCandidateEvidenceRecord],
+    seen_paths: set[str],
+    intermediate: FundDisclosureDocumentContentIntermediate,
+    role: str,
+    strong_tokens: tuple[str, ...],
+    generic_tokens: tuple[str, ...],
+    guard_tokens: tuple[str, ...],
+) -> None:
+    """追加 core_risk paragraph block candidate evidence。
+
+    Args:
+        records: 待追加的记录列表。
+        seen_paths: 已使用的 source path。
+        intermediate: 带正文结构的中间态。
+        role: 命中的 evidence role。
+        strong_tokens: 不需要额外 context 的匹配 token。
+        generic_tokens: 需要 source-level guard 的匹配 token。
+        guard_tokens: 允许 generic token 通过的 context token。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        无显式抛出。
+    """
+
+    for index, paragraph in enumerate(intermediate.paragraph_blocks):
+        path = f"paragraph_blocks[{index}]"
+        texts = (
+            paragraph.text_normalized,
+            paragraph.text_raw,
+            *_tuple_text(paragraph.heading_path),
+        )
+        if path in seen_paths or not _matches_guarded_core_risk_source(
+            texts, strong_tokens, generic_tokens, texts, guard_tokens
+        ):
+            continue
+        seen_paths.add(path)
+        records.append(
+            FundCandidateEvidenceRecord(
+                field_family_id="core_risk.v1",
+                source_boundary="candidate_only",
+                source_field_path=path,
+                section_id=paragraph.section_id,
+                table_id=None,
+                block_id=paragraph.block_id,
+                cell_id=None,
+                heading_path=paragraph.heading_path,
+                row_locator=f"role={role}; locator=block_id={paragraph.block_id}",
+                excerpt=_truncate(_first_non_empty((paragraph.text_normalized, paragraph.text_raw))),
+                locator_stability=paragraph.locator_stability,
+            )
+        )
+
+
+def _extend_core_risk_table_records(
+    records: list[FundCandidateEvidenceRecord],
+    seen_paths: set[str],
+    intermediate: FundDisclosureDocumentContentIntermediate,
+    role: str,
+    strong_tokens: tuple[str, ...],
+    generic_tokens: tuple[str, ...],
+    guard_tokens: tuple[str, ...],
+) -> None:
+    """追加 core_risk table 和 cell candidate evidence。
+
+    Args:
+        records: 待追加的记录列表。
+        seen_paths: 已使用的 source path。
+        intermediate: 带正文结构的中间态。
+        role: 命中的 evidence role。
+        strong_tokens: 不需要额外 context 的匹配 token。
+        generic_tokens: 需要 source-level guard 的匹配 token。
+        guard_tokens: 允许 generic token 通过的 context token。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        无显式抛出。
+    """
+
+    for table_index, table in enumerate(intermediate.table_blocks):
+        path = f"table_blocks[{table_index}]"
+        texts = (
+            table.heading_text,
+            table.table_caption_or_nearby_heading,
+            *_tuple_text(table.heading_path),
+        )
+        if path not in seen_paths and _matches_guarded_core_risk_source(
+            texts, strong_tokens, generic_tokens, texts, guard_tokens
+        ):
+            seen_paths.add(path)
+            records.append(
+                FundCandidateEvidenceRecord(
+                    field_family_id="core_risk.v1",
+                    source_boundary="candidate_only",
+                    source_field_path=path,
+                    section_id=table.section_id,
+                    table_id=table.table_id,
+                    block_id=None,
+                    cell_id=None,
+                    heading_path=table.heading_path,
+                    row_locator=f"role={role}; locator=table_id={table.table_id}",
+                    excerpt=_truncate(_first_non_empty(texts)),
+                    locator_stability=table.locator_stability,
+                )
+            )
+        _extend_core_risk_cell_records(
+            records, seen_paths, table_index, table, role, strong_tokens, generic_tokens, guard_tokens
+        )
+
+
+def _extend_core_risk_cell_records(
+    records: list[FundCandidateEvidenceRecord],
+    seen_paths: set[str],
+    table_index: int,
+    table: FundDisclosureTableBlockLike,
+    role: str,
+    strong_tokens: tuple[str, ...],
+    generic_tokens: tuple[str, ...],
+    guard_tokens: tuple[str, ...],
+) -> None:
+    """追加 core_risk table cell candidate evidence。
+
+    Args:
+        records: 待追加的记录列表。
+        seen_paths: 已使用的 source path。
+        table_index: table tuple 中的原始索引。
+        table: table block 结构协议对象。
+        role: 命中的 evidence role。
+        strong_tokens: 不需要额外 context 的匹配 token。
+        generic_tokens: 需要 source-level guard 的匹配 token。
+        guard_tokens: 允许 generic token 通过的 context token。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        无显式抛出。
+    """
+
+    indexed_cells = sorted(
+        enumerate(table.cells), key=lambda item: (item[1].row_index, item[1].column_index)
+    )
+    for cell_index, cell in indexed_cells:
+        path = f"table_blocks[{table_index}].cells[{cell_index}]"
+        texts = (
+            cell.cell_text_normalized,
+            cell.cell_text,
+            *_tuple_text(cell.row_label_path),
+            *_tuple_text(cell.column_header_path),
+            *_tuple_text(cell.heading_path),
+        )
+        guard_context = _core_risk_cell_guard_context(table, cell)
+        if path in seen_paths or not _matches_guarded_core_risk_source(
+            texts, strong_tokens, generic_tokens, guard_context, guard_tokens
+        ):
+            continue
+        seen_paths.add(path)
+        row_locator = (
+            f"role={role}; locator=table_id={cell.table_id}; "
+            f"row={cell.row_index}; column={cell.column_index}"
+        )
+        records.append(
+            FundCandidateEvidenceRecord(
+                field_family_id="core_risk.v1",
+                source_boundary="candidate_only",
+                source_field_path=path,
+                section_id=cell.section_anchor,
+                table_id=cell.table_id,
+                block_id=None,
+                cell_id=cell.cell_id,
+                heading_path=cell.heading_path,
+                row_locator=row_locator,
+                excerpt=_truncate(_first_non_empty((cell.cell_text_normalized, cell.cell_text))),
+                locator_stability=cell.locator_stability,
+            )
+        )
+
+
+def _matches_guarded_core_risk_source(
+    texts: tuple[str | None, ...],
+    strong_tokens: tuple[str, ...],
+    generic_tokens: tuple[str, ...],
+    guard_context: tuple[str | None, ...],
+    guard_tokens: tuple[str, ...],
+) -> bool:
+    """按 S6-F source-level guard 规则判断 core_risk source 是否可追加。
+
+    Args:
+        texts: 当前 source 的候选匹配文本。
+        strong_tokens: 无需额外 context 的 token。
+        generic_tokens: 需要 source-level guard 的 token。
+        guard_context: 当前 source 允许用于 guard 的上下文文本。
+        guard_tokens: 允许 generic token 通过的 context token。
+
+    Returns:
+        strong token 命中时返回 True；generic token 命中且 guard context 命中时返回 True。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if _matches_any_token(texts, strong_tokens):
+        return True
+    if not generic_tokens or not _matches_any_token(texts, generic_tokens):
+        return False
+    return _matches_any_token(guard_context, guard_tokens)
+
+
+def _core_risk_cell_guard_context(
+    table: FundDisclosureTableBlockLike,
+    cell: object,
+) -> tuple[str | None, ...]:
+    """返回 core_risk cell 级 generic guard context。
+
+    Args:
+        table: parent table block 协议对象。
+        cell: table cell 协议对象。
+
+    Returns:
+        role-invariant guard context；始终排除 cell_text / cell_text_normalized。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return (
+        table.heading_text,
+        table.table_caption_or_nearby_heading,
+        *_tuple_text(table.heading_path),
         *_tuple_text(cell.row_label_path),
         *_tuple_text(cell.column_header_path),
         *_tuple_text(cell.heading_path),

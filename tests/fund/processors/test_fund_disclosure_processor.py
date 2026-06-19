@@ -2399,6 +2399,733 @@ def test_investor_experience_selector_allows_subscription_redemption_context_gua
     assert paths_by_role["table_blocks[0].cells[0]"] == "role=subscription_redemption"
 
 
+# ── S6-F core risk candidate selector ───────────────────────────────────────
+
+
+def _core_risk_result(
+    *,
+    sections: tuple[_SectionStub, ...] = (),
+    paragraphs: tuple[_ParagraphStub, ...] = (),
+    tables: tuple[_TableStub, ...] = (),
+    candidate_boundary: CandidateBoundaryStatus | None = None,
+) -> FundProcessorResult:
+    """运行 core_risk selector 测试用 processor。
+
+    Args:
+        sections: section fixture。
+        paragraphs: paragraph fixture。
+        tables: table fixture。
+        candidate_boundary: 可选候选边界。
+
+    Returns:
+        processor 输出结果。
+
+    Raises:
+        AssertionError: processor contract 断言失败时由调用方抛出。
+    """
+
+    processor = FundDisclosureDocumentProcessor()
+    return processor.extract(
+        FundProcessorInput(
+            context=_dispatch_key(),
+            intermediate=_ContentIntermediateStub(
+                source_provenance=_provenance(),
+                candidate_boundary=candidate_boundary,
+                sections=sections,
+                paragraph_blocks=paragraphs,
+                table_blocks=tables,
+            ),
+        )
+    )
+
+
+def _family_signature(family: FundFieldFamilyResult) -> tuple[object, ...]:
+    """返回用于比较字段族 public/candidate 语义的稳定摘要。
+
+    Args:
+        family: 字段族结果。
+
+    Returns:
+        包含 record count、path 顺序、gap、public value/anchors 的摘要。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return (
+        len(family.candidate_evidence),
+        tuple(record.source_field_path for record in family.candidate_evidence),
+        tuple(gap.gap_code for gap in family.gaps),
+        family.value,
+        family.anchors,
+    )
+
+
+def test_core_risk_selector_adds_candidate_evidence_only() -> None:
+    """core_risk selector 只填 candidate_evidence，不填 public value/anchor。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 role、gap 或 public boundary 不符合 S6-F 时抛出。
+    """
+
+    result = _core_risk_result(
+        sections=(
+            _SectionStub(
+                section_id="section-risk",
+                heading_text_raw="风险收益特征",
+                heading_text_normalized="风险收益特征",
+                heading_path=("风险收益特征",),
+            ),
+            _SectionStub(
+                section_id="section-scale",
+                heading_text_raw="基金资产净值低于五千万元",
+                heading_text_normalized="基金资产净值低于五千万元",
+                heading_path=("基金资产净值低于五千万元",),
+            ),
+            _SectionStub(
+                section_id="section-tracking",
+                heading_text_raw="跟踪误差",
+                heading_text_normalized="跟踪误差",
+                heading_path=("跟踪误差",),
+            ),
+            _SectionStub(
+                section_id="section-turnover",
+                heading_text_raw="换手率",
+                heading_text_normalized="换手率",
+                heading_path=("换手率",),
+            ),
+            _SectionStub(
+                section_id="section-concentration",
+                heading_text_raw="持仓集中度",
+                heading_text_normalized="持仓集中度",
+                heading_path=("持仓集中度",),
+            ),
+        )
+    )
+
+    family = _field_family(result, "core_risk.v1")
+    roles = {record.row_locator.split(";")[0] for record in family.candidate_evidence}
+
+    assert result.contract_status == "missing"
+    assert roles == {
+        "role=risk_characteristic",
+        "role=liquidation_or_scale_risk",
+        "role=tracking_error_or_deviation_risk",
+        "role=turnover_or_style_drift_risk",
+        "role=concentration_risk",
+    }
+    assert family.status == "missing"
+    assert family.extraction_mode == "missing"
+    assert family.value == {}
+    assert family.anchors == ()
+    assert family.gaps[0].gap_code == "candidate_only_not_source_truth"
+
+
+def test_core_risk_selector_preserves_candidate_boundary_fields() -> None:
+    """core_risk candidate records 固定保持 candidate-only/not_proven/not_ready。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 candidate evidence 泄漏到 public value 时抛出。
+    """
+
+    paragraph = _ParagraphStub(
+        block_id="paragraph-risk-number",
+        heading_path=("核心风险",),
+        text_raw="连续二十个工作日基金资产净值低于5000万元，候选摘录含数值。",
+        text_normalized="连续二十个工作日基金资产净值低于5000万元，候选摘录含数值。",
+    )
+
+    family = _field_family(_core_risk_result(paragraphs=(paragraph,)), "core_risk.v1")
+
+    assert family.candidate_evidence
+    assert family.value == {}
+    assert family.anchors == ()
+    for record in family.candidate_evidence:
+        assert record.field_family_id == "core_risk.v1"
+        assert record.candidate_only
+        assert record.source_boundary == "candidate_only"
+        assert record.field_correctness_status == "not_proven"
+        assert record.source_truth_status == "not_proven"
+        assert not record.parser_replacement_authorized
+        assert record.readiness_status == "not_ready"
+        assert record.source_field_path not in family.value
+        assert record.excerpt not in family.value
+
+
+def test_core_risk_selector_keeps_current_stage_without_candidate_evidence() -> None:
+    """S6-F 不为 current_stage.v1 生成 candidate evidence。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 current_stage 越界获得 evidence 时抛出。
+    """
+
+    result = _core_risk_result(
+        sections=(
+            _SectionStub(
+                section_id="section-risk",
+                heading_text_raw="风险收益特征",
+                heading_text_normalized="风险收益特征",
+                heading_path=("风险收益特征",),
+            ),
+        )
+    )
+
+    current_stage = _field_family(result, "current_stage.v1")
+    core_risk = _field_family(result, "core_risk.v1")
+
+    assert core_risk.candidate_evidence
+    assert current_stage.candidate_evidence == ()
+    assert current_stage.value == {}
+    assert current_stage.anchors == ()
+    assert current_stage.gaps[0].gap_code == "field_family_missing"
+
+
+def test_core_risk_selector_no_match_keeps_field_family_missing() -> None:
+    """非匹配正文不产生 core_risk candidate evidence。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当无关正文被误命中时抛出。
+    """
+
+    result = _core_risk_result(
+        sections=(
+            _SectionStub(
+                section_id="section-neutral",
+                heading_text_raw="其他章节",
+                heading_text_normalized="其他章节",
+                heading_path=("其他章节",),
+            ),
+        ),
+        paragraphs=(
+            _ParagraphStub(
+                block_id="paragraph-neutral",
+                heading_path=("其他章节",),
+                text_raw="无关内容",
+                text_normalized="无关内容",
+            ),
+        ),
+        tables=(
+            _TableStub(
+                heading_text="其他表格",
+                table_caption_or_nearby_heading="其他表格",
+                heading_path=("其他章节",),
+                cells=(
+                    _CellStub(
+                        row_label_path=("其他",),
+                        column_header_path=("其他",),
+                        cell_text="无关",
+                        cell_text_normalized="无关",
+                    ),
+                ),
+            ),
+        ),
+    )
+
+    family = _field_family(result, "core_risk.v1")
+
+    assert family.candidate_evidence == ()
+    assert family.gaps[0].gap_code == "field_family_missing"
+
+
+def test_core_risk_selector_preserves_candidate_boundary_blocked_status() -> None:
+    """candidate_boundary 输入即使有 core_risk evidence，整体仍 blocked。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 candidate evidence 提升 consumption status 时抛出。
+    """
+
+    boundary = CandidateBoundaryStatus(
+        candidate_only=True,
+        field_correctness_status="not_proven",
+        source_truth_status="not_proven",
+    )
+
+    result = _core_risk_result(
+        candidate_boundary=boundary,
+        sections=(
+            _SectionStub(
+                section_id="section-risk",
+                heading_text_raw="风险收益特征",
+                heading_text_normalized="风险收益特征",
+                heading_path=("风险收益特征",),
+            ),
+        ),
+    )
+    family = _field_family(result, "core_risk.v1")
+
+    assert result.contract_status == "blocked"
+    assert result.candidate_boundary is boundary
+    assert family.candidate_evidence
+    assert family.value == {}
+    assert family.anchors == ()
+
+
+def test_core_risk_selector_orders_dedupes_limits_and_truncates() -> None:
+    """core_risk selector 保持 role/source 顺序、去重、16 条限量和摘录截断。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 source path、顺序、去重或限量不符合 S6-F 时抛出。
+    """
+
+    long_text = "风险收益特征" + "很长" * 100
+    sections = (
+        _SectionStub("section-risk", long_text, long_text, (long_text,)),
+        _SectionStub("section-scale", "基金合同自动终止", "基金合同自动终止", ("基金合同自动终止",)),
+        _SectionStub("section-tracking", "跟踪误差", "跟踪误差", ("跟踪误差",)),
+        _SectionStub("section-turnover", "换手率", "换手率", ("换手率",)),
+        _SectionStub("section-concentration", "持仓集中度", "持仓集中度", ("持仓集中度",)),
+    )
+    paragraphs = (
+        _ParagraphStub("paragraph-risk", heading_path=("风险收益特征",), text_raw="风险收益特征"),
+        _ParagraphStub(
+            "paragraph-scale",
+            heading_path=("清算",),
+            text_raw="连续二十个工作日基金资产净值低于5000万元",
+            text_normalized="连续二十个工作日基金资产净值低于5000万元",
+        ),
+        _ParagraphStub("paragraph-tracking", heading_path=("跟踪误差",), text_raw="跟踪误差"),
+        _ParagraphStub("paragraph-turnover", heading_path=("换手率",), text_raw="换手率"),
+        _ParagraphStub("paragraph-concentration", heading_path=("持仓集中度",), text_raw="持仓集中度"),
+    )
+    tables = (
+        _TableStub(
+            table_id="table-risk",
+            heading_text="风险收益特征",
+            table_caption_or_nearby_heading="风险收益特征",
+            heading_path=("风险收益特征",),
+            cells=(
+                _CellStub("risk-cell-original-0", row_index=2, cell_text="风险收益特征"),
+                _CellStub("risk-cell-original-1", row_index=0, cell_text="风险收益特征"),
+            ),
+        ),
+        _TableStub(
+            table_id="table-scale",
+            heading_text="基金财产清算",
+            table_caption_or_nearby_heading="基金财产清算",
+            heading_path=("基金财产清算",),
+            cells=(
+                _CellStub(
+                    "scale-cell",
+                    table_id="table-scale",
+                    cell_text="基金份额持有人数量不满200人",
+                    cell_text_normalized="基金份额持有人数量不满200人",
+                ),
+            ),
+        ),
+        _TableStub(
+            table_id="table-tracking",
+            heading_text="跟踪误差",
+            table_caption_or_nearby_heading="跟踪误差",
+            heading_path=("跟踪误差",),
+            cells=(
+                _CellStub(
+                    "tracking-cell",
+                    table_id="table-tracking",
+                    cell_text="日均跟踪偏离度",
+                    cell_text_normalized="日均跟踪偏离度",
+                ),
+            ),
+        ),
+        _TableStub(
+            table_id="table-turnover",
+            heading_text="换手率",
+            table_caption_or_nearby_heading="换手率",
+            heading_path=("换手率",),
+            cells=(
+                _CellStub(
+                    "turnover-cell",
+                    table_id="table-turnover",
+                    cell_text="投资风格发生重大变化",
+                    cell_text_normalized="投资风格发生重大变化",
+                ),
+            ),
+        ),
+        _TableStub(
+            table_id="table-concentration",
+            heading_text="前十名股票投资明细",
+            table_caption_or_nearby_heading="前十名股票投资明细",
+            heading_path=("前十名股票投资明细",),
+            cells=(
+                _CellStub(
+                    "concentration-cell",
+                    table_id="table-concentration",
+                    cell_text="报告期末基金资产组合情况",
+                    cell_text_normalized="报告期末基金资产组合情况",
+                ),
+            ),
+        ),
+    )
+
+    records = _field_family(
+        _core_risk_result(sections=sections, paragraphs=paragraphs, tables=tables),
+        "core_risk.v1",
+    ).candidate_evidence
+    paths = [record.source_field_path for record in records]
+
+    assert len(records) == 16
+    assert paths == [
+        "sections[0]",
+        "paragraph_blocks[0]",
+        "table_blocks[0]",
+        "table_blocks[0].cells[1]",
+        "table_blocks[0].cells[0]",
+        "sections[1]",
+        "paragraph_blocks[1]",
+        "table_blocks[1]",
+        "table_blocks[1].cells[0]",
+        "sections[2]",
+        "paragraph_blocks[2]",
+        "table_blocks[2]",
+        "table_blocks[2].cells[0]",
+        "sections[3]",
+        "paragraph_blocks[3]",
+        "table_blocks[3]",
+    ]
+    assert "sections[4]" not in paths
+    assert len(set(paths)) == len(paths)
+    assert records[0].row_locator == "role=risk_characteristic; locator=section_id=section-risk"
+    assert records[5].row_locator == "role=liquidation_or_scale_risk; locator=section_id=section-scale"
+    assert records[9].row_locator == "role=tracking_error_or_deviation_risk; locator=section_id=section-tracking"
+    assert records[13].row_locator == "role=turnover_or_style_drift_risk; locator=section_id=section-turnover"
+    assert all(len(record.excerpt) <= 160 for record in records)
+
+
+def test_core_risk_selector_requires_context_for_generic_tokens() -> None:
+    """core_risk broad generic token 缺少 source-level context 时不得产生 evidence。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 broad token 绕过 guard 时抛出。
+    """
+
+    sections = tuple(
+        _SectionStub(
+            section_id=f"section-generic-{index}",
+            heading_text_raw=text,
+            heading_text_normalized=text,
+            heading_path=(text,),
+        )
+        for index, text in enumerate(
+            (
+                "风险",
+                "收益",
+                "规模",
+                "清盘",
+                "持有人",
+                "基金资产净值",
+                "跟踪",
+                "偏离",
+                "换手",
+                "风格",
+                "漂移",
+                "策略变化",
+                "持仓",
+                "集中",
+                "行业集中",
+                "前十名",
+            )
+        )
+    )
+
+    family = _field_family(_core_risk_result(sections=sections), "core_risk.v1")
+
+    assert family.candidate_evidence == ()
+    assert family.gaps[0].gap_code == "field_family_missing"
+
+
+def test_core_risk_selector_allows_generic_tokens_with_source_context() -> None:
+    """core_risk generic token 带同源 guard context 时可产生 candidate evidence。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当正向 guard context 被过度阻断时抛出。
+    """
+
+    paragraphs = (
+        _ParagraphStub(
+            block_id="paragraph-risk",
+            text_raw="基金简介提示风险。",
+            text_normalized="基金简介提示风险。",
+        ),
+        _ParagraphStub(
+            block_id="paragraph-scale",
+            text_raw="基金份额持有人数量接近二百人，存在规模关注。",
+            text_normalized="基金份额持有人数量接近二百人，存在规模关注。",
+        ),
+        _ParagraphStub(
+            block_id="paragraph-tracking",
+            text_raw="业绩比较基准附近出现偏离。",
+            text_normalized="业绩比较基准附近出现偏离。",
+        ),
+        _ParagraphStub(
+            block_id="paragraph-turnover",
+            text_raw="投资策略发生重大变化，风格需要关注。",
+            text_normalized="投资策略发生重大变化，风格需要关注。",
+        ),
+        _ParagraphStub(
+            block_id="paragraph-concentration",
+            text_raw="股票投资组合中前十名占比体现持仓特征。",
+            text_normalized="股票投资组合中前十名占比体现持仓特征。",
+        ),
+    )
+
+    family = _field_family(_core_risk_result(paragraphs=paragraphs), "core_risk.v1")
+    roles = [record.row_locator.split(";")[0] for record in family.candidate_evidence]
+
+    assert roles == [
+        "role=risk_characteristic",
+        "role=liquidation_or_scale_risk",
+        "role=tracking_error_or_deviation_risk",
+        "role=turnover_or_style_drift_risk",
+        "role=concentration_risk",
+    ]
+
+
+def test_core_risk_selector_blocks_cell_self_guard_for_broad_tokens() -> None:
+    """core_risk cell generic token 不得靠同一 cell 文本自守卫。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 same-cell guard 或跨 source guard 误通过时抛出。
+    """
+
+    blocked_table = _TableStub(
+        table_id="table-blocked-risk",
+        heading_text="普通明细",
+        table_caption_or_nearby_heading="普通明细",
+        heading_path=("普通明细",),
+        cells=(
+                _CellStub(
+                    cell_id="cell-self-guard",
+                    table_id="table-blocked-risk",
+                    heading_path=("普通明细",),
+                    row_label_path=("项目",),
+                    column_header_path=("说明",),
+                    cell_text="基金产品资料概要提示风险",
+                    cell_text_normalized="基金产品资料概要提示风险",
+                ),
+                _CellStub(
+                    cell_id="cell-sibling-guard",
+                    table_id="table-blocked-risk",
+                    heading_path=("普通明细",),
+                    row_index=1,
+                    row_label_path=("基金简介",),
+                    column_header_path=("说明",),
+                cell_text="普通文本",
+                cell_text_normalized="普通文本",
+            ),
+        ),
+    )
+    allowed_table = _TableStub(
+        table_id="table-allowed-risk",
+        heading_text="基金简介",
+        table_caption_or_nearby_heading="基金简介",
+        heading_path=("基金简介",),
+        cells=(
+            _CellStub(
+                cell_id="cell-allowed-risk",
+                table_id="table-allowed-risk",
+                row_label_path=("项目",),
+                column_header_path=("说明",),
+                cell_text="风险",
+                cell_text_normalized="风险",
+            ),
+        ),
+    )
+
+    blocked_family = _field_family(_core_risk_result(tables=(blocked_table,)), "core_risk.v1")
+    allowed_family = _field_family(_core_risk_result(tables=(allowed_table,)), "core_risk.v1")
+    allowed_paths = {record.source_field_path for record in allowed_family.candidate_evidence}
+
+    assert blocked_family.candidate_evidence == ()
+    assert "table_blocks[0].cells[0]" in allowed_paths
+
+
+def test_core_risk_selector_does_not_capture_reasoning_or_output_tokens() -> None:
+    """S6-F 不把 Chapter 6 推理/输出词当成 locator token。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 forbidden token 单独产生 record 时抛出。
+    """
+
+    forbidden_sections = tuple(
+        _SectionStub(
+            section_id=f"section-forbidden-{index}",
+            heading_text_raw=text,
+            heading_text_normalized=text,
+            heading_path=(text,),
+        )
+        for index, text in enumerate(
+            ("压力测试", "最大回撤", "否决", "一票否决", "最致命", "需要替换", "值得持有", "风险等级")
+        )
+    )
+    mixed_paragraph = _ParagraphStub(
+        block_id="paragraph-mixed",
+        text_raw="压力测试提示风险收益特征需阅读披露。",
+        text_normalized="压力测试提示风险收益特征需阅读披露。",
+    )
+
+    pure_family = _field_family(_core_risk_result(sections=forbidden_sections), "core_risk.v1")
+    mixed_family = _field_family(_core_risk_result(paragraphs=(mixed_paragraph,)), "core_risk.v1")
+
+    assert pure_family.candidate_evidence == ()
+    assert len(mixed_family.candidate_evidence) == 1
+    assert mixed_family.candidate_evidence[0].row_locator.split(";")[0] == "role=risk_characteristic"
+    assert mixed_family.candidate_evidence[0].source_field_path == "paragraph_blocks[0]"
+
+
+def test_core_risk_selector_does_not_capture_investor_experience_owned_tokens() -> None:
+    """S6-E-owned share-flow/distribution token 不得生成 core_risk evidence。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 S6-F 捕获 S6-E owned token 时抛出。
+    """
+
+    sections = tuple(
+        _SectionStub(
+            section_id=f"section-investor-owned-{index}",
+            heading_text_raw=text,
+            heading_text_normalized=text,
+            heading_path=(text,),
+        )
+        for index, text in enumerate(
+            ("基金份额变动", "申购", "赎回", "净申购", "净赎回", "收益分配", "分红", "红利")
+        )
+    )
+
+    family = _field_family(_core_risk_result(sections=sections), "core_risk.v1")
+
+    assert family.candidate_evidence == ()
+    assert family.gaps[0].gap_code == "field_family_missing"
+
+
+def test_core_risk_selector_preserves_overlap_family_semantics() -> None:
+    """加入 S6-F 内容时 S6-B/S6-C/S6-D/S6-E 既有语义保持不变。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当既有字段族 count/order/gap/value/anchors 被改变时抛出。
+    """
+
+    baseline_sections = (
+        _SectionStub(
+            section_id="section-product",
+            heading_text_raw="基金简介",
+            heading_text_normalized="基金简介",
+            heading_path=("基金简介",),
+        ),
+        _SectionStub(
+            section_id="section-return",
+            heading_text_raw="基金份额净值增长率",
+            heading_text_normalized="基金份额净值增长率",
+            heading_path=("基金份额净值增长率",),
+        ),
+        _SectionStub(
+            section_id="section-manager",
+            heading_text_raw="基金经理简介",
+            heading_text_normalized="基金经理简介",
+            heading_path=("基金经理简介",),
+        ),
+        _SectionStub(
+            section_id="section-investor",
+            heading_text_raw="投资者实际收益",
+            heading_text_normalized="投资者实际收益",
+            heading_path=("投资者实际收益",),
+        ),
+    )
+    added_sections = (
+        *baseline_sections,
+        _SectionStub(
+            section_id="section-core-risk",
+            heading_text_raw="基金合同自动终止",
+            heading_text_normalized="基金合同自动终止",
+            heading_path=("基金合同自动终止",),
+        ),
+    )
+
+    baseline = _core_risk_result(sections=baseline_sections)
+    with_core_risk = _core_risk_result(sections=added_sections)
+
+    for family_id in (
+        "product_essence.v1",
+        "return_attribution.v1",
+        "manager_profile.v1",
+        "investor_experience.v1",
+    ):
+        assert _family_signature(_field_family(with_core_risk, family_id)) == _family_signature(
+            _field_family(baseline, family_id)
+        )
+    assert _field_family(with_core_risk, "core_risk.v1").candidate_evidence
+
+
 # ── Registration ────────────────────────────────────────────────────────────
 
 
