@@ -12,6 +12,11 @@ import pytest
 from fund_agent.fund.processors.contracts import (
     AnnualReportSourceFailureCategory,
     CandidateBoundaryStatus,
+    FundCandidateEvidenceRecord,
+    FundDisclosureDocumentContentIntermediate,
+    FundDisclosureDocumentIntermediate,
+    FundExtractionGap,
+    FundFieldFamilyResult,
     FundProcessorDispatchKey,
 )
 from fund_agent.fund.processors.fund_disclosure_processor import (
@@ -35,6 +40,77 @@ class _StubIntermediate:
     source_provenance: PublicSourceProvenance | None = None
     candidate_boundary: CandidateBoundaryStatus | None = None
     failure_class: AnnualReportSourceFailureCategory | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class _SectionStub:
+    """测试专用 section stub。"""
+
+    section_id: str = "section-1"
+    heading_text_raw: str = "基金简介"
+    heading_text_normalized: str = "基金简介"
+    heading_path: tuple[str, ...] = ("基金简介",)
+    heading_level: int | None = 1
+    locator_stability: str = "stable"
+
+
+@dataclass(frozen=True, slots=True)
+class _ParagraphStub:
+    """测试专用 paragraph stub。"""
+
+    block_id: str = "paragraph-1"
+    section_id: str | None = "section-1"
+    heading_path: tuple[str, ...] = ("基金简介",)
+    text_raw: str = "本基金为主动权益基金。"
+    text_normalized: str = "本基金为主动权益基金。"
+    content_hash: str = "a" * 64
+    locator_stability: str = "stable"
+
+
+@dataclass(frozen=True, slots=True)
+class _CellStub:
+    """测试专用 table cell stub。"""
+
+    cell_id: str = "cell-1"
+    table_id: str = "table-1"
+    section_anchor: str | None = "section-1"
+    heading_path: tuple[str, ...] = ("基金简介",)
+    row_index: int = 0
+    column_index: int = 0
+    row_label_path: tuple[str, ...] = ("基金名称",)
+    column_header_path: tuple[str, ...] = ("项目",)
+    cell_text: str = "测试基金"
+    cell_text_normalized: str = "测试基金"
+    locator_stability: str = "stable"
+
+
+@dataclass(frozen=True, slots=True)
+class _TableStub:
+    """测试专用 table stub。"""
+
+    table_id: str = "table-1"
+    section_id: str | None = "section-1"
+    heading_text: str | None = "基金基本情况"
+    heading_path: tuple[str, ...] = ("基金简介",)
+    table_caption_or_nearby_heading: str | None = "基金基本情况"
+    cells: tuple[_CellStub, ...] = (_CellStub(),)
+    locator_stability: str = "stable"
+
+
+@dataclass(frozen=True, slots=True)
+class _ContentIntermediateStub:
+    """测试专用带正文结构的中间态。"""
+
+    document_kind: Literal["annual_report"] = "annual_report"
+    fund_code: str = "004393"
+    report_year: int = 2025
+    intermediate_kind: Literal["fund_disclosure_document.v1"] = "fund_disclosure_document.v1"
+    source_provenance: PublicSourceProvenance | None = None
+    candidate_boundary: CandidateBoundaryStatus | None = None
+    failure_class: AnnualReportSourceFailureCategory | None = None
+    sections: tuple[_SectionStub, ...] = (_SectionStub(),)
+    paragraph_blocks: tuple[_ParagraphStub, ...] = (_ParagraphStub(),)
+    table_blocks: tuple[_TableStub, ...] = (_TableStub(),)
 
 
 def _provenance() -> PublicSourceProvenance:
@@ -94,6 +170,213 @@ def _stub(**overrides: object) -> _StubIntermediate:
     kw: dict[str, object] = {"source_provenance": _provenance()}
     kw.update(overrides)
     return _StubIntermediate(**kw)  # type: ignore[arg-type]
+
+
+def _candidate_evidence(**overrides: object) -> FundCandidateEvidenceRecord:
+    """构造 candidate evidence 记录。
+
+    Args:
+        **overrides: 可选字段覆盖。
+
+    Returns:
+        candidate-only 证据记录。
+
+    Raises:
+        ValueError: 字段非法时由契约模型抛出。
+    """
+
+    kwargs: dict[str, object] = {
+        "field_family_id": "product_essence.v1",
+        "source_boundary": "candidate_only",
+        "source_field_path": "sections[0]",
+        "section_id": "section-1",
+        "table_id": None,
+        "block_id": None,
+        "cell_id": None,
+        "heading_path": ("基金简介",),
+        "row_locator": None,
+        "excerpt": "候选摘录",
+        "locator_stability": "stable",
+    }
+    kwargs.update(overrides)
+    return FundCandidateEvidenceRecord(**kwargs)  # type: ignore[arg-type]
+
+
+def _missing_gap() -> FundExtractionGap:
+    """构造字段族缺失 gap。
+
+    Args:
+        无。
+
+    Returns:
+        字段族本地缺失 gap。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return FundExtractionGap(
+        gap_code="field_family_missing",
+        message="missing",
+        field_family_id="product_essence.v1",
+        source_field_path=None,
+        source_boundary="candidate_only",
+        required=True,
+    )
+
+
+# ── S6-A candidate evidence contract ───────────────────────────────────────
+
+
+def test_admission_protocol_remains_content_free() -> None:
+    """admission 协议不要求 section/table/paragraph 正文集合。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 admission 协议被正文结构污染时抛出。
+    """
+
+    intermediate = _stub(source_provenance=_provenance())
+
+    assert isinstance(intermediate, FundDisclosureDocumentIntermediate)
+    assert not isinstance(intermediate, FundDisclosureDocumentContentIntermediate)
+
+
+def test_content_intermediate_protocol_accepts_content_stub() -> None:
+    """content 协议只在 admission 字段之外增加正文集合。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 content 协议不能识别结构化正文 stub 时抛出。
+    """
+
+    intermediate = _ContentIntermediateStub(source_provenance=_provenance())
+
+    assert isinstance(intermediate, FundDisclosureDocumentIntermediate)
+    assert isinstance(intermediate, FundDisclosureDocumentContentIntermediate)
+
+
+@pytest.mark.parametrize(
+    ("field_name", "bad_value", "message"),
+    (
+        ("source_boundary", "annual_report", "source_boundary"),
+        ("candidate_only", False, "candidate_only"),
+        ("field_correctness_status", "proven", "field correctness"),
+        ("source_truth_status", "proven", "source truth"),
+        ("parser_replacement_authorized", True, "parser replacement"),
+        ("readiness_status", "ready", "readiness"),
+        ("source_field_path", "", "source_field_path"),
+        ("excerpt", "", "excerpt"),
+    ),
+)
+def test_candidate_evidence_record_rejects_unsafe_boundary_fields(
+    field_name: str,
+    bad_value: object,
+    message: str,
+) -> None:
+    """candidate evidence 拒绝 proof/source-truth/readiness 逃逸。
+
+    Args:
+        field_name: 被覆盖字段名。
+        bad_value: 非法字段值。
+        message: 预期错误消息片段。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当非法 candidate evidence 被接受时抛出。
+    """
+
+    with pytest.raises(ValueError, match=message):
+        _candidate_evidence(**{field_name: bad_value})
+
+
+def test_candidate_evidence_record_requires_locator_identity() -> None:
+    """candidate evidence 至少需要一个 locator identity。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当无定位证据被接受时抛出。
+    """
+
+    with pytest.raises(ValueError, match="locator identity"):
+        _candidate_evidence(section_id=None, table_id=None, block_id=None, cell_id=None)
+
+
+def test_missing_field_family_can_carry_candidate_evidence_without_value_leak() -> None:
+    """missing 字段族可携带 candidate_evidence，但不得写入 value。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 candidate evidence 泄漏到 public value 时抛出。
+    """
+
+    record = _candidate_evidence()
+
+    family = FundFieldFamilyResult(
+        field_family_id="product_essence.v1",
+        chapter_ids=(1,),
+        value={},
+        status="missing",
+        extraction_mode="missing",
+        anchors=(),
+        gaps=(_missing_gap(),),
+        source_provenance=_provenance(),
+        candidate_evidence=(record,),
+    )
+
+    assert family.status == "missing"
+    assert family.value == {}
+    assert family.anchors == ()
+    assert family.candidate_evidence == (record,)
+
+
+def test_candidate_evidence_does_not_satisfy_partial_anchor_requirement() -> None:
+    """candidate evidence 不能替代 partial 字段族的 public EvidenceAnchor。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 partial 无 public anchor 仍被接受时抛出。
+    """
+
+    with pytest.raises(ValueError, match="EvidenceAnchor"):
+        FundFieldFamilyResult(
+            field_family_id="product_essence.v1",
+            chapter_ids=(1,),
+            value={},
+            status="partial",
+            extraction_mode="direct",
+            anchors=(),
+            gaps=(),
+            source_provenance=_provenance(),
+            candidate_evidence=(_candidate_evidence(),),
+        )
 
 
 # ── Registration ────────────────────────────────────────────────────────────
