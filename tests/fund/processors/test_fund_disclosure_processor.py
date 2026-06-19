@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import ast
 from dataclasses import dataclass
+from decimal import Decimal
 from pathlib import Path
 from typing import Literal
 
 import pytest
 
+from fund_agent.fund.extractors.models import TrackingErrorValue
 from fund_agent.fund.processors.contracts import (
     AnnualReportSourceFailureCategory,
     CandidateBoundaryStatus,
@@ -407,6 +409,47 @@ def _product_cell(
         column_header_path=("内容",),
         cell_text=value,
         cell_text_normalized=value,
+    )
+
+
+def _return_attribution_cell(
+    label: str,
+    value: str,
+    *,
+    row_index: int,
+    column_index: int = 1,
+    cell_id: str | None = None,
+    label_axis: Literal["row", "column"] = "row",
+) -> _CellStub:
+    """构造 Slice 2 return_attribution table/cell source-truth fixture。
+
+    Args:
+        label: row label 或 column header label。
+        value: cell value。
+        row_index: 行号。
+        column_index: 列号。
+        cell_id: 可选 cell id。
+        label_axis: label 放入 row label 还是 column header。
+
+    Returns:
+        table cell stub。
+
+    Raises:
+        无显式抛出。
+    """
+
+    resolved_cell_id = cell_id or f"return-cell-{row_index}-{column_index}"
+    row_label_path = (label,) if label_axis == "row" else ("报告期",)
+    column_header_path = (label,) if label_axis == "column" else ("内容",)
+    return _CellStub(
+        cell_id=resolved_cell_id,
+        row_index=row_index,
+        column_index=column_index,
+        row_label_path=row_label_path,
+        column_header_path=column_header_path,
+        cell_text=value,
+        cell_text_normalized=value,
+        heading_path=("收益归因",),
     )
 
 
@@ -1598,6 +1641,321 @@ def test_return_attribution_source_truth_candidate_boundary_remains_blocked() ->
     assert family.anchors == ()
     assert family.candidate_evidence
     assert _gap_codes(family) == {"candidate_only_not_source_truth"}
+
+
+def test_return_attribution_source_truth_extracts_exact_value_shape() -> None:
+    """proof-positive FDD content 可抽取 exact return_attribution.v1 value shape。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 public value、anchor 或 direct route 不符合 Slice 2 时抛出。
+    """
+
+    cells = (
+        _return_attribution_cell(
+            "基金份额净值增长率",
+            "12.34%",
+            row_index=0,
+            column_index=1,
+            label_axis="column",
+        ),
+        _return_attribution_cell(
+            "业绩比较基准收益率",
+            "10.11%",
+            row_index=0,
+            column_index=2,
+            label_axis="column",
+        ),
+        _return_attribution_cell("管理费率", "1.20%", row_index=1),
+        _return_attribution_cell("托管费率", "0.20%", row_index=2),
+        _return_attribution_cell(
+            "年化跟踪误差",
+            "0.45%",
+            row_index=3,
+            column_index=1,
+            label_axis="column",
+        ),
+    )
+
+    result = _return_attribution_source_truth_result(
+        _source_truth_content_intermediate(cells=cells)
+    )
+    family = _field_family(result, "return_attribution.v1")
+    value = family.value
+    tracking_error = value["tracking_error"]
+
+    assert result.contract_status == "partial"
+    assert family.status == "accepted"
+    assert family.extraction_mode == "direct"
+    assert family.candidate_evidence == ()
+    assert set(value) == {
+        "schema_version",
+        "nav_benchmark_performance",
+        "fee_schedule",
+        "tracking_error",
+    }
+    assert value["schema_version"] == "return_attribution.v1"
+    assert value["nav_benchmark_performance"] == {
+        "nav_growth_rate": "12.34%",
+        "benchmark_return_rate": "10.11%",
+    }
+    assert value["fee_schedule"] == {
+        "management_fee": "1.20%",
+        "custody_fee": "0.20%",
+    }
+    assert isinstance(tracking_error, TrackingErrorValue)
+    assert tracking_error.value == Decimal("0.0045")
+    assert tracking_error.value_text == "0.45%"
+    assert tracking_error.unit == "ratio"
+    assert tracking_error.period_label == "报告期"
+    assert tracking_error.period_start is None
+    assert tracking_error.period_end is None
+    assert tracking_error.annualized
+    assert tracking_error.source_type == "direct_disclosure"
+    assert tracking_error.calculation_method == "disclosed"
+    assert tracking_error.benchmark_identity_status == "missing"
+    assert tracking_error.benchmark_index_name is None
+    assert tracking_error.benchmark_index_code is None
+    assert tracking_error.fund_series_source is None
+    assert tracking_error.index_series_source is None
+    assert tracking_error.observation_count is None
+    assert tracking_error.frequency == "annual_report_period"
+    assert tracking_error.annualization_factor is None
+    assert tracking_error.input_period_complete
+    assert "直接披露" in tracking_error.provenance_note
+    assert family.gaps == ()
+    assert len(family.anchors) == 5
+    assert {anchor.source_kind for anchor in family.anchors} == {"annual_report"}
+
+
+def test_return_attribution_source_truth_partial_when_required_groups_missing() -> None:
+    """只形成部分 top-level subvalue 时，return_attribution.v1 返回 partial。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当部分值被误判为 accepted 或 missing 时抛出。
+    """
+
+    cells = (
+        _return_attribution_cell(
+            "基金份额净值增长率",
+            "8.00%",
+            row_index=0,
+            column_index=1,
+            label_axis="column",
+        ),
+        _return_attribution_cell(
+            "业绩比较基准收益率",
+            "6.00%",
+            row_index=0,
+            column_index=2,
+            label_axis="column",
+        ),
+    )
+
+    result = _return_attribution_source_truth_result(
+        _source_truth_content_intermediate(cells=cells)
+    )
+    family = _field_family(result, "return_attribution.v1")
+
+    assert family.status == "partial"
+    assert family.extraction_mode == "direct"
+    assert set(family.value) == {"schema_version", "nav_benchmark_performance"}
+    assert _gap_codes(family) == {"field_family_partial"}
+    assert {gap.source_field_path for gap in family.gaps} == {"fee_schedule", "tracking_error"}
+
+
+def test_return_attribution_source_truth_missing_when_no_allowed_labels() -> None:
+    """proof-positive 但无允许 label 时，public 结果保持 missing。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当无关内容被提升为 public value 时抛出。
+    """
+
+    cells = (_return_attribution_cell("无关指标", "99.99%", row_index=0),)
+
+    result = _return_attribution_source_truth_result(
+        _source_truth_content_intermediate(cells=cells)
+    )
+    family = _field_family(result, "return_attribution.v1")
+
+    assert family.status == "missing"
+    assert family.extraction_mode == "missing"
+    assert family.value == {}
+    assert family.anchors == ()
+    assert family.candidate_evidence == ()
+    assert _gap_codes(family) == {"field_family_missing"}
+
+
+def test_return_attribution_source_truth_fee_schedule_one_side_is_partial() -> None:
+    """仅管理费或托管费存在时，fee_schedule 可作为 partial subvalue 输出。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当单侧费率被丢弃或扩展到未授权 subkey 时抛出。
+    """
+
+    cells = (_return_attribution_cell("管理费率", "1.50%", row_index=0),)
+
+    result = _return_attribution_source_truth_result(
+        _source_truth_content_intermediate(cells=cells)
+    )
+    family = _field_family(result, "return_attribution.v1")
+
+    assert family.status == "partial"
+    assert family.value["fee_schedule"] == {
+        "management_fee": "1.50%",
+        "custody_fee": None,
+    }
+    assert set(family.value["fee_schedule"]) == {"management_fee", "custody_fee"}
+    assert "field_family_partial" in _gap_codes(family)
+
+
+@pytest.mark.parametrize(
+    "cells",
+    (
+        (
+            _return_attribution_cell(
+                "基金份额净值增长率",
+                "8.00%",
+                row_index=0,
+                column_index=1,
+                label_axis="column",
+            ),
+        ),
+        (
+            _return_attribution_cell(
+                "基金份额净值增长率",
+                "8.00%",
+                row_index=0,
+                column_index=1,
+                label_axis="column",
+            ),
+            _return_attribution_cell(
+                "业绩比较基准收益率",
+                "6.00%",
+                row_index=1,
+                column_index=2,
+                label_axis="column",
+            ),
+        ),
+    ),
+)
+def test_return_attribution_source_truth_nav_requires_both_sides_same_row(
+    cells: tuple[_CellStub, ...],
+) -> None:
+    """NAV/benchmark 缺任一侧或不同 row 时，表现 subvalue fail closed。
+
+    Args:
+        cells: NAV/benchmark 测试单元格。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当非同一行配对被采信时抛出。
+    """
+
+    result = _return_attribution_source_truth_result(
+        _source_truth_content_intermediate(cells=cells)
+    )
+    family = _field_family(result, "return_attribution.v1")
+
+    assert family.status == "missing"
+    assert "nav_benchmark_performance" not in family.value
+    assert family.anchors == ()
+
+
+def test_return_attribution_source_truth_tracking_error_actual_disclosure_value() -> None:
+    """实际披露的跟踪误差构造完整 TrackingErrorValue。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 tracking_error 不是完整 direct disclosure 结构时抛出。
+    """
+
+    paragraph = _ParagraphStub(
+        block_id="paragraph-tracking",
+        section_id="section-tracking",
+        heading_path=("基金净值表现",),
+        text_raw="本报告期基金年化跟踪误差为0.88%。",
+        text_normalized="本报告期基金年化跟踪误差为0.88%。",
+    )
+
+    result = _return_attribution_source_truth_result(
+        _source_truth_content_intermediate(paragraphs=(paragraph,))
+    )
+    family = _field_family(result, "return_attribution.v1")
+    tracking_error = family.value["tracking_error"]
+
+    assert family.status == "partial"
+    assert isinstance(tracking_error, TrackingErrorValue)
+    assert tracking_error.value == Decimal("0.0088")
+    assert tracking_error.value_text == "0.88%"
+    assert tracking_error.period_label == "本报告期"
+    assert tracking_error.annualized
+    assert tracking_error.frequency == "annual_report_period"
+    assert tracking_error.input_period_complete
+    assert tracking_error.fund_series_source is None
+    assert tracking_error.index_series_source is None
+
+
+def test_return_attribution_source_truth_rejects_tracking_error_target_context() -> None:
+    """目标、控制或上限语境的跟踪误差不得进入 public value。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当目标/控制语境被当作实际披露时抛出。
+    """
+
+    paragraph = _ParagraphStub(
+        block_id="paragraph-tracking-target",
+        section_id="section-tracking",
+        heading_path=("投资目标",),
+        text_raw="本基金力争将跟踪误差控制在不超过4.00%，偏离度绝对值目标较低。",
+        text_normalized="本基金力争将跟踪误差控制在不超过4.00%，偏离度绝对值目标较低。",
+    )
+
+    result = _return_attribution_source_truth_result(
+        _source_truth_content_intermediate(paragraphs=(paragraph,))
+    )
+    family = _field_family(result, "return_attribution.v1")
+
+    assert family.status == "missing"
+    assert family.value == {}
+    assert family.anchors == ()
+    assert "field_family_missing" in _gap_codes(family)
 
 
 def test_return_attribution_selector_adds_candidate_evidence_only() -> None:
