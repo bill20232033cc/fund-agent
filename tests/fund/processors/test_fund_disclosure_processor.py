@@ -18,6 +18,8 @@ from fund_agent.fund.processors.contracts import (
     FundExtractionGap,
     FundFieldFamilyResult,
     FundProcessorDispatchKey,
+    FundProcessorInput,
+    FundProcessorResult,
 )
 from fund_agent.fund.processors.fund_disclosure_processor import (
     FundDisclosureDocumentProcessor,
@@ -225,6 +227,29 @@ def _missing_gap() -> FundExtractionGap:
     )
 
 
+def _field_family(
+    result: FundProcessorResult,
+    field_family_id: str,
+) -> FundFieldFamilyResult:
+    """按字段族 ID 取结果。
+
+    Args:
+        result: processor 结果。
+        field_family_id: 字段族 ID。
+
+    Returns:
+        匹配的字段族结果。
+
+    Raises:
+        AssertionError: 当字段族不存在时抛出。
+    """
+
+    for family in result.field_families:
+        if family.field_family_id == field_family_id:
+            return family
+    raise AssertionError(f"field family not found: {field_family_id}")
+
+
 # ── S6-A candidate evidence contract ───────────────────────────────────────
 
 
@@ -377,6 +402,183 @@ def test_candidate_evidence_does_not_satisfy_partial_anchor_requirement() -> Non
             source_provenance=_provenance(),
             candidate_evidence=(_candidate_evidence(),),
         )
+
+
+# ── S6-B product essence candidate selector ────────────────────────────────
+
+
+def test_product_essence_selector_adds_candidate_evidence_only() -> None:
+    """product_essence selector 只填 candidate_evidence，不填 public value/anchor。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当候选证据泄漏到 public 字段时抛出。
+    """
+
+    processor = FundDisclosureDocumentProcessor()
+
+    result = processor.extract(
+        FundProcessorInput(
+            context=_dispatch_key(),
+            intermediate=_ContentIntermediateStub(source_provenance=_provenance()),
+        )
+    )
+
+    product = _field_family(result, "product_essence.v1")
+    paths = {record.source_field_path for record in product.candidate_evidence}
+
+    assert result.contract_status == "missing"
+    assert product.status == "missing"
+    assert product.extraction_mode == "missing"
+    assert product.value == {}
+    assert product.anchors == ()
+    assert product.gaps[0].gap_code == "candidate_only_not_source_truth"
+    assert "sections[0]" in paths
+    assert "table_blocks[0]" in paths
+    assert "table_blocks[0].cells[0]" in paths
+    for record in product.candidate_evidence:
+        assert record.candidate_only
+        assert record.source_boundary == "candidate_only"
+        assert record.field_correctness_status == "not_proven"
+        assert record.source_truth_status == "not_proven"
+        assert not record.parser_replacement_authorized
+        assert record.readiness_status == "not_ready"
+        assert record.source_field_path not in product.value
+
+
+def test_product_essence_selector_leaves_other_families_without_candidate_evidence() -> None:
+    """S6-B 不为其它五个字段族生成 candidate evidence。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 selector 越界到其它字段族时抛出。
+    """
+
+    processor = FundDisclosureDocumentProcessor()
+
+    result = processor.extract(
+        FundProcessorInput(
+            context=_dispatch_key(),
+            intermediate=_ContentIntermediateStub(source_provenance=_provenance()),
+        )
+    )
+
+    for family in result.field_families:
+        if family.field_family_id == "product_essence.v1":
+            continue
+        assert family.status == "missing"
+        assert family.value == {}
+        assert family.anchors == ()
+        assert family.candidate_evidence == ()
+        assert family.gaps[0].gap_code == "field_family_missing"
+
+
+def test_product_essence_selector_no_match_keeps_field_family_missing() -> None:
+    """非匹配正文不产生 candidate evidence，保留 field_family_missing。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当无关正文被误命中时抛出。
+    """
+
+    processor = FundDisclosureDocumentProcessor()
+    section = _SectionStub(
+        heading_text_raw="其他章节",
+        heading_text_normalized="其他章节",
+        heading_path=("其他章节",),
+    )
+    paragraph = _ParagraphStub(
+        heading_path=("其他章节",),
+        text_raw="无关内容",
+        text_normalized="无关内容",
+    )
+    cell = _CellStub(
+        heading_path=("其他章节",),
+        row_label_path=("其他",),
+        column_header_path=("其他",),
+        cell_text="无关",
+        cell_text_normalized="无关",
+    )
+    table = _TableStub(
+        heading_text="其他表格",
+        table_caption_or_nearby_heading="其他表格",
+        heading_path=("其他章节",),
+        cells=(cell,),
+    )
+
+    result = processor.extract(
+        FundProcessorInput(
+            context=_dispatch_key(),
+            intermediate=_ContentIntermediateStub(
+                source_provenance=_provenance(),
+                sections=(section,),
+                paragraph_blocks=(paragraph,),
+                table_blocks=(table,),
+            ),
+        )
+    )
+
+    product = _field_family(result, "product_essence.v1")
+
+    assert product.candidate_evidence == ()
+    assert product.status == "missing"
+    assert product.value == {}
+    assert product.anchors == ()
+    assert product.gaps[0].gap_code == "field_family_missing"
+
+
+def test_product_essence_selector_preserves_candidate_boundary_blocked_status() -> None:
+    """candidate_boundary 输入即使有 candidate evidence，整体仍 blocked。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 candidate evidence 提升 consumption status 时抛出。
+    """
+
+    processor = FundDisclosureDocumentProcessor()
+    boundary = CandidateBoundaryStatus(
+        candidate_only=True,
+        field_correctness_status="not_proven",
+        source_truth_status="not_proven",
+    )
+
+    result = processor.extract(
+        FundProcessorInput(
+            context=_dispatch_key(),
+            intermediate=_ContentIntermediateStub(
+                source_provenance=_provenance(),
+                candidate_boundary=boundary,
+            ),
+        )
+    )
+
+    product = _field_family(result, "product_essence.v1")
+
+    assert result.contract_status == "blocked"
+    assert result.candidate_boundary is boundary
+    assert product.candidate_evidence
+    assert product.value == {}
+    assert product.anchors == ()
 
 
 # ── Registration ────────────────────────────────────────────────────────────
