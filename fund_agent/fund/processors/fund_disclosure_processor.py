@@ -8,12 +8,17 @@ provider、LLM、Service/UI/Host、renderer 或 quality gate。
 
 from __future__ import annotations
 
-from typing import Final
+from dataclasses import dataclass
+from typing import Final, Iterable, cast
 
+from fund_agent.fund.extractors.models import EvidenceAnchor
 from fund_agent.fund.processors.contracts import (
     FundCandidateEvidenceRecord,
+    FundDisclosureCellLike,
     FundDisclosureDocumentContentIntermediate,
     FundDisclosureDocumentIntermediate,
+    FundDisclosureParagraphBlockLike,
+    FundDisclosureSourceTruthAdmissionProof,
     FundDisclosureTableBlockLike,
     FundExtractionGap,
     FundExtractionGapCode,
@@ -66,6 +71,39 @@ _PRODUCT_ESSENCE_MATCH_GROUPS: Final[tuple[tuple[str, tuple[str, ...]], ...]] = 
     ("benchmark", ("业绩比较基准", "比较基准")),
     ("risk_characteristic", ("风险收益特征", "风险特征")),
 )
+_PRODUCT_ESSENCE_LABELS: Final[dict[str, tuple[str, ...]]] = {
+    "basic_identity.fund_name": ("基金名称", "基金简称"),
+    "basic_identity.fund_code": ("基金主代码", "基金代码"),
+    "basic_identity.fund_category": ("基金类别", "基金类型"),
+    "basic_identity.fund_scale": ("基金规模", "基金资产净值"),
+    "basic_identity.fund_manager": ("基金经理",),
+    "basic_identity.management_company": ("基金管理人",),
+    "basic_identity.custodian": ("基金托管人",),
+    "basic_identity.inception_date": ("基金合同生效日", "成立日期"),
+    "product_profile.investment_objective": ("投资目标",),
+    "product_profile.investment_scope": ("投资范围",),
+    "product_profile.investment_strategy": ("投资策略",),
+    "product_profile.style_positioning": ("投资风格", "产品定位", "风格定位"),
+    "benchmark.benchmark_text": ("业绩比较基准", "比较基准"),
+    "risk_characteristic_text.risk_characteristic_text": ("风险收益特征", "基金风险收益特征"),
+}
+_PRODUCT_ESSENCE_PARAGRAPH_OUTPUT_PATHS: Final[tuple[str, ...]] = (
+    "product_profile.investment_objective",
+    "product_profile.investment_scope",
+    "product_profile.investment_strategy",
+    "product_profile.style_positioning",
+    "benchmark.benchmark_text",
+    "risk_characteristic_text.risk_characteristic_text",
+)
+_PRODUCT_ESSENCE_GENERIC_CELL_TEXTS: Final[frozenset[str]] = frozenset(
+    ("项目", "指标", "名称", "内容", "说明")
+)
+_PRODUCT_ESSENCE_REQUIRED_TOP_LEVEL: Final[tuple[str, ...]] = (
+    "basic_identity",
+    "product_profile",
+    "benchmark",
+    "risk_characteristic_text",
+)
 _RETURN_ATTRIBUTION_MATCH_GROUPS: Final[tuple[tuple[str, tuple[str, ...]], ...]] = (
     (
         "nav_benchmark_performance",
@@ -96,6 +134,16 @@ _RETURN_ATTRIBUTION_MATCH_GROUPS: Final[tuple[tuple[str, tuple[str, ...]], ...]]
         ("跟踪误差", "年化跟踪误差", "日均跟踪偏离度", "日均偏离度"),
     ),
 )
+
+
+@dataclass(frozen=True, slots=True)
+class _ProductEssenceValueCandidate:
+    """product_essence.v1 单个字段值候选。"""
+
+    output_path: str
+    value: str
+    anchor: EvidenceAnchor
+    source_field_path: str
 _MANAGER_PROFILE_MATCH_GROUPS: Final[
     tuple[tuple[str, tuple[str, ...], tuple[str, ...], tuple[str, ...]], ...]
 ] = (
@@ -526,9 +574,26 @@ class FundDisclosureDocumentProcessor:
                 contract_status=admission.contract_status,
             )
 
-        field_families = _field_families_for_intermediate(intermediate, source_provenance)
+        source_truth_gap_code: FundExtractionGapCode | None = None
+        if admission.contract_status != "blocked":
+            source_truth_gap_code = _validate_source_truth_admission(intermediate, context)
+
+        field_families = _field_families_for_intermediate(
+            intermediate,
+            source_provenance,
+            context=context,
+            source_truth_extraction_allowed=(
+                admission.contract_status != "blocked" and source_truth_gap_code is None
+            ),
+            source_truth_gap_code=source_truth_gap_code,
+        )
         contract_status: FundProcessorContractStatus = (
-            "blocked" if admission.contract_status == "blocked" else "missing"
+            "blocked"
+            if admission.contract_status == "blocked"
+            else _derive_contract_status(field_families)
+        )
+        result_anchors = _dedupe_anchors(
+            anchor for family in field_families for anchor in family.anchors
         )
         return FundProcessorResult(
             processor_id=self.processor_id,
@@ -540,7 +605,7 @@ class FundDisclosureDocumentProcessor:
             input_intermediate_kind=context.intermediate_kind,
             field_families=field_families,
             gaps=(),
-            anchors=(),
+            anchors=result_anchors,
             source_provenance=source_provenance,
             candidate_boundary=candidate_boundary,
             contract_status=contract_status,
@@ -623,12 +688,19 @@ def _check_identity(
 def _field_families_for_intermediate(
     intermediate: FundDisclosureDocumentIntermediate,
     source_provenance: PublicSourceProvenance | None,
+    *,
+    context: FundProcessorDispatchKey,
+    source_truth_extraction_allowed: bool = False,
+    source_truth_gap_code: FundExtractionGapCode | None = None,
 ) -> tuple[FundFieldFamilyResult, ...]:
     """构造 FundDisclosureDocument processor 字段族结果。
 
     Args:
         intermediate: 已通过身份校验和 admission 的中间态。
         source_provenance: 公共来源 provenance。
+        context: Processor dispatch 身份。
+        source_truth_extraction_allowed: admission 非 blocked 且 source-truth proof 合法时为真。
+        source_truth_gap_code: source-truth admission proof 缺失或非法时的本地 gap。
 
     Returns:
         六个字段族结果；S6-B/S6-C/S6-D/S6-E/S6-F/S6-G 仅为已接受字段族附加
@@ -638,7 +710,18 @@ def _field_families_for_intermediate(
         无显式抛出。
     """
 
-    product_essence_evidence = _select_product_essence_candidate_evidence(intermediate)
+    product_essence_source_truth: FundFieldFamilyResult | None = None
+    content_intermediate = _content_intermediate_or_none(intermediate)
+    if source_truth_extraction_allowed and content_intermediate is not None:
+        product_essence_source_truth = _extract_product_essence_source_truth(
+            content_intermediate, source_provenance, context
+        )
+
+    product_essence_evidence = (
+        ()
+        if product_essence_source_truth is not None
+        else _select_product_essence_candidate_evidence(intermediate)
+    )
     return_attribution_evidence = _select_return_attribution_candidate_evidence(intermediate)
     manager_profile_evidence = _select_manager_profile_candidate_evidence(intermediate)
     investor_experience_evidence = _select_investor_experience_candidate_evidence(intermediate)
@@ -655,14 +738,825 @@ def _field_families_for_intermediate(
         "core_risk.v1": core_risk_evidence,
     }
 
-    return tuple(
-        _candidate_missing_field_family(
-            family_id, source_provenance, candidate_evidence_by_family[family_id]
+    field_families = tuple(
+        product_essence_source_truth
+        if family_id == "product_essence.v1" and product_essence_source_truth is not None
+        else (
+            _candidate_missing_field_family(
+                family_id, source_provenance, candidate_evidence_by_family[family_id]
+            )
+            if candidate_evidence_by_family.get(family_id)
+            else _missing_field_family(family_id, source_provenance)
         )
-        if candidate_evidence_by_family.get(family_id)
-        else _missing_field_family(family_id, source_provenance)
         for family_id in _FAMILY_ORDER
     )
+    if source_truth_gap_code is None:
+        return field_families
+    return tuple(
+        _with_source_truth_admission_gap(family, source_truth_gap_code)
+        for family in field_families
+    )
+
+
+def _validate_source_truth_admission(
+    intermediate: FundDisclosureDocumentIntermediate,
+    context: FundProcessorDispatchKey,
+) -> FundExtractionGapCode | None:
+    """校验 FundDisclosureDocument source-truth admission 正向证明。
+
+    Args:
+        intermediate: 已通过基础 admission 的中间态。
+        context: Processor dispatch 身份。
+
+    Returns:
+        proof 通过时返回 None；缺 proof 返回 ``source_truth_admission_missing``；
+        proof 身份或类型非法返回 ``source_truth_admission_invalid``。
+
+    Raises:
+        无显式抛出。
+    """
+
+    content_intermediate = _content_intermediate_or_none(intermediate)
+    if content_intermediate is None:
+        return "source_truth_admission_missing"
+
+    proof = getattr(content_intermediate, "source_truth_admission", None)
+    if proof is None:
+        return "source_truth_admission_missing"
+    if not isinstance(proof, FundDisclosureSourceTruthAdmissionProof):
+        return "source_truth_admission_invalid"
+    if content_intermediate.candidate_boundary is not None:
+        return "source_truth_admission_invalid"
+    if content_intermediate.failure_class is not None:
+        return "source_truth_admission_invalid"
+    if content_intermediate.source_provenance is None:
+        return "source_truth_admission_invalid"
+    if (
+        proof.fund_code != context.fund_code
+        or proof.fund_code != content_intermediate.fund_code
+        or proof.report_year != context.document_year
+        or proof.report_year != content_intermediate.report_year
+        or proof.document_kind != context.report_type
+        or proof.document_kind != content_intermediate.document_kind
+        or proof.intermediate_kind != context.intermediate_kind
+        or proof.intermediate_kind != content_intermediate.intermediate_kind
+        or proof.source_kind != context.source_kind
+        or proof.source_kind != "annual_report"
+    ):
+        return "source_truth_admission_invalid"
+    return None
+
+
+def _extract_product_essence_source_truth(
+    intermediate: FundDisclosureDocumentContentIntermediate,
+    source_provenance: PublicSourceProvenance | None,
+    context: FundProcessorDispatchKey,
+) -> FundFieldFamilyResult:
+    """从 proof-positive FDD 正文抽取模板第 1 章产品本质字段族。
+
+    Args:
+        intermediate: 已通过 source-truth admission proof 的正文中间态。
+        source_provenance: 公共来源 provenance。
+        context: Processor dispatch 身份。
+
+    Returns:
+        `product_essence.v1` 字段族；只包含 Slice B 允许的四个 top-level key。
+
+    Raises:
+        无显式抛出。
+    """
+
+    selected_values, ambiguous_paths = _select_product_essence_values(intermediate, context)
+    value = _build_product_essence_value(selected_values, context)
+    gaps = _product_essence_source_truth_gaps(value, ambiguous_paths)
+    status = _product_essence_status(value)
+    anchors = _dedupe_anchors(
+        selected_values[output_path].anchor
+        for output_path in _product_essence_emitted_output_paths(value, selected_values)
+    )
+    return FundFieldFamilyResult(
+        field_family_id="product_essence.v1",
+        chapter_ids=_CHAPTER_IDS["product_essence.v1"],
+        value=value,
+        status=status,
+        extraction_mode="missing" if status == "missing" else "direct",
+        anchors=anchors,
+        gaps=gaps,
+        source_provenance=source_provenance,
+        candidate_evidence=(),
+    )
+
+
+def _select_product_essence_values(
+    intermediate: FundDisclosureDocumentContentIntermediate,
+    context: FundProcessorDispatchKey,
+) -> tuple[dict[str, _ProductEssenceValueCandidate], set[str]]:
+    """按 Slice B 优先级选择 product_essence 输出路径值。
+
+    Args:
+        intermediate: FDD 正文中间态。
+        context: Processor dispatch 身份。
+
+    Returns:
+        `(selected_values, ambiguous_paths)`；歧义路径不会进入 selected_values。
+
+    Raises:
+        无显式抛出。
+    """
+
+    selected_values: dict[str, _ProductEssenceValueCandidate] = {}
+    ambiguous_paths: set[str] = set()
+    table_candidates = _collect_product_essence_table_candidates(intermediate, context)
+    paragraph_candidates = _collect_product_essence_paragraph_candidates(intermediate, context)
+    for output_path in _PRODUCT_ESSENCE_LABELS:
+        candidates = table_candidates.get(output_path, ())
+        if not candidates and output_path in _PRODUCT_ESSENCE_PARAGRAPH_OUTPUT_PATHS:
+            candidates = paragraph_candidates.get(output_path, ())
+        selected = _resolve_product_essence_candidate(
+            output_path, candidates, ambiguous_paths, context
+        )
+        if selected is not None:
+            selected_values[output_path] = selected
+    if "basic_identity.fund_code" in ambiguous_paths:
+        selected_values.pop("basic_identity.fund_code", None)
+    return selected_values, ambiguous_paths
+
+
+def _collect_product_essence_table_candidates(
+    intermediate: FundDisclosureDocumentContentIntermediate,
+    context: FundProcessorDispatchKey,
+) -> dict[str, tuple[_ProductEssenceValueCandidate, ...]]:
+    """收集稳定 table/cell 字段候选，不做 sibling lookup。
+
+    Args:
+        intermediate: FDD 正文中间态。
+        context: Processor dispatch 身份。
+
+    Returns:
+        output path 到 table/cell 候选元组的映射。
+
+    Raises:
+        无显式抛出。
+    """
+
+    candidates: dict[str, list[_ProductEssenceValueCandidate]] = {}
+    for table_index, table in enumerate(intermediate.table_blocks):
+        if table.locator_stability != "stable":
+            continue
+        indexed_cells = sorted(
+            enumerate(table.cells), key=lambda item: (item[1].row_index, item[1].column_index)
+        )
+        for cell_index, cell in indexed_cells:
+            if cell.locator_stability != "stable":
+                continue
+            output_path = _match_product_essence_cell_output_path(cell)
+            if output_path is None:
+                continue
+            value = _product_essence_cell_value(cell)
+            if not _is_product_essence_cell_value_allowed(value, output_path):
+                continue
+            anchor = _product_essence_cell_anchor(output_path, table, cell, context)
+            source_path = f"table_blocks[{table_index}].cells[{cell_index}]"
+            candidates.setdefault(output_path, []).append(
+                _ProductEssenceValueCandidate(
+                    output_path=output_path,
+                    value=value,
+                    anchor=anchor,
+                    source_field_path=source_path,
+                )
+            )
+    return {key: tuple(value) for key, value in candidates.items()}
+
+
+def _match_product_essence_cell_output_path(cell: FundDisclosureCellLike) -> str | None:
+    """按 row_label_path 优先、column_header_path 次之匹配 output path。
+
+    Args:
+        cell: FDD table cell。
+
+    Returns:
+        命中的 output path；未命中时返回 None。
+
+    Raises:
+        无显式抛出。
+    """
+
+    for output_path, labels in _PRODUCT_ESSENCE_LABELS.items():
+        if _path_contains_any_label(cell.row_label_path, labels):
+            return output_path
+    for output_path, labels in _PRODUCT_ESSENCE_LABELS.items():
+        if _path_contains_any_label(cell.column_header_path, labels):
+            return output_path
+    return None
+
+
+def _product_essence_cell_value(cell: FundDisclosureCellLike) -> str:
+    """返回 cell 的规范化取值。
+
+    Args:
+        cell: FDD table cell。
+
+    Returns:
+        `cell_text_normalized` 非空时优先，否则回退 `cell_text`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    value = cell.cell_text_normalized.strip() if cell.cell_text_normalized else ""
+    if value:
+        return value
+    return cell.cell_text.strip()
+
+
+def _is_product_essence_cell_value_allowed(value: str, output_path: str) -> bool:
+    """判断 table/cell value 是否可作为 Slice B 字段值。
+
+    Args:
+        value: cell 值。
+        output_path: 目标输出路径。
+
+    Returns:
+        非空、非 label 本身、非泛化表头时返回 True。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if not value:
+        return False
+    normalized_value = _normalize_match_text(value)
+    labels = tuple(_normalize_match_text(label) for label in _PRODUCT_ESSENCE_LABELS[output_path])
+    generic_texts = tuple(
+        _normalize_match_text(text) for text in _PRODUCT_ESSENCE_GENERIC_CELL_TEXTS
+    )
+    return normalized_value not in labels and normalized_value not in generic_texts
+
+
+def _product_essence_cell_anchor(
+    output_path: str,
+    table: FundDisclosureTableBlockLike,
+    cell: FundDisclosureCellLike,
+    context: FundProcessorDispatchKey,
+) -> EvidenceAnchor:
+    """构造 table/cell source-truth EvidenceAnchor。
+
+    Args:
+        output_path: 目标输出路径。
+        table: parent table block。
+        cell: FDD table cell。
+        context: Processor dispatch 身份。
+
+    Returns:
+        source_kind 固定为 annual_report 的公共锚点。
+
+    Raises:
+        无显式抛出。
+    """
+
+    table_id = cell.table_id or table.table_id
+    row_locator = (
+        f"field={output_path}; table_id={table_id}; "
+        f"row={cell.row_index}; column={cell.column_index}; cell_id={cell.cell_id}"
+    )
+    return EvidenceAnchor(
+        source_kind="annual_report",
+        document_year=context.document_year,
+        section_id=cell.section_anchor or table.section_id,
+        page_number=None,
+        table_id=table_id,
+        row_locator=row_locator,
+        note=_truncate(_product_essence_cell_value(cell)),
+    )
+
+
+def _collect_product_essence_paragraph_candidates(
+    intermediate: FundDisclosureDocumentContentIntermediate,
+    context: FundProcessorDispatchKey,
+) -> dict[str, tuple[_ProductEssenceValueCandidate, ...]]:
+    """收集 Slice B 允许 fallback 的 paragraph 字段候选。
+
+    Args:
+        intermediate: FDD 正文中间态。
+        context: Processor dispatch 身份。
+
+    Returns:
+        output path 到 paragraph 候选元组的映射。
+
+    Raises:
+        无显式抛出。
+    """
+
+    candidates: dict[str, list[_ProductEssenceValueCandidate]] = {}
+    for paragraph_index, paragraph in enumerate(intermediate.paragraph_blocks):
+        if paragraph.locator_stability != "stable":
+            continue
+        for output_path in _PRODUCT_ESSENCE_PARAGRAPH_OUTPUT_PATHS:
+            candidate = _product_essence_paragraph_candidate(
+                output_path, paragraph_index, paragraph, context
+            )
+            if candidate is not None:
+                candidates.setdefault(output_path, []).append(candidate)
+    return {key: tuple(value) for key, value in candidates.items()}
+
+
+def _product_essence_paragraph_candidate(
+    output_path: str,
+    paragraph_index: int,
+    paragraph: FundDisclosureParagraphBlockLike,
+    context: FundProcessorDispatchKey,
+) -> _ProductEssenceValueCandidate | None:
+    """从单个 paragraph 尝试构造字段值候选。
+
+    Args:
+        output_path: 目标输出路径。
+        paragraph_index: paragraph tuple 索引。
+        paragraph: FDD paragraph block。
+        context: Processor dispatch 身份。
+
+    Returns:
+        命中时返回候选；未命中或值为空时返回 None。
+
+    Raises:
+        无显式抛出。
+    """
+
+    text = paragraph.text_normalized.strip() if paragraph.text_normalized else ""
+    if not text:
+        text = paragraph.text_raw.strip()
+    if not text:
+        return None
+    labels = _PRODUCT_ESSENCE_LABELS[output_path]
+    value = _extract_product_essence_labeled_paragraph_value(text, labels)
+    if value is None and _path_contains_any_label(paragraph.heading_path, labels):
+        value = text
+    if value is None or not _is_product_essence_paragraph_value_allowed(value, labels):
+        return None
+    anchor = EvidenceAnchor(
+        source_kind="annual_report",
+        document_year=context.document_year,
+        section_id=paragraph.section_id,
+        page_number=None,
+        table_id=None,
+        row_locator=f"field={output_path}; block_id={paragraph.block_id}",
+        note=_truncate(value),
+    )
+    return _ProductEssenceValueCandidate(
+        output_path=output_path,
+        value=value,
+        anchor=anchor,
+        source_field_path=f"paragraph_blocks[{paragraph_index}]",
+    )
+
+
+def _extract_product_essence_labeled_paragraph_value(
+    text: str,
+    labels: tuple[str, ...],
+) -> str | None:
+    """从 `label:` / `label：` / `label ` 段落中提取 label 后文本。
+
+    Args:
+        text: paragraph 文本。
+        labels: 允许的字段 label。
+
+    Returns:
+        label 后非空文本；未命中时返回 None。
+
+    Raises:
+        无显式抛出。
+    """
+
+    for label in labels:
+        for separator in (":", "：", " "):
+            prefix = f"{label}{separator}"
+            if text.startswith(prefix):
+                value = text[len(prefix) :].strip()
+                return value or None
+    return None
+
+
+def _is_product_essence_paragraph_value_allowed(value: str, labels: tuple[str, ...]) -> bool:
+    """判断 paragraph fallback 值是否非空且不只是 label 本身。
+
+    Args:
+        value: paragraph 候选值。
+        labels: 目标输出路径 labels。
+
+    Returns:
+        可作为字段值时返回 True。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if not value:
+        return False
+    normalized_value = _normalize_match_text(value)
+    return normalized_value not in tuple(_normalize_match_text(label) for label in labels)
+
+
+def _resolve_product_essence_candidate(
+    output_path: str,
+    candidates: tuple[_ProductEssenceValueCandidate, ...],
+    ambiguous_paths: set[str],
+    context: FundProcessorDispatchKey,
+) -> _ProductEssenceValueCandidate | None:
+    """按重复/歧义规则解析同一路径候选。
+
+    Args:
+        output_path: 目标输出路径。
+        candidates: 同一路径候选。
+        ambiguous_paths: 待追加的歧义路径集合。
+        context: Processor dispatch 身份。
+
+    Returns:
+        唯一可采信候选；无候选或歧义时返回 None。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if not candidates:
+        return None
+    normalized_values = {_normalize_match_text(candidate.value) for candidate in candidates}
+    if output_path == "basic_identity.fund_code":
+        if normalized_values != {_normalize_match_text(context.fund_code)}:
+            ambiguous_paths.add(output_path)
+            return None
+    if len(normalized_values) > 1:
+        ambiguous_paths.add(output_path)
+        return None
+    return candidates[0]
+
+
+def _build_product_essence_value(
+    selected_values: dict[str, _ProductEssenceValueCandidate],
+    context: FundProcessorDispatchKey,
+) -> dict[str, object]:
+    """按 Slice B exact shape 构造 `product_essence.v1.value`。
+
+    Args:
+        selected_values: 已解析的输出路径值。
+        context: Processor dispatch 身份。
+
+    Returns:
+        顶层只包含 basic_identity、product_profile、benchmark、risk_characteristic_text。
+
+    Raises:
+        无显式抛出。
+    """
+
+    value: dict[str, object] = {}
+    basic_identity = _build_product_essence_basic_identity(selected_values, context)
+    if basic_identity is not None:
+        value["basic_identity"] = basic_identity
+    product_profile = _build_product_essence_product_profile(selected_values)
+    if product_profile is not None:
+        value["product_profile"] = product_profile
+    benchmark_text = _selected_product_essence_value(selected_values, "benchmark.benchmark_text")
+    if benchmark_text is not None:
+        value["benchmark"] = {"benchmark_text": benchmark_text}
+    risk_text = _selected_product_essence_value(
+        selected_values, "risk_characteristic_text.risk_characteristic_text"
+    )
+    if risk_text is not None:
+        risk_anchor = selected_values["risk_characteristic_text.risk_characteristic_text"].anchor
+        value["risk_characteristic_text"] = {
+            "schema_version": "risk_characteristic_text.v1",
+            "fund_code": context.fund_code,
+            "report_year": context.document_year,
+            "risk_characteristic_text": risk_text,
+            "source_anchors": [_risk_characteristic_anchor_ref(risk_anchor)],
+        }
+    return value
+
+
+def _build_product_essence_basic_identity(
+    selected_values: dict[str, _ProductEssenceValueCandidate],
+    context: FundProcessorDispatchKey,
+) -> dict[str, object] | None:
+    """构造 basic_identity，要求 fund_name 和匹配 dispatch 的 fund_code 同时存在。
+
+    Args:
+        selected_values: 已解析的输出路径值。
+        context: Processor dispatch 身份。
+
+    Returns:
+        basic_identity 字典；必要字段缺失时返回 None。
+
+    Raises:
+        无显式抛出。
+    """
+
+    fund_name = _selected_product_essence_value(selected_values, "basic_identity.fund_name")
+    fund_code = _selected_product_essence_value(selected_values, "basic_identity.fund_code")
+    if fund_name is None or fund_code != context.fund_code:
+        return None
+    return {
+        "fund_name": fund_name,
+        "fund_code": fund_code,
+        "fund_category": _selected_product_essence_value(
+            selected_values, "basic_identity.fund_category"
+        ),
+        "fund_scale": _selected_product_essence_value(
+            selected_values, "basic_identity.fund_scale"
+        ),
+        "fund_manager": _selected_product_essence_value(
+            selected_values, "basic_identity.fund_manager"
+        ),
+        "management_company": _selected_product_essence_value(
+            selected_values, "basic_identity.management_company"
+        ),
+        "custodian": _selected_product_essence_value(selected_values, "basic_identity.custodian"),
+        "inception_date": _selected_product_essence_value(
+            selected_values, "basic_identity.inception_date"
+        ),
+        "classified_fund_type": context.fund_type,
+        "classification_basis": ("dispatch_key.fund_type=active_fund",),
+    }
+
+
+def _build_product_essence_product_profile(
+    selected_values: dict[str, _ProductEssenceValueCandidate],
+) -> dict[str, object] | None:
+    """构造 product_profile，禁止从投资目标推导 style_positioning。
+
+    Args:
+        selected_values: 已解析的输出路径值。
+
+    Returns:
+        product_profile 字典；无 objective/scope/strategy 时返回 None。
+
+    Raises:
+        无显式抛出。
+    """
+
+    investment_objective = _selected_product_essence_value(
+        selected_values, "product_profile.investment_objective"
+    )
+    investment_scope = _selected_product_essence_value(
+        selected_values, "product_profile.investment_scope"
+    )
+    investment_strategy = _selected_product_essence_value(
+        selected_values, "product_profile.investment_strategy"
+    )
+    if not any((investment_objective, investment_scope, investment_strategy)):
+        return None
+    return {
+        "investment_objective": investment_objective,
+        "style_positioning": _selected_product_essence_value(
+            selected_values, "product_profile.style_positioning"
+        ),
+        "investment_scope": investment_scope,
+        "investment_strategy": investment_strategy,
+    }
+
+
+def _selected_product_essence_value(
+    selected_values: dict[str, _ProductEssenceValueCandidate],
+    output_path: str,
+) -> str | None:
+    """返回已选择 output path 的字段值。
+
+    Args:
+        selected_values: 已解析的输出路径值。
+        output_path: 目标输出路径。
+
+    Returns:
+        字段值；缺失时返回 None。
+
+    Raises:
+        无显式抛出。
+    """
+
+    candidate = selected_values.get(output_path)
+    if candidate is None:
+        return None
+    return candidate.value
+
+
+def _risk_characteristic_anchor_ref(anchor: EvidenceAnchor) -> dict[str, object]:
+    """构造 risk_characteristic_text.value.source_anchors 条目。
+
+    Args:
+        anchor: 字段公共锚点。
+
+    Returns:
+        只包含 Slice B 允许键的 anchor ref。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return {
+        "section_id": anchor.section_id,
+        "page_number": None,
+        "table_id": anchor.table_id,
+        "row_locator": anchor.row_locator,
+    }
+
+
+def _product_essence_emitted_output_paths(
+    value: dict[str, object],
+    selected_values: dict[str, _ProductEssenceValueCandidate],
+) -> tuple[str, ...]:
+    """返回实际进入 public value 的 source output paths。
+
+    Args:
+        value: 已构造的 product_essence value。
+        selected_values: 已解析的输出路径值。
+
+    Returns:
+        需要进入 family anchors 的输出路径元组。
+
+    Raises:
+        无显式抛出。
+    """
+
+    emitted: list[str] = []
+    if "basic_identity" in value:
+        emitted.extend(
+            output_path
+            for output_path in selected_values
+            if output_path.startswith("basic_identity.")
+        )
+    if "product_profile" in value:
+        emitted.extend(
+            output_path
+            for output_path in selected_values
+            if output_path.startswith("product_profile.")
+        )
+    if "benchmark" in value and "benchmark.benchmark_text" in selected_values:
+        emitted.append("benchmark.benchmark_text")
+    risk_path = "risk_characteristic_text.risk_characteristic_text"
+    if "risk_characteristic_text" in value and risk_path in selected_values:
+        emitted.append(risk_path)
+    return tuple(emitted)
+
+
+def _product_essence_source_truth_gaps(
+    value: dict[str, object],
+    ambiguous_paths: set[str],
+) -> tuple[FundExtractionGap, ...]:
+    """构造 product_essence.v1 source-truth 字段族本地 gaps。
+
+    Args:
+        value: 已构造的字段族 value。
+        ambiguous_paths: 发生 duplicate ambiguity 的输出路径集合。
+
+    Returns:
+        missing/partial/ambiguity gaps。
+
+    Raises:
+        无显式抛出。
+    """
+
+    gaps: list[FundExtractionGap] = []
+    for output_path in sorted(ambiguous_paths):
+        gaps.append(
+            FundExtractionGap(
+                gap_code="ambiguous_table_or_locator",
+                message=f"{output_path} 存在多个冲突的稳定 FDD locator 值",
+                field_family_id="product_essence.v1",
+                source_field_path=output_path,
+                source_boundary="ambiguous_locator",
+                required=output_path.startswith("basic_identity."),
+            )
+        )
+    missing_top_level = tuple(
+        top_level for top_level in _PRODUCT_ESSENCE_REQUIRED_TOP_LEVEL if top_level not in value
+    )
+    if not value:
+        gaps.append(
+            FundExtractionGap(
+                gap_code="field_family_missing",
+                message="product_essence.v1 未形成 Slice B 允许的 source-truth 字段值",
+                field_family_id="product_essence.v1",
+                source_field_path=None,
+                source_boundary="annual_report",
+                required=True,
+            )
+        )
+    elif missing_top_level:
+        gaps.extend(
+            FundExtractionGap(
+                gap_code="field_family_partial",
+                message=f"product_essence.v1 缺少 required top-level value: {top_level}",
+                field_family_id="product_essence.v1",
+                source_field_path=top_level,
+                source_boundary="annual_report",
+                required=True,
+            )
+            for top_level in missing_top_level
+        )
+    return tuple(gaps)
+
+
+def _product_essence_status(value: dict[str, object]) -> str:
+    """按 Slice B top-level 完整度派生字段族状态。
+
+    Args:
+        value: 已构造的字段族 value。
+
+    Returns:
+        `accepted`、`partial` 或 `missing`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if all(top_level in value for top_level in _PRODUCT_ESSENCE_REQUIRED_TOP_LEVEL):
+        return "accepted"
+    if value:
+        return "partial"
+    return "missing"
+
+
+def _path_contains_any_label(path: tuple[str, ...], labels: tuple[str, ...]) -> bool:
+    """判断路径任一片段是否等于目标 label。
+
+    Args:
+        path: row label、column header 或 heading path。
+        labels: 允许 label。
+
+    Returns:
+        规范化后任一片段等于任一 label 时返回 True。
+
+    Raises:
+        无显式抛出。
+    """
+
+    normalized_labels = {_normalize_match_text(label) for label in labels}
+    return any(_normalize_match_text(part) in normalized_labels for part in path)
+
+
+def _derive_contract_status(
+    field_families: tuple[FundFieldFamilyResult, ...],
+) -> FundProcessorContractStatus:
+    """从字段族状态派生 processor contract status。
+
+    Args:
+        field_families: 六个字段族结果。
+
+    Returns:
+        全 accepted 为 satisfied；任一 accepted/partial 为 partial；否则 missing。
+
+    Raises:
+        无显式抛出。
+    """
+
+    statuses = {family.status for family in field_families}
+    if statuses == {"accepted"}:
+        return "satisfied"
+    if "accepted" in statuses or "partial" in statuses:
+        return "partial"
+    return "missing"
+
+
+def _dedupe_anchors(anchors: Iterable[EvidenceAnchor]) -> tuple[EvidenceAnchor, ...]:
+    """按 dataclass 值去重公共 EvidenceAnchor。
+
+    Args:
+        anchors: 可迭代公共锚点。
+
+    Returns:
+        去重且保持首次出现顺序的锚点元组。
+
+    Raises:
+        无显式抛出。
+    """
+
+    deduped: list[EvidenceAnchor] = []
+    seen: set[EvidenceAnchor] = set()
+    for anchor in anchors:
+        if anchor in seen:
+            continue
+        seen.add(anchor)
+        deduped.append(anchor)
+    return tuple(deduped)
+
+
+def _content_intermediate_or_none(
+    intermediate: FundDisclosureDocumentIntermediate,
+) -> FundDisclosureDocumentContentIntermediate | None:
+    """按正文结构识别 FundDisclosureDocument content intermediate。
+
+    Args:
+        intermediate: FundDisclosureDocument-like 中间态。
+
+    Returns:
+        具备 section/paragraph/table 正文结构时返回 content 协议视图，否则返回 None。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if not all(
+        hasattr(intermediate, attribute_name)
+        for attribute_name in ("sections", "paragraph_blocks", "table_blocks")
+    ):
+        return None
+    return cast(FundDisclosureDocumentContentIntermediate, intermediate)
 
 
 def _select_product_essence_candidate_evidence(
@@ -680,15 +1574,20 @@ def _select_product_essence_candidate_evidence(
         无显式抛出。
     """
 
-    if not isinstance(intermediate, FundDisclosureDocumentContentIntermediate):
+    content_intermediate = _content_intermediate_or_none(intermediate)
+    if content_intermediate is None:
         return ()
 
     records: list[FundCandidateEvidenceRecord] = []
     seen_paths: set[str] = set()
     for role, tokens in _PRODUCT_ESSENCE_MATCH_GROUPS:
-        _extend_product_essence_section_records(records, seen_paths, intermediate, role, tokens)
-        _extend_product_essence_paragraph_records(records, seen_paths, intermediate, role, tokens)
-        _extend_product_essence_table_records(records, seen_paths, intermediate, role, tokens)
+        _extend_product_essence_section_records(
+            records, seen_paths, content_intermediate, role, tokens
+        )
+        _extend_product_essence_paragraph_records(
+            records, seen_paths, content_intermediate, role, tokens
+        )
+        _extend_product_essence_table_records(records, seen_paths, content_intermediate, role, tokens)
         if len(records) >= _PRODUCT_ESSENCE_CANDIDATE_LIMIT:
             break
     return tuple(records[:_PRODUCT_ESSENCE_CANDIDATE_LIMIT])
@@ -920,15 +1819,22 @@ def _select_return_attribution_candidate_evidence(
         无显式抛出。
     """
 
-    if not isinstance(intermediate, FundDisclosureDocumentContentIntermediate):
+    content_intermediate = _content_intermediate_or_none(intermediate)
+    if content_intermediate is None:
         return ()
 
     records: list[FundCandidateEvidenceRecord] = []
     seen_paths: set[str] = set()
     for role, tokens in _RETURN_ATTRIBUTION_MATCH_GROUPS:
-        _extend_return_attribution_section_records(records, seen_paths, intermediate, role, tokens)
-        _extend_return_attribution_paragraph_records(records, seen_paths, intermediate, role, tokens)
-        _extend_return_attribution_table_records(records, seen_paths, intermediate, role, tokens)
+        _extend_return_attribution_section_records(
+            records, seen_paths, content_intermediate, role, tokens
+        )
+        _extend_return_attribution_paragraph_records(
+            records, seen_paths, content_intermediate, role, tokens
+        )
+        _extend_return_attribution_table_records(
+            records, seen_paths, content_intermediate, role, tokens
+        )
     return tuple(records[:_RETURN_ATTRIBUTION_CANDIDATE_LIMIT])
 
 
@@ -1158,20 +2064,39 @@ def _select_manager_profile_candidate_evidence(
         无显式抛出。
     """
 
-    if not isinstance(intermediate, FundDisclosureDocumentContentIntermediate):
+    content_intermediate = _content_intermediate_or_none(intermediate)
+    if content_intermediate is None:
         return ()
 
     records: list[FundCandidateEvidenceRecord] = []
     seen_paths: set[str] = set()
     for role, strong_tokens, generic_tokens, guard_tokens in _MANAGER_PROFILE_MATCH_GROUPS:
         _extend_manager_profile_section_records(
-            records, seen_paths, intermediate, role, strong_tokens, generic_tokens, guard_tokens
+            records,
+            seen_paths,
+            content_intermediate,
+            role,
+            strong_tokens,
+            generic_tokens,
+            guard_tokens,
         )
         _extend_manager_profile_paragraph_records(
-            records, seen_paths, intermediate, role, strong_tokens, generic_tokens, guard_tokens
+            records,
+            seen_paths,
+            content_intermediate,
+            role,
+            strong_tokens,
+            generic_tokens,
+            guard_tokens,
         )
         _extend_manager_profile_table_records(
-            records, seen_paths, intermediate, role, strong_tokens, generic_tokens, guard_tokens
+            records,
+            seen_paths,
+            content_intermediate,
+            role,
+            strong_tokens,
+            generic_tokens,
+            guard_tokens,
         )
         if len(records) >= _MANAGER_PROFILE_CANDIDATE_LIMIT:
             break
@@ -1518,20 +2443,39 @@ def _select_investor_experience_candidate_evidence(
         无显式抛出。
     """
 
-    if not isinstance(intermediate, FundDisclosureDocumentContentIntermediate):
+    content_intermediate = _content_intermediate_or_none(intermediate)
+    if content_intermediate is None:
         return ()
 
     records: list[FundCandidateEvidenceRecord] = []
     seen_paths: set[str] = set()
     for role, strong_tokens, generic_tokens, guard_tokens in _INVESTOR_EXPERIENCE_MATCH_GROUPS:
         _extend_investor_experience_section_records(
-            records, seen_paths, intermediate, role, strong_tokens, generic_tokens, guard_tokens
+            records,
+            seen_paths,
+            content_intermediate,
+            role,
+            strong_tokens,
+            generic_tokens,
+            guard_tokens,
         )
         _extend_investor_experience_paragraph_records(
-            records, seen_paths, intermediate, role, strong_tokens, generic_tokens, guard_tokens
+            records,
+            seen_paths,
+            content_intermediate,
+            role,
+            strong_tokens,
+            generic_tokens,
+            guard_tokens,
         )
         _extend_investor_experience_table_records(
-            records, seen_paths, intermediate, role, strong_tokens, generic_tokens, guard_tokens
+            records,
+            seen_paths,
+            content_intermediate,
+            role,
+            strong_tokens,
+            generic_tokens,
+            guard_tokens,
         )
         if len(records) >= _INVESTOR_EXPERIENCE_CANDIDATE_LIMIT:
             break
@@ -1862,20 +2806,39 @@ def _select_current_stage_candidate_evidence(
         无显式抛出。
     """
 
-    if not isinstance(intermediate, FundDisclosureDocumentContentIntermediate):
+    content_intermediate = _content_intermediate_or_none(intermediate)
+    if content_intermediate is None:
         return ()
 
     records: list[FundCandidateEvidenceRecord] = []
     seen_paths: set[str] = set()
     for role, strong_tokens, generic_tokens, guard_tokens in _CURRENT_STAGE_MATCH_GROUPS:
         _extend_current_stage_section_records(
-            records, seen_paths, intermediate, role, strong_tokens, generic_tokens, guard_tokens
+            records,
+            seen_paths,
+            content_intermediate,
+            role,
+            strong_tokens,
+            generic_tokens,
+            guard_tokens,
         )
         _extend_current_stage_paragraph_records(
-            records, seen_paths, intermediate, role, strong_tokens, generic_tokens, guard_tokens
+            records,
+            seen_paths,
+            content_intermediate,
+            role,
+            strong_tokens,
+            generic_tokens,
+            guard_tokens,
         )
         _extend_current_stage_table_records(
-            records, seen_paths, intermediate, role, strong_tokens, generic_tokens, guard_tokens
+            records,
+            seen_paths,
+            content_intermediate,
+            role,
+            strong_tokens,
+            generic_tokens,
+            guard_tokens,
         )
         if len(records) >= _CURRENT_STAGE_CANDIDATE_LIMIT:
             break
@@ -2192,20 +3155,39 @@ def _select_core_risk_candidate_evidence(
         无显式抛出。
     """
 
-    if not isinstance(intermediate, FundDisclosureDocumentContentIntermediate):
+    content_intermediate = _content_intermediate_or_none(intermediate)
+    if content_intermediate is None:
         return ()
 
     records: list[FundCandidateEvidenceRecord] = []
     seen_paths: set[str] = set()
     for role, strong_tokens, generic_tokens, guard_tokens in _CORE_RISK_MATCH_GROUPS:
         _extend_core_risk_section_records(
-            records, seen_paths, intermediate, role, strong_tokens, generic_tokens, guard_tokens
+            records,
+            seen_paths,
+            content_intermediate,
+            role,
+            strong_tokens,
+            generic_tokens,
+            guard_tokens,
         )
         _extend_core_risk_paragraph_records(
-            records, seen_paths, intermediate, role, strong_tokens, generic_tokens, guard_tokens
+            records,
+            seen_paths,
+            content_intermediate,
+            role,
+            strong_tokens,
+            generic_tokens,
+            guard_tokens,
         )
         _extend_core_risk_table_records(
-            records, seen_paths, intermediate, role, strong_tokens, generic_tokens, guard_tokens
+            records,
+            seen_paths,
+            content_intermediate,
+            role,
+            strong_tokens,
+            generic_tokens,
+            guard_tokens,
         )
         if len(records) >= _CORE_RISK_CANDIDATE_LIMIT:
             break
@@ -2589,6 +3571,50 @@ def _missing_field_family(
             ),
         ),
         source_provenance=source_provenance,
+    )
+
+
+def _with_source_truth_admission_gap(
+    family: FundFieldFamilyResult,
+    gap_code: FundExtractionGapCode,
+) -> FundFieldFamilyResult:
+    """给字段族追加 source-truth admission fail-closed 本地 gap。
+
+    Args:
+        family: 原字段族结果。
+        gap_code: source-truth admission 缺失或非法 gap code。
+
+    Returns:
+        保留 public missing 形状、追加 source-truth admission gap 的字段族结果。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if gap_code == "source_truth_admission_missing":
+        message = "FundDisclosureDocument source-truth admission proof is missing"
+    else:
+        message = "FundDisclosureDocument source-truth admission proof is invalid"
+    return FundFieldFamilyResult(
+        field_family_id=family.field_family_id,
+        chapter_ids=family.chapter_ids,
+        value={},
+        status="missing",
+        extraction_mode="missing",
+        anchors=(),
+        gaps=(
+            *family.gaps,
+            FundExtractionGap(
+                gap_code=gap_code,
+                message=message,
+                field_family_id=family.field_family_id,
+                source_field_path=None,
+                source_boundary="source_truth_unverified",
+                required=True,
+            ),
+        ),
+        source_provenance=family.source_provenance,
+        candidate_evidence=family.candidate_evidence,
     )
 
 

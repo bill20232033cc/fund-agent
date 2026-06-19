@@ -15,6 +15,7 @@ from fund_agent.fund.processors.contracts import (
     FundCandidateEvidenceRecord,
     FundDisclosureDocumentContentIntermediate,
     FundDisclosureDocumentIntermediate,
+    FundDisclosureSourceTruthAdmissionProof,
     FundExtractionGap,
     FundFieldFamilyResult,
     FundProcessorDispatchKey,
@@ -110,6 +111,7 @@ class _ContentIntermediateStub:
     source_provenance: PublicSourceProvenance | None = None
     candidate_boundary: CandidateBoundaryStatus | None = None
     failure_class: AnnualReportSourceFailureCategory | None = None
+    source_truth_admission: FundDisclosureSourceTruthAdmissionProof | None = None
     sections: tuple[_SectionStub, ...] = (_SectionStub(),)
     paragraph_blocks: tuple[_ParagraphStub, ...] = (_ParagraphStub(),)
     table_blocks: tuple[_TableStub, ...] = (_TableStub(),)
@@ -129,6 +131,37 @@ def _provenance() -> PublicSourceProvenance:
     """
 
     return default_public_source_provenance()
+
+
+def _source_truth_admission_proof(**overrides: object) -> FundDisclosureSourceTruthAdmissionProof:
+    """构造 repository-loaded source-truth admission proof fixture。
+
+    Args:
+        **overrides: 可选字段覆盖。
+
+    Returns:
+        source-truth admission proof。
+
+    Raises:
+        ValueError: 字段非法时由契约模型抛出。
+    """
+
+    kwargs: dict[str, object] = {
+        "proof_kind": "repository_loaded_annual_report_identity.v1",
+        "source_boundary": "annual_report",
+        "fund_code": "004393",
+        "report_year": 2025,
+        "document_kind": "annual_report",
+        "intermediate_kind": "fund_disclosure_document.v1",
+        "source_kind": "annual_report",
+        "repository_identity_verified": True,
+        "source_provenance_verified": True,
+        "locator_identity_verified": True,
+        "parser_integrity_verified": True,
+        "producer": "FundDocumentRepository",
+    }
+    kwargs.update(overrides)
+    return FundDisclosureSourceTruthAdmissionProof(**kwargs)  # type: ignore[arg-type]
 
 
 def _dispatch_key(**overrides: object) -> FundProcessorDispatchKey:
@@ -250,6 +283,114 @@ def _field_family(
     raise AssertionError(f"field family not found: {field_family_id}")
 
 
+def _gap_codes(family: FundFieldFamilyResult) -> set[str]:
+    """返回字段族 gap code 集合。
+
+    Args:
+        family: 字段族结果。
+
+    Returns:
+        gap code 集合。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return {gap.gap_code for gap in family.gaps}
+
+
+def _source_truth_content_intermediate(
+    *,
+    cells: tuple[_CellStub, ...] = (),
+    paragraphs: tuple[_ParagraphStub, ...] = (),
+    sections: tuple[_SectionStub, ...] = (),
+    source_truth_admission: FundDisclosureSourceTruthAdmissionProof | None = None,
+    with_source_truth_proof: bool = True,
+) -> _ContentIntermediateStub:
+    """构造 proof-positive source-truth FDD content fixture。
+
+    Args:
+        cells: table cells。
+        paragraphs: paragraph blocks。
+        sections: sections。
+        source_truth_admission: 可选 source-truth proof；缺省构造合法 proof。
+        with_source_truth_proof: 是否带 source-truth proof。
+
+    Returns:
+        FDD content intermediate stub。
+
+    Raises:
+        无显式抛出。
+    """
+
+    table = _TableStub(cells=cells) if cells else _TableStub(cells=())
+    proof = source_truth_admission
+    if with_source_truth_proof and proof is None:
+        proof = _source_truth_admission_proof()
+    return _ContentIntermediateStub(
+        source_provenance=_provenance(),
+        source_truth_admission=proof,
+        sections=sections,
+        paragraph_blocks=paragraphs,
+        table_blocks=(table,),
+    )
+
+
+def _product_essence_source_truth_result(
+    intermediate: _ContentIntermediateStub,
+) -> FundProcessorResult:
+    """运行 product_essence source-truth processor fixture。
+
+    Args:
+        intermediate: FDD content intermediate。
+
+    Returns:
+        processor 输出结果。
+
+    Raises:
+        无显式抛出。
+    """
+
+    processor = FundDisclosureDocumentProcessor()
+    return processor.extract(FundProcessorInput(context=_dispatch_key(), intermediate=intermediate))
+
+
+def _product_cell(
+    output_label: str,
+    value: str,
+    *,
+    row_index: int,
+    column_index: int = 1,
+    cell_id: str | None = None,
+) -> _CellStub:
+    """构造 Slice B table/cell source-truth fixture。
+
+    Args:
+        output_label: row_label_path label。
+        value: cell value。
+        row_index: 行号。
+        column_index: 列号。
+        cell_id: 可选 cell id。
+
+    Returns:
+        table cell stub。
+
+    Raises:
+        无显式抛出。
+    """
+
+    resolved_cell_id = cell_id or f"cell-{row_index}-{column_index}"
+    return _CellStub(
+        cell_id=resolved_cell_id,
+        row_index=row_index,
+        column_index=column_index,
+        row_label_path=(output_label,),
+        column_header_path=("内容",),
+        cell_text=value,
+        cell_text_normalized=value,
+    )
+
+
 # ── S6-A candidate evidence contract ───────────────────────────────────────
 
 
@@ -289,6 +430,701 @@ def test_content_intermediate_protocol_accepts_content_stub() -> None:
 
     assert isinstance(intermediate, FundDisclosureDocumentIntermediate)
     assert isinstance(intermediate, FundDisclosureDocumentContentIntermediate)
+
+
+def test_source_truth_admission_requires_positive_proof() -> None:
+    """非候选 content FDD 不能只靠 candidate_boundary=None 声明 source truth。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当缺 proof 仍产出 public value 或 anchor 时抛出。
+    """
+
+    processor = FundDisclosureDocumentProcessor()
+
+    result = processor.extract(
+        FundProcessorInput(
+            context=_dispatch_key(),
+            intermediate=_ContentIntermediateStub(
+                source_provenance=_provenance(),
+                candidate_boundary=None,
+                source_truth_admission=None,
+            ),
+        )
+    )
+
+    product = _field_family(result, "product_essence.v1")
+
+    assert result.contract_status == "missing"
+    assert product.value == {}
+    assert product.anchors == ()
+    assert "source_truth_admission_missing" in _gap_codes(product)
+    assert product.candidate_evidence
+
+
+def test_source_truth_admission_marks_non_content_intermediate_missing() -> None:
+    """非 content FDD 中间态也必须暴露 source-truth admission 缺 proof 诊断。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当非 content FDD 缺 proof 被静默放行时抛出。
+    """
+
+    processor = FundDisclosureDocumentProcessor()
+
+    result = processor.extract(
+        FundProcessorInput(
+            context=_dispatch_key(),
+            intermediate=_StubIntermediate(
+                source_provenance=_provenance(),
+                candidate_boundary=None,
+                failure_class=None,
+            ),
+        )
+    )
+
+    product = _field_family(result, "product_essence.v1")
+
+    assert result.contract_status == "missing"
+    assert product.status == "missing"
+    assert product.value == {}
+    assert product.anchors == ()
+    assert "source_truth_admission_missing" in _gap_codes(product)
+
+
+def test_source_truth_admission_rejects_identity_mismatch() -> None:
+    """source-truth proof 身份必须与 dispatch/intermediate 同源一致。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 identity mismatch proof 被接受时抛出。
+    """
+
+    processor = FundDisclosureDocumentProcessor()
+
+    result = processor.extract(
+        FundProcessorInput(
+            context=_dispatch_key(),
+            intermediate=_ContentIntermediateStub(
+                source_provenance=_provenance(),
+                source_truth_admission=_source_truth_admission_proof(fund_code="110011"),
+            ),
+        )
+    )
+
+    product = _field_family(result, "product_essence.v1")
+
+    assert result.contract_status == "missing"
+    assert product.value == {}
+    assert product.anchors == ()
+    assert "source_truth_admission_invalid" in _gap_codes(product)
+
+
+def test_source_truth_admission_accepts_repository_loaded_identity_proof() -> None:
+    """repository-loaded identity proof 可通过 Slice A admission guard。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当匹配 proof 仍被 source-truth guard 拦截时抛出。
+    """
+
+    processor = FundDisclosureDocumentProcessor()
+
+    result = processor.extract(
+        FundProcessorInput(
+            context=_dispatch_key(),
+            intermediate=_ContentIntermediateStub(
+                source_provenance=_provenance(),
+                source_truth_admission=_source_truth_admission_proof(),
+            ),
+        )
+    )
+
+    product = _field_family(result, "product_essence.v1")
+
+    assert result.contract_status == "missing"
+    assert product.value == {}
+    assert product.anchors == ()
+    assert "source_truth_admission_missing" not in _gap_codes(product)
+    assert "source_truth_admission_invalid" not in _gap_codes(product)
+    assert product.candidate_evidence == ()
+
+
+# ── Slice B product essence source-truth extraction ────────────────────────
+
+
+def test_product_essence_source_truth_extracts_exact_value_shape() -> None:
+    """proof-positive FDD content 可抽取 exact product_essence.v1 value shape。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 public value、anchor 或候选边界不符合 Slice B 时抛出。
+    """
+
+    paragraph = _ParagraphStub(
+        block_id="paragraph-investment-objective",
+        heading_path=("投资目标",),
+        text_raw="力争实现基金资产长期稳健增值。",
+        text_normalized="力争实现基金资产长期稳健增值。",
+    )
+    result = _product_essence_source_truth_result(
+        _source_truth_content_intermediate(
+            cells=(
+                _product_cell("基金名称", "测试主动基金", row_index=0),
+                _product_cell("基金主代码", "004393", row_index=1),
+                _product_cell("基金管理人", "测试基金管理有限公司", row_index=2),
+                _product_cell("基金托管人", "测试托管银行", row_index=3),
+                _product_cell("业绩比较基准", "沪深300指数收益率*80%+中债综合指数收益率*20%", row_index=4),
+                _product_cell("风险收益特征", "本基金属于主动权益基金，风险收益水平较高。", row_index=5),
+            ),
+            paragraphs=(paragraph,),
+        )
+    )
+
+    product = _field_family(result, "product_essence.v1")
+    value = product.value
+
+    assert result.contract_status == "partial"
+    assert product.status == "accepted"
+    assert product.extraction_mode == "direct"
+    assert product.candidate_evidence == ()
+    assert set(value) == {
+        "basic_identity",
+        "product_profile",
+        "benchmark",
+        "risk_characteristic_text",
+    }
+    assert value["basic_identity"] == {
+        "fund_name": "测试主动基金",
+        "fund_code": "004393",
+        "fund_category": None,
+        "fund_scale": None,
+        "fund_manager": None,
+        "management_company": "测试基金管理有限公司",
+        "custodian": "测试托管银行",
+        "inception_date": None,
+        "classified_fund_type": "active_fund",
+        "classification_basis": ("dispatch_key.fund_type=active_fund",),
+    }
+    assert value["product_profile"] == {
+        "investment_objective": "力争实现基金资产长期稳健增值。",
+        "style_positioning": None,
+        "investment_scope": None,
+        "investment_strategy": None,
+    }
+    assert value["benchmark"] == {
+        "benchmark_text": "沪深300指数收益率*80%+中债综合指数收益率*20%"
+    }
+    assert value["risk_characteristic_text"] == {
+        "schema_version": "risk_characteristic_text.v1",
+        "fund_code": "004393",
+        "report_year": 2025,
+        "risk_characteristic_text": "本基金属于主动权益基金，风险收益水平较高。",
+        "source_anchors": [
+            {
+                "section_id": "section-1",
+                "page_number": None,
+                "table_id": "table-1",
+                "row_locator": (
+                    "field=risk_characteristic_text.risk_characteristic_text; "
+                    "table_id=table-1; row=5; column=1; cell_id=cell-5-1"
+                ),
+            }
+        ],
+    }
+    assert product.anchors
+    assert all(anchor.source_kind == "annual_report" for anchor in product.anchors)
+    for family in result.field_families:
+        if family.field_family_id == "product_essence.v1":
+            continue
+        assert family.status == "missing"
+        assert family.value == {}
+        assert family.anchors == ()
+
+
+def test_product_essence_source_truth_requires_proof_even_when_candidate_boundary_none() -> None:
+    """即使 candidate_boundary=None，缺 proof 的可抽取内容也必须 fail-closed。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当缺 proof 仍输出 public value 或 anchors 时抛出。
+    """
+
+    result = _product_essence_source_truth_result(
+        _source_truth_content_intermediate(
+            cells=(
+                _product_cell("基金名称", "测试主动基金", row_index=0),
+                _product_cell("基金主代码", "004393", row_index=1),
+            ),
+            with_source_truth_proof=False,
+        )
+    )
+
+    product = _field_family(result, "product_essence.v1")
+
+    assert product.value == {}
+    assert product.anchors == ()
+    assert "source_truth_admission_missing" in _gap_codes(product)
+
+
+def test_product_essence_source_truth_rejects_missing_source_provenance() -> None:
+    """source_provenance 缺失时在 base admission 顶层 blocked。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当缺 source provenance 未被 base admission 阻断时抛出。
+    """
+
+    result = _product_essence_source_truth_result(
+        _ContentIntermediateStub(
+            source_provenance=None,
+            source_truth_admission=_source_truth_admission_proof(),
+            table_blocks=(
+                _TableStub(
+                    cells=(
+                        _product_cell("基金名称", "测试主动基金", row_index=0),
+                        _product_cell("基金主代码", "004393", row_index=1),
+                    )
+                ),
+            ),
+        )
+    )
+
+    assert result.contract_status == "blocked"
+    assert result.field_families == ()
+    assert result.anchors == ()
+    assert result.gaps[0].gap_code == "source_provenance_unsafe"
+    assert result.gaps[0].source_boundary == "source_provenance_unsafe"
+
+
+@pytest.mark.parametrize(
+    ("failure_class", "expected_gap_code", "expected_source_boundary", "expected_status"),
+    (
+        ("not_found", "unsupported_intermediate", "unsupported_intermediate", "unsupported"),
+        ("unavailable", "unsupported_intermediate", "unsupported_intermediate", "unsupported"),
+        ("schema_drift", "candidate_boundary_blocked", "candidate_only", "blocked"),
+        ("identity_mismatch", "candidate_boundary_blocked", "candidate_only", "blocked"),
+        ("integrity_error", "candidate_boundary_blocked", "candidate_only", "blocked"),
+    ),
+)
+def test_product_essence_source_truth_rejects_failure_class_at_base_admission(
+    failure_class: AnnualReportSourceFailureCategory,
+    expected_gap_code: str,
+    expected_source_boundary: str,
+    expected_status: str,
+) -> None:
+    """failure_class 存在时按 base admission map fail-closed。
+
+    Args:
+        failure_class: 年报来源失败分类。
+        expected_gap_code: admission map 预期 gap code。
+        expected_source_boundary: admission map 预期来源边界。
+        expected_status: admission map 预期 contract status。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 failure_class 未按 admission map 阻断时抛出。
+    """
+
+    result = _product_essence_source_truth_result(
+        _ContentIntermediateStub(
+            source_provenance=_provenance(),
+            failure_class=failure_class,
+            source_truth_admission=_source_truth_admission_proof(),
+            table_blocks=(
+                _TableStub(
+                    cells=(
+                        _product_cell("基金名称", "测试主动基金", row_index=0),
+                        _product_cell("基金主代码", "004393", row_index=1),
+                    )
+                ),
+            ),
+        )
+    )
+
+    assert result.contract_status == expected_status
+    assert result.field_families == ()
+    assert result.anchors == ()
+    assert result.gaps[0].gap_code == expected_gap_code
+    assert result.gaps[0].source_boundary == expected_source_boundary
+
+
+def test_product_essence_source_truth_ambiguous_duplicate_omits_conflicting_path() -> None:
+    """同一路径多个不同稳定值必须省略冲突路径并记录 ambiguous gap。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当冲突 basic_identity 被错误输出时抛出。
+    """
+
+    result = _product_essence_source_truth_result(
+        _source_truth_content_intermediate(
+            cells=(
+                _product_cell("基金名称", "测试主动基金A", row_index=0, cell_id="cell-name-a"),
+                _product_cell("基金名称", "测试主动基金B", row_index=1, cell_id="cell-name-b"),
+                _product_cell("基金主代码", "004393", row_index=2),
+            )
+        )
+    )
+
+    product = _field_family(result, "product_essence.v1")
+
+    assert "basic_identity" not in product.value
+    assert product.anchors == ()
+    assert "ambiguous_table_or_locator" in _gap_codes(product)
+
+
+def test_product_essence_source_truth_matches_column_header_only_cell() -> None:
+    """row_label_path 不命中时允许 column_header_path 命中 product_essence 字段。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 column_header_path-only cell 未被抽取时抛出。
+    """
+
+    cell = _CellStub(
+        cell_id="cell-benchmark-column-only",
+        row_index=0,
+        column_index=2,
+        row_label_path=("无关行",),
+        column_header_path=("业绩比较基准",),
+        cell_text="沪深300指数收益率*80%+中债综合指数收益率*20%",
+        cell_text_normalized="沪深300指数收益率*80%+中债综合指数收益率*20%",
+    )
+    result = _product_essence_source_truth_result(
+        _source_truth_content_intermediate(cells=(cell,))
+    )
+
+    product = _field_family(result, "product_essence.v1")
+
+    assert product.value["benchmark"] == {
+        "benchmark_text": "沪深300指数收益率*80%+中债综合指数收益率*20%"
+    }
+    assert any(
+        anchor.row_locator == (
+            "field=benchmark.benchmark_text; table_id=table-1; "
+            "row=0; column=2; cell_id=cell-benchmark-column-only"
+        )
+        for anchor in product.anchors
+    )
+
+
+@pytest.mark.parametrize("generic_text", ("项目", "指标", "名称", "内容", "说明"))
+def test_product_essence_source_truth_rejects_generic_cell_text(generic_text: str) -> None:
+    """泛化表头文本不能作为 product_essence 字段值输出。
+
+    Args:
+        generic_text: 待验证的泛化 cell 文本。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当泛化 cell 文本被写入 public path 时抛出。
+    """
+
+    result = _product_essence_source_truth_result(
+        _source_truth_content_intermediate(
+            cells=(
+                _product_cell(
+                    "基金名称",
+                    generic_text,
+                    row_index=0,
+                    cell_id=f"cell-generic-{generic_text}",
+                ),
+                _product_cell("基金主代码", "004393", row_index=1),
+            )
+        )
+    )
+
+    product = _field_family(result, "product_essence.v1")
+
+    assert "basic_identity" not in product.value
+    assert all(
+        "field=basic_identity.fund_name" not in anchor.row_locator
+        for anchor in product.anchors
+    )
+
+
+def test_product_essence_source_truth_skips_unstable_table_or_cell_locator() -> None:
+    """table 或 cell locator 不稳定时必须跳过对应候选。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当不稳定 table/cell locator 被抽取时抛出。
+    """
+
+    unstable_table = _TableStub(
+        table_id="unstable-table",
+        locator_stability="unstable",
+        cells=(_product_cell("基金名称", "不应输出的基金名称", row_index=0),),
+    )
+    unstable_cell_table = _TableStub(
+        table_id="stable-table",
+        cells=(
+            _CellStub(
+                cell_id="unstable-cell",
+                table_id="stable-table",
+                row_index=1,
+                column_index=1,
+                row_label_path=("基金主代码",),
+                column_header_path=("内容",),
+                cell_text="004393",
+                cell_text_normalized="004393",
+                locator_stability="unstable",
+            ),
+        ),
+    )
+    result = _product_essence_source_truth_result(
+        _ContentIntermediateStub(
+            source_provenance=_provenance(),
+            source_truth_admission=_source_truth_admission_proof(),
+            paragraph_blocks=(),
+            table_blocks=(unstable_table, unstable_cell_table),
+        )
+    )
+
+    product = _field_family(result, "product_essence.v1")
+
+    assert product.status == "missing"
+    assert product.value == {}
+    assert product.anchors == ()
+    assert "ambiguous_table_or_locator" not in _gap_codes(product)
+
+
+def test_product_essence_source_truth_dedupes_identical_values_with_first_locator() -> None:
+    """同一路径相同规范化值去重，并使用第一个稳定 locator。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当相同值被误判为歧义或未使用首个 locator 时抛出。
+    """
+
+    result = _product_essence_source_truth_result(
+        _source_truth_content_intermediate(
+            cells=(
+                _product_cell("基金名称", "测试主动基金", row_index=0, cell_id="cell-name-first"),
+                _product_cell("基金名称", "测试主动基金", row_index=1, cell_id="cell-name-second"),
+                _product_cell("基金主代码", "004393", row_index=2, cell_id="cell-code"),
+            )
+        )
+    )
+
+    product = _field_family(result, "product_essence.v1")
+    name_locators = [
+        anchor.row_locator
+        for anchor in product.anchors
+        if "field=basic_identity.fund_name" in anchor.row_locator
+    ]
+
+    assert product.value["basic_identity"]["fund_name"] == "测试主动基金"
+    assert "ambiguous_table_or_locator" not in _gap_codes(product)
+    assert name_locators == [
+        (
+            "field=basic_identity.fund_name; table_id=table-1; "
+            "row=0; column=1; cell_id=cell-name-first"
+        )
+    ]
+
+
+def test_product_essence_source_truth_paragraph_fallback_for_descriptive_fields() -> None:
+    """描述性字段没有 table 值时允许 paragraph fallback。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 paragraph fallback 未形成 public value 或 anchor 时抛出。
+    """
+
+    paragraph = _ParagraphStub(
+        block_id="paragraph-investment-scope",
+        heading_path=("基金简介",),
+        text_raw="投资范围：主要投资于具有良好流动性的权益类资产。",
+        text_normalized="投资范围：主要投资于具有良好流动性的权益类资产。",
+    )
+    result = _product_essence_source_truth_result(
+        _source_truth_content_intermediate(
+            cells=(
+                _product_cell("基金名称", "测试主动基金", row_index=0),
+                _product_cell("基金主代码", "004393", row_index=1),
+            ),
+            paragraphs=(paragraph,),
+        )
+    )
+
+    product = _field_family(result, "product_essence.v1")
+    profile = product.value["product_profile"]
+
+    assert profile["investment_scope"] == "主要投资于具有良好流动性的权益类资产。"
+    assert any(
+        anchor.row_locator == (
+            "field=product_profile.investment_scope; block_id=paragraph-investment-scope"
+        )
+        for anchor in product.anchors
+    )
+
+
+def test_product_essence_source_truth_paragraph_heading_path_fallback() -> None:
+    """paragraph heading_path 命中时可抽取描述性字段全文。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 heading_path fallback 未抽取描述性字段时抛出。
+    """
+
+    paragraph = _ParagraphStub(
+        block_id="paragraph-investment-strategy",
+        heading_path=("基金产品资料概要", "投资策略"),
+        text_raw="本基金采用自下而上的个股选择策略。",
+        text_normalized="本基金采用自下而上的个股选择策略。",
+    )
+    result = _product_essence_source_truth_result(
+        _source_truth_content_intermediate(paragraphs=(paragraph,))
+    )
+
+    product = _field_family(result, "product_essence.v1")
+    profile = product.value["product_profile"]
+
+    assert profile["investment_strategy"] == "本基金采用自下而上的个股选择策略。"
+    assert any(
+        anchor.row_locator == (
+            "field=product_profile.investment_strategy; block_id=paragraph-investment-strategy"
+        )
+        for anchor in product.anchors
+    )
+
+
+def test_product_essence_source_truth_missing_keeps_family_missing() -> None:
+    """proof-positive content 无允许 label 时 product_essence 仍 missing。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当无 label 内容被误抽取时抛出。
+    """
+
+    result = _product_essence_source_truth_result(
+        _source_truth_content_intermediate(
+            cells=(_product_cell("其他字段", "无关内容", row_index=0),),
+            paragraphs=(
+                _ParagraphStub(
+                    heading_path=("其他章节",),
+                    text_raw="无关内容",
+                    text_normalized="无关内容",
+                ),
+            ),
+        )
+    )
+
+    product = _field_family(result, "product_essence.v1")
+
+    assert product.status == "missing"
+    assert product.value == {}
+    assert product.anchors == ()
+    assert product.candidate_evidence == ()
+    assert product.gaps[0].gap_code == "field_family_missing"
+
+
+def test_product_essence_source_truth_partial_when_required_groups_missing() -> None:
+    """只有 fund name/code 时输出 basic_identity，字段族状态为 partial。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 required group 缺失未反映为 partial gap 时抛出。
+    """
+
+    result = _product_essence_source_truth_result(
+        _source_truth_content_intermediate(
+            cells=(
+                _product_cell("基金名称", "测试主动基金", row_index=0),
+                _product_cell("基金主代码", "004393", row_index=1),
+            )
+        )
+    )
+
+    product = _field_family(result, "product_essence.v1")
+
+    assert product.status == "partial"
+    assert product.extraction_mode == "direct"
+    assert set(product.value) == {"basic_identity"}
+    assert product.value["basic_identity"]["fund_name"] == "测试主动基金"
+    assert product.value["basic_identity"]["fund_code"] == "004393"
+    assert "field_family_partial" in _gap_codes(product)
 
 
 @pytest.mark.parametrize(
@@ -4521,8 +5357,10 @@ def test_extract_satisfied_returns_fully_gapped_result() -> None:
         assert family.value == {}
         assert family.extraction_mode == "missing"
         assert family.anchors == ()
-        assert len(family.gaps) == 1
-        assert family.gaps[0].gap_code == "field_family_missing"
+        assert _gap_codes(family) == {
+            "field_family_missing",
+            "source_truth_admission_missing",
+        }
     assert result.gaps == ()
 
 
