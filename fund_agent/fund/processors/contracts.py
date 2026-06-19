@@ -290,6 +290,70 @@ class FundDisclosureDocumentIntermediate(Protocol):
         """
 
 
+class FundDisclosureSectionLike(Protocol):
+    """FundDisclosureDocument section 的最小结构协议。"""
+
+    section_id: str
+    heading_text_raw: str
+    heading_text_normalized: str
+    heading_path: tuple[str, ...]
+    heading_level: int | None
+    locator_stability: str
+
+
+class FundDisclosureParagraphBlockLike(Protocol):
+    """FundDisclosureDocument paragraph block 的最小结构协议。"""
+
+    block_id: str
+    section_id: str | None
+    heading_path: tuple[str, ...]
+    text_raw: str
+    text_normalized: str
+    content_hash: str
+    locator_stability: str
+
+
+class FundDisclosureCellLike(Protocol):
+    """FundDisclosureDocument table cell locator 的最小结构协议。"""
+
+    cell_id: str
+    table_id: str
+    section_anchor: str | None
+    heading_path: tuple[str, ...]
+    row_index: int
+    column_index: int
+    row_label_path: tuple[str, ...]
+    column_header_path: tuple[str, ...]
+    cell_text: str
+    cell_text_normalized: str
+    locator_stability: str
+
+
+class FundDisclosureTableBlockLike(Protocol):
+    """FundDisclosureDocument table block 的最小结构协议。"""
+
+    table_id: str
+    section_id: str | None
+    heading_text: str | None
+    heading_path: tuple[str, ...]
+    table_caption_or_nearby_heading: str | None
+    cells: tuple[FundDisclosureCellLike, ...]
+    locator_stability: str
+
+
+@runtime_checkable
+class FundDisclosureDocumentContentIntermediate(FundDisclosureDocumentIntermediate, Protocol):
+    """带正文结构的 FundDisclosureDocument 中间态协议。
+
+    本协议只用于 admission 之后的 candidate evidence harness。基础 admission 仍只依赖
+    ``FundDisclosureDocumentIntermediate``，避免把身份/失败分类判定与正文结构耦合。
+    """
+
+    sections: tuple[FundDisclosureSectionLike, ...]
+    paragraph_blocks: tuple[FundDisclosureParagraphBlockLike, ...]
+    table_blocks: tuple[FundDisclosureTableBlockLike, ...]
+
+
 @dataclass(frozen=True, slots=True)
 class FundProcessorInput:
     """Processor 输入契约。
@@ -344,6 +408,87 @@ class FundExtractionGap:
 
 
 @dataclass(frozen=True, slots=True)
+class FundCandidateEvidenceRecord:
+    """candidate-only 字段族证据记录。
+
+    Args:
+        无。
+
+    Attributes:
+        field_family_id: 候选证据所属字段族。
+        source_boundary: 固定为 ``candidate_only``。
+        source_field_path: 候选结构内字段路径。
+        section_id: section locator。
+        table_id: table locator。
+        block_id: paragraph/block locator。
+        cell_id: cell locator。
+        heading_path: 候选 heading path。
+        row_locator: 行级定位说明。
+        excerpt: 候选摘录，不是 source truth。
+        locator_stability: locator 稳定性标签。
+        candidate_only: 固定为 ``True``。
+        field_correctness_status: 固定为 ``not_proven``。
+        source_truth_status: 固定为 ``not_proven``。
+        parser_replacement_authorized: 固定为 ``False``。
+        readiness_status: 固定为 ``not_ready``。
+
+    Raises:
+        ValueError: 当候选边界、定位或证明状态非法时抛出。
+    """
+
+    field_family_id: FundFieldFamilyId
+    source_boundary: Literal["candidate_only"]
+    source_field_path: str
+    section_id: str | None
+    table_id: str | None
+    block_id: str | None
+    cell_id: str | None
+    heading_path: tuple[str, ...]
+    row_locator: str | None
+    excerpt: str
+    locator_stability: str
+    candidate_only: Literal[True] = True
+    field_correctness_status: Literal["not_proven"] = "not_proven"
+    source_truth_status: Literal["not_proven"] = "not_proven"
+    parser_replacement_authorized: Literal[False] = False
+    readiness_status: Literal["not_ready"] = "not_ready"
+
+    def __post_init__(self) -> None:
+        """校验 candidate evidence 不能声明 proof、source truth 或 readiness。
+
+        Args:
+            无。
+
+        Returns:
+            无返回值。
+
+        Raises:
+            ValueError: 当字段违反 candidate-only 契约时抛出。
+        """
+
+        if self.source_boundary != "candidate_only":
+            raise ValueError("candidate evidence source_boundary 必须是 candidate_only")
+        if not self.source_field_path:
+            raise ValueError("candidate evidence source_field_path 不能为空")
+        if not self.excerpt:
+            raise ValueError("candidate evidence excerpt 不能为空")
+        if not self.locator_stability:
+            raise ValueError("candidate evidence locator_stability 不能为空")
+        if not any((self.section_id, self.table_id, self.block_id, self.cell_id)):
+            raise ValueError("candidate evidence 必须至少包含一个 locator identity")
+        if not self.candidate_only:
+            raise ValueError("candidate evidence 必须保持 candidate_only=True")
+        if self.field_correctness_status != "not_proven":
+            raise ValueError("candidate evidence 不得声明 field correctness")
+        if self.source_truth_status != "not_proven":
+            raise ValueError("candidate evidence 不得声明 source truth")
+        if self.parser_replacement_authorized:
+            raise ValueError("candidate evidence 不得授权 parser replacement")
+        if self.readiness_status != "not_ready":
+            raise ValueError("candidate evidence 不得声明 readiness")
+
+
+@dataclass(frozen=True, slots=True)
 class FundFieldFamilyResult:
     """单个模板字段族输出。
 
@@ -359,6 +504,7 @@ class FundFieldFamilyResult:
         anchors: 当前字段族公共证据锚点。
         gaps: 当前字段族本地缺口；不进入 result-level gaps。
         source_provenance: 公共来源 provenance。
+        candidate_evidence: candidate-only 内部证据记录；不满足 public anchor 要求。
 
     Raises:
         ValueError: 非缺失字段族没有 anchor 或缺失字段族没有 gap 时抛出。
@@ -372,6 +518,7 @@ class FundFieldFamilyResult:
     anchors: tuple[EvidenceAnchor, ...]
     gaps: tuple[FundExtractionGap, ...]
     source_provenance: PublicSourceProvenance | None
+    candidate_evidence: tuple[FundCandidateEvidenceRecord, ...] = ()
 
     def __post_init__(self) -> None:
         """校验字段族 anchor/gap 的 fail-closed 形状。
