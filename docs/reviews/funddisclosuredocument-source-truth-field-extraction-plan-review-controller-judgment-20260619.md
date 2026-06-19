@@ -40,4 +40,3 @@ The plan review is accepted. The current plan is not implementation-ready and mu
 ## Completion Status
 
 Plan review gate is closed as failed. Proceed to plan fix gate before implementation.
-
