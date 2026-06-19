@@ -3126,6 +3126,958 @@ def test_core_risk_selector_preserves_overlap_family_semantics() -> None:
     assert _field_family(with_core_risk, "core_risk.v1").candidate_evidence
 
 
+# ── S6-G current stage candidate selector ───────────────────────────────────
+
+
+def _current_stage_result(
+    *,
+    sections: tuple[_SectionStub, ...] = (),
+    paragraphs: tuple[_ParagraphStub, ...] = (),
+    tables: tuple[_TableStub, ...] = (),
+    candidate_boundary: CandidateBoundaryStatus | None = None,
+) -> FundProcessorResult:
+    """运行 current_stage selector 测试用 processor。
+
+    Args:
+        sections: section fixture。
+        paragraphs: paragraph fixture。
+        tables: table fixture。
+        candidate_boundary: 可选候选边界。
+
+    Returns:
+        processor 输出结果。
+
+    Raises:
+        AssertionError: processor contract 断言失败时由调用方抛出。
+    """
+
+    processor = FundDisclosureDocumentProcessor()
+    return processor.extract(
+        FundProcessorInput(
+            context=_dispatch_key(),
+            intermediate=_ContentIntermediateStub(
+                source_provenance=_provenance(),
+                candidate_boundary=candidate_boundary,
+                sections=sections,
+                paragraph_blocks=paragraphs,
+                table_blocks=tables,
+            ),
+        )
+    )
+
+
+def test_current_stage_selector_adds_candidate_evidence_only() -> None:
+    """current_stage selector 只填 candidate_evidence，不填 public value/anchor。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 role、gap 或 public boundary 不符合 S6-G 时抛出。
+    """
+
+    result = _current_stage_result(
+        sections=(
+            _SectionStub(
+                section_id="section-stage",
+                heading_text_raw="当前阶段",
+                heading_text_normalized="当前阶段",
+                heading_path=("当前阶段",),
+            ),
+            _SectionStub(
+                section_id="section-manager-change",
+                heading_text_raw="基金经理变更",
+                heading_text_normalized="基金经理变更",
+                heading_path=("基金经理变更",),
+            ),
+            _SectionStub(
+                section_id="section-share-scale",
+                heading_text_raw="规模变化",
+                heading_text_normalized="规模变化",
+                heading_path=("规模变化",),
+            ),
+            _SectionStub(
+                section_id="section-strategy-change",
+                heading_text_raw="投资策略调整",
+                heading_text_normalized="投资策略调整",
+                heading_path=("投资策略调整",),
+            ),
+        )
+    )
+
+    family = _field_family(result, "current_stage.v1")
+    roles = {record.row_locator.split(";")[0] for record in family.candidate_evidence}
+
+    assert result.contract_status == "missing"
+    assert roles == {
+        "role=stage_status",
+        "role=manager_change",
+        "role=share_scale_change",
+        "role=holding_strategy_change",
+    }
+    assert family.status == "missing"
+    assert family.extraction_mode == "missing"
+    assert family.value == {}
+    assert family.anchors == ()
+    assert family.gaps[0].gap_code == "candidate_only_not_source_truth"
+
+
+def test_current_stage_selector_classifies_strategy_operation_heading_as_holding_change() -> None:
+    """S6-G exact 投资策略运作分析 heading/text 归属 holding_strategy_change。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 overlap token 被 stage_status 抢占时抛出。
+    """
+
+    overlap_text = "报告期内基金投资策略和运作分析"
+    section = _SectionStub(
+        section_id="section-strategy-operation",
+        heading_text_raw=overlap_text,
+        heading_text_normalized=overlap_text,
+        heading_path=(overlap_text,),
+    )
+    paragraph = _ParagraphStub(
+        block_id="paragraph-strategy-operation",
+        heading_path=(overlap_text,),
+        text_raw=overlap_text,
+        text_normalized=overlap_text,
+    )
+
+    family = _field_family(
+        _current_stage_result(sections=(section,), paragraphs=(paragraph,)),
+        "current_stage.v1",
+    )
+    row_locators = [record.row_locator for record in family.candidate_evidence]
+
+    assert row_locators == [
+        "role=holding_strategy_change; locator=section_id=section-strategy-operation",
+        "role=holding_strategy_change; locator=block_id=paragraph-strategy-operation",
+    ]
+    assert all(not row_locator.startswith("role=stage_status;") for row_locator in row_locators)
+
+
+def test_current_stage_selector_preserves_candidate_boundary_fields() -> None:
+    """current_stage candidate records 固定保持 candidate-only/not_proven/not_ready。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 candidate evidence 泄漏到 public value 时抛出。
+    """
+
+    paragraph = _ParagraphStub(
+        block_id="paragraph-stage-number",
+        heading_path=("当前阶段与关键变化",),
+        text_raw="基金当前阶段处于稳定期，候选摘录含 2025 年规模变化数字。",
+        text_normalized="基金当前阶段处于稳定期，候选摘录含 2025 年规模变化数字。",
+    )
+
+    family = _field_family(_current_stage_result(paragraphs=(paragraph,)), "current_stage.v1")
+
+    assert family.candidate_evidence
+    assert family.value == {}
+    assert family.anchors == ()
+    for record in family.candidate_evidence:
+        assert record.field_family_id == "current_stage.v1"
+        assert record.candidate_only
+        assert record.source_boundary == "candidate_only"
+        assert record.field_correctness_status == "not_proven"
+        assert record.source_truth_status == "not_proven"
+        assert not record.parser_replacement_authorized
+        assert record.readiness_status == "not_ready"
+        assert record.source_field_path not in family.value
+        assert record.excerpt not in family.value
+
+
+def test_current_stage_selector_no_match_keeps_field_family_missing() -> None:
+    """非匹配正文不产生 current_stage candidate evidence。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当无关正文被误命中时抛出。
+    """
+
+    family = _field_family(
+        _current_stage_result(
+            sections=(
+                _SectionStub(
+                    section_id="section-neutral",
+                    heading_text_raw="其他章节",
+                    heading_text_normalized="其他章节",
+                    heading_path=("其他章节",),
+                ),
+            ),
+            paragraphs=(
+                _ParagraphStub(
+                    block_id="paragraph-neutral",
+                    heading_path=("其他章节",),
+                    text_raw="无关内容",
+                    text_normalized="无关内容",
+                ),
+            ),
+            tables=(
+                _TableStub(
+                    heading_text="其他表格",
+                    table_caption_or_nearby_heading="其他表格",
+                    heading_path=("其他章节",),
+                    cells=(
+                        _CellStub(
+                            row_label_path=("其他",),
+                            column_header_path=("其他",),
+                            cell_text="无关",
+                            cell_text_normalized="无关",
+                        ),
+                    ),
+                ),
+            ),
+        ),
+        "current_stage.v1",
+    )
+
+    assert family.candidate_evidence == ()
+    assert family.status == "missing"
+    assert family.value == {}
+    assert family.anchors == ()
+    assert family.gaps[0].gap_code == "field_family_missing"
+
+
+def test_current_stage_selector_preserves_candidate_boundary_blocked_status() -> None:
+    """candidate_boundary 输入即使有 current_stage evidence，整体仍 blocked。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 candidate evidence 提升 consumption status 时抛出。
+    """
+
+    boundary = CandidateBoundaryStatus(
+        candidate_only=True,
+        field_correctness_status="not_proven",
+        source_truth_status="not_proven",
+    )
+
+    result = _current_stage_result(
+        candidate_boundary=boundary,
+        sections=(
+            _SectionStub(
+                section_id="section-stage",
+                heading_text_raw="当前阶段",
+                heading_text_normalized="当前阶段",
+                heading_path=("当前阶段",),
+            ),
+        ),
+    )
+    family = _field_family(result, "current_stage.v1")
+
+    assert result.contract_status == "blocked"
+    assert result.candidate_boundary is boundary
+    assert family.candidate_evidence
+    assert family.value == {}
+    assert family.anchors == ()
+
+
+def test_current_stage_selector_orders_dedupes_limits_and_truncates() -> None:
+    """current_stage selector 保持 role/source 顺序、去重、16 条限量和摘录截断。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 source path、顺序、去重或限量不符合 S6-G 时抛出。
+    """
+
+    long_text = "当前阶段" + "很长" * 100
+    sections = (
+        _SectionStub("section-stage", long_text, long_text, (long_text, "基金经理变更")),
+        _SectionStub("section-manager", "基金经理变更", "基金经理变更", ("基金经理变更",)),
+        _SectionStub("section-share", "基金份额变动", "基金份额变动", ("基金份额变动",)),
+        _SectionStub("section-strategy", "投资策略调整", "投资策略调整", ("投资策略调整",)),
+    )
+    paragraphs = (
+        _ParagraphStub("paragraph-stage", heading_path=("当前阶段",), text_raw="当前阶段"),
+        _ParagraphStub("paragraph-manager", heading_path=("基金经理变更",), text_raw="基金经理变更"),
+        _ParagraphStub("paragraph-share", heading_path=("基金份额变动",), text_raw="基金份额变动"),
+        _ParagraphStub("paragraph-strategy", heading_path=("投资策略调整",), text_raw="投资策略调整"),
+    )
+    tables = (
+        _TableStub(
+            table_id="table-stage",
+            heading_text="当前阶段",
+            table_caption_or_nearby_heading="当前阶段",
+            heading_path=("当前阶段",),
+            cells=(
+                _CellStub(
+                    "stage-cell-original-0",
+                    table_id="table-stage",
+                    row_index=2,
+                    cell_text="当前阶段",
+                    cell_text_normalized="当前阶段",
+                ),
+                _CellStub(
+                    "stage-cell-original-1",
+                    table_id="table-stage",
+                    row_index=0,
+                    cell_text="当前阶段",
+                    cell_text_normalized="当前阶段",
+                ),
+            ),
+        ),
+        _TableStub(
+            table_id="table-manager",
+            heading_text="基金经理变更",
+            table_caption_or_nearby_heading="基金经理变更",
+            heading_path=("基金经理变更",),
+            cells=(
+                _CellStub(
+                    "manager-cell",
+                    table_id="table-manager",
+                    cell_text="新任基金经理",
+                    cell_text_normalized="新任基金经理",
+                ),
+            ),
+        ),
+        _TableStub(
+            table_id="table-share",
+            heading_text="基金份额总额变动",
+            table_caption_or_nearby_heading="基金份额总额变动",
+            heading_path=("基金份额总额变动",),
+            cells=(
+                _CellStub(
+                    "share-cell",
+                    table_id="table-share",
+                    cell_text="大额申购",
+                    cell_text_normalized="大额申购",
+                ),
+            ),
+        ),
+        _TableStub(
+            table_id="table-strategy",
+            heading_text="投资策略调整",
+            table_caption_or_nearby_heading="投资策略调整",
+            heading_path=("投资策略调整",),
+            cells=(
+                _CellStub(
+                    "strategy-cell",
+                    table_id="table-strategy",
+                    cell_text="持仓结构变化",
+                    cell_text_normalized="持仓结构变化",
+                ),
+            ),
+        ),
+    )
+
+    records = _field_family(
+        _current_stage_result(sections=sections, paragraphs=paragraphs, tables=tables),
+        "current_stage.v1",
+    ).candidate_evidence
+    paths = [record.source_field_path for record in records]
+
+    assert len(records) == 16
+    assert paths == [
+        "sections[0]",
+        "paragraph_blocks[0]",
+        "table_blocks[0]",
+        "table_blocks[0].cells[1]",
+        "table_blocks[0].cells[0]",
+        "sections[1]",
+        "paragraph_blocks[1]",
+        "table_blocks[1]",
+        "table_blocks[1].cells[0]",
+        "sections[2]",
+        "paragraph_blocks[2]",
+        "table_blocks[2]",
+        "table_blocks[2].cells[0]",
+        "sections[3]",
+        "paragraph_blocks[3]",
+        "table_blocks[3]",
+    ]
+    assert "table_blocks[3].cells[0]" not in paths
+    assert paths.count("sections[0]") == 1
+    assert len(set(paths)) == len(paths)
+    assert records[0].row_locator == "role=stage_status; locator=section_id=section-stage"
+    assert records[5].row_locator == "role=manager_change; locator=section_id=section-manager"
+    assert records[9].row_locator == "role=share_scale_change; locator=section_id=section-share"
+    assert records[13].row_locator == "role=holding_strategy_change; locator=section_id=section-strategy"
+    assert all(len(record.excerpt) <= 160 for record in records)
+    assert all(record.field_family_id == "current_stage.v1" for record in records)
+
+
+def test_current_stage_selector_requires_context_for_generic_tokens() -> None:
+    """current_stage generic token 缺少 source-level context 时不得产生 evidence。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 broad token 绕过 guard 时抛出。
+    """
+
+    sections = tuple(
+        _SectionStub(
+            section_id=f"section-generic-{index}",
+            heading_text_raw=text,
+            heading_text_normalized=text,
+            heading_path=(text,),
+        )
+        for index, text in enumerate(
+            (
+                "阶段",
+                "状态",
+                "运作",
+                "变更",
+                "变动",
+                "任职",
+                "离任",
+                "聘任",
+                "份额",
+                "规模",
+                "申购",
+                "赎回",
+                "策略",
+                "持仓",
+                "配置",
+                "仓位",
+                "行业",
+                "重仓",
+                "变化",
+                "调整",
+            )
+        )
+    )
+
+    family = _field_family(_current_stage_result(sections=sections), "current_stage.v1")
+
+    assert family.candidate_evidence == ()
+    assert family.gaps[0].gap_code == "field_family_missing"
+
+
+def test_current_stage_selector_allows_generic_tokens_with_source_context() -> None:
+    """current_stage generic token 带同源 guard context 时可产生 candidate evidence。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当正向 guard context 被过度阻断时抛出。
+    """
+
+    tables = (
+        _TableStub(
+            table_id="table-stage-context",
+            heading_text="关键变化",
+            table_caption_or_nearby_heading="关键变化",
+            heading_path=("关键变化",),
+            cells=(
+                _CellStub(
+                    "cell-stage-generic",
+                    table_id="table-stage-context",
+                    cell_text="阶段",
+                    cell_text_normalized="阶段",
+                ),
+            ),
+        ),
+        _TableStub(
+            table_id="table-manager-context",
+            heading_text="基金经理情况",
+            table_caption_or_nearby_heading="基金经理情况",
+            heading_path=("基金经理情况",),
+            cells=(
+                _CellStub(
+                    "cell-manager-generic",
+                    table_id="table-manager-context",
+                    cell_text="变更",
+                    cell_text_normalized="变更",
+                ),
+            ),
+        ),
+        _TableStub(
+            table_id="table-share-context",
+            heading_text="基金份额总额变动",
+            table_caption_or_nearby_heading="基金份额总额变动",
+            heading_path=("基金份额总额变动",),
+            cells=(
+                _CellStub(
+                    "cell-share-generic",
+                    table_id="table-share-context",
+                    cell_text="规模",
+                    cell_text_normalized="规模",
+                ),
+            ),
+        ),
+        _TableStub(
+            table_id="table-strategy-context",
+            heading_text="投资组合",
+            table_caption_or_nearby_heading="投资组合",
+            heading_path=("投资组合",),
+            cells=(
+                _CellStub(
+                    "cell-strategy-generic",
+                    table_id="table-strategy-context",
+                    cell_text="调整",
+                    cell_text_normalized="调整",
+                ),
+            ),
+        ),
+    )
+
+    family = _field_family(_current_stage_result(tables=tables), "current_stage.v1")
+    roles = [record.row_locator.split(";")[0] for record in family.candidate_evidence]
+
+    assert "role=stage_status" in roles
+    assert "role=manager_change" in roles
+    assert "role=share_scale_change" in roles
+    assert "role=holding_strategy_change" in roles
+
+
+def test_current_stage_selector_blocks_cell_self_guard_for_broad_tokens() -> None:
+    """current_stage cell generic token 不得靠同一 cell 文本自守卫或 sibling 授权。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 same-cell guard 或跨 source guard 误通过时抛出。
+    """
+
+    blocked_table = _TableStub(
+        table_id="table-blocked-current-stage",
+        heading_text="普通明细",
+        table_caption_or_nearby_heading="普通明细",
+        heading_path=("普通明细",),
+        cells=(
+            _CellStub(
+                cell_id="cell-self-guard",
+                table_id="table-blocked-current-stage",
+                heading_path=("普通明细",),
+                row_label_path=("项目",),
+                column_header_path=("说明",),
+                cell_text="投资策略出现调整",
+                cell_text_normalized="投资策略出现调整",
+            ),
+            _CellStub(
+                cell_id="cell-sibling-guard",
+                table_id="table-blocked-current-stage",
+                heading_path=("普通明细",),
+                row_index=1,
+                row_label_path=("项目",),
+                column_header_path=("说明",),
+                cell_text="当前阶段",
+                cell_text_normalized="当前阶段",
+            ),
+        ),
+    )
+    allowed_table = _TableStub(
+        table_id="table-allowed-current-stage",
+        heading_text="投资组合",
+        table_caption_or_nearby_heading="投资组合",
+        heading_path=("投资组合",),
+        cells=(
+            _CellStub(
+                cell_id="cell-allowed-current-stage",
+                table_id="table-allowed-current-stage",
+                row_label_path=("项目",),
+                column_header_path=("说明",),
+                cell_text="调整",
+                cell_text_normalized="调整",
+            ),
+        ),
+    )
+
+    blocked_paths = {
+        record.source_field_path
+        for record in _field_family(
+            _current_stage_result(tables=(blocked_table,)), "current_stage.v1"
+        ).candidate_evidence
+    }
+    allowed_paths = {
+        record.source_field_path
+        for record in _field_family(
+            _current_stage_result(tables=(allowed_table,)), "current_stage.v1"
+        ).candidate_evidence
+    }
+
+    assert "table_blocks[0].cells[0]" not in blocked_paths
+    assert "table_blocks[0].cells[1]" in blocked_paths
+    assert "table_blocks[0].cells[0]" in allowed_paths
+
+
+def test_current_stage_selector_blocks_chapter5_reasoning_output_tokens() -> None:
+    """S6-G 不把 Chapter 5 推理/输出词当成 locator token。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 forbidden token 单独产生 record 时抛出。
+    """
+
+    forbidden_sections = tuple(
+        _SectionStub(
+            section_id=f"section-forbidden-ch5-{index}",
+            heading_text_raw=text,
+            heading_text_normalized=text,
+            heading_path=(text,),
+        )
+        for index, text in enumerate(
+            (
+                "为什么偏偏是现在",
+                "下一步最小验证问题",
+                "接下来最该跟踪",
+                "变化是否改变前文判断",
+                "未改变",
+                "需要重新评估",
+                "推翻前文判断",
+                "值得持有",
+                "需要关注",
+                "建议替换",
+                "买入",
+                "卖出",
+            )
+        )
+    )
+    mixed_paragraph = _ParagraphStub(
+        block_id="paragraph-mixed-ch5",
+        text_raw="为什么偏偏是现在需要关注；当前阶段披露为稳定期。",
+        text_normalized="为什么偏偏是现在需要关注；当前阶段披露为稳定期。",
+    )
+
+    pure_family = _field_family(_current_stage_result(sections=forbidden_sections), "current_stage.v1")
+    mixed_family = _field_family(
+        _current_stage_result(paragraphs=(mixed_paragraph,)), "current_stage.v1"
+    )
+
+    assert pure_family.candidate_evidence == ()
+    assert len(mixed_family.candidate_evidence) == 1
+    assert mixed_family.candidate_evidence[0].row_locator.split(";")[0] == "role=stage_status"
+    assert mixed_family.candidate_evidence[0].source_field_path == "paragraph_blocks[0]"
+
+
+def test_current_stage_selector_blocks_chapter6_risk_tokens() -> None:
+    """S6-G 不捕获 Chapter 6 / S6-F risk-owned token。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当风险词单独生成 current_stage record 时抛出。
+    """
+
+    sections = tuple(
+        _SectionStub(
+            section_id=f"section-risk-owned-{index}",
+            heading_text_raw=text,
+            heading_text_normalized=text,
+            heading_path=(text,),
+        )
+        for index, text in enumerate(
+            ("风险", "核心风险", "清盘风险", "压力测试", "最大回撤", "否决", "一票否决", "风险等级", "需要替换", "值得持有")
+        )
+    )
+
+    family = _field_family(_current_stage_result(sections=sections), "current_stage.v1")
+
+    assert family.candidate_evidence == ()
+    assert family.gaps[0].gap_code == "field_family_missing"
+
+
+def test_current_stage_selector_blocks_market_and_valuation_external_tokens() -> None:
+    """S6-G 不捕获市场预测或估值外部真源 token。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当外部预测词生成 current_stage record 时抛出。
+    """
+
+    sections = tuple(
+        _SectionStub(
+            section_id=f"section-market-owned-{index}",
+            heading_text_raw=text,
+            heading_text_normalized=text,
+            heading_path=(text,),
+        )
+        for index, text in enumerate(
+            ("市场走势", "未来收益", "宏观预测", "估值温度计", "温度计", "估值百分位", "估值分位", "低估", "高估", "便宜", "昂贵")
+        )
+    )
+
+    family = _field_family(_current_stage_result(sections=sections), "current_stage.v1")
+
+    assert family.candidate_evidence == ()
+    assert family.gaps[0].gap_code == "field_family_missing"
+
+
+def test_current_stage_selector_blocks_product_identity_only_overlap() -> None:
+    """产品身份类 token 不单独生成 current_stage evidence。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 S6-B-owned token 越界生成 current_stage record 时抛出。
+    """
+
+    sections = tuple(
+        _SectionStub(
+            section_id=f"section-product-owned-{index}",
+            heading_text_raw=text,
+            heading_text_normalized=text,
+            heading_path=(text,),
+        )
+        for index, text in enumerate(("基金简介", "基金基本情况", "产品概况", "基金名称", "基金代码", "风险收益特征", "业绩比较基准"))
+    )
+
+    result = _current_stage_result(sections=sections)
+
+    assert _field_family(result, "current_stage.v1").candidate_evidence == ()
+    assert _field_family(result, "product_essence.v1").candidate_evidence
+
+
+def test_current_stage_selector_blocks_manager_biography_only_overlap() -> None:
+    """基金经理履历类 token 不单独生成 current_stage evidence。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 S6-D-owned token 越界或合法变更词被阻断时抛出。
+    """
+
+    biography_sections = tuple(
+        _SectionStub(
+            section_id=f"section-manager-bio-{index}",
+            heading_text_raw=text,
+            heading_text_normalized=text,
+            heading_path=(text,),
+        )
+        for index, text in enumerate(("基金经理简介", "姓名", "职务", "职责", "岗位"))
+    )
+    legal_section = _SectionStub(
+        section_id="section-manager-change",
+        heading_text_raw="基金经理变更",
+        heading_text_normalized="基金经理变更",
+        heading_path=("基金经理变更",),
+    )
+
+    biography_result = _current_stage_result(sections=biography_sections)
+    legal_result = _current_stage_result(sections=(legal_section,))
+    legal_roles = {
+        record.row_locator.split(";")[0]
+        for record in _field_family(legal_result, "current_stage.v1").candidate_evidence
+    }
+
+    assert _field_family(biography_result, "current_stage.v1").candidate_evidence == ()
+    assert _field_family(biography_result, "manager_profile.v1").candidate_evidence
+    assert legal_roles == {"role=manager_change"}
+
+
+def test_current_stage_selector_blocks_investor_experience_only_overlap() -> None:
+    """投资者获得感类 token 不单独生成 current_stage evidence。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 S6-E-owned token 越界或合法份额变化词被阻断时抛出。
+    """
+
+    investor_sections = tuple(
+        _SectionStub(
+            section_id=f"section-investor-owned-{index}",
+            heading_text_raw=text,
+            heading_text_normalized=text,
+            heading_path=(text,),
+        )
+        for index, text in enumerate(
+            ("持有人户数", "户均持有份额", "机构投资者持有", "个人投资者持有", "收益分配", "分红", "红利", "投资者实际收益", "投资者获得感")
+        )
+    )
+    legal_section = _SectionStub(
+        section_id="section-share-scale",
+        heading_text_raw="基金份额变动",
+        heading_text_normalized="基金份额变动",
+        heading_path=("基金份额变动",),
+    )
+
+    investor_result = _current_stage_result(sections=investor_sections)
+    legal_result = _current_stage_result(sections=(legal_section,))
+    legal_roles = {
+        record.row_locator.split(";")[0]
+        for record in _field_family(legal_result, "current_stage.v1").candidate_evidence
+    }
+
+    assert _field_family(investor_result, "current_stage.v1").candidate_evidence == ()
+    assert _field_family(investor_result, "investor_experience.v1").candidate_evidence
+    assert legal_roles == {"role=share_scale_change"}
+
+
+def test_current_stage_selector_blocks_return_fee_only_overlap() -> None:
+    """收益/费用类 token 不单独生成 current_stage evidence。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 S6-C-owned token 越界生成 current_stage record 时抛出。
+    """
+
+    sections = tuple(
+        _SectionStub(
+            section_id=f"section-return-fee-owned-{index}",
+            heading_text_raw=text,
+            heading_text_normalized=text,
+            heading_path=(text,),
+        )
+        for index, text in enumerate(
+            ("净值增长率", "业绩比较基准收益率", "管理费", "托管费", "销售服务费", "跟踪误差", "跟踪偏离度")
+        )
+    )
+
+    result = _current_stage_result(sections=sections)
+
+    assert _field_family(result, "current_stage.v1").candidate_evidence == ()
+    assert _field_family(result, "return_attribution.v1").candidate_evidence
+
+
+def test_current_stage_selector_preserves_overlap_family_semantics() -> None:
+    """加入 S6-G 内容时 S6-B/S6-C/S6-D/S6-E/S6-F 既有语义保持不变。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当既有字段族 count/order/gap/value/anchors 被改变时抛出。
+    """
+
+    baseline_sections = (
+        _SectionStub(
+            section_id="section-product",
+            heading_text_raw="基金简介",
+            heading_text_normalized="基金简介",
+            heading_path=("基金简介",),
+        ),
+        _SectionStub(
+            section_id="section-return",
+            heading_text_raw="基金份额净值增长率",
+            heading_text_normalized="基金份额净值增长率",
+            heading_path=("基金份额净值增长率",),
+        ),
+        _SectionStub(
+            section_id="section-manager",
+            heading_text_raw="基金经理简介",
+            heading_text_normalized="基金经理简介",
+            heading_path=("基金经理简介",),
+        ),
+        _SectionStub(
+            section_id="section-investor-share",
+            heading_text_raw="基金份额变动",
+            heading_text_normalized="基金份额变动",
+            heading_path=("基金份额变动",),
+        ),
+        _SectionStub(
+            section_id="section-core-risk",
+            heading_text_raw="风险收益特征",
+            heading_text_normalized="风险收益特征",
+            heading_path=("风险收益特征",),
+        ),
+    )
+    added_sections = (
+        *baseline_sections,
+        _SectionStub(
+            section_id="section-current-stage",
+            heading_text_raw="当前阶段",
+            heading_text_normalized="当前阶段",
+            heading_path=("当前阶段",),
+        ),
+    )
+
+    baseline = _current_stage_result(sections=baseline_sections)
+    with_current_stage = _current_stage_result(sections=added_sections)
+
+    for family_id in (
+        "product_essence.v1",
+        "return_attribution.v1",
+        "manager_profile.v1",
+        "investor_experience.v1",
+        "core_risk.v1",
+    ):
+        assert _family_signature(_field_family(with_current_stage, family_id)) == _family_signature(
+            _field_family(baseline, family_id)
+        )
+
+    investor_baseline = _field_family(baseline, "investor_experience.v1")
+    investor_with_stage = _field_family(with_current_stage, "investor_experience.v1")
+    assert investor_baseline.candidate_evidence[0].row_locator.startswith("role=share_change")
+    assert _family_signature(investor_with_stage) == _family_signature(investor_baseline)
+    assert {
+        record.source_field_path
+        for record in _field_family(baseline, "current_stage.v1").candidate_evidence
+    } == {"sections[3]"}
+    assert {
+        record.source_field_path
+        for record in _field_family(with_current_stage, "current_stage.v1").candidate_evidence
+    } == {"sections[3]", "sections[5]"}
+
+
 # ── Registration ────────────────────────────────────────────────────────────
 
 
