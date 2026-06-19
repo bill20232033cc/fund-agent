@@ -703,17 +703,21 @@ def _field_families_for_intermediate(
         source_truth_gap_code: source-truth admission proof 缺失或非法时的本地 gap。
 
     Returns:
-        六个字段族结果；S6-B/S6-C/S6-D/S6-E/S6-F/S6-G 仅为已接受字段族附加
-        candidate evidence。
+        六个字段族结果；proof-positive source-truth 路径可进入已授权 direct extractor，
+        其余已接受字段族仅附加 candidate evidence。
 
     Raises:
         无显式抛出。
     """
 
     product_essence_source_truth: FundFieldFamilyResult | None = None
+    return_attribution_source_truth: FundFieldFamilyResult | None = None
     content_intermediate = _content_intermediate_or_none(intermediate)
     if source_truth_extraction_allowed and content_intermediate is not None:
         product_essence_source_truth = _extract_product_essence_source_truth(
+            content_intermediate, source_provenance, context
+        )
+        return_attribution_source_truth = _extract_return_attribution_source_truth(
             content_intermediate, source_provenance, context
         )
 
@@ -723,6 +727,9 @@ def _field_families_for_intermediate(
         else _select_product_essence_candidate_evidence(intermediate)
     )
     return_attribution_evidence = _select_return_attribution_candidate_evidence(intermediate)
+    return_attribution_evidence = (
+        () if return_attribution_source_truth is not None else return_attribution_evidence
+    )
     manager_profile_evidence = _select_manager_profile_candidate_evidence(intermediate)
     investor_experience_evidence = _select_investor_experience_candidate_evidence(intermediate)
     current_stage_evidence = _select_current_stage_candidate_evidence(intermediate)
@@ -741,6 +748,9 @@ def _field_families_for_intermediate(
     field_families = tuple(
         product_essence_source_truth
         if family_id == "product_essence.v1" and product_essence_source_truth is not None
+        else return_attribution_source_truth
+        if family_id == "return_attribution.v1"
+        and return_attribution_source_truth is not None
         else (
             _candidate_missing_field_family(
                 family_id, source_provenance, candidate_evidence_by_family[family_id]
@@ -845,6 +855,30 @@ def _extract_product_essence_source_truth(
         source_provenance=source_provenance,
         candidate_evidence=(),
     )
+
+
+def _extract_return_attribution_source_truth(
+    intermediate: FundDisclosureDocumentContentIntermediate,
+    source_provenance: PublicSourceProvenance | None,
+    context: FundProcessorDispatchKey,
+) -> FundFieldFamilyResult:
+    """为模板第 2 章收益归因字段族建立 proof-positive direct route。
+
+    Args:
+        intermediate: 已通过 source-truth admission proof 的正文中间态。
+        source_provenance: 公共来源 provenance。
+        context: Processor dispatch 身份；Slice 1 只用于保持签名与后续值抽取一致。
+
+    Returns:
+        `return_attribution.v1` 字段族；Slice 1 先 fail-closed 为 public missing，
+        并清空 candidate evidence，避免 proof-positive direct route 混用候选证据。
+
+    Raises:
+        无显式抛出。
+    """
+
+    _ = (intermediate, context)
+    return _missing_field_family("return_attribution.v1", source_provenance)
 
 
 def _select_product_essence_values(

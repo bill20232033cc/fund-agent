@@ -355,6 +355,25 @@ def _product_essence_source_truth_result(
     return processor.extract(FundProcessorInput(context=_dispatch_key(), intermediate=intermediate))
 
 
+def _return_attribution_source_truth_result(
+    intermediate: _ContentIntermediateStub,
+) -> FundProcessorResult:
+    """运行 return_attribution source-truth route 测试用 processor。
+
+    Args:
+        intermediate: FDD content intermediate。
+
+    Returns:
+        processor 输出结果。
+
+    Raises:
+        无显式抛出。
+    """
+
+    processor = FundDisclosureDocumentProcessor()
+    return processor.extract(FundProcessorInput(context=_dispatch_key(), intermediate=intermediate))
+
+
 def _product_cell(
     output_label: str,
     value: str,
@@ -1418,6 +1437,167 @@ def test_product_essence_selector_preserves_candidate_boundary_blocked_status() 
 
 
 # ── S6-C return attribution candidate selector ─────────────────────────────
+
+
+def test_return_attribution_source_truth_route_suppresses_candidate_evidence() -> None:
+    """proof-positive route 进入 direct skeleton，并压制候选证据。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 direct skeleton 混入 candidate evidence 或 public value 时抛出。
+    """
+
+    section = _SectionStub(
+        section_id="section-nav",
+        heading_text_raw="基金份额净值增长率",
+        heading_text_normalized="基金份额净值增长率",
+        heading_path=("基金份额净值增长率",),
+    )
+
+    result = _return_attribution_source_truth_result(
+        _source_truth_content_intermediate(sections=(section,))
+    )
+    family = _field_family(result, "return_attribution.v1")
+
+    assert result.contract_status == "missing"
+    assert family.status == "missing"
+    assert family.extraction_mode == "missing"
+    assert family.value == {}
+    assert family.anchors == ()
+    assert family.candidate_evidence == ()
+    assert _gap_codes(family) == {"field_family_missing"}
+
+
+def test_return_attribution_source_truth_requires_proof_even_when_candidate_boundary_none() -> None:
+    """缺 proof 时即使 candidate_boundary=None，也保留候选证据和 admission gap。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当缺 proof 被 direct route 接受或候选证据丢失时抛出。
+    """
+
+    section = _SectionStub(
+        section_id="section-nav",
+        heading_text_raw="业绩比较基准收益率",
+        heading_text_normalized="业绩比较基准收益率",
+        heading_path=("业绩比较基准收益率",),
+    )
+
+    result = _return_attribution_source_truth_result(
+        _source_truth_content_intermediate(sections=(section,), with_source_truth_proof=False)
+    )
+    family = _field_family(result, "return_attribution.v1")
+
+    assert result.contract_status == "missing"
+    assert family.status == "missing"
+    assert family.value == {}
+    assert family.anchors == ()
+    assert family.candidate_evidence
+    assert _gap_codes(family) == {
+        "candidate_only_not_source_truth",
+        "source_truth_admission_missing",
+    }
+
+
+def test_return_attribution_source_truth_rejects_base_admission_invalid_paths() -> None:
+    """failure_class 或 source_provenance 非法时不产生 return direct output。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 base admission invalid path 仍返回字段族时抛出。
+    """
+
+    section = _SectionStub(
+        section_id="section-nav",
+        heading_text_raw="基金份额净值增长率",
+        heading_text_normalized="基金份额净值增长率",
+        heading_path=("基金份额净值增长率",),
+    )
+    invalid_inputs = (
+        _ContentIntermediateStub(
+            source_provenance=None,
+            source_truth_admission=_source_truth_admission_proof(),
+            sections=(section,),
+            paragraph_blocks=(),
+            table_blocks=(),
+        ),
+        _ContentIntermediateStub(
+            source_provenance=_provenance(),
+            failure_class="schema_drift",
+            source_truth_admission=_source_truth_admission_proof(),
+            sections=(section,),
+            paragraph_blocks=(),
+            table_blocks=(),
+        ),
+    )
+
+    for intermediate in invalid_inputs:
+        result = _return_attribution_source_truth_result(intermediate)
+
+        assert result.contract_status == "blocked"
+        assert result.field_families == ()
+        assert result.anchors == ()
+
+
+def test_return_attribution_source_truth_candidate_boundary_remains_blocked() -> None:
+    """candidate_boundary blocked path 不因 proof 存在被提升为 source truth。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 candidate boundary 被 direct route 绕过时抛出。
+    """
+
+    boundary = CandidateBoundaryStatus(
+        candidate_only=True,
+        field_correctness_status="not_proven",
+        source_truth_status="not_proven",
+    )
+    section = _SectionStub(
+        section_id="section-nav",
+        heading_text_raw="基准收益率",
+        heading_text_normalized="基准收益率",
+        heading_path=("基准收益率",),
+    )
+
+    result = _return_attribution_source_truth_result(
+        _ContentIntermediateStub(
+            source_provenance=_provenance(),
+            candidate_boundary=boundary,
+            source_truth_admission=_source_truth_admission_proof(),
+            sections=(section,),
+            paragraph_blocks=(),
+            table_blocks=(),
+        )
+    )
+    family = _field_family(result, "return_attribution.v1")
+
+    assert result.contract_status == "blocked"
+    assert result.candidate_boundary is boundary
+    assert family.status == "missing"
+    assert family.value == {}
+    assert family.anchors == ()
+    assert family.candidate_evidence
+    assert _gap_codes(family) == {"candidate_only_not_source_truth"}
 
 
 def test_return_attribution_selector_adds_candidate_evidence_only() -> None:
