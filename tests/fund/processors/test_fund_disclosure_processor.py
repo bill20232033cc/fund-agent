@@ -978,6 +978,597 @@ def test_return_attribution_selector_orders_dedupes_limits_and_truncates() -> No
     assert all(record.field_family_id == "return_attribution.v1" for record in records)
 
 
+# ── S6-D manager profile candidate selector ────────────────────────────────
+
+
+def test_manager_profile_selector_adds_candidate_evidence_only() -> None:
+    """manager_profile selector 只填 candidate_evidence，不填 public value/anchor。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当候选证据泄漏到 public 字段时抛出。
+    """
+
+    processor = FundDisclosureDocumentProcessor()
+    section = _SectionStub(
+        section_id="section-manager",
+        heading_text_raw="基金管理人及基金经理情况",
+        heading_text_normalized="基金管理人及基金经理情况",
+        heading_path=("基金管理人及基金经理情况",),
+    )
+    strategy = _ParagraphStub(
+        block_id="paragraph-strategy",
+        section_id="section-strategy",
+        heading_path=("投资策略和运作分析",),
+        text_raw="报告期内基金投资策略和运作分析。",
+        text_normalized="报告期内基金投资策略和运作分析。",
+    )
+    alignment = _ParagraphStub(
+        block_id="paragraph-alignment",
+        section_id="section-alignment",
+        heading_path=("基金管理人持有情况",),
+        text_raw="基金管理人从业人员持有本基金。",
+        text_normalized="基金管理人从业人员持有本基金。",
+    )
+    turnover_table = _TableStub(
+        table_id="table-turnover",
+        section_id="section-turnover",
+        heading_text="报告期内股票换手率",
+        table_caption_or_nearby_heading="报告期内股票换手率",
+        heading_path=("交易情况",),
+        cells=(),
+    )
+    holdings_table = _TableStub(
+        table_id="table-holdings",
+        section_id="section-holdings",
+        heading_text="前十名股票投资明细",
+        table_caption_or_nearby_heading="前十名股票投资明细",
+        heading_path=("投资组合",),
+        cells=(),
+    )
+
+    result = processor.extract(
+        FundProcessorInput(
+            context=_dispatch_key(),
+            intermediate=_ContentIntermediateStub(
+                source_provenance=_provenance(),
+                sections=(section,),
+                paragraph_blocks=(strategy, alignment),
+                table_blocks=(turnover_table, holdings_table),
+            ),
+        )
+    )
+
+    family = _field_family(result, "manager_profile.v1")
+    roles = {record.row_locator.split(";")[0] for record in family.candidate_evidence}
+
+    assert family.status == "missing"
+    assert family.extraction_mode == "missing"
+    assert family.value == {}
+    assert family.anchors == ()
+    assert family.gaps[0].gap_code == "candidate_only_not_source_truth"
+    assert roles == {
+        "role=portfolio_managers",
+        "role=manager_strategy_text",
+        "role=turnover_rate",
+        "role=manager_alignment",
+        "role=holdings_snapshot",
+    }
+
+
+def test_manager_profile_selector_preserves_candidate_boundary_fields() -> None:
+    """manager_profile candidate records 固定保持 candidate-only/not_proven/not_ready。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当候选边界字段被提升时抛出。
+    """
+
+    processor = FundDisclosureDocumentProcessor()
+    section = _SectionStub(
+        section_id="section-manager",
+        heading_text_raw="基金经理简介",
+        heading_text_normalized="基金经理简介",
+        heading_path=("基金经理简介",),
+    )
+
+    result = processor.extract(
+        FundProcessorInput(
+            context=_dispatch_key(),
+            intermediate=_ContentIntermediateStub(
+                source_provenance=_provenance(),
+                sections=(section,),
+                paragraph_blocks=(),
+                table_blocks=(),
+            ),
+        )
+    )
+
+    family = _field_family(result, "manager_profile.v1")
+
+    assert family.candidate_evidence
+    for record in family.candidate_evidence:
+        assert record.field_family_id == "manager_profile.v1"
+        assert record.candidate_only
+        assert record.source_boundary == "candidate_only"
+        assert record.field_correctness_status == "not_proven"
+        assert record.source_truth_status == "not_proven"
+        assert not record.parser_replacement_authorized
+        assert record.readiness_status == "not_ready"
+        assert record.source_field_path not in family.value
+
+
+def test_manager_profile_selector_keeps_other_remaining_families_without_candidate_evidence() -> None:
+    """S6-D 不为未授权字段族生成 candidate evidence。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 selector 越界到其它字段族时抛出。
+    """
+
+    processor = FundDisclosureDocumentProcessor()
+    section = _SectionStub(
+        section_id="section-manager",
+        heading_text_raw="基金经理情况",
+        heading_text_normalized="基金经理情况",
+        heading_path=("基金经理情况",),
+    )
+
+    result = processor.extract(
+        FundProcessorInput(
+            context=_dispatch_key(),
+            intermediate=_ContentIntermediateStub(
+                source_provenance=_provenance(),
+                sections=(section,),
+                paragraph_blocks=(),
+                table_blocks=(),
+            ),
+        )
+    )
+
+    for family_id in ("product_essence.v1", "return_attribution.v1"):
+        family = _field_family(result, family_id)
+        assert family.candidate_evidence == ()
+        assert family.gaps[0].gap_code == "field_family_missing"
+
+    for family_id in ("investor_experience.v1", "current_stage.v1", "core_risk.v1"):
+        family = _field_family(result, family_id)
+        assert family.status == "missing"
+        assert family.value == {}
+        assert family.anchors == ()
+        assert family.candidate_evidence == ()
+        assert family.gaps[0].gap_code == "field_family_missing"
+
+
+def test_manager_profile_selector_no_match_keeps_field_family_missing() -> None:
+    """非匹配正文不产生 manager_profile candidate evidence。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当无关正文被误命中时抛出。
+    """
+
+    processor = FundDisclosureDocumentProcessor()
+    section = _SectionStub(
+        heading_text_raw="其他章节",
+        heading_text_normalized="其他章节",
+        heading_path=("其他章节",),
+    )
+    paragraph = _ParagraphStub(
+        heading_path=("其他章节",),
+        text_raw="无关内容",
+        text_normalized="无关内容",
+    )
+    cell = _CellStub(
+        heading_path=("其他章节",),
+        row_label_path=("其他",),
+        column_header_path=("其他",),
+        cell_text="无关",
+        cell_text_normalized="无关",
+    )
+    table = _TableStub(
+        heading_text="其他表格",
+        table_caption_or_nearby_heading="其他表格",
+        heading_path=("其他章节",),
+        cells=(cell,),
+    )
+
+    result = processor.extract(
+        FundProcessorInput(
+            context=_dispatch_key(),
+            intermediate=_ContentIntermediateStub(
+                source_provenance=_provenance(),
+                sections=(section,),
+                paragraph_blocks=(paragraph,),
+                table_blocks=(table,),
+            ),
+        )
+    )
+
+    family = _field_family(result, "manager_profile.v1")
+
+    assert family.candidate_evidence == ()
+    assert family.status == "missing"
+    assert family.value == {}
+    assert family.anchors == ()
+    assert family.gaps[0].gap_code == "field_family_missing"
+
+
+def test_manager_profile_selector_preserves_candidate_boundary_blocked_status() -> None:
+    """candidate_boundary 输入即使有 manager candidate evidence，整体仍 blocked。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 candidate evidence 提升 consumption status 时抛出。
+    """
+
+    processor = FundDisclosureDocumentProcessor()
+    boundary = CandidateBoundaryStatus(
+        candidate_only=True,
+        field_correctness_status="not_proven",
+        source_truth_status="not_proven",
+    )
+    section = _SectionStub(
+        section_id="section-manager",
+        heading_text_raw="主要人员情况",
+        heading_text_normalized="主要人员情况",
+        heading_path=("主要人员情况",),
+    )
+
+    result = processor.extract(
+        FundProcessorInput(
+            context=_dispatch_key(),
+            intermediate=_ContentIntermediateStub(
+                source_provenance=_provenance(),
+                candidate_boundary=boundary,
+                sections=(section,),
+                paragraph_blocks=(),
+                table_blocks=(),
+            ),
+        )
+    )
+
+    family = _field_family(result, "manager_profile.v1")
+
+    assert result.contract_status == "blocked"
+    assert result.candidate_boundary is boundary
+    assert family.candidate_evidence
+    assert family.value == {}
+    assert family.anchors == ()
+
+
+def test_manager_profile_selector_orders_dedupes_limits_and_truncates() -> None:
+    """manager_profile selector 保持 role/source 顺序、去重和 16 条限量。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 source path、顺序、去重或限量不符合 S6-D 时抛出。
+    """
+
+    processor = FundDisclosureDocumentProcessor()
+    long_heading = "基金经理简介" + "明细" * 100
+    section = _SectionStub(
+        section_id="section-manager",
+        heading_text_raw=long_heading,
+        heading_text_normalized=long_heading,
+        heading_path=(long_heading,),
+    )
+    portfolio_paragraphs = tuple(
+        _ParagraphStub(
+            block_id=f"paragraph-manager-{index}",
+            section_id=f"section-manager-{index}",
+            heading_path=("基金经理情况",),
+            text_raw=text,
+            text_normalized=text,
+        )
+        for index, text in enumerate(("姓名", "职务"))
+    )
+    strategy_paragraphs = tuple(
+        _ParagraphStub(
+            block_id=f"paragraph-strategy-{index}",
+            section_id=f"section-strategy-{index}",
+            heading_path=("投资策略和运作分析",),
+            text_raw=f"第{index}段披露投资策略和运作分析。",
+            text_normalized=f"第{index}段披露投资策略和运作分析。",
+        )
+        for index in range(3)
+    )
+    turnover_paragraphs = tuple(
+        _ParagraphStub(
+            block_id=f"paragraph-turnover-{index}",
+            section_id=f"section-turnover-{index}",
+            heading_path=("换手率",),
+            text_raw=f"第{index}段披露换手率。",
+            text_normalized=f"第{index}段披露换手率。",
+        )
+        for index in range(3)
+    )
+    alignment_paragraphs = tuple(
+        _ParagraphStub(
+            block_id=f"paragraph-alignment-{index}",
+            section_id=f"section-alignment-{index}",
+            heading_path=("持有情况",),
+            text_raw=f"第{index}段披露基金经理持有情况。",
+            text_normalized=f"第{index}段披露基金经理持有情况。",
+        )
+        for index in range(4)
+    )
+    cells = (
+        _CellStub(
+            cell_id="cell-original-0",
+            row_index=2,
+            column_index=0,
+            column_header_path=("任职日期",),
+            cell_text="2020-01-01",
+            cell_text_normalized="2020-01-01",
+        ),
+        _CellStub(
+            cell_id="cell-original-1",
+            row_index=0,
+            column_index=0,
+            column_header_path=("姓名",),
+            cell_text="张三",
+            cell_text_normalized="张三",
+        ),
+        _CellStub(
+            cell_id="cell-original-2",
+            row_index=1,
+            column_index=0,
+            column_header_path=("职务",),
+            cell_text="基金经理",
+            cell_text_normalized="基金经理",
+        ),
+    )
+    table = _TableStub(
+        table_id="table-manager",
+        section_id="section-manager-table",
+        heading_text="基金经理情况",
+        table_caption_or_nearby_heading="基金经理情况",
+        heading_path=("基金经理情况",),
+        cells=cells,
+    )
+
+    result = processor.extract(
+        FundProcessorInput(
+            context=_dispatch_key(),
+            intermediate=_ContentIntermediateStub(
+                source_provenance=_provenance(),
+                sections=(section,),
+                paragraph_blocks=(
+                    *portfolio_paragraphs,
+                    *strategy_paragraphs,
+                    *turnover_paragraphs,
+                    *alignment_paragraphs,
+                ),
+                table_blocks=(table,),
+            ),
+        )
+    )
+
+    records = _field_family(result, "manager_profile.v1").candidate_evidence
+    paths = [record.source_field_path for record in records]
+
+    assert len(records) == 16
+    assert paths == [
+        "sections[0]",
+        "paragraph_blocks[0]",
+        "paragraph_blocks[1]",
+        "table_blocks[0]",
+        "table_blocks[0].cells[1]",
+        "table_blocks[0].cells[2]",
+        "table_blocks[0].cells[0]",
+        "paragraph_blocks[2]",
+        "paragraph_blocks[3]",
+        "paragraph_blocks[4]",
+        "paragraph_blocks[5]",
+        "paragraph_blocks[6]",
+        "paragraph_blocks[7]",
+        "paragraph_blocks[8]",
+        "paragraph_blocks[9]",
+        "paragraph_blocks[10]",
+    ]
+    assert "paragraph_blocks[11]" not in paths
+    assert len(set(paths)) == len(paths)
+    assert records[0].row_locator == "role=portfolio_managers; locator=section_id=section-manager"
+    assert records[13].row_locator == "role=manager_alignment; locator=block_id=paragraph-alignment-0"
+    assert all(len(record.excerpt) <= 160 for record in records)
+    assert all(record.field_family_id == "manager_profile.v1" for record in records)
+
+
+def test_manager_profile_selector_requires_context_for_generic_roster_and_holding_tokens() -> None:
+    """generic roster/holding token 缺少 context 时不得产生 manager_profile evidence。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 generic token 绕过 guard 时抛出。
+    """
+
+    processor = FundDisclosureDocumentProcessor()
+    section = _SectionStub(
+        heading_text_raw="姓名",
+        heading_text_normalized="姓名",
+        heading_path=("姓名",),
+    )
+    paragraph = _ParagraphStub(
+        heading_path=("人员信息",),
+        text_raw="职务",
+        text_normalized="职务",
+    )
+    cells = (
+        _CellStub(
+            cell_id="cell-roster",
+            row_index=0,
+            column_index=0,
+            row_label_path=("人员",),
+            column_header_path=("任职日期",),
+            cell_text="2020-01-01",
+            cell_text_normalized="2020-01-01",
+        ),
+        _CellStub(
+            cell_id="cell-holding",
+            row_index=1,
+            column_index=0,
+            row_label_path=("持有本基金",),
+            column_header_path=("份额",),
+            cell_text="持有本基金",
+            cell_text_normalized="持有本基金",
+        ),
+    )
+    table = _TableStub(
+        heading_text="人员清单",
+        table_caption_or_nearby_heading="人员清单",
+        heading_path=("人员清单",),
+        cells=cells,
+    )
+
+    result = processor.extract(
+        FundProcessorInput(
+            context=_dispatch_key(),
+            intermediate=_ContentIntermediateStub(
+                source_provenance=_provenance(),
+                sections=(section,),
+                paragraph_blocks=(paragraph,),
+                table_blocks=(table,),
+            ),
+        )
+    )
+
+    family = _field_family(result, "manager_profile.v1")
+
+    assert family.candidate_evidence == ()
+    assert family.gaps[0].gap_code == "field_family_missing"
+
+
+def test_manager_profile_selector_allows_generic_tokens_with_context() -> None:
+    """generic token 带 controller 指定 context 时可产生 candidate evidence。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当正向 guard context 被过度阻断时抛出。
+    """
+
+    processor = FundDisclosureDocumentProcessor()
+    roster_cells = (
+        _CellStub(
+            cell_id="cell-name",
+            row_index=0,
+            column_index=0,
+            column_header_path=("姓名",),
+            cell_text="张三",
+            cell_text_normalized="张三",
+        ),
+        _CellStub(
+            cell_id="cell-role",
+            row_index=0,
+            column_index=1,
+            column_header_path=("职务",),
+            cell_text="基金经理",
+            cell_text_normalized="基金经理",
+        ),
+        _CellStub(
+            cell_id="cell-date",
+            row_index=0,
+            column_index=2,
+            column_header_path=("任职日期",),
+            cell_text="2020-01-01",
+            cell_text_normalized="2020-01-01",
+        ),
+    )
+    roster_table = _TableStub(
+        table_id="table-roster",
+        section_id="section-manager",
+        heading_text="基金经理情况",
+        table_caption_or_nearby_heading="基金经理情况",
+        heading_path=("基金管理人及基金经理情况",),
+        cells=roster_cells,
+    )
+    holding_cell = _CellStub(
+        cell_id="cell-holding",
+        table_id="table-holding",
+        row_index=0,
+        column_index=0,
+        row_label_path=("基金管理人从业人员",),
+        column_header_path=("持有本基金",),
+        cell_text="持有本基金",
+        cell_text_normalized="持有本基金",
+    )
+    holding_table = _TableStub(
+        table_id="table-holding",
+        section_id="section-holding",
+        heading_text="基金管理人持有情况",
+        table_caption_or_nearby_heading="基金管理人持有情况",
+        heading_path=("基金管理人持有情况",),
+        cells=(holding_cell,),
+    )
+
+    result = processor.extract(
+        FundProcessorInput(
+            context=_dispatch_key(),
+            intermediate=_ContentIntermediateStub(
+                source_provenance=_provenance(),
+                sections=(),
+                paragraph_blocks=(),
+                table_blocks=(roster_table, holding_table),
+            ),
+        )
+    )
+
+    family = _field_family(result, "manager_profile.v1")
+    paths_by_role = {
+        record.source_field_path: record.row_locator.split(";")[0]
+        for record in family.candidate_evidence
+    }
+
+    assert paths_by_role["table_blocks[0].cells[0]"] == "role=portfolio_managers"
+    assert paths_by_role["table_blocks[0].cells[1]"] == "role=portfolio_managers"
+    assert paths_by_role["table_blocks[0].cells[2]"] == "role=portfolio_managers"
+    assert paths_by_role["table_blocks[1].cells[0]"] == "role=manager_alignment"
+    assert family.status == "missing"
+    assert family.extraction_mode == "missing"
+    assert family.value == {}
+    assert family.anchors == ()
+
+
 # ── Registration ────────────────────────────────────────────────────────────
 
 

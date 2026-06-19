@@ -52,6 +52,7 @@ _CHAPTER_IDS: Final[dict[FundFieldFamilyId, tuple[int, ...]]] = {
 
 _PRODUCT_ESSENCE_CANDIDATE_LIMIT: Final[int] = 12
 _RETURN_ATTRIBUTION_CANDIDATE_LIMIT: Final[int] = 12
+_MANAGER_PROFILE_CANDIDATE_LIMIT: Final[int] = 16
 _CANDIDATE_EXCERPT_LIMIT: Final[int] = 160
 _PRODUCT_ESSENCE_MATCH_GROUPS: Final[tuple[tuple[str, tuple[str, ...]], ...]] = (
     (
@@ -90,6 +91,73 @@ _RETURN_ATTRIBUTION_MATCH_GROUPS: Final[tuple[tuple[str, tuple[str, ...]], ...]]
     (
         "tracking_error",
         ("跟踪误差", "年化跟踪误差", "日均跟踪偏离度", "日均偏离度"),
+    ),
+)
+_MANAGER_PROFILE_MATCH_GROUPS: Final[
+    tuple[tuple[str, tuple[str, ...], tuple[str, ...], tuple[str, ...]], ...]
+] = (
+    (
+        "portfolio_managers",
+        ("基金经理简介", "基金管理人及基金经理情况", "基金经理情况", "主要人员情况"),
+        (
+            "姓名",
+            "职务",
+            "职责",
+            "岗位",
+            "任职日期",
+            "任职时间",
+            "聘任日期",
+            "起始日期",
+            "离任日期",
+            "离任时间",
+            "终止日期",
+        ),
+        ("基金经理", "管理人"),
+    ),
+    (
+        "manager_strategy_text",
+        (
+            "报告期内基金投资策略和运作分析",
+            "投资策略和运作分析",
+            "投资策略",
+            "运作分析",
+            "管理人对宏观经济、证券市场及行业走势的简要展望",
+            "后市展望",
+            "市场展望",
+        ),
+        (),
+        (),
+    ),
+    (
+        "turnover_rate",
+        ("换手率", "股票换手率", "报告期内股票换手率", "换手率口径", "换手率计算口径"),
+        (),
+        (),
+    ),
+    (
+        "manager_alignment",
+        (
+            "基金经理持有本基金",
+            "基金经理持有份额",
+            "本基金基金经理持有本开放式基金",
+            "基金管理人所有从业人员持有本基金",
+            "从业人员持有本基金",
+        ),
+        ("基金经理持有", "从业人员持有", "持有本基金"),
+        ("基金经理", "从业人员", "基金管理人"),
+    ),
+    (
+        "holdings_snapshot",
+        (
+            "报告期末按行业分类的股票投资组合",
+            "期末按行业分类的股票投资组合",
+            "报告期末按公允价值占基金资产净值比例大小排序的前十名股票投资明细",
+            "前十名股票投资明细",
+            "报告期末基金资产组合情况",
+            "持仓集中度",
+        ),
+        (),
+        (),
     ),
 )
 
@@ -313,7 +381,7 @@ def _field_families_for_intermediate(
         source_provenance: 公共来源 provenance。
 
     Returns:
-        六个字段族结果；S6-B/S6-C 仅为已接受字段族附加 candidate evidence。
+        六个字段族结果；S6-B/S6-C/S6-D 仅为已接受字段族附加 candidate evidence。
 
     Raises:
         无显式抛出。
@@ -321,6 +389,7 @@ def _field_families_for_intermediate(
 
     product_essence_evidence = _select_product_essence_candidate_evidence(intermediate)
     return_attribution_evidence = _select_return_attribution_candidate_evidence(intermediate)
+    manager_profile_evidence = _select_manager_profile_candidate_evidence(intermediate)
     return tuple(
         _candidate_missing_field_family(family_id, source_provenance, product_essence_evidence)
         if family_id == "product_essence.v1" and product_essence_evidence
@@ -328,6 +397,8 @@ def _field_families_for_intermediate(
             family_id, source_provenance, return_attribution_evidence
         )
         if family_id == "return_attribution.v1" and return_attribution_evidence
+        else _candidate_missing_field_family(family_id, source_provenance, manager_profile_evidence)
+        if family_id == "manager_profile.v1" and manager_profile_evidence
         else _missing_field_family(family_id, source_provenance)
         for family_id in _FAMILY_ORDER
     )
@@ -809,6 +880,366 @@ def _extend_return_attribution_cell_records(
                 locator_stability=cell.locator_stability,
             )
         )
+
+
+def _select_manager_profile_candidate_evidence(
+    intermediate: FundDisclosureDocumentIntermediate,
+) -> tuple[FundCandidateEvidenceRecord, ...]:
+    """选择基金经理画像字段族的 candidate-only locator evidence（见模板第3章）。
+
+    Args:
+        intermediate: FundDisclosureDocument-like 中间态。
+
+    Returns:
+        按 S6-D mapping table 排序、去重和限量后的候选证据记录。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if not isinstance(intermediate, FundDisclosureDocumentContentIntermediate):
+        return ()
+
+    records: list[FundCandidateEvidenceRecord] = []
+    seen_paths: set[str] = set()
+    for role, strong_tokens, generic_tokens, guard_tokens in _MANAGER_PROFILE_MATCH_GROUPS:
+        _extend_manager_profile_section_records(
+            records, seen_paths, intermediate, role, strong_tokens, generic_tokens, guard_tokens
+        )
+        _extend_manager_profile_paragraph_records(
+            records, seen_paths, intermediate, role, strong_tokens, generic_tokens, guard_tokens
+        )
+        _extend_manager_profile_table_records(
+            records, seen_paths, intermediate, role, strong_tokens, generic_tokens, guard_tokens
+        )
+        if len(records) >= _MANAGER_PROFILE_CANDIDATE_LIMIT:
+            break
+    return tuple(records[:_MANAGER_PROFILE_CANDIDATE_LIMIT])
+
+
+def _extend_manager_profile_section_records(
+    records: list[FundCandidateEvidenceRecord],
+    seen_paths: set[str],
+    intermediate: FundDisclosureDocumentContentIntermediate,
+    role: str,
+    strong_tokens: tuple[str, ...],
+    generic_tokens: tuple[str, ...],
+    guard_tokens: tuple[str, ...],
+) -> None:
+    """追加 manager_profile section locator candidate evidence。
+
+    Args:
+        records: 待追加的记录列表。
+        seen_paths: 已使用的 source path。
+        intermediate: 带正文结构的中间态。
+        role: 命中的 evidence role。
+        strong_tokens: 不需要额外 context 的匹配 token。
+        generic_tokens: 需要 guard context 的匹配 token。
+        guard_tokens: generic token 的 source-level guard token。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        无显式抛出。
+    """
+
+    for index, section in enumerate(intermediate.sections):
+        path = f"sections[{index}]"
+        texts = (
+            section.heading_text_normalized,
+            section.heading_text_raw,
+            *_tuple_text(section.heading_path),
+        )
+        if path in seen_paths or not _matches_guarded_manager_profile_source(
+            texts, strong_tokens, generic_tokens, texts, guard_tokens
+        ):
+            continue
+        seen_paths.add(path)
+        records.append(
+            FundCandidateEvidenceRecord(
+                field_family_id="manager_profile.v1",
+                source_boundary="candidate_only",
+                source_field_path=path,
+                section_id=section.section_id,
+                table_id=None,
+                block_id=None,
+                cell_id=None,
+                heading_path=section.heading_path,
+                row_locator=f"role={role}; locator=section_id={section.section_id}",
+                excerpt=_truncate(_first_non_empty(texts)),
+                locator_stability=section.locator_stability,
+            )
+        )
+
+
+def _extend_manager_profile_paragraph_records(
+    records: list[FundCandidateEvidenceRecord],
+    seen_paths: set[str],
+    intermediate: FundDisclosureDocumentContentIntermediate,
+    role: str,
+    strong_tokens: tuple[str, ...],
+    generic_tokens: tuple[str, ...],
+    guard_tokens: tuple[str, ...],
+) -> None:
+    """追加 manager_profile paragraph block candidate evidence。
+
+    Args:
+        records: 待追加的记录列表。
+        seen_paths: 已使用的 source path。
+        intermediate: 带正文结构的中间态。
+        role: 命中的 evidence role。
+        strong_tokens: 不需要额外 context 的匹配 token。
+        generic_tokens: 需要 guard context 的匹配 token。
+        guard_tokens: generic token 的 source-level guard token。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        无显式抛出。
+    """
+
+    for index, paragraph in enumerate(intermediate.paragraph_blocks):
+        path = f"paragraph_blocks[{index}]"
+        texts = (
+            paragraph.text_normalized,
+            paragraph.text_raw,
+            *_tuple_text(paragraph.heading_path),
+        )
+        guard_context = _manager_profile_paragraph_guard_context(role, paragraph)
+        if path in seen_paths or not _matches_guarded_manager_profile_source(
+            texts, strong_tokens, generic_tokens, guard_context, guard_tokens
+        ):
+            continue
+        seen_paths.add(path)
+        records.append(
+            FundCandidateEvidenceRecord(
+                field_family_id="manager_profile.v1",
+                source_boundary="candidate_only",
+                source_field_path=path,
+                section_id=paragraph.section_id,
+                table_id=None,
+                block_id=paragraph.block_id,
+                cell_id=None,
+                heading_path=paragraph.heading_path,
+                row_locator=f"role={role}; locator=block_id={paragraph.block_id}",
+                excerpt=_truncate(_first_non_empty((paragraph.text_normalized, paragraph.text_raw))),
+                locator_stability=paragraph.locator_stability,
+            )
+        )
+
+
+def _extend_manager_profile_table_records(
+    records: list[FundCandidateEvidenceRecord],
+    seen_paths: set[str],
+    intermediate: FundDisclosureDocumentContentIntermediate,
+    role: str,
+    strong_tokens: tuple[str, ...],
+    generic_tokens: tuple[str, ...],
+    guard_tokens: tuple[str, ...],
+) -> None:
+    """追加 manager_profile table 和 cell candidate evidence。
+
+    Args:
+        records: 待追加的记录列表。
+        seen_paths: 已使用的 source path。
+        intermediate: 带正文结构的中间态。
+        role: 命中的 evidence role。
+        strong_tokens: 不需要额外 context 的匹配 token。
+        generic_tokens: 需要 guard context 的匹配 token。
+        guard_tokens: generic token 的 source-level guard token。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        无显式抛出。
+    """
+
+    for table_index, table in enumerate(intermediate.table_blocks):
+        path = f"table_blocks[{table_index}]"
+        texts = (
+            table.heading_text,
+            table.table_caption_or_nearby_heading,
+            *_tuple_text(table.heading_path),
+        )
+        if path not in seen_paths and _matches_guarded_manager_profile_source(
+            texts, strong_tokens, generic_tokens, texts, guard_tokens
+        ):
+            seen_paths.add(path)
+            records.append(
+                FundCandidateEvidenceRecord(
+                    field_family_id="manager_profile.v1",
+                    source_boundary="candidate_only",
+                    source_field_path=path,
+                    section_id=table.section_id,
+                    table_id=table.table_id,
+                    block_id=None,
+                    cell_id=None,
+                    heading_path=table.heading_path,
+                    row_locator=f"role={role}; locator=table_id={table.table_id}",
+                    excerpt=_truncate(_first_non_empty(texts)),
+                    locator_stability=table.locator_stability,
+                )
+            )
+        _extend_manager_profile_cell_records(
+            records, seen_paths, table_index, table, role, strong_tokens, generic_tokens, guard_tokens
+        )
+
+
+def _extend_manager_profile_cell_records(
+    records: list[FundCandidateEvidenceRecord],
+    seen_paths: set[str],
+    table_index: int,
+    table: FundDisclosureTableBlockLike,
+    role: str,
+    strong_tokens: tuple[str, ...],
+    generic_tokens: tuple[str, ...],
+    guard_tokens: tuple[str, ...],
+) -> None:
+    """追加 manager_profile table cell candidate evidence。
+
+    Args:
+        records: 待追加的记录列表。
+        seen_paths: 已使用的 source path。
+        table_index: table tuple 中的原始索引。
+        table: table block 结构协议对象。
+        role: 命中的 evidence role。
+        strong_tokens: 不需要额外 context 的匹配 token。
+        generic_tokens: 需要 guard context 的匹配 token。
+        guard_tokens: generic token 的 source-level guard token。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        无显式抛出。
+    """
+
+    indexed_cells = sorted(
+        enumerate(table.cells), key=lambda item: (item[1].row_index, item[1].column_index)
+    )
+    for cell_index, cell in indexed_cells:
+        path = f"table_blocks[{table_index}].cells[{cell_index}]"
+        texts = (
+            cell.cell_text_normalized,
+            cell.cell_text,
+            *_tuple_text(cell.row_label_path),
+            *_tuple_text(cell.column_header_path),
+            *_tuple_text(cell.heading_path),
+        )
+        guard_context = _manager_profile_cell_guard_context(role, table, cell)
+        if path in seen_paths or not _matches_guarded_manager_profile_source(
+            texts, strong_tokens, generic_tokens, guard_context, guard_tokens
+        ):
+            continue
+        seen_paths.add(path)
+        row_locator = (
+            f"role={role}; locator=table_id={cell.table_id}; "
+            f"row={cell.row_index}; column={cell.column_index}"
+        )
+        records.append(
+            FundCandidateEvidenceRecord(
+                field_family_id="manager_profile.v1",
+                source_boundary="candidate_only",
+                source_field_path=path,
+                section_id=cell.section_anchor,
+                table_id=cell.table_id,
+                block_id=None,
+                cell_id=cell.cell_id,
+                heading_path=cell.heading_path,
+                row_locator=row_locator,
+                excerpt=_truncate(_first_non_empty((cell.cell_text_normalized, cell.cell_text))),
+                locator_stability=cell.locator_stability,
+            )
+        )
+
+
+def _matches_guarded_manager_profile_source(
+    texts: tuple[str | None, ...],
+    strong_tokens: tuple[str, ...],
+    generic_tokens: tuple[str, ...],
+    guard_context: tuple[str | None, ...],
+    guard_tokens: tuple[str, ...],
+) -> bool:
+    """按 S6-D source-level guard 规则判断 manager_profile source 是否可追加。
+
+    Args:
+        texts: 当前 source 的候选匹配文本。
+        strong_tokens: 无需额外 context 的 token。
+        generic_tokens: 需要 source-level guard 的 token。
+        guard_context: 当前 source 允许用于 guard 的上下文文本。
+        guard_tokens: 允许 generic token 通过的 context token。
+
+    Returns:
+        strong token 命中时返回 True；generic token 命中且 guard context 命中时返回 True。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if _matches_any_token(texts, strong_tokens):
+        return True
+    if not generic_tokens or not _matches_any_token(texts, generic_tokens):
+        return False
+    return _matches_any_token(guard_context, guard_tokens)
+
+
+def _manager_profile_paragraph_guard_context(role: str, paragraph: object) -> tuple[str | None, ...]:
+    """返回 paragraph 级 generic guard context。
+
+    Args:
+        role: 当前 manager_profile evidence role。
+        paragraph: paragraph block 协议对象。
+
+    Returns:
+        只含 plan/controller 允许字段的 guard context。
+
+    Raises:
+        无显式抛出。
+    """
+
+    heading_path = _tuple_text(paragraph.heading_path)
+    if role == "manager_alignment":
+        return (paragraph.text_normalized, paragraph.text_raw, *heading_path)
+    return (*heading_path,)
+
+
+def _manager_profile_cell_guard_context(
+    role: str,
+    table: FundDisclosureTableBlockLike,
+    cell: object,
+) -> tuple[str | None, ...]:
+    """返回 cell 级 generic guard context。
+
+    Args:
+        role: 当前 manager_profile evidence role。
+        table: parent table block 协议对象。
+        cell: table cell 协议对象。
+
+    Returns:
+        只含 plan/controller 允许字段的 guard context。
+
+    Raises:
+        无显式抛出。
+    """
+
+    table_context = (
+        table.heading_text,
+        table.table_caption_or_nearby_heading,
+        *_tuple_text(table.heading_path),
+    )
+    if role == "manager_alignment":
+        return (
+            *table_context,
+            cell.cell_text_normalized,
+            cell.cell_text,
+            *_tuple_text(cell.row_label_path),
+            *_tuple_text(cell.column_header_path),
+            *_tuple_text(cell.heading_path),
+        )
+    return (*table_context, *_tuple_text(cell.heading_path))
 
 
 def _candidate_missing_field_family(
