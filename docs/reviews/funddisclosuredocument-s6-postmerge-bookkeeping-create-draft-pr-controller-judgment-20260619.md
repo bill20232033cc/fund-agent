@@ -10,7 +10,7 @@
 - PR number: `27`
 - PR state: `OPEN`
 - PR draft state: `true`
-- PR head oid: `153c9fba85a4a9d9a06003fdcfca097a5fcfd4c2`
+- PR creation-time head oid: `153c9fba85a4a9d9a06003fdcfca097a5fcfd4c2`
 
 ## Verdict
 
@@ -31,7 +31,7 @@ Draft PR #27 has been opened for the docs-only post-merge bookkeeping branch. Re
   - draft: `true`
   - base: `main`
   - head branch: `funddisclosure-s6-postmerge-bookkeeping`
-  - head oid: `153c9fba85a4a9d9a06003fdcfca097a5fcfd4c2`
+  - creation-time head oid: `153c9fba85a4a9d9a06003fdcfca097a5fcfd4c2`
   - mergeable: `MERGEABLE`
   - CI `test`: `IN_PROGRESS` at creation-time inspection
 - Local and remote branch heads match:
