@@ -775,9 +775,10 @@ def _field_families_for_intermediate(
         if product_essence_source_truth is not None
         else _select_product_essence_candidate_evidence(intermediate)
     )
-    return_attribution_evidence = _select_return_attribution_candidate_evidence(intermediate)
     return_attribution_evidence = (
-        () if return_attribution_source_truth is not None else return_attribution_evidence
+        ()
+        if return_attribution_source_truth is not None
+        else _select_return_attribution_candidate_evidence(intermediate)
     )
     manager_profile_evidence = _select_manager_profile_candidate_evidence(intermediate)
     investor_experience_evidence = _select_investor_experience_candidate_evidence(intermediate)

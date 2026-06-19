@@ -1887,6 +1887,64 @@ def test_return_attribution_source_truth_nav_requires_both_sides_same_row(
     assert family.anchors == ()
 
 
+def test_return_attribution_source_truth_nav_ambiguous_pairs_fail_closed() -> None:
+    """多组 NAV/benchmark 同行配对时，表现 subvalue 必须 fail closed。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当多行配对被任意采信时抛出。
+    """
+
+    cells = (
+        _return_attribution_cell(
+            "基金份额净值增长率",
+            "8.00%",
+            row_index=0,
+            column_index=1,
+            label_axis="column",
+        ),
+        _return_attribution_cell(
+            "业绩比较基准收益率",
+            "6.00%",
+            row_index=0,
+            column_index=2,
+            label_axis="column",
+        ),
+        _return_attribution_cell(
+            "基金份额净值增长率",
+            "9.00%",
+            row_index=1,
+            column_index=1,
+            label_axis="column",
+        ),
+        _return_attribution_cell(
+            "业绩比较基准收益率",
+            "7.00%",
+            row_index=1,
+            column_index=2,
+            label_axis="column",
+        ),
+    )
+
+    result = _return_attribution_source_truth_result(
+        _source_truth_content_intermediate(cells=cells)
+    )
+    family = _field_family(result, "return_attribution.v1")
+
+    assert family.status == "missing"
+    assert family.value == {}
+    assert family.anchors == ()
+    assert _gap_codes(family) == {"ambiguous_table_or_locator", "field_family_missing"}
+    assert {gap.source_field_path for gap in family.gaps if gap.gap_code == "ambiguous_table_or_locator"} == {
+        "nav_benchmark_performance"
+    }
+
+
 def test_return_attribution_source_truth_tracking_error_actual_disclosure_value() -> None:
     """实际披露的跟踪误差构造完整 TrackingErrorValue。
 
@@ -1949,6 +2007,39 @@ def test_return_attribution_source_truth_rejects_tracking_error_target_context()
 
     result = _return_attribution_source_truth_result(
         _source_truth_content_intermediate(paragraphs=(paragraph,))
+    )
+    family = _field_family(result, "return_attribution.v1")
+
+    assert family.status == "missing"
+    assert family.value == {}
+    assert family.anchors == ()
+    assert "field_family_missing" in _gap_codes(family)
+
+
+def test_return_attribution_source_truth_rejects_table_cell_tracking_error_target_context() -> None:
+    """table cell 中目标/控制语境的跟踪误差不得进入 public value。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 table cell 目标/控制语境被当作实际披露时抛出。
+    """
+
+    cells = (
+        _return_attribution_cell(
+            "跟踪误差控制目标",
+            "不超过4.00%",
+            row_index=0,
+            column_index=1,
+        ),
+    )
+
+    result = _return_attribution_source_truth_result(
+        _source_truth_content_intermediate(cells=cells)
     )
     family = _field_family(result, "return_attribution.v1")
 
