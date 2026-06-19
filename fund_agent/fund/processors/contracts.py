@@ -54,6 +54,8 @@ FundExtractionGapCode = Literal[
     "source_provenance_unsafe",
     "candidate_boundary_blocked",
     "candidate_only_not_source_truth",
+    "source_truth_admission_missing",
+    "source_truth_admission_invalid",
     "derived_metric_unavailable",
     "ambiguous_table_or_locator",
     "fund_type_missing_or_ambiguous",
@@ -68,6 +70,7 @@ FundExtractionSourceBoundary = Literal[
     "unsupported_processor_goal",
     "ambiguous_locator",
     "source_provenance_unsafe",
+    "source_truth_unverified",
 ]
 
 _SUPPORTED_REPORT_TYPES = frozenset(("annual_report",))
@@ -180,6 +183,82 @@ class CandidateBoundaryStatus:
             raise ValueError("候选边界不得授权 parser replacement")
         if self.readiness_status != "not_ready":
             raise ValueError("候选边界不得声明 readiness")
+
+
+@dataclass(frozen=True, slots=True)
+class FundDisclosureSourceTruthAdmissionProof:
+    """FundDisclosureDocument source-truth admission 正向证明。
+
+    Args:
+        无。
+
+    Attributes:
+        proof_kind: 固定证明类型；只表示 repository 已加载年报身份。
+        source_boundary: 固定为年报边界。
+        fund_code: 6 位基金代码。
+        report_year: 年报年份。
+        document_kind: 固定为年报。
+        intermediate_kind: 固定为 FundDisclosureDocument 中间态。
+        source_kind: 固定为年报来源。
+        repository_identity_verified: repository 身份校验必须为真。
+        source_provenance_verified: 来源 provenance 校验必须为真。
+        locator_identity_verified: locator 身份校验必须为真。
+        parser_integrity_verified: parser 完整性校验必须为真。
+        producer: 固定为 `FundDocumentRepository`。
+
+    Raises:
+        ValueError: 当任一字段不满足 Slice A 正向证明契约时抛出。
+    """
+
+    proof_kind: Literal["repository_loaded_annual_report_identity.v1"]
+    source_boundary: Literal["annual_report"]
+    fund_code: str
+    report_year: int
+    document_kind: Literal["annual_report"]
+    intermediate_kind: Literal["fund_disclosure_document.v1"]
+    source_kind: Literal["annual_report"]
+    repository_identity_verified: Literal[True]
+    source_provenance_verified: Literal[True]
+    locator_identity_verified: Literal[True]
+    parser_integrity_verified: Literal[True]
+    producer: Literal["FundDocumentRepository"]
+
+    def __post_init__(self) -> None:
+        """校验 source-truth admission proof 的显式正向证明字段。
+
+        Args:
+            无。
+
+        Returns:
+            无返回值。
+
+        Raises:
+            ValueError: 当 proof 字段越界、身份非法或布尔证明不全为真时抛出。
+        """
+
+        if self.proof_kind != "repository_loaded_annual_report_identity.v1":
+            raise ValueError("source-truth admission proof_kind 非法")
+        if self.source_boundary != "annual_report":
+            raise ValueError("source-truth admission source_boundary 非法")
+        if not (self.fund_code.isdigit() and len(self.fund_code) == 6):
+            raise ValueError("source-truth admission fund_code 必须是 6 位数字")
+        if self.report_year <= 0:
+            raise ValueError("source-truth admission report_year 必须为正整数")
+        if self.document_kind != "annual_report":
+            raise ValueError("source-truth admission document_kind 非法")
+        if self.intermediate_kind != "fund_disclosure_document.v1":
+            raise ValueError("source-truth admission intermediate_kind 非法")
+        if self.source_kind != "annual_report":
+            raise ValueError("source-truth admission source_kind 非法")
+        if self.producer != "FundDocumentRepository":
+            raise ValueError("source-truth admission producer 非法")
+        if not (
+            self.repository_identity_verified is True
+            and self.source_provenance_verified is True
+            and self.locator_identity_verified is True
+            and self.parser_integrity_verified is True
+        ):
+            raise ValueError("source-truth admission proof booleans 必须全为 True")
 
 
 @runtime_checkable
@@ -352,6 +431,7 @@ class FundDisclosureDocumentContentIntermediate(FundDisclosureDocumentIntermedia
     sections: tuple[FundDisclosureSectionLike, ...]
     paragraph_blocks: tuple[FundDisclosureParagraphBlockLike, ...]
     table_blocks: tuple[FundDisclosureTableBlockLike, ...]
+    source_truth_admission: FundDisclosureSourceTruthAdmissionProof | None
 
 
 @dataclass(frozen=True, slots=True)

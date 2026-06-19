@@ -8,12 +8,13 @@ provider、LLM、Service/UI/Host、renderer 或 quality gate。
 
 from __future__ import annotations
 
-from typing import Final
+from typing import Final, cast
 
 from fund_agent.fund.processors.contracts import (
     FundCandidateEvidenceRecord,
     FundDisclosureDocumentContentIntermediate,
     FundDisclosureDocumentIntermediate,
+    FundDisclosureSourceTruthAdmissionProof,
     FundDisclosureTableBlockLike,
     FundExtractionGap,
     FundExtractionGapCode,
@@ -526,7 +527,15 @@ class FundDisclosureDocumentProcessor:
                 contract_status=admission.contract_status,
             )
 
-        field_families = _field_families_for_intermediate(intermediate, source_provenance)
+        source_truth_gap_code: FundExtractionGapCode | None = None
+        if admission.contract_status != "blocked":
+            source_truth_gap_code = _validate_source_truth_admission(intermediate, context)
+
+        field_families = _field_families_for_intermediate(
+            intermediate,
+            source_provenance,
+            source_truth_gap_code=source_truth_gap_code,
+        )
         contract_status: FundProcessorContractStatus = (
             "blocked" if admission.contract_status == "blocked" else "missing"
         )
@@ -623,12 +632,15 @@ def _check_identity(
 def _field_families_for_intermediate(
     intermediate: FundDisclosureDocumentIntermediate,
     source_provenance: PublicSourceProvenance | None,
+    *,
+    source_truth_gap_code: FundExtractionGapCode | None = None,
 ) -> tuple[FundFieldFamilyResult, ...]:
     """构造 FundDisclosureDocument processor 字段族结果。
 
     Args:
         intermediate: 已通过身份校验和 admission 的中间态。
         source_provenance: 公共来源 provenance。
+        source_truth_gap_code: source-truth admission proof 缺失或非法时的本地 gap。
 
     Returns:
         六个字段族结果；S6-B/S6-C/S6-D/S6-E/S6-F/S6-G 仅为已接受字段族附加
@@ -655,7 +667,7 @@ def _field_families_for_intermediate(
         "core_risk.v1": core_risk_evidence,
     }
 
-    return tuple(
+    field_families = tuple(
         _candidate_missing_field_family(
             family_id, source_provenance, candidate_evidence_by_family[family_id]
         )
@@ -663,6 +675,84 @@ def _field_families_for_intermediate(
         else _missing_field_family(family_id, source_provenance)
         for family_id in _FAMILY_ORDER
     )
+    if source_truth_gap_code is None:
+        return field_families
+    return tuple(
+        _with_source_truth_admission_gap(family, source_truth_gap_code)
+        for family in field_families
+    )
+
+
+def _validate_source_truth_admission(
+    intermediate: FundDisclosureDocumentIntermediate,
+    context: FundProcessorDispatchKey,
+) -> FundExtractionGapCode | None:
+    """校验 FundDisclosureDocument source-truth admission 正向证明。
+
+    Args:
+        intermediate: 已通过基础 admission 的中间态。
+        context: Processor dispatch 身份。
+
+    Returns:
+        proof 通过时返回 None；缺 proof 返回 ``source_truth_admission_missing``；
+        proof 身份或类型非法返回 ``source_truth_admission_invalid``。
+
+    Raises:
+        无显式抛出。
+    """
+
+    content_intermediate = _content_intermediate_or_none(intermediate)
+    if content_intermediate is None:
+        return "source_truth_admission_missing"
+
+    proof = getattr(content_intermediate, "source_truth_admission", None)
+    if proof is None:
+        return "source_truth_admission_missing"
+    if not isinstance(proof, FundDisclosureSourceTruthAdmissionProof):
+        return "source_truth_admission_invalid"
+    if content_intermediate.candidate_boundary is not None:
+        return "source_truth_admission_invalid"
+    if content_intermediate.failure_class is not None:
+        return "source_truth_admission_invalid"
+    if content_intermediate.source_provenance is None:
+        return "source_truth_admission_invalid"
+    if (
+        proof.fund_code != context.fund_code
+        or proof.fund_code != content_intermediate.fund_code
+        or proof.report_year != context.document_year
+        or proof.report_year != content_intermediate.report_year
+        or proof.document_kind != context.report_type
+        or proof.document_kind != content_intermediate.document_kind
+        or proof.intermediate_kind != context.intermediate_kind
+        or proof.intermediate_kind != content_intermediate.intermediate_kind
+        or proof.source_kind != context.source_kind
+        or proof.source_kind != "annual_report"
+    ):
+        return "source_truth_admission_invalid"
+    return None
+
+
+def _content_intermediate_or_none(
+    intermediate: FundDisclosureDocumentIntermediate,
+) -> FundDisclosureDocumentContentIntermediate | None:
+    """按正文结构识别 FundDisclosureDocument content intermediate。
+
+    Args:
+        intermediate: FundDisclosureDocument-like 中间态。
+
+    Returns:
+        具备 section/paragraph/table 正文结构时返回 content 协议视图，否则返回 None。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if not all(
+        hasattr(intermediate, attribute_name)
+        for attribute_name in ("sections", "paragraph_blocks", "table_blocks")
+    ):
+        return None
+    return cast(FundDisclosureDocumentContentIntermediate, intermediate)
 
 
 def _select_product_essence_candidate_evidence(
@@ -680,15 +770,20 @@ def _select_product_essence_candidate_evidence(
         无显式抛出。
     """
 
-    if not isinstance(intermediate, FundDisclosureDocumentContentIntermediate):
+    content_intermediate = _content_intermediate_or_none(intermediate)
+    if content_intermediate is None:
         return ()
 
     records: list[FundCandidateEvidenceRecord] = []
     seen_paths: set[str] = set()
     for role, tokens in _PRODUCT_ESSENCE_MATCH_GROUPS:
-        _extend_product_essence_section_records(records, seen_paths, intermediate, role, tokens)
-        _extend_product_essence_paragraph_records(records, seen_paths, intermediate, role, tokens)
-        _extend_product_essence_table_records(records, seen_paths, intermediate, role, tokens)
+        _extend_product_essence_section_records(
+            records, seen_paths, content_intermediate, role, tokens
+        )
+        _extend_product_essence_paragraph_records(
+            records, seen_paths, content_intermediate, role, tokens
+        )
+        _extend_product_essence_table_records(records, seen_paths, content_intermediate, role, tokens)
         if len(records) >= _PRODUCT_ESSENCE_CANDIDATE_LIMIT:
             break
     return tuple(records[:_PRODUCT_ESSENCE_CANDIDATE_LIMIT])
@@ -920,15 +1015,22 @@ def _select_return_attribution_candidate_evidence(
         无显式抛出。
     """
 
-    if not isinstance(intermediate, FundDisclosureDocumentContentIntermediate):
+    content_intermediate = _content_intermediate_or_none(intermediate)
+    if content_intermediate is None:
         return ()
 
     records: list[FundCandidateEvidenceRecord] = []
     seen_paths: set[str] = set()
     for role, tokens in _RETURN_ATTRIBUTION_MATCH_GROUPS:
-        _extend_return_attribution_section_records(records, seen_paths, intermediate, role, tokens)
-        _extend_return_attribution_paragraph_records(records, seen_paths, intermediate, role, tokens)
-        _extend_return_attribution_table_records(records, seen_paths, intermediate, role, tokens)
+        _extend_return_attribution_section_records(
+            records, seen_paths, content_intermediate, role, tokens
+        )
+        _extend_return_attribution_paragraph_records(
+            records, seen_paths, content_intermediate, role, tokens
+        )
+        _extend_return_attribution_table_records(
+            records, seen_paths, content_intermediate, role, tokens
+        )
     return tuple(records[:_RETURN_ATTRIBUTION_CANDIDATE_LIMIT])
 
 
@@ -1158,20 +1260,39 @@ def _select_manager_profile_candidate_evidence(
         无显式抛出。
     """
 
-    if not isinstance(intermediate, FundDisclosureDocumentContentIntermediate):
+    content_intermediate = _content_intermediate_or_none(intermediate)
+    if content_intermediate is None:
         return ()
 
     records: list[FundCandidateEvidenceRecord] = []
     seen_paths: set[str] = set()
     for role, strong_tokens, generic_tokens, guard_tokens in _MANAGER_PROFILE_MATCH_GROUPS:
         _extend_manager_profile_section_records(
-            records, seen_paths, intermediate, role, strong_tokens, generic_tokens, guard_tokens
+            records,
+            seen_paths,
+            content_intermediate,
+            role,
+            strong_tokens,
+            generic_tokens,
+            guard_tokens,
         )
         _extend_manager_profile_paragraph_records(
-            records, seen_paths, intermediate, role, strong_tokens, generic_tokens, guard_tokens
+            records,
+            seen_paths,
+            content_intermediate,
+            role,
+            strong_tokens,
+            generic_tokens,
+            guard_tokens,
         )
         _extend_manager_profile_table_records(
-            records, seen_paths, intermediate, role, strong_tokens, generic_tokens, guard_tokens
+            records,
+            seen_paths,
+            content_intermediate,
+            role,
+            strong_tokens,
+            generic_tokens,
+            guard_tokens,
         )
         if len(records) >= _MANAGER_PROFILE_CANDIDATE_LIMIT:
             break
@@ -1518,20 +1639,39 @@ def _select_investor_experience_candidate_evidence(
         无显式抛出。
     """
 
-    if not isinstance(intermediate, FundDisclosureDocumentContentIntermediate):
+    content_intermediate = _content_intermediate_or_none(intermediate)
+    if content_intermediate is None:
         return ()
 
     records: list[FundCandidateEvidenceRecord] = []
     seen_paths: set[str] = set()
     for role, strong_tokens, generic_tokens, guard_tokens in _INVESTOR_EXPERIENCE_MATCH_GROUPS:
         _extend_investor_experience_section_records(
-            records, seen_paths, intermediate, role, strong_tokens, generic_tokens, guard_tokens
+            records,
+            seen_paths,
+            content_intermediate,
+            role,
+            strong_tokens,
+            generic_tokens,
+            guard_tokens,
         )
         _extend_investor_experience_paragraph_records(
-            records, seen_paths, intermediate, role, strong_tokens, generic_tokens, guard_tokens
+            records,
+            seen_paths,
+            content_intermediate,
+            role,
+            strong_tokens,
+            generic_tokens,
+            guard_tokens,
         )
         _extend_investor_experience_table_records(
-            records, seen_paths, intermediate, role, strong_tokens, generic_tokens, guard_tokens
+            records,
+            seen_paths,
+            content_intermediate,
+            role,
+            strong_tokens,
+            generic_tokens,
+            guard_tokens,
         )
         if len(records) >= _INVESTOR_EXPERIENCE_CANDIDATE_LIMIT:
             break
@@ -1862,20 +2002,39 @@ def _select_current_stage_candidate_evidence(
         无显式抛出。
     """
 
-    if not isinstance(intermediate, FundDisclosureDocumentContentIntermediate):
+    content_intermediate = _content_intermediate_or_none(intermediate)
+    if content_intermediate is None:
         return ()
 
     records: list[FundCandidateEvidenceRecord] = []
     seen_paths: set[str] = set()
     for role, strong_tokens, generic_tokens, guard_tokens in _CURRENT_STAGE_MATCH_GROUPS:
         _extend_current_stage_section_records(
-            records, seen_paths, intermediate, role, strong_tokens, generic_tokens, guard_tokens
+            records,
+            seen_paths,
+            content_intermediate,
+            role,
+            strong_tokens,
+            generic_tokens,
+            guard_tokens,
         )
         _extend_current_stage_paragraph_records(
-            records, seen_paths, intermediate, role, strong_tokens, generic_tokens, guard_tokens
+            records,
+            seen_paths,
+            content_intermediate,
+            role,
+            strong_tokens,
+            generic_tokens,
+            guard_tokens,
         )
         _extend_current_stage_table_records(
-            records, seen_paths, intermediate, role, strong_tokens, generic_tokens, guard_tokens
+            records,
+            seen_paths,
+            content_intermediate,
+            role,
+            strong_tokens,
+            generic_tokens,
+            guard_tokens,
         )
         if len(records) >= _CURRENT_STAGE_CANDIDATE_LIMIT:
             break
@@ -2192,20 +2351,39 @@ def _select_core_risk_candidate_evidence(
         无显式抛出。
     """
 
-    if not isinstance(intermediate, FundDisclosureDocumentContentIntermediate):
+    content_intermediate = _content_intermediate_or_none(intermediate)
+    if content_intermediate is None:
         return ()
 
     records: list[FundCandidateEvidenceRecord] = []
     seen_paths: set[str] = set()
     for role, strong_tokens, generic_tokens, guard_tokens in _CORE_RISK_MATCH_GROUPS:
         _extend_core_risk_section_records(
-            records, seen_paths, intermediate, role, strong_tokens, generic_tokens, guard_tokens
+            records,
+            seen_paths,
+            content_intermediate,
+            role,
+            strong_tokens,
+            generic_tokens,
+            guard_tokens,
         )
         _extend_core_risk_paragraph_records(
-            records, seen_paths, intermediate, role, strong_tokens, generic_tokens, guard_tokens
+            records,
+            seen_paths,
+            content_intermediate,
+            role,
+            strong_tokens,
+            generic_tokens,
+            guard_tokens,
         )
         _extend_core_risk_table_records(
-            records, seen_paths, intermediate, role, strong_tokens, generic_tokens, guard_tokens
+            records,
+            seen_paths,
+            content_intermediate,
+            role,
+            strong_tokens,
+            generic_tokens,
+            guard_tokens,
         )
         if len(records) >= _CORE_RISK_CANDIDATE_LIMIT:
             break
@@ -2589,6 +2767,50 @@ def _missing_field_family(
             ),
         ),
         source_provenance=source_provenance,
+    )
+
+
+def _with_source_truth_admission_gap(
+    family: FundFieldFamilyResult,
+    gap_code: FundExtractionGapCode,
+) -> FundFieldFamilyResult:
+    """给字段族追加 source-truth admission fail-closed 本地 gap。
+
+    Args:
+        family: 原字段族结果。
+        gap_code: source-truth admission 缺失或非法 gap code。
+
+    Returns:
+        保留 public missing 形状、追加 source-truth admission gap 的字段族结果。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if gap_code == "source_truth_admission_missing":
+        message = "FundDisclosureDocument source-truth admission proof is missing"
+    else:
+        message = "FundDisclosureDocument source-truth admission proof is invalid"
+    return FundFieldFamilyResult(
+        field_family_id=family.field_family_id,
+        chapter_ids=family.chapter_ids,
+        value={},
+        status="missing",
+        extraction_mode="missing",
+        anchors=(),
+        gaps=(
+            *family.gaps,
+            FundExtractionGap(
+                gap_code=gap_code,
+                message=message,
+                field_family_id=family.field_family_id,
+                source_field_path=None,
+                source_boundary="source_truth_unverified",
+                required=True,
+            ),
+        ),
+        source_provenance=family.source_provenance,
+        candidate_evidence=family.candidate_evidence,
     )
 
 

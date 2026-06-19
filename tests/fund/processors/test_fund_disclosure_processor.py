@@ -15,6 +15,7 @@ from fund_agent.fund.processors.contracts import (
     FundCandidateEvidenceRecord,
     FundDisclosureDocumentContentIntermediate,
     FundDisclosureDocumentIntermediate,
+    FundDisclosureSourceTruthAdmissionProof,
     FundExtractionGap,
     FundFieldFamilyResult,
     FundProcessorDispatchKey,
@@ -110,6 +111,7 @@ class _ContentIntermediateStub:
     source_provenance: PublicSourceProvenance | None = None
     candidate_boundary: CandidateBoundaryStatus | None = None
     failure_class: AnnualReportSourceFailureCategory | None = None
+    source_truth_admission: FundDisclosureSourceTruthAdmissionProof | None = None
     sections: tuple[_SectionStub, ...] = (_SectionStub(),)
     paragraph_blocks: tuple[_ParagraphStub, ...] = (_ParagraphStub(),)
     table_blocks: tuple[_TableStub, ...] = (_TableStub(),)
@@ -129,6 +131,37 @@ def _provenance() -> PublicSourceProvenance:
     """
 
     return default_public_source_provenance()
+
+
+def _source_truth_admission_proof(**overrides: object) -> FundDisclosureSourceTruthAdmissionProof:
+    """构造 repository-loaded source-truth admission proof fixture。
+
+    Args:
+        **overrides: 可选字段覆盖。
+
+    Returns:
+        source-truth admission proof。
+
+    Raises:
+        ValueError: 字段非法时由契约模型抛出。
+    """
+
+    kwargs: dict[str, object] = {
+        "proof_kind": "repository_loaded_annual_report_identity.v1",
+        "source_boundary": "annual_report",
+        "fund_code": "004393",
+        "report_year": 2025,
+        "document_kind": "annual_report",
+        "intermediate_kind": "fund_disclosure_document.v1",
+        "source_kind": "annual_report",
+        "repository_identity_verified": True,
+        "source_provenance_verified": True,
+        "locator_identity_verified": True,
+        "parser_integrity_verified": True,
+        "producer": "FundDocumentRepository",
+    }
+    kwargs.update(overrides)
+    return FundDisclosureSourceTruthAdmissionProof(**kwargs)  # type: ignore[arg-type]
 
 
 def _dispatch_key(**overrides: object) -> FundProcessorDispatchKey:
@@ -250,6 +283,22 @@ def _field_family(
     raise AssertionError(f"field family not found: {field_family_id}")
 
 
+def _gap_codes(family: FundFieldFamilyResult) -> set[str]:
+    """返回字段族 gap code 集合。
+
+    Args:
+        family: 字段族结果。
+
+    Returns:
+        gap code 集合。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return {gap.gap_code for gap in family.gaps}
+
+
 # ── S6-A candidate evidence contract ───────────────────────────────────────
 
 
@@ -289,6 +338,144 @@ def test_content_intermediate_protocol_accepts_content_stub() -> None:
 
     assert isinstance(intermediate, FundDisclosureDocumentIntermediate)
     assert isinstance(intermediate, FundDisclosureDocumentContentIntermediate)
+
+
+def test_source_truth_admission_requires_positive_proof() -> None:
+    """非候选 content FDD 不能只靠 candidate_boundary=None 声明 source truth。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当缺 proof 仍产出 public value 或 anchor 时抛出。
+    """
+
+    processor = FundDisclosureDocumentProcessor()
+
+    result = processor.extract(
+        FundProcessorInput(
+            context=_dispatch_key(),
+            intermediate=_ContentIntermediateStub(
+                source_provenance=_provenance(),
+                candidate_boundary=None,
+                source_truth_admission=None,
+            ),
+        )
+    )
+
+    product = _field_family(result, "product_essence.v1")
+
+    assert result.contract_status == "missing"
+    assert product.value == {}
+    assert product.anchors == ()
+    assert "source_truth_admission_missing" in _gap_codes(product)
+    assert product.candidate_evidence
+
+
+def test_source_truth_admission_marks_non_content_intermediate_missing() -> None:
+    """非 content FDD 中间态也必须暴露 source-truth admission 缺 proof 诊断。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当非 content FDD 缺 proof 被静默放行时抛出。
+    """
+
+    processor = FundDisclosureDocumentProcessor()
+
+    result = processor.extract(
+        FundProcessorInput(
+            context=_dispatch_key(),
+            intermediate=_StubIntermediate(
+                source_provenance=_provenance(),
+                candidate_boundary=None,
+                failure_class=None,
+            ),
+        )
+    )
+
+    product = _field_family(result, "product_essence.v1")
+
+    assert result.contract_status == "missing"
+    assert product.status == "missing"
+    assert product.value == {}
+    assert product.anchors == ()
+    assert "source_truth_admission_missing" in _gap_codes(product)
+
+
+def test_source_truth_admission_rejects_identity_mismatch() -> None:
+    """source-truth proof 身份必须与 dispatch/intermediate 同源一致。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 identity mismatch proof 被接受时抛出。
+    """
+
+    processor = FundDisclosureDocumentProcessor()
+
+    result = processor.extract(
+        FundProcessorInput(
+            context=_dispatch_key(),
+            intermediate=_ContentIntermediateStub(
+                source_provenance=_provenance(),
+                source_truth_admission=_source_truth_admission_proof(fund_code="110011"),
+            ),
+        )
+    )
+
+    product = _field_family(result, "product_essence.v1")
+
+    assert result.contract_status == "missing"
+    assert product.value == {}
+    assert product.anchors == ()
+    assert "source_truth_admission_invalid" in _gap_codes(product)
+
+
+def test_source_truth_admission_accepts_repository_loaded_identity_proof() -> None:
+    """repository-loaded identity proof 可通过 Slice A admission guard。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当匹配 proof 仍被 source-truth guard 拦截时抛出。
+    """
+
+    processor = FundDisclosureDocumentProcessor()
+
+    result = processor.extract(
+        FundProcessorInput(
+            context=_dispatch_key(),
+            intermediate=_ContentIntermediateStub(
+                source_provenance=_provenance(),
+                source_truth_admission=_source_truth_admission_proof(),
+            ),
+        )
+    )
+
+    product = _field_family(result, "product_essence.v1")
+
+    assert result.contract_status == "missing"
+    assert product.value == {}
+    assert product.anchors == ()
+    assert "source_truth_admission_missing" not in _gap_codes(product)
+    assert "source_truth_admission_invalid" not in _gap_codes(product)
+    assert product.candidate_evidence
 
 
 @pytest.mark.parametrize(
@@ -4521,8 +4708,10 @@ def test_extract_satisfied_returns_fully_gapped_result() -> None:
         assert family.value == {}
         assert family.extraction_mode == "missing"
         assert family.anchors == ()
-        assert len(family.gaps) == 1
-        assert family.gaps[0].gap_code == "field_family_missing"
+        assert _gap_codes(family) == {
+            "field_family_missing",
+            "source_truth_admission_missing",
+        }
     assert result.gaps == ()
 
 
