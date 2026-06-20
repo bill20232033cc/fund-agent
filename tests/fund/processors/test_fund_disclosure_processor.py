@@ -26,6 +26,7 @@ from fund_agent.fund.processors.contracts import (
 )
 from fund_agent.fund.processors.fund_disclosure_processor import (
     FundDisclosureDocumentProcessor,
+    _CORE_RISK_ROLE_KEYS,
     _manager_profile_cell_original_index,
 )
 from fund_agent.fund.processors.registry import FundProcessorRegistry
@@ -419,6 +420,25 @@ def _current_stage_source_truth_result(
     intermediate: _ContentIntermediateStub,
 ) -> FundProcessorResult:
     """运行 current_stage source-truth route 测试用 processor。
+
+    Args:
+        intermediate: FDD content intermediate。
+
+    Returns:
+        processor 输出结果。
+
+    Raises:
+        无显式抛出。
+    """
+
+    processor = FundDisclosureDocumentProcessor()
+    return processor.extract(FundProcessorInput(context=_dispatch_key(), intermediate=intermediate))
+
+
+def _core_risk_source_truth_result(
+    intermediate: _ContentIntermediateStub,
+) -> FundProcessorResult:
+    """运行 core_risk source-truth route 测试用 processor。
 
     Args:
         intermediate: FDD content intermediate。
@@ -941,11 +961,21 @@ def test_product_essence_source_truth_extracts_exact_value_shape() -> None:
     assert set(current_stage.value) == {"schema_version", "basic_identity"}
     assert current_stage.candidate_evidence == ()
     for family in result.field_families:
-        if family.field_family_id in {"product_essence.v1", "current_stage.v1"}:
+        if family.field_family_id in {
+            "product_essence.v1",
+            "current_stage.v1",
+            "core_risk.v1",
+        }:
             continue
         assert family.status == "missing"
         assert family.value == {}
         assert family.anchors == ()
+    core_risk = _field_family(result, "core_risk.v1")
+    assert core_risk.status == "partial"
+    assert set(core_risk.value) == {"schema_version", "risk_characteristic_text"}
+    assert core_risk.candidate_evidence == ()
+    partial_gaps = [gap for gap in core_risk.gaps if gap.gap_code == "field_family_partial"]
+    assert len(partial_gaps) == 4
 
 
 def test_product_essence_source_truth_requires_proof_even_when_candidate_boundary_none() -> None:
@@ -2978,8 +3008,10 @@ def test_manager_profile_source_truth_extracts_roster_strategy_turnover_shape() 
     assert set(current_stage.value) == {"schema_version", "portfolio_managers"}
     assert current_stage.anchors
     assert current_stage.candidate_evidence == ()
-    assert _field_family(result, "core_risk.v1").value == {}
-    assert _field_family(result, "core_risk.v1").anchors == ()
+    core_risk = _field_family(result, "core_risk.v1")
+    assert "turnover_or_style_drift_risk" in core_risk.value
+    assert core_risk.value["turnover_or_style_drift_risk"]["risk_disclosure_text"] == "123.45%"
+    assert core_risk.anchors
 
 
 def test_manager_profile_source_truth_partial_when_required_groups_missing() -> None:
@@ -3842,7 +3874,9 @@ def test_manager_profile_source_truth_accepted_when_all_allowed_groups_present()
         "portfolio_managers",
     }
     assert current_stage.candidate_evidence == ()
-    assert _field_family(result, "core_risk.v1").value == {}
+    core_risk = _field_family(result, "core_risk.v1")
+    assert "turnover_or_style_drift_risk" in core_risk.value
+    assert core_risk.value["turnover_or_style_drift_risk"]["risk_disclosure_text"] == "123.45%"
 
 
 def test_manager_profile_source_truth_full_value_with_internal_ambiguity_is_partial() -> None:
@@ -6133,8 +6167,8 @@ def test_investor_experience_source_truth_share_change_calculates_net_change() -
     assert share_change["net_change"] == "234.50"
 
 
-def test_investor_experience_source_truth_does_not_populate_stage_or_risk() -> None:
-    """investor direct route 不得把候选 evidence 提升为 stage/risk public value。
+def test_investor_experience_source_truth_does_not_pollute_stage_or_core_risk() -> None:
+    """investor direct route 不污染 stage，core_risk 只接收已授权 risk text。
 
     Args:
         无。
@@ -6175,9 +6209,14 @@ def test_investor_experience_source_truth_does_not_populate_stage_or_risk() -> N
     assert investor.candidate_evidence == ()
     assert investor.value["investor_return"]["investor_return_rate"] == "7.25%"
     assert current_stage.value == {}
-    assert core_risk.value == {}
+    assert core_risk.status == "partial"
+    assert set(core_risk.value) == {"schema_version", "risk_characteristic_text"}
+    assert core_risk.value["risk_characteristic_text"]["risk_characteristic_text"] == (
+        "本基金属于较高风险较高收益的基金品种。"
+    )
     assert current_stage.candidate_evidence == ()
-    assert core_risk.candidate_evidence
+    assert core_risk.candidate_evidence == ()
+    assert "field_family_partial" in _gap_codes(core_risk)
 
 
 # ── current_stage source-truth values ──────────────────────────────────────
@@ -6488,8 +6527,8 @@ def test_current_stage_source_truth_candidate_boundary_remains_blocked() -> None
     assert _gap_codes(family) == {"candidate_only_not_source_truth"}
 
 
-def test_current_stage_source_truth_does_not_implement_core_risk() -> None:
-    """current_stage direct extraction 不改变 core_risk candidate-only 边界。
+def test_current_stage_source_truth_does_not_project_core_risk_section_locator() -> None:
+    """current_stage direct extraction 不把 section-only risk locator 提升为 core_risk value。
 
     Args:
         无。
@@ -6537,7 +6576,955 @@ def test_current_stage_source_truth_does_not_implement_core_risk() -> None:
     assert core_risk.status == "missing"
     assert core_risk.value == {}
     assert core_risk.anchors == ()
-    assert core_risk.candidate_evidence
+    assert core_risk.candidate_evidence == ()
+    assert _gap_codes(core_risk) == {"field_family_missing"}
+
+
+# ── core_risk source-truth values ──────────────────────────────────────────
+
+
+def test_core_risk_source_truth_extracts_all_five_required_subvalues() -> None:
+    """proof-positive core_risk 发出全部五个 required subvalue 的完整 public shape。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 public shape 不完整、anchor 缺失或混入 candidate 时抛出。
+    """
+
+    result = _core_risk_source_truth_result(
+        _source_truth_content_intermediate(
+            cells=(
+                _CellStub(
+                    cell_id="risk-characteristic-cell",
+                    table_id="table-risk",
+                    section_anchor="section-risk",
+                    row_index=0,
+                    column_index=1,
+                    row_label_path=("风险收益特征",),
+                    column_header_path=("内容",),
+                    cell_text="本基金属于主动权益基金，风险收益水平较高。",
+                    cell_text_normalized="本基金属于主动权益基金，风险收益水平较高。",
+                ),
+            ),
+            paragraphs=(
+                _ParagraphStub(
+                    block_id="paragraph-liquidation",
+                    section_id="section-risk",
+                    heading_path=("基金合同终止",),
+                    text_raw="基金资产净值低于五千万元且基金份额持有人数量不满二百人时基金合同自动终止。",
+                    text_normalized="基金资产净值低于五千万元且基金份额持有人数量不满二百人时基金合同自动终止。",
+                ),
+                _ParagraphStub(
+                    block_id="paragraph-tracking",
+                    section_id="section-risk",
+                    heading_path=("跟踪误差",),
+                    text_raw="本基金的跟踪误差通过年化跟踪误差指标进行监控，确保偏离度在合理范围内。",
+                    text_normalized="本基金的跟踪误差通过年化跟踪误差指标进行监控，确保偏离度在合理范围内。",
+                ),
+                _ParagraphStub(
+                    block_id="paragraph-turnover",
+                    section_id="section-risk",
+                    heading_path=("换手率",),
+                    text_raw="报告期内股票换手率为180%，以双边成交金额除以平均股票市值计算。",
+                    text_normalized="报告期内股票换手率为180%，以双边成交金额除以平均股票市值计算。",
+                ),
+                _ParagraphStub(
+                    block_id="paragraph-concentration",
+                    section_id="section-risk",
+                    heading_path=("持仓集中度",),
+                    text_raw="持仓集中度方面，前十大重仓股占基金资产净值比例为45%。",
+                    text_normalized="持仓集中度方面，前十大重仓股占基金资产净值比例为45%。",
+                ),
+            ),
+        )
+    )
+
+    family = _field_family(result, "core_risk.v1")
+    value = family.value
+
+    assert family.status == "accepted"
+    assert family.extraction_mode == "direct"
+    assert set(value) == {
+        "schema_version",
+        "risk_characteristic_text",
+        "liquidation_or_scale_risk",
+        "tracking_error_or_deviation_risk",
+        "turnover_or_style_drift_risk",
+        "concentration_risk",
+    }
+    assert value["schema_version"] == "core_risk.v1"
+
+    # risk_characteristic_text 保持既有 shape
+    assert value["risk_characteristic_text"] == {
+        "schema_version": "risk_characteristic_text.v1",
+        "fund_code": "004393",
+        "report_year": 2025,
+        "risk_characteristic_text": "本基金属于主动权益基金，风险收益水平较高。",
+        "source_anchors": [
+            {
+                "section_id": "section-risk",
+                "page_number": None,
+                "table_id": "table-risk",
+                "row_locator": (
+                    "field=risk_characteristic_text.risk_characteristic_text; "
+                    "table_id=table-risk; row=0; column=1; "
+                    "cell_id=risk-characteristic-cell"
+                ),
+            }
+        ],
+    }
+
+    # 四个 role subvalue 均使用 core_risk_role_disclosure.v1 shape
+    assert value["liquidation_or_scale_risk"] == {
+        "schema_version": "core_risk_role_disclosure.v1",
+        "fund_code": "004393",
+        "report_year": 2025,
+        "role": "liquidation_or_scale_risk",
+        "risk_disclosure_text": (
+            "基金资产净值低于五千万元且基金份额持有人数量不满二百人时基金合同自动终止。"
+        ),
+    }
+    assert value["tracking_error_or_deviation_risk"] == {
+        "schema_version": "core_risk_role_disclosure.v1",
+        "fund_code": "004393",
+        "report_year": 2025,
+        "role": "tracking_error_or_deviation_risk",
+        "risk_disclosure_text": (
+            "本基金的跟踪误差通过年化跟踪误差指标进行监控，确保偏离度在合理范围内。"
+        ),
+    }
+    assert value["turnover_or_style_drift_risk"] == {
+        "schema_version": "core_risk_role_disclosure.v1",
+        "fund_code": "004393",
+        "report_year": 2025,
+        "role": "turnover_or_style_drift_risk",
+        "risk_disclosure_text": (
+            "报告期内股票换手率为180%，以双边成交金额除以平均股票市值计算。"
+        ),
+    }
+    assert value["concentration_risk"] == {
+        "schema_version": "core_risk_role_disclosure.v1",
+        "fund_code": "004393",
+        "report_year": 2025,
+        "role": "concentration_risk",
+        "risk_disclosure_text": "持仓集中度方面，前十大重仓股占基金资产净值比例为45%。",
+    }
+
+    # role subvalue 禁止内嵌 source_anchors
+    for role_key in _CORE_RISK_ROLE_KEYS:
+        assert "source_anchors" not in value[role_key]
+
+    assert family.candidate_evidence == ()
+    assert family.anchors
+    assert {anchor.source_kind for anchor in family.anchors} == {"annual_report"}
+    # 五个 anchor row_locator 各自包含对应 field key
+    row_locators = {anchor.row_locator for anchor in family.anchors}
+    assert any("field=risk_characteristic_text.risk_characteristic_text" in rl for rl in row_locators)
+    for role_key in _CORE_RISK_ROLE_KEYS:
+        assert any(f"field={role_key}" in rl for rl in row_locators)
+
+    assert not any(gap.gap_code == "deferred_role" for gap in family.gaps)
+
+    forbidden_keys = {
+        "pressure_test",
+        "max_drawdown",
+        "veto",
+        "risk_level",
+        "risk_summary",
+        "final_decision",
+    }
+    assert forbidden_keys.isdisjoint(value)
+    for role_key in _CORE_RISK_ROLE_KEYS:
+        assert forbidden_keys.isdisjoint(value[role_key])
+
+
+def test_core_risk_source_truth_risk_text_only_yields_partial() -> None:
+    """仅有 risk_characteristic_text 时返回 partial 并记录 role 缺失。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当仅有 risk text 被当作 accepted 或缺失 field_family_partial 时抛出。
+    """
+
+    result = _core_risk_source_truth_result(
+        _source_truth_content_intermediate(
+            cells=(
+                _CellStub(
+                    cell_id="risk-characteristic-cell",
+                    table_id="table-risk",
+                    section_anchor="section-risk",
+                    row_index=0,
+                    column_index=1,
+                    row_label_path=("风险收益特征",),
+                    column_header_path=("内容",),
+                    cell_text="本基金属于主动权益基金，风险收益水平较高。",
+                    cell_text_normalized="本基金属于主动权益基金，风险收益水平较高。",
+                ),
+            ),
+        )
+    )
+
+    family = _field_family(result, "core_risk.v1")
+
+    assert family.status == "partial"
+    assert family.extraction_mode == "direct"
+    assert "risk_characteristic_text" in family.value
+    assert family.candidate_evidence == ()
+    partial_gaps = [gap for gap in family.gaps if gap.gap_code == "field_family_partial"]
+    assert {gap.source_field_path for gap in partial_gaps} == set(_CORE_RISK_ROLE_KEYS)
+    assert all(gap.required for gap in partial_gaps)
+
+
+def test_core_risk_source_truth_role_heading_only_not_promoted() -> None:
+    """proof-positive 仅有 section/table locator heading 时不提升为 public value。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 heading-only locator 被提升为 role value 时抛出。
+    """
+
+    result = _core_risk_source_truth_result(
+        _source_truth_content_intermediate(
+            cells=(
+                _CellStub(
+                    cell_id="risk-characteristic-cell",
+                    table_id="table-risk",
+                    section_anchor="section-risk",
+                    row_index=0,
+                    column_index=1,
+                    row_label_path=("风险收益特征",),
+                    column_header_path=("内容",),
+                    cell_text="本基金属于主动权益基金，风险收益水平较高。",
+                    cell_text_normalized="本基金属于主动权益基金，风险收益水平较高。",
+                ),
+            ),
+            sections=(
+                _SectionStub(
+                    section_id="section-scale",
+                    heading_text_raw="基金合同终止事由",
+                    heading_text_normalized="基金合同终止事由",
+                    heading_path=("基金合同终止事由",),
+                ),
+                _SectionStub(
+                    section_id="section-tracking",
+                    heading_text_raw="跟踪误差",
+                    heading_text_normalized="跟踪误差",
+                    heading_path=("跟踪误差",),
+                ),
+            ),
+        )
+    )
+
+    family = _field_family(result, "core_risk.v1")
+
+    assert family.status == "partial"
+    assert "risk_characteristic_text" in family.value
+    for role_key in _CORE_RISK_ROLE_KEYS:
+        assert role_key not in family.value
+    assert family.candidate_evidence == ()
+
+
+def test_core_risk_source_truth_role_ambiguity_omits_role() -> None:
+    """同一 role 的冲突段落披露省略该 role 并发射 ambiguous_table_or_locator。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当冲突值被任意采信时抛出。
+    """
+
+    result = _core_risk_source_truth_result(
+        _source_truth_content_intermediate(
+            paragraphs=(
+                _ParagraphStub(
+                    block_id="paragraph-risk",
+                    section_id="section-risk",
+                    heading_path=("风险收益特征",),
+                    text_raw="本基金属于主动权益基金，风险收益水平较高。",
+                    text_normalized="本基金属于主动权益基金，风险收益水平较高。",
+                ),
+                _ParagraphStub(
+                    block_id="paragraph-liquidation-a",
+                    section_id="section-risk",
+                    heading_path=("基金合同终止",),
+                    text_raw="连续二十个工作日基金资产净值低于5000万元时基金合同终止。",
+                    text_normalized="连续二十个工作日基金资产净值低于5000万元时基金合同终止。",
+                ),
+                _ParagraphStub(
+                    block_id="paragraph-liquidation-b",
+                    section_id="section-risk",
+                    heading_path=("基金合同终止",),
+                    text_raw="基金资产净值低于五千万元且连续二十个工作日将触发合同终止。",
+                    text_normalized="基金资产净值低于五千万元且连续二十个工作日将触发合同终止。",
+                ),
+            ),
+        )
+    )
+
+    family = _field_family(result, "core_risk.v1")
+
+    assert family.status == "partial"
+    assert "risk_characteristic_text" in family.value
+    assert "liquidation_or_scale_risk" not in family.value
+    assert family.candidate_evidence == ()
+    ambiguity_gaps = [gap for gap in family.gaps if gap.gap_code == "ambiguous_table_or_locator"]
+    assert {gap.source_field_path for gap in ambiguity_gaps} == {"liquidation_or_scale_risk"}
+
+
+def test_core_risk_source_truth_identical_role_text_resolves_first() -> None:
+    """同一 role 的多个段落/单元格披露文本相同时取第一个候选。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当相同文本被误判为歧义时抛出。
+    """
+
+    result = _core_risk_source_truth_result(
+        _source_truth_content_intermediate(
+            paragraphs=(
+                _ParagraphStub(
+                    block_id="paragraph-risk",
+                    section_id="section-risk",
+                    heading_path=("风险收益特征",),
+                    text_raw="本基金属于主动权益基金，风险收益水平较高。",
+                    text_normalized="本基金属于主动权益基金，风险收益水平较高。",
+                ),
+                _ParagraphStub(
+                    block_id="paragraph-concentration-a",
+                    section_id="section-risk",
+                    heading_path=("持仓集中度",),
+                    text_raw="持仓集中度方面，前十大重仓股占基金资产净值比例为45%。",
+                    text_normalized="持仓集中度方面，前十大重仓股占基金资产净值比例为45%。",
+                ),
+                _ParagraphStub(
+                    block_id="paragraph-concentration-b",
+                    section_id="section-risk",
+                    heading_path=("持仓集中度",),
+                    text_raw="持仓集中度方面，前十大重仓股占基金资产净值比例为45%。",
+                    text_normalized="持仓集中度方面，前十大重仓股占基金资产净值比例为45%。",
+                ),
+            ),
+        )
+    )
+
+    family = _field_family(result, "core_risk.v1")
+
+    assert "concentration_risk" in family.value
+    assert family.value["concentration_risk"]["risk_disclosure_text"] == (
+        "持仓集中度方面，前十大重仓股占基金资产净值比例为45%。"
+    )
+    ambiguity_gaps = [gap for gap in family.gaps if gap.gap_code == "ambiguous_table_or_locator"]
+    assert not ambiguity_gaps
+
+
+def test_core_risk_source_truth_paragraph_heading_only_rejected() -> None:
+    """paragraph 仅包含 token 本身作为文本时不产生 role value。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 heading-only 文本被选择时抛出。
+    """
+
+    result = _core_risk_source_truth_result(
+        _source_truth_content_intermediate(
+            cells=(
+                _CellStub(
+                    cell_id="risk-characteristic-cell",
+                    table_id="table-risk",
+                    section_anchor="section-risk",
+                    row_index=0,
+                    column_index=1,
+                    row_label_path=("风险收益特征",),
+                    column_header_path=("内容",),
+                    cell_text="本基金属于主动权益基金，风险收益水平较高。",
+                    cell_text_normalized="本基金属于主动权益基金，风险收益水平较高。",
+                ),
+            ),
+            paragraphs=(
+                _ParagraphStub(
+                    block_id="paragraph-turnover-label",
+                    section_id="section-risk",
+                    heading_path=("换手率",),
+                    text_raw="换手率",
+                    text_normalized="换手率",
+                ),
+            ),
+        )
+    )
+
+    family = _field_family(result, "core_risk.v1")
+
+    assert "turnover_or_style_drift_risk" not in family.value
+    partial_gaps = [gap for gap in family.gaps if gap.gap_code == "field_family_partial"]
+    assert "turnover_or_style_drift_risk" in {gap.source_field_path for gap in partial_gaps}
+
+
+def test_core_risk_source_truth_generic_token_requires_guard_context() -> None:
+    """仅有 generic token 无同 role guard context 时不产生 role value。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当无 guard 的 generic token 被选择时抛出。
+    """
+
+    result = _core_risk_source_truth_result(
+        _source_truth_content_intermediate(
+            cells=(
+                _CellStub(
+                    cell_id="risk-characteristic-cell",
+                    table_id="table-risk",
+                    section_anchor="section-risk",
+                    row_index=0,
+                    column_index=1,
+                    row_label_path=("风险收益特征",),
+                    column_header_path=("内容",),
+                    cell_text="本基金属于主动权益基金，风险收益水平较高。",
+                    cell_text_normalized="本基金属于主动权益基金，风险收益水平较高。",
+                ),
+            ),
+            paragraphs=(
+                _ParagraphStub(
+                    block_id="paragraph-size",
+                    section_id="section-other",
+                    heading_path=("其他信息",),
+                    text_raw="本基金规模在报告期内保持稳定。",
+                    text_normalized="本基金规模在报告期内保持稳定。",
+                ),
+            ),
+        )
+    )
+
+    family = _field_family(result, "core_risk.v1")
+
+    # "规模" is a generic token for liquidation_or_scale_risk
+    # but heading "其他信息" provides no guard token -> should not produce value
+    assert "liquidation_or_scale_risk" not in family.value
+
+
+def test_core_risk_source_truth_generic_token_with_guard_accepted() -> None:
+    """generic token 带同 role guard context 时可产生 role value。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当带 guard 的 generic token 未被选择时抛出。
+    """
+
+    result = _core_risk_source_truth_result(
+        _source_truth_content_intermediate(
+            cells=(
+                _CellStub(
+                    cell_id="risk-characteristic-cell",
+                    table_id="table-risk",
+                    section_anchor="section-risk",
+                    row_index=0,
+                    column_index=1,
+                    row_label_path=("风险收益特征",),
+                    column_header_path=("内容",),
+                    cell_text="本基金属于主动权益基金，风险收益水平较高。",
+                    cell_text_normalized="本基金属于主动权益基金，风险收益水平较高。",
+                ),
+            ),
+            paragraphs=(
+                _ParagraphStub(
+                    block_id="paragraph-liquidation-generic",
+                    section_id="section-risk",
+                    heading_path=("基金合同终止",),
+                    text_raw="当触发连续二十个工作日条件时，基金规模不足将导致合同终止。",
+                    text_normalized="当触发连续二十个工作日条件时，基金规模不足将导致合同终止。",
+                ),
+            ),
+        )
+    )
+
+    family = _field_family(result, "core_risk.v1")
+
+    # "规模" is generic, "基金合同终止" heading_path is guard → should produce value
+    assert "liquidation_or_scale_risk" in family.value
+    assert family.value["liquidation_or_scale_risk"]["risk_disclosure_text"] == (
+        "当触发连续二十个工作日条件时，基金规模不足将导致合同终止。"
+    )
+
+
+def test_core_risk_source_truth_short_numeric_cell_accepted_short_label_rejected() -> None:
+    """含数字的短数据单元格可通过，不含数字的短标签仍被拒绝。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当短数字值被误拒或短标签被误接受时抛出。
+    """
+
+    risk_cell = _CellStub(
+        cell_id="risk-characteristic-cell",
+        table_id="table-risk",
+        section_anchor="section-risk",
+        row_index=0,
+        column_index=1,
+        row_label_path=("风险收益特征",),
+        column_header_path=("内容",),
+        cell_text="本基金属于主动权益基金，风险收益水平较高。",
+        cell_text_normalized="本基金属于主动权益基金，风险收益水平较高。",
+    )
+    risk_table = _TableStub(
+        table_id="table-risk",
+        cells=(risk_cell,),
+    )
+    # 纯数值 body cell：token 来自 row_label_path/table heading/caption guard context
+    turnover_cell = _CellStub(
+        cell_id="cell-turnover",
+        table_id="table-turnover",
+        section_anchor="section-turnover",
+        heading_path=("投资组合",),
+        row_index=0,
+        column_index=1,
+        row_label_path=("换手率",),
+        column_header_path=("数值",),
+        cell_text="180%",
+        cell_text_normalized="180%",
+    )
+    turnover_table = _TableStub(
+        table_id="table-turnover",
+        section_id="section-turnover",
+        heading_text="报告期内股票换手率",
+        heading_path=("投资组合", "换手率"),
+        table_caption_or_nearby_heading="报告期内股票换手率",
+        cells=(turnover_cell,),
+    )
+    # 纯数值 body cell with concentration guard context
+    concentration_cell = _CellStub(
+        cell_id="cell-concentration",
+        table_id="table-concentration",
+        section_anchor="section-concentration",
+        heading_path=("投资组合",),
+        row_index=1,
+        column_index=1,
+        row_label_path=("持仓集中度",),
+        column_header_path=("数值",),
+        cell_text="45%",
+        cell_text_normalized="45%",
+    )
+    concentration_table = _TableStub(
+        table_id="table-concentration",
+        section_id="section-concentration",
+        heading_text="报告期末按行业分类的股票投资组合",
+        heading_path=("投资组合", "股票投资组合"),
+        table_caption_or_nearby_heading="报告期末按行业分类的股票投资组合",
+        cells=(concentration_cell,),
+    )
+    # 短非数字段落：text 含 strong_token "换手率" 但无数字，仍应被拒绝
+    short_label_paragraph = _ParagraphStub(
+        block_id="paragraph-turnover-label",
+        section_id="section-turnover",
+        heading_path=("换手率",),
+        text_raw="换手率风险",
+        text_normalized="换手率风险",
+    )
+
+    intermediate = _ContentIntermediateStub(
+        source_provenance=_provenance(),
+        source_truth_admission=_source_truth_admission_proof(),
+        sections=(),
+        paragraph_blocks=(short_label_paragraph,),
+        table_blocks=(risk_table, turnover_table, concentration_table),
+    )
+    result = _core_risk_source_truth_result(intermediate)
+
+    family = _field_family(result, "core_risk.v1")
+
+    # 纯数值 turnover cell 通过 guard context 匹配
+    assert "turnover_or_style_drift_risk" in family.value
+    assert family.value["turnover_or_style_drift_risk"]["risk_disclosure_text"] == "180%"
+
+    # 纯数值 concentration cell 通过 guard context 匹配
+    assert "concentration_risk" in family.value
+    assert family.value["concentration_risk"]["risk_disclosure_text"] == "45%"
+
+    # 不含数字的短标签段落仍应被拒绝（不会进入 candidates，也不会导致歧义）
+    assert "ambiguous_table_or_locator" not in _gap_codes(family)
+    # 仍有 field_family_partial 标记其他缺失 role
+    assert "field_family_partial" in _gap_codes(family)
+
+
+def test_core_risk_source_truth_isolated_numeric_cell_omitted() -> None:
+    """孤立无同 role guard 的纯数值 cell 不被提升为 role。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当数值 cell 误获 role 时抛出。
+    """
+
+    isolated_cell = _CellStub(
+        cell_id="cell-isolated",
+        table_id="table-generic",
+        section_anchor="section-generic",
+        row_index=0,
+        column_index=1,
+        row_label_path=("其他指标",),
+        column_header_path=("数值",),
+        cell_text="180%",
+        cell_text_normalized="180%",
+    )
+    generic_table = _TableStub(
+        table_id="table-generic",
+        heading_text="基金基本情况",
+        heading_path=("基金简介",),
+        table_caption_or_nearby_heading="基金基本情况",
+        cells=(isolated_cell,),
+    )
+    intermediate = _ContentIntermediateStub(
+        source_provenance=_provenance(),
+        source_truth_admission=_source_truth_admission_proof(),
+        sections=(),
+        paragraph_blocks=(),
+        table_blocks=(generic_table,),
+    )
+    result = _core_risk_source_truth_result(intermediate)
+    family = _field_family(result, "core_risk.v1")
+    assert "turnover_or_style_drift_risk" not in family.value
+    assert "concentration_risk" not in family.value
+
+
+def test_core_risk_source_truth_numeric_cell_accepted_via_caption_only_context() -> None:
+    """纯数值 cell 通过 caption-only 同 role guard context 可被接受。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 caption-only 数值 cell 被误拒或误跨 role 时抛出。
+    """
+
+    caption_only_cell = _CellStub(
+        cell_id="cell-caption-turnover",
+        table_id="table-caption-turnover",
+        section_anchor="section-turnover",
+        row_index=0,
+        column_index=1,
+        row_label_path=("数值",),
+        column_header_path=("比率",),
+        cell_text="180%",
+        cell_text_normalized="180%",
+    )
+    caption_only_table = _TableStub(
+        table_id="table-caption-turnover",
+        section_id="section-turnover",
+        heading_text=None,
+        heading_path=("投资组合",),
+        table_caption_or_nearby_heading="报告期内股票换手率",
+        cells=(caption_only_cell,),
+    )
+    intermediate = _ContentIntermediateStub(
+        source_provenance=_provenance(),
+        source_truth_admission=_source_truth_admission_proof(),
+        sections=(),
+        paragraph_blocks=(),
+        table_blocks=(caption_only_table,),
+    )
+    result = _core_risk_source_truth_result(intermediate)
+    family = _field_family(result, "core_risk.v1")
+    assert "turnover_or_style_drift_risk" in family.value
+    assert family.value["turnover_or_style_drift_risk"]["risk_disclosure_text"] == "180%"
+    assert "concentration_risk" not in family.value
+
+
+def test_core_risk_source_truth_direct_missing_suppresses_candidate_evidence() -> None:
+    """proof-positive core_risk direct missing 不回退 candidate evidence。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 direct missing 混入 candidate evidence 时抛出。
+    """
+
+    result = _core_risk_source_truth_result(
+        _source_truth_content_intermediate(
+            sections=(
+                _SectionStub(
+                    section_id="section-risk",
+                    heading_text_raw="风险收益特征",
+                    heading_text_normalized="风险收益特征",
+                    heading_path=("风险收益特征",),
+                ),
+            ),
+        )
+    )
+
+    family = _field_family(result, "core_risk.v1")
+
+    assert family.status == "missing"
+    assert family.extraction_mode == "missing"
+    assert family.value == {}
+    assert family.anchors == ()
+    assert family.candidate_evidence == ()
+    assert _gap_codes(family) == {"field_family_missing"}
+
+
+def test_core_risk_source_truth_ambiguous_text_returns_missing() -> None:
+    """proof-positive risk_characteristic_text 冲突时 fail-closed。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当冲突值被任意采信时抛出。
+    """
+
+    result = _core_risk_source_truth_result(
+        _source_truth_content_intermediate(
+            paragraphs=(
+                _ParagraphStub(
+                    block_id="paragraph-risk-1",
+                    heading_path=("风险收益特征",),
+                    text_raw="风险收益特征：本基金为较高风险品种。",
+                    text_normalized="风险收益特征：本基金为较高风险品种。",
+                ),
+                _ParagraphStub(
+                    block_id="paragraph-risk-2",
+                    heading_path=("风险收益特征",),
+                    text_raw="风险收益特征：本基金为中高风险品种。",
+                    text_normalized="风险收益特征：本基金为中高风险品种。",
+                ),
+            ),
+        )
+    )
+
+    family = _field_family(result, "core_risk.v1")
+
+    assert family.status == "missing"
+    assert family.value == {}
+    assert family.anchors == ()
+    assert family.candidate_evidence == ()
+    assert _gap_codes(family) == {"ambiguous_table_or_locator"}
+    assert family.gaps[0].source_field_path == "risk_characteristic_text.risk_characteristic_text"
+
+
+def test_core_risk_source_truth_requires_positive_proof() -> None:
+    """proof 缺失时保持 core_risk candidate-only missing。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 proof-missing 路径被提升为 direct source truth 时抛出。
+    """
+
+    result = _core_risk_source_truth_result(
+        _ContentIntermediateStub(
+            source_provenance=_provenance(),
+            source_truth_admission=None,
+            sections=(
+                _SectionStub(
+                    section_id="section-risk",
+                    heading_text_raw="风险收益特征",
+                    heading_text_normalized="风险收益特征",
+                    heading_path=("风险收益特征",),
+                ),
+            ),
+            paragraph_blocks=(),
+            table_blocks=(),
+        )
+    )
+
+    family = _field_family(result, "core_risk.v1")
+
+    assert family.status == "missing"
+    assert family.value == {}
+    assert family.anchors == ()
+    assert family.candidate_evidence
+    assert _gap_codes(family) == {
+        "candidate_only_not_source_truth",
+        "source_truth_admission_missing",
+    }
+
+
+def test_core_risk_source_truth_rejects_invalid_proof() -> None:
+    """proof 身份不一致时 core_risk 不进入 direct source truth。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 invalid proof 被接受时抛出。
+    """
+
+    result = _core_risk_source_truth_result(
+        _ContentIntermediateStub(
+            source_provenance=_provenance(),
+            source_truth_admission=_source_truth_admission_proof(fund_code="110011"),
+            sections=(
+                _SectionStub(
+                    section_id="section-risk",
+                    heading_text_raw="风险收益特征",
+                    heading_text_normalized="风险收益特征",
+                    heading_path=("风险收益特征",),
+                ),
+            ),
+            paragraph_blocks=(),
+            table_blocks=(),
+        )
+    )
+
+    family = _field_family(result, "core_risk.v1")
+
+    assert family.status == "missing"
+    assert family.value == {}
+    assert family.anchors == ()
+    assert family.candidate_evidence
+    assert "source_truth_admission_invalid" in _gap_codes(family)
+
+
+def test_core_risk_source_truth_candidate_boundary_remains_blocked() -> None:
+    """candidate_boundary 输入不得进入 core_risk source-truth direct extraction。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 candidate boundary 被 direct route 绕过时抛出。
+    """
+
+    boundary = CandidateBoundaryStatus(
+        candidate_only=True,
+        field_correctness_status="not_proven",
+        source_truth_status="not_proven",
+    )
+    result = _core_risk_source_truth_result(
+        _ContentIntermediateStub(
+            source_provenance=_provenance(),
+            candidate_boundary=boundary,
+            source_truth_admission=_source_truth_admission_proof(),
+            paragraph_blocks=(
+                _ParagraphStub(
+                    block_id="paragraph-scale",
+                    section_id="section-risk",
+                    heading_path=("基金合同终止",),
+                    text_raw="连续二十个工作日基金资产净值低于5000万元。",
+                    text_normalized="连续二十个工作日基金资产净值低于5000万元。",
+                ),
+            ),
+            table_blocks=(),
+        )
+    )
+
+    family = _field_family(result, "core_risk.v1")
+
+    assert result.contract_status == "blocked"
+    assert result.candidate_boundary is boundary
+    assert family.status == "missing"
+    assert family.value == {}
+    assert family.anchors == ()
+    assert family.candidate_evidence
+    assert {record.row_locator.split(";")[0] for record in family.candidate_evidence} == {
+        "role=liquidation_or_scale_risk"
+    }
+    assert _gap_codes(family) == {"candidate_only_not_source_truth"}
+
+
+def test_core_risk_source_truth_candidate_tokens_do_not_leak_on_direct_route() -> None:
+    """proof-positive core_risk direct route 永不携带 candidate evidence。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 direct route 暴露 candidate evidence 时抛出。
+    """
+
+    result = _core_risk_source_truth_result(
+        _source_truth_content_intermediate(
+            sections=(
+                _SectionStub(
+                    section_id="section-scale",
+                    heading_text_raw="基金合同自动终止",
+                    heading_text_normalized="基金合同自动终止",
+                    heading_path=("基金合同自动终止",),
+                ),
+                _SectionStub(
+                    section_id="section-tracking",
+                    heading_text_raw="跟踪误差",
+                    heading_text_normalized="跟踪误差",
+                    heading_path=("跟踪误差",),
+                ),
+            ),
+        )
+    )
+
+    family = _field_family(result, "core_risk.v1")
+
+    assert family.status == "missing"
+    assert family.value == {}
+    assert family.anchors == ()
+    assert family.candidate_evidence == ()
 
 
 # ── S6-F core risk candidate selector ───────────────────────────────────────

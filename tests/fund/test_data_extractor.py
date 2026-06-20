@@ -1002,6 +1002,250 @@ class _MarkerDisclosureProcessor:
         )
 
 
+class _CoreRiskFallbackDisclosureProcessor:
+    """返回 product 缺失 risk、core_risk accepted risk 的 FDD processor。"""
+
+    processor_id = "marker_test.core_risk_fallback_disclosure"
+    priority = 999
+    output_schema_version = "test_core_risk_fallback.v1"
+
+    def supports(self, context: FundProcessorDispatchKey) -> bool:
+        return (
+            context.fund_type == "active_fund"
+            and context.report_type == "annual_report"
+            and context.intermediate_kind == "fund_disclosure_document.v1"
+        )
+
+    def extract(self, input_data: FundProcessorInput) -> FundProcessorResult:
+        marker_anchor = EvidenceAnchor(
+            source_kind="annual_report",
+            document_year=input_data.context.document_year,
+            section_id="core-risk",
+            page_number=None,
+            table_id="core-risk-table",
+            row_locator="field=risk_characteristic_text.risk_characteristic_text",
+            note=None,
+        )
+        risk_text = {
+            "schema_version": "risk_characteristic_text.v1",
+            "fund_code": input_data.context.fund_code,
+            "report_year": input_data.context.document_year,
+            "risk_characteristic_text": "本基金为较高风险较高收益品种。",
+            "source_anchors": (
+                {
+                    "section_id": "core-risk",
+                    "page_number": None,
+                    "table_id": "core-risk-table",
+                    "row_locator": "field=risk_characteristic_text.risk_characteristic_text",
+                },
+            ),
+        }
+        families: tuple[FundFieldFamilyResult, ...] = (
+            FundFieldFamilyResult(
+                field_family_id="product_essence.v1",
+                chapter_ids=(1,),
+                value={
+                    "schema_version": "product_essence.v1",
+                    "basic_identity": _MARKER_BASIC_IDENTITY,
+                },
+                status="partial",
+                extraction_mode="direct",
+                anchors=(marker_anchor,),
+                gaps=(),
+                source_provenance=input_data.source_provenance,
+            ),
+            FundFieldFamilyResult(
+                field_family_id="core_risk.v1",
+                chapter_ids=(6,),
+                value={
+                    "schema_version": "core_risk.v1",
+                    "risk_characteristic_text": risk_text,
+                },
+                status="accepted",
+                extraction_mode="direct",
+                anchors=(marker_anchor,),
+                gaps=(),
+                source_provenance=input_data.source_provenance,
+            ),
+        )
+        return FundProcessorResult(
+            processor_id=self.processor_id,
+            output_schema_version=self.output_schema_version,
+            fund_code=input_data.context.fund_code,
+            report_year=input_data.context.document_year,
+            fund_type=input_data.context.fund_type,
+            report_type=input_data.context.report_type,
+            input_intermediate_kind=input_data.context.intermediate_kind,
+            field_families=families,
+            gaps=(),
+            anchors=(marker_anchor,),
+            source_provenance=input_data.source_provenance,
+            candidate_boundary=None,
+            contract_status="partial",
+        )
+
+
+class _CoreRiskAllRolesDisclosureProcessor:
+    """返回 core_risk.v1 全部五个 subvalue 的 FDD processor（不含 product risk text）。"""
+
+    processor_id = "marker_test.core_risk_all_roles_disclosure"
+    priority = 999
+    output_schema_version = "test_core_risk_all_roles.v1"
+
+    def supports(self, context: FundProcessorDispatchKey) -> bool:
+        return (
+            context.fund_type == "active_fund"
+            and context.report_type == "annual_report"
+            and context.intermediate_kind == "fund_disclosure_document.v1"
+        )
+
+    def extract(self, input_data: FundProcessorInput) -> FundProcessorResult:
+        marker_anchor = EvidenceAnchor(
+            source_kind="annual_report",
+            document_year=input_data.context.document_year,
+            section_id="core-risk",
+            page_number=None,
+            table_id="core-risk-table",
+            row_locator="field=risk_characteristic_text.risk_characteristic_text",
+            note=None,
+        )
+        risk_text = {
+            "schema_version": "risk_characteristic_text.v1",
+            "fund_code": input_data.context.fund_code,
+            "report_year": input_data.context.document_year,
+            "risk_characteristic_text": "本基金为较高风险较高收益品种。",
+            "source_anchors": (
+                {
+                    "section_id": "core-risk",
+                    "page_number": None,
+                    "table_id": "core-risk-table",
+                    "row_locator": "field=risk_characteristic_text.risk_characteristic_text",
+                },
+            ),
+        }
+        role_keys = (
+            "liquidation_or_scale_risk",
+            "tracking_error_or_deviation_risk",
+            "turnover_or_style_drift_risk",
+            "concentration_risk",
+        )
+        core_risk_value: dict[str, object] = {
+            "schema_version": "core_risk.v1",
+            "risk_characteristic_text": risk_text,
+        }
+        for role_key in role_keys:
+            core_risk_value[role_key] = {
+                "schema_version": "core_risk_role_disclosure.v1",
+                "fund_code": input_data.context.fund_code,
+                "report_year": input_data.context.document_year,
+                "role": role_key,
+                "risk_disclosure_text": f"{role_key} disclosure text from processor.",
+            }
+        families: tuple[FundFieldFamilyResult, ...] = (
+            FundFieldFamilyResult(
+                field_family_id="product_essence.v1",
+                chapter_ids=(1,),
+                value={
+                    "schema_version": "product_essence.v1",
+                    "basic_identity": _MARKER_BASIC_IDENTITY,
+                },
+                status="partial",
+                extraction_mode="direct",
+                anchors=(marker_anchor,),
+                gaps=(),
+                source_provenance=input_data.source_provenance,
+            ),
+            FundFieldFamilyResult(
+                field_family_id="core_risk.v1",
+                chapter_ids=(6,),
+                value=core_risk_value,
+                status="accepted",
+                extraction_mode="direct",
+                anchors=(marker_anchor,),
+                gaps=(),
+                source_provenance=input_data.source_provenance,
+            ),
+        )
+        return FundProcessorResult(
+            processor_id=self.processor_id,
+            output_schema_version=self.output_schema_version,
+            fund_code=input_data.context.fund_code,
+            report_year=input_data.context.document_year,
+            fund_type=input_data.context.fund_type,
+            report_type=input_data.context.report_type,
+            input_intermediate_kind=input_data.context.intermediate_kind,
+            field_families=families,
+            gaps=(),
+            anchors=(marker_anchor,),
+            source_provenance=input_data.source_provenance,
+            candidate_boundary=None,
+            contract_status="partial",
+        )
+
+
+class _CoreRiskProductWinsDisclosureProcessor(_CoreRiskFallbackDisclosureProcessor):
+    """返回 product/core 同时含 risk text 的 FDD processor。"""
+
+    processor_id = "marker_test.core_risk_product_wins_disclosure"
+    output_schema_version = "test_core_risk_product_wins.v1"
+
+    def extract(self, input_data: FundProcessorInput) -> FundProcessorResult:
+        result = super().extract(input_data)
+        product_anchor = EvidenceAnchor(
+            source_kind="annual_report",
+            document_year=input_data.context.document_year,
+            section_id="product-risk",
+            page_number=None,
+            table_id="product-risk-table",
+            row_locator="field=risk_characteristic_text.risk_characteristic_text",
+            note=None,
+        )
+        product_risk_text = {
+            "schema_version": "risk_characteristic_text.v1",
+            "fund_code": input_data.context.fund_code,
+            "report_year": input_data.context.document_year,
+            "risk_characteristic_text": "product_essence owns this risk text",
+            "source_anchors": (
+                {
+                    "section_id": "product-risk",
+                    "page_number": None,
+                    "table_id": "product-risk-table",
+                    "row_locator": "field=risk_characteristic_text.risk_characteristic_text",
+                },
+            ),
+        }
+        core_risk = result.field_families[1]
+        product = FundFieldFamilyResult(
+            field_family_id="product_essence.v1",
+            chapter_ids=(1,),
+            value={
+                "schema_version": "product_essence.v1",
+                "basic_identity": _MARKER_BASIC_IDENTITY,
+                "risk_characteristic_text": product_risk_text,
+            },
+            status="partial",
+            extraction_mode="direct",
+            anchors=(product_anchor,),
+            gaps=(),
+            source_provenance=input_data.source_provenance,
+        )
+        return FundProcessorResult(
+            processor_id=self.processor_id,
+            output_schema_version=self.output_schema_version,
+            fund_code=result.fund_code,
+            report_year=result.report_year,
+            fund_type=result.fund_type,
+            report_type=result.report_type,
+            input_intermediate_kind=result.input_intermediate_kind,
+            field_families=(product, core_risk),
+            gaps=(),
+            anchors=(product_anchor, *core_risk.anchors),
+            source_provenance=result.source_provenance,
+            candidate_boundary=None,
+            contract_status="partial",
+        )
+
+
 class _MismatchedDisclosureIdentityProcessor:
     """返回与 FDD dispatch key 不一致 identity 的 processor。"""
 
@@ -1431,6 +1675,150 @@ async def test_explicit_disclosure_current_stage_source_truth_has_no_bundle_proj
         "share_class_column": "110011",
         "share_class_selection_reason": "single_value_column",
     }
+
+
+@pytest.mark.asyncio
+async def test_explicit_disclosure_core_risk_fallback_projects_risk_text_only() -> None:
+    """验证既有 core_risk.v1 fallback 只投影 risk_characteristic_text。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 facade 新增 core_risk 字段或投影 deferred roles 时抛出。
+    """
+
+    registry = FundProcessorRegistry()
+    registry.register(_CoreRiskFallbackDisclosureProcessor)
+    extractor = FundDataExtractor(
+        repository=_FakeRepository(_annual_report()),
+        nav_provider=_RecordingNavProvider(),
+        processor_registry=registry,
+    )
+
+    bundle = await extractor.extract(
+        "110011",
+        2024,
+        disclosure_intermediate=_disclosure_intermediate(
+            source_truth_admission=_source_truth_admission_proof()
+        ),
+    )
+
+    assert not hasattr(bundle, "core_risk")
+    assert bundle.risk_characteristic_text.value == {
+        "schema_version": "risk_characteristic_text.v1",
+        "fund_code": "110011",
+        "report_year": 2024,
+        "risk_characteristic_text": "本基金为较高风险较高收益品种。",
+        "source_anchors": (
+            {
+                "section_id": "core-risk",
+                "page_number": None,
+                "table_id": "core-risk-table",
+                "row_locator": "field=risk_characteristic_text.risk_characteristic_text",
+            },
+        ),
+    }
+    assert bundle.risk_characteristic_text.note == "fallback_from_core_risk.v1"
+    assert bundle.risk_characteristic_text.extraction_mode == "direct"
+    assert bundle.risk_characteristic_text.anchors
+    assert bundle.turnover_rate.value is None
+    assert bundle.holdings_snapshot.value is None
+    assert bundle.manager_strategy_text.value is None
+
+
+@pytest.mark.asyncio
+async def test_explicit_disclosure_core_risk_role_keys_not_projected_to_bundle() -> None:
+    """core_risk.v1 四个 role key 不投影到 bundle 字段也不创建 bundle.core_risk。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 role key 被 facade 投影到 bundle 字段时抛出。
+    """
+
+    registry = FundProcessorRegistry()
+    registry.register(_CoreRiskAllRolesDisclosureProcessor)
+    extractor = FundDataExtractor(
+        repository=_FakeRepository(_annual_report()),
+        nav_provider=_RecordingNavProvider(),
+        processor_registry=registry,
+    )
+
+    bundle = await extractor.extract(
+        "110011",
+        2024,
+        disclosure_intermediate=_disclosure_intermediate(
+            source_truth_admission=_source_truth_admission_proof()
+        ),
+    )
+
+    assert not hasattr(bundle, "core_risk")
+    assert bundle.risk_characteristic_text.value is not None
+    assert bundle.risk_characteristic_text.value["risk_characteristic_text"] == (
+        "本基金为较高风险较高收益品种。"
+    )
+    assert bundle.risk_characteristic_text.note == "fallback_from_core_risk.v1"
+    # 现有 bundle 字段不得从 core_risk role subvalue 投影
+    assert bundle.tracking_error.value is None
+    assert bundle.turnover_rate.value is None
+    assert bundle.holdings_snapshot.value is None
+    # role key 不得作为 bundle 属性出现
+    for role_key in (
+        "liquidation_or_scale_risk",
+        "tracking_error_or_deviation_risk",
+        "turnover_or_style_drift_risk",
+        "concentration_risk",
+    ):
+        assert not hasattr(bundle, role_key)
+
+
+@pytest.mark.asyncio
+async def test_explicit_disclosure_product_risk_text_wins_over_core_risk_fallback() -> None:
+    """product_essence 已有 risk text 时不使用 core_risk fallback 覆盖。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 core_risk fallback 覆盖 owning family 字段时抛出。
+    """
+
+    registry = FundProcessorRegistry()
+    registry.register(_CoreRiskProductWinsDisclosureProcessor)
+    extractor = FundDataExtractor(
+        repository=_FakeRepository(_annual_report()),
+        nav_provider=_RecordingNavProvider(),
+        processor_registry=registry,
+    )
+
+    bundle = await extractor.extract(
+        "110011",
+        2024,
+        disclosure_intermediate=_disclosure_intermediate(
+            source_truth_admission=_source_truth_admission_proof()
+        ),
+    )
+
+    assert not hasattr(bundle, "core_risk")
+    assert bundle.risk_characteristic_text.value is not None
+    assert (
+        bundle.risk_characteristic_text.value["risk_characteristic_text"]
+        == "product_essence owns this risk text"
+    )
+    assert bundle.risk_characteristic_text.note is None
+    assert bundle.risk_characteristic_text.anchors
+    assert bundle.risk_characteristic_text.anchors[0].section_id == "product-risk"
 
 
 @pytest.mark.asyncio
