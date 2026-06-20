@@ -222,6 +222,57 @@ _MANAGER_PROFILE_TURNOVER_BASIS_LABELS: Final[tuple[str, ...]] = (
     "计算口径",
     "口径",
 )
+_MANAGER_PROFILE_ALIGNMENT_STRONG_TOKENS: Final[tuple[str, ...]] = (
+    "基金经理持有本基金",
+    "基金经理持有份额",
+    "本基金基金经理持有本开放式基金",
+    "基金管理人所有从业人员持有本基金",
+    "从业人员持有本基金",
+)
+_MANAGER_PROFILE_ALIGNMENT_GENERIC_TOKENS: Final[tuple[str, ...]] = (
+    "基金经理持有",
+    "从业人员持有",
+    "持有本基金",
+)
+_MANAGER_PROFILE_ALIGNMENT_GUARD_TOKENS: Final[tuple[str, ...]] = (
+    "基金经理",
+    "从业人员",
+    "基金管理人",
+)
+_MANAGER_PROFILE_ALIGNMENT_MANAGER_TOKENS: Final[tuple[str, ...]] = (
+    "基金经理",
+)
+_MANAGER_PROFILE_ALIGNMENT_EMPLOYEE_TOKENS: Final[tuple[str, ...]] = (
+    "从业人员",
+    "基金管理人所有从业人员",
+)
+_MANAGER_PROFILE_HOLDINGS_TOP_HEADINGS: Final[tuple[str, ...]] = (
+    "报告期末按公允价值占基金资产净值比例大小排序的前十名股票投资明细",
+    "前十名股票投资明细",
+)
+_MANAGER_PROFILE_HOLDINGS_INDUSTRY_HEADINGS: Final[tuple[str, ...]] = (
+    "报告期末按行业分类的股票投资组合",
+    "期末按行业分类的股票投资组合",
+)
+_MANAGER_PROFILE_HOLDINGS_CONTEXT_HEADINGS: Final[tuple[str, ...]] = (
+    *_MANAGER_PROFILE_HOLDINGS_TOP_HEADINGS,
+    *_MANAGER_PROFILE_HOLDINGS_INDUSTRY_HEADINGS,
+    "报告期末基金资产组合情况",
+)
+_MANAGER_PROFILE_TOP_HOLDINGS_IDENTITY_LABELS: Final[tuple[str, ...]] = (
+    "股票代码",
+    "股票名称",
+    "证券代码",
+    "证券名称",
+)
+_MANAGER_PROFILE_INDUSTRY_IDENTITY_LABELS: Final[tuple[str, ...]] = (
+    "行业类别",
+    "行业名称",
+    "行业",
+)
+_MANAGER_PROFILE_GENERIC_TABLE_HEADERS: Final[frozenset[str]] = frozenset(
+    ("项目", "内容", "说明", "序号")
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -1031,7 +1082,7 @@ def _extract_manager_profile_source_truth(
         context: Processor dispatch 身份。
 
     Returns:
-        `manager_profile.v1` 字段族；Slice 2 只包含 roster、strategy、turnover。
+        `manager_profile.v1` 字段族；Slice 3 包含五个已授权 top-level subvalues。
 
     Raises:
         无显式抛出。
@@ -1040,7 +1091,7 @@ def _extract_manager_profile_source_truth(
     selected_values, ambiguous_paths = _select_manager_profile_values(intermediate, context)
     value = _build_manager_profile_value(selected_values)
     gaps = _manager_profile_source_truth_gaps(value, ambiguous_paths)
-    status = _manager_profile_status(value)
+    status = _manager_profile_status(value, ambiguous_paths)
     anchors = _dedupe_anchors(
         selected_values[output_path].anchor
         for output_path in _manager_profile_emitted_output_paths(value, selected_values)
@@ -1062,7 +1113,7 @@ def _select_manager_profile_values(
     intermediate: FundDisclosureDocumentContentIntermediate,
     context: FundProcessorDispatchKey,
 ) -> tuple[dict[str, _ManagerProfileValueCandidate], set[str]]:
-    """按 Slice 2 fail-closed 规则选择基金经理画像字段值。
+    """按 Slice 3 fail-closed 规则选择基金经理画像字段值。
 
     Args:
         intermediate: FDD 正文中间态。
@@ -1088,6 +1139,14 @@ def _select_manager_profile_values(
     turnover_rate = _select_manager_profile_turnover_rate(intermediate, context, ambiguous_paths)
     if turnover_rate is not None:
         selected_values["turnover_rate"] = turnover_rate
+    manager_alignment = _select_manager_profile_alignment(intermediate, context, ambiguous_paths)
+    if manager_alignment is not None:
+        selected_values["manager_alignment"] = manager_alignment
+    holdings_snapshot = _select_manager_profile_holdings_snapshot(
+        intermediate, context, ambiguous_paths
+    )
+    if holdings_snapshot is not None:
+        selected_values["holdings_snapshot"] = holdings_snapshot
     return selected_values, ambiguous_paths
 
 
@@ -1636,6 +1695,506 @@ def _select_manager_profile_turnover_rate(
     )
 
 
+def _select_manager_profile_alignment(
+    intermediate: FundDisclosureDocumentContentIntermediate,
+    context: FundProcessorDispatchKey,
+    ambiguous_paths: set[str],
+) -> _ManagerProfileValueCandidate | None:
+    """从稳定段落或表格选择基金经理/从业人员持有披露。
+
+    Args:
+        intermediate: FDD 正文中间态。
+        context: Processor dispatch 身份。
+        ambiguous_paths: 待追加的歧义路径集合。
+
+    Returns:
+        至少存在 manager_holding 或 employee_holding 时返回候选；judgment 固定为 None。
+
+    Raises:
+        无显式抛出。
+    """
+
+    candidates: dict[str, list[_ManagerProfileValueCandidate]] = {
+        "manager_alignment.manager_holding": [],
+        "manager_alignment.employee_holding": [],
+    }
+    for paragraph_index, paragraph in enumerate(intermediate.paragraph_blocks):
+        if paragraph.locator_stability != "stable":
+            continue
+        text = _manager_profile_paragraph_text(paragraph)
+        source_texts = (text, *_tuple_text(paragraph.heading_path))
+        guard_context = _manager_profile_paragraph_guard_context("manager_alignment", paragraph)
+        if not _manager_profile_alignment_source_allowed(source_texts, guard_context):
+            continue
+        for output_path in _manager_profile_alignment_output_paths(source_texts):
+            candidates[output_path].append(
+                _manager_profile_paragraph_candidate(
+                    output_path,
+                    text,
+                    paragraph_index,
+                    paragraph,
+                    context,
+                )
+            )
+    for table_index, table in enumerate(intermediate.table_blocks):
+        if table.locator_stability != "stable":
+            continue
+        rows = _manager_profile_rows_by_index(table)
+        for row_index in sorted(rows):
+            cells = rows[row_index]
+            source_texts = _manager_profile_alignment_row_context(table, cells)
+            if not _manager_profile_alignment_source_allowed(source_texts, source_texts):
+                continue
+            value = _manager_profile_alignment_row_value(cells)
+            if value is None:
+                continue
+            anchor_cell = _manager_profile_first_stable_cell(cells)
+            cell_index = _manager_profile_cell_original_index(table, anchor_cell)
+            for output_path in _manager_profile_alignment_output_paths(source_texts):
+                candidates[output_path].append(
+                    _manager_profile_cell_candidate(
+                        output_path,
+                        value,
+                        table_index,
+                        cell_index,
+                        table,
+                        anchor_cell,
+                        context,
+                    )
+                )
+    selected_manager = _resolve_manager_profile_candidate(
+        "manager_alignment.manager_holding",
+        tuple(candidates["manager_alignment.manager_holding"]),
+        ambiguous_paths,
+    )
+    selected_employee = _resolve_manager_profile_candidate(
+        "manager_alignment.employee_holding",
+        tuple(candidates["manager_alignment.employee_holding"]),
+        ambiguous_paths,
+    )
+    if selected_manager is None and selected_employee is None:
+        return None
+    value = {
+        "manager_holding": None if selected_manager is None else selected_manager.value,
+        "employee_holding": None if selected_employee is None else selected_employee.value,
+        "judgment": None,
+    }
+    anchor = selected_manager.anchor if selected_manager is not None else selected_employee.anchor
+    source_field_path = (
+        selected_manager.source_field_path
+        if selected_manager is not None
+        else selected_employee.source_field_path
+    )
+    return _ManagerProfileValueCandidate(
+        output_path="manager_alignment",
+        value=value,
+        anchor=anchor,
+        source_field_path=source_field_path,
+    )
+
+
+def _manager_profile_alignment_source_allowed(
+    texts: tuple[str | None, ...],
+    guard_context: tuple[str | None, ...],
+) -> bool:
+    """判断 source 是否满足 manager_alignment 强 token 或 generic guard。
+
+    Args:
+        texts: 当前 source 候选文本。
+        guard_context: generic token 同源 guard 文本。
+
+    Returns:
+        命中允许持有披露语境时返回 True。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return _matches_guarded_manager_profile_source(
+        texts,
+        _MANAGER_PROFILE_ALIGNMENT_STRONG_TOKENS,
+        _MANAGER_PROFILE_ALIGNMENT_GENERIC_TOKENS,
+        guard_context,
+        _MANAGER_PROFILE_ALIGNMENT_GUARD_TOKENS,
+    )
+
+
+def _manager_profile_alignment_output_paths(
+    texts: tuple[str | None, ...],
+) -> tuple[str, ...]:
+    """按披露语境判断 alignment 值归属 manager 或 employee。
+
+    Args:
+        texts: 当前 source 文本集合。
+
+    Returns:
+        可写入的 alignment 子路径；无明确归属时返回空元组。
+
+    Raises:
+        无显式抛出。
+    """
+
+    output_paths: list[str] = []
+    if _matches_any_token(texts, _MANAGER_PROFILE_ALIGNMENT_MANAGER_TOKENS):
+        output_paths.append("manager_alignment.manager_holding")
+    if _matches_any_token(texts, _MANAGER_PROFILE_ALIGNMENT_EMPLOYEE_TOKENS):
+        output_paths.append("manager_alignment.employee_holding")
+    return tuple(output_paths)
+
+
+def _manager_profile_alignment_row_context(
+    table: FundDisclosureTableBlockLike,
+    cells: tuple[FundDisclosureCellLike, ...],
+) -> tuple[str | None, ...]:
+    """拼接 alignment 表格行同源上下文。
+
+    Args:
+        table: parent table block。
+        cells: 同一行稳定 cells。
+
+    Returns:
+        表格标题、路径、行列标签与 cell 文本集合。
+
+    Raises:
+        无显式抛出。
+    """
+
+    context: list[str | None] = [
+        table.heading_text,
+        table.table_caption_or_nearby_heading,
+        *_tuple_text(table.heading_path),
+    ]
+    for cell in cells:
+        context.extend(
+            (
+                cell.cell_text_normalized,
+                cell.cell_text,
+                *_tuple_text(cell.row_label_path),
+                *_tuple_text(cell.column_header_path),
+                *_tuple_text(cell.heading_path),
+            )
+        )
+    return tuple(context)
+
+
+def _manager_profile_alignment_row_value(
+    cells: tuple[FundDisclosureCellLike, ...],
+) -> str | None:
+    """选择 alignment 行中披露的持有值或区间文本。
+
+    Args:
+        cells: 同一行稳定 cells。
+
+    Returns:
+        首个非标签值；仅有标签文本时返回该行首个非空披露文本。
+
+    Raises:
+        无显式抛出。
+    """
+
+    fallback: str | None = None
+    for cell in sorted(cells, key=lambda item: item.column_index):
+        value = _manager_profile_cell_value(cell)
+        if not value:
+            continue
+        if fallback is None:
+            fallback = value
+        if _manager_profile_alignment_value_is_label(value):
+            continue
+        if _path_contains_any_label(
+            cell.column_header_path,
+            tuple(_MANAGER_PROFILE_GENERIC_TABLE_HEADERS),
+        ):
+            return value
+        if not _matches_any_token(
+            (value,),
+            (
+                *_MANAGER_PROFILE_ALIGNMENT_STRONG_TOKENS,
+                *_MANAGER_PROFILE_ALIGNMENT_GENERIC_TOKENS,
+            ),
+        ):
+            return value
+    return fallback
+
+
+def _manager_profile_alignment_value_is_label(value: str) -> bool:
+    """判断 alignment cell 文本是否只是标签而非披露值。
+
+    Args:
+        value: cell 披露文本。
+
+    Returns:
+        文本等同于持有语境标签时返回 True。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return _matches_any_token(
+        (value,),
+        (
+            *_MANAGER_PROFILE_ALIGNMENT_STRONG_TOKENS,
+            *_MANAGER_PROFILE_ALIGNMENT_GENERIC_TOKENS,
+        ),
+    )
+
+
+def _select_manager_profile_holdings_snapshot(
+    intermediate: FundDisclosureDocumentContentIntermediate,
+    context: FundProcessorDispatchKey,
+    ambiguous_paths: set[str],
+) -> _ManagerProfileValueCandidate | None:
+    """从稳定持仓表格选择前十持仓与行业分布快照。
+
+    Args:
+        intermediate: FDD 正文中间态。
+        context: Processor dispatch 身份。
+        ambiguous_paths: 待追加的歧义路径集合。
+
+    Returns:
+        至少存在 top_holdings 或 industry_distribution 时返回候选。
+
+    Raises:
+        无显式抛出。
+    """
+
+    top_rows, top_anchor = _select_manager_profile_holdings_rows(
+        intermediate,
+        context,
+        ambiguous_paths,
+        output_path="holdings_snapshot.top_holdings",
+        headings=_MANAGER_PROFILE_HOLDINGS_TOP_HEADINGS,
+        identity_labels=_MANAGER_PROFILE_TOP_HOLDINGS_IDENTITY_LABELS,
+        limit=10,
+    )
+    industry_rows, industry_anchor = _select_manager_profile_holdings_rows(
+        intermediate,
+        context,
+        ambiguous_paths,
+        output_path="holdings_snapshot.industry_distribution",
+        headings=_MANAGER_PROFILE_HOLDINGS_INDUSTRY_HEADINGS,
+        identity_labels=_MANAGER_PROFILE_INDUSTRY_IDENTITY_LABELS,
+        limit=None,
+    )
+    if not top_rows and not industry_rows:
+        return None
+    value = {
+        "top_holdings": top_rows or None,
+        "top_holdings_status": "direct_top_ten" if top_rows else "missing",
+        "top_holdings_source": "top_ten" if top_rows else "none",
+        "industry_distribution": industry_rows or None,
+        "industry_distribution_status": "direct" if industry_rows else "missing",
+    }
+    anchor = top_anchor if top_anchor is not None else industry_anchor
+    if anchor is None:
+        return None
+    return _ManagerProfileValueCandidate(
+        output_path="holdings_snapshot",
+        value=value,
+        anchor=anchor,
+        source_field_path="holdings_snapshot",
+    )
+
+
+def _select_manager_profile_holdings_rows(
+    intermediate: FundDisclosureDocumentContentIntermediate,
+    context: FundProcessorDispatchKey,
+    ambiguous_paths: set[str],
+    *,
+    output_path: str,
+    headings: tuple[str, ...],
+    identity_labels: tuple[str, ...],
+    limit: int | None,
+) -> tuple[list[dict[str, str]], EvidenceAnchor | None]:
+    """选择指定 holdings_snapshot 子表的非冲突披露行。
+
+    Args:
+        intermediate: FDD 正文中间态。
+        context: Processor dispatch 身份。
+        ambiguous_paths: 待追加的歧义路径集合。
+        output_path: 目标输出路径。
+        headings: 允许的表格 heading/caption tokens。
+        identity_labels: 行身份列 labels。
+        limit: 最大行数；None 表示不限。
+
+    Returns:
+        `(rows, first_anchor)`；冲突 identity 行被省略。
+
+    Raises:
+        无显式抛出。
+    """
+
+    seen_rows: dict[str, tuple[str, dict[str, str], EvidenceAnchor]] = {}
+    conflicted_identities: set[str] = set()
+    for table_index, table in enumerate(intermediate.table_blocks):
+        if table.locator_stability != "stable" or not _manager_profile_holdings_table_allowed(
+            table, headings
+        ):
+            continue
+        rows = _manager_profile_rows_by_index(table)
+        for row_index in sorted(rows):
+            row = _manager_profile_holdings_row_dict(rows[row_index])
+            if row is None:
+                continue
+            identity = _manager_profile_holdings_row_identity(row, identity_labels)
+            normalized_row = _normalize_manager_profile_value(row)
+            anchor_cell = _manager_profile_first_stable_cell(rows[row_index])
+            cell_index = _manager_profile_cell_original_index(table, anchor_cell)
+            candidate = _manager_profile_cell_candidate(
+                output_path,
+                row,
+                table_index,
+                cell_index,
+                table,
+                anchor_cell,
+                context,
+            )
+            previous = seen_rows.get(identity)
+            if previous is None:
+                seen_rows[identity] = (normalized_row, row, candidate.anchor)
+                continue
+            if previous[0] != normalized_row:
+                conflicted_identities.add(identity)
+                ambiguous_paths.add(output_path)
+    accepted_rows: list[dict[str, str]] = []
+    anchors: list[EvidenceAnchor] = []
+    for identity, (_normalized_row, row, anchor) in seen_rows.items():
+        if identity in conflicted_identities:
+            continue
+        accepted_rows.append(row)
+        anchors.append(anchor)
+        if limit is not None and len(accepted_rows) >= limit:
+            break
+    first_anchor = anchors[0] if anchors else None
+    return accepted_rows, first_anchor
+
+
+def _manager_profile_holdings_table_allowed(
+    table: FundDisclosureTableBlockLike,
+    headings: tuple[str, ...],
+) -> bool:
+    """判断 holdings_snapshot 表格是否位于允许 heading 下。
+
+    Args:
+        table: FDD table block。
+        headings: 当前子表允许 heading tokens。
+
+    Returns:
+        表格上下文命中指定持仓 heading 时返回 True。
+
+    Raises:
+        无显式抛出。
+    """
+
+    texts = (
+        table.heading_text,
+        table.table_caption_or_nearby_heading,
+        *_tuple_text(table.heading_path),
+    )
+    return _matches_any_token(texts, headings) and _matches_any_token(
+        texts, _MANAGER_PROFILE_HOLDINGS_CONTEXT_HEADINGS
+    )
+
+
+def _manager_profile_holdings_row_dict(
+    cells: tuple[FundDisclosureCellLike, ...],
+) -> dict[str, str] | None:
+    """把同一稳定表格行转换为中文表头到披露 cell 文本的映射。
+
+    Args:
+        cells: 同一行稳定 cells。
+
+    Returns:
+        非空 row dict；缺少可识别中文表头或无披露值时返回 None。
+
+    Raises:
+        无显式抛出。
+    """
+
+    row: dict[str, str] = {}
+    for cell in sorted(cells, key=lambda item: item.column_index):
+        header = _manager_profile_holdings_cell_header(cell)
+        value = _manager_profile_cell_value(cell)
+        if header is None or not value:
+            continue
+        row[header] = value
+    if not row:
+        return None
+    return row
+
+
+def _manager_profile_holdings_cell_header(cell: FundDisclosureCellLike) -> str | None:
+    """选择 holdings_snapshot cell 的披露中文列头。
+
+    Args:
+        cell: FDD table cell。
+
+    Returns:
+        非 generic 的 column header；缺失时返回 None。
+
+    Raises:
+        无显式抛出。
+    """
+
+    for header in reversed(cell.column_header_path):
+        normalized = _normalize_match_text(header)
+        if not normalized or normalized in _MANAGER_PROFILE_GENERIC_TABLE_HEADERS:
+            continue
+        return header
+    return None
+
+
+def _manager_profile_holdings_row_identity(
+    row: dict[str, str],
+    identity_labels: tuple[str, ...],
+) -> str:
+    """生成 holdings_snapshot 行去重身份。
+
+    Args:
+        row: 已构造的披露行。
+        identity_labels: 优先用于身份判断的列名。
+
+    Returns:
+        规范化后的行身份；没有专用身份列时使用整行首个披露值。
+
+    Raises:
+        无显式抛出。
+    """
+
+    identity_values = [
+        row[label]
+        for label in identity_labels
+        if label in row and _normalize_match_text(row[label])
+    ]
+    if identity_values:
+        return "|".join(_normalize_match_text(value) for value in identity_values)
+    first_key = next(iter(row))
+    return _normalize_match_text(row[first_key])
+
+
+def _manager_profile_cell_original_index(
+    table: FundDisclosureTableBlockLike,
+    target_cell: FundDisclosureCellLike,
+) -> int:
+    """返回 cell 在 table.cells tuple 中的原始索引。
+
+    Args:
+        table: parent table block。
+        target_cell: 目标 cell。
+
+    Returns:
+        原始 tuple index。
+
+    Raises:
+        ValueError: target_cell 不属于 table.cells 时抛出。
+    """
+
+    for cell_index, cell in enumerate(table.cells):
+        if cell is target_cell:
+            return cell_index
+    raise ValueError("target_cell not found in table.cells")
+
+
 def _manager_profile_cell_candidate(
     output_path: str,
     value: object,
@@ -1828,7 +2387,7 @@ def _normalize_manager_profile_roster_entry(entry: dict[str, object]) -> str:
 def _build_manager_profile_value(
     selected_values: dict[str, _ManagerProfileValueCandidate],
 ) -> dict[str, object]:
-    """构造 `manager_profile.v1.value` Slice 2 public shape。
+    """构造 `manager_profile.v1.value` Slice 3 public shape。
 
     Args:
         selected_values: 已解析的输出路径值。
@@ -1841,7 +2400,7 @@ def _build_manager_profile_value(
     """
 
     value: dict[str, object] = {}
-    for top_level in ("portfolio_managers", "manager_strategy_text", "turnover_rate"):
+    for top_level in _MANAGER_PROFILE_REQUIRED_TOP_LEVEL:
         selected = selected_values.get(top_level)
         if selected is not None:
             value[top_level] = selected.value
@@ -1869,7 +2428,7 @@ def _manager_profile_emitted_output_paths(
 
     return tuple(
         top_level
-        for top_level in ("portfolio_managers", "manager_strategy_text", "turnover_rate")
+        for top_level in _MANAGER_PROFILE_REQUIRED_TOP_LEVEL
         if top_level in value and top_level in selected_values
     )
 
@@ -1910,7 +2469,7 @@ def _manager_profile_source_truth_gaps(
         gaps.append(
             FundExtractionGap(
                 gap_code="field_family_missing",
-                message="manager_profile.v1 未形成 Slice 2 允许的 source-truth 字段值",
+                message="manager_profile.v1 未形成 Slice 3 允许的 source-truth 字段值",
                 field_family_id="manager_profile.v1",
                 source_field_path=None,
                 source_boundary="annual_report",
@@ -1932,11 +2491,12 @@ def _manager_profile_source_truth_gaps(
     return tuple(gaps)
 
 
-def _manager_profile_status(value: dict[str, object]) -> str:
+def _manager_profile_status(value: dict[str, object], ambiguous_paths: set[str]) -> str:
     """按五个 top-level 完整度派生 manager_profile 字段族状态。
 
     Args:
         value: 已构造的字段族 value。
+        ambiguous_paths: 已发现的歧义输出路径集合。
 
     Returns:
         `accepted`、`partial` 或 `missing`。
@@ -1945,7 +2505,7 @@ def _manager_profile_status(value: dict[str, object]) -> str:
         无显式抛出。
     """
 
-    if all(top_level in value for top_level in _MANAGER_PROFILE_REQUIRED_TOP_LEVEL):
+    if all(top_level in value for top_level in _MANAGER_PROFILE_REQUIRED_TOP_LEVEL) and not ambiguous_paths:
         return "accepted"
     if value:
         return "partial"

@@ -26,6 +26,7 @@ from fund_agent.fund.processors.contracts import (
 )
 from fund_agent.fund.processors.fund_disclosure_processor import (
     FundDisclosureDocumentProcessor,
+    _manager_profile_cell_original_index,
 )
 from fund_agent.fund.processors.registry import FundProcessorRegistry
 from fund_agent.fund.source_provenance import (
@@ -516,6 +517,43 @@ def _manager_profile_cell(
         cell_text_normalized=value,
         heading_path=("基金经理情况",),
         locator_stability=locator_stability,
+    )
+
+
+def _manager_profile_holdings_cell(
+    header: str,
+    value: str,
+    *,
+    row_index: int,
+    column_index: int,
+    table_id: str,
+) -> _CellStub:
+    """构造 Slice 3 holdings_snapshot table/cell source-truth fixture。
+
+    Args:
+        header: 中文披露列头。
+        value: cell 披露文本。
+        row_index: 行号。
+        column_index: 列号。
+        table_id: 所属 table id。
+
+    Returns:
+        holdings_snapshot table cell stub。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return _CellStub(
+        cell_id=f"{table_id}-cell-{row_index}-{column_index}",
+        table_id=table_id,
+        row_index=row_index,
+        column_index=column_index,
+        row_label_path=("持仓明细",),
+        column_header_path=(header,),
+        cell_text=value,
+        cell_text_normalized=value,
+        heading_path=("投资组合",),
     )
 
 
@@ -3292,6 +3330,602 @@ def test_manager_profile_source_truth_identical_roster_duplicate_keeps_first_loc
     assert len(family.anchors) == 1
     assert family.anchors[0].table_id == "table-roster-first"
     assert "ambiguous_table_or_locator" not in _gap_codes(family)
+
+
+def test_manager_profile_source_truth_extracts_alignment_without_judgment() -> None:
+    """proof-positive FDD 只抽取经理/从业人员持有披露，不生成利益一致性判断。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 judgment 非 None 或候选证据泄漏时抛出。
+    """
+
+    manager_paragraph = _ParagraphStub(
+        block_id="paragraph-manager-holding",
+        section_id="section-alignment",
+        heading_path=("基金经理持有本基金情况",),
+        text_raw="本基金基金经理持有本开放式基金份额区间为100万份以上。",
+        text_normalized="本基金基金经理持有本开放式基金份额区间为100万份以上。",
+    )
+    employee_paragraph = _ParagraphStub(
+        block_id="paragraph-employee-holding",
+        section_id="section-alignment",
+        heading_path=("基金管理人从业人员持有本基金情况",),
+        text_raw="基金管理人所有从业人员持有本基金份额区间为50万份至100万份。",
+        text_normalized="基金管理人所有从业人员持有本基金份额区间为50万份至100万份。",
+    )
+
+    result = _manager_profile_source_truth_result(
+        _ContentIntermediateStub(
+            source_provenance=_provenance(),
+            source_truth_admission=_source_truth_admission_proof(),
+            sections=(),
+            paragraph_blocks=(manager_paragraph, employee_paragraph),
+            table_blocks=(),
+        )
+    )
+
+    family = _field_family(result, "manager_profile.v1")
+    alignment = family.value["manager_alignment"]
+
+    assert family.status == "partial"
+    assert family.extraction_mode == "direct"
+    assert family.candidate_evidence == ()
+    assert alignment == {
+        "manager_holding": "本基金基金经理持有本开放式基金份额区间为100万份以上。",
+        "employee_holding": "基金管理人所有从业人员持有本基金份额区间为50万份至100万份。",
+        "judgment": None,
+    }
+    assert "利益一致" not in str(alignment)
+    assert {gap.source_field_path for gap in family.gaps} == {
+        "portfolio_managers",
+        "manager_strategy_text",
+        "turnover_rate",
+        "holdings_snapshot",
+    }
+
+
+def test_manager_profile_source_truth_extracts_holdings_snapshot_without_risk_or_stage_fields() -> None:
+    """proof-positive FDD 只抽取持仓快照原始行，不向阶段或风险字段族写值。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当持仓快照扩展出风险/阶段字段或跨族泄漏时抛出。
+    """
+
+    top_table = _TableStub(
+        table_id="table-top-holdings",
+        section_id="section-holdings",
+        heading_text="前十名股票投资明细",
+        table_caption_or_nearby_heading="前十名股票投资明细",
+        heading_path=("投资组合", "前十名股票投资明细"),
+        cells=(
+            _manager_profile_holdings_cell("股票代码", "600000", row_index=0, column_index=0, table_id="table-top-holdings"),
+            _manager_profile_holdings_cell("股票名称", "浦发银行", row_index=0, column_index=1, table_id="table-top-holdings"),
+            _manager_profile_holdings_cell("公允价值", "1,234,567.89", row_index=0, column_index=2, table_id="table-top-holdings"),
+        ),
+    )
+    industry_table = _TableStub(
+        table_id="table-industry",
+        section_id="section-industry",
+        heading_text="报告期末按行业分类的股票投资组合",
+        table_caption_or_nearby_heading="报告期末按行业分类的股票投资组合",
+        heading_path=("投资组合", "报告期末按行业分类的股票投资组合"),
+        cells=(
+            _manager_profile_holdings_cell("行业类别", "制造业", row_index=0, column_index=0, table_id="table-industry"),
+            _manager_profile_holdings_cell("公允价值", "2,000,000.00", row_index=0, column_index=1, table_id="table-industry"),
+            _manager_profile_holdings_cell("占基金资产净值比例", "12.34%", row_index=0, column_index=2, table_id="table-industry"),
+        ),
+    )
+
+    result = _manager_profile_source_truth_result(
+        _ContentIntermediateStub(
+            source_provenance=_provenance(),
+            source_truth_admission=_source_truth_admission_proof(),
+            sections=(),
+            paragraph_blocks=(),
+            table_blocks=(top_table, industry_table),
+        )
+    )
+
+    family = _field_family(result, "manager_profile.v1")
+    holdings = family.value["holdings_snapshot"]
+
+    assert family.status == "partial"
+    assert set(holdings) == {
+        "top_holdings",
+        "top_holdings_status",
+        "top_holdings_source",
+        "industry_distribution",
+        "industry_distribution_status",
+    }
+    assert holdings["top_holdings_status"] == "direct_top_ten"
+    assert holdings["top_holdings_source"] == "top_ten"
+    assert holdings["industry_distribution_status"] == "direct"
+    assert holdings["top_holdings"] == [
+        {"股票代码": "600000", "股票名称": "浦发银行", "公允价值": "1,234,567.89"}
+    ]
+    assert holdings["industry_distribution"] == [
+        {"行业类别": "制造业", "公允价值": "2,000,000.00", "占基金资产净值比例": "12.34%"}
+    ]
+    assert "concentration" not in holdings
+    assert "style_drift" not in holdings
+    assert "core_risk" not in holdings
+    assert "current_stage" not in holdings
+    assert _field_family(result, "current_stage.v1").value == {}
+    assert _field_family(result, "current_stage.v1").anchors == ()
+    assert _field_family(result, "core_risk.v1").value == {}
+    assert _field_family(result, "core_risk.v1").anchors == ()
+
+
+def test_manager_profile_source_truth_rejects_generic_holding_without_guard_context() -> None:
+    """generic 持有本基金 source 缺少经理/从业人员同源 guard 时不得抽取。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 generic holding token 自授权进入 public value 时抛出。
+    """
+
+    table = _TableStub(
+        table_id="table-generic-holding",
+        section_id="section-other",
+        heading_text="其他持有情况",
+        table_caption_or_nearby_heading="其他持有情况",
+        heading_path=("其他持有情况",),
+        cells=(
+            _CellStub(
+                cell_id="cell-generic-holding",
+                table_id="table-generic-holding",
+                row_index=0,
+                column_index=0,
+                row_label_path=("持有本基金",),
+                column_header_path=("内容",),
+                cell_text="持有本基金",
+                cell_text_normalized="持有本基金",
+            ),
+        ),
+    )
+
+    result = _manager_profile_source_truth_result(
+        _ContentIntermediateStub(
+            source_provenance=_provenance(),
+            source_truth_admission=_source_truth_admission_proof(),
+            sections=(),
+            paragraph_blocks=(),
+            table_blocks=(table,),
+        )
+    )
+
+    family = _field_family(result, "manager_profile.v1")
+
+    assert family.status == "missing"
+    assert family.value == {}
+    assert family.anchors == ()
+    assert family.candidate_evidence == ()
+    assert _gap_codes(family) == {"field_family_missing"}
+
+
+def test_manager_profile_source_truth_same_value_multi_locator_keeps_first_anchor() -> None:
+    """同一 alignment 值跨多个稳定 locator 重复时保留首个 anchor。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当同值重复产生 ambiguity 或锚点不稳定时抛出。
+    """
+
+    first = _ParagraphStub(
+        block_id="paragraph-holding-first",
+        section_id="section-first",
+        heading_path=("基金经理持有本基金情况",),
+        text_raw="基金经理持有本基金份额区间为100万份以上。",
+        text_normalized="基金经理持有本基金份额区间为100万份以上。",
+    )
+    second = _ParagraphStub(
+        block_id="paragraph-holding-second",
+        section_id="section-second",
+        heading_path=("基金经理持有本基金情况",),
+        text_raw="基金经理持有本基金份额区间为100万份以上。",
+        text_normalized="基金经理持有本基金份额区间为100万份以上。",
+    )
+
+    result = _manager_profile_source_truth_result(
+        _ContentIntermediateStub(
+            source_provenance=_provenance(),
+            source_truth_admission=_source_truth_admission_proof(),
+            sections=(),
+            paragraph_blocks=(first, second),
+            table_blocks=(),
+        )
+    )
+
+    family = _field_family(result, "manager_profile.v1")
+
+    assert family.value["manager_alignment"]["manager_holding"] == "基金经理持有本基金份额区间为100万份以上。"
+    assert len(family.anchors) == 1
+    assert family.anchors[0].row_locator == (
+        "field=manager_alignment.manager_holding; block_id=paragraph-holding-first"
+    )
+    assert "ambiguous_table_or_locator" not in _gap_codes(family)
+
+
+def test_manager_profile_source_truth_conflicting_holdings_row_is_ambiguous() -> None:
+    """同一持仓行 identity 出现冲突值时省略该行并追加 ambiguity gap。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当冲突持仓行进入 public value 时抛出。
+    """
+
+    table = _TableStub(
+        table_id="table-conflicting-holdings",
+        section_id="section-holdings",
+        heading_text="前十名股票投资明细",
+        table_caption_or_nearby_heading="前十名股票投资明细",
+        heading_path=("投资组合", "前十名股票投资明细"),
+        cells=(
+            _manager_profile_holdings_cell("股票代码", "600000", row_index=0, column_index=0, table_id="table-conflicting-holdings"),
+            _manager_profile_holdings_cell("股票名称", "浦发银行", row_index=0, column_index=1, table_id="table-conflicting-holdings"),
+            _manager_profile_holdings_cell("公允价值", "1,000.00", row_index=0, column_index=2, table_id="table-conflicting-holdings"),
+            _manager_profile_holdings_cell("股票代码", "600000", row_index=1, column_index=0, table_id="table-conflicting-holdings"),
+            _manager_profile_holdings_cell("股票名称", "浦发银行", row_index=1, column_index=1, table_id="table-conflicting-holdings"),
+            _manager_profile_holdings_cell("公允价值", "2,000.00", row_index=1, column_index=2, table_id="table-conflicting-holdings"),
+        ),
+    )
+
+    result = _manager_profile_source_truth_result(
+        _ContentIntermediateStub(
+            source_provenance=_provenance(),
+            source_truth_admission=_source_truth_admission_proof(),
+            sections=(),
+            paragraph_blocks=(),
+            table_blocks=(table,),
+        )
+    )
+
+    family = _field_family(result, "manager_profile.v1")
+
+    assert "holdings_snapshot" not in family.value
+    assert family.anchors == ()
+    assert "ambiguous_table_or_locator" in _gap_codes(family)
+    assert any(
+        gap.source_field_path == "holdings_snapshot.top_holdings"
+        for gap in family.gaps
+        if gap.gap_code == "ambiguous_table_or_locator"
+    )
+
+
+def test_manager_profile_source_truth_accepted_when_all_allowed_groups_present() -> None:
+    """五个 manager_profile top-level subvalues 全部存在时 accepted 且无缺口。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当五项完整仍 partial、缺 gap 或跨族泄漏时抛出。
+    """
+
+    roster_table = _TableStub(
+        table_id="table-roster",
+        section_id="section-manager",
+        heading_text="基金经理情况",
+        table_caption_or_nearby_heading="基金经理情况",
+        heading_path=("基金经理情况",),
+        cells=(
+            _manager_profile_cell("姓名", "张三", row_index=0, column_index=0),
+            _manager_profile_cell("职务", "基金经理", row_index=0, column_index=1),
+            _manager_profile_cell("任职日期", "2020-01-01", row_index=0, column_index=2),
+        ),
+    )
+    turnover_table = _TableStub(
+        table_id="table-turnover",
+        section_id="section-turnover",
+        heading_text="报告期内股票换手率",
+        table_caption_or_nearby_heading="报告期内股票换手率",
+        heading_path=("交易情况",),
+        cells=(
+            _manager_profile_cell(
+                "报告期内股票换手率",
+                "123.45%",
+                row_index=0,
+                table_id="table-turnover",
+                label_axis="row",
+            ),
+        ),
+    )
+    top_table = _TableStub(
+        table_id="table-top-holdings",
+        section_id="section-holdings",
+        heading_text="前十名股票投资明细",
+        table_caption_or_nearby_heading="前十名股票投资明细",
+        heading_path=("投资组合", "前十名股票投资明细"),
+        cells=(
+            _manager_profile_holdings_cell("股票代码", "600000", row_index=0, column_index=0, table_id="table-top-holdings"),
+            _manager_profile_holdings_cell("股票名称", "浦发银行", row_index=0, column_index=1, table_id="table-top-holdings"),
+            _manager_profile_holdings_cell("公允价值", "1,234.56", row_index=0, column_index=2, table_id="table-top-holdings"),
+        ),
+    )
+    strategy = _ParagraphStub(
+        block_id="paragraph-strategy",
+        section_id="section-strategy",
+        heading_path=("报告期内基金投资策略和运作分析",),
+        text_raw="本报告期坚持均衡配置。",
+        text_normalized="本报告期坚持均衡配置。",
+    )
+    alignment = _ParagraphStub(
+        block_id="paragraph-alignment",
+        section_id="section-alignment",
+        heading_path=("基金经理持有本基金情况",),
+        text_raw="基金经理持有本基金份额区间为100万份以上。",
+        text_normalized="基金经理持有本基金份额区间为100万份以上。",
+    )
+
+    result = _manager_profile_source_truth_result(
+        _ContentIntermediateStub(
+            source_provenance=_provenance(),
+            source_truth_admission=_source_truth_admission_proof(),
+            sections=(),
+            paragraph_blocks=(strategy, alignment),
+            table_blocks=(roster_table, turnover_table, top_table),
+        )
+    )
+
+    family = _field_family(result, "manager_profile.v1")
+
+    assert result.contract_status == "partial"
+    assert family.status == "accepted"
+    assert family.extraction_mode == "direct"
+    assert family.gaps == ()
+    assert family.candidate_evidence == ()
+    assert set(family.value) == {
+        "schema_version",
+        "portfolio_managers",
+        "manager_strategy_text",
+        "turnover_rate",
+        "manager_alignment",
+        "holdings_snapshot",
+    }
+    assert family.value["schema_version"] == "manager_profile.v1"
+    assert _field_family(result, "current_stage.v1").value == {}
+    assert _field_family(result, "core_risk.v1").value == {}
+
+
+def test_manager_profile_source_truth_full_value_with_internal_ambiguity_is_partial() -> None:
+    """五个 top-level 都存在但内部有歧义时不得返回 accepted。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当带 ambiguity gap 的完整 top-level 被误标 accepted 时抛出。
+    """
+
+    roster_table = _TableStub(
+        table_id="table-roster",
+        section_id="section-manager",
+        heading_text="基金经理情况",
+        table_caption_or_nearby_heading="基金经理情况",
+        heading_path=("基金经理情况",),
+        cells=(
+            _manager_profile_cell("姓名", "张三", row_index=0, column_index=0),
+            _manager_profile_cell("职务", "基金经理", row_index=0, column_index=1),
+            _manager_profile_cell("任职日期", "2020-01-01", row_index=0, column_index=2),
+        ),
+    )
+    turnover_table = _TableStub(
+        table_id="table-turnover",
+        section_id="section-turnover",
+        heading_text="报告期内股票换手率",
+        table_caption_or_nearby_heading="报告期内股票换手率",
+        heading_path=("交易情况",),
+        cells=(
+            _manager_profile_cell(
+                "报告期内股票换手率",
+                "123.45%",
+                row_index=0,
+                table_id="table-turnover",
+                label_axis="row",
+            ),
+        ),
+    )
+    holdings_table = _TableStub(
+        table_id="table-ambiguous-plus-valid-holdings",
+        section_id="section-holdings",
+        heading_text="前十名股票投资明细",
+        table_caption_or_nearby_heading="前十名股票投资明细",
+        heading_path=("投资组合", "前十名股票投资明细"),
+        cells=(
+            _manager_profile_holdings_cell("股票代码", "600000", row_index=0, column_index=0, table_id="table-ambiguous-plus-valid-holdings"),
+            _manager_profile_holdings_cell("股票名称", "浦发银行", row_index=0, column_index=1, table_id="table-ambiguous-plus-valid-holdings"),
+            _manager_profile_holdings_cell("公允价值", "1,000.00", row_index=0, column_index=2, table_id="table-ambiguous-plus-valid-holdings"),
+            _manager_profile_holdings_cell("股票代码", "600000", row_index=1, column_index=0, table_id="table-ambiguous-plus-valid-holdings"),
+            _manager_profile_holdings_cell("股票名称", "浦发银行", row_index=1, column_index=1, table_id="table-ambiguous-plus-valid-holdings"),
+            _manager_profile_holdings_cell("公允价值", "2,000.00", row_index=1, column_index=2, table_id="table-ambiguous-plus-valid-holdings"),
+            _manager_profile_holdings_cell("股票代码", "000001", row_index=2, column_index=0, table_id="table-ambiguous-plus-valid-holdings"),
+            _manager_profile_holdings_cell("股票名称", "平安银行", row_index=2, column_index=1, table_id="table-ambiguous-plus-valid-holdings"),
+            _manager_profile_holdings_cell("公允价值", "3,000.00", row_index=2, column_index=2, table_id="table-ambiguous-plus-valid-holdings"),
+        ),
+    )
+    strategy = _ParagraphStub(
+        block_id="paragraph-strategy",
+        section_id="section-strategy",
+        heading_path=("报告期内基金投资策略和运作分析",),
+        text_raw="本报告期坚持均衡配置。",
+        text_normalized="本报告期坚持均衡配置。",
+    )
+    alignment = _ParagraphStub(
+        block_id="paragraph-alignment",
+        section_id="section-alignment",
+        heading_path=("基金经理持有本基金情况",),
+        text_raw="基金经理持有本基金份额区间为100万份以上。",
+        text_normalized="基金经理持有本基金份额区间为100万份以上。",
+    )
+
+    result = _manager_profile_source_truth_result(
+        _ContentIntermediateStub(
+            source_provenance=_provenance(),
+            source_truth_admission=_source_truth_admission_proof(),
+            sections=(),
+            paragraph_blocks=(strategy, alignment),
+            table_blocks=(roster_table, turnover_table, holdings_table),
+        )
+    )
+
+    family = _field_family(result, "manager_profile.v1")
+
+    assert set(family.value) == {
+        "schema_version",
+        "portfolio_managers",
+        "manager_strategy_text",
+        "turnover_rate",
+        "manager_alignment",
+        "holdings_snapshot",
+    }
+    assert family.status == "partial"
+    assert family.extraction_mode == "direct"
+    assert family.candidate_evidence == ()
+    assert "ambiguous_table_or_locator" in _gap_codes(family)
+    assert any(
+        gap.source_field_path == "holdings_snapshot.top_holdings"
+        for gap in family.gaps
+        if gap.gap_code == "ambiguous_table_or_locator"
+    )
+
+
+def test_manager_profile_source_truth_extracts_table_backed_alignment() -> None:
+    """table-backed alignment 路径可按 label/value split 抽取持有披露。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 table/cell guard 或 label/value 分离失效时抛出。
+    """
+
+    table = _TableStub(
+        table_id="table-alignment",
+        section_id="section-alignment",
+        heading_text="基金管理人持有情况",
+        table_caption_or_nearby_heading="基金管理人持有情况",
+        heading_path=("基金管理人持有情况",),
+        cells=(
+            _CellStub(
+                cell_id="cell-manager-label",
+                table_id="table-alignment",
+                row_index=0,
+                column_index=0,
+                row_label_path=("基金经理持有本基金",),
+                column_header_path=("项目",),
+                cell_text="基金经理持有本基金",
+                cell_text_normalized="基金经理持有本基金",
+            ),
+            _CellStub(
+                cell_id="cell-manager-value",
+                table_id="table-alignment",
+                row_index=0,
+                column_index=1,
+                row_label_path=("基金经理持有本基金",),
+                column_header_path=("内容",),
+                cell_text="100万份以上",
+                cell_text_normalized="100万份以上",
+            ),
+            _CellStub(
+                cell_id="cell-employee-label",
+                table_id="table-alignment",
+                row_index=1,
+                column_index=0,
+                row_label_path=("基金管理人所有从业人员持有本基金",),
+                column_header_path=("项目",),
+                cell_text="基金管理人所有从业人员持有本基金",
+                cell_text_normalized="基金管理人所有从业人员持有本基金",
+            ),
+            _CellStub(
+                cell_id="cell-employee-value",
+                table_id="table-alignment",
+                row_index=1,
+                column_index=1,
+                row_label_path=("基金管理人所有从业人员持有本基金",),
+                column_header_path=("内容",),
+                cell_text="50万份至100万份",
+                cell_text_normalized="50万份至100万份",
+            ),
+        ),
+    )
+
+    result = _manager_profile_source_truth_result(
+        _ContentIntermediateStub(
+            source_provenance=_provenance(),
+            source_truth_admission=_source_truth_admission_proof(),
+            sections=(),
+            paragraph_blocks=(),
+            table_blocks=(table,),
+        )
+    )
+
+    family = _field_family(result, "manager_profile.v1")
+
+    assert family.value["manager_alignment"] == {
+        "manager_holding": "100万份以上",
+        "employee_holding": "50万份至100万份",
+        "judgment": None,
+    }
+    assert family.anchors[0].table_id == "table-alignment"
+    assert family.anchors[0].row_locator.startswith("field=manager_alignment.manager_holding")
+    assert family.candidate_evidence == ()
+
+
+def test_manager_profile_cell_original_index_raises_for_foreign_cell() -> None:
+    """target cell 不属于 table.cells 时不得静默返回 cells[0]。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 helper 未抛出 ValueError 时由 pytest 抛出。
+    """
+
+    table_cell = _CellStub(cell_id="cell-owned", table_id="table-owned")
+    foreign_cell = _CellStub(cell_id="cell-foreign", table_id="table-owned")
+    table = _TableStub(table_id="table-owned", cells=(table_cell,))
+
+    with pytest.raises(ValueError, match="target_cell not found"):
+        _manager_profile_cell_original_index(table, foreign_cell)
 
 
 # ── S6-D manager profile candidate selector ────────────────────────────────
