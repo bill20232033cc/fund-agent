@@ -297,10 +297,10 @@ def _jsonable(value: object, *, path: str) -> object:
             for field in fields(value)
         }
     if isinstance(value, Sequence):
-        return tuple(
+        return [
             _jsonable(item, path=f"{path}[{index}]")
             for index, item in enumerate(value)
-        )
+        ]
     raise TypeError(f"{path} 不是支持的 JSON 值类型：{type(value).__name__}")
 
 

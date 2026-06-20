@@ -113,6 +113,33 @@ def test_repository_roundtrip_preserves_anchors_nav_data_and_source_provenance(
     assert source_provenance["fallback_eligibility"] == "not_applicable"
 
 
+def test_repository_save_and_load_payload_use_same_sequence_shape(tmp_path: Path) -> None:
+    """验证 save 返回 payload 与 load 返回 payload 使用一致 JSON array/list 形态。
+
+    Args:
+        tmp_path: pytest 临时目录。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: save/load payload sequence 形态不一致时抛出。
+    """
+
+    repository = ExtractorOutputRepository(root_dir=tmp_path)
+
+    saved_record = repository.save(bundle=_bundle())
+    loaded_record = repository.load(fund_code="110011", report_type="annual_report", report_year=2024)
+    saved_basic_identity = saved_record.bundle_payload["basic_identity"]
+    loaded_basic_identity = loaded_record.bundle_payload["basic_identity"]
+
+    assert isinstance(saved_basic_identity, dict)
+    assert isinstance(loaded_basic_identity, dict)
+    assert isinstance(saved_basic_identity["anchors"], list)
+    assert saved_basic_identity["anchors"] == loaded_basic_identity["anchors"]
+    assert saved_record.bundle_payload == loaded_record.bundle_payload
+
+
 def test_repository_rejects_path_json_identity_mismatch(tmp_path: Path) -> None:
     """验证 load 时会拒绝路径身份与 JSON 身份不一致的文件。
 
