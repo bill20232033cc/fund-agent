@@ -415,6 +415,25 @@ def _investor_experience_source_truth_result(
     return processor.extract(FundProcessorInput(context=_dispatch_key(), intermediate=intermediate))
 
 
+def _current_stage_source_truth_result(
+    intermediate: _ContentIntermediateStub,
+) -> FundProcessorResult:
+    """运行 current_stage source-truth route 测试用 processor。
+
+    Args:
+        intermediate: FDD content intermediate。
+
+    Returns:
+        processor 输出结果。
+
+    Raises:
+        无显式抛出。
+    """
+
+    processor = FundDisclosureDocumentProcessor()
+    return processor.extract(FundProcessorInput(context=_dispatch_key(), intermediate=intermediate))
+
+
 def _investor_paragraph(
     text: str,
     *,
@@ -917,8 +936,12 @@ def test_product_essence_source_truth_extracts_exact_value_shape() -> None:
     }
     assert product.anchors
     assert all(anchor.source_kind == "annual_report" for anchor in product.anchors)
+    current_stage = _field_family(result, "current_stage.v1")
+    assert current_stage.status == "partial"
+    assert set(current_stage.value) == {"schema_version", "basic_identity"}
+    assert current_stage.candidate_evidence == ()
     for family in result.field_families:
-        if family.field_family_id == "product_essence.v1":
+        if family.field_family_id in {"product_essence.v1", "current_stage.v1"}:
             continue
         assert family.status == "missing"
         assert family.value == {}
@@ -2950,8 +2973,11 @@ def test_manager_profile_source_truth_extracts_roster_strategy_turnover_shape() 
     }
     assert len(family.anchors) == 3
     assert all(anchor.source_kind == "annual_report" for anchor in family.anchors)
-    assert _field_family(result, "current_stage.v1").value == {}
-    assert _field_family(result, "current_stage.v1").anchors == ()
+    current_stage = _field_family(result, "current_stage.v1")
+    assert current_stage.status == "partial"
+    assert set(current_stage.value) == {"schema_version", "portfolio_managers"}
+    assert current_stage.anchors
+    assert current_stage.candidate_evidence == ()
     assert _field_family(result, "core_risk.v1").value == {}
     assert _field_family(result, "core_risk.v1").anchors == ()
 
@@ -3554,8 +3580,11 @@ def test_manager_profile_source_truth_extracts_holdings_snapshot_without_risk_or
     assert "style_drift" not in holdings
     assert "core_risk" not in holdings
     assert "current_stage" not in holdings
-    assert _field_family(result, "current_stage.v1").value == {}
-    assert _field_family(result, "current_stage.v1").anchors == ()
+    current_stage = _field_family(result, "current_stage.v1")
+    assert current_stage.status == "partial"
+    assert set(current_stage.value) == {"schema_version", "holdings_snapshot"}
+    assert current_stage.anchors
+    assert current_stage.candidate_evidence == ()
     assert _field_family(result, "core_risk.v1").value == {}
     assert _field_family(result, "core_risk.v1").anchors == ()
 
@@ -3805,7 +3834,14 @@ def test_manager_profile_source_truth_accepted_when_all_allowed_groups_present()
         "holdings_snapshot",
     }
     assert family.value["schema_version"] == "manager_profile.v1"
-    assert _field_family(result, "current_stage.v1").value == {}
+    current_stage = _field_family(result, "current_stage.v1")
+    assert current_stage.status == "partial"
+    assert set(current_stage.value) == {
+        "schema_version",
+        "holdings_snapshot",
+        "portfolio_managers",
+    }
+    assert current_stage.candidate_evidence == ()
     assert _field_family(result, "core_risk.v1").value == {}
 
 
@@ -6098,7 +6134,7 @@ def test_investor_experience_source_truth_share_change_calculates_net_change() -
 
 
 def test_investor_experience_source_truth_does_not_populate_stage_or_risk() -> None:
-    """investor direct suppression 不得清空 current_stage/core_risk candidate evidence。
+    """investor direct route 不得把候选 evidence 提升为 stage/risk public value。
 
     Args:
         无。
@@ -6140,7 +6176,367 @@ def test_investor_experience_source_truth_does_not_populate_stage_or_risk() -> N
     assert investor.value["investor_return"]["investor_return_rate"] == "7.25%"
     assert current_stage.value == {}
     assert core_risk.value == {}
-    assert current_stage.candidate_evidence
+    assert current_stage.candidate_evidence == ()
+    assert core_risk.candidate_evidence
+
+
+# ── current_stage source-truth values ──────────────────────────────────────
+
+
+def test_current_stage_source_truth_extracts_allowed_fact_inputs_only() -> None:
+    """proof-positive current_stage 只发出四个既有 public key。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 current_stage 扩张 schema、缺少 anchor 或混入 candidate 时抛出。
+    """
+
+    product_table = _TableStub(
+        table_id="table-product",
+        section_id="section-product",
+        heading_text="基金基本情况",
+        table_caption_or_nearby_heading="基金基本情况",
+        heading_path=("基金简介",),
+        cells=(
+            _product_cell("基金名称", "测试主动基金", row_index=0, cell_id="product-name"),
+            _product_cell("基金主代码", "004393", row_index=1, cell_id="product-code"),
+        ),
+    )
+    share_table = _TableStub(
+        table_id="table-share",
+        section_id="section-share",
+        heading_text="基金份额变动",
+        table_caption_or_nearby_heading="基金份额变动",
+        heading_path=("基金份额变动",),
+        cells=(
+            _investor_cell(
+                "期初基金份额总额",
+                "1,000.00",
+                row_index=0,
+                table_id="table-share",
+                column_header_path=("004393",),
+            ),
+            _investor_cell(
+                "期末基金份额总额",
+                "1,250.00",
+                row_index=1,
+                table_id="table-share",
+                column_header_path=("004393",),
+            ),
+            _investor_cell(
+                "净变动",
+                "250.00",
+                row_index=2,
+                table_id="table-share",
+                column_header_path=("004393",),
+            ),
+        ),
+    )
+    roster_table = _TableStub(
+        table_id="table-roster",
+        section_id="section-manager",
+        heading_text="基金经理情况",
+        table_caption_or_nearby_heading="基金经理情况",
+        heading_path=("基金管理人及基金经理情况",),
+        cells=(
+            _manager_profile_cell("姓名", "张三", row_index=0, column_index=0),
+            _manager_profile_cell("职务", "基金经理", row_index=0, column_index=1),
+            _manager_profile_cell("任职日期", "2020-01-01", row_index=0, column_index=2),
+        ),
+    )
+    holdings_table = _TableStub(
+        table_id="table-top-holdings",
+        section_id="section-holdings",
+        heading_text="前十名股票投资明细",
+        table_caption_or_nearby_heading="前十名股票投资明细",
+        heading_path=("投资组合", "前十名股票投资明细"),
+        cells=(
+            _manager_profile_holdings_cell(
+                "股票代码", "600000", row_index=0, column_index=0, table_id="table-top-holdings"
+            ),
+            _manager_profile_holdings_cell(
+                "股票名称", "浦发银行", row_index=0, column_index=1, table_id="table-top-holdings"
+            ),
+            _manager_profile_holdings_cell(
+                "公允价值",
+                "1,234,567.89",
+                row_index=0,
+                column_index=2,
+                table_id="table-top-holdings",
+            ),
+        ),
+    )
+
+    result = _current_stage_source_truth_result(
+        _ContentIntermediateStub(
+            source_provenance=_provenance(),
+            source_truth_admission=_source_truth_admission_proof(),
+            sections=(),
+            paragraph_blocks=(),
+            table_blocks=(product_table, share_table, roster_table, holdings_table),
+        )
+    )
+
+    family = _field_family(result, "current_stage.v1")
+    value = family.value
+
+    assert family.status == "accepted"
+    assert family.extraction_mode == "direct"
+    assert family.candidate_evidence == ()
+    assert set(value) == {
+        "schema_version",
+        "basic_identity",
+        "share_change",
+        "holdings_snapshot",
+        "portfolio_managers",
+    }
+    assert value["schema_version"] == "current_stage.v1"
+    assert value["basic_identity"]["fund_name"] == "测试主动基金"
+    assert value["basic_identity"]["fund_code"] == "004393"
+    assert value["share_change"] == {
+        "beginning_share": "1,000.00",
+        "ending_share": "1,250.00",
+        "net_change": "250.00",
+        "share_class_column": "004393",
+        "share_class_selection_reason": "single_value_column",
+    }
+    assert value["holdings_snapshot"]["top_holdings"] == [
+        {"股票代码": "600000", "股票名称": "浦发银行", "公允价值": "1,234,567.89"}
+    ]
+    assert value["portfolio_managers"]["portfolio_managers"][0]["name"] == "张三"
+    assert family.anchors
+    assert {anchor.source_kind for anchor in family.anchors} == {"annual_report"}
+    forbidden_keys = {
+        "current_stage_summary",
+        "stage_status",
+        "manager_change",
+        "share_scale_change",
+        "holding_strategy_change",
+        "stage_judgment",
+        "market_timing",
+        "valuation_state",
+    }
+    assert forbidden_keys.isdisjoint(value)
+
+
+def test_current_stage_source_truth_direct_missing_suppresses_candidate_evidence() -> None:
+    """proof-positive current_stage direct missing 不回退 candidate evidence。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 direct missing 混入 candidate evidence 时抛出。
+    """
+
+    result = _current_stage_source_truth_result(
+        _ContentIntermediateStub(
+            source_provenance=_provenance(),
+            source_truth_admission=_source_truth_admission_proof(),
+            sections=(
+                _SectionStub(
+                    section_id="section-stage",
+                    heading_text_raw="当前阶段",
+                    heading_text_normalized="当前阶段",
+                    heading_path=("当前阶段",),
+                ),
+            ),
+            paragraph_blocks=(),
+            table_blocks=(),
+        )
+    )
+
+    family = _field_family(result, "current_stage.v1")
+
+    assert family.status == "missing"
+    assert family.extraction_mode == "missing"
+    assert family.value == {}
+    assert family.anchors == ()
+    assert family.candidate_evidence == ()
+    assert _gap_codes(family) == {"field_family_missing"}
+
+
+def test_current_stage_source_truth_requires_positive_proof() -> None:
+    """缺 source-truth proof 时 current_stage public 结果保持 missing。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当缺 proof 仍输出 current_stage public value 时抛出。
+    """
+
+    result = _current_stage_source_truth_result(
+        _ContentIntermediateStub(
+            source_provenance=_provenance(),
+            source_truth_admission=None,
+            sections=(
+                _SectionStub(
+                    section_id="section-stage",
+                    heading_text_raw="当前阶段",
+                    heading_text_normalized="当前阶段",
+                    heading_path=("当前阶段",),
+                ),
+            ),
+            paragraph_blocks=(),
+            table_blocks=(),
+        )
+    )
+
+    family = _field_family(result, "current_stage.v1")
+
+    assert family.status == "missing"
+    assert family.value == {}
+    assert family.anchors == ()
+    assert family.candidate_evidence
+    assert "source_truth_admission_missing" in _gap_codes(family)
+
+
+def test_current_stage_source_truth_rejects_invalid_proof() -> None:
+    """proof 身份不一致时 current_stage 不进入 direct source truth。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 invalid proof 被接受时抛出。
+    """
+
+    result = _current_stage_source_truth_result(
+        _ContentIntermediateStub(
+            source_provenance=_provenance(),
+            source_truth_admission=_source_truth_admission_proof(fund_code="110011"),
+            sections=(
+                _SectionStub(
+                    section_id="section-stage",
+                    heading_text_raw="基金运作情况",
+                    heading_text_normalized="基金运作情况",
+                    heading_path=("基金运作情况",),
+                ),
+            ),
+            paragraph_blocks=(),
+            table_blocks=(),
+        )
+    )
+
+    family = _field_family(result, "current_stage.v1")
+
+    assert family.status == "missing"
+    assert family.value == {}
+    assert family.anchors == ()
+    assert "source_truth_admission_invalid" in _gap_codes(family)
+
+
+def test_current_stage_source_truth_candidate_boundary_remains_blocked() -> None:
+    """candidate boundary 不因 current_stage source-truth proof 存在被绕过。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 candidate boundary 被 direct route 绕过时抛出。
+    """
+
+    boundary = CandidateBoundaryStatus(
+        candidate_only=True,
+        field_correctness_status="not_proven",
+        source_truth_status="not_proven",
+    )
+    result = _current_stage_source_truth_result(
+        _ContentIntermediateStub(
+            source_provenance=_provenance(),
+            candidate_boundary=boundary,
+            source_truth_admission=_source_truth_admission_proof(),
+            sections=(
+                _SectionStub(
+                    section_id="section-stage",
+                    heading_text_raw="当前阶段",
+                    heading_text_normalized="当前阶段",
+                    heading_path=("当前阶段",),
+                ),
+            ),
+            paragraph_blocks=(),
+            table_blocks=(),
+        )
+    )
+
+    family = _field_family(result, "current_stage.v1")
+
+    assert result.contract_status == "blocked"
+    assert result.candidate_boundary is boundary
+    assert family.status == "missing"
+    assert family.value == {}
+    assert family.anchors == ()
+    assert family.candidate_evidence
+    assert _gap_codes(family) == {"candidate_only_not_source_truth"}
+
+
+def test_current_stage_source_truth_does_not_implement_core_risk() -> None:
+    """current_stage direct extraction 不改变 core_risk candidate-only 边界。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 core_risk 被 source-truth 提升时抛出。
+    """
+
+    result = _current_stage_source_truth_result(
+        _ContentIntermediateStub(
+            source_provenance=_provenance(),
+            source_truth_admission=_source_truth_admission_proof(),
+            sections=(
+                _SectionStub(
+                    section_id="section-risk",
+                    heading_text_raw="风险收益特征",
+                    heading_text_normalized="风险收益特征",
+                    heading_path=("风险收益特征",),
+                ),
+            ),
+            table_blocks=(
+                _TableStub(
+                    table_id="table-product",
+                    heading_text="基金基本情况",
+                    table_caption_or_nearby_heading="基金基本情况",
+                    heading_path=("基金简介",),
+                    cells=(
+                        _product_cell("基金名称", "测试主动基金", row_index=0),
+                        _product_cell("基金主代码", "004393", row_index=1),
+                    ),
+                ),
+            ),
+        )
+    )
+
+    current_stage = _field_family(result, "current_stage.v1")
+    core_risk = _field_family(result, "core_risk.v1")
+
+    assert current_stage.status == "partial"
+    assert set(current_stage.value) == {"schema_version", "basic_identity"}
+    assert current_stage.candidate_evidence == ()
+    assert core_risk.status == "missing"
+    assert core_risk.value == {}
+    assert core_risk.anchors == ()
     assert core_risk.candidate_evidence
 
 

@@ -354,6 +354,12 @@ _SHARE_CHANGE_LABEL_COLUMN_TOKENS: Final[tuple[str, ...]] = (
 _SHARE_CHANGE_VALUE_PATTERN: Final[re.Pattern[str]] = re.compile(
     r"[-+]?\d+(?:,\d{3})*(?:\.\d+)?"
 )
+_CURRENT_STAGE_REQUIRED_TOP_LEVEL: Final[tuple[str, ...]] = (
+    "basic_identity",
+    "share_change",
+    "holdings_snapshot",
+    "portfolio_managers",
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -394,6 +400,16 @@ class _InvestorExperienceValueCandidate:
     output_path: str
     value: object
     anchor: EvidenceAnchor
+    source_field_path: str
+
+
+@dataclass(frozen=True, slots=True)
+class _CurrentStageValueCandidate:
+    """current_stage.v1 单个 source-truth 字段值候选，见模板第 5 章。"""
+
+    output_path: str
+    value: object
+    anchors: tuple[EvidenceAnchor, ...]
     source_field_path: str
 _MANAGER_PROFILE_MATCH_GROUPS: Final[
     tuple[tuple[str, tuple[str, ...], tuple[str, ...], tuple[str, ...]], ...]
@@ -965,6 +981,7 @@ def _field_families_for_intermediate(
     return_attribution_source_truth: FundFieldFamilyResult | None = None
     manager_profile_source_truth: FundFieldFamilyResult | None = None
     investor_experience_source_truth: FundFieldFamilyResult | None = None
+    current_stage_source_truth: FundFieldFamilyResult | None = None
     content_intermediate = _content_intermediate_or_none(intermediate)
     if source_truth_extraction_allowed and content_intermediate is not None:
         product_essence_source_truth = _extract_product_essence_source_truth(
@@ -977,6 +994,9 @@ def _field_families_for_intermediate(
             content_intermediate, source_provenance, context
         )
         investor_experience_source_truth = _extract_investor_experience_source_truth(
+            content_intermediate, source_provenance, context
+        )
+        current_stage_source_truth = _extract_current_stage_source_truth(
             content_intermediate, source_provenance, context
         )
 
@@ -1000,7 +1020,11 @@ def _field_families_for_intermediate(
         if investor_experience_source_truth is not None
         else _select_investor_experience_candidate_evidence(intermediate)
     )
-    current_stage_evidence = _select_current_stage_candidate_evidence(intermediate)
+    current_stage_evidence = (
+        ()
+        if current_stage_source_truth is not None
+        else _select_current_stage_candidate_evidence(intermediate)
+    )
     core_risk_evidence = _select_core_risk_candidate_evidence(intermediate)
     candidate_evidence_by_family: dict[
         FundFieldFamilyId, tuple[FundCandidateEvidenceRecord, ...]
@@ -1025,6 +1049,9 @@ def _field_families_for_intermediate(
         else investor_experience_source_truth
         if family_id == "investor_experience.v1"
         and investor_experience_source_truth is not None
+        else current_stage_source_truth
+        if family_id == "current_stage.v1"
+        and current_stage_source_truth is not None
         else (
             _candidate_missing_field_family(
                 family_id, source_provenance, candidate_evidence_by_family[family_id]
@@ -6423,6 +6450,250 @@ def _investor_experience_status(value: dict[str, object], ambiguous_paths: set[s
     """
 
     if all(top_level in value for top_level in _INVESTOR_EXPERIENCE_REQUIRED_TOP_LEVEL) and not ambiguous_paths:
+        return "accepted"
+    if value:
+        return "partial"
+    return "missing"
+
+
+def _extract_current_stage_source_truth(
+    intermediate: FundDisclosureDocumentContentIntermediate,
+    source_provenance: PublicSourceProvenance | None,
+    context: FundProcessorDispatchKey,
+) -> FundFieldFamilyResult:
+    """从 proof-positive FDD 正文抽取模板第 5 章当前阶段输入字段族。
+
+    Args:
+        intermediate: 已通过 source-truth admission proof 的正文中间态。
+        source_provenance: 公共来源 provenance。
+        context: Processor dispatch 身份。
+
+    Returns:
+        `current_stage.v1` 字段族；只复用既有 public 字段形状，不输出阶段判断。
+
+    Raises:
+        无显式抛出。
+    """
+
+    selected_values, ambiguous_paths = _select_current_stage_values(intermediate, context)
+    value = _build_current_stage_value(selected_values)
+    gaps = _current_stage_source_truth_gaps(value, ambiguous_paths)
+    status = _current_stage_status(value, ambiguous_paths)
+    anchors = _dedupe_anchors(
+        anchor
+        for output_path in _current_stage_emitted_output_paths(value, selected_values)
+        for anchor in selected_values[output_path].anchors
+    )
+    return FundFieldFamilyResult(
+        field_family_id="current_stage.v1",
+        chapter_ids=_CHAPTER_IDS["current_stage.v1"],
+        value=value,
+        status=status,
+        extraction_mode="missing" if status == "missing" else "direct",
+        anchors=anchors,
+        gaps=gaps,
+        source_provenance=source_provenance,
+        candidate_evidence=(),
+    )
+
+
+def _select_current_stage_values(
+    intermediate: FundDisclosureDocumentContentIntermediate,
+    context: FundProcessorDispatchKey,
+) -> tuple[dict[str, _CurrentStageValueCandidate], set[str]]:
+    """选择 current_stage.v1 允许复用的四个事实输入。
+
+    Args:
+        intermediate: FDD 正文中间态。
+        context: Processor dispatch 身份。
+
+    Returns:
+        `(selected_values, ambiguous_paths)`；只包含允许 public top-level key。
+
+    Raises:
+        无显式抛出。
+    """
+
+    selected_values: dict[str, _CurrentStageValueCandidate] = {}
+    ambiguous_paths: set[str] = set()
+    product_values, product_ambiguous_paths = _select_product_essence_values(
+        intermediate, context
+    )
+    basic_identity = _build_product_essence_basic_identity(product_values, context)
+    if basic_identity is not None:
+        emitted_paths = tuple(
+            output_path
+            for output_path in _product_essence_emitted_output_paths(
+                {"basic_identity": basic_identity}, product_values
+            )
+            if output_path.startswith("basic_identity.")
+        )
+        selected_values["basic_identity"] = _CurrentStageValueCandidate(
+            output_path="basic_identity",
+            value=basic_identity,
+            anchors=tuple(product_values[output_path].anchor for output_path in emitted_paths),
+            source_field_path="basic_identity",
+        )
+    if any(path.startswith("basic_identity.") for path in product_ambiguous_paths):
+        ambiguous_paths.add("basic_identity")
+
+    share_change = _select_investor_experience_share_change(
+        intermediate, context, ambiguous_paths
+    )
+    if share_change is not None:
+        selected_values["share_change"] = _CurrentStageValueCandidate(
+            output_path="share_change",
+            value=share_change.value,
+            anchors=(share_change.anchor,),
+            source_field_path=share_change.source_field_path,
+        )
+
+    holdings_snapshot = _select_manager_profile_holdings_snapshot(
+        intermediate, context, ambiguous_paths
+    )
+    if holdings_snapshot is not None:
+        selected_values["holdings_snapshot"] = _CurrentStageValueCandidate(
+            output_path="holdings_snapshot",
+            value=holdings_snapshot.value,
+            anchors=(holdings_snapshot.anchor,),
+            source_field_path=holdings_snapshot.source_field_path,
+        )
+
+    portfolio_managers = _select_manager_profile_portfolio_managers(
+        intermediate, context, ambiguous_paths
+    )
+    if portfolio_managers is not None:
+        selected_values["portfolio_managers"] = _CurrentStageValueCandidate(
+            output_path="portfolio_managers",
+            value=portfolio_managers.value,
+            anchors=(portfolio_managers.anchor,),
+            source_field_path=portfolio_managers.source_field_path,
+        )
+    return selected_values, ambiguous_paths
+
+
+def _build_current_stage_value(
+    selected_values: dict[str, _CurrentStageValueCandidate],
+) -> dict[str, object]:
+    """构造 `current_stage.v1.value`，不生成当前阶段语义摘要。
+
+    Args:
+        selected_values: 已解析的允许 top-level 候选值。
+
+    Returns:
+        只包含 schema_version 与允许 top-level key；无值时返回空字典。
+
+    Raises:
+        无显式抛出。
+    """
+
+    value: dict[str, object] = {}
+    for top_level in _CURRENT_STAGE_REQUIRED_TOP_LEVEL:
+        selected = selected_values.get(top_level)
+        if selected is not None:
+            value[top_level] = selected.value
+    if not value:
+        return {}
+    return {"schema_version": "current_stage.v1", **value}
+
+
+def _current_stage_emitted_output_paths(
+    value: dict[str, object],
+    selected_values: dict[str, _CurrentStageValueCandidate],
+) -> tuple[str, ...]:
+    """返回实际进入 public value 的 current_stage output paths。
+
+    Args:
+        value: 已构造的字段族 value。
+        selected_values: 已解析的 top-level 候选值。
+
+    Returns:
+        需要进入 family anchors 的输出路径元组。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return tuple(
+        top_level
+        for top_level in _CURRENT_STAGE_REQUIRED_TOP_LEVEL
+        if top_level in value and top_level in selected_values
+    )
+
+
+def _current_stage_source_truth_gaps(
+    value: dict[str, object],
+    ambiguous_paths: set[str],
+) -> tuple[FundExtractionGap, ...]:
+    """构造 current_stage.v1 source-truth 字段族本地 gaps。
+
+    Args:
+        value: 已构造的字段族 value。
+        ambiguous_paths: 发生 duplicate ambiguity 的输出路径集合。
+
+    Returns:
+        missing/partial/ambiguity gaps。
+
+    Raises:
+        无显式抛出。
+    """
+
+    gaps: list[FundExtractionGap] = []
+    for output_path in sorted(ambiguous_paths):
+        gaps.append(
+            FundExtractionGap(
+                gap_code="ambiguous_table_or_locator",
+                message=f"{output_path} 存在多个冲突的稳定 FDD locator 值",
+                field_family_id="current_stage.v1",
+                source_field_path=output_path,
+                source_boundary="ambiguous_locator",
+                required=True,
+            )
+        )
+    missing_top_level = tuple(
+        top_level for top_level in _CURRENT_STAGE_REQUIRED_TOP_LEVEL if top_level not in value
+    )
+    if not value:
+        gaps.append(
+            FundExtractionGap(
+                gap_code="field_family_missing",
+                message="current_stage.v1 未形成允许的 source-truth 字段值",
+                field_family_id="current_stage.v1",
+                source_field_path=None,
+                source_boundary="annual_report",
+                required=True,
+            )
+        )
+    elif missing_top_level:
+        gaps.extend(
+            FundExtractionGap(
+                gap_code="field_family_partial",
+                message=f"current_stage.v1 缺少 required top-level value: {top_level}",
+                field_family_id="current_stage.v1",
+                source_field_path=top_level,
+                source_boundary="annual_report",
+                required=True,
+            )
+            for top_level in missing_top_level
+        )
+    return tuple(gaps)
+
+
+def _current_stage_status(value: dict[str, object], ambiguous_paths: set[str]) -> str:
+    """按四个允许 top-level 完整度派生 current_stage 字段族状态。
+
+    Args:
+        value: 已构造的字段族 value。
+        ambiguous_paths: 已发现的歧义输出路径集合。
+
+    Returns:
+        `accepted`、`partial` 或 `missing`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if all(top_level in value for top_level in _CURRENT_STAGE_REQUIRED_TOP_LEVEL) and not ambiguous_paths:
         return "accepted"
     if value:
         return "partial"
