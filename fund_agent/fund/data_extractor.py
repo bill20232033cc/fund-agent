@@ -474,6 +474,9 @@ class FundDataExtractor:
             fund_code=report.key.fund_code,
         )
         source_provenance = disclosure_intermediate.source_provenance
+        if source_provenance is None:
+            raise RuntimeError("FundDisclosureDocument source_provenance is required")
+
         processor = self._processor_registry.resolve(dispatch_key)
         processor_input = FundProcessorInput(
             context=dispatch_key,
@@ -488,8 +491,6 @@ class FundDataExtractor:
                 f"fund_disclosure_document processor {result.processor_id} returned "
                 f"{result.contract_status}: {result.gaps}"
             )
-        if source_provenance is None:
-            raise RuntimeError("FundDisclosureDocument source_provenance is required")
 
         drawdown_metric, drawdown_metric_error = await _load_drawdown_metric_for_bond_fund(
             self._nav_series_repository,

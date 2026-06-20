@@ -2017,19 +2017,24 @@ async def test_explicit_disclosure_wrong_intermediate_kind_fails_before_nav() ->
 
 @pytest.mark.asyncio
 async def test_explicit_disclosure_missing_provenance_fails_closed() -> None:
-    """验证缺失 provenance 的显式 FDD 路径 fail-closed，不返回 bundle。"""
+    """验证缺失 provenance 的显式 FDD 路径在 registry 前 fail-closed。"""
 
+    registry = _RecordingRegistry()
+    registry.register(_MarkerDisclosureProcessor)
     extractor = FundDataExtractor(
         repository=_FakeRepository(_annual_report()),
         nav_provider=_RecordingNavProvider(),
+        processor_registry=registry,
     )
 
-    with pytest.raises(RuntimeError, match="source_provenance_unsafe"):
+    with pytest.raises(RuntimeError, match="source_provenance is required"):
         await extractor.extract(
             "110011",
             2024,
             disclosure_intermediate=_disclosure_intermediate(source_provenance=None),
         )
+
+    assert registry.resolved_contexts == []
 
 
 @pytest.mark.asyncio
