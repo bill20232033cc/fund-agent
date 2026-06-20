@@ -826,10 +826,16 @@ class _MarkerActiveFundProcessor:
             FundFieldFamilyResult(
                 field_family_id="current_stage.v1",
                 chapter_ids=(5,),
-                value={"schema_version": "current_stage.v1"},
-                status="not_applicable",
-                extraction_mode="not_applicable",
-                anchors=(),
+                value={
+                    "schema_version": "current_stage.v1",
+                    "basic_identity": {"marker": "current_stage_basic_identity_must_not_project"},
+                    "share_change": {"marker": "current_stage_share_must_not_project"},
+                    "holdings_snapshot": {"marker": "current_stage_holdings_must_not_project"},
+                    "portfolio_managers": {"marker": "current_stage_portfolio_must_not_project"},
+                },
+                status="accepted",
+                extraction_mode="direct",
+                anchors=(marker_anchor,),
                 gaps=(),
                 source_provenance=input_data.source_provenance,
             ),
@@ -955,10 +961,16 @@ class _MarkerDisclosureProcessor:
             FundFieldFamilyResult(
                 field_family_id="current_stage.v1",
                 chapter_ids=(5,),
-                value={"schema_version": "current_stage.v1"},
-                status="not_applicable",
-                extraction_mode="not_applicable",
-                anchors=(),
+                value={
+                    "schema_version": "current_stage.v1",
+                    "basic_identity": {"marker": "current_stage_basic_identity_must_not_project"},
+                    "share_change": {"marker": "current_stage_share_must_not_project"},
+                    "holdings_snapshot": {"marker": "current_stage_holdings_must_not_project"},
+                    "portfolio_managers": {"marker": "current_stage_portfolio_must_not_project"},
+                },
+                status="accepted",
+                extraction_mode="direct",
+                anchors=(marker_anchor,),
                 gaps=(),
                 source_provenance=input_data.source_provenance,
             ),
@@ -1066,10 +1078,10 @@ class _NeverSupportProcessor:
 
 @pytest.mark.asyncio
 async def test_active_fund_uses_processor_path_with_marker_values() -> None:
-    """验证 active fund 字段来自 processor 输出而非 direct extractor。
+    """验证 all-six-family processor 投影只消费 owning family 字段。
 
     注入返回已知 marker 值的自定义 processor，验证 bundle 字段包含 marker
-    而非 direct extractor 结果。这证明 S2 已接入 processor registry 路径。
+    而非 direct extractor 或 current_stage.v1 结果。
     """
 
     registry = FundProcessorRegistry()
@@ -1096,6 +1108,11 @@ async def test_active_fund_uses_processor_path_with_marker_values() -> None:
     assert bundle.investor_return.value == {"marker": "investor_return_from_processor"}
     assert bundle.holder_structure.value == {"marker": "holder_from_processor"}
     assert bundle.share_change.value == {"marker": "share_change_from_processor"}
+    assert not hasattr(bundle, "current_stage")
+    assert bundle.basic_identity.value != {"marker": "current_stage_basic_identity_must_not_project"}
+    assert bundle.share_change.value != {"marker": "current_stage_share_must_not_project"}
+    assert bundle.holdings_snapshot.value != {"marker": "current_stage_holdings_must_not_project"}
+    assert bundle.portfolio_managers.value != {"marker": "current_stage_portfolio_must_not_project"}
     assert bundle.tracking_error.extraction_mode == "missing"
     assert bundle.tracking_error.note == "非指数基金不适用跟踪误差"
 
@@ -1166,6 +1183,13 @@ async def test_explicit_disclosure_intermediate_routes_to_registry() -> None:
     assert bundle.basic_identity.value["fund_name"] == "DISCLOSURE_MARKER_PROCESSOR_PROOF"
     assert bundle.product_profile.value == {"marker": "product_profile_from_disclosure_processor"}
     assert bundle.portfolio_managers.value == {"marker": "portfolio_from_disclosure_processor"}
+    assert bundle.share_change.value == {"marker": "share_from_disclosure_processor"}
+    assert bundle.holdings_snapshot.value == {"marker": "holdings_from_disclosure_processor"}
+    assert not hasattr(bundle, "current_stage")
+    assert bundle.basic_identity.value != {"marker": "current_stage_basic_identity_must_not_project"}
+    assert bundle.share_change.value != {"marker": "current_stage_share_must_not_project"}
+    assert bundle.holdings_snapshot.value != {"marker": "current_stage_holdings_must_not_project"}
+    assert bundle.portfolio_managers.value != {"marker": "current_stage_portfolio_must_not_project"}
 
 
 @pytest.mark.asyncio
@@ -1369,6 +1393,44 @@ async def test_explicit_disclosure_source_truth_investor_experience_projects_to_
             *bundle.share_change.anchors,
         )
     } == {"annual_report"}
+
+
+@pytest.mark.asyncio
+async def test_explicit_disclosure_current_stage_source_truth_has_no_bundle_projection() -> None:
+    """验证 proof-positive FDD current_stage source text 不产生 bundle 字段。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 facade 暴露 StructuredFundDataBundle.current_stage 时抛出。
+    """
+
+    extractor = FundDataExtractor(
+        repository=_FakeRepository(_annual_report()),
+        nav_provider=_RecordingNavProvider(),
+        processor_registry=FundProcessorRegistry.create_default(),
+    )
+
+    bundle = await extractor.extract(
+        "110011",
+        2024,
+        disclosure_intermediate=_current_stage_source_truth_disclosure_intermediate(),
+    )
+
+    assert not hasattr(bundle, "current_stage")
+    assert bundle.basic_identity.value is not None
+    assert bundle.basic_identity.value["fund_code"] == "110011"
+    assert bundle.share_change.value == {
+        "beginning_share": "1,000.00",
+        "ending_share": "1,250.00",
+        "net_change": "250.00",
+        "share_class_column": "110011",
+        "share_class_selection_reason": "single_value_column",
+    }
 
 
 @pytest.mark.asyncio
@@ -1961,6 +2023,80 @@ def _investor_experience_candidate_only_disclosure_intermediate() -> _StubDisclo
     """
 
     return _investor_experience_disclosure_intermediate(source_truth_admission=None)
+
+
+def _current_stage_source_truth_disclosure_intermediate() -> _StubDisclosureIntermediate:
+    """构造带 proof-positive current_stage.v1 相关内容的 FDD stub。
+
+    Args:
+        无。
+
+    Returns:
+        测试用 current_stage source-truth FDD content intermediate。
+
+    Raises:
+        无显式抛出。
+    """
+
+    product_table = _DisclosureTable(
+        table_id="table-current-product",
+        section_id="section-product",
+        heading_text="基金基本情况",
+        table_caption_or_nearby_heading="基金基本情况",
+        heading_path=("基金简介",),
+        cells=(
+            _DisclosureCell(
+                cell_id="current-product-name",
+                table_id="table-current-product",
+                section_anchor="section-product",
+                heading_path=("基金简介",),
+                row_index=0,
+                column_index=1,
+                row_label_path=("基金名称",),
+                column_header_path=("内容",),
+                cell_text="测试当前阶段基金",
+            ),
+            _DisclosureCell(
+                cell_id="current-product-code",
+                table_id="table-current-product",
+                section_anchor="section-product",
+                heading_path=("基金简介",),
+                row_index=1,
+                column_index=1,
+                row_label_path=("基金主代码",),
+                column_header_path=("内容",),
+                cell_text="110011",
+            ),
+        ),
+    )
+    share_change_table = _DisclosureTable(
+        table_id="table-investor-share-change",
+        section_id="section-share-change",
+        heading_text="基金份额变动",
+        table_caption_or_nearby_heading="基金份额变动",
+        heading_path=("基金份额变动",),
+        cells=(
+            _investor_experience_share_change_cell(
+                "期初基金份额总额", "1,000.00", row_index=0
+            ),
+            _investor_experience_share_change_cell(
+                "期末基金份额总额", "1,250.00", row_index=1
+            ),
+            _investor_experience_share_change_cell("净变动", "250.00", row_index=2),
+        ),
+    )
+    current_stage_paragraph = _DisclosureParagraph(
+        block_id="paragraph-current-stage",
+        section_id="section-current-stage",
+        heading_path=("当前阶段",),
+        text_raw="当前阶段：报告期基金运作保持稳定。",
+        text_normalized="当前阶段：报告期基金运作保持稳定。",
+    )
+    return _disclosure_intermediate(
+        paragraph_blocks=(current_stage_paragraph,),
+        table_blocks=(product_table, share_change_table),
+        source_truth_admission=_source_truth_admission_proof(),
+    )
 
 
 def _investor_experience_disclosure_intermediate(
