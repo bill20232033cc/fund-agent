@@ -28,7 +28,7 @@ git push -u origin funddisclosure-source-truth-post-merge-control-sync
 
 ## Accepted Push Evidence
 
-- Remote branch `origin/funddisclosure-source-truth-post-merge-control-sync` is expected to be created at `the push-gate commit`.
+- Remote branch `origin/funddisclosure-source-truth-post-merge-control-sync` was created at pushed head `c2799e9dccf51dbf534bc7e8ddce3982d71fd404`.
 - Pushed content is control-plane only relative to `origin/main`: startup packet, implementation control, design wording, and three controller judgments.
 
 ## Boundaries Preserved
