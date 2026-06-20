@@ -19,6 +19,7 @@ DEFAULT_GOLDEN_REVIEWED_MARKDOWN: Final[Path] = Path(
 )
 DEFAULT_GOLDEN_ANSWER_JSON: Final[Path] = Path("reports/golden-answers/golden-answer.json")
 DEFAULT_EXTRACTION_SNAPSHOT_ROOT: Final[Path] = Path("reports/extraction-snapshots")
+DEFAULT_EXTRACTOR_OUTPUT_ROOT: Final[Path] = Path("reports/extractor-outputs")
 DEFAULT_QUALITY_GATE_OUTPUT_ROOT: Final[Path] = Path("reports/quality-gate-runs")
 DEFAULT_LLM_RUN_ARTIFACT_ROOT: Final[Path] = Path("reports/llm-runs")
 DEFAULT_REPRESENTATION_JSON_OUTPUT_ROOT: Final[Path] = Path("reports/representation-json")

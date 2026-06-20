@@ -19,6 +19,7 @@ report-*.md
 .mimocode/
 基金年报/
 reports/extraction-snapshots/
+reports/extractor-outputs/
 reports/quality-gate-runs/
 reports/smoke/
 reports/scoring-runs/

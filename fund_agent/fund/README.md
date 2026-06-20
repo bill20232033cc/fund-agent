@@ -234,6 +234,18 @@ template truth-source replacement、typed projection 和 `EvidenceAvailability` 
 - 输出 `snapshot.jsonl`、`summary.md` 和 `errors.jsonl`；`summary.md` 额外包含独立 `Source Provenance` 表，完全失败且没有 snapshot 记录的基金在 v1 表中省略并保留说明；单只基金失败时继续后续基金并记录错误
 - snapshot 只记录当前 extractor 的真实输出，不为特定基金覆盖字段值；`004393` 曾被误判为 `index_fund` 的问题已在 P4-S3a 修复为 `active_fund`
 
+`ExtractorOutputRepository` 当前用于把完整 `StructuredFundDataBundle` 保存为 bundle-level 结构化 JSON：
+
+- schema version 固定为 `fund-agent.extractor_output.v1`
+- 默认根目录为 `reports/extractor-outputs`
+- 路径固定为 `<root>/<fund_code>/annual_report/<year>/structured_fund_data.json`
+- 当前只支持 `report_type="annual_report"`；其它报告类型 fail-closed
+- JSON 顶层保留 `fund_code`、`report_type`、`report_year`、`created_at` 和 `bundle`
+- `bundle` 保留当前 `StructuredFundDataBundle` 的全部字段；每个 `ExtractedField` 保留 `value`、`anchors`、`extraction_mode` 和 `note`
+- `load(...)` 会校验路径请求身份与 JSON 顶层身份一致；不一致时 fail-closed
+- 序列化只接受 JSON primitive、dataclass、string-key mapping 和 sequence；未知对象不做 `str()` fallback，而是 `TypeError` fail-closed
+- 该仓库不读取文档仓库、PDF/cache、parser 原始产物或 source helper，不替代 `extraction_snapshot`、strict golden answer、quality gate、source truth、readiness 或 release proof
+
 `run_extraction_score()` 返回 `ExtractionScoreResult`，当前覆盖 P4-S2 字段级评分和 P4-R10 correctness 最小闭环：
 
 - 只消费 P4-S1 `snapshot.jsonl`，不读取 PDF、cache 或文档仓库
@@ -545,6 +557,7 @@ C2 当前只做确定性 marker / 元数据检查，不调用 LLM，不判断语
 - 当前管理人/持有人 extractor 覆盖 `manager_strategy_text`、`portfolio_managers`、`turnover_rate`、`manager_alignment`、`holder_structure` 五类输出；`portfolio_managers` 已接入 `StructuredFundDataBundle`、snapshot、report evidence、chapter facts 和 EvidenceAvailability，但不改变 renderer 或 quality gate。
 - 当前持仓/份额 extractor 只覆盖 `holdings_snapshot` 与 `share_change` 两类输出；`holdings_snapshot` 当前支持股票 `top_holdings`、债券 `bond_top_holdings`、目标基金 `target_fund_holdings` 和行业分布，债券持仓与目标基金持仓只作为 `holdings_snapshot` 子形态接入下游，不新增 top-level bundle 字段；`share_change` 对多份额列表只显式选择单值列或表头精确基金代码列，无法可靠选择时返回 `missing`，不再按列顺序或 A 类 fallback 默认取值。
 - `data_extractor.py` façade 已接入当前结构化数据；`structured_data` 当前以 `StructuredFundDataBundle` dataclass 表达，不额外物化 SQLite 表。
+- `extractor_output_repository.py` 当前把 `StructuredFundDataBundle` 显式保存为 `fund-agent.extractor_output.v1` JSON，按 `fund_code / annual_report / report_year` 组织；它是 bundle-level 输出仓库，不是字段级 scoring snapshot，也不触发 extractor 默认写盘。
 - `report_evidence.py` 当前只投影已有 `StructuredFundDataBundle`，包括 `portfolio_managers` 与 `risk_characteristic_text`；不新增抽取路径、不调用文档仓库、不把 `nav_data` 作为事实，也不改变 renderer / FQ0-FQ6 行为。
 - `data/nav_repository.py` 当前默认把 CSRC EID 006597 家族 A/C/E/F 分类 `累计净值` 归一化为 accumulated NAV typed series，按份额 fail-closed 验证身份、分页、日期和数值；legacy raw-unit adapter 只能通过 constructor injection 进入兼容分支，并显式标记为非 strong drawdown evidence。`data/nav_metrics.py` 当前基于该 typed series 计算最大回撤；不提供 dividend-adjusted、total-return 或 volatility 指标。
 - `extraction_snapshot.py` 当前记录字段级抽取状态，并通过 `comparable_values` 暴露 correctness 可比子字段白名单；不为特定基金覆盖字段值。
