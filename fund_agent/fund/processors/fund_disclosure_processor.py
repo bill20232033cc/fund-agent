@@ -63,7 +63,14 @@ _MANAGER_PROFILE_CANDIDATE_LIMIT: Final[int] = 16
 _INVESTOR_EXPERIENCE_CANDIDATE_LIMIT: Final[int] = 16
 _CURRENT_STAGE_CANDIDATE_LIMIT: Final[int] = 16
 _CORE_RISK_CANDIDATE_LIMIT: Final[int] = 16
-_CORE_RISK_DEFERRED_ROLES: Final[tuple[str, ...]] = (
+_CORE_RISK_REQUIRED_TOP_LEVEL: Final[tuple[str, ...]] = (
+    "risk_characteristic_text",
+    "liquidation_or_scale_risk",
+    "tracking_error_or_deviation_risk",
+    "turnover_or_style_drift_risk",
+    "concentration_risk",
+)
+_CORE_RISK_ROLE_KEYS: Final[tuple[str, ...]] = (
     "liquidation_or_scale_risk",
     "tracking_error_or_deviation_risk",
     "turnover_or_style_drift_risk",
@@ -389,6 +396,20 @@ class _RiskCharacteristicValueCandidate:
     value: str
     anchor: EvidenceAnchor
     source_field_path: str
+
+
+@dataclass(frozen=True, slots=True)
+class _CoreRiskRoleValueCandidate:
+    """核心风险单角色 source-truth 披露文本候选，见模板第 6 章。"""
+
+    output_path: str
+    role: str
+    value: str
+    anchor: EvidenceAnchor
+    source_field_path: str
+
+
+_CoreRiskValueCandidate = _RiskCharacteristicValueCandidate | _CoreRiskRoleValueCandidate
 
 
 @dataclass(frozen=True, slots=True)
@@ -1198,7 +1219,7 @@ def _extract_core_risk_source_truth(
         context: Processor dispatch 身份。
 
     Returns:
-        `core_risk.v1` 字段族；本 gate 只允许 risk_characteristic_text。
+        `core_risk.v1` 字段族；支持 risk_characteristic_text 及四个 role disclosure subvalue。
 
     Raises:
         无显式抛出。
@@ -4662,57 +4683,398 @@ def _product_essence_status(value: dict[str, object]) -> str:
     return "missing"
 
 
-def _select_core_risk_values(
+# ── core_risk role source-truth helpers ────────────────────────────────────
+
+
+def _select_core_risk_role_values(
     intermediate: FundDisclosureDocumentContentIntermediate,
     context: FundProcessorDispatchKey,
-) -> tuple[dict[str, _RiskCharacteristicValueCandidate], set[str]]:
-    """选择 core_risk.v1 当前唯一允许的 source-truth subvalue。
+) -> tuple[dict[str, _CoreRiskRoleValueCandidate], set[str]]:
+    """从 FDD 正文选择四个 core_risk role 的 source-truth 披露文本。
 
     Args:
         intermediate: FDD 正文中间态。
         context: Processor dispatch 身份。
 
     Returns:
-        `(selected_values, ambiguous_paths)`；仅包含 risk_characteristic_text。
+        ``(selected_values, ambiguous_paths)``；key 为 role key。
 
     Raises:
         无显式抛出。
     """
 
-    return _select_risk_characteristic_value(intermediate, context)
+    selected_values: dict[str, _CoreRiskRoleValueCandidate] = {}
+    ambiguous_paths: set[str] = set()
+    for role, strong_tokens, generic_tokens, guard_tokens in _CORE_RISK_MATCH_GROUPS:
+        if role == "risk_characteristic":
+            continue
+        paragraph_candidates = _collect_core_risk_role_paragraph_candidates(
+            intermediate, role, strong_tokens, generic_tokens, guard_tokens, context
+        )
+        cell_candidates = _collect_core_risk_role_cell_candidates(
+            intermediate, role, strong_tokens, generic_tokens, guard_tokens, context
+        )
+        all_candidates = paragraph_candidates + cell_candidates
+        resolved = _resolve_core_risk_role_candidate(role, all_candidates, ambiguous_paths)
+        if resolved is not None:
+            selected_values[role] = resolved
+    return selected_values, ambiguous_paths
 
 
-def _build_core_risk_value(
-    selected_values: dict[str, _RiskCharacteristicValueCandidate],
+def _collect_core_risk_role_paragraph_candidates(
+    intermediate: FundDisclosureDocumentContentIntermediate,
+    role: str,
+    strong_tokens: tuple[str, ...],
+    generic_tokens: tuple[str, ...],
+    guard_tokens: tuple[str, ...],
     context: FundProcessorDispatchKey,
-) -> dict[str, object]:
-    """构造 core_risk.v1 最小 public value。
+) -> tuple[_CoreRiskRoleValueCandidate, ...]:
+    """收集 core_risk 单个 role 的 paragraph 候选。
 
     Args:
-        selected_values: 已选择的风险收益特征文本候选。
+        intermediate: FDD 正文中间态。
+        role: role key。
+        strong_tokens: 强匹配 token。
+        generic_tokens: 需 guard context 的 token。
+        guard_tokens: guard context 允许 token。
         context: Processor dispatch 身份。
 
     Returns:
-        只包含 schema_version 与 risk_characteristic_text；缺值时返回空字典。
+        paragraph 候选元组，按 paragraph tuple 索引顺序。
 
     Raises:
         无显式抛出。
     """
 
-    candidate = selected_values.get(_RISK_CHARACTERISTIC_OUTPUT_PATH)
-    if candidate is None:
-        return {}
-    return {
-        "schema_version": "core_risk.v1",
-        "risk_characteristic_text": _build_risk_characteristic_text_value(
-            candidate.value, candidate.anchor, context
-        ),
+    candidates: list[_CoreRiskRoleValueCandidate] = []
+    for paragraph_index, paragraph in enumerate(intermediate.paragraph_blocks):
+        if paragraph.locator_stability != "stable":
+            continue
+        text = paragraph.text_normalized.strip() if paragraph.text_normalized else ""
+        if not text:
+            text = paragraph.text_raw.strip()
+        if not text:
+            continue
+        candidate_texts = (text,)
+        guard_context = (
+            *_tuple_text(paragraph.heading_path),
+            text,
+        )
+        if not _matches_guarded_core_risk_source(
+            candidate_texts, strong_tokens, generic_tokens, guard_context, guard_tokens
+        ):
+            continue
+        if _is_core_risk_role_heading_only(text, strong_tokens, generic_tokens):
+            continue
+        anchor = EvidenceAnchor(
+            source_kind="annual_report",
+            document_year=context.document_year,
+            section_id=paragraph.section_id,
+            page_number=None,
+            table_id=None,
+            row_locator=(
+                f"field={role}; source=paragraph_blocks[{paragraph_index}]; "
+                f"block_id={paragraph.block_id}"
+            ),
+            note=_truncate(text),
+        )
+        candidates.append(
+            _CoreRiskRoleValueCandidate(
+                output_path=role,
+                role=role,
+                value=text,
+                anchor=anchor,
+                source_field_path=f"paragraph_blocks[{paragraph_index}]",
+            )
+        )
+    return tuple(candidates)
+
+
+def _collect_core_risk_role_cell_candidates(
+    intermediate: FundDisclosureDocumentContentIntermediate,
+    role: str,
+    strong_tokens: tuple[str, ...],
+    generic_tokens: tuple[str, ...],
+    guard_tokens: tuple[str, ...],
+    context: FundProcessorDispatchKey,
+) -> tuple[_CoreRiskRoleValueCandidate, ...]:
+    """收集 core_risk 单个 role 的 table cell 候选。
+
+    Args:
+        intermediate: FDD 正文中间态。
+        role: role key。
+        strong_tokens: 强匹配 token。
+        generic_tokens: 需 guard context 的 token。
+        guard_tokens: guard context 允许 token。
+        context: Processor dispatch 身份。
+
+    Returns:
+        cell 候选元组，按 table 索引和 ``(row_index, column_index)`` 顺序。
+
+    Raises:
+        无显式抛出。
+    """
+
+    candidates: list[_CoreRiskRoleValueCandidate] = []
+    for table_index, table in enumerate(intermediate.table_blocks):
+        if table.locator_stability != "stable":
+            continue
+        header_rows = getattr(table, "header_rows", ())
+        body_rows = getattr(table, "body_rows", ())
+        indexed_cells = sorted(
+            enumerate(table.cells), key=lambda item: (item[1].row_index, item[1].column_index)
+        )
+        for cell_index, cell in indexed_cells:
+            if cell.locator_stability != "stable":
+                continue
+            if getattr(cell, "is_header_cell", False):
+                continue
+            if cell.row_index in header_rows:
+                continue
+            if body_rows and cell.row_index not in body_rows:
+                continue
+            text = cell.cell_text_normalized.strip() if cell.cell_text_normalized else ""
+            if not text:
+                text = cell.cell_text.strip()
+            if not text:
+                continue
+            if _is_core_risk_role_placeholder(text):
+                continue
+            guard_context = _core_risk_cell_guard_context(table, cell)
+            normalized = _normalize_match_text(text)
+            if _any_ascii_digit(normalized):
+                candidate_texts = (text,) + tuple(
+                    g for g in (
+                        table.heading_text,
+                        table.table_caption_or_nearby_heading,
+                        *_tuple_text(cell.row_label_path),
+                        *_tuple_text(cell.column_header_path),
+                    ) if g
+                )
+            else:
+                candidate_texts = (text,)
+            if not _matches_guarded_core_risk_source(
+                candidate_texts, strong_tokens, generic_tokens, guard_context, guard_tokens
+            ):
+                continue
+            if _is_core_risk_role_heading_only(text, strong_tokens, generic_tokens):
+                continue
+            anchor = EvidenceAnchor(
+                source_kind="annual_report",
+                document_year=context.document_year,
+                section_id=cell.section_anchor,
+                page_number=None,
+                table_id=table.table_id,
+                row_locator=(
+                    f"field={role}; "
+                    f"source=table_blocks[{table_index}].cells[{cell_index}]; "
+                    f"table_id={table.table_id}; "
+                    f"row={cell.row_index}; column={cell.column_index}; "
+                    f"cell_id={cell.cell_id}"
+                ),
+                note=_truncate(text),
+            )
+            candidates.append(
+                _CoreRiskRoleValueCandidate(
+                    output_path=role,
+                    role=role,
+                    value=text,
+                    anchor=anchor,
+                    source_field_path=f"table_blocks[{table_index}].cells[{cell_index}]",
+                )
+            )
+    return tuple(candidates)
+
+
+def _is_core_risk_role_placeholder(text: str) -> bool:
+    """判断 cell 文本是否为空值占位符。
+
+    Args:
+        text: 候选文本。
+
+    Returns:
+        占位符时返回 True。
+
+    Raises:
+        无显式抛出。
+    """
+
+    normalized = _normalize_match_text(text)
+    return normalized in {"", "无", "不适用", "-", "—", "--", "未披露", "n/a", "N/A"}
+
+
+def _is_core_risk_role_heading_only(
+    text: str,
+    strong_tokens: tuple[str, ...],
+    generic_tokens: tuple[str, ...],
+) -> bool:
+    """判断文本是否仅为一个结构性标签/表头，无实质性披露。
+
+    Args:
+        text: 候选文本。
+        strong_tokens: 强匹配 token。
+        generic_tokens: 通用 token。
+
+    Returns:
+        仅结构性标签时返回 True。
+
+    Raises:
+        无显式抛出。
+    """
+
+    normalized = _normalize_match_text(text)
+    if not normalized:
+        return True
+    all_tokens_normalized = {
+        _normalize_match_text(t) for t in (*strong_tokens, *generic_tokens)
     }
+    if normalized in all_tokens_normalized:
+        return True
+    if len(normalized) < 15:
+        if not _any_ascii_digit(normalized):
+            return True
+    return False
+
+
+def _any_ascii_digit(text: str) -> bool:
+    """判断文本是否包含 ASCII 数字字符。
+
+    Args:
+        text: 规范化后的候选文本。
+
+    Returns:
+        含 ``0-9`` 时返回 True。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return any(ch.isdigit() for ch in text)
+
+
+def _resolve_core_risk_role_candidate(
+    role: str,
+    candidates: tuple[_CoreRiskRoleValueCandidate, ...],
+    ambiguous_paths: set[str],
+) -> _CoreRiskRoleValueCandidate | None:
+    """解析单个 role 的候选集。
+
+    Args:
+        role: role key。
+        candidates: 按 scan order 排列的候选。
+        ambiguous_paths: 发生歧义的路径集合（就地修改）。
+
+    Returns:
+        唯一解析结果；无候选或冲突时返回 None。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if not candidates:
+        return None
+    first_normalized = _normalize_match_text(candidates[0].value)
+    if all(_normalize_match_text(c.value) == first_normalized for c in candidates):
+        return candidates[0]
+    ambiguous_paths.add(role)
+    return None
+
+
+def _build_core_risk_role_disclosure_value(
+    candidate: _CoreRiskRoleValueCandidate,
+    context: FundProcessorDispatchKey,
+) -> dict[str, object]:
+    """构造 ``core_risk_role_disclosure.v1`` subvalue。
+
+    Args:
+        candidate: 已解析的 role 候选。
+        context: Processor dispatch 身份。
+
+    Returns:
+        五键 role disclosure subvalue。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return {
+        "schema_version": "core_risk_role_disclosure.v1",
+        "fund_code": context.fund_code,
+        "report_year": context.document_year,
+        "role": candidate.role,
+        "risk_disclosure_text": candidate.value,
+    }
+
+
+# ── core_risk public functions ──────────────────────────────────────────────
+
+
+def _select_core_risk_values(
+    intermediate: FundDisclosureDocumentContentIntermediate,
+    context: FundProcessorDispatchKey,
+) -> tuple[dict[str, _CoreRiskValueCandidate], set[str]]:
+    """选择 core_risk.v1 所有五个 required source-truth subvalue。
+
+    Args:
+        intermediate: FDD 正文中间态。
+        context: Processor dispatch 身份。
+
+    Returns:
+        ``(selected_values, ambiguous_paths)``。
+
+    Raises:
+        无显式抛出。
+    """
+
+    risk_values, risk_ambiguous_paths = _select_risk_characteristic_value(
+        intermediate, context
+    )
+    role_values, role_ambiguous_paths = _select_core_risk_role_values(
+        intermediate, context
+    )
+    selected_values: dict[str, _CoreRiskValueCandidate] = {}
+    for rv in risk_values.values():
+        selected_values[_RISK_CHARACTERISTIC_OUTPUT_PATH] = rv
+    for role_key, rv in role_values.items():
+        selected_values[role_key] = rv
+    ambiguous_paths = risk_ambiguous_paths | role_ambiguous_paths
+    return selected_values, ambiguous_paths
+
+
+def _build_core_risk_value(
+    selected_values: dict[str, _CoreRiskValueCandidate],
+    context: FundProcessorDispatchKey,
+) -> dict[str, object]:
+    """构造 core_risk.v1 完整 public value。
+
+    Args:
+        selected_values: 已选择的所有 subvalue 候选。
+        context: Processor dispatch 身份。
+
+    Returns:
+        core_risk.v1 字段族 value；无可发射 subvalue 时返回空字典。
+
+    Raises:
+        无显式抛出。
+    """
+
+    value: dict[str, object] = {"schema_version": "core_risk.v1"}
+    for output_path, candidate in selected_values.items():
+        if output_path == _RISK_CHARACTERISTIC_OUTPUT_PATH:
+            if isinstance(candidate, _RiskCharacteristicValueCandidate):
+                value["risk_characteristic_text"] = _build_risk_characteristic_text_value(
+                    candidate.value, candidate.anchor, context
+                )
+        elif isinstance(candidate, _CoreRiskRoleValueCandidate):
+            value[output_path] = _build_core_risk_role_disclosure_value(candidate, context)
+    if len(value) == 1:
+        return {}
+    return value
 
 
 def _core_risk_emitted_output_paths(
     value: dict[str, object],
-    selected_values: dict[str, _RiskCharacteristicValueCandidate],
+    selected_values: dict[str, _CoreRiskValueCandidate],
 ) -> tuple[str, ...]:
     """返回实际进入 public value 的 core_risk output paths。
 
@@ -4721,15 +5083,21 @@ def _core_risk_emitted_output_paths(
         selected_values: 已解析的候选值。
 
     Returns:
-        需要进入 family anchors 的输出路径元组。
+        需要进入 family anchors 的输出路径元组，按 required top-level 顺序。
 
     Raises:
         无显式抛出。
     """
 
-    if "risk_characteristic_text" in value and _RISK_CHARACTERISTIC_OUTPUT_PATH in selected_values:
-        return (_RISK_CHARACTERISTIC_OUTPUT_PATH,)
-    return ()
+    paths: list[str] = []
+    for top_level in _CORE_RISK_REQUIRED_TOP_LEVEL:
+        if top_level == "risk_characteristic_text":
+            if "risk_characteristic_text" in value and _RISK_CHARACTERISTIC_OUTPUT_PATH in selected_values:
+                paths.append(_RISK_CHARACTERISTIC_OUTPUT_PATH)
+        else:
+            if top_level in value and top_level in selected_values:
+                paths.append(top_level)
+    return tuple(paths)
 
 
 def _core_risk_source_truth_gaps(
@@ -4743,7 +5111,7 @@ def _core_risk_source_truth_gaps(
         ambiguous_paths: 发生 duplicate ambiguity 的输出路径集合。
 
     Returns:
-        missing/ambiguity gaps；accepted 时追加四个 deferred_role gaps。
+        missing/partial/ambiguity gaps；不再发射 ``deferred_role``。
 
     Raises:
         无显式抛出。
@@ -4753,7 +5121,7 @@ def _core_risk_source_truth_gaps(
     for output_path in sorted(ambiguous_paths):
         gaps.append(
             FundExtractionGap(
-                gap_code="ambiguous_table_or_locator",  # type: ignore[arg-type]
+                gap_code="ambiguous_table_or_locator",
                 message=f"{output_path} 存在多个冲突的稳定 FDD locator 值",
                 field_family_id="core_risk.v1",
                 source_field_path=output_path,
@@ -4766,7 +5134,7 @@ def _core_risk_source_truth_gaps(
             gaps.append(
                 FundExtractionGap(
                     gap_code="field_family_missing",
-                    message="core_risk.v1 未形成 risk_characteristic_text source-truth 字段值",
+                    message="core_risk.v1 未形成任何 source-truth 字段值",
                     field_family_id="core_risk.v1",
                     source_field_path=None,
                     source_boundary="annual_report",
@@ -4774,35 +5142,42 @@ def _core_risk_source_truth_gaps(
                 )
             )
         return tuple(gaps)
-    gaps.extend(
-        FundExtractionGap(
-            gap_code="deferred_role",  # type: ignore[arg-type]
-            message=f"core_risk.v1 {role} source-truth subvalue deferred",
-            field_family_id="core_risk.v1",
-            source_field_path=role,
-            source_boundary="annual_report",
-            required=False,
-        )
-        for role in _CORE_RISK_DEFERRED_ROLES
-    )
+    emitted_top_level = {k for k in value if k != "schema_version"}
+    for top_level in _CORE_RISK_REQUIRED_TOP_LEVEL:
+        if top_level not in emitted_top_level and top_level not in ambiguous_paths:
+            gaps.append(
+                FundExtractionGap(
+                    gap_code="field_family_partial",
+                    message=f"core_risk.v1 {top_level} source-truth subvalue missing",
+                    field_family_id="core_risk.v1",
+                    source_field_path=top_level,
+                    source_boundary="annual_report",
+                    required=True,
+                )
+            )
     return tuple(gaps)
 
 
 def _core_risk_status(value: dict[str, object]) -> str:
-    """按唯一 required subvalue 派生 core_risk 字段族状态。
+    """按 required top-level 完整性派生 core_risk 字段族状态。
 
     Args:
         value: 已构造的字段族 value。
 
     Returns:
-        `accepted` 或 `missing`。
+        ``"accepted"`` / ``"partial"`` / ``"missing"``。
 
     Raises:
         无显式抛出。
     """
 
-    if "risk_characteristic_text" in value:
+    if not value:
+        return "missing"
+    emitted = {k for k in value if k != "schema_version"}
+    if emitted == set(_CORE_RISK_REQUIRED_TOP_LEVEL):
         return "accepted"
+    if emitted:
+        return "partial"
     return "missing"
 
 

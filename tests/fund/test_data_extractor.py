@@ -1085,6 +1085,104 @@ class _CoreRiskFallbackDisclosureProcessor:
         )
 
 
+class _CoreRiskAllRolesDisclosureProcessor:
+    """返回 core_risk.v1 全部五个 subvalue 的 FDD processor（不含 product risk text）。"""
+
+    processor_id = "marker_test.core_risk_all_roles_disclosure"
+    priority = 999
+    output_schema_version = "test_core_risk_all_roles.v1"
+
+    def supports(self, context: FundProcessorDispatchKey) -> bool:
+        return (
+            context.fund_type == "active_fund"
+            and context.report_type == "annual_report"
+            and context.intermediate_kind == "fund_disclosure_document.v1"
+        )
+
+    def extract(self, input_data: FundProcessorInput) -> FundProcessorResult:
+        marker_anchor = EvidenceAnchor(
+            source_kind="annual_report",
+            document_year=input_data.context.document_year,
+            section_id="core-risk",
+            page_number=None,
+            table_id="core-risk-table",
+            row_locator="field=risk_characteristic_text.risk_characteristic_text",
+            note=None,
+        )
+        risk_text = {
+            "schema_version": "risk_characteristic_text.v1",
+            "fund_code": input_data.context.fund_code,
+            "report_year": input_data.context.document_year,
+            "risk_characteristic_text": "本基金为较高风险较高收益品种。",
+            "source_anchors": (
+                {
+                    "section_id": "core-risk",
+                    "page_number": None,
+                    "table_id": "core-risk-table",
+                    "row_locator": "field=risk_characteristic_text.risk_characteristic_text",
+                },
+            ),
+        }
+        role_keys = (
+            "liquidation_or_scale_risk",
+            "tracking_error_or_deviation_risk",
+            "turnover_or_style_drift_risk",
+            "concentration_risk",
+        )
+        core_risk_value: dict[str, object] = {
+            "schema_version": "core_risk.v1",
+            "risk_characteristic_text": risk_text,
+        }
+        for role_key in role_keys:
+            core_risk_value[role_key] = {
+                "schema_version": "core_risk_role_disclosure.v1",
+                "fund_code": input_data.context.fund_code,
+                "report_year": input_data.context.document_year,
+                "role": role_key,
+                "risk_disclosure_text": f"{role_key} disclosure text from processor.",
+            }
+        families: tuple[FundFieldFamilyResult, ...] = (
+            FundFieldFamilyResult(
+                field_family_id="product_essence.v1",
+                chapter_ids=(1,),
+                value={
+                    "schema_version": "product_essence.v1",
+                    "basic_identity": _MARKER_BASIC_IDENTITY,
+                },
+                status="partial",
+                extraction_mode="direct",
+                anchors=(marker_anchor,),
+                gaps=(),
+                source_provenance=input_data.source_provenance,
+            ),
+            FundFieldFamilyResult(
+                field_family_id="core_risk.v1",
+                chapter_ids=(6,),
+                value=core_risk_value,
+                status="accepted",
+                extraction_mode="direct",
+                anchors=(marker_anchor,),
+                gaps=(),
+                source_provenance=input_data.source_provenance,
+            ),
+        )
+        return FundProcessorResult(
+            processor_id=self.processor_id,
+            output_schema_version=self.output_schema_version,
+            fund_code=input_data.context.fund_code,
+            report_year=input_data.context.document_year,
+            fund_type=input_data.context.fund_type,
+            report_type=input_data.context.report_type,
+            input_intermediate_kind=input_data.context.intermediate_kind,
+            field_families=families,
+            gaps=(),
+            anchors=(marker_anchor,),
+            source_provenance=input_data.source_provenance,
+            candidate_boundary=None,
+            contract_status="partial",
+        )
+
+
 class _CoreRiskProductWinsDisclosureProcessor(_CoreRiskFallbackDisclosureProcessor):
     """返回 product/core 同时含 risk text 的 FDD processor。"""
 
@@ -1630,6 +1728,56 @@ async def test_explicit_disclosure_core_risk_fallback_projects_risk_text_only() 
     assert bundle.turnover_rate.value is None
     assert bundle.holdings_snapshot.value is None
     assert bundle.manager_strategy_text.value is None
+
+
+@pytest.mark.asyncio
+async def test_explicit_disclosure_core_risk_role_keys_not_projected_to_bundle() -> None:
+    """core_risk.v1 四个 role key 不投影到 bundle 字段也不创建 bundle.core_risk。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 role key 被 facade 投影到 bundle 字段时抛出。
+    """
+
+    registry = FundProcessorRegistry()
+    registry.register(_CoreRiskAllRolesDisclosureProcessor)
+    extractor = FundDataExtractor(
+        repository=_FakeRepository(_annual_report()),
+        nav_provider=_RecordingNavProvider(),
+        processor_registry=registry,
+    )
+
+    bundle = await extractor.extract(
+        "110011",
+        2024,
+        disclosure_intermediate=_disclosure_intermediate(
+            source_truth_admission=_source_truth_admission_proof()
+        ),
+    )
+
+    assert not hasattr(bundle, "core_risk")
+    assert bundle.risk_characteristic_text.value is not None
+    assert bundle.risk_characteristic_text.value["risk_characteristic_text"] == (
+        "本基金为较高风险较高收益品种。"
+    )
+    assert bundle.risk_characteristic_text.note == "fallback_from_core_risk.v1"
+    # 现有 bundle 字段不得从 core_risk role subvalue 投影
+    assert bundle.tracking_error.value is None
+    assert bundle.turnover_rate.value is None
+    assert bundle.holdings_snapshot.value is None
+    # role key 不得作为 bundle 属性出现
+    for role_key in (
+        "liquidation_or_scale_risk",
+        "tracking_error_or_deviation_risk",
+        "turnover_or_style_drift_risk",
+        "concentration_risk",
+    ):
+        assert not hasattr(bundle, role_key)
 
 
 @pytest.mark.asyncio
