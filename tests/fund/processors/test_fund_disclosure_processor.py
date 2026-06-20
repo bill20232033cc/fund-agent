@@ -472,6 +472,53 @@ def _return_attribution_cell(
     )
 
 
+def _manager_profile_cell(
+    label: str,
+    value: str,
+    *,
+    row_index: int,
+    column_index: int = 1,
+    cell_id: str | None = None,
+    table_id: str = "table-manager",
+    label_axis: Literal["row", "column"] = "column",
+    locator_stability: str = "stable",
+) -> _CellStub:
+    """构造 Slice 2 manager_profile table/cell source-truth fixture。
+
+    Args:
+        label: row label 或 column header label。
+        value: cell value。
+        row_index: 行号。
+        column_index: 列号。
+        cell_id: 可选 cell id。
+        table_id: 所属 table id。
+        label_axis: label 放入 row label 还是 column header。
+        locator_stability: locator 稳定性。
+
+    Returns:
+        table cell stub。
+
+    Raises:
+        无显式抛出。
+    """
+
+    resolved_cell_id = cell_id or f"manager-cell-{row_index}-{column_index}"
+    row_label_path = (label,) if label_axis == "row" else ("经理信息",)
+    column_header_path = (label,) if label_axis == "column" else ("内容",)
+    return _CellStub(
+        cell_id=resolved_cell_id,
+        table_id=table_id,
+        row_index=row_index,
+        column_index=column_index,
+        row_label_path=row_label_path,
+        column_header_path=column_header_path,
+        cell_text=value,
+        cell_text_normalized=value,
+        heading_path=("基金经理情况",),
+        locator_stability=locator_stability,
+    )
+
+
 # ── S6-A candidate evidence contract ───────────────────────────────────────
 
 
@@ -2484,29 +2531,13 @@ def test_manager_profile_source_truth_route_suppresses_candidate_evidence() -> N
         heading_text_normalized="基金管理人及基金经理情况",
         heading_path=("基金管理人及基金经理情况",),
     )
-    strategy = _ParagraphStub(
-        block_id="paragraph-strategy",
-        section_id="section-strategy",
-        heading_path=("投资策略和运作分析",),
-        text_raw="报告期内基金投资策略和运作分析。",
-        text_normalized="报告期内基金投资策略和运作分析。",
-    )
-    holdings_table = _TableStub(
-        table_id="table-holdings",
-        section_id="section-holdings",
-        heading_text="前十名股票投资明细",
-        table_caption_or_nearby_heading="前十名股票投资明细",
-        heading_path=("投资组合",),
-        cells=(),
-    )
-
     result = _manager_profile_source_truth_result(
         _ContentIntermediateStub(
             source_provenance=_provenance(),
             source_truth_admission=_source_truth_admission_proof(),
             sections=(section,),
-            paragraph_blocks=(strategy,),
-            table_blocks=(holdings_table,),
+            paragraph_blocks=(),
+            table_blocks=(),
         )
     )
 
@@ -2672,6 +2703,595 @@ def test_manager_profile_source_truth_candidate_boundary_remains_blocked() -> No
     assert family.anchors == ()
     assert family.candidate_evidence
     assert _gap_codes(family) == {"candidate_only_not_source_truth"}
+
+
+# ── manager_profile source-truth Slice 2 values ────────────────────────────
+
+
+def test_manager_profile_source_truth_extracts_roster_strategy_turnover_shape() -> None:
+    """proof-positive FDD 可抽取 roster、strategy/outlook 和 turnover exact shape。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 Slice 2 public value、anchor 或越界 family 不符合计划时抛出。
+    """
+
+    roster_table = _TableStub(
+        table_id="table-roster",
+        section_id="section-manager",
+        heading_text="基金经理情况",
+        table_caption_or_nearby_heading="基金经理情况",
+        heading_path=("基金管理人及基金经理情况",),
+        cells=(
+            _manager_profile_cell("姓名", "张三", row_index=0, column_index=0),
+            _manager_profile_cell("职务", "基金经理", row_index=0, column_index=1),
+            _manager_profile_cell("任职日期", "2020-01-01", row_index=0, column_index=2),
+        ),
+    )
+    turnover_table = _TableStub(
+        table_id="table-turnover",
+        section_id="section-turnover",
+        heading_text="报告期内股票换手率",
+        table_caption_or_nearby_heading="报告期内股票换手率",
+        heading_path=("交易情况",),
+        cells=(
+            _manager_profile_cell(
+                "报告期内股票换手率",
+                "123.45%",
+                row_index=0,
+                column_index=1,
+                table_id="table-turnover",
+                label_axis="row",
+            ),
+            _manager_profile_cell(
+                "换手率计算口径",
+                "双边成交金额除以平均股票市值",
+                row_index=1,
+                column_index=1,
+                table_id="table-turnover",
+                label_axis="row",
+            ),
+        ),
+    )
+    strategy = _ParagraphStub(
+        block_id="paragraph-strategy",
+        section_id="section-strategy",
+        heading_path=("报告期内基金投资策略和运作分析",),
+        text_raw="本报告期坚持均衡配置。",
+        text_normalized="本报告期坚持均衡配置。",
+    )
+    outlook = _ParagraphStub(
+        block_id="paragraph-outlook",
+        section_id="section-outlook",
+        heading_path=("后市展望",),
+        text_raw="后续将关注基本面变化。",
+        text_normalized="后续将关注基本面变化。",
+    )
+
+    result = _manager_profile_source_truth_result(
+        _ContentIntermediateStub(
+            source_provenance=_provenance(),
+            source_truth_admission=_source_truth_admission_proof(),
+            sections=(),
+            paragraph_blocks=(strategy, outlook),
+            table_blocks=(roster_table, turnover_table),
+        )
+    )
+
+    family = _field_family(result, "manager_profile.v1")
+    value = family.value
+    roster = value["portfolio_managers"]
+    manager = roster["portfolio_managers"][0]
+
+    assert result.contract_status == "partial"
+    assert family.status == "partial"
+    assert family.extraction_mode == "direct"
+    assert family.candidate_evidence == ()
+    assert set(value) == {
+        "schema_version",
+        "portfolio_managers",
+        "manager_strategy_text",
+        "turnover_rate",
+    }
+    assert value["schema_version"] == "manager_profile.v1"
+    assert roster["schema_version"] == "portfolio_manager_tenure_list.v1"
+    assert roster["fund_code"] == "004393"
+    assert roster["report_year"] == 2025
+    assert manager["name"] == "张三"
+    assert manager["role"] == "基金经理"
+    assert manager["start_date"] == "2020-01-01"
+    assert manager["source_anchor"]["row_locator"] == "portfolio_manager:张三"
+    assert value["manager_strategy_text"] == {
+        "strategy_summary": "本报告期坚持均衡配置。",
+        "market_outlook": "后续将关注基本面变化。",
+    }
+    assert value["turnover_rate"] == {
+        "turnover_rate": "123.45%",
+        "turnover_basis": "双边成交金额除以平均股票市值",
+    }
+    assert {gap.source_field_path for gap in family.gaps} == {
+        "manager_alignment",
+        "holdings_snapshot",
+    }
+    assert len(family.anchors) == 3
+    assert all(anchor.source_kind == "annual_report" for anchor in family.anchors)
+    assert _field_family(result, "current_stage.v1").value == {}
+    assert _field_family(result, "current_stage.v1").anchors == ()
+    assert _field_family(result, "core_risk.v1").value == {}
+    assert _field_family(result, "core_risk.v1").anchors == ()
+
+
+def test_manager_profile_source_truth_partial_when_required_groups_missing() -> None:
+    """只形成一个 Slice 2 subvalue 时返回 partial，缺失 top-level 用 gaps 表示。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当缺失 top-level key 被 None 占位或状态错误时抛出。
+    """
+
+    strategy = _ParagraphStub(
+        block_id="paragraph-strategy",
+        section_id="section-strategy",
+        heading_path=("投资策略和运作分析",),
+        text_raw="本报告期采用自下而上的选股策略。",
+        text_normalized="本报告期采用自下而上的选股策略。",
+    )
+    basis_only = _ParagraphStub(
+        block_id="paragraph-turnover-basis",
+        section_id="section-turnover",
+        heading_path=("换手率计算口径",),
+        text_raw="换手率计算口径为双边成交金额。",
+        text_normalized="换手率计算口径为双边成交金额。",
+    )
+
+    result = _manager_profile_source_truth_result(
+        _ContentIntermediateStub(
+            source_provenance=_provenance(),
+            source_truth_admission=_source_truth_admission_proof(),
+            sections=(),
+            paragraph_blocks=(strategy, basis_only),
+            table_blocks=(),
+        )
+    )
+
+    family = _field_family(result, "manager_profile.v1")
+
+    assert family.status == "partial"
+    assert family.extraction_mode == "direct"
+    assert set(family.value) == {"schema_version", "manager_strategy_text"}
+    assert family.value["manager_strategy_text"] == {
+        "strategy_summary": "本报告期采用自下而上的选股策略。",
+        "market_outlook": None,
+    }
+    assert "turnover_rate" not in family.value
+    assert "portfolio_managers" not in family.value
+    assert "turnover_rate" not in family.value
+    assert {gap.source_field_path for gap in family.gaps} == {
+        "portfolio_managers",
+        "turnover_rate",
+        "manager_alignment",
+        "holdings_snapshot",
+    }
+
+
+def test_manager_profile_source_truth_missing_when_no_allowed_labels() -> None:
+    """proof-positive content 没有 Slice 2 allowed label 时保持 direct-route missing。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当无关内容被误抽取或回退到 candidate evidence 时抛出。
+    """
+
+    result = _manager_profile_source_truth_result(
+        _ContentIntermediateStub(
+            source_provenance=_provenance(),
+            source_truth_admission=_source_truth_admission_proof(),
+            sections=(
+                _SectionStub(
+                    heading_text_raw="其他章节",
+                    heading_text_normalized="其他章节",
+                    heading_path=("其他章节",),
+                ),
+            ),
+            paragraph_blocks=(
+                _ParagraphStub(
+                    heading_path=("其他章节",),
+                    text_raw="无关内容。",
+                    text_normalized="无关内容。",
+                ),
+            ),
+            table_blocks=(),
+        )
+    )
+
+    family = _field_family(result, "manager_profile.v1")
+
+    assert result.contract_status == "missing"
+    assert family.status == "missing"
+    assert family.extraction_mode == "missing"
+    assert family.value == {}
+    assert family.anchors == ()
+    assert family.candidate_evidence == ()
+    assert _gap_codes(family) == {"field_family_missing"}
+
+
+def test_manager_profile_source_truth_ambiguous_duplicate_omits_conflicting_value() -> None:
+    """同一路径冲突稳定值必须省略对应 turnover_rate 并追加 ambiguity gap。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当冲突 turnover 值进入 public value 时抛出。
+    """
+
+    turnover_table = _TableStub(
+        table_id="table-turnover",
+        section_id="section-turnover",
+        heading_text="报告期内股票换手率",
+        table_caption_or_nearby_heading="报告期内股票换手率",
+        heading_path=("交易情况",),
+        cells=(
+            _manager_profile_cell(
+                "报告期内股票换手率",
+                "100.00%",
+                row_index=0,
+                table_id="table-turnover",
+                label_axis="row",
+            ),
+            _manager_profile_cell(
+                "报告期内股票换手率",
+                "120.00%",
+                row_index=1,
+                table_id="table-turnover",
+                label_axis="row",
+            ),
+        ),
+    )
+    strategy = _ParagraphStub(
+        block_id="paragraph-strategy",
+        section_id="section-strategy",
+        heading_path=("投资策略",),
+        text_raw="本报告期维持既定投资策略。",
+        text_normalized="本报告期维持既定投资策略。",
+    )
+
+    result = _manager_profile_source_truth_result(
+        _ContentIntermediateStub(
+            source_provenance=_provenance(),
+            source_truth_admission=_source_truth_admission_proof(),
+            sections=(),
+            paragraph_blocks=(strategy,),
+            table_blocks=(turnover_table,),
+        )
+    )
+
+    family = _field_family(result, "manager_profile.v1")
+
+    assert family.status == "partial"
+    assert "manager_strategy_text" in family.value
+    assert "turnover_rate" not in family.value
+    assert "ambiguous_table_or_locator" in _gap_codes(family)
+    assert any(
+        gap.source_field_path == "turnover_rate.turnover_rate"
+        for gap in family.gaps
+        if gap.gap_code == "ambiguous_table_or_locator"
+    )
+    assert all("field=turnover_rate.turnover_rate" not in anchor.row_locator for anchor in family.anchors)
+
+
+def test_manager_profile_source_truth_skips_unstable_locator() -> None:
+    """unstable table、paragraph 或 cell locator 不得进入 manager_profile source-truth value。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 unstable locator 被抽取为 public value 时抛出。
+    """
+
+    unstable_roster_table = _TableStub(
+        table_id="table-roster",
+        section_id="section-manager",
+        heading_text="基金经理情况",
+        table_caption_or_nearby_heading="基金经理情况",
+        heading_path=("基金经理情况",),
+        locator_stability="unstable",
+        cells=(
+            _manager_profile_cell("姓名", "张三", row_index=0, column_index=0),
+            _manager_profile_cell("职务", "基金经理", row_index=0, column_index=1),
+        ),
+    )
+    unstable_turnover_table = _TableStub(
+        table_id="table-turnover",
+        section_id="section-turnover",
+        heading_text="报告期内股票换手率",
+        table_caption_or_nearby_heading="报告期内股票换手率",
+        heading_path=("交易情况",),
+        cells=(
+            _manager_profile_cell(
+                "报告期内股票换手率",
+                "80.00%",
+                row_index=0,
+                table_id="table-turnover",
+                label_axis="row",
+                locator_stability="unstable",
+            ),
+        ),
+    )
+    unstable_strategy = _ParagraphStub(
+        block_id="paragraph-strategy",
+        section_id="section-strategy",
+        heading_path=("投资策略和运作分析",),
+        text_raw="不稳定 locator 的策略文本。",
+        text_normalized="不稳定 locator 的策略文本。",
+        locator_stability="unstable",
+    )
+
+    result = _manager_profile_source_truth_result(
+        _ContentIntermediateStub(
+            source_provenance=_provenance(),
+            source_truth_admission=_source_truth_admission_proof(),
+            sections=(),
+            paragraph_blocks=(unstable_strategy,),
+            table_blocks=(unstable_roster_table, unstable_turnover_table),
+        )
+    )
+
+    family = _field_family(result, "manager_profile.v1")
+
+    assert family.status == "missing"
+    assert family.extraction_mode == "missing"
+    assert family.value == {}
+    assert family.anchors == ()
+    assert family.candidate_evidence == ()
+    assert "ambiguous_table_or_locator" not in _gap_codes(family)
+
+
+def test_manager_profile_source_truth_roster_broad_heading_does_not_authorize_non_manager_row() -> None:
+    """broad manager heading 下非基金经理角色行不得发出 portfolio_managers。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 heading_path 自授权非经理行时抛出。
+    """
+
+    roster_table = _TableStub(
+        table_id="table-roster",
+        section_id="section-manager",
+        heading_text="主要人员情况",
+        table_caption_or_nearby_heading="基金经理情况",
+        heading_path=("基金管理人及基金经理情况",),
+        cells=(
+            _manager_profile_cell("姓名", "李四", row_index=0, column_index=0),
+            _manager_profile_cell("职务", "研究员", row_index=0, column_index=1),
+        ),
+    )
+
+    result = _manager_profile_source_truth_result(
+        _ContentIntermediateStub(
+            source_provenance=_provenance(),
+            source_truth_admission=_source_truth_admission_proof(),
+            sections=(),
+            paragraph_blocks=(),
+            table_blocks=(roster_table,),
+        )
+    )
+
+    family = _field_family(result, "manager_profile.v1")
+
+    assert family.status == "missing"
+    assert family.value == {}
+    assert family.anchors == ()
+    assert family.candidate_evidence == ()
+
+
+def test_manager_profile_source_truth_strategy_requires_heading_path_membership() -> None:
+    """非 strategy heading 下正文包含策略 token 时不得发出 manager_strategy_text。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当正文 token 绕过 heading gate 时抛出。
+    """
+
+    paragraph = _ParagraphStub(
+        block_id="paragraph-other",
+        section_id="section-other",
+        heading_path=("其他重要事项",),
+        text_raw="本段提到投资策略和运作分析，但不位于策略章节。",
+        text_normalized="本段提到投资策略和运作分析，但不位于策略章节。",
+    )
+
+    result = _manager_profile_source_truth_result(
+        _ContentIntermediateStub(
+            source_provenance=_provenance(),
+            source_truth_admission=_source_truth_admission_proof(),
+            sections=(),
+            paragraph_blocks=(paragraph,),
+            table_blocks=(),
+        )
+    )
+
+    family = _field_family(result, "manager_profile.v1")
+
+    assert family.status == "missing"
+    assert "manager_strategy_text" not in family.value
+    assert family.anchors == ()
+    assert family.candidate_evidence == ()
+
+
+def test_manager_profile_source_truth_ambiguous_roster_name_omits_conflicting_entry() -> None:
+    """同名经理披露 role/date 冲突时省略该 entry 并追加 portfolio ambiguity。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当冲突同名经理进入 public value 时抛出。
+    """
+
+    first_table = _TableStub(
+        table_id="table-roster-first",
+        section_id="section-manager",
+        heading_text="基金经理情况",
+        table_caption_or_nearby_heading="基金经理情况",
+        heading_path=("基金经理情况",),
+        cells=(
+            _manager_profile_cell(
+                "姓名", "张三", row_index=0, column_index=0, table_id="table-roster-first"
+            ),
+            _manager_profile_cell(
+                "职务", "基金经理", row_index=0, column_index=1, table_id="table-roster-first"
+            ),
+            _manager_profile_cell(
+                "任职日期", "2020-01-01", row_index=0, column_index=2, table_id="table-roster-first"
+            ),
+        ),
+    )
+    second_table = _TableStub(
+        table_id="table-roster-second",
+        section_id="section-manager",
+        heading_text="基金经理情况",
+        table_caption_or_nearby_heading="基金经理情况",
+        heading_path=("基金经理情况",),
+        cells=(
+            _manager_profile_cell(
+                "姓名", "张三", row_index=0, column_index=0, table_id="table-roster-second"
+            ),
+            _manager_profile_cell(
+                "职务", "基金经理", row_index=0, column_index=1, table_id="table-roster-second"
+            ),
+            _manager_profile_cell(
+                "任职日期", "2021-01-01", row_index=0, column_index=2, table_id="table-roster-second"
+            ),
+        ),
+    )
+
+    result = _manager_profile_source_truth_result(
+        _ContentIntermediateStub(
+            source_provenance=_provenance(),
+            source_truth_admission=_source_truth_admission_proof(),
+            sections=(),
+            paragraph_blocks=(),
+            table_blocks=(first_table, second_table),
+        )
+    )
+
+    family = _field_family(result, "manager_profile.v1")
+
+    assert "portfolio_managers" not in family.value
+    assert "ambiguous_table_or_locator" in _gap_codes(family)
+    assert any(
+        gap.source_field_path == "portfolio_managers"
+        for gap in family.gaps
+        if gap.gap_code == "ambiguous_table_or_locator"
+    )
+
+
+def test_manager_profile_source_truth_identical_roster_duplicate_keeps_first_locator() -> None:
+    """同名经理披露值完全相同时只保留首个 locator 且不产生 ambiguity。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当同值重复经理被误判冲突或重复输出时抛出。
+    """
+
+    first_table = _TableStub(
+        table_id="table-roster-first",
+        section_id="section-manager",
+        heading_text="基金经理情况",
+        table_caption_or_nearby_heading="基金经理情况",
+        heading_path=("基金经理情况",),
+        cells=(
+            _manager_profile_cell(
+                "姓名", "张三", row_index=0, column_index=0, table_id="table-roster-first"
+            ),
+            _manager_profile_cell(
+                "职务", "基金经理", row_index=0, column_index=1, table_id="table-roster-first"
+            ),
+            _manager_profile_cell(
+                "任职日期", "2020-01-01", row_index=0, column_index=2, table_id="table-roster-first"
+            ),
+        ),
+    )
+    second_table = _TableStub(
+        table_id="table-roster-second",
+        section_id="section-manager",
+        heading_text="基金经理情况",
+        table_caption_or_nearby_heading="基金经理情况",
+        heading_path=("基金经理情况",),
+        cells=(
+            _manager_profile_cell(
+                "姓名", "张三", row_index=0, column_index=0, table_id="table-roster-second"
+            ),
+            _manager_profile_cell(
+                "职务", "基金经理", row_index=0, column_index=1, table_id="table-roster-second"
+            ),
+            _manager_profile_cell(
+                "任职日期", "2020-01-01", row_index=0, column_index=2, table_id="table-roster-second"
+            ),
+        ),
+    )
+
+    result = _manager_profile_source_truth_result(
+        _ContentIntermediateStub(
+            source_provenance=_provenance(),
+            source_truth_admission=_source_truth_admission_proof(),
+            sections=(),
+            paragraph_blocks=(),
+            table_blocks=(first_table, second_table),
+        )
+    )
+
+    family = _field_family(result, "manager_profile.v1")
+    roster = family.value["portfolio_managers"]
+    managers = roster["portfolio_managers"]
+
+    assert len(managers) == 1
+    assert managers[0]["name"] == "张三"
+    assert managers[0]["source_anchor"]["table_id"] == "table-roster-first"
+    assert len(family.anchors) == 1
+    assert family.anchors[0].table_id == "table-roster-first"
+    assert "ambiguous_table_or_locator" not in _gap_codes(family)
 
 
 # ── S6-D manager profile candidate selector ────────────────────────────────
