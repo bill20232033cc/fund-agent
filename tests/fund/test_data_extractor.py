@@ -655,6 +655,26 @@ _MARKER_BASIC_IDENTITY = {
 }
 
 
+def _marker_basic_identity(context: FundProcessorDispatchKey) -> dict[str, object]:
+    """按 dispatch key 构造 marker 基础身份字段。
+
+    Args:
+        context: 当前 processor dispatch key。
+
+    Returns:
+        与 dispatch fund_type 一致的基础身份 marker。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return {
+        **_MARKER_BASIC_IDENTITY,
+        "fund_code": context.fund_code,
+        "classified_fund_type": context.fund_type,
+    }
+
+
 @dataclass(frozen=True, slots=True)
 class _StubDisclosureIntermediate:
     """测试专用 FundDisclosureDocumentIntermediate stub。"""
@@ -765,7 +785,7 @@ class _MarkerActiveFundProcessor:
                 chapter_ids=(1,),
                 value={
                     "schema_version": "product_essence.v1",
-                    "basic_identity": _MARKER_BASIC_IDENTITY,
+                    "basic_identity": _marker_basic_identity(input_data.context),
                     "product_profile": {"marker": "product_profile_from_processor"},
                     "benchmark": {"marker": "benchmark_from_processor"},
                     "risk_characteristic_text": {"marker": "risk_text_from_processor"},
@@ -855,7 +875,7 @@ class _MarkerActiveFundProcessor:
             output_schema_version=self.output_schema_version,
             fund_code=input_data.context.fund_code,
             report_year=input_data.context.document_year,
-            fund_type="active_fund",
+            fund_type=input_data.context.fund_type,
             report_type="annual_report",
             input_intermediate_kind="parsed_annual_report.v1",
             field_families=families,
@@ -864,6 +884,18 @@ class _MarkerActiveFundProcessor:
             source_provenance=input_data.source_provenance,
             candidate_boundary=None,
             contract_status="satisfied",
+        )
+
+
+class _MarkerAnyParsedAnnualReportProcessor(_MarkerActiveFundProcessor):
+    """返回 marker 值以证明任意已分类 ParsedAnnualReport 经 registry。"""
+
+    processor_id = "marker_test.any_parsed_annual_report"
+
+    def supports(self, context: FundProcessorDispatchKey) -> bool:
+        return (
+            context.report_type == "annual_report"
+            and context.intermediate_kind == "parsed_annual_report.v1"
         )
 
 
@@ -898,7 +930,7 @@ class _MarkerDisclosureProcessor:
                 value={
                     "schema_version": "product_essence.v1",
                     "basic_identity": {
-                        **_MARKER_BASIC_IDENTITY,
+                        **_marker_basic_identity(input_data.context),
                         "fund_name": "DISCLOSURE_MARKER_PROCESSOR_PROOF",
                     },
                     "product_profile": {"marker": "product_profile_from_disclosure_processor"},
@@ -999,6 +1031,18 @@ class _MarkerDisclosureProcessor:
             source_provenance=input_data.source_provenance,
             candidate_boundary=None,
             contract_status="satisfied",
+        )
+
+
+class _MarkerAnyDisclosureProcessor(_MarkerDisclosureProcessor):
+    """返回 marker 值以证明任意已分类 FDD route 经 registry。"""
+
+    processor_id = "marker_test.any_fund_disclosure_document"
+
+    def supports(self, context: FundProcessorDispatchKey) -> bool:
+        return (
+            context.report_type == "annual_report"
+            and context.intermediate_kind == "fund_disclosure_document.v1"
         )
 
 
@@ -2047,25 +2091,62 @@ async def test_explicit_disclosure_not_found_fails_closed_no_parsed_fallback() -
 
 
 @pytest.mark.asyncio
-async def test_explicit_disclosure_non_active_fund_raises_no_legacy_fallback() -> None:
-    """验证非 active 显式 FDD 路径 fail-closed，不走 direct legacy。"""
+@pytest.mark.parametrize(
+    ("fund_type", "fund_code"),
+    (
+        ("index_fund", "000001"),
+        ("enhanced_index", "000002"),
+        ("bond_fund", "006597"),
+        ("qdii_fund", "000003"),
+        ("fof_fund", "000004"),
+    ),
+)
+async def test_explicit_disclosure_non_active_fund_types_route_to_registry(
+    fund_type: str,
+    fund_code: str,
+) -> None:
+    """验证五类非 active 显式 FDD 路径按真实 fund_type resolve registry。
 
+    Args:
+        fund_type: 标准基金类型。
+        fund_code: 测试基金代码。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当显式 FDD route 仍 active-only 或 dispatch 类型错误时抛出。
+    """
+
+    registry = _RecordingRegistry()
+    registry.register(_MarkerAnyDisclosureProcessor)
     extractor = FundDataExtractor(
-        repository=_FakeRepository(_index_annual_report()),
+        repository=_FakeRepository(_typed_non_active_annual_report(fund_type, fund_code)),
         nav_provider=_RecordingNavProvider(),
+        nav_series_repository=_RecordingNavSeriesRepository(_nav_series()),
+        processor_registry=registry,
     )
 
-    with pytest.raises(RuntimeError, match="supports only active_fund"):
-        await extractor.extract(
-            "000001",
-            2024,
-            disclosure_intermediate=_disclosure_intermediate(fund_code="000001"),
-        )
+    bundle = await extractor.extract(
+        fund_code,
+        2024,
+        disclosure_intermediate=_disclosure_intermediate(fund_code=fund_code),
+    )
+
+    assert [context.fund_type for context in registry.resolved_contexts] == [fund_type]
+    assert [context.intermediate_kind for context in registry.resolved_contexts] == [
+        "fund_disclosure_document.v1"
+    ]
+    assert bundle.basic_identity.value is not None
+    assert bundle.basic_identity.value["fund_code"] == fund_code
+    assert bundle.basic_identity.value["classified_fund_type"] == fund_type
+    assert bundle.basic_identity.value["fund_name"] == "DISCLOSURE_MARKER_PROCESSOR_PROOF"
+    assert bundle.product_profile.value == {"marker": "product_profile_from_disclosure_processor"}
 
 
 @pytest.mark.asyncio
-async def test_default_non_active_without_disclosure_preserves_legacy_path() -> None:
-    """验证非 active 默认无 FDD 参数时仍保留 direct legacy path。"""
+async def test_default_non_active_without_disclosure_uses_parsed_processor_path() -> None:
+    """验证非 active 默认无 FDD 参数时进入 ParsedAnnualReport processor 路径。"""
 
     extractor = FundDataExtractor(
         repository=_FakeRepository(_index_annual_report()),
@@ -2077,6 +2158,55 @@ async def test_default_non_active_without_disclosure_preserves_legacy_path() -> 
     assert bundle.fund_code == "000001"
     assert bundle.basic_identity.value is not None
     assert bundle.basic_identity.value["classified_fund_type"] == "index_fund"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("fund_type", "fund_code"),
+    (
+        ("index_fund", "000001"),
+        ("enhanced_index", "000002"),
+        ("bond_fund", "006597"),
+        ("qdii_fund", "000003"),
+        ("fof_fund", "000004"),
+    ),
+)
+async def test_non_active_classified_fund_types_dispatch_to_registry(
+    fund_type: str,
+    fund_code: str,
+) -> None:
+    """验证五类非 active 已分类基金默认路径都按真实 fund_type resolve registry。
+
+    Args:
+        fund_type: 标准基金类型。
+        fund_code: 测试基金代码。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当任一类型仍绕过 registry 或 dispatch fund_type 错误时抛出。
+    """
+
+    registry = _RecordingRegistry()
+    registry.register(_MarkerAnyParsedAnnualReportProcessor)
+    extractor = FundDataExtractor(
+        repository=_FakeRepository(_typed_non_active_annual_report(fund_type, fund_code)),
+        nav_provider=_RecordingNavProvider(),
+        nav_series_repository=_RecordingNavSeriesRepository(_nav_series()),
+        processor_registry=registry,
+    )
+
+    bundle = await extractor.extract(fund_code, 2024)
+
+    assert [context.fund_type for context in registry.resolved_contexts] == [fund_type]
+    assert [context.intermediate_kind for context in registry.resolved_contexts] == [
+        "parsed_annual_report.v1"
+    ]
+    assert bundle.basic_identity.value is not None
+    assert bundle.basic_identity.value["fund_code"] == fund_code
+    assert bundle.basic_identity.value["classified_fund_type"] == fund_type
+    assert bundle.product_profile.value == {"marker": "product_profile_from_processor"}
 
 
 @pytest.mark.asyncio
@@ -2231,8 +2361,8 @@ async def test_data_extractor_rejects_report_identity_mismatch_before_nav() -> N
 
 
 @pytest.mark.asyncio
-async def test_index_fund_direct_path_smoke_test() -> None:
-    """验证非 active 指数基金保留 direct legacy path 行为，不报错且返回 bundle。"""
+async def test_index_fund_default_processor_path_smoke_test() -> None:
+    """验证指数基金默认 processor path 不报错且返回 bundle。"""
 
     repository = _FakeRepository(_index_annual_report())
     extractor = FundDataExtractor(repository=repository, nav_provider=_RecordingNavProvider())
@@ -2858,7 +2988,7 @@ async def _assert_explicit_disclosure_failure_class_raises(
 
 
 def _index_annual_report() -> ParsedAnnualReport:
-    """构造指数基金年报 fixture（非 active 类型走 direct path）。"""
+    """构造指数基金年报 fixture。"""
 
     section_one = "\n".join(
         (
@@ -2883,6 +3013,108 @@ def _index_annual_report() -> ParsedAnnualReport:
     section_two_start = len(section_one) + 1
     return ParsedAnnualReport(
         key=DocumentKey(fund_code="000001", year=2024),
+        raw_text=raw_text,
+        sections={
+            "§1": ReportSection(
+                section_id="§1",
+                title="§1 基金简介",
+                start_offset=section_one_start,
+                end_offset=len(section_one),
+                matched_rule="fixture",
+                confidence=1.0,
+            ),
+            "§2": ReportSection(
+                section_id="§2",
+                title="§2 基金简介",
+                start_offset=section_two_start,
+                end_offset=len(raw_text),
+                matched_rule="fixture",
+                confidence=1.0,
+            ),
+        },
+        tables=(),
+        metadata=AnnualReportMetadata(),
+    )
+
+
+def _typed_non_active_annual_report(fund_type: str, fund_code: str) -> ParsedAnnualReport:
+    """构造五类非 active 基金年报 fixture。
+
+    Args:
+        fund_type: 标准基金类型。
+        fund_code: 基金代码。
+
+    Returns:
+        可触发目标基金类型分类的 ParsedAnnualReport。
+
+    Raises:
+        KeyError: 当传入未覆盖基金类型时抛出。
+    """
+
+    fixtures = {
+        "index_fund": (
+            "测试指数基金",
+            "股票指数型",
+            "投资目标：跟踪标的指数",
+            "投资范围：主要投资指数成分股",
+            "投资策略：完全复制法跟踪指数。",
+        ),
+        "enhanced_index": (
+            "测试指数增强基金",
+            "指数增强型",
+            "投资目标：跟踪标的指数并追求增强收益",
+            "投资范围：主要投资指数成分股",
+            "投资策略：指数增强策略。",
+        ),
+        "bond_fund": (
+            "测试债券基金",
+            "债券型",
+            "投资目标：在严格控制风险前提下追求稳健收益",
+            "投资范围：主要投资债券资产",
+            "投资策略：中债久期管理策略。",
+        ),
+        "qdii_fund": (
+            "测试QDII基金",
+            "QDII",
+            "投资目标：投资境外市场资产",
+            "投资范围：主要投资境外权益资产",
+            "投资策略：QDII 全球配置策略。",
+        ),
+        "fof_fund": (
+            "测试FOF基金",
+            "基金中基金",
+            "投资目标：通过基金组合分散风险",
+            "投资范围：主要投资其他公开募集基金",
+            "投资策略：FOF 基金中基金配置策略。",
+        ),
+    }
+    fund_name, fund_category, investment_objective, investment_scope, investment_strategy = fixtures[
+        fund_type
+    ]
+    section_one = "\n".join(
+        (
+            "§1 基金简介",
+            f"基金名称：{fund_name}",
+            f"基金代码：{fund_code}",
+            f"基金类别：{fund_category}",
+            "业绩比较基准：测试基准收益率",
+        )
+    )
+    section_two = "\n".join(
+        (
+            "§2 基金简介",
+            investment_objective,
+            investment_scope,
+            investment_strategy,
+            "管理费率：0.50%",
+            "托管费率：0.10%",
+        )
+    )
+    raw_text = f"{section_one}\n{section_two}"
+    section_one_start = 0
+    section_two_start = len(section_one) + 1
+    return ParsedAnnualReport(
+        key=DocumentKey(fund_code=fund_code, year=2024),
         raw_text=raw_text,
         sections={
             "§1": ReportSection(

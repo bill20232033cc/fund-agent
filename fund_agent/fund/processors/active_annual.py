@@ -1,9 +1,9 @@
-"""主动基金年报 Processor。
+"""年报 ParsedAnnualReport Processor。
 
-本模块实现 `S1_ACTIVE_ANNUAL_PROCESSOR_CONTRACTS_NO_LIVE`：只消费已经加载好的
-`ParsedAnnualReport`，包装现有窄 extractor，输出模板第 1-6 章最小字段族。它不读取
-`FundDocumentRepository`、PDF/cache/source helper、Docling、candidate projection、
-network、provider、LLM、Service/UI/Host、renderer 或 quality gate。
+本模块实现 `ParsedAnnualReport` 字段族 processor：只消费已经加载好的
+`ParsedAnnualReport`，按基金类型分 processor 包装现有窄 extractor，输出模板第 1-6
+章最小字段族。它不读取 `FundDocumentRepository`、PDF/cache/source helper、Docling、
+candidate projection、network、provider、LLM、Service/UI/Host、renderer 或 quality gate。
 
 字段级 mapping table：
 
@@ -46,6 +46,7 @@ from fund_agent.fund.extractors.manager_ownership import extract_manager_ownersh
 from fund_agent.fund.extractors.models import EvidenceAnchor, ExtractedField
 from fund_agent.fund.extractors.performance import extract_performance
 from fund_agent.fund.extractors.profile import extract_profile
+from fund_agent.fund.fund_type import FundType
 from fund_agent.fund.processors.contracts import (
     FundExtractionGapCode,
     FundExtractionSourceBoundary,
@@ -198,17 +199,17 @@ _FAMILY_ORDER: Final[tuple[FundFieldFamilyId, ...]] = (
 )
 
 
-class ActiveFundAnnualProcessor:
-    """主动基金年报 processor，见模板第 1-6 章字段族。
+class _ParsedAnnualReportFundProcessor:
+    """已分类基金年报 parsed intermediate processor 基类，见模板第 1-6 章字段族。
 
-    该 processor 只支持 `active_fund + annual_report + parsed_annual_report.v1`，
-    并把当前窄 extractor 输出投影为字段族结果；它不会声明 source truth、parser
-    replacement、candidate proof、readiness 或 release 状态。
+    子类只通过 `processor_id` 和 `supported_fund_type` 区分基金类型；字段族 mapping
+    与 fail-closed 语义共享，避免为每类基金复制 extractor 编排。
     """
 
-    processor_id: Final[str] = "active_fund_annual.parsed_annual_report.v1"
-    priority: Final[int] = 100
-    output_schema_version: Final[str] = _OUTPUT_SCHEMA_VERSION
+    processor_id: str = ""
+    priority: int = 90
+    output_schema_version: str = _OUTPUT_SCHEMA_VERSION
+    supported_fund_type: FundType = "active_fund"
 
     def supports(self, context: FundProcessorDispatchKey) -> bool:
         """判断是否支持当前 dispatch key。
@@ -217,21 +218,21 @@ class ActiveFundAnnualProcessor:
             context: Processor 路由键。
 
         Returns:
-            仅在主动基金年报 `ParsedAnnualReport` 场景返回 `True`。
+            仅在子类声明基金类型的年报 `ParsedAnnualReport` 场景返回 `True`。
 
         Raises:
             无显式抛出。
         """
 
         return (
-            context.fund_type == "active_fund"
+            context.fund_type == self.supported_fund_type
             and context.report_type == "annual_report"
             and context.intermediate_kind == "parsed_annual_report.v1"
             and context.processor_goal == "template_chapters_1_6_minimum_field_families"
         )
 
     def extract(self, input_data: FundProcessorInput) -> FundProcessorResult:
-        """抽取主动基金年报六个字段族。
+        """抽取已分类基金年报六个字段族。
 
         Args:
             input_data: Processor 输入契约。
@@ -244,12 +245,15 @@ class ActiveFundAnnualProcessor:
         """
 
         if not self.supports(input_data.context):
-            gap_code, source_boundary = _unsupported_block_details(input_data.context)
+            gap_code, source_boundary = _unsupported_block_details(
+                input_data.context,
+                supported_fund_type=self.supported_fund_type,
+            )
             return _blocked_result(
                 self.processor_id,
                 input_data.context,
                 gap_code=gap_code,
-                message="ActiveFundAnnualProcessor 不支持当前 dispatch key",
+                message=f"{self.__class__.__name__} 不支持当前 dispatch key",
                 source_boundary=source_boundary,
             )
         if not isinstance(input_data.intermediate, ParsedAnnualReport):
@@ -257,7 +261,7 @@ class ActiveFundAnnualProcessor:
                 self.processor_id,
                 input_data.context,
                 gap_code="input_type_mismatch",
-                message="active annual processor 只接受 ParsedAnnualReport",
+                message="parsed annual processor 只接受 ParsedAnnualReport",
                 source_boundary="unsupported_intermediate",
             )
 
@@ -288,6 +292,54 @@ class ActiveFundAnnualProcessor:
             candidate_boundary=None,
             contract_status=_derive_contract_status(field_families),
         )
+
+
+class ActiveFundAnnualProcessor(_ParsedAnnualReportFundProcessor):
+    """主动基金年报 processor，见模板第 1-6 章字段族。
+
+    该 processor 支持 `active_fund + annual_report + parsed_annual_report.v1`，
+    并把当前窄 extractor 输出投影为字段族结果；它不会声明 source truth、parser
+    replacement、candidate proof、readiness 或 release 状态。
+    """
+
+    processor_id: Final[str] = "active_fund_annual.parsed_annual_report.v1"
+    priority: Final[int] = 100
+    supported_fund_type: Final[FundType] = "active_fund"
+
+
+class IndexFundAnnualProcessor(_ParsedAnnualReportFundProcessor):
+    """指数基金年报 processor，见模板第 1-6 章字段族。"""
+
+    processor_id: Final[str] = "index_fund_annual.parsed_annual_report.v1"
+    supported_fund_type: Final[FundType] = "index_fund"
+
+
+class EnhancedIndexFundAnnualProcessor(_ParsedAnnualReportFundProcessor):
+    """指数增强基金年报 processor，见模板第 1-6 章字段族。"""
+
+    processor_id: Final[str] = "enhanced_index_annual.parsed_annual_report.v1"
+    supported_fund_type: Final[FundType] = "enhanced_index"
+
+
+class BondFundAnnualProcessor(_ParsedAnnualReportFundProcessor):
+    """债券基金年报 processor，见模板第 1-6 章字段族。"""
+
+    processor_id: Final[str] = "bond_fund_annual.parsed_annual_report.v1"
+    supported_fund_type: Final[FundType] = "bond_fund"
+
+
+class QdiiFundAnnualProcessor(_ParsedAnnualReportFundProcessor):
+    """QDII 基金年报 processor，见模板第 1-6 章字段族。"""
+
+    processor_id: Final[str] = "qdii_fund_annual.parsed_annual_report.v1"
+    supported_fund_type: Final[FundType] = "qdii_fund"
+
+
+class FofFundAnnualProcessor(_ParsedAnnualReportFundProcessor):
+    """FOF 基金年报 processor，见模板第 1-6 章字段族。"""
+
+    processor_id: Final[str] = "fof_fund_annual.parsed_annual_report.v1"
+    supported_fund_type: Final[FundType] = "fof_fund"
 
 
 def _collect_existing_extractor_fields(
@@ -559,11 +611,14 @@ def _dedupe_anchors(anchors: Iterable[EvidenceAnchor]) -> tuple[EvidenceAnchor, 
 
 def _unsupported_block_details(
     context: FundProcessorDispatchKey,
+    *,
+    supported_fund_type: FundType,
 ) -> tuple[FundExtractionGapCode, FundExtractionSourceBoundary]:
     """按 dispatch key 不匹配维度选择 fail-closed gap 归因。
 
     Args:
         context: Processor 路由键。
+        supported_fund_type: 当前 processor 支持的标准基金类型。
 
     Returns:
         跨字段缺口码与 source boundary。
@@ -572,7 +627,7 @@ def _unsupported_block_details(
         无显式抛出。
     """
 
-    if context.fund_type != "active_fund":
+    if context.fund_type != supported_fund_type:
         return "unsupported_fund_type", "unsupported_fund_type"
     if context.report_type != "annual_report":
         return "unsupported_report_type", "unsupported_report_type"

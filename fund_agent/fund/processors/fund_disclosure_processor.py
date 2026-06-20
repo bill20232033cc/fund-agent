@@ -14,6 +14,7 @@ import re
 from typing import Final, Iterable, cast
 
 from fund_agent.fund.extractors.models import EvidenceAnchor, TrackingErrorValue
+from fund_agent.fund.fund_type import FundType
 from fund_agent.fund.processors.contracts import (
     FundCandidateEvidenceRecord,
     FundDisclosureCellLike,
@@ -38,6 +39,7 @@ from fund_agent.fund.processors.fund_disclosure_dispatch import (
 from fund_agent.fund.source_provenance import PublicSourceProvenance
 
 _OUTPUT_SCHEMA_VERSION: Final[str] = "fund_processor_result.v1"
+_FUND_DISCLOSURE_INTERMEDIATE_KIND: Final[str] = "fund_disclosure_document.v1"
 
 _FAMILY_ORDER: Final[tuple[FundFieldFamilyId, ...]] = (
     "product_essence.v1",
@@ -767,17 +769,19 @@ _CORE_RISK_MATCH_GROUPS: Final[
 )
 
 
-class FundDisclosureDocumentProcessor:
-    """FundDisclosureDocument 中间态 processor（S4 skeleton）。
+class _FundDisclosureDocumentFundProcessor:
+    """分类型 FundDisclosureDocument 中间态 processor 基类。
 
-    本 processor 只支持 active_fund + annual_report + fund_disclosure_document.v1，
-    在 FundDisclosureDocument schema gate 完成前所有字段族返回 missing。
+    子类按 `supported_fund_type` 分别支持单一基金类型的
+    `annual_report + fund_disclosure_document.v1` 输入。字段族抽取、proof/candidate
+    admission 与 fail-closed 语义共享，避免跨类型复制 extraction 规则。
     不声明 source truth、parser replacement、candidate proof、readiness 或 release。
     """
 
-    processor_id: Final[str] = "fund_disclosure_document.fund_disclosure_document.v1"
-    priority: Final[int] = 50
-    output_schema_version: Final[str] = _OUTPUT_SCHEMA_VERSION
+    processor_id: str = ""
+    priority: int = 50
+    output_schema_version: str = _OUTPUT_SCHEMA_VERSION
+    supported_fund_type: FundType = "active_fund"
 
     def supports(self, context: FundProcessorDispatchKey) -> bool:
         """判断是否支持当前 dispatch key。
@@ -786,16 +790,16 @@ class FundDisclosureDocumentProcessor:
             context: Processor 路由键。
 
         Returns:
-            仅在主动基金年报 FundDisclosureDocument 中间态返回 True。
+            仅在子类声明基金类型的年报 FundDisclosureDocument 中间态返回 True。
 
         Raises:
             无显式抛出。
         """
 
         return (
-            context.fund_type == "active_fund"
+            context.fund_type == self.supported_fund_type
             and context.report_type == "annual_report"
-            and context.intermediate_kind == "fund_disclosure_document.v1"
+            and context.intermediate_kind == _FUND_DISCLOSURE_INTERMEDIATE_KIND
             and context.processor_goal == "template_chapters_1_6_minimum_field_families"
         )
 
@@ -815,7 +819,10 @@ class FundDisclosureDocumentProcessor:
         context = input_data.context
 
         if not self.supports(context):
-            gap_code, source_boundary = _unsupported_block_details(context)
+            gap_code, source_boundary = _unsupported_block_details(
+                context,
+                supported_fund_type=self.supported_fund_type,
+            )
             return _blocked_result(
                 self.processor_id,
                 context,
@@ -834,7 +841,11 @@ class FundDisclosureDocumentProcessor:
                 source_boundary="unsupported_intermediate",
             )
 
-        identity_blocked = _check_identity(context, intermediate)
+        identity_blocked = _check_identity(
+            context,
+            intermediate,
+            processor_id=self.processor_id,
+        )
         if identity_blocked is not None:
             return identity_blocked
 
@@ -919,9 +930,59 @@ class FundDisclosureDocumentProcessor:
         )
 
 
+class FundDisclosureDocumentProcessor(_FundDisclosureDocumentFundProcessor):
+    """主动基金 FundDisclosureDocument processor，见模板第 1-6 章字段族。"""
+
+    processor_id: Final[str] = "active_fund_disclosure.fund_disclosure_document.v1"
+    priority: Final[int] = 50
+    supported_fund_type: Final[FundType] = "active_fund"
+
+
+class IndexFundDisclosureDocumentProcessor(_FundDisclosureDocumentFundProcessor):
+    """指数基金 FundDisclosureDocument processor，见模板第 1-6 章字段族。"""
+
+    processor_id: Final[str] = "index_fund_disclosure.fund_disclosure_document.v1"
+    priority: Final[int] = 50
+    supported_fund_type: Final[FundType] = "index_fund"
+
+
+class EnhancedIndexDisclosureDocumentProcessor(_FundDisclosureDocumentFundProcessor):
+    """指数增强基金 FundDisclosureDocument processor，见模板第 1-6 章字段族。"""
+
+    processor_id: Final[str] = "enhanced_index_disclosure.fund_disclosure_document.v1"
+    priority: Final[int] = 50
+    supported_fund_type: Final[FundType] = "enhanced_index"
+
+
+class BondFundDisclosureDocumentProcessor(_FundDisclosureDocumentFundProcessor):
+    """债券基金 FundDisclosureDocument processor，见模板第 1-6 章字段族。"""
+
+    processor_id: Final[str] = "bond_fund_disclosure.fund_disclosure_document.v1"
+    priority: Final[int] = 50
+    supported_fund_type: Final[FundType] = "bond_fund"
+
+
+class QdiiFundDisclosureDocumentProcessor(_FundDisclosureDocumentFundProcessor):
+    """QDII 基金 FundDisclosureDocument processor，见模板第 1-6 章字段族。"""
+
+    processor_id: Final[str] = "qdii_fund_disclosure.fund_disclosure_document.v1"
+    priority: Final[int] = 50
+    supported_fund_type: Final[FundType] = "qdii_fund"
+
+
+class FofFundDisclosureDocumentProcessor(_FundDisclosureDocumentFundProcessor):
+    """FOF 基金 FundDisclosureDocument processor，见模板第 1-6 章字段族。"""
+
+    processor_id: Final[str] = "fof_fund_disclosure.fund_disclosure_document.v1"
+    priority: Final[int] = 50
+    supported_fund_type: Final[FundType] = "fof_fund"
+
+
 def _check_identity(
     context: FundProcessorDispatchKey,
     intermediate: FundDisclosureDocumentIntermediate,
+    *,
+    processor_id: str,
 ) -> FundProcessorResult | None:
     """校验 dispatch key 与 intermediate 身份一致性。
 
@@ -939,7 +1000,7 @@ def _check_identity(
 
     if intermediate.intermediate_kind != context.intermediate_kind:
         return _blocked_result(
-            processor_id="fund_disclosure_document.fund_disclosure_document.v1",
+            processor_id=processor_id,
             context=context,
             gap_code="input_type_mismatch",
             message=(
@@ -952,7 +1013,7 @@ def _check_identity(
         )
     if intermediate.document_kind != context.report_type:
         return _blocked_result(
-            processor_id="fund_disclosure_document.fund_disclosure_document.v1",
+            processor_id=processor_id,
             context=context,
             gap_code="unsupported_report_type",
             message=(
@@ -965,7 +1026,7 @@ def _check_identity(
         )
     if intermediate.fund_code != context.fund_code:
         return _blocked_result(
-            processor_id="fund_disclosure_document.fund_disclosure_document.v1",
+            processor_id=processor_id,
             context=context,
             gap_code="unsupported_intermediate",
             message=(
@@ -978,7 +1039,7 @@ def _check_identity(
         )
     if intermediate.report_year != context.document_year:
         return _blocked_result(
-            processor_id="fund_disclosure_document.fund_disclosure_document.v1",
+            processor_id=processor_id,
             context=context,
             gap_code="unsupported_intermediate",
             message=(
@@ -9031,11 +9092,14 @@ def _tuple_text(values: tuple[str, ...]) -> tuple[str, ...]:
 
 def _unsupported_block_details(
     context: FundProcessorDispatchKey,
+    *,
+    supported_fund_type: FundType,
 ) -> tuple[FundExtractionGapCode, FundExtractionSourceBoundary]:
     """按 dispatch key 不匹配维度选择 fail-closed gap 归因。
 
     Args:
         context: Processor 路由键。
+        supported_fund_type: 当前 processor 子类声明支持的基金类型。
 
     Returns:
         跨字段缺口码与 source boundary。
@@ -9044,11 +9108,11 @@ def _unsupported_block_details(
         无显式抛出。
     """
 
-    if context.fund_type != "active_fund":
+    if context.fund_type != supported_fund_type:
         return "unsupported_fund_type", "unsupported_fund_type"
     if context.report_type != "annual_report":
         return "unsupported_report_type", "unsupported_report_type"
-    if context.intermediate_kind != "fund_disclosure_document.v1":
+    if context.intermediate_kind != _FUND_DISCLOSURE_INTERMEDIATE_KIND:
         return "unsupported_intermediate_kind", "unsupported_intermediate"
     if context.processor_goal != "template_chapters_1_6_minimum_field_families":
         return "unsupported_processor_goal", "unsupported_processor_goal"
