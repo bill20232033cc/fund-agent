@@ -695,6 +695,18 @@ class _DisclosureCell:
 
 
 @dataclass(frozen=True, slots=True)
+class _DisclosureParagraph:
+    """测试专用 FundDisclosureDocument paragraph stub。"""
+
+    block_id: str
+    text_raw: str
+    text_normalized: str
+    section_id: str | None
+    heading_path: tuple[str, ...]
+    locator_stability: str = "stable"
+
+
+@dataclass(frozen=True, slots=True)
 class _DisclosureTable:
     """测试专用 FundDisclosureDocument table stub。"""
 
@@ -1210,6 +1222,143 @@ async def test_explicit_disclosure_source_truth_return_attribution_projects_to_b
     )
 
 
+@pytest.mark.asyncio
+async def test_explicit_disclosure_source_truth_manager_profile_projects_to_bundle() -> None:
+    """验证 proof-positive FDD manager_profile source truth 经 facade 投影。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 manager_profile 五个 public bundle 字段未投影时抛出。
+    """
+
+    extractor = FundDataExtractor(
+        repository=_FakeRepository(_annual_report()),
+        nav_provider=_RecordingNavProvider(),
+        processor_registry=FundProcessorRegistry.create_default(),
+    )
+
+    bundle = await extractor.extract(
+        "110011",
+        2024,
+        disclosure_intermediate=_manager_profile_source_truth_disclosure_intermediate(),
+    )
+
+    assert bundle.portfolio_managers.extraction_mode == "direct"
+    assert bundle.portfolio_managers.value is not None
+    assert bundle.portfolio_managers.value["schema_version"] == (
+        "portfolio_manager_tenure_list.v1"
+    )
+    assert bundle.portfolio_managers.value["fund_code"] == "110011"
+    assert bundle.portfolio_managers.value["report_year"] == 2024
+    assert bundle.portfolio_managers.value["portfolio_managers"] == [
+        {
+            "name": "张三",
+            "role": "基金经理",
+            "start_date": "2020-01-01",
+            "source_anchor": {
+                "section_id": "section-manager",
+                "section_title": "基金经理情况",
+                "page_number": None,
+                "table_id": "table-roster",
+                "row_locator": "portfolio_manager:张三",
+            },
+        }
+    ]
+    assert bundle.turnover_rate.value == {
+        "turnover_rate": "123.45%",
+        "turnover_basis": "双边成交金额除以平均股票市值",
+    }
+    assert bundle.manager_alignment.value == {
+        "manager_holding": "本基金基金经理持有本开放式基金份额区间为100万份以上。",
+        "employee_holding": "基金管理人所有从业人员持有本基金份额区间为50万份至100万份。",
+        "judgment": None,
+    }
+    assert bundle.manager_strategy_text.value == {
+        "strategy_summary": "本报告期坚持均衡配置。",
+        "market_outlook": "后续将关注基本面变化。",
+    }
+    assert bundle.holdings_snapshot.value == {
+        "top_holdings": [
+            {"股票代码": "600000", "股票名称": "浦发银行", "公允价值": "1,234,567.89"}
+        ],
+        "top_holdings_status": "direct_top_ten",
+        "top_holdings_source": "top_ten",
+        "industry_distribution": [
+            {"行业类别": "制造业", "公允价值": "2,000,000.00", "占基金资产净值比例": "12.34%"}
+        ],
+        "industry_distribution_status": "direct",
+    }
+    assert bundle.turnover_rate.extraction_mode == "direct"
+    assert bundle.manager_alignment.extraction_mode == "direct"
+    assert bundle.manager_strategy_text.extraction_mode == "direct"
+    assert bundle.holdings_snapshot.extraction_mode == "direct"
+    assert all(
+        field.anchors
+        for field in (
+            bundle.portfolio_managers,
+            bundle.turnover_rate,
+            bundle.manager_alignment,
+            bundle.manager_strategy_text,
+            bundle.holdings_snapshot,
+        )
+    )
+    assert bundle.investor_return.value is None
+    assert bundle.holder_structure.value is None
+    assert bundle.share_change.value is None
+    assert bundle.bond_risk_evidence.value is None
+
+
+@pytest.mark.asyncio
+async def test_explicit_disclosure_candidate_only_manager_profile_stays_missing() -> None:
+    """验证 proof-missing/candidate-only manager_profile 不投影 bundle 字段。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 candidate evidence 被 facade 当作字段值消费时抛出。
+    """
+
+    extractor = FundDataExtractor(
+        repository=_FakeRepository(_annual_report()),
+        nav_provider=_RecordingNavProvider(),
+        processor_registry=FundProcessorRegistry.create_default(),
+    )
+
+    bundle = await extractor.extract(
+        "110011",
+        2024,
+        disclosure_intermediate=_manager_profile_candidate_only_disclosure_intermediate(),
+    )
+
+    assert bundle.portfolio_managers.value is None
+    assert bundle.turnover_rate.value is None
+    assert bundle.manager_alignment.value is None
+    assert bundle.manager_strategy_text.value is None
+    assert bundle.holdings_snapshot.value is None
+    assert bundle.portfolio_managers.anchors == ()
+    assert bundle.turnover_rate.anchors == ()
+    assert bundle.manager_alignment.anchors == ()
+    assert bundle.manager_strategy_text.anchors == ()
+    assert bundle.holdings_snapshot.anchors == ()
+    assert bundle.portfolio_managers.extraction_mode == "missing"
+    assert bundle.turnover_rate.extraction_mode == "missing"
+    assert bundle.manager_alignment.extraction_mode == "missing"
+    assert bundle.manager_strategy_text.extraction_mode == "missing"
+    assert bundle.holdings_snapshot.extraction_mode == "missing"
+    assert bundle.portfolio_managers.note == (
+        "field_not_in_family:manager_profile.v1:portfolio_managers"
+    )
+
+
 def test_explicit_disclosure_intermediate_uses_protocol_not_candidate_import() -> None:
     """验证 data_extractor 只导入协议，不导入 concrete candidate 模块。"""
 
@@ -1648,6 +1797,256 @@ def _source_truth_disclosure_intermediate() -> _StubDisclosureIntermediate:
     return _disclosure_intermediate(
         table_blocks=(table,),
         source_truth_admission=_source_truth_admission_proof(),
+    )
+
+
+def _manager_profile_source_truth_disclosure_intermediate() -> _StubDisclosureIntermediate:
+    """构造带 proof-positive manager_profile.v1 内容的 FDD stub。
+
+    Args:
+        无。
+
+    Returns:
+        测试用 manager_profile source-truth FDD content intermediate。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return _manager_profile_disclosure_intermediate(
+        source_truth_admission=_source_truth_admission_proof()
+    )
+
+
+def _manager_profile_candidate_only_disclosure_intermediate() -> _StubDisclosureIntermediate:
+    """构造 proof-missing/candidate-only manager_profile.v1 内容的 FDD stub。
+
+    Args:
+        无。
+
+    Returns:
+        测试用 candidate-only FDD content intermediate。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return _manager_profile_disclosure_intermediate(source_truth_admission=None)
+
+
+def _manager_profile_disclosure_intermediate(
+    *,
+    source_truth_admission: FundDisclosureSourceTruthAdmissionProof | None,
+) -> _StubDisclosureIntermediate:
+    """构造 manager_profile facade route 共用 FDD content fixture。
+
+    Args:
+        source_truth_admission: source-truth 正向证明；为空时保留 candidate-only 路径。
+
+    Returns:
+        测试用 FDD content intermediate。
+
+    Raises:
+        无显式抛出。
+    """
+
+    roster_table = _DisclosureTable(
+        table_id="table-roster",
+        section_id="section-manager",
+        heading_text="基金经理情况",
+        table_caption_or_nearby_heading="基金经理情况",
+        heading_path=("基金管理人及基金经理情况",),
+        cells=(
+            _manager_profile_cell("姓名", "张三", row_index=0, column_index=0),
+            _manager_profile_cell("职务", "基金经理", row_index=0, column_index=1),
+            _manager_profile_cell("任职日期", "2020-01-01", row_index=0, column_index=2),
+        ),
+    )
+    turnover_table = _DisclosureTable(
+        table_id="table-turnover",
+        section_id="section-turnover",
+        heading_text="报告期内股票换手率",
+        table_caption_or_nearby_heading="报告期内股票换手率",
+        heading_path=("交易情况",),
+        cells=(
+            _manager_profile_cell(
+                "报告期内股票换手率",
+                "123.45%",
+                row_index=0,
+                column_index=1,
+                table_id="table-turnover",
+                label_axis="row",
+            ),
+            _manager_profile_cell(
+                "换手率计算口径",
+                "双边成交金额除以平均股票市值",
+                row_index=1,
+                column_index=1,
+                table_id="table-turnover",
+                label_axis="row",
+            ),
+        ),
+    )
+    top_holdings_table = _DisclosureTable(
+        table_id="table-top-holdings",
+        section_id="section-holdings",
+        heading_text="前十名股票投资明细",
+        table_caption_or_nearby_heading="前十名股票投资明细",
+        heading_path=("投资组合", "前十名股票投资明细"),
+        cells=(
+            _manager_profile_holdings_cell(
+                "股票代码", "600000", row_index=0, column_index=0, table_id="table-top-holdings"
+            ),
+            _manager_profile_holdings_cell(
+                "股票名称", "浦发银行", row_index=0, column_index=1, table_id="table-top-holdings"
+            ),
+            _manager_profile_holdings_cell(
+                "公允价值",
+                "1,234,567.89",
+                row_index=0,
+                column_index=2,
+                table_id="table-top-holdings",
+            ),
+        ),
+    )
+    industry_table = _DisclosureTable(
+        table_id="table-industry",
+        section_id="section-industry",
+        heading_text="报告期末按行业分类的股票投资组合",
+        table_caption_or_nearby_heading="报告期末按行业分类的股票投资组合",
+        heading_path=("投资组合", "报告期末按行业分类的股票投资组合"),
+        cells=(
+            _manager_profile_holdings_cell(
+                "行业类别", "制造业", row_index=0, column_index=0, table_id="table-industry"
+            ),
+            _manager_profile_holdings_cell(
+                "公允价值",
+                "2,000,000.00",
+                row_index=0,
+                column_index=1,
+                table_id="table-industry",
+            ),
+            _manager_profile_holdings_cell(
+                "占基金资产净值比例",
+                "12.34%",
+                row_index=0,
+                column_index=2,
+                table_id="table-industry",
+            ),
+        ),
+    )
+    paragraphs = (
+        _DisclosureParagraph(
+            block_id="paragraph-strategy",
+            section_id="section-strategy",
+            heading_path=("报告期内基金投资策略和运作分析",),
+            text_raw="本报告期坚持均衡配置。",
+            text_normalized="本报告期坚持均衡配置。",
+        ),
+        _DisclosureParagraph(
+            block_id="paragraph-outlook",
+            section_id="section-outlook",
+            heading_path=("后市展望",),
+            text_raw="后续将关注基本面变化。",
+            text_normalized="后续将关注基本面变化。",
+        ),
+        _DisclosureParagraph(
+            block_id="paragraph-manager-holding",
+            section_id="section-alignment",
+            heading_path=("基金经理持有本基金情况",),
+            text_raw="本基金基金经理持有本开放式基金份额区间为100万份以上。",
+            text_normalized="本基金基金经理持有本开放式基金份额区间为100万份以上。",
+        ),
+        _DisclosureParagraph(
+            block_id="paragraph-employee-holding",
+            section_id="section-alignment",
+            heading_path=("基金管理人从业人员持有本基金情况",),
+            text_raw="基金管理人所有从业人员持有本基金份额区间为50万份至100万份。",
+            text_normalized="基金管理人所有从业人员持有本基金份额区间为50万份至100万份。",
+        ),
+    )
+    return _disclosure_intermediate(
+        paragraph_blocks=paragraphs,
+        table_blocks=(roster_table, turnover_table, top_holdings_table, industry_table),
+        source_truth_admission=source_truth_admission,
+    )
+
+
+def _manager_profile_cell(
+    label: str,
+    value: str,
+    *,
+    row_index: int,
+    column_index: int,
+    table_id: str = "table-roster",
+    label_axis: Literal["row", "column"] = "column",
+) -> _DisclosureCell:
+    """构造 manager_profile table/cell facade fixture。
+
+    Args:
+        label: 行标签或列头文本。
+        value: 单元格披露值。
+        row_index: 行号。
+        column_index: 列号。
+        table_id: 所属表格 ID。
+        label_axis: label 放入 row label 还是 column header。
+
+    Returns:
+        FDD cell stub。
+
+    Raises:
+        无显式抛出。
+    """
+
+    row_label_path = (label,) if label_axis == "row" else ("经理信息",)
+    column_header_path = (label,) if label_axis == "column" else ("内容",)
+    return _DisclosureCell(
+        cell_id=f"{table_id}-cell-{row_index}-{column_index}",
+        table_id=table_id,
+        section_anchor="section-manager",
+        heading_path=("基金经理情况",),
+        row_index=row_index,
+        column_index=column_index,
+        row_label_path=row_label_path,
+        column_header_path=column_header_path,
+        cell_text=value,
+    )
+
+
+def _manager_profile_holdings_cell(
+    header: str,
+    value: str,
+    *,
+    row_index: int,
+    column_index: int,
+    table_id: str,
+) -> _DisclosureCell:
+    """构造 holdings_snapshot table/cell facade fixture。
+
+    Args:
+        header: 中文披露列头。
+        value: 单元格披露值。
+        row_index: 行号。
+        column_index: 列号。
+        table_id: 所属表格 ID。
+
+    Returns:
+        FDD cell stub。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return _DisclosureCell(
+        cell_id=f"{table_id}-cell-{row_index}-{column_index}",
+        table_id=table_id,
+        section_anchor="section-holdings",
+        heading_path=("投资组合",),
+        row_index=row_index,
+        column_index=column_index,
+        row_label_path=("持仓明细",),
+        column_header_path=(header,),
+        cell_text=value,
     )
 
 
