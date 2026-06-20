@@ -761,12 +761,16 @@ def _field_families_for_intermediate(
 
     product_essence_source_truth: FundFieldFamilyResult | None = None
     return_attribution_source_truth: FundFieldFamilyResult | None = None
+    manager_profile_source_truth: FundFieldFamilyResult | None = None
     content_intermediate = _content_intermediate_or_none(intermediate)
     if source_truth_extraction_allowed and content_intermediate is not None:
         product_essence_source_truth = _extract_product_essence_source_truth(
             content_intermediate, source_provenance, context
         )
         return_attribution_source_truth = _extract_return_attribution_source_truth(
+            content_intermediate, source_provenance, context
+        )
+        manager_profile_source_truth = _extract_manager_profile_source_truth(
             content_intermediate, source_provenance, context
         )
 
@@ -780,7 +784,11 @@ def _field_families_for_intermediate(
         if return_attribution_source_truth is not None
         else _select_return_attribution_candidate_evidence(intermediate)
     )
-    manager_profile_evidence = _select_manager_profile_candidate_evidence(intermediate)
+    manager_profile_evidence = (
+        ()
+        if manager_profile_source_truth is not None
+        else _select_manager_profile_candidate_evidence(intermediate)
+    )
     investor_experience_evidence = _select_investor_experience_candidate_evidence(intermediate)
     current_stage_evidence = _select_current_stage_candidate_evidence(intermediate)
     core_risk_evidence = _select_core_risk_candidate_evidence(intermediate)
@@ -801,6 +809,9 @@ def _field_families_for_intermediate(
         else return_attribution_source_truth
         if family_id == "return_attribution.v1"
         and return_attribution_source_truth is not None
+        else manager_profile_source_truth
+        if family_id == "manager_profile.v1"
+        and manager_profile_source_truth is not None
         else (
             _candidate_missing_field_family(
                 family_id, source_provenance, candidate_evidence_by_family[family_id]
@@ -942,6 +953,48 @@ def _extract_return_attribution_source_truth(
         extraction_mode="missing" if status == "missing" else "direct",
         anchors=anchors,
         gaps=gaps,
+        source_provenance=source_provenance,
+        candidate_evidence=(),
+    )
+
+
+def _extract_manager_profile_source_truth(
+    intermediate: FundDisclosureDocumentContentIntermediate,
+    source_provenance: PublicSourceProvenance | None,
+    context: FundProcessorDispatchKey,
+) -> FundFieldFamilyResult:
+    """构造模板第 3 章基金经理画像字段族的 direct-route missing 骨架。
+
+    Args:
+        intermediate: 已通过 source-truth admission proof 的正文中间态。
+        source_provenance: 公共来源 provenance。
+        context: Processor dispatch 身份。
+
+    Returns:
+        `manager_profile.v1` 字段族 Slice 1 骨架；不抽取 public value，
+        并在 proof-positive direct route 中清空 candidate evidence。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return FundFieldFamilyResult(
+        field_family_id="manager_profile.v1",
+        chapter_ids=_CHAPTER_IDS["manager_profile.v1"],
+        value={},
+        status="missing",
+        extraction_mode="missing",
+        anchors=(),
+        gaps=(
+            FundExtractionGap(
+                gap_code="field_family_missing",
+                message="manager_profile.v1 Source-truth Slice 1 仅启用 direct-route missing 骨架",
+                field_family_id="manager_profile.v1",
+                source_field_path=None,
+                source_boundary="annual_report",
+                required=True,
+            ),
+        ),
         source_provenance=source_provenance,
         candidate_evidence=(),
     )

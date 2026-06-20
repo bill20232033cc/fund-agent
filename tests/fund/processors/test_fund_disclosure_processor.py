@@ -376,6 +376,25 @@ def _return_attribution_source_truth_result(
     return processor.extract(FundProcessorInput(context=_dispatch_key(), intermediate=intermediate))
 
 
+def _manager_profile_source_truth_result(
+    intermediate: _ContentIntermediateStub,
+) -> FundProcessorResult:
+    """运行 manager_profile source-truth route 测试用 processor。
+
+    Args:
+        intermediate: FDD content intermediate。
+
+    Returns:
+        processor 输出结果。
+
+    Raises:
+        无显式抛出。
+    """
+
+    processor = FundDisclosureDocumentProcessor()
+    return processor.extract(FundProcessorInput(context=_dispatch_key(), intermediate=intermediate))
+
+
 def _product_cell(
     output_label: str,
     value: str,
@@ -2441,6 +2460,218 @@ def test_return_attribution_selector_orders_dedupes_limits_and_truncates() -> No
     assert records[1].row_locator == "role=nav_benchmark_performance; locator=section_id=section-nav-fee"
     assert all(len(record.excerpt) <= 160 for record in records)
     assert all(record.field_family_id == "return_attribution.v1" for record in records)
+
+
+# ── manager_profile source-truth Slice 1 skeleton ─────────────────────────
+
+
+def test_manager_profile_source_truth_route_suppresses_candidate_evidence() -> None:
+    """proof-positive direct-route missing 必须抑制 manager_profile candidate evidence。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 direct-route missing 回退到 S6-D candidate evidence 时抛出。
+    """
+
+    section = _SectionStub(
+        section_id="section-manager",
+        heading_text_raw="基金管理人及基金经理情况",
+        heading_text_normalized="基金管理人及基金经理情况",
+        heading_path=("基金管理人及基金经理情况",),
+    )
+    strategy = _ParagraphStub(
+        block_id="paragraph-strategy",
+        section_id="section-strategy",
+        heading_path=("投资策略和运作分析",),
+        text_raw="报告期内基金投资策略和运作分析。",
+        text_normalized="报告期内基金投资策略和运作分析。",
+    )
+    holdings_table = _TableStub(
+        table_id="table-holdings",
+        section_id="section-holdings",
+        heading_text="前十名股票投资明细",
+        table_caption_or_nearby_heading="前十名股票投资明细",
+        heading_path=("投资组合",),
+        cells=(),
+    )
+
+    result = _manager_profile_source_truth_result(
+        _ContentIntermediateStub(
+            source_provenance=_provenance(),
+            source_truth_admission=_source_truth_admission_proof(),
+            sections=(section,),
+            paragraph_blocks=(strategy,),
+            table_blocks=(holdings_table,),
+        )
+    )
+
+    family = _field_family(result, "manager_profile.v1")
+    current_stage = _field_family(result, "current_stage.v1")
+    core_risk = _field_family(result, "core_risk.v1")
+
+    assert result.contract_status == "missing"
+    assert family.status == "missing"
+    assert family.extraction_mode == "missing"
+    assert family.value == {}
+    assert family.anchors == ()
+    assert family.candidate_evidence == ()
+    assert _gap_codes(family) == {"field_family_missing"}
+    assert current_stage.status == "missing"
+    assert current_stage.value == {}
+    assert current_stage.anchors == ()
+    assert core_risk.status == "missing"
+    assert core_risk.value == {}
+    assert core_risk.anchors == ()
+
+
+def test_manager_profile_source_truth_requires_proof_even_when_candidate_boundary_none() -> None:
+    """candidate_boundary=None 缺 proof 时保留 candidate-only 路径和 admission missing gap。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当缺 proof 被误认为 source truth 或丢失 candidate evidence 时抛出。
+    """
+
+    section = _SectionStub(
+        section_id="section-manager",
+        heading_text_raw="基金经理简介",
+        heading_text_normalized="基金经理简介",
+        heading_path=("基金经理简介",),
+    )
+
+    result = _manager_profile_source_truth_result(
+        _ContentIntermediateStub(
+            source_provenance=_provenance(),
+            candidate_boundary=None,
+            source_truth_admission=None,
+            sections=(section,),
+            paragraph_blocks=(),
+            table_blocks=(),
+        )
+    )
+
+    family = _field_family(result, "manager_profile.v1")
+
+    assert result.contract_status == "missing"
+    assert family.status == "missing"
+    assert family.value == {}
+    assert family.anchors == ()
+    assert family.candidate_evidence
+    assert _gap_codes(family) == {
+        "candidate_only_not_source_truth",
+        "source_truth_admission_missing",
+    }
+
+
+def test_manager_profile_source_truth_rejects_base_admission_invalid_paths() -> None:
+    """base admission 非法路径必须先阻断，不进入 manager_profile direct skeleton。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 base admission failure 仍返回字段族时抛出。
+    """
+
+    missing_provenance = _manager_profile_source_truth_result(
+        _ContentIntermediateStub(
+            source_provenance=None,
+            source_truth_admission=_source_truth_admission_proof(),
+            sections=(
+                _SectionStub(
+                    heading_text_raw="基金经理简介",
+                    heading_text_normalized="基金经理简介",
+                    heading_path=("基金经理简介",),
+                ),
+            ),
+            paragraph_blocks=(),
+            table_blocks=(),
+        )
+    )
+    schema_drift = _manager_profile_source_truth_result(
+        _ContentIntermediateStub(
+            source_provenance=_provenance(),
+            failure_class="schema_drift",
+            source_truth_admission=_source_truth_admission_proof(),
+            sections=(
+                _SectionStub(
+                    heading_text_raw="基金经理简介",
+                    heading_text_normalized="基金经理简介",
+                    heading_path=("基金经理简介",),
+                ),
+            ),
+            paragraph_blocks=(),
+            table_blocks=(),
+        )
+    )
+
+    assert missing_provenance.contract_status == "blocked"
+    assert missing_provenance.field_families == ()
+    assert missing_provenance.gaps[0].gap_code == "source_provenance_unsafe"
+    assert schema_drift.contract_status == "blocked"
+    assert schema_drift.field_families == ()
+    assert schema_drift.gaps[0].gap_code == "candidate_boundary_blocked"
+
+
+def test_manager_profile_source_truth_candidate_boundary_remains_blocked() -> None:
+    """candidate_boundary 输入仍 blocked，且 manager_profile 不进入 source-truth direct route。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 candidate boundary 被 direct route 绕过时抛出。
+    """
+
+    boundary = CandidateBoundaryStatus(
+        candidate_only=True,
+        field_correctness_status="not_proven",
+        source_truth_status="not_proven",
+    )
+    section = _SectionStub(
+        section_id="section-manager",
+        heading_text_raw="主要人员情况",
+        heading_text_normalized="主要人员情况",
+        heading_path=("主要人员情况",),
+    )
+
+    result = _manager_profile_source_truth_result(
+        _ContentIntermediateStub(
+            source_provenance=_provenance(),
+            candidate_boundary=boundary,
+            source_truth_admission=_source_truth_admission_proof(),
+            sections=(section,),
+            paragraph_blocks=(),
+            table_blocks=(),
+        )
+    )
+
+    family = _field_family(result, "manager_profile.v1")
+
+    assert result.contract_status == "blocked"
+    assert result.candidate_boundary is boundary
+    assert family.status == "missing"
+    assert family.extraction_mode == "missing"
+    assert family.value == {}
+    assert family.anchors == ()
+    assert family.candidate_evidence
+    assert _gap_codes(family) == {"candidate_only_not_source_truth"}
 
 
 # ── S6-D manager profile candidate selector ────────────────────────────────
