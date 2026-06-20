@@ -273,6 +273,87 @@ _MANAGER_PROFILE_INDUSTRY_IDENTITY_LABELS: Final[tuple[str, ...]] = (
 _MANAGER_PROFILE_GENERIC_TABLE_HEADERS: Final[frozenset[str]] = frozenset(
     ("项目", "内容", "说明", "序号")
 )
+_INVESTOR_EXPERIENCE_REQUIRED_TOP_LEVEL: Final[tuple[str, ...]] = (
+    "investor_return",
+    "holder_structure",
+    "share_change",
+)
+_INVESTOR_RETURN_DIRECT_LABELS: Final[tuple[str, ...]] = (
+    "加权平均投资者收益率",
+    "投资者收益率",
+    "投资者实际收益",
+)
+_INVESTOR_RETURN_ESTIMATED_LABELS: Final[tuple[str, ...]] = (
+    "加权平均投资者收益率（估算）",
+    "投资者收益率（估算）",
+    "估算投资者收益率",
+)
+_INVESTOR_RETURN_UNAVAILABLE_TOKENS: Final[tuple[str, ...]] = (
+    "未披露",
+    "未提供",
+    "无法取得",
+    "不适用",
+    "无",
+)
+_HOLDER_STRUCTURE_INSTITUTIONAL_LABELS: Final[tuple[str, ...]] = (
+    "机构投资者",
+    "机构投资者持有",
+    "机构投资者持有比例",
+    "机构投资者持有份额",
+)
+_HOLDER_STRUCTURE_INDIVIDUAL_LABELS: Final[tuple[str, ...]] = (
+    "个人投资者",
+    "个人投资者持有",
+    "个人投资者持有比例",
+    "个人投资者持有份额",
+)
+_HOLDER_STRUCTURE_GUARD_LABELS: Final[tuple[str, ...]] = (
+    "基金份额持有人信息",
+    "基金份额持有人结构",
+    "基金份额持有人情况",
+    "持有人结构",
+)
+_HOLDER_STRUCTURE_PLACEHOLDERS: Final[frozenset[str]] = frozenset(
+    ("", "无", "不适用", "-", "—", "未披露")
+)
+_SHARE_CHANGE_BEGINNING_LABELS: Final[tuple[str, ...]] = (
+    "期初基金份额总额",
+    "报告期期初基金份额总额",
+    "期初份额",
+)
+_SHARE_CHANGE_ENDING_LABELS: Final[tuple[str, ...]] = (
+    "期末基金份额总额",
+    "报告期期末基金份额总额",
+    "期末份额",
+)
+_SHARE_CHANGE_NET_LABELS: Final[tuple[str, ...]] = (
+    "净变动",
+    "本期申购赎回净额",
+)
+_SHARE_CHANGE_TABLE_GUARD_LABELS: Final[tuple[str, ...]] = (
+    "基金份额变动",
+    "份额变动",
+    "基金份额总额变动",
+)
+_SHARE_CHANGE_LABEL_COLUMN_TOKENS: Final[tuple[str, ...]] = (
+    "项目",
+    "项目名称",
+    "份额类别",
+    "类别",
+    "基金份额",
+    "基金份额项目",
+    "变动项目",
+    "期初",
+    "期末",
+    "申购",
+    "赎回",
+    *_SHARE_CHANGE_BEGINNING_LABELS,
+    *_SHARE_CHANGE_ENDING_LABELS,
+    *_SHARE_CHANGE_NET_LABELS,
+)
+_SHARE_CHANGE_VALUE_PATTERN: Final[re.Pattern[str]] = re.compile(
+    r"[-+]?\d+(?:,\d{3})*(?:\.\d+)?"
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -299,6 +380,16 @@ class _ReturnAttributionValueCandidate:
 @dataclass(frozen=True, slots=True)
 class _ManagerProfileValueCandidate:
     """manager_profile.v1 单个 source-truth 字段值候选，见模板第 3 章。"""
+
+    output_path: str
+    value: object
+    anchor: EvidenceAnchor
+    source_field_path: str
+
+
+@dataclass(frozen=True, slots=True)
+class _InvestorExperienceValueCandidate:
+    """investor_experience.v1 单个 source-truth 字段值候选，见模板第 4 章。"""
 
     output_path: str
     value: object
@@ -873,6 +964,7 @@ def _field_families_for_intermediate(
     product_essence_source_truth: FundFieldFamilyResult | None = None
     return_attribution_source_truth: FundFieldFamilyResult | None = None
     manager_profile_source_truth: FundFieldFamilyResult | None = None
+    investor_experience_source_truth: FundFieldFamilyResult | None = None
     content_intermediate = _content_intermediate_or_none(intermediate)
     if source_truth_extraction_allowed and content_intermediate is not None:
         product_essence_source_truth = _extract_product_essence_source_truth(
@@ -882,6 +974,9 @@ def _field_families_for_intermediate(
             content_intermediate, source_provenance, context
         )
         manager_profile_source_truth = _extract_manager_profile_source_truth(
+            content_intermediate, source_provenance, context
+        )
+        investor_experience_source_truth = _extract_investor_experience_source_truth(
             content_intermediate, source_provenance, context
         )
 
@@ -900,7 +995,11 @@ def _field_families_for_intermediate(
         if manager_profile_source_truth is not None
         else _select_manager_profile_candidate_evidence(intermediate)
     )
-    investor_experience_evidence = _select_investor_experience_candidate_evidence(intermediate)
+    investor_experience_evidence = (
+        ()
+        if investor_experience_source_truth is not None
+        else _select_investor_experience_candidate_evidence(intermediate)
+    )
     current_stage_evidence = _select_current_stage_candidate_evidence(intermediate)
     core_risk_evidence = _select_core_risk_candidate_evidence(intermediate)
     candidate_evidence_by_family: dict[
@@ -923,6 +1022,9 @@ def _field_families_for_intermediate(
         else manager_profile_source_truth
         if family_id == "manager_profile.v1"
         and manager_profile_source_truth is not None
+        else investor_experience_source_truth
+        if family_id == "investor_experience.v1"
+        and investor_experience_source_truth is not None
         else (
             _candidate_missing_field_family(
                 family_id, source_provenance, candidate_evidence_by_family[family_id]
@@ -5113,6 +5215,1373 @@ def _manager_profile_cell_guard_context(
             *_tuple_text(cell.heading_path),
         )
     return (*table_context, *_tuple_text(cell.heading_path))
+
+
+def _extract_investor_experience_source_truth(
+    intermediate: FundDisclosureDocumentContentIntermediate,
+    source_provenance: PublicSourceProvenance | None,
+    context: FundProcessorDispatchKey,
+) -> FundFieldFamilyResult:
+    """从 proof-positive FDD 正文抽取模板第 4 章投资者获得感字段族。
+
+    Args:
+        intermediate: 已通过 source-truth admission proof 的正文中间态。
+        source_provenance: 公共来源 provenance。
+        context: Processor dispatch 身份。
+
+    Returns:
+        `investor_experience.v1` 字段族；只包含既有 public/bundle 三个 top-level key。
+
+    Raises:
+        无显式抛出。
+    """
+
+    selected_values, ambiguous_paths = _select_investor_experience_values(
+        intermediate, context
+    )
+    value = _build_investor_experience_value(selected_values)
+    gaps = _investor_experience_source_truth_gaps(value, ambiguous_paths)
+    status = _investor_experience_status(value, ambiguous_paths)
+    anchors = _dedupe_anchors(
+        selected_values[output_path].anchor
+        for output_path in _investor_experience_emitted_output_paths(value, selected_values)
+    )
+    return FundFieldFamilyResult(
+        field_family_id="investor_experience.v1",
+        chapter_ids=_CHAPTER_IDS["investor_experience.v1"],
+        value=value,
+        status=status,
+        extraction_mode="missing" if status == "missing" else "direct",
+        anchors=anchors,
+        gaps=gaps,
+        source_provenance=source_provenance,
+        candidate_evidence=(),
+    )
+
+
+def _select_investor_experience_values(
+    intermediate: FundDisclosureDocumentContentIntermediate,
+    context: FundProcessorDispatchKey,
+) -> tuple[dict[str, _InvestorExperienceValueCandidate], set[str]]:
+    """按 proof-positive fail-closed 规则选择投资者获得感字段值。
+
+    Args:
+        intermediate: FDD 正文中间态。
+        context: Processor dispatch 身份。
+
+    Returns:
+        `(selected_values, ambiguous_paths)`；歧义路径不会进入 selected_values。
+
+    Raises:
+        无显式抛出。
+    """
+
+    ambiguous_paths: set[str] = set()
+    selected_values: dict[str, _InvestorExperienceValueCandidate] = {}
+    for candidate in (
+        _select_investor_experience_return(intermediate, context, ambiguous_paths),
+        _select_investor_experience_holder_structure(intermediate, context, ambiguous_paths),
+        _select_investor_experience_share_change(intermediate, context, ambiguous_paths),
+    ):
+        if candidate is not None:
+            selected_values[candidate.output_path] = candidate
+    return selected_values, ambiguous_paths
+
+
+def _select_investor_experience_return(
+    intermediate: FundDisclosureDocumentContentIntermediate,
+    context: FundProcessorDispatchKey,
+    ambiguous_paths: set[str],
+) -> _InvestorExperienceValueCandidate | None:
+    """选择投资者收益率 public subvalue。
+
+    Args:
+        intermediate: FDD 正文中间态。
+        context: Processor dispatch 身份。
+        ambiguous_paths: 待追加的歧义路径集合。
+
+    Returns:
+        可采信 investor_return 候选；缺失或冲突时返回 None。
+
+    Raises:
+        无显式抛出。
+    """
+
+    candidates = (
+        *_collect_investor_return_paragraph_candidates(intermediate, context),
+        *_collect_investor_return_table_candidates(intermediate, context),
+    )
+    direct = tuple(candidate for candidate in candidates if _investor_return_status(candidate) == "direct")
+    estimated = tuple(
+        candidate for candidate in candidates if _investor_return_status(candidate) == "estimated"
+    )
+    selected = _resolve_investor_experience_candidate(
+        "investor_return", direct or estimated, ambiguous_paths
+    )
+    return selected
+
+
+def _collect_investor_return_paragraph_candidates(
+    intermediate: FundDisclosureDocumentContentIntermediate,
+    context: FundProcessorDispatchKey,
+) -> tuple[_InvestorExperienceValueCandidate, ...]:
+    """收集 paragraph 投资者收益率候选。
+
+    Args:
+        intermediate: FDD 正文中间态。
+        context: Processor dispatch 身份。
+
+    Returns:
+        稳定 paragraph 候选元组。
+
+    Raises:
+        无显式抛出。
+    """
+
+    candidates: list[_InvestorExperienceValueCandidate] = []
+    for paragraph_index, paragraph in enumerate(intermediate.paragraph_blocks):
+        if paragraph.locator_stability != "stable":
+            continue
+        text = _first_non_empty((paragraph.text_normalized, paragraph.text_raw)).strip()
+        if not text:
+            continue
+        value = _investor_return_value_from_text(text)
+        if value is None:
+            continue
+        disclosure_status = _investor_return_label_kind(text)
+        if disclosure_status is None:
+            continue
+        anchor = EvidenceAnchor(
+            source_kind="annual_report",
+            document_year=context.document_year,
+            section_id=paragraph.section_id,
+            page_number=None,
+            table_id=None,
+            row_locator=f"field=investor_return; block_id={paragraph.block_id}",
+            note=_truncate(value),
+        )
+        candidates.append(
+            _InvestorExperienceValueCandidate(
+                output_path="investor_return",
+                value={
+                    "investor_return_rate": value,
+                    "disclosure_status": disclosure_status,
+                    "fallback_status": _investor_return_fallback_status(disclosure_status),
+                },
+                anchor=anchor,
+                source_field_path=f"paragraph_blocks[{paragraph_index}]",
+            )
+        )
+    return tuple(candidates)
+
+
+def _collect_investor_return_table_candidates(
+    intermediate: FundDisclosureDocumentContentIntermediate,
+    context: FundProcessorDispatchKey,
+) -> tuple[_InvestorExperienceValueCandidate, ...]:
+    """收集 table/cell 投资者收益率候选。
+
+    Args:
+        intermediate: FDD 正文中间态。
+        context: Processor dispatch 身份。
+
+    Returns:
+        稳定 table row/cell 候选元组。
+
+    Raises:
+        无显式抛出。
+    """
+
+    candidates: list[_InvestorExperienceValueCandidate] = []
+    for table_index, table in enumerate(intermediate.table_blocks):
+        if table.locator_stability != "stable":
+            continue
+        stable_cells = _stable_indexed_cells(table)
+        rows = _cells_by_row(stable_cells)
+        for row_index, row_cells in rows.items():
+            row_context = _row_text_context(row_cells)
+            disclosure_status = _investor_return_label_kind(" ".join(row_context))
+            if disclosure_status is None:
+                continue
+            for cell_index, cell in row_cells:
+                value = _percent_value_from_text(_cell_value(cell))
+                if value is None:
+                    continue
+                anchor = _investor_experience_cell_anchor(
+                    "investor_return", table, cell, context
+                )
+                candidates.append(
+                    _InvestorExperienceValueCandidate(
+                        output_path="investor_return",
+                        value={
+                            "investor_return_rate": value,
+                            "disclosure_status": disclosure_status,
+                            "fallback_status": _investor_return_fallback_status(
+                                disclosure_status
+                            ),
+                        },
+                        anchor=anchor,
+                        source_field_path=f"table_blocks[{table_index}].cells[{cell_index}]",
+                    )
+                )
+                break
+            if row_index < 0:
+                break
+    return tuple(candidates)
+
+
+def _investor_return_label_kind(text: str) -> str | None:
+    """判断文本命中的投资者收益率 label 类型。
+
+    Args:
+        text: 候选文本。
+
+    Returns:
+        `direct`、`estimated` 或 None。
+
+    Raises:
+        无显式抛出。
+    """
+
+    normalized = _normalize_match_text(text)
+    for label in _INVESTOR_RETURN_ESTIMATED_LABELS:
+        if _normalize_match_text(label) in normalized:
+            return "estimated"
+    for label in _INVESTOR_RETURN_DIRECT_LABELS:
+        if _normalize_match_text(label) in normalized:
+            return "direct"
+    return None
+
+
+def _investor_return_value_from_text(text: str) -> str | None:
+    """从同源 label/value 文本中抽取投资者收益率。
+
+    Args:
+        text: paragraph、cell 或 row context 文本。
+
+    Returns:
+        显式百分比文本；缺 label、缺值或不可用表述时返回 None。
+
+    Raises:
+        无显式抛出。
+    """
+
+    label = _first_investor_return_label(text)
+    if label is None:
+        return None
+    label_index = text.find(label)
+    value_text = text[label_index + len(label) :] if label_index >= 0 else text
+    if _investor_return_has_unavailable_wording(value_text):
+        return None
+    match = _RETURN_ATTRIBUTION_PERCENT_PATTERN.search(value_text)
+    if match is None:
+        return None
+    return match.group("value") + "%"
+
+
+def _percent_value_from_text(text: str) -> str | None:
+    """从文本中抽取首个百分比值。
+
+    Args:
+        text: 候选文本。
+
+    Returns:
+        百分比文本；无百分比时返回 None。
+
+    Raises:
+        无显式抛出。
+    """
+
+    match = _RETURN_ATTRIBUTION_PERCENT_PATTERN.search(text)
+    if match is None:
+        return None
+    return match.group("value") + "%"
+
+
+def _first_investor_return_label(text: str) -> str | None:
+    """返回文本中最先出现的投资者收益率 label。
+
+    Args:
+        text: 候选文本。
+
+    Returns:
+        label 原文；无命中时返回 None。
+
+    Raises:
+        无显式抛出。
+    """
+
+    labels = (*_INVESTOR_RETURN_ESTIMATED_LABELS, *_INVESTOR_RETURN_DIRECT_LABELS)
+    positions = tuple((text.find(label), label) for label in labels if text.find(label) >= 0)
+    if not positions:
+        return None
+    return min(positions, key=lambda item: item[0])[1]
+
+
+def _investor_return_has_unavailable_wording(text_after_label: str) -> bool:
+    """判断 label 后近邻文本是否表达未披露或不可用。
+
+    Args:
+        text_after_label: label 后文本。
+
+    Returns:
+        命中不可用语义时返回 True。
+
+    Raises:
+        无显式抛出。
+    """
+
+    window = _normalize_match_text(text_after_label[:32])
+    for token in _INVESTOR_RETURN_UNAVAILABLE_TOKENS:
+        normalized = _normalize_match_text(token)
+        if normalized == "无":
+            if window.startswith("无"):
+                return True
+            continue
+        if normalized in window:
+            return True
+    return False
+
+
+def _investor_return_fallback_status(disclosure_status: str) -> str:
+    """返回 investor_return 既有 public shape 的 fallback_status。
+
+    Args:
+        disclosure_status: `direct` 或 `estimated`。
+
+    Returns:
+        public fallback_status 字符串。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if disclosure_status == "estimated":
+        return "estimated_disclosure_in_section"
+    return "not_needed"
+
+
+def _investor_return_status(candidate: _InvestorExperienceValueCandidate) -> str:
+    """读取 investor_return 候选的 disclosure_status。
+
+    Args:
+        candidate: investor_return 候选。
+
+    Returns:
+        disclosure_status 字符串。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if isinstance(candidate.value, dict):
+        return str(candidate.value.get("disclosure_status"))
+    return ""
+
+
+def _select_investor_experience_holder_structure(
+    intermediate: FundDisclosureDocumentContentIntermediate,
+    context: FundProcessorDispatchKey,
+    ambiguous_paths: set[str],
+) -> _InvestorExperienceValueCandidate | None:
+    """选择持有人结构 public subvalue。
+
+    Args:
+        intermediate: FDD 正文中间态。
+        context: Processor dispatch 身份。
+        ambiguous_paths: 待追加的歧义路径集合。
+
+    Returns:
+        holder_structure 候选；缺失时返回 None。
+
+    Raises:
+        无显式抛出。
+    """
+
+    side_candidates = {
+        "holder_structure.institutional_holder": (
+            *_collect_holder_structure_paragraph_candidates(
+                "holder_structure.institutional_holder",
+                _HOLDER_STRUCTURE_INSTITUTIONAL_LABELS,
+                intermediate,
+                context,
+            ),
+            *_collect_holder_structure_table_candidates(
+                "holder_structure.institutional_holder",
+                _HOLDER_STRUCTURE_INSTITUTIONAL_LABELS,
+                intermediate,
+                context,
+            ),
+        ),
+        "holder_structure.individual_holder": (
+            *_collect_holder_structure_paragraph_candidates(
+                "holder_structure.individual_holder",
+                _HOLDER_STRUCTURE_INDIVIDUAL_LABELS,
+                intermediate,
+                context,
+            ),
+            *_collect_holder_structure_table_candidates(
+                "holder_structure.individual_holder",
+                _HOLDER_STRUCTURE_INDIVIDUAL_LABELS,
+                intermediate,
+                context,
+            ),
+        ),
+    }
+    institutional = _resolve_investor_experience_candidate(
+        "holder_structure.institutional_holder",
+        side_candidates["holder_structure.institutional_holder"],
+        ambiguous_paths,
+    )
+    individual = _resolve_investor_experience_candidate(
+        "holder_structure.individual_holder",
+        side_candidates["holder_structure.individual_holder"],
+        ambiguous_paths,
+    )
+    if institutional is None and individual is None:
+        return None
+    value = {
+        "institutional_holder": institutional.value if institutional is not None else None,
+        "individual_holder": individual.value if individual is not None else None,
+    }
+    anchor = (institutional or individual).anchor
+    source_path = (institutional or individual).source_field_path
+    return _InvestorExperienceValueCandidate(
+        output_path="holder_structure",
+        value=value,
+        anchor=anchor,
+        source_field_path=source_path,
+    )
+
+
+def _collect_holder_structure_paragraph_candidates(
+    output_path: str,
+    labels: tuple[str, ...],
+    intermediate: FundDisclosureDocumentContentIntermediate,
+    context: FundProcessorDispatchKey,
+) -> tuple[_InvestorExperienceValueCandidate, ...]:
+    """收集 paragraph 持有人结构候选。
+
+    Args:
+        output_path: holder side 输出路径。
+        labels: 允许的 side label。
+        intermediate: FDD 正文中间态。
+        context: Processor dispatch 身份。
+
+    Returns:
+        稳定 paragraph 候选元组。
+
+    Raises:
+        无显式抛出。
+    """
+
+    candidates: list[_InvestorExperienceValueCandidate] = []
+    for paragraph_index, paragraph in enumerate(intermediate.paragraph_blocks):
+        if paragraph.locator_stability != "stable":
+            continue
+        text = _first_non_empty((paragraph.text_normalized, paragraph.text_raw)).strip()
+        value = _holder_structure_value_from_text(text, labels)
+        if value is None:
+            continue
+        anchor = EvidenceAnchor(
+            source_kind="annual_report",
+            document_year=context.document_year,
+            section_id=paragraph.section_id,
+            page_number=None,
+            table_id=None,
+            row_locator=f"field={output_path}; block_id={paragraph.block_id}",
+            note=_truncate(value),
+        )
+        candidates.append(
+            _InvestorExperienceValueCandidate(
+                output_path=output_path,
+                value=value,
+                anchor=anchor,
+                source_field_path=f"paragraph_blocks[{paragraph_index}]",
+            )
+        )
+    return tuple(candidates)
+
+
+def _collect_holder_structure_table_candidates(
+    output_path: str,
+    labels: tuple[str, ...],
+    intermediate: FundDisclosureDocumentContentIntermediate,
+    context: FundProcessorDispatchKey,
+) -> tuple[_InvestorExperienceValueCandidate, ...]:
+    """收集 table/cell 持有人结构候选。
+
+    Args:
+        output_path: holder side 输出路径。
+        labels: 允许的 side label。
+        intermediate: FDD 正文中间态。
+        context: Processor dispatch 身份。
+
+    Returns:
+        稳定 table/cell 候选元组。
+
+    Raises:
+        无显式抛出。
+    """
+
+    candidates: list[_InvestorExperienceValueCandidate] = []
+    for table_index, table in enumerate(intermediate.table_blocks):
+        if table.locator_stability != "stable" or not _holder_structure_table_has_guard(table):
+            continue
+        for cell_index, cell in _stable_indexed_cells(table):
+            context_texts = (
+                _cell_value(cell),
+                *_tuple_text(cell.row_label_path),
+                *_tuple_text(cell.column_header_path),
+                *_tuple_text(cell.heading_path),
+            )
+            context_text = " ".join(
+                (
+                    *context_texts,
+                )
+            )
+            value = _holder_structure_cell_value(context_texts, labels, _cell_value(cell))
+            if value is None:
+                value = _holder_structure_value_from_text(context_text, labels)
+            if value is None:
+                continue
+            anchor = _investor_experience_cell_anchor(output_path, table, cell, context)
+            candidates.append(
+                _InvestorExperienceValueCandidate(
+                    output_path=output_path,
+                    value=value,
+                    anchor=anchor,
+                    source_field_path=f"table_blocks[{table_index}].cells[{cell_index}]",
+                )
+            )
+    return tuple(candidates)
+
+
+def _holder_structure_table_has_guard(table: FundDisclosureTableBlockLike) -> bool:
+    """判断 table 是否具备持有人结构上下文。
+
+    Args:
+        table: FDD table block。
+
+    Returns:
+        table heading/caption/path 命中 guard 时返回 True。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return _matches_any_token(
+        (table.heading_text, table.table_caption_or_nearby_heading, *_tuple_text(table.heading_path)),
+        _HOLDER_STRUCTURE_GUARD_LABELS,
+    )
+
+
+def _holder_structure_value_from_text(text: str, labels: tuple[str, ...]) -> str | None:
+    """从同源 label/value 文本中抽取持有人结构值。
+
+    Args:
+        text: 候选文本。
+        labels: 允许 label。
+
+    Returns:
+        披露值；无 label、无值或 placeholder 时返回 None。
+
+    Raises:
+        无显式抛出。
+    """
+
+    for label in sorted(labels, key=len, reverse=True):
+        index = text.find(label)
+        if index < 0:
+            continue
+        value = text[index + len(label) :].strip(" ：:，,")
+        if not value:
+            return None
+        if _normalize_match_text(value) in {
+            _normalize_match_text(item) for item in _HOLDER_STRUCTURE_PLACEHOLDERS
+        }:
+            return None
+        return value
+    return None
+
+
+def _holder_structure_cell_value(
+    context_texts: tuple[str, ...],
+    labels: tuple[str, ...],
+    cell_value: str,
+) -> str | None:
+    """从 row/column label 命中的 cell 中读取持有人结构值。
+
+    Args:
+        context_texts: cell value 与 label/header/path 文本集合。
+        labels: 允许 label。
+        cell_value: 当前 cell 披露值。
+
+    Returns:
+        当前 cell 可作为值时返回 cell value；否则返回 None。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if not _matches_any_token(context_texts, labels):
+        return None
+    normalized = _normalize_match_text(cell_value)
+    if normalized in {_normalize_match_text(label) for label in labels}:
+        return None
+    if normalized in {_normalize_match_text(item) for item in _HOLDER_STRUCTURE_PLACEHOLDERS}:
+        return None
+    return cell_value
+
+
+def _select_investor_experience_share_change(
+    intermediate: FundDisclosureDocumentContentIntermediate,
+    context: FundProcessorDispatchKey,
+    ambiguous_paths: set[str],
+) -> _InvestorExperienceValueCandidate | None:
+    """选择基金份额变动 public subvalue。
+
+    Args:
+        intermediate: FDD 正文中间态。
+        context: Processor dispatch 身份。
+        ambiguous_paths: 待追加的歧义路径集合。
+
+    Returns:
+        share_change 候选；缺失或冲突时返回 None。
+
+    Raises:
+        无显式抛出。
+    """
+
+    candidates = _collect_share_change_table_candidates(intermediate, context, ambiguous_paths)
+    return _resolve_investor_experience_candidate("share_change", candidates, ambiguous_paths)
+
+
+def _collect_share_change_table_candidates(
+    intermediate: FundDisclosureDocumentContentIntermediate,
+    context: FundProcessorDispatchKey,
+    ambiguous_paths: set[str],
+) -> tuple[_InvestorExperienceValueCandidate, ...]:
+    """收集 table 份额变动候选。
+
+    Args:
+        intermediate: FDD 正文中间态。
+        context: Processor dispatch 身份。
+        ambiguous_paths: 待追加的歧义路径集合。
+
+    Returns:
+        稳定 table 候选元组。
+
+    Raises:
+        无显式抛出。
+    """
+
+    candidates: list[_InvestorExperienceValueCandidate] = []
+    for table_index, table in enumerate(intermediate.table_blocks):
+        if table.locator_stability != "stable" or not _share_change_table_has_guard(table):
+            continue
+        candidate = _share_change_candidate_from_table(table_index, table, context, ambiguous_paths)
+        if candidate is not None:
+            candidates.append(candidate)
+    return tuple(candidates)
+
+
+def _share_change_table_has_guard(table: FundDisclosureTableBlockLike) -> bool:
+    """判断 table 是否具备份额变动上下文。
+
+    Args:
+        table: FDD table block。
+
+    Returns:
+        table heading/caption/path 命中 guard，或行 label 命中份额变动 label 时返回 True。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if _matches_any_token(
+        (table.heading_text, table.table_caption_or_nearby_heading, *_tuple_text(table.heading_path)),
+        _SHARE_CHANGE_TABLE_GUARD_LABELS,
+    ):
+        return True
+    labels = (*_SHARE_CHANGE_BEGINNING_LABELS, *_SHARE_CHANGE_ENDING_LABELS, *_SHARE_CHANGE_NET_LABELS)
+    return any(
+        _path_contains_any_label(cell.row_label_path, labels)
+        or _matches_any_token((_cell_value(cell),), labels)
+        for _, cell in _stable_indexed_cells(table)
+    )
+
+
+def _share_change_candidate_from_table(
+    table_index: int,
+    table: FundDisclosureTableBlockLike,
+    context: FundProcessorDispatchKey,
+    ambiguous_paths: set[str],
+) -> _InvestorExperienceValueCandidate | None:
+    """从单个 share-change table 构造 public subvalue。
+
+    Args:
+        table_index: table tuple 中的原始索引。
+        table: FDD table block。
+        context: Processor dispatch 身份。
+        ambiguous_paths: 待追加的歧义路径集合。
+
+    Returns:
+        share_change 候选；无法选定 value column 时返回 None。
+
+    Raises:
+        无显式抛出。
+    """
+
+    stable_cells = _stable_indexed_cells(table)
+    rows = _cells_by_row(stable_cells)
+    value_columns = _share_change_value_columns(stable_cells, rows)
+    if not value_columns:
+        return None
+    selected_column, reason = _select_share_change_value_column(value_columns, stable_cells, context)
+    if selected_column is None or reason is None:
+        if len(value_columns) > 1:
+            ambiguous_paths.add("share_change")
+        return None
+    values = _share_change_values_for_column(selected_column, rows)
+    if not any(values.values()):
+        return None
+    if values["net_change"] is None:
+        values["net_change"] = _calculate_investor_share_net_change(
+            values["beginning_share"], values["ending_share"]
+        )
+    header = _share_change_column_header(selected_column, stable_cells)
+    anchor_cell = _first_share_change_anchor_cell(selected_column, rows)
+    if anchor_cell is None:
+        return None
+    cell_index, cell = anchor_cell
+    anchor = _investor_experience_cell_anchor("share_change", table, cell, context)
+    return _InvestorExperienceValueCandidate(
+        output_path="share_change",
+        value={
+            "beginning_share": values["beginning_share"],
+            "ending_share": values["ending_share"],
+            "net_change": values["net_change"],
+            "share_class_column": header,
+            "share_class_selection_reason": reason,
+        },
+        anchor=anchor,
+        source_field_path=f"table_blocks[{table_index}].cells[{cell_index}]",
+    )
+
+
+def _share_change_value_columns(
+    stable_cells: tuple[tuple[int, FundDisclosureCellLike], ...],
+    rows: dict[int, tuple[tuple[int, FundDisclosureCellLike], ...]],
+) -> tuple[int, ...]:
+    """筛选 share-change value columns，排除 label columns。
+
+    Args:
+        stable_cells: 稳定 cell 列表。
+        rows: row_index 到 cell 列表的映射。
+
+    Returns:
+        候选 value column index 元组。
+
+    Raises:
+        无显式抛出。
+    """
+
+    columns = sorted({cell.column_index for _, cell in stable_cells})
+    return tuple(
+        column
+        for column in columns
+        if not _share_change_is_label_column(column, stable_cells)
+        and _share_change_column_has_row_value(column, rows)
+    )
+
+
+def _share_change_is_label_column(
+    column: int,
+    stable_cells: tuple[tuple[int, FundDisclosureCellLike], ...],
+) -> bool:
+    """判断某列是否是 label column。
+
+    Args:
+        column: column_index。
+        stable_cells: 稳定 cell 列表。
+
+    Returns:
+        label column 返回 True。
+
+    Raises:
+        无显式抛出。
+    """
+
+    column_cells = tuple(cell for _, cell in stable_cells if cell.column_index == column)
+    header = _share_change_column_header(column, stable_cells)
+    if _matches_any_token((header,), _SHARE_CHANGE_LABEL_COLUMN_TOKENS):
+        return True
+    label_like_count = sum(
+        1
+        for cell in column_cells
+        if _matches_any_token((_cell_value(cell),), _SHARE_CHANGE_LABEL_COLUMN_TOKENS)
+    )
+    numeric_count = sum(1 for cell in column_cells if _looks_like_share_change_value(_cell_value(cell)))
+    return label_like_count > 0 and label_like_count >= numeric_count
+
+
+def _share_change_column_has_row_value(
+    column: int,
+    rows: dict[int, tuple[tuple[int, FundDisclosureCellLike], ...]],
+) -> bool:
+    """判断 column 是否包含 share-change 行的有效数值。
+
+    Args:
+        column: column_index。
+        rows: row_index 到 cell 列表的映射。
+
+    Returns:
+        至少一个 begin/end/net 行有数值时返回 True。
+
+    Raises:
+        无显式抛出。
+    """
+
+    for row_cells in rows.values():
+        if _share_change_row_kind(row_cells) is None:
+            continue
+        value = _cell_for_column(column, row_cells)
+        if value is not None and _looks_like_share_change_value(_cell_value(value)):
+            return True
+    return False
+
+
+def _select_share_change_value_column(
+    value_columns: tuple[int, ...],
+    stable_cells: tuple[tuple[int, FundDisclosureCellLike], ...],
+    context: FundProcessorDispatchKey,
+) -> tuple[int | None, str | None]:
+    """选择 share-change value column。
+
+    Args:
+        value_columns: 已过滤的 value columns。
+        stable_cells: 稳定 cell 列表。
+        context: Processor dispatch 身份。
+
+    Returns:
+        `(column_index, reason)`；无法唯一选择时返回 `(None, None)`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if len(value_columns) == 1:
+        return value_columns[0], "single_value_column"
+    fund_code = _normalize_match_text(context.fund_code)
+    matched = tuple(
+        column
+        for column in value_columns
+        if _normalize_match_text(_share_change_column_header(column, stable_cells)) == fund_code
+    )
+    if len(matched) == 1:
+        return matched[0], "fund_code_header_match"
+    return None, None
+
+
+def _share_change_values_for_column(
+    column: int,
+    rows: dict[int, tuple[tuple[int, FundDisclosureCellLike], ...]],
+) -> dict[str, str | None]:
+    """读取 selected share-change column 的 begin/end/net 值。
+
+    Args:
+        column: selected value column。
+        rows: row_index 到 cell 列表的映射。
+
+    Returns:
+        public shape 三个数值字段。
+
+    Raises:
+        无显式抛出。
+    """
+
+    values: dict[str, str | None] = {
+        "beginning_share": None,
+        "ending_share": None,
+        "net_change": None,
+    }
+    for row_cells in rows.values():
+        kind = _share_change_row_kind(row_cells)
+        if kind is None:
+            continue
+        value_cell = _cell_for_column(column, row_cells)
+        if value_cell is None:
+            continue
+        value = _cell_value(value_cell)
+        if not _looks_like_share_change_value(value):
+            continue
+        values[kind] = value
+    return values
+
+
+def _share_change_row_kind(
+    row_cells: tuple[tuple[int, FundDisclosureCellLike], ...],
+) -> str | None:
+    """判断 share-change 行类型。
+
+    Args:
+        row_cells: 同一 row 的 cell 列表。
+
+    Returns:
+        `beginning_share`、`ending_share`、`net_change` 或 None。
+
+    Raises:
+        无显式抛出。
+    """
+
+    context_text = " ".join(_row_text_context(row_cells))
+    if _matches_any_token((context_text,), _SHARE_CHANGE_BEGINNING_LABELS):
+        return "beginning_share"
+    if _matches_any_token((context_text,), _SHARE_CHANGE_ENDING_LABELS):
+        return "ending_share"
+    if _matches_any_token((context_text,), _SHARE_CHANGE_NET_LABELS):
+        return "net_change"
+    return None
+
+
+def _first_share_change_anchor_cell(
+    column: int,
+    rows: dict[int, tuple[tuple[int, FundDisclosureCellLike], ...]],
+) -> tuple[int, FundDisclosureCellLike] | None:
+    """返回 selected column 的首个 share-change anchor cell。
+
+    Args:
+        column: selected value column。
+        rows: row_index 到 cell 列表的映射。
+
+    Returns:
+        `(cell_index, cell)`；无稳定数值 cell 时返回 None。
+
+    Raises:
+        无显式抛出。
+    """
+
+    for row_cells in rows.values():
+        if _share_change_row_kind(row_cells) is None:
+            continue
+        for cell_index, cell in row_cells:
+            if cell.column_index == column and _looks_like_share_change_value(_cell_value(cell)):
+                return cell_index, cell
+    return None
+
+
+def _share_change_column_header(
+    column: int,
+    stable_cells: tuple[tuple[int, FundDisclosureCellLike], ...],
+) -> str:
+    """聚合 FDD `column_header_path` 构造 share-class column 文本。
+
+    Args:
+        column: column_index。
+        stable_cells: 稳定 cell 列表。
+
+    Returns:
+        去重后以 ` / ` 连接的列头文本；缺失时为空字符串。
+
+    Raises:
+        无显式抛出。
+    """
+
+    parts: list[str] = []
+    seen: set[str] = set()
+    for _, cell in stable_cells:
+        if cell.column_index != column:
+            continue
+        for part in cell.column_header_path:
+            trimmed = part.strip()
+            if not trimmed or trimmed in seen:
+                continue
+            seen.add(trimmed)
+            parts.append(trimmed)
+    return " / ".join(parts)
+
+
+def _calculate_investor_share_net_change(
+    beginning_share: str | None,
+    ending_share: str | None,
+) -> str | None:
+    """用 Decimal 计算份额净变动，见模板第 4 章“投资者获得感”。
+
+    Args:
+        beginning_share: 期初基金份额。
+        ending_share: 期末基金份额。
+
+    Returns:
+        两个输入均可解析时返回逗号分隔、两位小数的净变动；否则返回 None。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if beginning_share is None or ending_share is None:
+        return None
+    try:
+        beginning_value = Decimal(beginning_share.replace(",", ""))
+        ending_value = Decimal(ending_share.replace(",", ""))
+    except InvalidOperation:
+        return None
+    net_change = ending_value - beginning_value
+    return f"{net_change:,.2f}"
+
+
+def _looks_like_share_change_value(value: str) -> bool:
+    """判断文本是否可作为份额变动数值。
+
+    Args:
+        value: cell 文本。
+
+    Returns:
+        包含 Decimal-like 数值且不是 placeholder 时返回 True。
+
+    Raises:
+        无显式抛出。
+    """
+
+    normalized = _normalize_match_text(value)
+    if normalized in {"", "无", "不适用", "-", "—", "未披露"}:
+        return False
+    return _SHARE_CHANGE_VALUE_PATTERN.fullmatch(normalized) is not None
+
+
+def _resolve_investor_experience_candidate(
+    output_path: str,
+    candidates: tuple[_InvestorExperienceValueCandidate, ...],
+    ambiguous_paths: set[str],
+) -> _InvestorExperienceValueCandidate | None:
+    """按重复/歧义规则解析 investor_experience 候选。
+
+    Args:
+        output_path: 目标输出路径。
+        candidates: 同一路径候选。
+        ambiguous_paths: 待追加的歧义路径集合。
+
+    Returns:
+        唯一可采信候选；无候选或冲突时返回 None。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if not candidates:
+        return None
+    normalized_values = {
+        _normalize_investor_experience_value(candidate.value) for candidate in candidates
+    }
+    if len(normalized_values) > 1:
+        ambiguous_paths.add(output_path)
+        return None
+    return candidates[0]
+
+
+def _normalize_investor_experience_value(value: object) -> str:
+    """规范化 investor_experience 候选值用于冲突判断。
+
+    Args:
+        value: 候选值。
+
+    Returns:
+        稳定比较字符串。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if isinstance(value, dict):
+        return "|".join(
+            f"{key}={_normalize_investor_experience_value(value[key])}" for key in sorted(value)
+        )
+    if isinstance(value, list):
+        return "||".join(_normalize_investor_experience_value(item) for item in value)
+    return _normalize_match_text(str(value))
+
+
+def _build_investor_experience_value(
+    selected_values: dict[str, _InvestorExperienceValueCandidate],
+) -> dict[str, object]:
+    """构造 `investor_experience.v1.value` public shape。
+
+    Args:
+        selected_values: 已解析的 top-level 候选值。
+
+    Returns:
+        只包含 schema_version 与已发出的三个既有 top-level subvalues；全缺时返回空字典。
+
+    Raises:
+        无显式抛出。
+    """
+
+    value: dict[str, object] = {}
+    for top_level in _INVESTOR_EXPERIENCE_REQUIRED_TOP_LEVEL:
+        selected = selected_values.get(top_level)
+        if selected is not None:
+            value[top_level] = selected.value
+    if not value:
+        return {}
+    return {"schema_version": "investor_experience.v1", **value}
+
+
+def _investor_experience_emitted_output_paths(
+    value: dict[str, object],
+    selected_values: dict[str, _InvestorExperienceValueCandidate],
+) -> tuple[str, ...]:
+    """返回实际进入 public value 的 investor_experience output paths。
+
+    Args:
+        value: 已构造的字段族 value。
+        selected_values: 已解析的 top-level 候选值。
+
+    Returns:
+        需要进入 family anchors 的输出路径元组。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return tuple(
+        top_level
+        for top_level in _INVESTOR_EXPERIENCE_REQUIRED_TOP_LEVEL
+        if top_level in value and top_level in selected_values
+    )
+
+
+def _investor_experience_source_truth_gaps(
+    value: dict[str, object],
+    ambiguous_paths: set[str],
+) -> tuple[FundExtractionGap, ...]:
+    """构造 investor_experience.v1 source-truth 字段族本地 gaps。
+
+    Args:
+        value: 已构造的字段族 value。
+        ambiguous_paths: 发生 duplicate ambiguity 的输出路径集合。
+
+    Returns:
+        missing/partial/ambiguity gaps。
+
+    Raises:
+        无显式抛出。
+    """
+
+    gaps: list[FundExtractionGap] = []
+    for output_path in sorted(ambiguous_paths):
+        gaps.append(
+            FundExtractionGap(
+                gap_code="ambiguous_table_or_locator",
+                message=f"{output_path} 存在多个冲突的稳定 FDD locator 值",
+                field_family_id="investor_experience.v1",
+                source_field_path=output_path,
+                source_boundary="ambiguous_locator",
+                required=True,
+            )
+        )
+    missing_top_level = tuple(
+        top_level for top_level in _INVESTOR_EXPERIENCE_REQUIRED_TOP_LEVEL if top_level not in value
+    )
+    if not value:
+        gaps.append(
+            FundExtractionGap(
+                gap_code="field_family_missing",
+                message="investor_experience.v1 未形成允许的 source-truth 字段值",
+                field_family_id="investor_experience.v1",
+                source_field_path=None,
+                source_boundary="annual_report",
+                required=True,
+            )
+        )
+    elif missing_top_level:
+        gaps.extend(
+            FundExtractionGap(
+                gap_code="field_family_partial",
+                message=f"investor_experience.v1 缺少 required top-level value: {top_level}",
+                field_family_id="investor_experience.v1",
+                source_field_path=top_level,
+                source_boundary="annual_report",
+                required=True,
+            )
+            for top_level in missing_top_level
+        )
+    return tuple(gaps)
+
+
+def _investor_experience_status(value: dict[str, object], ambiguous_paths: set[str]) -> str:
+    """按三个 top-level 完整度派生 investor_experience 字段族状态。
+
+    Args:
+        value: 已构造的字段族 value。
+        ambiguous_paths: 已发现的歧义输出路径集合。
+
+    Returns:
+        `accepted`、`partial` 或 `missing`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if all(top_level in value for top_level in _INVESTOR_EXPERIENCE_REQUIRED_TOP_LEVEL) and not ambiguous_paths:
+        return "accepted"
+    if value:
+        return "partial"
+    return "missing"
+
+
+def _investor_experience_cell_anchor(
+    output_path: str,
+    table: FundDisclosureTableBlockLike,
+    cell: FundDisclosureCellLike,
+    context: FundProcessorDispatchKey,
+) -> EvidenceAnchor:
+    """构造 investor_experience table/cell source-truth EvidenceAnchor。
+
+    Args:
+        output_path: 目标输出路径。
+        table: parent table block。
+        cell: FDD table cell。
+        context: Processor dispatch 身份。
+
+    Returns:
+        source_kind 固定为 annual_report 的公共锚点。
+
+    Raises:
+        无显式抛出。
+    """
+
+    table_id = cell.table_id or table.table_id
+    row_locator = (
+        f"field={output_path}; table_id={table_id}; "
+        f"row={cell.row_index}; column={cell.column_index}; cell_id={cell.cell_id}"
+    )
+    return EvidenceAnchor(
+        source_kind="annual_report",
+        document_year=context.document_year,
+        section_id=cell.section_anchor or table.section_id,
+        page_number=None,
+        table_id=table_id,
+        row_locator=row_locator,
+        note=_truncate(_cell_value(cell)),
+    )
+
+
+def _stable_indexed_cells(
+    table: FundDisclosureTableBlockLike,
+) -> tuple[tuple[int, FundDisclosureCellLike], ...]:
+    """返回按 row/column 排序的 stable cell。
+
+    Args:
+        table: FDD table block。
+
+    Returns:
+        `(原始 cell tuple index, cell)` 元组。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return tuple(
+        sorted(
+            (
+                (index, cell)
+                for index, cell in enumerate(table.cells)
+                if cell.locator_stability == "stable"
+            ),
+            key=lambda item: (item[1].row_index, item[1].column_index),
+        )
+    )
+
+
+def _cells_by_row(
+    stable_cells: tuple[tuple[int, FundDisclosureCellLike], ...],
+) -> dict[int, tuple[tuple[int, FundDisclosureCellLike], ...]]:
+    """按 row_index 分组 stable cells。
+
+    Args:
+        stable_cells: 稳定 cell 列表。
+
+    Returns:
+        row_index 到 cell 列表的映射。
+
+    Raises:
+        无显式抛出。
+    """
+
+    rows: dict[int, list[tuple[int, FundDisclosureCellLike]]] = {}
+    for cell_index, cell in stable_cells:
+        rows.setdefault(cell.row_index, []).append((cell_index, cell))
+    return {row: tuple(cells) for row, cells in sorted(rows.items())}
+
+
+def _row_text_context(
+    row_cells: tuple[tuple[int, FundDisclosureCellLike], ...],
+) -> tuple[str, ...]:
+    """返回同一 row 的文本上下文。
+
+    Args:
+        row_cells: 同一 row 的 cell 列表。
+
+    Returns:
+        cell value、row label、column header 和 heading path 文本。
+
+    Raises:
+        无显式抛出。
+    """
+
+    texts: list[str] = []
+    for _, cell in row_cells:
+        texts.extend(
+            (
+                _cell_value(cell),
+                *_tuple_text(cell.row_label_path),
+                *_tuple_text(cell.column_header_path),
+                *_tuple_text(cell.heading_path),
+            )
+        )
+    return tuple(text for text in texts if text)
+
+
+def _cell_for_column(
+    column: int,
+    row_cells: tuple[tuple[int, FundDisclosureCellLike], ...],
+) -> FundDisclosureCellLike | None:
+    """返回指定 row 中指定 column 的 cell。
+
+    Args:
+        column: column_index。
+        row_cells: 同一 row 的 cell 列表。
+
+    Returns:
+        命中的 cell；缺失时返回 None。
+
+    Raises:
+        无显式抛出。
+    """
+
+    for _, cell in row_cells:
+        if cell.column_index == column:
+            return cell
+    return None
+
+
+def _cell_value(cell: FundDisclosureCellLike) -> str:
+    """返回 FDD cell 的规范化取值。
+
+    Args:
+        cell: FDD table cell。
+
+    Returns:
+        `cell_text_normalized` 非空时优先，否则回退 `cell_text`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    value = cell.cell_text_normalized.strip() if cell.cell_text_normalized else ""
+    if value:
+        return value
+    return cell.cell_text.strip()
 
 
 def _select_investor_experience_candidate_evidence(

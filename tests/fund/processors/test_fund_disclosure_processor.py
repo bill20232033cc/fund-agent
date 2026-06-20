@@ -396,6 +396,98 @@ def _manager_profile_source_truth_result(
     return processor.extract(FundProcessorInput(context=_dispatch_key(), intermediate=intermediate))
 
 
+def _investor_experience_source_truth_result(
+    intermediate: _ContentIntermediateStub,
+) -> FundProcessorResult:
+    """运行 investor_experience source-truth route 测试用 processor。
+
+    Args:
+        intermediate: FDD content intermediate。
+
+    Returns:
+        processor 输出结果。
+
+    Raises:
+        无显式抛出。
+    """
+
+    processor = FundDisclosureDocumentProcessor()
+    return processor.extract(FundProcessorInput(context=_dispatch_key(), intermediate=intermediate))
+
+
+def _investor_paragraph(
+    text: str,
+    *,
+    block_id: str = "paragraph-investor",
+    heading_path: tuple[str, ...] = ("投资者获得感",),
+) -> _ParagraphStub:
+    """构造 investor_experience paragraph source-truth fixture。
+
+    Args:
+        text: paragraph 文本。
+        block_id: block id。
+        heading_path: heading path。
+
+    Returns:
+        paragraph stub。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return _ParagraphStub(
+        block_id=block_id,
+        section_id="section-investor",
+        heading_path=heading_path,
+        text_raw=text,
+        text_normalized=text,
+    )
+
+
+def _investor_cell(
+    label: str,
+    value: str,
+    *,
+    row_index: int,
+    column_index: int = 1,
+    table_id: str = "table-investor",
+    cell_id: str | None = None,
+    column_header_path: tuple[str, ...] = ("内容",),
+    heading_path: tuple[str, ...] = ("投资者获得感",),
+) -> _CellStub:
+    """构造 investor_experience table/cell source-truth fixture。
+
+    Args:
+        label: row label。
+        value: cell value。
+        row_index: 行号。
+        column_index: 列号。
+        table_id: 所属表格 ID。
+        cell_id: 可选 cell id。
+        column_header_path: column header path。
+        heading_path: heading path。
+
+    Returns:
+        cell stub。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return _CellStub(
+        cell_id=cell_id or f"{table_id}-cell-{row_index}-{column_index}",
+        table_id=table_id,
+        section_anchor="section-investor",
+        heading_path=heading_path,
+        row_index=row_index,
+        column_index=column_index,
+        row_label_path=(label,),
+        column_header_path=column_header_path,
+        cell_text=value,
+        cell_text_normalized=value,
+    )
+
+
 def _product_cell(
     output_label: str,
     value: str,
@@ -5347,6 +5439,709 @@ def test_investor_experience_selector_allows_subscription_redemption_context_gua
     }
 
     assert paths_by_role["table_blocks[0].cells[0]"] == "role=subscription_redemption"
+
+
+def test_investor_experience_source_truth_route_suppresses_candidate_evidence() -> None:
+    """proof-positive direct route 缺 public value 时也清空 investor candidate evidence。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 direct-route missing 仍泄漏 candidate evidence 时抛出。
+    """
+
+    result = _investor_experience_source_truth_result(
+        _source_truth_content_intermediate(
+            sections=(
+                _SectionStub(
+                    section_id="section-distribution",
+                    heading_text_raw="基金收益分配",
+                    heading_text_normalized="基金收益分配",
+                    heading_path=("基金收益分配",),
+                ),
+            ),
+        )
+    )
+
+    family = _field_family(result, "investor_experience.v1")
+
+    assert family.status == "missing"
+    assert family.value == {}
+    assert family.anchors == ()
+    assert family.candidate_evidence == ()
+    assert _gap_codes(family) == {"field_family_missing"}
+
+
+def test_investor_experience_source_truth_requires_proof_even_when_candidate_boundary_none() -> None:
+    """proof 缺失时保持 candidate-only missing 并追加 source_truth_admission_missing。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 proof-missing 路径被提升为 public direct 时抛出。
+    """
+
+    processor = FundDisclosureDocumentProcessor()
+    result = processor.extract(
+        FundProcessorInput(
+            context=_dispatch_key(),
+            intermediate=_ContentIntermediateStub(
+                source_provenance=_provenance(),
+                sections=(
+                    _SectionStub(
+                        section_id="section-investor",
+                        heading_text_raw="投资者实际收益",
+                        heading_text_normalized="投资者实际收益",
+                        heading_path=("投资者实际收益",),
+                    ),
+                ),
+                paragraph_blocks=(),
+                table_blocks=(),
+            ),
+        )
+    )
+
+    family = _field_family(result, "investor_experience.v1")
+
+    assert family.status == "missing"
+    assert family.value == {}
+    assert family.anchors == ()
+    assert family.candidate_evidence
+    assert _gap_codes(family) == {
+        "candidate_only_not_source_truth",
+        "source_truth_admission_missing",
+    }
+
+
+def test_investor_experience_source_truth_rejects_base_admission_invalid_paths() -> None:
+    """缺 provenance 或 failure_class 非空时不得产出 investor public value。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 invalid base admission 被直接抽取时抛出。
+    """
+
+    for intermediate in (
+        _ContentIntermediateStub(
+            source_provenance=None,
+            source_truth_admission=_source_truth_admission_proof(),
+            paragraph_blocks=(
+                _investor_paragraph("投资者收益率：6.66%", block_id="paragraph-return"),
+            ),
+            table_blocks=(),
+        ),
+        _ContentIntermediateStub(
+            source_provenance=_provenance(),
+            failure_class="schema_drift",
+            source_truth_admission=_source_truth_admission_proof(),
+            paragraph_blocks=(
+                _investor_paragraph("投资者收益率：6.66%", block_id="paragraph-return"),
+            ),
+            table_blocks=(),
+        ),
+    ):
+        result = _investor_experience_source_truth_result(intermediate)
+        if result.field_families:
+            family = _field_family(result, "investor_experience.v1")
+            assert family.value == {}
+            assert family.anchors == ()
+            assert family.extraction_mode == "missing"
+        else:
+            assert result.contract_status == "blocked"
+            assert result.anchors == ()
+
+
+def test_investor_experience_source_truth_candidate_boundary_remains_blocked() -> None:
+    """candidate_boundary 输入不得进入 investor source-truth direct extraction。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 candidate boundary 被提升为 public source truth 时抛出。
+    """
+
+    result = _investor_experience_source_truth_result(
+        _ContentIntermediateStub(
+            source_provenance=_provenance(),
+            candidate_boundary=CandidateBoundaryStatus(
+                candidate_only=True,
+                field_correctness_status="not_proven",
+                source_truth_status="not_proven",
+            ),
+            source_truth_admission=_source_truth_admission_proof(),
+            paragraph_blocks=(
+                _investor_paragraph("投资者收益率：6.66%", block_id="paragraph-return"),
+            ),
+            table_blocks=(),
+        )
+    )
+
+    family = _field_family(result, "investor_experience.v1")
+
+    assert result.contract_status == "blocked"
+    assert family.value == {}
+    assert family.anchors == ()
+
+
+def test_investor_experience_source_truth_extracts_exact_value_shape() -> None:
+    """proof-positive investor_experience 只发出三个既有 public/bundle key。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 public shape 扩张或字段缺失时抛出。
+    """
+
+    cells = (
+        _investor_cell("期初基金份额总额", "1,000.00", row_index=0, column_header_path=("004393",)),
+        _investor_cell("期末基金份额总额", "1,250.00", row_index=1, column_header_path=("004393",)),
+        _investor_cell("净变动", "250.00", row_index=2, column_header_path=("004393",)),
+    )
+    result = _investor_experience_source_truth_result(
+        _source_truth_content_intermediate(
+            cells=cells,
+            paragraphs=(
+                _investor_paragraph("投资者收益率：7.25%", block_id="paragraph-return"),
+                _investor_paragraph("机构投资者持有比例：60.00%", block_id="paragraph-inst"),
+                _investor_paragraph("个人投资者持有比例：40.00%", block_id="paragraph-ind"),
+            ),
+        )
+    )
+
+    family = _field_family(result, "investor_experience.v1")
+
+    assert family.status == "accepted"
+    assert family.extraction_mode == "direct"
+    assert set(family.value) == {
+        "schema_version",
+        "investor_return",
+        "holder_structure",
+        "share_change",
+    }
+    assert family.value["investor_return"] == {
+        "investor_return_rate": "7.25%",
+        "disclosure_status": "direct",
+        "fallback_status": "not_needed",
+    }
+    assert family.value["holder_structure"] == {
+        "institutional_holder": "60.00%",
+        "individual_holder": "40.00%",
+    }
+    assert family.value["share_change"] == {
+        "beginning_share": "1,000.00",
+        "ending_share": "1,250.00",
+        "net_change": "250.00",
+        "share_class_column": "004393",
+        "share_class_selection_reason": "single_value_column",
+    }
+    assert family.candidate_evidence == ()
+    assert family.anchors
+    assert {anchor.source_kind for anchor in family.anchors} == {"annual_report"}
+
+
+def test_investor_experience_source_truth_estimated_investor_return_only() -> None:
+    """仅估算投资者收益率时发出 estimated public shape。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 estimated disclosure status 错误时抛出。
+    """
+
+    result = _investor_experience_source_truth_result(
+        _source_truth_content_intermediate(
+            paragraphs=(
+                _investor_paragraph(
+                    "估算投资者收益率：5.50%",
+                    block_id="paragraph-estimated-return",
+                ),
+            ),
+        )
+    )
+
+    family = _field_family(result, "investor_experience.v1")
+
+    assert family.status == "partial"
+    assert family.value["investor_return"] == {
+        "investor_return_rate": "5.50%",
+        "disclosure_status": "estimated",
+        "fallback_status": "estimated_disclosure_in_section",
+    }
+
+
+def test_investor_experience_source_truth_estimated_investor_return_conflict_omits_value() -> None:
+    """估算投资者收益率冲突时 omit investor_return 并记录 ambiguity。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 estimated 冲突仍进入 public value 时抛出。
+    """
+
+    result = _investor_experience_source_truth_result(
+        _source_truth_content_intermediate(
+            paragraphs=(
+                _investor_paragraph("估算投资者收益率：5.50%", block_id="paragraph-est-1"),
+                _investor_paragraph("估算投资者收益率：6.50%", block_id="paragraph-est-2"),
+            ),
+        )
+    )
+
+    family = _field_family(result, "investor_experience.v1")
+
+    assert family.value == {}
+    assert any(
+        gap.gap_code == "ambiguous_table_or_locator"
+        and gap.source_field_path == "investor_return"
+        for gap in family.gaps
+    )
+
+
+def test_investor_experience_source_truth_investor_return_paragraph_requires_label_value_pattern() -> None:
+    """投资者收益率 paragraph 必须同段有 label 和有效百分比且非 unavailable。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 label-only 或 unavailable 文本被采信时抛出。
+    """
+
+    result = _investor_experience_source_truth_result(
+        _source_truth_content_intermediate(
+            paragraphs=(
+                _investor_paragraph("投资者收益率", block_id="paragraph-label-only"),
+                _investor_paragraph("投资者收益率：未披露 8.00%", block_id="paragraph-unavailable"),
+                _investor_paragraph("本段仅出现 8.00% 但无标签", block_id="paragraph-value-only"),
+            ),
+        )
+    )
+
+    family = _field_family(result, "investor_experience.v1")
+
+    assert family.value == {}
+    assert _gap_codes(family) == {"field_family_missing"}
+
+
+def test_investor_experience_source_truth_holder_structure_filters_placeholder_values() -> None:
+    """holder_structure placeholder side 不得作为 public value。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 placeholder 被写入 holder_structure 时抛出。
+    """
+
+    result = _investor_experience_source_truth_result(
+        _source_truth_content_intermediate(
+            paragraphs=(
+                _investor_paragraph("机构投资者持有比例：未披露", block_id="paragraph-inst"),
+                _investor_paragraph("个人投资者持有比例：40.00%", block_id="paragraph-ind"),
+            ),
+        )
+    )
+
+    family = _field_family(result, "investor_experience.v1")
+
+    assert family.value["holder_structure"] == {
+        "institutional_holder": None,
+        "individual_holder": "40.00%",
+    }
+
+
+def test_investor_experience_source_truth_partial_when_required_groups_missing() -> None:
+    """只命中部分 top-level 时返回 partial 并记录 field_family_partial。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 partial 完整度状态错误时抛出。
+    """
+
+    result = _investor_experience_source_truth_result(
+        _source_truth_content_intermediate(
+            paragraphs=(
+                _investor_paragraph("投资者收益率：7.25%", block_id="paragraph-return"),
+            ),
+        )
+    )
+
+    family = _field_family(result, "investor_experience.v1")
+
+    assert family.status == "partial"
+    assert set(family.value) == {"schema_version", "investor_return"}
+    assert "field_family_partial" in _gap_codes(family)
+
+
+def test_investor_experience_source_truth_missing_when_no_allowed_public_labels() -> None:
+    """仅申购赎回或收益分配 locator 内容不得产生 public subvalue。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 candidate-only role 被写入 public value 时抛出。
+    """
+
+    result = _investor_experience_source_truth_result(
+        _source_truth_content_intermediate(
+            sections=(
+                _SectionStub(
+                    section_id="section-subscription",
+                    heading_text_raw="申购赎回",
+                    heading_text_normalized="申购赎回",
+                    heading_path=("基金份额变动", "申购赎回"),
+                ),
+                _SectionStub(
+                    section_id="section-distribution",
+                    heading_text_raw="收益分配",
+                    heading_text_normalized="收益分配",
+                    heading_path=("收益分配",),
+                ),
+            ),
+        )
+    )
+
+    family = _field_family(result, "investor_experience.v1")
+
+    assert family.value == {}
+    assert family.candidate_evidence == ()
+    assert _gap_codes(family) == {"field_family_missing"}
+
+
+def test_investor_experience_source_truth_ambiguous_duplicate_omits_conflicting_value() -> None:
+    """同一 output path 多个冲突值时 omit 对应 public subvalue。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当冲突值被任意采信时抛出。
+    """
+
+    result = _investor_experience_source_truth_result(
+        _source_truth_content_intermediate(
+            paragraphs=(
+                _investor_paragraph("投资者收益率：7.25%", block_id="paragraph-return-1"),
+                _investor_paragraph("投资者收益率：8.25%", block_id="paragraph-return-2"),
+                _investor_paragraph("机构投资者持有比例：60.00%", block_id="paragraph-inst"),
+            ),
+        )
+    )
+
+    family = _field_family(result, "investor_experience.v1")
+
+    assert "investor_return" not in family.value
+    assert "holder_structure" in family.value
+    assert family.status == "partial"
+    assert any(gap.source_field_path == "investor_return" for gap in family.gaps)
+
+
+def test_investor_experience_source_truth_share_change_excludes_label_column() -> None:
+    """share_change table 排除 label column 后只取数值列。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 label column 被误选为 value column 时抛出。
+    """
+
+    cells = (
+        _investor_cell("项目", "期初基金份额总额", row_index=0, column_index=0),
+        _investor_cell("项目", "期末基金份额总额", row_index=1, column_index=0),
+        _investor_cell("期初基金份额总额", "1,000.00", row_index=0, column_index=1),
+        _investor_cell("期末基金份额总额", "1,250.00", row_index=1, column_index=1),
+    )
+    result = _investor_experience_source_truth_result(
+        _source_truth_content_intermediate(cells=cells)
+    )
+
+    family = _field_family(result, "investor_experience.v1")
+
+    assert family.value["share_change"]["beginning_share"] == "1,000.00"
+    assert family.value["share_change"]["ending_share"] == "1,250.00"
+    assert family.value["share_change"]["share_class_selection_reason"] == "single_value_column"
+
+
+def test_investor_experience_source_truth_share_change_selects_single_value_column() -> None:
+    """share_change 只有一个 value column 时不要求 fund code header。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 single-value-column 路径未被独立选择时抛出。
+    """
+
+    cells = (
+        _investor_cell("项目", "期初基金份额总额", row_index=0, column_index=0),
+        _investor_cell("项目", "期末基金份额总额", row_index=1, column_index=0),
+        _investor_cell(
+            "期初基金份额总额",
+            "1,000.00",
+            row_index=0,
+            column_index=1,
+            column_header_path=("报告期份额",),
+        ),
+        _investor_cell(
+            "期末基金份额总额",
+            "1,250.00",
+            row_index=1,
+            column_index=1,
+            column_header_path=("报告期份额",),
+        ),
+    )
+    result = _investor_experience_source_truth_result(
+        _source_truth_content_intermediate(cells=cells)
+    )
+
+    share_change = _field_family(result, "investor_experience.v1").value["share_change"]
+
+    assert share_change == {
+        "beginning_share": "1,000.00",
+        "ending_share": "1,250.00",
+        "net_change": "250.00",
+        "share_class_column": "报告期份额",
+        "share_class_selection_reason": "single_value_column",
+    }
+
+
+def test_investor_experience_source_truth_share_change_selects_exact_fund_code_column() -> None:
+    """多 value column 时只允许 exact fund_code header match。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 substring/fuzzy fund code 被误选时抛出。
+    """
+
+    cells = (
+        _investor_cell(
+            "期初基金份额总额",
+            "1,000.00",
+            row_index=0,
+            column_index=1,
+            column_header_path=("004393",),
+        ),
+        _investor_cell(
+            "期末基金份额总额",
+            "1,250.00",
+            row_index=1,
+            column_index=1,
+            column_header_path=("004393",),
+        ),
+        _investor_cell(
+            "期初基金份额总额",
+            "9,000.00",
+            row_index=0,
+            column_index=2,
+            column_header_path=("004393A",),
+        ),
+        _investor_cell(
+            "期末基金份额总额",
+            "9,250.00",
+            row_index=1,
+            column_index=2,
+            column_header_path=("004393A",),
+        ),
+    )
+    result = _investor_experience_source_truth_result(
+        _source_truth_content_intermediate(cells=cells)
+    )
+
+    share_change = _field_family(result, "investor_experience.v1").value["share_change"]
+
+    assert share_change["beginning_share"] == "1,000.00"
+    assert share_change["ending_share"] == "1,250.00"
+    assert share_change["share_class_column"] == "004393"
+    assert share_change["share_class_selection_reason"] == "fund_code_header_match"
+
+
+def test_investor_experience_source_truth_share_change_rejects_ambiguous_share_class_columns() -> None:
+    """多 value column 无 exact fund_code 时 omit share_change。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 share class ambiguity 被静默选择时抛出。
+    """
+
+    cells = (
+        _investor_cell(
+            "期初基金份额总额",
+            "1,000.00",
+            row_index=0,
+            column_index=1,
+            column_header_path=("A类",),
+        ),
+        _investor_cell(
+            "期末基金份额总额",
+            "1,250.00",
+            row_index=1,
+            column_index=1,
+            column_header_path=("A类",),
+        ),
+        _investor_cell(
+            "期初基金份额总额",
+            "2,000.00",
+            row_index=0,
+            column_index=2,
+            column_header_path=("C类",),
+        ),
+        _investor_cell(
+            "期末基金份额总额",
+            "2,250.00",
+            row_index=1,
+            column_index=2,
+            column_header_path=("C类",),
+        ),
+    )
+    result = _investor_experience_source_truth_result(
+        _source_truth_content_intermediate(cells=cells)
+    )
+
+    family = _field_family(result, "investor_experience.v1")
+
+    assert family.value == {}
+    assert _gap_codes(family) == {"ambiguous_table_or_locator", "field_family_missing"}
+    assert any(
+        gap.gap_code == "ambiguous_table_or_locator" and gap.source_field_path == "share_change"
+        for gap in family.gaps
+    )
+
+
+def test_investor_experience_source_truth_share_change_calculates_net_change() -> None:
+    """缺净变动行时用 Decimal 计算 ending - beginning。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当净变动计算格式偏离既有语义时抛出。
+    """
+
+    cells = (
+        _investor_cell("期初基金份额总额", "1,000.00", row_index=0, column_header_path=("004393",)),
+        _investor_cell("期末基金份额总额", "1,234.50", row_index=1, column_header_path=("004393",)),
+    )
+    result = _investor_experience_source_truth_result(
+        _source_truth_content_intermediate(cells=cells)
+    )
+
+    share_change = _field_family(result, "investor_experience.v1").value["share_change"]
+
+    assert share_change["net_change"] == "234.50"
+
+
+def test_investor_experience_source_truth_does_not_populate_stage_or_risk() -> None:
+    """investor direct suppression 不得清空 current_stage/core_risk candidate evidence。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当相邻 family 被 direct route 干扰时抛出。
+    """
+
+    result = _investor_experience_source_truth_result(
+        _source_truth_content_intermediate(
+            paragraphs=(
+                _investor_paragraph("投资者收益率：7.25%", block_id="paragraph-return"),
+                _ParagraphStub(
+                    block_id="paragraph-stage",
+                    section_id="section-stage",
+                    heading_path=("投资策略和运作分析",),
+                    text_raw="本报告期组合仓位保持稳定，配置结构有所调整。",
+                    text_normalized="本报告期组合仓位保持稳定，配置结构有所调整。",
+                ),
+                _ParagraphStub(
+                    block_id="paragraph-risk",
+                    section_id="section-risk",
+                    heading_path=("风险收益特征",),
+                    text_raw="本基金属于较高风险较高收益的基金品种。",
+                    text_normalized="本基金属于较高风险较高收益的基金品种。",
+                ),
+            ),
+        )
+    )
+
+    investor = _field_family(result, "investor_experience.v1")
+    current_stage = _field_family(result, "current_stage.v1")
+    core_risk = _field_family(result, "core_risk.v1")
+
+    assert investor.candidate_evidence == ()
+    assert investor.value["investor_return"]["investor_return_rate"] == "7.25%"
+    assert current_stage.value == {}
+    assert core_risk.value == {}
+    assert current_stage.candidate_evidence
+    assert core_risk.candidate_evidence
 
 
 # ── S6-F core risk candidate selector ───────────────────────────────────────
