@@ -1314,6 +1314,64 @@ async def test_explicit_disclosure_source_truth_manager_profile_projects_to_bund
 
 
 @pytest.mark.asyncio
+async def test_explicit_disclosure_source_truth_investor_experience_projects_to_bundle() -> None:
+    """验证 proof-positive FDD investor_experience source truth 经 facade 投影。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 investor_experience 三个 bundle 字段未投影时抛出。
+    """
+
+    extractor = FundDataExtractor(
+        repository=_FakeRepository(_annual_report()),
+        nav_provider=_RecordingNavProvider(),
+        processor_registry=FundProcessorRegistry.create_default(),
+    )
+
+    bundle = await extractor.extract(
+        "110011",
+        2024,
+        disclosure_intermediate=_investor_experience_source_truth_disclosure_intermediate(),
+    )
+
+    assert bundle.investor_return.value == {
+        "investor_return_rate": "7.25%",
+        "disclosure_status": "direct",
+        "fallback_status": "not_needed",
+    }
+    assert bundle.holder_structure.value == {
+        "institutional_holder": "60.00%",
+        "individual_holder": "40.00%",
+    }
+    assert bundle.share_change.value == {
+        "beginning_share": "1,000.00",
+        "ending_share": "1,250.00",
+        "net_change": "250.00",
+        "share_class_column": "110011",
+        "share_class_selection_reason": "single_value_column",
+    }
+    assert bundle.investor_return.extraction_mode == "direct"
+    assert bundle.holder_structure.extraction_mode == "direct"
+    assert bundle.share_change.extraction_mode == "direct"
+    assert bundle.investor_return.anchors
+    assert bundle.holder_structure.anchors
+    assert bundle.share_change.anchors
+    assert {
+        anchor.source_kind
+        for anchor in (
+            *bundle.investor_return.anchors,
+            *bundle.holder_structure.anchors,
+            *bundle.share_change.anchors,
+        )
+    } == {"annual_report"}
+
+
+@pytest.mark.asyncio
 async def test_explicit_disclosure_candidate_only_manager_profile_stays_missing() -> None:
     """验证 proof-missing/candidate-only manager_profile 不投影 bundle 字段。
 
@@ -1354,6 +1412,43 @@ async def test_explicit_disclosure_candidate_only_manager_profile_stays_missing(
     assert bundle.manager_alignment.extraction_mode == "missing"
     assert bundle.manager_strategy_text.extraction_mode == "missing"
     assert bundle.holdings_snapshot.extraction_mode == "missing"
+
+
+@pytest.mark.asyncio
+async def test_explicit_disclosure_candidate_only_investor_experience_stays_missing() -> None:
+    """验证 proof-missing/candidate-only investor_experience 不投影 bundle 字段。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 candidate evidence 被 facade 当作 investor 字段值消费时抛出。
+    """
+
+    extractor = FundDataExtractor(
+        repository=_FakeRepository(_annual_report()),
+        nav_provider=_RecordingNavProvider(),
+        processor_registry=FundProcessorRegistry.create_default(),
+    )
+
+    bundle = await extractor.extract(
+        "110011",
+        2024,
+        disclosure_intermediate=_investor_experience_candidate_only_disclosure_intermediate(),
+    )
+
+    assert bundle.investor_return.value is None
+    assert bundle.holder_structure.value is None
+    assert bundle.share_change.value is None
+    assert bundle.investor_return.anchors == ()
+    assert bundle.holder_structure.anchors == ()
+    assert bundle.share_change.anchors == ()
+    assert bundle.investor_return.extraction_mode == "missing"
+    assert bundle.holder_structure.extraction_mode == "missing"
+    assert bundle.share_change.extraction_mode == "missing"
     assert bundle.portfolio_managers.note == (
         "field_not_in_family:manager_profile.v1:portfolio_managers"
     )
@@ -1832,6 +1927,135 @@ def _manager_profile_candidate_only_disclosure_intermediate() -> _StubDisclosure
     """
 
     return _manager_profile_disclosure_intermediate(source_truth_admission=None)
+
+
+def _investor_experience_source_truth_disclosure_intermediate() -> _StubDisclosureIntermediate:
+    """构造带 proof-positive investor_experience.v1 内容的 FDD stub。
+
+    Args:
+        无。
+
+    Returns:
+        测试用 investor_experience source-truth FDD content intermediate。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return _investor_experience_disclosure_intermediate(
+        source_truth_admission=_source_truth_admission_proof()
+    )
+
+
+def _investor_experience_candidate_only_disclosure_intermediate() -> _StubDisclosureIntermediate:
+    """构造 proof-missing/candidate-only investor_experience.v1 内容的 FDD stub。
+
+    Args:
+        无。
+
+    Returns:
+        测试用 candidate-only FDD content intermediate。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return _investor_experience_disclosure_intermediate(source_truth_admission=None)
+
+
+def _investor_experience_disclosure_intermediate(
+    *,
+    source_truth_admission: FundDisclosureSourceTruthAdmissionProof | None,
+) -> _StubDisclosureIntermediate:
+    """构造 investor_experience facade route 共用 FDD content fixture。
+
+    Args:
+        source_truth_admission: source-truth 正向证明；为空时保留 candidate-only 路径。
+
+    Returns:
+        测试用 FDD content intermediate。
+
+    Raises:
+        无显式抛出。
+    """
+
+    paragraphs = (
+        _DisclosureParagraph(
+            block_id="paragraph-investor-return",
+            section_id="section-investor",
+            heading_path=("投资者获得感",),
+            text_raw="投资者收益率：7.25%",
+            text_normalized="投资者收益率：7.25%",
+        ),
+        _DisclosureParagraph(
+            block_id="paragraph-institutional-holder",
+            section_id="section-holder",
+            heading_path=("基金份额持有人结构",),
+            text_raw="机构投资者持有比例：60.00%",
+            text_normalized="机构投资者持有比例：60.00%",
+        ),
+        _DisclosureParagraph(
+            block_id="paragraph-individual-holder",
+            section_id="section-holder",
+            heading_path=("基金份额持有人结构",),
+            text_raw="个人投资者持有比例：40.00%",
+            text_normalized="个人投资者持有比例：40.00%",
+        ),
+    )
+    share_change_table = _DisclosureTable(
+        table_id="table-investor-share-change",
+        section_id="section-share-change",
+        heading_text="基金份额变动",
+        table_caption_or_nearby_heading="基金份额变动",
+        heading_path=("基金份额变动",),
+        cells=(
+            _investor_experience_share_change_cell(
+                "期初基金份额总额", "1,000.00", row_index=0
+            ),
+            _investor_experience_share_change_cell(
+                "期末基金份额总额", "1,250.00", row_index=1
+            ),
+            _investor_experience_share_change_cell("净变动", "250.00", row_index=2),
+        ),
+    )
+    return _disclosure_intermediate(
+        paragraph_blocks=paragraphs,
+        table_blocks=(share_change_table,),
+        source_truth_admission=source_truth_admission,
+    )
+
+
+def _investor_experience_share_change_cell(
+    label: str,
+    value: str,
+    *,
+    row_index: int,
+) -> _DisclosureCell:
+    """构造 investor_experience share_change facade fixture。
+
+    Args:
+        label: 份额变动 row label。
+        value: 披露值。
+        row_index: 行号。
+
+    Returns:
+        FDD cell stub。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return _DisclosureCell(
+        cell_id=f"investor-share-change-{row_index}",
+        table_id="table-investor-share-change",
+        section_anchor="section-share-change",
+        heading_path=("基金份额变动",),
+        row_index=row_index,
+        column_index=1,
+        row_label_path=(label,),
+        column_header_path=("110011",),
+        cell_text=value,
+    )
 
 
 def _manager_profile_disclosure_intermediate(
