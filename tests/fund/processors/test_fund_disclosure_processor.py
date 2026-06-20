@@ -484,7 +484,7 @@ def _manager_profile_cell(
     label_axis: Literal["row", "column"] = "column",
     locator_stability: str = "stable",
 ) -> _CellStub:
-    """构造 Slice 2 manager_profile table/cell source-truth fixture。
+    """构造 Slice 3 manager_profile table/cell source-truth fixture。
 
     Args:
         label: row label 或 column header label。
@@ -2743,7 +2743,7 @@ def test_manager_profile_source_truth_candidate_boundary_remains_blocked() -> No
     assert _gap_codes(family) == {"candidate_only_not_source_truth"}
 
 
-# ── manager_profile source-truth Slice 2 values ────────────────────────────
+# ── manager_profile source-truth Slice 3 values ────────────────────────────
 
 
 def test_manager_profile_source_truth_extracts_roster_strategy_turnover_shape() -> None:
@@ -2756,7 +2756,7 @@ def test_manager_profile_source_truth_extracts_roster_strategy_turnover_shape() 
         无返回值。
 
     Raises:
-        AssertionError: 当 Slice 2 public value、anchor 或越界 family 不符合计划时抛出。
+        AssertionError: 当 Slice 3 public value、anchor 或越界 family 不符合计划时抛出。
     """
 
     roster_table = _TableStub(
@@ -2865,7 +2865,7 @@ def test_manager_profile_source_truth_extracts_roster_strategy_turnover_shape() 
 
 
 def test_manager_profile_source_truth_partial_when_required_groups_missing() -> None:
-    """只形成一个 Slice 2 subvalue 时返回 partial，缺失 top-level 用 gaps 表示。
+    """只形成一个 Slice 3 subvalue 时返回 partial，缺失 top-level 用 gaps 表示。
 
     Args:
         无。
@@ -2923,7 +2923,7 @@ def test_manager_profile_source_truth_partial_when_required_groups_missing() -> 
 
 
 def test_manager_profile_source_truth_missing_when_no_allowed_labels() -> None:
-    """proof-positive content 没有 Slice 2 allowed label 时保持 direct-route missing。
+    """proof-positive content 没有 Slice 3 allowed label 时保持 direct-route missing。
 
     Args:
         无。
