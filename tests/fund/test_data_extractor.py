@@ -34,6 +34,7 @@ from fund_agent.fund.extractors.models import EvidenceAnchor
 from fund_agent.fund.processors.contracts import (
     AnnualReportSourceFailureCategory,
     CandidateBoundaryStatus,
+    FundDisclosureSourceTruthAdmissionProof,
     FundProcessorDispatchKey,
     FundFieldFamilyResult,
     FundProcessorInput,
@@ -665,6 +666,45 @@ class _StubDisclosureIntermediate:
     source_provenance: PublicSourceProvenance | None = None
     candidate_boundary: CandidateBoundaryStatus | None = None
     failure_class: AnnualReportSourceFailureCategory | None = None
+    sections: tuple[object, ...] = ()
+    paragraph_blocks: tuple[object, ...] = ()
+    table_blocks: tuple[object, ...] = ()
+    source_truth_admission: FundDisclosureSourceTruthAdmissionProof | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class _DisclosureCell:
+    """测试专用 FundDisclosureDocument cell stub。"""
+
+    cell_id: str
+    table_id: str
+    row_index: int
+    column_index: int
+    cell_text: str
+    row_label_path: tuple[str, ...] = ()
+    column_header_path: tuple[str, ...] = ()
+    section_anchor: str | None = "§2"
+    heading_path: tuple[str, ...] = ("收益归因",)
+    locator_stability: str = "stable"
+
+    @property
+    def cell_text_normalized(self) -> str:
+        """返回规范化单元格文本。"""
+
+        return self.cell_text
+
+
+@dataclass(frozen=True, slots=True)
+class _DisclosureTable:
+    """测试专用 FundDisclosureDocument table stub。"""
+
+    table_id: str
+    cells: tuple[_DisclosureCell, ...]
+    section_id: str | None = "§2"
+    heading_text: str | None = "收益归因"
+    heading_path: tuple[str, ...] = ("收益归因",)
+    table_caption_or_nearby_heading: str | None = "收益归因"
+    locator_stability: str = "stable"
 
 
 class _RecordingRegistry(FundProcessorRegistry):
@@ -1116,6 +1156,60 @@ async def test_explicit_disclosure_intermediate_routes_to_registry() -> None:
     assert bundle.portfolio_managers.value == {"marker": "portfolio_from_disclosure_processor"}
 
 
+@pytest.mark.asyncio
+async def test_explicit_disclosure_source_truth_return_attribution_projects_to_bundle() -> None:
+    """验证 proof-positive FDD 收益归因 source truth 经 facade 投影。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当显式 FDD direct route 未投影到 bundle 或误用 candidate 时抛出。
+    """
+
+    extractor = FundDataExtractor(
+        repository=_FakeRepository(_annual_report()),
+        nav_provider=_RecordingNavProvider(),
+        processor_registry=FundProcessorRegistry.create_default(),
+    )
+
+    bundle = await extractor.extract(
+        "110011",
+        2024,
+        disclosure_intermediate=_source_truth_disclosure_intermediate(),
+    )
+
+    assert bundle.fee_schedule.value == {
+        "management_fee": "1.50%",
+        "custody_fee": "0.25%",
+    }
+    assert bundle.fee_schedule.extraction_mode == "direct"
+    assert bundle.nav_benchmark_performance.value == {
+        "nav_growth_rate": "8.00%",
+        "benchmark_return_rate": "6.00%",
+    }
+    assert bundle.nav_benchmark_performance.extraction_mode == "direct"
+    assert bundle.tracking_error.value is None
+    assert bundle.tracking_error.extraction_mode == "missing"
+    assert bundle.tracking_error.note == "非指数基金不适用跟踪误差"
+    assert bundle.fee_schedule.anchors
+    assert bundle.nav_benchmark_performance.anchors
+    assert {
+        anchor.source_kind
+        for anchor in (
+            *bundle.fee_schedule.anchors,
+            *bundle.nav_benchmark_performance.anchors,
+        )
+    } == {"annual_report"}
+    assert all(
+        anchor.row_locator is not None and anchor.row_locator.startswith("field=")
+        for anchor in (*bundle.fee_schedule.anchors, *bundle.nav_benchmark_performance.anchors)
+    )
+
+
 def test_explicit_disclosure_intermediate_uses_protocol_not_candidate_import() -> None:
     """验证 data_extractor 只导入协议，不导入 concrete candidate 模块。"""
 
@@ -1491,6 +1585,99 @@ def _disclosure_intermediate(**overrides: object) -> _StubDisclosureIntermediate
     kwargs: dict[str, object] = {"source_provenance": _provenance()}
     kwargs.update(overrides)
     return _StubDisclosureIntermediate(**kwargs)  # type: ignore[arg-type]
+
+
+def _source_truth_disclosure_intermediate() -> _StubDisclosureIntermediate:
+    """构造带 proof-positive return_attribution.v1 内容的 FDD stub。
+
+    Args:
+        无。
+
+    Returns:
+        测试用 source-truth FDD content intermediate。
+
+    Raises:
+        无显式抛出。
+    """
+
+    table = _DisclosureTable(
+        table_id="return-attribution-table",
+        cells=(
+            _DisclosureCell(
+                cell_id="nav-growth",
+                table_id="return-attribution-table",
+                row_index=0,
+                column_index=1,
+                cell_text="8.00%",
+                column_header_path=("基金份额净值增长率",),
+            ),
+            _DisclosureCell(
+                cell_id="benchmark-return",
+                table_id="return-attribution-table",
+                row_index=0,
+                column_index=2,
+                cell_text="6.00%",
+                column_header_path=("业绩比较基准收益率",),
+            ),
+            _DisclosureCell(
+                cell_id="management-fee",
+                table_id="return-attribution-table",
+                row_index=1,
+                column_index=1,
+                cell_text="1.50%",
+                row_label_path=("管理费率",),
+            ),
+            _DisclosureCell(
+                cell_id="custody-fee",
+                table_id="return-attribution-table",
+                row_index=2,
+                column_index=1,
+                cell_text="0.25%",
+                row_label_path=("托管费率",),
+            ),
+            _DisclosureCell(
+                cell_id="tracking-error",
+                table_id="return-attribution-table",
+                row_index=3,
+                column_index=1,
+                cell_text="1.23%",
+                row_label_path=("跟踪误差",),
+            ),
+        ),
+    )
+    return _disclosure_intermediate(
+        table_blocks=(table,),
+        source_truth_admission=_source_truth_admission_proof(),
+    )
+
+
+def _source_truth_admission_proof() -> FundDisclosureSourceTruthAdmissionProof:
+    """构造测试用合法 source-truth admission proof。
+
+    Args:
+        无。
+
+    Returns:
+        合法的 FDD source-truth 正向证明。
+
+    Raises:
+        ValueError: 当 proof 字段不满足契约时由 dataclass 抛出。
+    """
+
+    return FundDisclosureSourceTruthAdmissionProof(
+        proof_kind="repository_loaded_annual_report_identity.v1",
+        source_boundary="annual_report",
+        fund_code="110011",
+        report_year=2024,
+        document_kind="annual_report",
+        intermediate_kind="fund_disclosure_document.v1",
+        source_kind="annual_report",
+        repository_identity_verified=True,
+        source_provenance_verified=True,
+        locator_identity_verified=True,
+        parser_integrity_verified=True,
+        producer="FundDocumentRepository",
+    )
 
 
 async def _assert_explicit_disclosure_failure_class_raises(
