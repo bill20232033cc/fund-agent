@@ -9,9 +9,11 @@ provider、LLM、Service/UI/Host、renderer 或 quality gate。
 from __future__ import annotations
 
 from dataclasses import dataclass
+from decimal import Decimal, InvalidOperation
+import re
 from typing import Final, Iterable, cast
 
-from fund_agent.fund.extractors.models import EvidenceAnchor
+from fund_agent.fund.extractors.models import EvidenceAnchor, TrackingErrorValue
 from fund_agent.fund.processors.contracts import (
     FundCandidateEvidenceRecord,
     FundDisclosureCellLike,
@@ -134,6 +136,42 @@ _RETURN_ATTRIBUTION_MATCH_GROUPS: Final[tuple[tuple[str, tuple[str, ...]], ...]]
         ("跟踪误差", "年化跟踪误差", "日均跟踪偏离度", "日均偏离度"),
     ),
 )
+_RETURN_ATTRIBUTION_REQUIRED_TOP_LEVEL: Final[tuple[str, ...]] = (
+    "nav_benchmark_performance",
+    "fee_schedule",
+    "tracking_error",
+)
+_RETURN_ATTRIBUTION_NAV_LABELS: Final[tuple[str, ...]] = (
+    "基金份额净值增长率",
+    "净值增长率",
+)
+_RETURN_ATTRIBUTION_BENCHMARK_LABELS: Final[tuple[str, ...]] = (
+    "业绩比较基准收益率",
+    "基准收益率",
+)
+_RETURN_ATTRIBUTION_FEE_LABELS: Final[dict[str, tuple[str, ...]]] = {
+    "fee_schedule.management_fee": ("基金管理费", "管理费率", "管理费"),
+    "fee_schedule.custody_fee": ("基金托管费", "托管费率", "托管费"),
+}
+_RETURN_ATTRIBUTION_TRACKING_ERROR_LABELS: Final[tuple[str, ...]] = (
+    "跟踪误差",
+    "年化跟踪误差",
+    "日均跟踪偏离度",
+    "日均偏离度",
+)
+_RETURN_ATTRIBUTION_GENERIC_CELL_TEXTS: Final[frozenset[str]] = frozenset(
+    ("项目", "指标", "名称", "内容", "说明", "费率")
+)
+_RETURN_ATTRIBUTION_TRACKING_ERROR_REJECT_CONTEXT: Final[tuple[str, ...]] = (
+    "目标",
+    "控制",
+    "不超过",
+    "力争",
+    "偏离度绝对值",
+)
+_RETURN_ATTRIBUTION_PERCENT_PATTERN: Final[re.Pattern[str]] = re.compile(
+    r"(?P<value>[-+]?\d+(?:,\d{3})*(?:\.\d+)?)\s*[％%]"
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -144,6 +182,17 @@ class _ProductEssenceValueCandidate:
     value: str
     anchor: EvidenceAnchor
     source_field_path: str
+
+
+@dataclass(frozen=True, slots=True)
+class _ReturnAttributionValueCandidate:
+    """return_attribution.v1 单个字段值候选，见模板第 2 章 R=A+B-C。"""
+
+    output_path: str
+    value: object
+    anchor: EvidenceAnchor
+    source_field_path: str
+    period_label: str | None = None
 _MANAGER_PROFILE_MATCH_GROUPS: Final[
     tuple[tuple[str, tuple[str, ...], tuple[str, ...], tuple[str, ...]], ...]
 ] = (
@@ -703,17 +752,21 @@ def _field_families_for_intermediate(
         source_truth_gap_code: source-truth admission proof 缺失或非法时的本地 gap。
 
     Returns:
-        六个字段族结果；S6-B/S6-C/S6-D/S6-E/S6-F/S6-G 仅为已接受字段族附加
-        candidate evidence。
+        六个字段族结果；proof-positive source-truth 路径可进入已授权 direct extractor，
+        其余已接受字段族仅附加 candidate evidence。
 
     Raises:
         无显式抛出。
     """
 
     product_essence_source_truth: FundFieldFamilyResult | None = None
+    return_attribution_source_truth: FundFieldFamilyResult | None = None
     content_intermediate = _content_intermediate_or_none(intermediate)
     if source_truth_extraction_allowed and content_intermediate is not None:
         product_essence_source_truth = _extract_product_essence_source_truth(
+            content_intermediate, source_provenance, context
+        )
+        return_attribution_source_truth = _extract_return_attribution_source_truth(
             content_intermediate, source_provenance, context
         )
 
@@ -722,7 +775,11 @@ def _field_families_for_intermediate(
         if product_essence_source_truth is not None
         else _select_product_essence_candidate_evidence(intermediate)
     )
-    return_attribution_evidence = _select_return_attribution_candidate_evidence(intermediate)
+    return_attribution_evidence = (
+        ()
+        if return_attribution_source_truth is not None
+        else _select_return_attribution_candidate_evidence(intermediate)
+    )
     manager_profile_evidence = _select_manager_profile_candidate_evidence(intermediate)
     investor_experience_evidence = _select_investor_experience_candidate_evidence(intermediate)
     current_stage_evidence = _select_current_stage_candidate_evidence(intermediate)
@@ -741,6 +798,9 @@ def _field_families_for_intermediate(
     field_families = tuple(
         product_essence_source_truth
         if family_id == "product_essence.v1" and product_essence_source_truth is not None
+        else return_attribution_source_truth
+        if family_id == "return_attribution.v1"
+        and return_attribution_source_truth is not None
         else (
             _candidate_missing_field_family(
                 family_id, source_provenance, candidate_evidence_by_family[family_id]
@@ -845,6 +905,1045 @@ def _extract_product_essence_source_truth(
         source_provenance=source_provenance,
         candidate_evidence=(),
     )
+
+
+def _extract_return_attribution_source_truth(
+    intermediate: FundDisclosureDocumentContentIntermediate,
+    source_provenance: PublicSourceProvenance | None,
+    context: FundProcessorDispatchKey,
+) -> FundFieldFamilyResult:
+    """从 proof-positive FDD 正文抽取模板第 2 章收益归因字段族。
+
+    Args:
+        intermediate: 已通过 source-truth admission proof 的正文中间态。
+        source_provenance: 公共来源 provenance。
+        context: Processor dispatch 身份。
+
+    Returns:
+        `return_attribution.v1` 字段族；只包含 Slice 2 允许的三个 public top-level key。
+
+    Raises:
+        无显式抛出。
+    """
+
+    selected_values, ambiguous_paths = _select_return_attribution_values(intermediate, context)
+    value = _build_return_attribution_value(selected_values)
+    gaps = _return_attribution_source_truth_gaps(value, ambiguous_paths)
+    status = _return_attribution_status(value)
+    anchors = _dedupe_anchors(
+        selected_values[output_path].anchor
+        for output_path in _return_attribution_emitted_output_paths(value, selected_values)
+    )
+    return FundFieldFamilyResult(
+        field_family_id="return_attribution.v1",
+        chapter_ids=_CHAPTER_IDS["return_attribution.v1"],
+        value=value,
+        status=status,
+        extraction_mode="missing" if status == "missing" else "direct",
+        anchors=anchors,
+        gaps=gaps,
+        source_provenance=source_provenance,
+        candidate_evidence=(),
+    )
+
+
+def _select_return_attribution_values(
+    intermediate: FundDisclosureDocumentContentIntermediate,
+    context: FundProcessorDispatchKey,
+) -> tuple[dict[str, _ReturnAttributionValueCandidate], set[str]]:
+    """按 Slice 2 fail-closed 规则选择收益归因字段值。
+
+    Args:
+        intermediate: FDD 正文中间态。
+        context: Processor dispatch 身份。
+
+    Returns:
+        `(selected_values, ambiguous_paths)`；歧义路径不会进入 selected_values。
+
+    Raises:
+        无显式抛出。
+    """
+
+    selected_values: dict[str, _ReturnAttributionValueCandidate] = {}
+    ambiguous_paths: set[str] = set()
+    selected_values.update(
+        _select_return_attribution_nav_benchmark_values(intermediate, context, ambiguous_paths)
+    )
+    fee_candidates = _collect_return_attribution_fee_candidates(intermediate, context)
+    for output_path in _RETURN_ATTRIBUTION_FEE_LABELS:
+        selected = _resolve_return_attribution_candidate(
+            output_path, fee_candidates.get(output_path, ()), ambiguous_paths
+        )
+        if selected is not None:
+            selected_values[output_path] = selected
+    tracking_candidates = _collect_return_attribution_tracking_error_candidates(
+        intermediate, context
+    )
+    selected_tracking = _resolve_return_attribution_candidate(
+        "tracking_error", tracking_candidates, ambiguous_paths
+    )
+    if selected_tracking is not None:
+        selected_values["tracking_error"] = selected_tracking
+    return selected_values, ambiguous_paths
+
+
+def _select_return_attribution_nav_benchmark_values(
+    intermediate: FundDisclosureDocumentContentIntermediate,
+    context: FundProcessorDispatchKey,
+    ambiguous_paths: set[str],
+) -> dict[str, _ReturnAttributionValueCandidate]:
+    """选择唯一同表同行的 NAV/benchmark 收益率组合。
+
+    Args:
+        intermediate: FDD 正文中间态。
+        context: Processor dispatch 身份。
+        ambiguous_paths: 待追加的歧义路径集合。
+
+    Returns:
+        同行 NAV 与 benchmark 候选；缺任一侧或多行冲突时返回空字典。
+
+    Raises:
+        无显式抛出。
+    """
+
+    row_pairs: list[tuple[_ReturnAttributionValueCandidate, _ReturnAttributionValueCandidate]] = []
+    for table_index, table in enumerate(intermediate.table_blocks):
+        if table.locator_stability != "stable":
+            continue
+        nav_by_row: dict[int, _ReturnAttributionValueCandidate] = {}
+        benchmark_by_row: dict[int, _ReturnAttributionValueCandidate] = {}
+        indexed_cells = sorted(
+            enumerate(table.cells), key=lambda item: (item[1].row_index, item[1].column_index)
+        )
+        for cell_index, cell in indexed_cells:
+            if cell.locator_stability != "stable":
+                continue
+            value_text = _return_attribution_percent_text(_return_attribution_cell_value(cell))
+            if value_text is None:
+                continue
+            if _return_attribution_cell_matches_label(cell, _RETURN_ATTRIBUTION_NAV_LABELS):
+                nav_by_row.setdefault(
+                    cell.row_index,
+                    _return_attribution_cell_candidate(
+                        "nav_benchmark_performance.nav_growth_rate",
+                        value_text,
+                        table_index,
+                        cell_index,
+                        table,
+                        cell,
+                        context,
+                        period_label=_return_attribution_cell_period_label(table, cell),
+                    ),
+                )
+            if _return_attribution_cell_matches_label(cell, _RETURN_ATTRIBUTION_BENCHMARK_LABELS):
+                benchmark_by_row.setdefault(
+                    cell.row_index,
+                    _return_attribution_cell_candidate(
+                        "nav_benchmark_performance.benchmark_return_rate",
+                        value_text,
+                        table_index,
+                        cell_index,
+                        table,
+                        cell,
+                        context,
+                        period_label=_return_attribution_cell_period_label(table, cell),
+                    ),
+                )
+        for row_index, nav_candidate in nav_by_row.items():
+            benchmark_candidate = benchmark_by_row.get(row_index)
+            if benchmark_candidate is not None:
+                row_pairs.append((nav_candidate, benchmark_candidate))
+    if len(row_pairs) > 1:
+        ambiguous_paths.add("nav_benchmark_performance")
+        return {}
+    if not row_pairs:
+        return {}
+    nav_candidate, benchmark_candidate = row_pairs[0]
+    return {
+        nav_candidate.output_path: nav_candidate,
+        benchmark_candidate.output_path: benchmark_candidate,
+    }
+
+
+def _collect_return_attribution_fee_candidates(
+    intermediate: FundDisclosureDocumentContentIntermediate,
+    context: FundProcessorDispatchKey,
+) -> dict[str, tuple[_ReturnAttributionValueCandidate, ...]]:
+    """收集管理费/托管费显式费率候选，见模板第 2 章 Cost。
+
+    Args:
+        intermediate: FDD 正文中间态。
+        context: Processor dispatch 身份。
+
+    Returns:
+        output path 到候选元组的映射。
+
+    Raises:
+        无显式抛出。
+    """
+
+    candidates: dict[str, list[_ReturnAttributionValueCandidate]] = {}
+    for table_index, table in enumerate(intermediate.table_blocks):
+        if table.locator_stability != "stable":
+            continue
+        indexed_cells = sorted(
+            enumerate(table.cells), key=lambda item: (item[1].row_index, item[1].column_index)
+        )
+        for cell_index, cell in indexed_cells:
+            if cell.locator_stability != "stable":
+                continue
+            output_path = _match_return_attribution_fee_cell_output_path(cell)
+            if output_path is None:
+                continue
+            value_text = _return_attribution_percent_text(_return_attribution_cell_value(cell))
+            if value_text is None:
+                continue
+            candidates.setdefault(output_path, []).append(
+                _return_attribution_cell_candidate(
+                    output_path, value_text, table_index, cell_index, table, cell, context
+                )
+            )
+    for paragraph_index, paragraph in enumerate(intermediate.paragraph_blocks):
+        if paragraph.locator_stability != "stable":
+            continue
+        for output_path, labels in _RETURN_ATTRIBUTION_FEE_LABELS.items():
+            candidate = _return_attribution_fee_paragraph_candidate(
+                output_path, labels, paragraph_index, paragraph, context
+            )
+            if candidate is not None:
+                candidates.setdefault(output_path, []).append(candidate)
+    return {key: tuple(value) for key, value in candidates.items()}
+
+
+def _collect_return_attribution_tracking_error_candidates(
+    intermediate: FundDisclosureDocumentContentIntermediate,
+    context: FundProcessorDispatchKey,
+) -> tuple[_ReturnAttributionValueCandidate, ...]:
+    """收集实际披露的跟踪误差候选，拒绝目标/控制/上限语境。
+
+    Args:
+        intermediate: FDD 正文中间态。
+        context: Processor dispatch 身份。
+
+    Returns:
+        跟踪误差候选元组。
+
+    Raises:
+        无显式抛出。
+    """
+
+    candidates: list[_ReturnAttributionValueCandidate] = []
+    for table_index, table in enumerate(intermediate.table_blocks):
+        if table.locator_stability != "stable":
+            continue
+        indexed_cells = sorted(
+            enumerate(table.cells), key=lambda item: (item[1].row_index, item[1].column_index)
+        )
+        for cell_index, cell in indexed_cells:
+            if cell.locator_stability != "stable":
+                continue
+            context_text = _return_attribution_cell_context_text(table, cell)
+            if not _return_attribution_mentions_tracking_error(context_text):
+                continue
+            if _return_attribution_tracking_error_rejected(context_text):
+                continue
+            value_text = _return_attribution_percent_text(_return_attribution_cell_value(cell))
+            ratio = _return_attribution_percent_ratio(value_text)
+            if value_text is None or ratio is None:
+                continue
+            period_label = _return_attribution_cell_period_label(table, cell)
+            candidates.append(
+                _return_attribution_cell_candidate(
+                    "tracking_error",
+                    _return_attribution_tracking_error_value(
+                        value_text=value_text,
+                        ratio=ratio,
+                        period_label=period_label,
+                        annualized="年化" in _normalize_match_text(context_text),
+                    ),
+                    table_index,
+                    cell_index,
+                    table,
+                    cell,
+                    context,
+                    period_label=period_label,
+                )
+            )
+    for paragraph_index, paragraph in enumerate(intermediate.paragraph_blocks):
+        candidate = _return_attribution_tracking_error_paragraph_candidate(
+            paragraph_index, paragraph, context
+        )
+        if candidate is not None:
+            candidates.append(candidate)
+    return tuple(candidates)
+
+
+def _match_return_attribution_fee_cell_output_path(
+    cell: FundDisclosureCellLike,
+) -> str | None:
+    """匹配费率 cell 的 public output path。
+
+    Args:
+        cell: FDD table cell。
+
+    Returns:
+        `fee_schedule.management_fee`、`fee_schedule.custody_fee` 或 None。
+
+    Raises:
+        无显式抛出。
+    """
+
+    for output_path, labels in _RETURN_ATTRIBUTION_FEE_LABELS.items():
+        if _return_attribution_cell_matches_label(cell, labels):
+            return output_path
+    return None
+
+
+def _return_attribution_cell_matches_label(
+    cell: FundDisclosureCellLike,
+    labels: tuple[str, ...],
+) -> bool:
+    """判断 cell 的标签路径是否命中指定 label。
+
+    Args:
+        cell: FDD table cell。
+        labels: 允许标签。
+
+    Returns:
+        row label、column header 或 heading path 命中时返回 True。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return (
+        _path_contains_any_label(cell.row_label_path, labels)
+        or _path_contains_any_label(cell.column_header_path, labels)
+        or _path_contains_any_label(cell.heading_path, labels)
+    )
+
+
+def _return_attribution_cell_value(cell: FundDisclosureCellLike) -> str:
+    """返回收益归因 cell 的规范化取值。
+
+    Args:
+        cell: FDD table cell。
+
+    Returns:
+        `cell_text_normalized` 非空时优先，否则回退 `cell_text`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    value = cell.cell_text_normalized.strip() if cell.cell_text_normalized else ""
+    if value:
+        return value
+    return cell.cell_text.strip()
+
+
+def _return_attribution_cell_context_text(
+    table: FundDisclosureTableBlockLike,
+    cell: FundDisclosureCellLike,
+) -> str:
+    """拼接 cell 周边语义，供跟踪误差上下文判定。
+
+    Args:
+        table: parent table block。
+        cell: FDD table cell。
+
+    Returns:
+        表格标题、路径、行列标签和值的合并文本。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return " ".join(
+        part
+        for part in (
+            table.heading_text,
+            table.table_caption_or_nearby_heading,
+            *_tuple_text(table.heading_path),
+            *_tuple_text(cell.heading_path),
+            *_tuple_text(cell.row_label_path),
+            *_tuple_text(cell.column_header_path),
+            cell.cell_text_normalized,
+            cell.cell_text,
+        )
+        if part
+    )
+
+
+def _return_attribution_cell_period_label(
+    table: FundDisclosureTableBlockLike,
+    cell: FundDisclosureCellLike,
+) -> str:
+    """生成人可读的跟踪误差或表现期间标签。
+
+    Args:
+        table: parent table block。
+        cell: FDD table cell。
+
+    Returns:
+        优先使用行标签；否则使用表格标题和行号。
+
+    Raises:
+        无显式抛出。
+    """
+
+    row_label = _first_non_empty(tuple(cell.row_label_path))
+    if row_label != "candidate evidence":
+        return row_label
+    table_label = table.table_caption_or_nearby_heading or table.heading_text or table.table_id
+    return f"{table_label} 第{cell.row_index}行"
+
+
+def _return_attribution_cell_candidate(
+    output_path: str,
+    value: object,
+    table_index: int,
+    cell_index: int,
+    table: FundDisclosureTableBlockLike,
+    cell: FundDisclosureCellLike,
+    context: FundProcessorDispatchKey,
+    *,
+    period_label: str | None = None,
+) -> _ReturnAttributionValueCandidate:
+    """构造 table/cell source-truth 候选。
+
+    Args:
+        output_path: 目标输出路径。
+        value: 输出值。
+        table_index: table tuple 索引。
+        cell_index: cell tuple 索引。
+        table: parent table block。
+        cell: FDD table cell。
+        context: Processor dispatch 身份。
+        period_label: 可选人可读期间标签。
+
+    Returns:
+        收益归因字段值候选。
+
+    Raises:
+        无显式抛出。
+    """
+
+    anchor = _return_attribution_cell_anchor(output_path, table, cell, context)
+    return _ReturnAttributionValueCandidate(
+        output_path=output_path,
+        value=value,
+        anchor=anchor,
+        source_field_path=f"table_blocks[{table_index}].cells[{cell_index}]",
+        period_label=period_label,
+    )
+
+
+def _return_attribution_cell_anchor(
+    output_path: str,
+    table: FundDisclosureTableBlockLike,
+    cell: FundDisclosureCellLike,
+    context: FundProcessorDispatchKey,
+) -> EvidenceAnchor:
+    """构造收益归因 table/cell EvidenceAnchor。
+
+    Args:
+        output_path: 目标输出路径。
+        table: parent table block。
+        cell: FDD table cell。
+        context: Processor dispatch 身份。
+
+    Returns:
+        source_kind 固定为 annual_report 的公共锚点。
+
+    Raises:
+        无显式抛出。
+    """
+
+    table_id = cell.table_id or table.table_id
+    row_locator = (
+        f"field={output_path}; table_id={table_id}; "
+        f"row={cell.row_index}; column={cell.column_index}; cell_id={cell.cell_id}"
+    )
+    return EvidenceAnchor(
+        source_kind="annual_report",
+        document_year=context.document_year,
+        section_id=cell.section_anchor or table.section_id,
+        page_number=None,
+        table_id=table_id,
+        row_locator=row_locator,
+        note=_truncate(_return_attribution_cell_value(cell)),
+    )
+
+
+def _return_attribution_fee_paragraph_candidate(
+    output_path: str,
+    labels: tuple[str, ...],
+    paragraph_index: int,
+    paragraph: FundDisclosureParagraphBlockLike,
+    context: FundProcessorDispatchKey,
+) -> _ReturnAttributionValueCandidate | None:
+    """从显式费率 paragraph 中提取管理费或托管费。
+
+    Args:
+        output_path: 目标输出路径。
+        labels: 允许费率标签。
+        paragraph_index: paragraph tuple 索引。
+        paragraph: FDD paragraph block。
+        context: Processor dispatch 身份。
+
+    Returns:
+        命中显式 label 与百分比时返回候选；否则返回 None。
+
+    Raises:
+        无显式抛出。
+    """
+
+    text = paragraph.text_normalized.strip() if paragraph.text_normalized else ""
+    if not text:
+        text = paragraph.text_raw.strip()
+    if not _return_attribution_text_starts_with_label(text, labels):
+        return None
+    value_text = _return_attribution_percent_text(text)
+    if value_text is None:
+        return None
+    anchor = EvidenceAnchor(
+        source_kind="annual_report",
+        document_year=context.document_year,
+        section_id=paragraph.section_id,
+        page_number=None,
+        table_id=None,
+        row_locator=f"field={output_path}; block_id={paragraph.block_id}",
+        note=_truncate(text),
+    )
+    return _ReturnAttributionValueCandidate(
+        output_path=output_path,
+        value=value_text,
+        anchor=anchor,
+        source_field_path=f"paragraph_blocks[{paragraph_index}]",
+    )
+
+
+def _return_attribution_tracking_error_paragraph_candidate(
+    paragraph_index: int,
+    paragraph: FundDisclosureParagraphBlockLike,
+    context: FundProcessorDispatchKey,
+) -> _ReturnAttributionValueCandidate | None:
+    """从 paragraph 中提取实际披露的跟踪误差。
+
+    Args:
+        paragraph_index: paragraph tuple 索引。
+        paragraph: FDD paragraph block。
+        context: Processor dispatch 身份。
+
+    Returns:
+        命中实际披露百分比时返回候选；否则返回 None。
+
+    Raises:
+        无显式抛出。
+    """
+
+    text = paragraph.text_normalized.strip() if paragraph.text_normalized else ""
+    if not text:
+        text = paragraph.text_raw.strip()
+    if not _return_attribution_mentions_tracking_error(text):
+        return None
+    if _return_attribution_tracking_error_rejected(text):
+        return None
+    value_text = _return_attribution_percent_text(text)
+    ratio = _return_attribution_percent_ratio(value_text)
+    if value_text is None or ratio is None:
+        return None
+    period_label = _return_attribution_paragraph_period_label(paragraph)
+    anchor = EvidenceAnchor(
+        source_kind="annual_report",
+        document_year=context.document_year,
+        section_id=paragraph.section_id,
+        page_number=None,
+        table_id=None,
+        row_locator=f"field=tracking_error; block_id={paragraph.block_id}",
+        note=_truncate(text),
+    )
+    return _ReturnAttributionValueCandidate(
+        output_path="tracking_error",
+        value=_return_attribution_tracking_error_value(
+            value_text=value_text,
+            ratio=ratio,
+            period_label=period_label,
+            annualized="年化" in _normalize_match_text(text),
+        ),
+        anchor=anchor,
+        source_field_path=f"paragraph_blocks[{paragraph_index}]",
+        period_label=period_label,
+    )
+
+
+def _return_attribution_paragraph_period_label(
+    paragraph: FundDisclosureParagraphBlockLike,
+) -> str:
+    """生成 paragraph 跟踪误差的人可读期间标签。
+
+    Args:
+        paragraph: FDD paragraph block。
+
+    Returns:
+        heading path、block id 或报告期语义标签。
+
+    Raises:
+        无显式抛出。
+    """
+
+    text = paragraph.text_normalized or paragraph.text_raw
+    if "过去一年" in text:
+        return "过去一年"
+    if "本报告期" in text:
+        return "本报告期"
+    if "报告期" in text:
+        return "报告期"
+    heading = " / ".join(part for part in paragraph.heading_path if part)
+    if heading:
+        return heading
+    return f"段落 {paragraph.block_id}"
+
+
+def _return_attribution_tracking_error_value(
+    *,
+    value_text: str,
+    ratio: Decimal,
+    period_label: str,
+    annualized: bool,
+) -> TrackingErrorValue:
+    """构造直接披露语义的 TrackingErrorValue。
+
+    Args:
+        value_text: 年报披露百分比文本。
+        ratio: 标准化小数比例。
+        period_label: 人可读期间标签。
+        annualized: 是否年化。
+
+    Returns:
+        公开 tracking_error 结构化值。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return TrackingErrorValue(
+        value=ratio,
+        value_text=value_text,
+        unit="ratio",
+        period_label=period_label,
+        period_start=None,
+        period_end=None,
+        annualized=annualized,
+        source_type="direct_disclosure",
+        calculation_method="disclosed",
+        benchmark_identity_status="missing",
+        benchmark_index_name=None,
+        benchmark_index_code=None,
+        fund_series_source=None,
+        index_series_source=None,
+        observation_count=None,
+        frequency="annual_report_period",
+        annualization_factor=None,
+        input_period_complete=True,
+        provenance_note="FundDisclosureDocument 年报直接披露的实际跟踪误差；未使用序列、基准收益率或标准差推导。",
+    )
+
+
+def _return_attribution_mentions_tracking_error(text: str) -> bool:
+    """判断文本是否包含跟踪误差披露标签。
+
+    Args:
+        text: 候选上下文。
+
+    Returns:
+        包含允许跟踪误差 label 时返回 True。
+
+    Raises:
+        无显式抛出。
+    """
+
+    normalized_text = _normalize_match_text(text)
+    return any(_normalize_match_text(label) in normalized_text for label in _RETURN_ATTRIBUTION_TRACKING_ERROR_LABELS)
+
+
+def _return_attribution_tracking_error_rejected(text: str) -> bool:
+    """判断跟踪误差上下文是否属于目标/控制/限制语境。
+
+    Args:
+        text: 候选上下文。
+
+    Returns:
+        命中禁止语境时返回 True。
+
+    Raises:
+        无显式抛出。
+    """
+
+    normalized_text = _normalize_match_text(text)
+    return any(
+        _normalize_match_text(token) in normalized_text
+        for token in _RETURN_ATTRIBUTION_TRACKING_ERROR_REJECT_CONTEXT
+    )
+
+
+def _return_attribution_text_starts_with_label(text: str, labels: tuple[str, ...]) -> bool:
+    """判断 paragraph 是否以显式 label 开头。
+
+    Args:
+        text: paragraph 文本。
+        labels: 允许 label。
+
+    Returns:
+        `label:`、`label：` 或 label 直接开头时返回 True。
+
+    Raises:
+        无显式抛出。
+    """
+
+    normalized_text = _normalize_match_text(text)
+    return any(normalized_text.startswith(_normalize_match_text(label)) for label in labels)
+
+
+def _return_attribution_percent_text(text: str | None) -> str | None:
+    """从候选文本中提取百分比原文。
+
+    Args:
+        text: 候选文本。
+
+    Returns:
+        规范化为 ASCII `%` 的百分比文本；未命中时返回 None。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if text is None:
+        return None
+    match = _RETURN_ATTRIBUTION_PERCENT_PATTERN.search(text)
+    if match is None:
+        return None
+    return f"{match.group('value').replace(',', '')}%"
+
+
+def _return_attribution_percent_ratio(value_text: str | None) -> Decimal | None:
+    """把百分比文本解析为小数比例。
+
+    Args:
+        value_text: 百分比文本。
+
+    Returns:
+        小数比例；不可解析时返回 None。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if value_text is None:
+        return None
+    match = _RETURN_ATTRIBUTION_PERCENT_PATTERN.search(value_text)
+    if match is None:
+        return None
+    try:
+        return Decimal(match.group("value").replace(",", "")) / Decimal("100")
+    except InvalidOperation:
+        return None
+
+
+def _resolve_return_attribution_candidate(
+    output_path: str,
+    candidates: tuple[_ReturnAttributionValueCandidate, ...],
+    ambiguous_paths: set[str],
+) -> _ReturnAttributionValueCandidate | None:
+    """按重复/歧义规则解析收益归因候选。
+
+    Args:
+        output_path: 目标输出路径。
+        candidates: 同一路径候选。
+        ambiguous_paths: 待追加的歧义路径集合。
+
+    Returns:
+        唯一可采信候选；无候选或冲突时返回 None。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if not candidates:
+        return None
+    normalized_values = {_normalize_return_attribution_value(candidate.value) for candidate in candidates}
+    if len(normalized_values) > 1:
+        ambiguous_paths.add(output_path)
+        return None
+    return candidates[0]
+
+
+def _normalize_return_attribution_value(value: object) -> str:
+    """规范化收益归因候选值用于冲突判断。
+
+    Args:
+        value: 候选值。
+
+    Returns:
+        稳定比较字符串。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if isinstance(value, TrackingErrorValue):
+        return f"{value.value_text}|{value.period_label}|{value.annualized}"
+    return _normalize_match_text(str(value))
+
+
+def _build_return_attribution_value(
+    selected_values: dict[str, _ReturnAttributionValueCandidate],
+) -> dict[str, object]:
+    """构造 `return_attribution.v1.value` exact public shape。
+
+    Args:
+        selected_values: 已解析的输出路径值。
+
+    Returns:
+        只包含 `schema_version` 与三个已允许 top-level key 的 value；全缺时返回空字典。
+
+    Raises:
+        无显式抛出。
+    """
+
+    value: dict[str, object] = {}
+    nav_benchmark = _build_return_attribution_nav_benchmark_value(selected_values)
+    fee_schedule = _build_return_attribution_fee_schedule_value(selected_values)
+    tracking_error = _build_return_attribution_tracking_error_value(selected_values)
+    if nav_benchmark is not None:
+        value["nav_benchmark_performance"] = nav_benchmark
+    if fee_schedule is not None:
+        value["fee_schedule"] = fee_schedule
+    if tracking_error is not None:
+        value["tracking_error"] = tracking_error
+    if not value:
+        return {}
+    return {"schema_version": "return_attribution.v1", **value}
+
+
+def _build_return_attribution_nav_benchmark_value(
+    selected_values: dict[str, _ReturnAttributionValueCandidate],
+) -> dict[str, object] | None:
+    """构造同一稳定行的 NAV/benchmark 表现值。
+
+    Args:
+        selected_values: 已解析的输出路径值。
+
+    Returns:
+        同时包含 nav 和 benchmark 时返回 dict；否则返回 None。
+
+    Raises:
+        无显式抛出。
+    """
+
+    nav_growth_rate = _selected_return_attribution_value(
+        selected_values, "nav_benchmark_performance.nav_growth_rate"
+    )
+    benchmark_return_rate = _selected_return_attribution_value(
+        selected_values, "nav_benchmark_performance.benchmark_return_rate"
+    )
+    if nav_growth_rate is None or benchmark_return_rate is None:
+        return None
+    return {
+        "nav_growth_rate": nav_growth_rate,
+        "benchmark_return_rate": benchmark_return_rate,
+    }
+
+
+def _build_return_attribution_fee_schedule_value(
+    selected_values: dict[str, _ReturnAttributionValueCandidate],
+) -> dict[str, object] | None:
+    """构造费率字段值，只允许管理费和托管费。
+
+    Args:
+        selected_values: 已解析的输出路径值。
+
+    Returns:
+        任一费率存在时返回包含两个允许 subkey 的 dict；全缺时返回 None。
+
+    Raises:
+        无显式抛出。
+    """
+
+    management_fee = _selected_return_attribution_value(
+        selected_values, "fee_schedule.management_fee"
+    )
+    custody_fee = _selected_return_attribution_value(selected_values, "fee_schedule.custody_fee")
+    if management_fee is None and custody_fee is None:
+        return None
+    return {
+        "management_fee": management_fee,
+        "custody_fee": custody_fee,
+    }
+
+
+def _build_return_attribution_tracking_error_value(
+    selected_values: dict[str, _ReturnAttributionValueCandidate],
+) -> TrackingErrorValue | None:
+    """读取已采信的跟踪误差结构化值。
+
+    Args:
+        selected_values: 已解析的输出路径值。
+
+    Returns:
+        TrackingErrorValue；缺失时返回 None。
+
+    Raises:
+        无显式抛出。
+    """
+
+    value = _selected_return_attribution_value(selected_values, "tracking_error")
+    if isinstance(value, TrackingErrorValue):
+        return value
+    return None
+
+
+def _selected_return_attribution_value(
+    selected_values: dict[str, _ReturnAttributionValueCandidate],
+    output_path: str,
+) -> object | None:
+    """返回已选择 output path 的字段值。
+
+    Args:
+        selected_values: 已解析的输出路径值。
+        output_path: 目标输出路径。
+
+    Returns:
+        字段值；缺失时返回 None。
+
+    Raises:
+        无显式抛出。
+    """
+
+    candidate = selected_values.get(output_path)
+    if candidate is None:
+        return None
+    return candidate.value
+
+
+def _return_attribution_emitted_output_paths(
+    value: dict[str, object],
+    selected_values: dict[str, _ReturnAttributionValueCandidate],
+) -> tuple[str, ...]:
+    """返回实际进入 public value 的 source output paths。
+
+    Args:
+        value: 已构造的 return_attribution value。
+        selected_values: 已解析的输出路径值。
+
+    Returns:
+        需要进入 family anchors 的输出路径元组。
+
+    Raises:
+        无显式抛出。
+    """
+
+    emitted: list[str] = []
+    if "nav_benchmark_performance" in value:
+        emitted.extend(
+            (
+                "nav_benchmark_performance.nav_growth_rate",
+                "nav_benchmark_performance.benchmark_return_rate",
+            )
+        )
+    if "fee_schedule" in value:
+        emitted.extend(
+            output_path
+            for output_path in (
+                "fee_schedule.management_fee",
+                "fee_schedule.custody_fee",
+            )
+            if output_path in selected_values
+        )
+    if "tracking_error" in value and "tracking_error" in selected_values:
+        emitted.append("tracking_error")
+    return tuple(emitted)
+
+
+def _return_attribution_source_truth_gaps(
+    value: dict[str, object],
+    ambiguous_paths: set[str],
+) -> tuple[FundExtractionGap, ...]:
+    """构造 return_attribution.v1 source-truth 字段族本地 gaps。
+
+    Args:
+        value: 已构造的字段族 value。
+        ambiguous_paths: 发生 duplicate ambiguity 的输出路径集合。
+
+    Returns:
+        missing/partial/ambiguity gaps。
+
+    Raises:
+        无显式抛出。
+    """
+
+    gaps: list[FundExtractionGap] = []
+    for output_path in sorted(ambiguous_paths):
+        gaps.append(
+            FundExtractionGap(
+                gap_code="ambiguous_table_or_locator",
+                message=f"{output_path} 存在多个冲突的稳定 FDD locator 值",
+                field_family_id="return_attribution.v1",
+                source_field_path=output_path,
+                source_boundary="ambiguous_locator",
+                required=True,
+            )
+        )
+    missing_top_level = tuple(
+        top_level
+        for top_level in _RETURN_ATTRIBUTION_REQUIRED_TOP_LEVEL
+        if top_level not in value
+    )
+    if not value:
+        gaps.append(
+            FundExtractionGap(
+                gap_code="field_family_missing",
+                message="return_attribution.v1 未形成 Slice 2 允许的 source-truth 字段值",
+                field_family_id="return_attribution.v1",
+                source_field_path=None,
+                source_boundary="annual_report",
+                required=True,
+            )
+        )
+    elif missing_top_level:
+        gaps.extend(
+            FundExtractionGap(
+                gap_code="field_family_partial",
+                message=f"return_attribution.v1 缺少 required top-level value: {top_level}",
+                field_family_id="return_attribution.v1",
+                source_field_path=top_level,
+                source_boundary="annual_report",
+                required=True,
+            )
+            for top_level in missing_top_level
+        )
+    return tuple(gaps)
+
+
+def _return_attribution_status(value: dict[str, object]) -> str:
+    """按 Slice 2 top-level 完整度派生字段族状态。
+
+    Args:
+        value: 已构造的字段族 value。
+
+    Returns:
+        `accepted`、`partial` 或 `missing`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if all(top_level in value for top_level in _RETURN_ATTRIBUTION_REQUIRED_TOP_LEVEL):
+        return "accepted"
+    if value:
+        return "partial"
+    return "missing"
 
 
 def _select_product_essence_values(
