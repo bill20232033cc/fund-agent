@@ -4,7 +4,12 @@ from __future__ import annotations
 
 from dataclasses import replace
 
-from fund_agent.fund.chapter_facts import ChapterFactEntry, ChapterFactInput, project_chapter_facts
+from fund_agent.fund.chapter_facts import (
+    ChapterFactEntry,
+    ChapterFactInput,
+    ChapterFactProjection,
+    project_chapter_facts,
+)
 from fund_agent.fund.evidence_confirm import (
     EVIDENCE_CONFIRM_SCHEMA_VERSION,
     EvidenceConfirmReference,
@@ -566,6 +571,38 @@ def test_projection_aggregates_multiple_chapters_deterministically() -> None:
     nav_data_result = next(item for item in result.fact_results if item.source_field_id == "structured.nav_data")
     assert nav_data_result.status == "not_applicable"
     assert nav_data_result.auditability_score is None
+    assert result.issues == ()
+
+
+def test_empty_projection_returns_not_applicable() -> None:
+    """验证空 projection 不伪造通过或失败状态。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 空 projection 聚合状态错误时抛出。
+    """
+
+    base_projection = project_chapter_facts(_bundle(), chapter_ids=(3,))
+    projection = ChapterFactProjection(
+        schema_version=base_projection.schema_version,
+        fund_code=base_projection.fund_code,
+        report_year=base_projection.report_year,
+        fund_type=base_projection.fund_type,
+        classification_basis=base_projection.classification_basis,
+        chapters=(),
+        global_missing_reasons=(),
+    )
+
+    result = confirm_projection_evidence(projection, ())
+
+    assert result.overall_status == "not_applicable"
+    assert result.auditability_score is None
+    assert result.fact_results == ()
     assert result.issues == ()
 
 
