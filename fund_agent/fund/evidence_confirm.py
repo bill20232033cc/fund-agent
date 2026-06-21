@@ -23,6 +23,7 @@ from fund_agent.fund.chapter_facts import (
 )
 
 EVIDENCE_CONFIRM_SCHEMA_VERSION: Final[str] = "evidence_confirm.v1"
+EVIDENCE_CONFIRM_V2_SCHEMA_VERSION: Final[str] = "evidence_confirm.v2"
 
 EvidenceConfirmRuleCode: TypeAlias = Literal["E1", "E2", "E3"]
 EvidenceConfirmStatus: TypeAlias = Literal["pass", "warn", "fail", "not_applicable"]
@@ -33,6 +34,24 @@ EvidenceConfirmReferenceKind: TypeAlias = Literal[
     "derived_calculation",
 ]
 EvidenceConfirmSourceTruthStatus: TypeAlias = Literal["proven", "not_proven"]
+
+EvidenceConfirmGateStatus: TypeAlias = Literal["pass", "warn", "fail", "not_applicable"]
+EvidenceConfirmDimension: TypeAlias = Literal[
+    "anchor_precision", "source_support", "missing_evidence", "proof_boundary", "value_match"
+]
+EvidenceConfirmDimensionStatus: TypeAlias = Literal["pass", "warn", "fail", "not_applicable"]
+EvidenceConfirmGateSeverity: TypeAlias = Literal["blocking", "reviewable", "informational"]
+EvidenceConfirmNextGateRecommendation: TypeAlias = Literal[
+    "evidence_anchor", "source_truth_proof", "value_matching", "manual_review", "not_applicable"
+]
+
+_V2_DIMENSION_ORDER: Final[tuple[EvidenceConfirmDimension, ...]] = (
+    "anchor_precision",
+    "source_support",
+    "missing_evidence",
+    "proof_boundary",
+    "value_match",
+)
 
 _PROOF_SOURCE_KINDS: Final[frozenset[str]] = frozenset(("annual_report", "reviewed_note", "derived"))
 _REFERENCE_SOURCE_KIND_PAIRS: Final[dict[str, str]] = {
@@ -155,6 +174,106 @@ class EvidenceConfirmResult:
     auditability_score: int | None
 
 
+@dataclass(frozen=True, slots=True)
+class EvidenceConfirmDimensionResult:
+    """V2 单维度评分结果。
+
+    Attributes:
+        dimension: 维度名称。
+        status: 维度状态。
+        score: 维度分数；not_applicable 时为 ``None``。
+        issue_ids: 关联 issue ids。
+        matched_anchor_ids: 匹配 anchor ids。
+        next_gate_recommendation: 下一 gate 建议。
+        message: 可选说明。
+    """
+
+    dimension: EvidenceConfirmDimension
+    status: EvidenceConfirmDimensionStatus
+    score: int | None
+    issue_ids: tuple[str, ...]
+    matched_anchor_ids: tuple[str, ...]
+    next_gate_recommendation: EvidenceConfirmNextGateRecommendation
+    message: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class EvidenceConfirmHardGate:
+    """V2 硬门控结果。
+
+    Attributes:
+        status: 门控状态。
+        blocking_issue_ids: 阻塞 issue ids。
+        reviewable_issue_ids: 可复核 issue ids。
+        informational_issue_ids: 信息性 issue ids。
+        passed_dimension_count: 通过维度数。
+        failed_dimension_count: 失败维度数。
+        warn_dimension_count: 警告维度数。
+        not_applicable_dimension_count: 不适用维度数。
+    """
+
+    status: EvidenceConfirmGateStatus
+    blocking_issue_ids: tuple[str, ...]
+    reviewable_issue_ids: tuple[str, ...]
+    informational_issue_ids: tuple[str, ...]
+    passed_dimension_count: int
+    failed_dimension_count: int
+    warn_dimension_count: int
+    not_applicable_dimension_count: int
+
+
+@dataclass(frozen=True, slots=True)
+class EvidenceConfirmFactResultV2:
+    """V2 单 fact 证据复核结果。
+
+    Attributes:
+        fact_id: 关联事实 id。
+        source_field_id: 关联来源字段 id。
+        status: fact 硬门控状态。
+        hard_gate: fact 硬门控详情。
+        dimension_results: 五维度结果，按确定性顺序。
+        matched_anchor_ids: 匹配 anchor ids。
+        issue_ids: 关联 issue ids。
+        auditability_score: 可审计性分数；not_applicable 时为 ``None``。
+    """
+
+    fact_id: str
+    source_field_id: str
+    status: EvidenceConfirmGateStatus
+    hard_gate: EvidenceConfirmHardGate
+    dimension_results: tuple[EvidenceConfirmDimensionResult, ...]
+    matched_anchor_ids: tuple[str, ...]
+    issue_ids: tuple[str, ...]
+    auditability_score: int | None
+
+
+@dataclass(frozen=True, slots=True)
+class EvidenceConfirmResultV2:
+    """V2 Evidence Confirm 聚合结果。
+
+    Attributes:
+        schema_version: 结果 schema 版本。
+        fund_code: 基金代码。
+        report_year: 年报年份。
+        fact_results: 单 fact V2 结果。
+        issues: 所有 issue。
+        checked_rules: 已执行规则。
+        hard_gate: 聚合硬门控。
+        overall_status: 聚合状态，等于 hard_gate.status。
+        auditability_score: 聚合可审计性分数。
+    """
+
+    schema_version: str
+    fund_code: str
+    report_year: int
+    fact_results: tuple[EvidenceConfirmFactResultV2, ...]
+    issues: tuple[EvidenceConfirmIssue, ...]
+    checked_rules: tuple[EvidenceConfirmRuleCode, ...]
+    hard_gate: EvidenceConfirmHardGate
+    overall_status: EvidenceConfirmGateStatus
+    auditability_score: int | None
+
+
 def confirm_chapter_evidence(
     chapter: ChapterFactInput,
     references: tuple[EvidenceConfirmReference, ...],
@@ -240,6 +359,956 @@ def confirm_projection_evidence(
         overall_status=_overall_status(sorted_issues, sorted_fact_results),
         auditability_score=_aggregate_score(sorted_fact_results),
     )
+
+
+def confirm_chapter_evidence_v2(
+    chapter: ChapterFactInput,
+    references: tuple[EvidenceConfirmReference, ...],
+) -> EvidenceConfirmResultV2:
+    """V2 复核单章 fact 与 anchor reference 的同源关系。
+
+    产生五维度评分和硬门控结果。不读取外部状态。
+
+    Args:
+        chapter: 单章事实输入。
+        references: 调用方显式传入的同源引用摘录。
+
+    Returns:
+        V2 单章 Evidence Confirm 结果。
+
+    Raises:
+        无显式抛出。
+    """
+
+    references_by_anchor = _references_by_anchor(references)
+    anchors_by_id = _anchors_by_id(chapter.evidence_anchors)
+    report_year = _report_year_from_facts(chapter.facts) or _report_year_from_references(references)
+    issues: list[EvidenceConfirmIssue] = []
+    fact_results: list[EvidenceConfirmFactResultV2] = []
+    for fact in sorted(chapter.facts, key=lambda item: (item.source_field_id, item.fact_id)):
+        fact_result, fact_issues = _confirm_fact_v2(fact, references_by_anchor, anchors_by_id, report_year)
+        issues.extend(fact_issues)
+        fact_results.append(fact_result)
+    sorted_issues = tuple(sorted(issues, key=lambda issue: issue.issue_id))
+    sorted_fact_results = tuple(sorted(fact_results, key=lambda item: (item.source_field_id, item.fact_id)))
+    aggregate_hard_gate = _aggregate_hard_gate(sorted_fact_results)
+    return EvidenceConfirmResultV2(
+        schema_version=EVIDENCE_CONFIRM_V2_SCHEMA_VERSION,
+        fund_code=_fund_code_from_facts(chapter.facts),
+        report_year=report_year,
+        fact_results=sorted_fact_results,
+        issues=sorted_issues,
+        checked_rules=("E1", "E2", "E3"),
+        hard_gate=aggregate_hard_gate,
+        overall_status=aggregate_hard_gate.status,
+        auditability_score=_aggregate_score_v2(sorted_fact_results, aggregate_hard_gate),
+    )
+
+
+def confirm_projection_evidence_v2(
+    projection: ChapterFactProjection,
+    references: tuple[EvidenceConfirmReference, ...],
+) -> EvidenceConfirmResultV2:
+    """V2 复核章节事实投影中的全部章节。
+
+    聚合所有章节 fact 结果，按 chapter_id/source_field_id/fact_id 稳定排序。
+
+    Args:
+        projection: 章节事实投影。
+        references: 调用方显式传入的同源引用摘录。
+
+    Returns:
+        V2 聚合 Evidence Confirm 结果。
+
+    Raises:
+        无显式抛出。
+    """
+
+    references_by_anchor = _references_by_anchor(references)
+    issues: list[EvidenceConfirmIssue] = []
+    fact_results: list[tuple[int, EvidenceConfirmFactResultV2]] = []
+    for chapter in sorted(projection.chapters, key=lambda item: item.chapter_id):
+        anchors_by_id = _anchors_by_id(chapter.evidence_anchors)
+        for fact in sorted(chapter.facts, key=lambda item: (item.source_field_id, item.fact_id)):
+            fact_result, fact_issues = _confirm_fact_v2(
+                fact,
+                references_by_anchor,
+                anchors_by_id,
+                projection.report_year,
+            )
+            issues.extend(fact_issues)
+            fact_results.append((chapter.chapter_id, fact_result))
+    sorted_issues = tuple(sorted(issues, key=lambda issue: issue.issue_id))
+    sorted_fact_results = tuple(
+        item[1]
+        for item in sorted(
+            fact_results,
+            key=lambda item: (item[0], item[1].source_field_id, item[1].fact_id),
+        )
+    )
+    aggregate_hard_gate = _aggregate_hard_gate(sorted_fact_results)
+    return EvidenceConfirmResultV2(
+        schema_version=EVIDENCE_CONFIRM_V2_SCHEMA_VERSION,
+        fund_code=projection.fund_code,
+        report_year=projection.report_year,
+        fact_results=sorted_fact_results,
+        issues=sorted_issues,
+        checked_rules=("E1", "E2", "E3"),
+        hard_gate=aggregate_hard_gate,
+        overall_status=aggregate_hard_gate.status,
+        auditability_score=_aggregate_score_v2(sorted_fact_results, aggregate_hard_gate),
+    )
+
+
+def _confirm_fact_v2(
+    fact: ChapterFactEntry,
+    references_by_anchor: dict[str, tuple[EvidenceConfirmReference, ...]],
+    anchors_by_id: dict[str, ChapterEvidenceAnchor],
+    report_year: int,
+) -> tuple[EvidenceConfirmFactResultV2, tuple[EvidenceConfirmIssue, ...]]:
+    """V2 复核单个 fact，产生五维度结果。
+
+    Args:
+        fact: 章节事实。
+        references_by_anchor: anchor id 到引用摘录的映射。
+        anchors_by_id: anchor id 到章节证据锚点的映射。
+        report_year: 当前报告年份。
+
+    Returns:
+        V2 单 fact result 与 issue 列表。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if _fact_is_not_applicable(fact):
+        return _fact_result_v2_not_applicable(fact), ()
+
+    if fact.missing_reason == "evidence_missing":
+        issue = _issue("E3", "blocking", fact, None, "缺锚点 fact 不能被证据复核确认。")
+        return _fact_result_v2_e3_blocking(fact, (issue,)), (issue,)
+
+    if fact.status != "available":
+        return _fact_result_v2_not_applicable(fact), ()
+
+    if _fact_is_derived(fact):
+        return _fact_result_v2_not_applicable(fact), ()
+
+    if not fact.evidence_anchor_ids:
+        issue = _issue("E3", "blocking", fact, None, "可用 fact 缺少 evidence anchor。")
+        return _fact_result_v2_e3_blocking(fact, (issue,)), (issue,)
+
+    known_anchors = _known_anchors_for_fact(fact, anchors_by_id)
+    if not known_anchors:
+        issue = _issue("E3", "blocking", fact, None, "fact anchor 不存在于当前章节 evidence anchors。")
+        return _fact_result_v2_e3_blocking(fact, (issue,)), (issue,)
+
+    if not any(anchor.source_kind in _PROOF_SOURCE_KINDS for anchor in known_anchors):
+        return _fact_result_v2_not_applicable(fact), ()
+
+    # 收集 fact 自身 anchor 的全部 references（含 non-proof）
+    all_fact_references: list[EvidenceConfirmReference] = []
+    for anchor_id in fact.evidence_anchor_ids:
+        for reference in references_by_anchor.get(anchor_id, ()):
+            all_fact_references.append(reference)
+
+    proof_references = _proof_references_for_fact(fact, references_by_anchor, anchors_by_id, report_year)
+
+    issues: list[EvidenceConfirmIssue] = []
+    dimension_results: list[EvidenceConfirmDimensionResult] = []
+
+    # 维度 1: anchor_precision
+    dim_anchor, dim_anchor_issues = _dimension_anchor_precision(fact, proof_references)
+    issues.extend(dim_anchor_issues)
+    dimension_results.append(dim_anchor)
+
+    # 维度 2: source_support
+    dim_source, dim_source_issues = _dimension_source_support(fact, proof_references)
+    issues.extend(dim_source_issues)
+    dimension_results.append(dim_source)
+
+    # 维度 3: missing_evidence
+    dim_missing, dim_missing_issues = _dimension_missing_evidence(fact, proof_references)
+    issues.extend(dim_missing_issues)
+    dimension_results.append(dim_missing)
+
+    # 维度 4: proof_boundary
+    dim_proof, dim_proof_issues = _dimension_proof_boundary(
+        fact, all_fact_references, anchors_by_id, report_year
+    )
+    issues.extend(dim_proof_issues)
+    dimension_results.append(dim_proof)
+
+    # 维度 5: value_match
+    dim_value, dim_value_issues = _dimension_value_match(fact, proof_references)
+    issues.extend(dim_value_issues)
+    dimension_results.append(dim_value)
+
+    hard_gate = _fact_hard_gate(dimension_results, issues)
+    matched_anchor_ids = _all_matched_anchor_ids(dimension_results)
+    fact_score = _fact_score_v2(dimension_results, hard_gate)
+
+    return EvidenceConfirmFactResultV2(
+        fact_id=fact.fact_id,
+        source_field_id=fact.source_field_id,
+        status=hard_gate.status,
+        hard_gate=hard_gate,
+        dimension_results=tuple(dimension_results),
+        matched_anchor_ids=matched_anchor_ids,
+        issue_ids=_issue_ids(issues),
+        auditability_score=fact_score,
+    ), tuple(issues)
+
+
+def _fact_result_v2_not_applicable(fact: ChapterFactEntry) -> EvidenceConfirmFactResultV2:
+    """构造 not_applicable V2 fact result。
+
+    Args:
+        fact: 章节事实。
+
+    Returns:
+        所有维度 not_applicable 的 V2 fact result。
+
+    Raises:
+        无显式抛出。
+    """
+
+    dimension_results = tuple(
+        EvidenceConfirmDimensionResult(
+            dimension=dim,
+            status="not_applicable",
+            score=None,
+            issue_ids=(),
+            matched_anchor_ids=(),
+            next_gate_recommendation="not_applicable",
+        )
+        for dim in _V2_DIMENSION_ORDER
+    )
+    hard_gate = EvidenceConfirmHardGate(
+        status="not_applicable",
+        blocking_issue_ids=(),
+        reviewable_issue_ids=(),
+        informational_issue_ids=(),
+        passed_dimension_count=0,
+        failed_dimension_count=0,
+        warn_dimension_count=0,
+        not_applicable_dimension_count=5,
+    )
+    return EvidenceConfirmFactResultV2(
+        fact_id=fact.fact_id,
+        source_field_id=fact.source_field_id,
+        status="not_applicable",
+        hard_gate=hard_gate,
+        dimension_results=dimension_results,
+        matched_anchor_ids=(),
+        issue_ids=(),
+        auditability_score=None,
+    )
+
+
+def _fact_result_v2_e3_blocking(
+    fact: ChapterFactEntry,
+    blocking_issues: tuple[EvidenceConfirmIssue, ...],
+) -> EvidenceConfirmFactResultV2:
+    """构造 E3 阻塞失败的 V2 fact result。
+
+    Args:
+        fact: 章节事实。
+        blocking_issues: 阻塞 issue 列表。
+
+    Returns:
+        missing_evidence fail、其余 not_applicable 的 V2 fact result。
+
+    Raises:
+        无显式抛出。
+    """
+
+    blocking_issue_ids = tuple(issue.issue_id for issue in blocking_issues)
+    dimension_results: list[EvidenceConfirmDimensionResult] = []
+    for dim in _V2_DIMENSION_ORDER:
+        if dim == "missing_evidence":
+            dimension_results.append(
+                EvidenceConfirmDimensionResult(
+                    dimension=dim,
+                    status="fail",
+                    score=0,
+                    issue_ids=blocking_issue_ids,
+                    matched_anchor_ids=(),
+                    next_gate_recommendation="evidence_anchor",
+                )
+            )
+        else:
+            dimension_results.append(
+                EvidenceConfirmDimensionResult(
+                    dimension=dim,
+                    status="not_applicable",
+                    score=None,
+                    issue_ids=(),
+                    matched_anchor_ids=(),
+                    next_gate_recommendation="not_applicable",
+                )
+            )
+    hard_gate = EvidenceConfirmHardGate(
+        status="fail",
+        blocking_issue_ids=blocking_issue_ids,
+        reviewable_issue_ids=(),
+        informational_issue_ids=(),
+        passed_dimension_count=0,
+        failed_dimension_count=1,
+        warn_dimension_count=0,
+        not_applicable_dimension_count=4,
+    )
+    return EvidenceConfirmFactResultV2(
+        fact_id=fact.fact_id,
+        source_field_id=fact.source_field_id,
+        status="fail",
+        hard_gate=hard_gate,
+        dimension_results=tuple(dimension_results),
+        matched_anchor_ids=(),
+        issue_ids=blocking_issue_ids,
+        auditability_score=0,
+    )
+
+
+def _dimension_anchor_precision(
+    fact: ChapterFactEntry,
+    proof_references: tuple[EvidenceConfirmReference, ...],
+) -> tuple[EvidenceConfirmDimensionResult, tuple[EvidenceConfirmIssue, ...]]:
+    """计算 anchor_precision 维度。
+
+    Args:
+        fact: 章节事实。
+        proof_references: proven references。
+
+    Returns:
+        维度结果与 issue 列表。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if not proof_references:
+        return (
+            EvidenceConfirmDimensionResult(
+                dimension="anchor_precision",
+                status="not_applicable",
+                score=None,
+                issue_ids=(),
+                matched_anchor_ids=(),
+                next_gate_recommendation="not_applicable",
+            ),
+            (),
+        )
+
+    issues: list[EvidenceConfirmIssue] = []
+    for reference in proof_references:
+        precision_issue = _precision_issue(fact, reference)
+        if precision_issue is not None:
+            issues.append(precision_issue)
+
+    if issues:
+        return (
+            EvidenceConfirmDimensionResult(
+                dimension="anchor_precision",
+                status="warn",
+                score=70,
+                issue_ids=tuple(issue.issue_id for issue in issues),
+                matched_anchor_ids=(),
+                next_gate_recommendation="evidence_anchor",
+            ),
+            tuple(issues),
+        )
+
+    return (
+        EvidenceConfirmDimensionResult(
+            dimension="anchor_precision",
+            status="pass",
+            score=100,
+            issue_ids=(),
+            matched_anchor_ids=tuple(dict.fromkeys(r.anchor_id for r in proof_references)),
+            next_gate_recommendation="evidence_anchor",
+        ),
+        (),
+    )
+
+
+def _dimension_source_support(
+    fact: ChapterFactEntry,
+    proof_references: tuple[EvidenceConfirmReference, ...],
+) -> tuple[EvidenceConfirmDimensionResult, tuple[EvidenceConfirmIssue, ...]]:
+    """计算 source_support 维度。
+
+    Args:
+        fact: 章节事实。
+        proof_references: proven references。
+
+    Returns:
+        维度结果与 issue 列表。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if _fact_is_not_applicable(fact) or _fact_is_derived(fact):
+        return (
+            EvidenceConfirmDimensionResult(
+                dimension="source_support",
+                status="not_applicable",
+                score=None,
+                issue_ids=(),
+                matched_anchor_ids=(),
+                next_gate_recommendation="not_applicable",
+            ),
+            (),
+        )
+
+    if proof_references:
+        return (
+            EvidenceConfirmDimensionResult(
+                dimension="source_support",
+                status="pass",
+                score=100,
+                issue_ids=(),
+                matched_anchor_ids=tuple(dict.fromkeys(r.anchor_id for r in proof_references)),
+                next_gate_recommendation="source_truth_proof",
+            ),
+            (),
+        )
+
+    issue = _issue(
+        "E3",
+        "blocking",
+        fact,
+        None,
+        "source_support 缺少与 fact 自有 anchor 关联的 proven reference excerpt。",
+    )
+    return (
+        EvidenceConfirmDimensionResult(
+            dimension="source_support",
+            status="fail",
+            score=0,
+            issue_ids=(issue.issue_id,),
+            matched_anchor_ids=(),
+            next_gate_recommendation="source_truth_proof",
+        ),
+        (issue,),
+    )
+
+
+def _dimension_missing_evidence(
+    fact: ChapterFactEntry,
+    proof_references: tuple[EvidenceConfirmReference, ...],
+) -> tuple[EvidenceConfirmDimensionResult, tuple[EvidenceConfirmIssue, ...]]:
+    """计算 missing_evidence 维度。
+
+    Args:
+        fact: 章节事实。
+        proof_references: proven references。
+
+    Returns:
+        维度结果与 issue 列表。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if _fact_is_not_applicable(fact) or _fact_is_derived(fact):
+        return (
+            EvidenceConfirmDimensionResult(
+                dimension="missing_evidence",
+                status="not_applicable",
+                score=None,
+                issue_ids=(),
+                matched_anchor_ids=(),
+                next_gate_recommendation="not_applicable",
+            ),
+            (),
+        )
+
+    if proof_references:
+        return (
+            EvidenceConfirmDimensionResult(
+                dimension="missing_evidence",
+                status="pass",
+                score=100,
+                issue_ids=(),
+                matched_anchor_ids=tuple(dict.fromkeys(r.anchor_id for r in proof_references)),
+                next_gate_recommendation="evidence_anchor",
+            ),
+            (),
+        )
+
+    issue = _issue(
+        "E3",
+        "blocking",
+        fact,
+        None,
+        "missing_evidence 缺少满足 E3 证据要求的 proven reference excerpt。",
+    )
+    return (
+        EvidenceConfirmDimensionResult(
+            dimension="missing_evidence",
+            status="fail",
+            score=0,
+            issue_ids=(issue.issue_id,),
+            matched_anchor_ids=(),
+            next_gate_recommendation="evidence_anchor",
+        ),
+        (issue,),
+    )
+
+
+def _dimension_proof_boundary(
+    fact: ChapterFactEntry,
+    all_fact_references: list[EvidenceConfirmReference],
+    anchors_by_id: dict[str, ChapterEvidenceAnchor],
+    report_year: int,
+) -> tuple[EvidenceConfirmDimensionResult, tuple[EvidenceConfirmIssue, ...]]:
+    """计算 proof_boundary 维度。
+
+    混合引用规则：即使存在 valid proven references，若有 invalid same-anchor
+    引用，proof_boundary 仍 fail。
+
+    Args:
+        fact: 章节事实。
+        all_fact_references: fact 自身 anchor 的全部 references。
+        anchors_by_id: anchor id 到章节证据锚点的映射。
+        report_year: 当前报告年份。
+
+    Returns:
+        维度结果与 issue 列表。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if _fact_is_not_applicable(fact) or _fact_is_derived(fact):
+        return (
+            EvidenceConfirmDimensionResult(
+                dimension="proof_boundary",
+                status="not_applicable",
+                score=None,
+                issue_ids=(),
+                matched_anchor_ids=(),
+                next_gate_recommendation="not_applicable",
+            ),
+            (),
+        )
+
+    if not all_fact_references:
+        return (
+            EvidenceConfirmDimensionResult(
+                dimension="proof_boundary",
+                status="not_applicable",
+                score=None,
+                issue_ids=(),
+                matched_anchor_ids=(),
+                next_gate_recommendation="not_applicable",
+            ),
+            (),
+        )
+
+    issues: list[EvidenceConfirmIssue] = []
+    for reference in all_fact_references:
+        anchor = anchors_by_id.get(reference.anchor_id)
+        if anchor is None:
+            issue = _issue(
+                "E3",
+                "blocking",
+                fact,
+                reference.anchor_id,
+                "reference anchor 不存在于当前章节 evidence anchors。",
+            )
+            issues.append(issue)
+            continue
+        if not _reference_is_proof(reference, anchor, report_year):
+            reason = _proof_failure_reason(reference, anchor, report_year)
+            issue = _issue("E3", "blocking", fact, reference.anchor_id, reason)
+            issues.append(issue)
+
+    if issues:
+        return (
+            EvidenceConfirmDimensionResult(
+                dimension="proof_boundary",
+                status="fail",
+                score=0,
+                issue_ids=tuple(issue.issue_id for issue in issues),
+                matched_anchor_ids=(),
+                next_gate_recommendation="source_truth_proof",
+            ),
+            tuple(issues),
+        )
+
+    return (
+        EvidenceConfirmDimensionResult(
+            dimension="proof_boundary",
+            status="pass",
+            score=100,
+            issue_ids=(),
+            matched_anchor_ids=tuple(dict.fromkeys(r.anchor_id for r in all_fact_references)),
+            next_gate_recommendation="source_truth_proof",
+        ),
+        (),
+    )
+
+
+def _proof_failure_reason(
+    reference: EvidenceConfirmReference,
+    anchor: ChapterEvidenceAnchor,
+    report_year: int,
+) -> str:
+    """返回 proof 失败的具体原因。
+
+    Args:
+        reference: 引用摘录。
+        anchor: 章节证据锚点。
+        report_year: 报告年份。
+
+    Returns:
+        中文失败原因。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if reference.candidate_only:
+        return "candidate-only reference 不能满足 proof predicate。"
+    if reference.source_truth_status != "proven":
+        return "not_proven reference 不能满足 proof predicate。"
+    if reference.source_kind not in _PROOF_SOURCE_KINDS:
+        return f"未知 source_kind '{reference.source_kind}' 不能满足 proof predicate。"
+    if _REFERENCE_SOURCE_KIND_PAIRS.get(reference.reference_kind) != reference.source_kind:
+        return f"reference_kind '{reference.reference_kind}' 与 source_kind '{reference.source_kind}' 不匹配。"
+    if anchor.source_kind != reference.source_kind:
+        return f"reference source_kind '{reference.source_kind}' 与 anchor source_kind '{anchor.source_kind}' 不匹配。"
+    if report_year and reference.document_year is not None and reference.document_year != report_year:
+        return f"reference document_year {reference.document_year} 与 report_year {report_year} 不匹配。"
+    if (
+        anchor.document_year is not None
+        and reference.document_year is not None
+        and anchor.document_year != reference.document_year
+    ):
+        return f"reference document_year {reference.document_year} 与 anchor document_year {anchor.document_year} 不匹配。"
+    if anchor.section_id and reference.section_id and anchor.section_id != reference.section_id:
+        return f"reference section_id '{reference.section_id}' 与 anchor section_id '{anchor.section_id}' 不匹配。"
+    if (
+        anchor.page_number is not None
+        and reference.page_number is not None
+        and anchor.page_number != reference.page_number
+    ):
+        return f"reference page_number {reference.page_number} 与 anchor page_number {anchor.page_number} 不匹配。"
+    if anchor.table_id and reference.table_id and anchor.table_id != reference.table_id:
+        return f"reference table_id '{reference.table_id}' 与 anchor table_id '{anchor.table_id}' 不匹配。"
+    if anchor.row_locator and reference.row_locator and anchor.row_locator != reference.row_locator:
+        return f"reference row_locator '{reference.row_locator}' 与 anchor row_locator '{anchor.row_locator}' 不匹配。"
+    return "reference 不满足 proof predicate。"
+
+
+def _dimension_value_match(
+    fact: ChapterFactEntry,
+    proof_references: tuple[EvidenceConfirmReference, ...],
+) -> tuple[EvidenceConfirmDimensionResult, tuple[EvidenceConfirmIssue, ...]]:
+    """计算 value_match 维度。
+
+    Args:
+        fact: 章节事实。
+        proof_references: proven references。
+
+    Returns:
+        维度结果与 issue 列表。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if _fact_is_not_applicable(fact) or _fact_is_derived(fact):
+        return (
+            EvidenceConfirmDimensionResult(
+                dimension="value_match",
+                status="not_applicable",
+                score=None,
+                issue_ids=(),
+                matched_anchor_ids=(),
+                next_gate_recommendation="not_applicable",
+            ),
+            (),
+        )
+
+    if not proof_references:
+        return (
+            EvidenceConfirmDimensionResult(
+                dimension="value_match",
+                status="not_applicable",
+                score=None,
+                issue_ids=(),
+                matched_anchor_ids=(),
+                next_gate_recommendation="not_applicable",
+            ),
+            (),
+        )
+
+    tokens = _material_tokens(fact.value)
+    if not tokens:
+        if _fact_is_required(fact):
+            issue = _issue("E3", "blocking", fact, None, "required fact 无可复核 material value token。")
+            return (
+                EvidenceConfirmDimensionResult(
+                    dimension="value_match",
+                    status="fail",
+                    score=0,
+                    issue_ids=(issue.issue_id,),
+                    matched_anchor_ids=(),
+                    next_gate_recommendation="manual_review",
+                ),
+                (issue,),
+            )
+        return (
+            EvidenceConfirmDimensionResult(
+                dimension="value_match",
+                status="not_applicable",
+                score=None,
+                issue_ids=(),
+                matched_anchor_ids=(),
+                next_gate_recommendation="not_applicable",
+            ),
+            (),
+        )
+
+    matched_anchor_ids = _matched_anchor_ids(tokens, proof_references)
+    if matched_anchor_ids:
+        return (
+            EvidenceConfirmDimensionResult(
+                dimension="value_match",
+                status="pass",
+                score=100,
+                issue_ids=(),
+                matched_anchor_ids=matched_anchor_ids,
+                next_gate_recommendation="value_matching",
+            ),
+            (),
+        )
+
+    issue = _issue(
+        "E2",
+        "blocking",
+        fact,
+        None,
+        "fact value 未出现在同一 anchor 的 reference excerpt 中。",
+    )
+    return (
+        EvidenceConfirmDimensionResult(
+            dimension="value_match",
+            status="fail",
+            score=40,
+            issue_ids=(issue.issue_id,),
+            matched_anchor_ids=(),
+            next_gate_recommendation="value_matching",
+        ),
+        (issue,),
+    )
+
+
+def _fact_hard_gate(
+    dimension_results: list[EvidenceConfirmDimensionResult],
+    issues: list[EvidenceConfirmIssue],
+) -> EvidenceConfirmHardGate:
+    """计算 fact 级硬门控。
+
+    Args:
+        dimension_results: 维度结果。
+        issues: issue 列表。
+
+    Returns:
+        fact 级硬门控。
+
+    Raises:
+        无显式抛出。
+    """
+
+    blocking_issue_ids = tuple(issue.issue_id for issue in issues if issue.severity == "blocking")
+    reviewable_issue_ids = tuple(issue.issue_id for issue in issues if issue.severity == "reviewable")
+    informational_issue_ids = tuple(issue.issue_id for issue in issues if issue.severity == "informational")
+
+    passed = sum(1 for d in dimension_results if d.status == "pass")
+    failed = sum(1 for d in dimension_results if d.status == "fail")
+    warned = sum(1 for d in dimension_results if d.status == "warn")
+    not_applicable = sum(1 for d in dimension_results if d.status == "not_applicable")
+
+    if failed > 0 and blocking_issue_ids:
+        status: EvidenceConfirmGateStatus = "fail"
+    elif warned > 0 and not blocking_issue_ids:
+        status = "warn"
+    elif not_applicable == len(dimension_results):
+        status = "not_applicable"
+    else:
+        status = "pass"
+
+    return EvidenceConfirmHardGate(
+        status=status,
+        blocking_issue_ids=blocking_issue_ids,
+        reviewable_issue_ids=reviewable_issue_ids,
+        informational_issue_ids=informational_issue_ids,
+        passed_dimension_count=passed,
+        failed_dimension_count=failed,
+        warn_dimension_count=warned,
+        not_applicable_dimension_count=not_applicable,
+    )
+
+
+def _aggregate_hard_gate(
+    fact_results: tuple[EvidenceConfirmFactResultV2, ...],
+) -> EvidenceConfirmHardGate:
+    """计算聚合硬门控。
+
+    Args:
+        fact_results: fact V2 结果列表。
+
+    Returns:
+        聚合硬门控。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if not fact_results:
+        return EvidenceConfirmHardGate(
+            status="not_applicable",
+            blocking_issue_ids=(),
+            reviewable_issue_ids=(),
+            informational_issue_ids=(),
+            passed_dimension_count=0,
+            failed_dimension_count=0,
+            warn_dimension_count=0,
+            not_applicable_dimension_count=0,
+        )
+
+    all_blocking: list[str] = []
+    all_reviewable: list[str] = []
+    all_informational: list[str] = []
+    for result in fact_results:
+        all_blocking.extend(result.hard_gate.blocking_issue_ids)
+        all_reviewable.extend(result.hard_gate.reviewable_issue_ids)
+        all_informational.extend(result.hard_gate.informational_issue_ids)
+
+    has_fail = any(r.status == "fail" for r in fact_results)
+    has_warn = any(r.status == "warn" for r in fact_results)
+    has_pass = any(r.status == "pass" for r in fact_results)
+    all_not_applicable = all(r.status == "not_applicable" for r in fact_results)
+
+    if has_fail:
+        status: EvidenceConfirmGateStatus = "fail"
+    elif has_warn:
+        status = "warn"
+    elif has_pass:
+        status = "pass"
+    elif all_not_applicable:
+        status = "not_applicable"
+    else:
+        status = "not_applicable"
+
+    return EvidenceConfirmHardGate(
+        status=status,
+        blocking_issue_ids=tuple(dict.fromkeys(all_blocking)),
+        reviewable_issue_ids=tuple(dict.fromkeys(all_reviewable)),
+        informational_issue_ids=tuple(dict.fromkeys(all_informational)),
+        passed_dimension_count=sum(r.hard_gate.passed_dimension_count for r in fact_results),
+        failed_dimension_count=sum(r.hard_gate.failed_dimension_count for r in fact_results),
+        warn_dimension_count=sum(r.hard_gate.warn_dimension_count for r in fact_results),
+        not_applicable_dimension_count=sum(r.hard_gate.not_applicable_dimension_count for r in fact_results),
+    )
+
+
+def _all_matched_anchor_ids(
+    dimension_results: list[EvidenceConfirmDimensionResult],
+) -> tuple[str, ...]:
+    """从所有维度结果收集 matched_anchor_ids。
+
+    Args:
+        dimension_results: 维度结果列表。
+
+    Returns:
+        去重 matched anchor ids。
+
+    Raises:
+        无显式抛出。
+    """
+
+    all_ids: list[str] = []
+    for dim in dimension_results:
+        all_ids.extend(dim.matched_anchor_ids)
+    return tuple(dict.fromkeys(all_ids))
+
+
+def _fact_score_v2(
+    dimension_results: list[EvidenceConfirmDimensionResult],
+    hard_gate: EvidenceConfirmHardGate,
+) -> int | None:
+    """计算 V2 fact 可审计性分数，含阻塞失败上限。
+
+    Args:
+        dimension_results: 维度结果。
+        hard_gate: fact 硬门控。
+
+    Returns:
+        fact 分数；全 not_applicable 时为 ``None``。
+
+    Raises:
+        无显式抛出。
+    """
+
+    scores = [d.score for d in dimension_results if d.score is not None]
+    if not scores:
+        return None
+
+    raw_average = round(sum(scores) / len(scores))
+
+    if hard_gate.status == "fail":
+        blocking_fail_scores = [
+            d.score
+            for d in dimension_results
+            if d.status == "fail" and d.score is not None and any(
+                issue_id in hard_gate.blocking_issue_ids for issue_id in d.issue_ids
+            )
+        ]
+        if blocking_fail_scores:
+            return min(blocking_fail_scores)
+
+    return raw_average
+
+
+def _aggregate_score_v2(
+    fact_results: tuple[EvidenceConfirmFactResultV2, ...],
+    aggregate_hard_gate: EvidenceConfirmHardGate,
+) -> int | None:
+    """计算 V2 聚合可审计性分数，含聚合阻塞失败上限。
+
+    Args:
+        fact_results: fact V2 结果列表。
+        aggregate_hard_gate: 聚合硬门控。
+
+    Returns:
+        聚合分数；无 fact 有 numeric score 时为 ``None``。
+
+    Raises:
+        无显式抛出。
+    """
+
+    scores = tuple(r.auditability_score for r in fact_results if r.auditability_score is not None)
+    if not scores:
+        return None
+
+    raw_average = round(sum(scores) / len(scores))
+
+    if aggregate_hard_gate.status == "fail":
+        failing_scores = [
+            r.auditability_score
+            for r in fact_results
+            if r.status == "fail" and r.auditability_score is not None
+        ]
+        if failing_scores:
+            return min(failing_scores)
+
+    return raw_average
 
 
 def _confirm_fact(
