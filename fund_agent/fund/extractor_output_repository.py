@@ -10,6 +10,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, fields, is_dataclass
 from datetime import datetime, timezone
+from decimal import Decimal
 import json
 from pathlib import Path
 from typing import Any, Final
@@ -287,6 +288,8 @@ def _jsonable(value: object, *, path: str) -> object:
 
     if value is None or isinstance(value, str | int | float | bool):
         return value
+    if isinstance(value, Decimal):
+        return str(value)
     if isinstance(value, bytes | bytearray):
         raise TypeError(f"{path} 不是支持的 JSON 值类型：{type(value).__name__}")
     if isinstance(value, Mapping):

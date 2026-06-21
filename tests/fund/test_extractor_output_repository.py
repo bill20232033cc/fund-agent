@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import replace
+from decimal import Decimal
 from pathlib import Path
 
 import pytest
@@ -17,7 +18,7 @@ from fund_agent.fund.extractor_output_repository import (
     EXTRACTOR_OUTPUT_SCHEMA_VERSION,
     ExtractorOutputRepository,
 )
-from fund_agent.fund.extractors.models import ExtractedField
+from fund_agent.fund.extractors.models import EvidenceAnchor, ExtractedField, TrackingErrorValue
 from tests.services.test_fund_analysis_service import _bundle
 
 
@@ -47,6 +48,69 @@ def test_repository_saves_bundle_under_fund_report_type_year_path(tmp_path: Path
     assert payload["report_year"] == 2024
     assert payload["bundle"]["fund_code"] == "110011"
     assert payload["bundle"]["report_year"] == 2024
+
+
+def test_repository_saves_tracking_error_decimal_as_exact_json_text(tmp_path: Path) -> None:
+    """验证当前跟踪误差 Decimal 输出能稳定落盘。
+
+    Args:
+        tmp_path: pytest 临时目录。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: Decimal 被拒绝或精度文本未保留时抛出。
+    """
+
+    repository = ExtractorOutputRepository(root_dir=tmp_path)
+    bundle = replace(
+        _bundle(),
+        tracking_error=ExtractedField(
+            value=TrackingErrorValue(
+                value=Decimal("0.0123"),
+                value_text="1.23%",
+                unit="ratio",
+                period_label="报告期",
+                period_start=None,
+                period_end=None,
+                annualized=True,
+                source_type="direct_disclosure",
+                calculation_method="disclosed",
+                benchmark_identity_status="identified",
+                benchmark_index_name="沪深300指数",
+                benchmark_index_code="000300",
+                fund_series_source=None,
+                index_series_source=None,
+                observation_count=None,
+                frequency="annual_report_period",
+                annualization_factor=Decimal("252"),
+                input_period_complete=True,
+                provenance_note="年报§3直接披露。",
+            ),
+            anchors=(
+                EvidenceAnchor(
+                    source_kind="annual_report",
+                    document_year=2024,
+                    section_id="§3",
+                    page_number=None,
+                    table_id=None,
+                    row_locator="tracking_error",
+                    note=None,
+                ),
+            ),
+            extraction_mode="direct",
+            note=None,
+        ),
+    )
+
+    repository.save(bundle=bundle)
+    record = repository.load(fund_code="110011", report_type="annual_report", report_year=2024)
+    tracking_error = record.bundle_payload["tracking_error"]
+
+    assert isinstance(tracking_error, dict)
+    assert tracking_error["value"]["value"] == "0.0123"
+    assert tracking_error["value"]["annualization_factor"] == "252"
 
 
 def test_repository_roundtrip_preserves_extracted_field_missing_semantics(
