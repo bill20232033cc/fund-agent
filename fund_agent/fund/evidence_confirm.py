@@ -12,7 +12,7 @@ import hashlib
 import re
 import unicodedata
 from dataclasses import asdict, dataclass, is_dataclass
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from typing import Final, Literal, TypeAlias
 
 from fund_agent.fund.chapter_facts import (
@@ -51,6 +51,8 @@ _IGNORED_VALUE_KEYS: Final[frozenset[str]] = frozenset(
 )
 _WHITESPACE_RE: Final[re.Pattern[str]] = re.compile(r"\s+")
 _PUNCTUATION_RE: Final[re.Pattern[str]] = re.compile(r"[，,。；;：:、（）()\[\]{}]")
+_NUMERIC_TOKEN_RE: Final[re.Pattern[str]] = re.compile(r"^[+-]?\d+(?:\.\d+)?%?$")
+_NUMERIC_CANDIDATE_RE: Final[re.Pattern[str]] = re.compile(r"(?<![\d.])[+-]?\d+(?:\.\d+)?%?(?![\d.])")
 
 
 @dataclass(frozen=True, slots=True)
@@ -542,9 +544,75 @@ def _matched_anchor_ids(
     matched: list[str] = []
     for reference in references:
         normalized_excerpt = _normalize_text(reference.excerpt_text)
-        if any(token in normalized_excerpt for token in tokens):
+        if any(_token_matches_excerpt(token, normalized_excerpt) for token in tokens):
             matched.append(reference.anchor_id)
     return tuple(dict.fromkeys(matched))
+
+
+def _token_matches_excerpt(token: str, normalized_excerpt: str) -> bool:
+    """判断 material token 是否在摘录中可复核命中。
+
+    Args:
+        token: 已归一化 material token。
+        normalized_excerpt: 已归一化 reference excerpt。
+
+    Returns:
+        token 可在摘录中保守命中时返回 ``True``。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if _NUMERIC_TOKEN_RE.fullmatch(token):
+        return _numeric_token_matches_excerpt(token, normalized_excerpt)
+    return token in normalized_excerpt
+
+
+def _numeric_token_matches_excerpt(token: str, normalized_excerpt: str) -> bool:
+    """按数值边界和小数等价匹配 numeric token。
+
+    Args:
+        token: 已归一化 numeric token。
+        normalized_excerpt: 已归一化 reference excerpt。
+
+    Returns:
+        数值候选在边界和单位上相容时返回 ``True``。
+
+    Raises:
+        无显式抛出。
+    """
+
+    token_has_percent = token.endswith("%")
+    token_decimal = _decimal_from_numeric_token(token)
+    if token_decimal is None:
+        return False
+    for match in _NUMERIC_CANDIDATE_RE.finditer(normalized_excerpt):
+        candidate = match.group(0)
+        if candidate.endswith("%") != token_has_percent:
+            continue
+        candidate_decimal = _decimal_from_numeric_token(candidate)
+        if candidate_decimal is not None and candidate_decimal == token_decimal:
+            return True
+    return False
+
+
+def _decimal_from_numeric_token(token: str) -> Decimal | None:
+    """从 numeric token 读取 Decimal。
+
+    Args:
+        token: 已归一化 numeric token。
+
+    Returns:
+        Decimal 值；无法解析时返回 ``None``。
+
+    Raises:
+        无显式抛出。
+    """
+
+    try:
+        return Decimal(token.rstrip("%"))
+    except InvalidOperation:
+        return None
 
 
 def _material_tokens(value: object | None) -> tuple[str, ...]:

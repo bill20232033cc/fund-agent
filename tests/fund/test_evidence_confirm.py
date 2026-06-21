@@ -102,6 +102,56 @@ def test_value_absent_from_same_anchor_excerpt_fails_e2() -> None:
     assert {issue.rule_code for issue in result.issues} == {"E2"}
 
 
+def test_numeric_token_does_not_match_inside_larger_decimal() -> None:
+    """验证短数字 token 不跨数值边界误命中。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 数字 token 跨边界误匹配时抛出。
+    """
+
+    chapter, fact = _chapter_and_fact("structured.turnover_rate")
+    chapter = replace(chapter, facts=(replace(fact, value={"turnover_rate": "12"}),))
+    result = confirm_chapter_evidence(
+        chapter,
+        (_reference(fact.evidence_anchor_ids[0], excerpt_text="年报披露管理费率为 1.20%。"),),
+    )
+
+    assert result.overall_status == "fail"
+    assert result.fact_results[0].auditability_score == 40
+    assert {issue.rule_code for issue in result.issues} == {"E2"}
+
+
+def test_numeric_percent_token_matches_equivalent_decimal_format() -> None:
+    """验证百分比 token 支持小数尾零等价匹配。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 等价百分比格式未匹配时抛出。
+    """
+
+    chapter, fact = _chapter_and_fact("structured.turnover_rate")
+    chapter = replace(chapter, facts=(replace(fact, value={"turnover_rate": "1.20%"}),))
+    result = confirm_chapter_evidence(
+        chapter,
+        (_reference(fact.evidence_anchor_ids[0], excerpt_text="年报披露管理费率为 1.2%。"),),
+    )
+
+    assert result.overall_status == "pass"
+    assert result.fact_results[0].auditability_score == 100
+    assert result.issues == ()
+
+
 def test_empty_excerpt_emits_e1_and_e2() -> None:
     """验证空摘录同时触发定位可复核性与值不匹配问题。
 
@@ -517,6 +567,38 @@ def test_projection_aggregates_multiple_chapters_deterministically() -> None:
     assert nav_data_result.status == "not_applicable"
     assert nav_data_result.auditability_score is None
     assert result.issues == ()
+
+
+def test_chapter_aggregation_uses_strictest_status_and_average_score() -> None:
+    """验证混合 fact 状态按最严格状态聚合并平均可计分 fact。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 聚合状态或分数错误时抛出。
+    """
+
+    chapter, fact = _chapter_and_fact("structured.turnover_rate")
+    failed_fact = replace(
+        fact,
+        fact_id=f"{fact.fact_id}:failed",
+        source_field_id="structured.aaa_failed_turnover_rate",
+        value={"turnover_rate": "121%"},
+    )
+    chapter = replace(chapter, facts=(fact, failed_fact))
+    result = confirm_chapter_evidence(
+        chapter,
+        (_reference(fact.evidence_anchor_ids[0], excerpt_text="年报披露换手率为 120%。"),),
+    )
+
+    assert result.overall_status == "fail"
+    assert result.auditability_score == 70
+    assert [item.auditability_score for item in result.fact_results] == [40, 100]
+    assert {issue.rule_code for issue in result.issues} == {"E2"}
 
 
 def _chapter_and_fact(source_field_id: str) -> tuple[ChapterFactInput, ChapterFactEntry]:
