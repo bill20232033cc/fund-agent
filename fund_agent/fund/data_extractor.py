@@ -303,8 +303,8 @@ class FundDataExtractor:
 
         Raises:
             Exception: 允许仓库或年报 extractor 异常向上抛出；净值外部数据异常会降级为不可用结果。
-            UnsupportedFundProcessorError: 当 active fund 无可用 processor 时 fail-closed。
-            RuntimeError: 当 active fund processor 结果状态为 unsupported 或 blocked 时 fail-closed。
+            UnsupportedFundProcessorError: 当已分类基金无可用 processor 时 fail-closed。
+            RuntimeError: 当 processor 结果状态为 unsupported 或 blocked 时 fail-closed。
         """
 
         report = await self._repository.load_annual_report(
@@ -332,7 +332,7 @@ class FundDataExtractor:
         classified_fund_type = _classified_fund_type(profile_result.basic_identity)
 
         if disclosure_intermediate is not None:
-            return await self._extract_active_fund_disclosure_via_processor(
+            return await self._extract_fund_disclosure_via_processor(
                 report=report,
                 disclosure_intermediate=disclosure_intermediate,
                 nav_data=nav_data,
@@ -341,11 +341,9 @@ class FundDataExtractor:
                 force_refresh=force_refresh,
             )
 
-        if classified_fund_type == "active_fund":
-            return await self._extract_active_fund_via_processor(
+        if classified_fund_type is not None:
+            return await self._extract_classified_fund_via_processor(
                 report=report,
-                fund_code=fund_code,
-                report_year=report_year,
                 nav_data=nav_data,
                 profile_result=profile_result,
                 classified_fund_type=classified_fund_type,
@@ -361,21 +359,20 @@ class FundDataExtractor:
             force_refresh=force_refresh,
         )
 
-    async def _extract_active_fund_via_processor(
+    async def _extract_classified_fund_via_processor(
         self,
         *,
         report: ParsedAnnualReport,
-        fund_code: str,
-        report_year: int,
         nav_data: NavDataResult,
         profile_result: Any,
         classified_fund_type: FundType,
         force_refresh: bool,
     ) -> StructuredFundDataBundle:
-        """通过 processor registry 路径抽取 active fund 结构化数据。
+        """通过 processor registry 路径抽取已分类基金结构化数据。
 
-        S2 接入：只覆盖 active_fund + annual_report + parsed_annual_report.v1。
-        非 active fund 不得进入此路径。
+        当前默认路径覆盖所有已分类基金类型的
+        `<fund_type> + annual_report + parsed_annual_report.v1`。未分类基金仍保留
+        legacy residual path，避免用 registry 静默猜测基金类型。
 
         Raises:
             UnsupportedFundProcessorError: registry 无可用 processor。
@@ -383,7 +380,7 @@ class FundDataExtractor:
         """
 
         dispatch_key = FundProcessorDispatchKey(
-            fund_type="active_fund",
+            fund_type=classified_fund_type,
             report_type="annual_report",
             intermediate_kind="parsed_annual_report.v1",
             source_kind="annual_report",
@@ -400,7 +397,7 @@ class FundDataExtractor:
         result = processor.extract(processor_input)
         if result.contract_status in ("unsupported", "blocked"):
             raise RuntimeError(
-                f"active_fund processor {result.processor_id} returned "
+                f"{classified_fund_type} processor {result.processor_id} returned "
                 f"{result.contract_status}: {result.gaps}"
             )
 
@@ -420,7 +417,7 @@ class FundDataExtractor:
             drawdown_metric_error=drawdown_metric_error,
         )
 
-        return _active_processor_result_to_bundle(
+        return _processor_result_to_bundle(
             result,
             nav_data=nav_data,
             profile_result=profile_result,
@@ -429,7 +426,7 @@ class FundDataExtractor:
             source_provenance=source_provenance,
         )
 
-    async def _extract_active_fund_disclosure_via_processor(
+    async def _extract_fund_disclosure_via_processor(
         self,
         *,
         report: ParsedAnnualReport,
@@ -441,9 +438,10 @@ class FundDataExtractor:
     ) -> StructuredFundDataBundle:
         """通过 processor registry 路由显式 FundDisclosureDocument 中间态。
 
-        S5 仅允许显式 opt-in 的
-        active_fund + annual_report + fund_disclosure_document.v1；分类仍来自已加载的
-        ParsedAnnualReport，候选内容不得决定基金类型或绕过 production 年报身份校验。
+        显式 opt-in 的 FundDisclosureDocument route 仍先通过
+        FundDocumentRepository 加载并校验 ParsedAnnualReport，再使用 parsed report
+        分类结果分派到对应基金类型 processor。候选内容不得决定基金类型或绕过
+        production 年报身份校验。
 
         Args:
             report: 已通过 FundDocumentRepository 加载并完成身份校验的年报。
@@ -458,18 +456,17 @@ class FundDataExtractor:
 
         Raises:
             UnsupportedFundProcessorError: registry 无可用 FDD processor。
-            RuntimeError: 非 active fund、processor identity mismatch、blocked/unsupported
+            RuntimeError: 基金类型未分类、processor identity mismatch、blocked/unsupported
                 status 或 provenance 缺失时 fail-closed。
         """
 
-        if classified_fund_type != "active_fund":
+        if classified_fund_type is None:
             raise RuntimeError(
-                "FundDisclosureDocument route supports only active_fund annual_report; "
-                f"classified_fund_type={classified_fund_type}"
+                "FundDisclosureDocument route requires classified fund type from ParsedAnnualReport"
             )
 
         dispatch_key = FundProcessorDispatchKey(
-            fund_type="active_fund",
+            fund_type=classified_fund_type,
             report_type="annual_report",
             intermediate_kind="fund_disclosure_document.v1",
             source_kind="annual_report",
@@ -477,6 +474,9 @@ class FundDataExtractor:
             fund_code=report.key.fund_code,
         )
         source_provenance = disclosure_intermediate.source_provenance
+        if source_provenance is None:
+            raise RuntimeError("FundDisclosureDocument source_provenance is required")
+
         processor = self._processor_registry.resolve(dispatch_key)
         processor_input = FundProcessorInput(
             context=dispatch_key,
@@ -491,8 +491,6 @@ class FundDataExtractor:
                 f"fund_disclosure_document processor {result.processor_id} returned "
                 f"{result.contract_status}: {result.gaps}"
             )
-        if source_provenance is None:
-            raise RuntimeError("FundDisclosureDocument source_provenance is required")
 
         drawdown_metric, drawdown_metric_error = await _load_drawdown_metric_for_bond_fund(
             self._nav_series_repository,
@@ -508,7 +506,7 @@ class FundDataExtractor:
             drawdown_metric_error=drawdown_metric_error,
         )
 
-        return _active_processor_result_to_bundle(
+        return _processor_result_to_bundle(
             result,
             nav_data=nav_data,
             profile_result=profile_result,
@@ -527,11 +525,11 @@ async def _extract_bundle_direct_legacy_path(
     nav_series_repository: _NavSeriesRepository,
     force_refresh: bool,
 ) -> StructuredFundDataBundle:
-    """S2 residual：非 active fund 直接窄 extractor 编排路径。
+    """residual：未分类 fund 直接窄 extractor 编排路径。
 
-    该路径仅在 S2 未实现 processor 的基金类型（index、enhanced_index、bond、QDII、
-    FOF 及未分类）上保留现有行为。每类基金后续需独立 planning/implementation gate
-    接入对应 processor。不得被 Service/UI/Host/renderer/quality gate 直接消费。
+    该路径仅在 `classified_fund_type is None` 时保留现有行为。已分类的 index、
+    enhanced_index、bond、QDII、FOF 和 active fund 均必须通过
+    `FundProcessorRegistry`，不得被 Service/UI/Host/renderer/quality gate 直接消费。
     """
 
     performance_result = extract_performance(report)
@@ -705,7 +703,7 @@ def _validate_disclosure_intermediate_identity(
         raise RuntimeError("FundDisclosureDocument identity mismatch: " + "; ".join(mismatches))
 
 
-def _active_processor_result_to_bundle(
+def _processor_result_to_bundle(
     result: FundProcessorResult,
     *,
     nav_data: NavDataResult,
@@ -714,7 +712,7 @@ def _active_processor_result_to_bundle(
     bond_risk_evidence: ExtractedField[BondRiskEvidenceValue],
     source_provenance: PublicSourceProvenance,
 ) -> StructuredFundDataBundle:
-    """从 active_fund processor 结果投影 StructuredFundDataBundle。
+    """从 processor 结果投影 StructuredFundDataBundle。
 
     投影规则：
     - product_essence.v1 → basic_identity, product_profile, benchmark, risk_characteristic_text

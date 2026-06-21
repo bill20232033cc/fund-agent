@@ -112,23 +112,46 @@ def _dispatch_key() -> FundProcessorDispatchKey:
     )
 
 
-def _fund_disclosure_dispatch_key() -> FundProcessorDispatchKey:
+def _fund_disclosure_dispatch_key(fund_type: str = "active_fund") -> FundProcessorDispatchKey:
     """构造 FundDisclosureDocument 中间态 dispatch key。
 
     Args:
         无。
 
     Returns:
-        主动基金年报 FundDisclosureDocument processor 路由键。
+        指定基金类型的年报 FundDisclosureDocument processor 路由键。
 
     Raises:
         无显式抛出。
     """
 
     return FundProcessorDispatchKey(
-        fund_type="active_fund",
+        fund_type=fund_type,
         report_type="annual_report",
         intermediate_kind="fund_disclosure_document.v1",
+        source_kind="annual_report",
+        document_year=2024,
+        fund_code="110011",
+    )
+
+
+def _parsed_annual_dispatch_key(fund_type: str) -> FundProcessorDispatchKey:
+    """构造指定基金类型的 ParsedAnnualReport dispatch key。
+
+    Args:
+        fund_type: 标准基金类型。
+
+    Returns:
+        对应基金类型的年报 ParsedAnnualReport processor 路由键。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return FundProcessorDispatchKey(
+        fund_type=fund_type,  # type: ignore[arg-type]
+        report_type="annual_report",
+        intermediate_kind="parsed_annual_report.v1",
         source_kind="annual_report",
         document_year=2024,
         fund_code="110011",
@@ -242,8 +265,36 @@ def test_registry_create_default_resolves_active_annual_processor() -> None:
     assert processor.processor_id == "active_fund_annual.parsed_annual_report.v1"
 
 
+def test_registry_create_default_resolves_non_active_parsed_annual_processors() -> None:
+    """验证默认 registry 按基金类型解析五类非 active ParsedAnnualReport processor。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当任一非 active 类型缺少默认 processor 时抛出。
+    """
+
+    registry = FundProcessorRegistry.create_default()
+
+    expected_processor_ids = {
+        "index_fund": "index_fund_annual.parsed_annual_report.v1",
+        "enhanced_index": "enhanced_index_annual.parsed_annual_report.v1",
+        "bond_fund": "bond_fund_annual.parsed_annual_report.v1",
+        "qdii_fund": "qdii_fund_annual.parsed_annual_report.v1",
+        "fof_fund": "fof_fund_annual.parsed_annual_report.v1",
+    }
+    for fund_type, expected_processor_id in expected_processor_ids.items():
+        processor = registry.resolve(_parsed_annual_dispatch_key(fund_type))
+
+        assert processor.processor_id == expected_processor_id
+
+
 def test_registry_default_supports_fund_disclosure_document_intermediate() -> None:
-    """验证 S4 默认 registry 已注册 FundDisclosureDocumentProcessor。
+    """验证默认 registry 已注册 active FundDisclosureDocumentProcessor。
 
     Args:
         无。
@@ -259,7 +310,35 @@ def test_registry_default_supports_fund_disclosure_document_intermediate() -> No
 
     processor = registry.resolve(_fund_disclosure_dispatch_key())
 
-    assert processor.processor_id == "fund_disclosure_document.fund_disclosure_document.v1"
+    assert processor.processor_id == "active_fund_disclosure.fund_disclosure_document.v1"
+
+
+def test_registry_create_default_resolves_non_active_fund_disclosure_processors() -> None:
+    """验证默认 registry 按基金类型解析五类非 active FDD processor。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当任一非 active FDD processor 缺失时抛出。
+    """
+
+    registry = FundProcessorRegistry.create_default()
+
+    expected_processor_ids = {
+        "index_fund": "index_fund_disclosure.fund_disclosure_document.v1",
+        "enhanced_index": "enhanced_index_disclosure.fund_disclosure_document.v1",
+        "bond_fund": "bond_fund_disclosure.fund_disclosure_document.v1",
+        "qdii_fund": "qdii_fund_disclosure.fund_disclosure_document.v1",
+        "fof_fund": "fof_fund_disclosure.fund_disclosure_document.v1",
+    }
+    for fund_type, expected_processor_id in expected_processor_ids.items():
+        processor = registry.resolve(_fund_disclosure_dispatch_key(fund_type))
+
+        assert processor.processor_id == expected_processor_id
 
 
 def test_dispatch_key_rejects_invalid_values_and_has_no_extra_payload() -> None:

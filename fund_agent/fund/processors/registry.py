@@ -134,18 +134,40 @@ class FundProcessorRegistry:
             无。
 
         Returns:
-            注册了当前 S1 active annual processor 的注册表。
+            注册了当前 parsed annual report 与 FundDisclosureDocument processor 的注册表。
 
         Raises:
             ValueError: 当默认 processor 注册冲突时抛出。
         """
 
-        from fund_agent.fund.processors.active_annual import ActiveFundAnnualProcessor
+        from fund_agent.fund.processors.active_annual import (
+            ActiveFundAnnualProcessor,
+            BondFundAnnualProcessor,
+            EnhancedIndexFundAnnualProcessor,
+            FofFundAnnualProcessor,
+            IndexFundAnnualProcessor,
+            QdiiFundAnnualProcessor,
+        )
         from fund_agent.fund.processors.fund_disclosure_processor import (
+            BondFundDisclosureDocumentProcessor,
+            EnhancedIndexDisclosureDocumentProcessor,
+            FofFundDisclosureDocumentProcessor,
             FundDisclosureDocumentProcessor,
+            IndexFundDisclosureDocumentProcessor,
+            QdiiFundDisclosureDocumentProcessor,
         )
 
         registry = cls()
         registry.register(ActiveFundAnnualProcessor)  # priority=100
+        registry.register(IndexFundAnnualProcessor)  # priority=90
+        registry.register(EnhancedIndexFundAnnualProcessor)  # priority=90
+        registry.register(BondFundAnnualProcessor)  # priority=90
+        registry.register(QdiiFundAnnualProcessor)  # priority=90
+        registry.register(FofFundAnnualProcessor)  # priority=90
         registry.register(FundDisclosureDocumentProcessor)  # priority=50
+        registry.register(IndexFundDisclosureDocumentProcessor)  # priority=50
+        registry.register(EnhancedIndexDisclosureDocumentProcessor)  # priority=50
+        registry.register(BondFundDisclosureDocumentProcessor)  # priority=50
+        registry.register(QdiiFundDisclosureDocumentProcessor)  # priority=50
+        registry.register(FofFundDisclosureDocumentProcessor)  # priority=50
         return registry

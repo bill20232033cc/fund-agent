@@ -25,7 +25,12 @@ from fund_agent.fund.processors.contracts import (
     FundProcessorResult,
 )
 from fund_agent.fund.processors.fund_disclosure_processor import (
+    BondFundDisclosureDocumentProcessor,
+    EnhancedIndexDisclosureDocumentProcessor,
+    FofFundDisclosureDocumentProcessor,
     FundDisclosureDocumentProcessor,
+    IndexFundDisclosureDocumentProcessor,
+    QdiiFundDisclosureDocumentProcessor,
     _CORE_RISK_ROLE_KEYS,
     _manager_profile_cell_original_index,
 )
@@ -9236,7 +9241,52 @@ def test_processor_registered_in_default_registry() -> None:
     )
 
     assert isinstance(processor, FundDisclosureDocumentProcessor)
-    assert processor.processor_id == "fund_disclosure_document.fund_disclosure_document.v1"
+    assert processor.processor_id == "active_fund_disclosure.fund_disclosure_document.v1"
+
+
+def test_default_registry_resolves_non_active_fund_disclosure_processors() -> None:
+    """默认 registry 逐类解析五类非 active FundDisclosureDocument processor。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当任一非 active FDD processor 缺失或串类时抛出。
+    """
+
+    registry = FundProcessorRegistry.create_default()
+
+    expected = {
+        "index_fund": (
+            IndexFundDisclosureDocumentProcessor,
+            "index_fund_disclosure.fund_disclosure_document.v1",
+        ),
+        "enhanced_index": (
+            EnhancedIndexDisclosureDocumentProcessor,
+            "enhanced_index_disclosure.fund_disclosure_document.v1",
+        ),
+        "bond_fund": (
+            BondFundDisclosureDocumentProcessor,
+            "bond_fund_disclosure.fund_disclosure_document.v1",
+        ),
+        "qdii_fund": (
+            QdiiFundDisclosureDocumentProcessor,
+            "qdii_fund_disclosure.fund_disclosure_document.v1",
+        ),
+        "fof_fund": (
+            FofFundDisclosureDocumentProcessor,
+            "fof_fund_disclosure.fund_disclosure_document.v1",
+        ),
+    }
+
+    for fund_type, (processor_type, processor_id) in expected.items():
+        processor = registry.resolve(_dispatch_key(fund_type=fund_type))
+
+        assert isinstance(processor, processor_type)
+        assert processor.processor_id == processor_id
 
 
 # ── supports() ──────────────────────────────────────────────────────────────
@@ -9278,8 +9328,8 @@ def test_supports_rejects_parsed_annual_report_v1() -> None:
     assert not processor.supports(_dispatch_key(intermediate_kind="parsed_annual_report.v1"))
 
 
-def test_supports_rejects_non_active_fund_type() -> None:
-    """supports() 对非 active fund 类型返回 False。
+def test_disclosure_processors_support_only_declared_fund_type() -> None:
+    """六类 FDD processor 只支持各自声明的 fund_type。
 
     Args:
         无。
@@ -9288,12 +9338,23 @@ def test_supports_rejects_non_active_fund_type() -> None:
         无返回值。
 
     Raises:
-        AssertionError: 当 supports 接受非 active 类型时抛出。
+        AssertionError: 当 processor 串类接受其他基金类型时抛出。
     """
 
-    processor = FundDisclosureDocumentProcessor()
+    processors = (
+        (FundDisclosureDocumentProcessor(), "active_fund"),
+        (IndexFundDisclosureDocumentProcessor(), "index_fund"),
+        (EnhancedIndexDisclosureDocumentProcessor(), "enhanced_index"),
+        (BondFundDisclosureDocumentProcessor(), "bond_fund"),
+        (QdiiFundDisclosureDocumentProcessor(), "qdii_fund"),
+        (FofFundDisclosureDocumentProcessor(), "fof_fund"),
+    )
 
-    assert not processor.supports(_dispatch_key(fund_type="index_fund"))
+    for processor, supported_fund_type in processors:
+        other_fund_type = "active_fund" if supported_fund_type != "active_fund" else "index_fund"
+
+        assert processor.supports(_dispatch_key(fund_type=supported_fund_type))
+        assert not processor.supports(_dispatch_key(fund_type=other_fund_type))
 
 
 def test_processor_priority_below_active_annual() -> None:
