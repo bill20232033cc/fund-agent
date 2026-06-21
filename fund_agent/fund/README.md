@@ -201,6 +201,15 @@ Source-truth direct extraction 在该 Processor/Extractor 边界内增加了 `Fu
 - `auditability_score` 当前为确定性四档：通过 100、E1 reviewable 70、E2 不匹配 40、E3 缺失 0；derived、not_applicable 或当前 phase 1 不支持的非 annual-report / derived anchor fact 不计分
 - 该能力不读取文档仓库、PDF/cache/source helper、Service、Host、provider、retained report、文件系统、环境变量或 dayu，不接入 `ProgrammaticAuditResult`、FQ0-FQ6 quality gate、renderer、CLI 或 readiness 判定
 
+`fund_agent/fund/evidence_confirm.py` 同时提供 no-live `evidence_confirm.v2` 五维评分与硬门控：
+
+- `confirm_chapter_evidence_v2()` / `confirm_projection_evidence_v2()` 消费与 V1 相同的 `ChapterFactInput` / `ChapterFactProjection` 和 `EvidenceConfirmReference`，返回 `EvidenceConfirmResultV2`
+- 五个确定性评分维度：`anchor_precision`、`source_support`、`missing_evidence`、`proof_boundary`、`value_match`，每个维度有独立的 `pass/warn/fail/not_applicable` 状态
+- 硬门控语义：fact 级和聚合级 `EvidenceConfirmHardGate` 的 `fail/warn/pass/not_applicable`；阻断性失败（如 E3 缺失、proof_boundary 失败）产生 `fail`
+- 分数语义：阻断性失败产生分数上限（score cap），防止稀释；通过 fact 使用无上限均值聚合
+- V2 与 V1 共存：V1 公共函数 `confirm_chapter_evidence()` / `confirm_projection_evidence()` 不变，返回类型、分数和状态语义保持原样
+- 该能力不读取文档仓库、PDF/cache/source helper、Service、Host、provider、retained report、文件系统、环境变量或 dayu，不接入 `ProgrammaticAuditResult`、FQ0-FQ6 quality gate、renderer、CLI 或 readiness 判定；调用方自行提供 reference
+
 template truth-source replacement、typed projection 和 `EvidenceAvailability` 的当前非目标是：不改变 deterministic `analyze/checklist`、renderer、FQ0-FQ6 quality gate、final judgment、provider/runtime defaults、score/golden/readiness，不实现 Ch2 公开拆章、多年证据 runtime、Agent runner/tool-loop、Host 业务理解或 dayu runtime。
 
 `fund_agent/fund/chapter_writer.py` 和 `fund_agent/fund/chapter_auditor.py` 当前提供 Gate 2 单章 writer / auditor primitives：
@@ -571,7 +580,7 @@ C2 当前只做确定性 marker / 元数据检查，不调用 LLM，不判断语
   - `downloader.py`：仅供仓库内部使用的 PDF 下载 helper，会写入本地缓存
   - `parser.py`：PDF 全文、表格与章节定位原型
 - EID 年报来源对同一基金代码/年份的 PDF 下载使用实例级锁；同 key 并发请求会复用首个请求落地的 PDF 缓存。该保护不等同于跨进程锁或完整仓库事务。
-- `evidence_confirm.py`：no-live phase 1 Evidence Confirm 与锚点可审计性评分，只消费显式 `EvidenceConfirmReference`，执行 E1/E2/E3 的保守同 anchor excerpt 复核，不接 `ProgrammaticAuditResult` 或 quality gate。
+- `evidence_confirm.py`：no-live Evidence Confirm（V1 phase 1 + V2 五维评分与硬门控），只消费显式 `EvidenceConfirmReference`，执行 E1/E2/E3 的保守同 anchor excerpt 复核与五维确定性评分，不接 `ProgrammaticAuditResult` 或 quality gate。
 - `audit/`：程序审计规则。当前包含 `audit_programmatic.py` 和 `contract_rules.py`，执行 P1/P2/P3/C2/L1/R1/R2；C1/L2 属于后续 LLM 审计或语义复核层，E1/E2/E3 的 report-level/full source 接入仍需后续 gate。
 
 ## 当前边界
