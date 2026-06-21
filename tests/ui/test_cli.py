@@ -1075,6 +1075,54 @@ class _FakeExtractionSnapshotService:
 
 
 @dataclass(frozen=True, slots=True)
+class _FakeExtractorOutputIdentity:
+    """CLI 测试用 extractor output 身份。"""
+
+    fund_code: str
+    report_type: str
+    report_year: int
+
+
+@dataclass(frozen=True, slots=True)
+class _FakeExtractorOutputRecord:
+    """CLI 测试用 extractor output 保存结果。"""
+
+    schema_version: str
+    identity: _FakeExtractorOutputIdentity
+    path: Path
+
+
+class _FakeExtractorOutputService:
+    """CLI 测试用 extractor output Service。"""
+
+    last_request = None
+
+    async def save(self, request):  # type: ignore[no-untyped-def]
+        """记录请求并返回固定保存结果。
+
+        Args:
+            request: CLI 构造的保存请求。
+
+        Returns:
+            fake 保存结果。
+
+        Raises:
+            无显式抛出。
+        """
+
+        type(self).last_request = request
+        return _FakeExtractorOutputRecord(
+            schema_version="fund-agent.extractor_output.v1",
+            identity=_FakeExtractorOutputIdentity(
+                fund_code=request.fund_code,
+                report_type=request.report_type,
+                report_year=request.report_year,
+            ),
+            path=Path("reports/extractor-outputs/004393/annual_report/2024/structured_fund_data.json"),
+        )
+
+
+@dataclass(frozen=True, slots=True)
 class _FakeScoreResult:
     """CLI 测试用评分运行结果。"""
 
@@ -3671,6 +3719,53 @@ def test_extraction_snapshot_cli_is_thin_capability_entry(monkeypatch, tmp_path)
     assert _FakeExtractionSnapshotService.last_request.force_refresh is True
     assert _FakeExtractionSnapshotService.last_request.sample_per_category == 2
     assert _FakeExtractionSnapshotService.last_request.limit == 3
+
+
+def test_extractor_output_save_cli_is_thin_service_entry(monkeypatch, tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """验证 extractor-output-save 命令只把显式参数转发给 Service。
+
+    Args:
+        monkeypatch: pytest monkeypatch fixture。
+        tmp_path: pytest 临时目录 fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 CLI 参数转发或输出路径不符合契约时抛出。
+    """
+
+    _FakeExtractorOutputService.last_request = None
+    monkeypatch.setattr(cli, "ExtractorOutputService", _FakeExtractorOutputService)
+    runner = CliRunner()
+
+    result = runner.invoke(
+        cli.app,
+        [
+            "extractor-output-save",
+            "004393",
+            "--report-year",
+            "2024",
+            "--report-type",
+            "annual_report",
+            "--output-root",
+            str(tmp_path),
+            "--force-refresh",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert "extractor_output_json:" in result.output
+    assert "schema_version: fund-agent.extractor_output.v1" in result.output
+    assert "fund_code: 004393" in result.output
+    assert "report_type: annual_report" in result.output
+    assert "report_year: 2024" in result.output
+    assert _FakeExtractorOutputService.last_request is not None
+    assert _FakeExtractorOutputService.last_request.fund_code == "004393"
+    assert _FakeExtractorOutputService.last_request.report_year == 2024
+    assert _FakeExtractorOutputService.last_request.report_type == "annual_report"
+    assert _FakeExtractorOutputService.last_request.output_root == tmp_path
+    assert _FakeExtractorOutputService.last_request.force_refresh is True
 
 
 def test_extraction_score_cli_is_thin_service_entry(monkeypatch, tmp_path) -> None:  # type: ignore[no-untyped-def]

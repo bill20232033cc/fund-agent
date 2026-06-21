@@ -5,6 +5,10 @@ from fund_agent.services.extraction_snapshot_service import (
     ExtractionSnapshotRequest,
     ExtractionSnapshotService,
 )
+from fund_agent.services.extractor_output_service import (
+    ExtractorOutputSaveRequest,
+    ExtractorOutputService,
+)
 from fund_agent.services.extraction_score_service import (
     ExtractionScoreRequest,
     ExtractionScoreService,
@@ -95,6 +99,8 @@ from fund_agent.services.fund_analysis_service import (
 __all__ = [
     "ExtractionSnapshotRequest",
     "ExtractionSnapshotService",
+    "ExtractorOutputSaveRequest",
+    "ExtractorOutputService",
     "ExtractionScoreRequest",
     "ExtractionScoreService",
     "GoldenAnswerBuildRequest",

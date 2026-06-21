@@ -30,6 +30,8 @@ from fund_agent.services import (
     ExtractionScoreService,
     ExtractionSnapshotRequest,
     ExtractionSnapshotService,
+    ExtractorOutputSaveRequest,
+    ExtractorOutputService,
     FinalJudgment,
     FundChecklistResult,
     FundAnalysisDeveloperOverrides,
@@ -1187,6 +1189,61 @@ def extraction_snapshot(
     typer.echo(f"snapshot: {result.snapshot_path}")
     typer.echo(f"summary: {result.summary_path}")
     typer.echo(f"errors: {result.errors_path}")
+
+
+@app.command("extractor-output-save")
+def extractor_output_save(
+    fund_code: Annotated[str, typer.Argument(help="6 位基金代码")],
+    report_year: Annotated[int, typer.Option("--report-year", help="年报年份")] = 2024,
+    report_type: Annotated[
+        str,
+        typer.Option("--report-type", help="报告类型；当前仅支持 annual_report"),
+    ] = "annual_report",
+    output_root: Annotated[
+        Path | None,
+        typer.Option("--output-root", help="extractor output 仓库根目录"),
+    ] = None,
+    force_refresh: Annotated[
+        bool, typer.Option("--force-refresh", help="强制刷新底层数据")
+    ] = False,
+) -> None:
+    """抽取并保存结构化 extractor output JSON。
+
+    Args:
+        fund_code: 6 位基金代码。
+        report_year: 年报年份。
+        report_type: 报告类型；当前仅支持 `annual_report`。
+        output_root: 输出仓库根目录；为空时使用默认 `reports/extractor-outputs`。
+        force_refresh: 是否强制刷新底层数据。
+
+    Returns:
+        无返回值，产物写入仓库路径并在 stdout 打印身份和路径。
+
+    Raises:
+        typer.Exit: 保存失败时以非零状态退出。
+    """
+
+    try:
+        result = asyncio.run(
+            ExtractorOutputService().save(
+                ExtractorOutputSaveRequest(
+                    fund_code=fund_code,
+                    report_year=report_year,
+                    report_type=report_type,
+                    output_root=output_root,
+                    force_refresh=force_refresh,
+                )
+            )
+        )
+    except Exception as exc:
+        typer.echo(f"extractor output 保存失败：{exc}", err=True)
+        raise typer.Exit(code=1) from exc
+
+    typer.echo(f"extractor_output_json: {result.path}")
+    typer.echo(f"schema_version: {result.schema_version}")
+    typer.echo(f"fund_code: {result.identity.fund_code}")
+    typer.echo(f"report_type: {result.identity.report_type}")
+    typer.echo(f"report_year: {result.identity.report_year}")
 
 
 @app.command("extraction-score")
