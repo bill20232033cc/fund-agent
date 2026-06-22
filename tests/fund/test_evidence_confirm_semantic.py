@@ -254,6 +254,33 @@ def test_semantic_does_not_call_client_when_candidate_only_reference_fails_proof
     assert client.requests == []
 
 
+def test_semantic_missing_bounded_excerpt_does_not_call_client() -> None:
+    """验证 claim anchor 未命中 deterministic matched anchors 时不调用 client。"""
+
+    chapter, fact = _chapter_and_fact("structured.turnover_rate")
+    references = (_reference(fact.evidence_anchor_ids[0], excerpt_text="年报披露换手率为 120%。"),)
+    evidence_result = confirm_chapter_evidence_v2(chapter, references)
+    client = _FakeEntailmentClient(
+        EvidenceEntailmentJudgment(status="entailed", reason_code="entailed_by_excerpt")
+    )
+    claim = _claim(fact, "换手率披露为 120%。")
+    claim = replace(claim, anchor_ids=("anchor:unmatched",))
+
+    result = confirm_semantic_entailment(
+        evidence_result=evidence_result,
+        references=references,
+        claims=(claim,),
+        client=client,
+    )
+
+    assert result.overall_status == "fail"
+    assert result.claim_results[0].status == "insufficient"
+    assert result.claim_results[0].severity == "block"
+    assert result.claim_results[0].reason_code == "missing_bounded_excerpt"
+    assert result.claim_results[0].matched_anchor_ids == ()
+    assert client.requests == []
+
+
 def test_semantic_malformed_client_result_fails_closed() -> None:
     """验证非法 client 返回 fail-closed。"""
 

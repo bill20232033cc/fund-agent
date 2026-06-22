@@ -42,7 +42,7 @@ uv run pytest tests/fund/test_evidence_confirm.py tests/fund/test_evidence_confi
 Result:
 
 ```text
-59 passed
+60 passed
 ```
 
 ```bash
