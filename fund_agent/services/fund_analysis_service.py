@@ -13,7 +13,7 @@ from dataclasses import dataclass, replace
 from decimal import Decimal
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Callable, Literal, Mapping, Protocol
+from typing import Awaitable, Callable, Literal, Mapping, Protocol
 
 from fund_agent.config.paths import DEFAULT_GOLDEN_ANSWER_JSON
 from fund_agent.fund.analysis import (
@@ -53,9 +53,20 @@ from fund_agent.fund.annual_evidence import (
     MAX_ANNUAL_EVIDENCE_YEARS,
 )
 from fund_agent.fund.audit import ProgrammaticAuditResult, run_programmatic_audit
+from fund_agent.fund.chapter_facts import project_chapter_facts
 from fund_agent.fund.data.thermometer import ThermometerSnapshot
 from fund_agent.fund.data.thermometer_types import ThermometerBatchResult, ThermometerReading
 from fund_agent.fund.data_extractor import FundDataExtractor, StructuredFundDataBundle
+from fund_agent.fund.evidence_confirm_production import (
+    EvidenceConfirmProductionPolicy,
+    EvidenceConfirmProductionSummary,
+    summary_from_repository_result,
+)
+from fund_agent.fund.evidence_confirm_sources import (
+    EvidenceConfirmRepositoryRunRequest,
+    EvidenceConfirmRepositoryRunResult,
+    run_repository_bounded_evidence_confirm,
+)
 from fund_agent.config.paths import DEFAULT_SELECTED_FUNDS_CSV
 from fund_agent.fund.fund_type import FundType
 from fund_agent.fund.quality_gate import GATE_STATUS_BLOCK, QualityGateResult
@@ -186,6 +197,13 @@ class _AnnualEvidenceLoader(Protocol):
         """
 
 
+# EvidenceConfirmRunner 是 Service 注入的 Fund 层 Evidence Confirm 异步运行器类型。
+EvidenceConfirmRunner = Callable[
+    [EvidenceConfirmRepositoryRunRequest],
+    Awaitable[EvidenceConfirmRepositoryRunResult],
+]
+
+
 @dataclass(frozen=True, slots=True)
 class FundAnalysisDeveloperOverrides:
     """开发覆盖参数，只能在 developer override mode 使用。
@@ -205,6 +223,7 @@ class FundAnalysisDeveloperOverrides:
         quality_gate_output_dir: quality gate 显式输出目录。
         quality_gate_run_id: quality gate 运行 ID；为空时 Service 生成唯一 ID。
         quality_gate_golden_answer_path: strict golden answer JSON 路径。
+        evidence_confirm_policy: Evidence Confirm 生产集成策略；只在 developer override mode 生效。
     """
 
     equity_position: Decimal | str | int | float | None = None
@@ -221,6 +240,7 @@ class FundAnalysisDeveloperOverrides:
     quality_gate_output_dir: Path | None = None
     quality_gate_run_id: str | None = None
     quality_gate_golden_answer_path: Path | None = None
+    evidence_confirm_policy: EvidenceConfirmProductionPolicy | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -350,6 +370,7 @@ class ResolvedAnalyzeContract:
         quality_gate_output_dir: quality gate 显式输出目录。
         quality_gate_run_id: quality gate 运行 ID。
         quality_gate_golden_answer_path: strict golden answer JSON 路径。
+        evidence_confirm_policy: Evidence Confirm 生产集成策略。
     """
 
     mode: AnalyzeMode
@@ -367,6 +388,7 @@ class ResolvedAnalyzeContract:
     quality_gate_output_dir: Path | None
     quality_gate_run_id: str | None
     quality_gate_golden_answer_path: Path | None
+    evidence_confirm_policy: EvidenceConfirmProductionPolicy
 
 
 @dataclass(frozen=True, slots=True)
@@ -387,6 +409,7 @@ class FundAnalysisResult:
         audit_result: 程序审计结果。
         quality_gate_result: quality gate 结果；未运行时为空。
         quality_gate_not_run_reason: quality gate 未运行原因。
+        evidence_confirm_summary: Evidence Confirm 安全摘要；未请求时为空。
     """
 
     structured_data: StructuredFundDataBundle
@@ -402,6 +425,7 @@ class FundAnalysisResult:
     audit_result: ProgrammaticAuditResult
     quality_gate_result: QualityGateResult | None = None
     quality_gate_not_run_reason: str | None = None
+    evidence_confirm_summary: EvidenceConfirmProductionSummary | None = None
 
     @property
     def report_markdown(self) -> str:
@@ -511,6 +535,7 @@ class FundChecklistResult:
         final_judgment_decision: 最终判断选择契约。
         quality_gate_result: quality gate 结果；未运行时为空。
         quality_gate_not_run_reason: quality gate 未运行原因。
+        evidence_confirm_summary: Evidence Confirm 安全摘要；Slice 2 checklist 有效策略固定为 off。
     """
 
     structured_data: StructuredFundDataBundle
@@ -524,6 +549,7 @@ class FundChecklistResult:
     final_judgment_decision: FinalJudgmentDecision
     quality_gate_result: QualityGateResult | None = None
     quality_gate_not_run_reason: str | None = None
+    evidence_confirm_summary: EvidenceConfirmProductionSummary | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -544,6 +570,7 @@ class _AnalysisCoreResult:
         current_stage: 当前阶段说明。
         quality_gate_result: quality gate 结果；未运行时为空。
         quality_gate_not_run_reason: quality gate 未运行原因。
+        evidence_confirm_summary: Evidence Confirm 安全摘要；未请求时为空。
     """
 
     structured_data: StructuredFundDataBundle
@@ -559,6 +586,7 @@ class _AnalysisCoreResult:
     current_stage: str | None
     quality_gate_result: QualityGateResult | None
     quality_gate_not_run_reason: str | None
+    evidence_confirm_summary: EvidenceConfirmProductionSummary | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -627,6 +655,37 @@ class QualityGateNotRunBlockedError(ValueError):
         super().__init__(f"质量 gate 未运行：{reason}")
 
 
+class EvidenceConfirmBlockedError(ValueError):
+    """Evidence Confirm 阻断报告输出的结构化异常。
+
+    Attributes:
+        evidence_confirm_summary: 可安全展示的 Evidence Confirm 生产摘要。
+        policy: 触发阻断的 Evidence Confirm 策略，固定为 `block`。
+    """
+
+    def __init__(self, evidence_confirm_summary: EvidenceConfirmProductionSummary) -> None:
+        """初始化 Evidence Confirm 阻断异常。
+
+        Args:
+            evidence_confirm_summary: 可安全展示的生产摘要，不包含原文或路径。
+
+        Returns:
+            无返回值。
+
+        Raises:
+            无显式抛出。
+        """
+
+        self.evidence_confirm_summary = evidence_confirm_summary
+        self.policy: EvidenceConfirmProductionPolicy = "block"
+        super().__init__(
+            "Evidence Confirm 阻断报告输出："
+            f"status={evidence_confirm_summary.status}, "
+            f"failed_facts={evidence_confirm_summary.failed_fact_count}, "
+            f"reason={evidence_confirm_summary.not_run_reason or 'deterministic_fail'}"
+        )
+
+
 class _LLMIncompleteHostRunError(RuntimeError):
     """LLM 分析未完成时用于让 Host runner 形成 failed 终态的内部异常。"""
 
@@ -643,6 +702,7 @@ class FundAnalysisService:
         extractor: _FundDataExtractor | None = None,
         thermometer_service: _ThermometerService | None = None,
         annual_evidence_loader: _AnnualEvidenceLoader | None = None,
+        evidence_confirm_runner: EvidenceConfirmRunner | None = None,
     ) -> None:
         """初始化基金分析 Service。
 
@@ -650,6 +710,7 @@ class FundAnalysisService:
             extractor: P1 结构化抽取器；未提供时使用默认 `FundDataExtractor`。
             thermometer_service: 自建温度计 Service；未提供时使用默认实现。
             annual_evidence_loader: 多年年报证据 loader；未提供时使用默认实现。
+            evidence_confirm_runner: Evidence Confirm 异步 runner；测试可注入 fake。
 
         Returns:
             无返回值。
@@ -661,6 +722,9 @@ class FundAnalysisService:
         self._extractor = extractor or FundDataExtractor()
         self._thermometer_service = thermometer_service or IndexThermometerService()
         self._annual_evidence_loader = annual_evidence_loader or AnnualEvidenceLoader()
+        self._evidence_confirm_runner = (
+            evidence_confirm_runner or run_repository_bounded_evidence_confirm
+        )
 
     async def analyze(self, request: FundAnalysisRequest) -> FundAnalysisResult:
         """执行单只基金完整分析并生成 8 章报告。
@@ -675,6 +739,7 @@ class FundAnalysisService:
             ValueError: 当基金代码、年份、基金类型或审计结果非法时抛出。
             QualityGateBlockedError: 当 quality gate 在 block 策略下阻断报告时抛出。
             QualityGateNotRunBlockedError: 当 quality gate 在 block 策略下未运行时抛出。
+            EvidenceConfirmBlockedError: 当 EC policy 为 block 且确定性复核失败时抛出。
             Exception: 允许底层抽取器或 Agent 层基金能力传播异常。
         """
 
@@ -714,6 +779,7 @@ class FundAnalysisService:
             audit_result=audit_result,
             quality_gate_result=core_result.quality_gate_result,
             quality_gate_not_run_reason=core_result.quality_gate_not_run_reason,
+            evidence_confirm_summary=core_result.evidence_confirm_summary,
         )
 
     async def checklist(self, request: FundAnalysisRequest) -> FundChecklistResult:
@@ -729,6 +795,7 @@ class FundAnalysisService:
             ValueError: 当基金代码、年份、基金类型或请求契约非法时抛出。
             QualityGateBlockedError: 当 quality gate 在 block 策略下阻断报告时抛出。
             QualityGateNotRunBlockedError: 当 quality gate 在 block 策略下未运行时抛出。
+            EvidenceConfirmBlockedError: 当 EC policy 为 block 且确定性复核失败时抛出。
             Exception: 允许底层抽取器或 Agent 层基金能力传播异常。
         """
 
@@ -747,6 +814,7 @@ class FundAnalysisService:
             final_judgment_decision=core_result.final_judgment_decision,
             quality_gate_result=core_result.quality_gate_result,
             quality_gate_not_run_reason=core_result.quality_gate_not_run_reason,
+            evidence_confirm_summary=core_result.evidence_confirm_summary,
         )
 
     async def analyze_multi_year_annual(
@@ -853,6 +921,7 @@ class FundAnalysisService:
             ValueError: 当请求契约、章节编排输入或总装输入非法时抛出。
             QualityGateBlockedError: 当 quality gate 在 block 策略下阻断报告时抛出。
             QualityGateNotRunBlockedError: 当 quality gate 在 block 策略下未运行时抛出。
+            EvidenceConfirmBlockedError: 当 EC policy 为 block 且确定性复核失败时抛出。
             Exception: 允许底层抽取器或 Agent 层基金能力传播异常。
         """
 
@@ -929,6 +998,7 @@ class FundAnalysisService:
             ValueError: 当请求契约、章节编排输入或总装输入非法时抛出。
             QualityGateBlockedError: 当 quality gate 在 block 策略下阻断报告时抛出。
             QualityGateNotRunBlockedError: 当 quality gate 在 block 策略下未运行时抛出。
+            EvidenceConfirmBlockedError: 当 EC policy 为 block 且确定性复核失败时抛出。
             Exception: 允许底层抽取器或 Agent 层基金能力传播异常。
         """
 
@@ -971,6 +1041,7 @@ class FundAnalysisService:
             LLMProviderConstructionError: 当 provider clients 构造失败时抛出。
             QualityGateBlockedError: 当 quality gate 在 block 策略下阻断报告时抛出。
             QualityGateNotRunBlockedError: 当 quality gate 在 block 策略下未运行时抛出。
+            EvidenceConfirmBlockedError: 当 EC policy 为 block 且确定性复核失败时抛出。
             ValueError: 当请求或执行契约非法时抛出。
         """
 
@@ -978,13 +1049,18 @@ class FundAnalysisService:
             request,
             opt_in_mode="explicit_cli_flag",
         )
-        quality_gate_exception: QualityGateBlockedError | QualityGateNotRunBlockedError | None = None
+        structured_block_exception: (
+            QualityGateBlockedError
+            | QualityGateNotRunBlockedError
+            | EvidenceConfirmBlockedError
+            | None
+        ) = None
         incomplete_result: FundLLMAnalysisResult | None = None
 
         def operation(host_context: HostRunContext) -> FundLLMAnalysisResult:
             """Service-owned async bridge，Host runner 不管理 event loop。"""
 
-            nonlocal incomplete_result, quality_gate_exception
+            nonlocal incomplete_result, structured_block_exception
             try:
                 result = asyncio.run(
                     self.analyze_with_llm_execution(
@@ -1000,8 +1076,12 @@ class FundAnalysisService:
                     )
                     raise _LLMIncompleteHostRunError("llm_result_incomplete")
                 return result
-            except (QualityGateBlockedError, QualityGateNotRunBlockedError) as exc:
-                quality_gate_exception = exc
+            except (
+                QualityGateBlockedError,
+                QualityGateNotRunBlockedError,
+                EvidenceConfirmBlockedError,
+            ) as exc:
+                structured_block_exception = exc
                 host_context.record_diagnostic(error_type=type(exc).__name__)
                 raise
 
@@ -1011,8 +1091,8 @@ class FundAnalysisService:
             timeout_seconds=execution_request.runtime_plan.host_timeout_seconds,
             event_sink=event_sink,
         )
-        if quality_gate_exception is not None:
-            raise quality_gate_exception
+        if structured_block_exception is not None:
+            raise structured_block_exception
         if incomplete_result is not None:
             host_result = replace(host_result, operation_result=incomplete_result)
         return _project_hosted_llm_run_result(host_result)
@@ -1099,6 +1179,7 @@ class FundAnalysisService:
             ValueError: 当请求契约或结构化数据非法时抛出。
             QualityGateBlockedError: 当 quality gate 在 block 策略下阻断输出时抛出。
             QualityGateNotRunBlockedError: 当 quality gate 在 block 策略下未运行时抛出。
+            EvidenceConfirmBlockedError: 当 EC policy 为 block 且确定性复核失败时抛出。
             Exception: 允许底层抽取器或 Agent 层基金能力传播异常。
         """
 
@@ -1113,16 +1194,27 @@ class FundAnalysisService:
             request.report_year,
             force_refresh=request.force_refresh,
         )
+        evidence_confirm_summary = await self._run_evidence_confirm_if_enabled(
+            structured_data=structured_data,
+            policy=_effective_evidence_confirm_policy(
+                resolved_contract,
+                command_source=request.command_source,
+            ),
+            force_refresh=request.force_refresh,
+        )
         quality_gate_result, quality_gate_not_run_reason = _run_quality_gate_if_enabled(
             structured_data=structured_data,
             resolved_contract=resolved_contract,
             command_source=request.command_source,
+            evidence_confirm_summary=evidence_confirm_summary,
         )
         if resolved_contract.quality_gate_policy == "block":
             if quality_gate_result is None:
+                _raise_evidence_confirm_block_if_required(evidence_confirm_summary)
                 raise QualityGateNotRunBlockedError(quality_gate_not_run_reason or "unknown")
             if quality_gate_result.status == GATE_STATUS_BLOCK:
                 raise QualityGateBlockedError(quality_gate_result)
+        _raise_evidence_confirm_block_if_required(evidence_confirm_summary)
         quality_gate_status = _resolve_final_judgment_quality_gate_status(
             quality_gate_result=quality_gate_result,
             quality_gate_not_run_reason=quality_gate_not_run_reason,
@@ -1208,7 +1300,54 @@ class FundAnalysisService:
             current_stage=resolved_contract.current_stage,
             quality_gate_result=quality_gate_result,
             quality_gate_not_run_reason=quality_gate_not_run_reason,
+            evidence_confirm_summary=evidence_confirm_summary,
         )
+
+    async def _run_evidence_confirm_if_enabled(
+        self,
+        *,
+        structured_data: StructuredFundDataBundle,
+        policy: EvidenceConfirmProductionPolicy,
+        force_refresh: bool,
+    ) -> EvidenceConfirmProductionSummary | None:
+        """按 developer override 策略运行 Evidence Confirm。
+
+        该方法只从已抽取的结构化数据投影章节事实，然后调用注入的 Fund 层 runner；
+        Service 不读取原文引用、不解析 parser 产物，也不管理底层来源。
+
+        Args:
+            structured_data: 已抽取的结构化基金数据包。
+            policy: Evidence Confirm 有效策略。
+            force_refresh: 是否把请求刷新语义传给 runner。
+
+        Returns:
+            Evidence Confirm 生产摘要；策略为 `off` 时返回 `None`。
+
+        Raises:
+            ValueError: policy 非法时抛出。
+        """
+
+        if policy == "off":
+            return None
+        if policy not in {"warn", "block"}:
+            raise ValueError("evidence_confirm_policy 必须是 off / warn / block")
+        try:
+            runner_result = await self._evidence_confirm_runner(
+                EvidenceConfirmRepositoryRunRequest(
+                    fund_code=structured_data.fund_code,
+                    report_year=structured_data.report_year,
+                    projection=project_chapter_facts(structured_data),
+                    force_refresh=force_refresh,
+                )
+            )
+        except Exception as exc:  # noqa: BLE001 - EC runner failure must become safe summary.
+            return _runner_exception_evidence_confirm_summary(
+                fund_code=structured_data.fund_code,
+                report_year=structured_data.report_year,
+                policy=policy,
+                exception_type=exc.__class__.__name__,
+            )
+        return summary_from_repository_result(runner_result, policy)
 
 
 def build_fund_llm_execution_request(
@@ -1445,6 +1584,7 @@ def _resolve_analyze_contract(request: FundAnalysisRequest) -> ResolvedAnalyzeCo
             quality_gate_output_dir=None,
             quality_gate_run_id=None,
             quality_gate_golden_answer_path=DEFAULT_GOLDEN_ANSWER_PATH,
+            evidence_confirm_policy="off",
         )
     overrides = request.developer_overrides or FundAnalysisDeveloperOverrides()
     return ResolvedAnalyzeContract(
@@ -1471,6 +1611,7 @@ def _resolve_analyze_contract(request: FundAnalysisRequest) -> ResolvedAnalyzeCo
             if overrides.quality_gate_golden_answer_path is None
             else overrides.quality_gate_golden_answer_path
         ),
+        evidence_confirm_policy=overrides.evidence_confirm_policy or "off",
     )
 
 
@@ -1498,6 +1639,8 @@ def _validate_request(
         raise ValueError("command_source 必须是 analyze / checklist")
     if resolved_contract.quality_gate_policy not in {"off", "warn", "block"}:
         raise ValueError("quality_gate_policy 必须是 off / warn / block")
+    if resolved_contract.evidence_confirm_policy not in {"off", "warn", "block"}:
+        raise ValueError("evidence_confirm_policy 必须是 off / warn / block")
     if (
         resolved_contract.quality_gate_run_id is not None
         and not resolved_contract.quality_gate_run_id.strip()
@@ -1510,6 +1653,100 @@ def _validate_request(
     ):
         raise ValueError("quality_gate_output_dir 必须是目录")
     return _ValidatedRequest(fund_code=normalized_fund_code)
+
+
+def _effective_evidence_confirm_policy(
+    resolved_contract: ResolvedAnalyzeContract,
+    *,
+    command_source: AnalyzeCommandSource,
+) -> EvidenceConfirmProductionPolicy:
+    """解析当前入口实际生效的 Evidence Confirm 策略。
+
+    Slice 2 只开放 `analyze()` developer override opt-in；`checklist()` 在本 slice
+    固定为 `off`，避免在没有 CLI/UX gate 的情况下暗中运行 Evidence Confirm。
+
+    Args:
+        resolved_contract: 已解析的 Service 契约。
+        command_source: 当前 Service 方法归一化后的命令来源。
+
+    Returns:
+        实际生效的 Evidence Confirm 策略。
+
+    Raises:
+        ValueError: command_source 非法时抛出。
+    """
+
+    if command_source == "checklist":
+        return "off"
+    if command_source == "analyze":
+        return resolved_contract.evidence_confirm_policy
+    raise ValueError("command_source 必须是 analyze / checklist")
+
+
+def _runner_exception_evidence_confirm_summary(
+    *,
+    fund_code: str,
+    report_year: int,
+    policy: EvidenceConfirmProductionPolicy,
+    exception_type: str,
+) -> EvidenceConfirmProductionSummary:
+    """构造 runner 异常的 fail-closed Evidence Confirm 摘要。
+
+    Args:
+        fund_code: 基金代码。
+        report_year: 年报年份。
+        policy: Evidence Confirm 有效策略。
+        exception_type: 异常类型名称；不包含异常消息，避免泄漏底层细节。
+
+    Returns:
+        fail-closed 生产摘要。
+
+    Raises:
+        无显式抛出。
+    """
+
+    reason = f"runner_exception:{exception_type}"
+    issue_id = f"evidence-confirm-runner:{reason}"
+    return EvidenceConfirmProductionSummary(
+        schema_version="evidence_confirm_production_summary.v1",
+        policy=policy,
+        status="fail",
+        fund_code=fund_code,
+        report_year=report_year,
+        pathway_status="fail",
+        deterministic_status="not_run",
+        semantic_status="not_run",
+        checked_fact_count=0,
+        failed_fact_count=0,
+        warning_fact_count=0,
+        not_applicable_fact_count=0,
+        issue_count=1,
+        auditability_score=None,
+        blocking_issue_ids=(issue_id,),
+        warning_issue_ids=(),
+        not_run_reason=reason,
+    )
+
+
+def _raise_evidence_confirm_block_if_required(
+    summary: EvidenceConfirmProductionSummary | None,
+) -> None:
+    """按 EC policy block 规则抛出 Evidence Confirm 专属阻断异常。
+
+    Args:
+        summary: Evidence Confirm 生产摘要；未请求时为空。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        EvidenceConfirmBlockedError: 当 EC policy 为 block 且摘要状态为 fail 时抛出。
+    """
+
+    if summary is None:
+        return
+    if summary.policy == "block" and summary.status == "fail":
+        raise EvidenceConfirmBlockedError(summary)
 
 
 def _normalize_fund_code(fund_code: str) -> str:
@@ -1639,6 +1876,7 @@ def _run_quality_gate_if_enabled(
     structured_data: StructuredFundDataBundle,
     resolved_contract: ResolvedAnalyzeContract,
     command_source: AnalyzeCommandSource,
+    evidence_confirm_summary: EvidenceConfirmProductionSummary | None,
 ) -> tuple[QualityGateResult | None, str | None]:
     """按请求策略运行输入质量 gate。
 
@@ -1646,6 +1884,7 @@ def _run_quality_gate_if_enabled(
         structured_data: 已抽取的结构化基金数据包，避免重复读取年报。
         resolved_contract: 解析后的 analyze 契约。
         command_source: 触发 quality gate 的命令来源。
+        evidence_confirm_summary: 可选 Evidence Confirm 安全摘要，用于 ECQ issue 投影。
 
     Returns:
         `(quality_gate_result, not_run_reason)`。
@@ -1669,6 +1908,7 @@ def _run_quality_gate_if_enabled(
             command_source=command_source,
         ),
         golden_answer_path=golden_answer_path,
+        evidence_confirm_summary=evidence_confirm_summary,
     )
     return integration_result.quality_gate_result, integration_result.not_run_reason
 
