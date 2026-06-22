@@ -748,7 +748,7 @@ def analyze(
         str,
         typer.Option(
             "--evidence-confirm-policy",
-            help="开发覆盖：Evidence Confirm 策略 off/warn/block；opt-in，不代表 readiness",
+            help="开发覆盖：Evidence Confirm 策略 off/warn/block；仅在 --dev-override 下生效",
         ),
     ] = "off",
     use_llm: Annotated[

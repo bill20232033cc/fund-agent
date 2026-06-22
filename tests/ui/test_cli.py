@@ -195,6 +195,10 @@ class _FakeEvidenceConfirmSummary:
     failed_fact_count: int = 0
     auditability_score: int | None = 92
     not_run_reason: str | None = None
+    source_excerpt: str | None = None
+    pdf_path: str | None = None
+    parser_payload: object | None = None
+    provider_payload: object | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -571,6 +575,42 @@ class _FakeEvidenceConfirmWarnService:
                 failed_fact_count=1,
                 auditability_score=None,
             ),
+        )
+
+
+class _FakeProductEvidenceConfirmWarnService:
+    """CLI 测试用默认 product Evidence Confirm 摘要 Service。"""
+
+    last_request = None
+
+    async def analyze(self, request):  # type: ignore[no-untyped-def]
+        """记录 product 请求并返回只应暴露 safe fields 的摘要。
+
+        Args:
+            request: CLI 构造的 Service 请求。
+
+        Returns:
+            fake Service 返回值。
+
+        Raises:
+            无显式抛出。
+        """
+
+        type(self).last_request = request
+        summary = _FakeEvidenceConfirmSummary(
+            policy="warn",
+            status="warn",
+            checked_fact_count=8,
+            failed_fact_count=1,
+            auditability_score=87,
+            source_excerpt="secret excerpt should stay hidden",
+            pdf_path="/tmp/source.pdf",
+            parser_payload={"raw": "parser json"},
+            provider_payload={"raw": "provider body"},
+        )
+        return _FakeResult(
+            report_markdown="# report body\n",
+            evidence_confirm_summary=summary,
         )
 
 
@@ -1762,6 +1802,36 @@ def test_analyze_cli_calls_service_and_prints_report(monkeypatch) -> None:  # ty
     assert _FakeService.last_request.developer_overrides.evidence_confirm_policy == "off"
 
 
+def test_analyze_cli_dev_override_without_policy_keeps_evidence_confirm_off(
+    monkeypatch,
+) -> None:  # type: ignore[no-untyped-def]
+    """验证 plain `--dev-override` 不继承 product Evidence Confirm warn。
+
+    Args:
+        monkeypatch: pytest monkeypatch fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当开发覆盖默认 Evidence Confirm 策略不是 off 时抛出。
+    """
+
+    _FakeService.last_request = None
+    _FakeService.analyze_called = False
+    monkeypatch.setattr(cli, "FundAnalysisService", _FakeService)
+    runner = CliRunner()
+
+    result = runner.invoke(cli.app, ["analyze", "110011", "--dev-override"])
+
+    assert result.exit_code == 0
+    assert _FakeService.analyze_called is True
+    assert _FakeService.last_request is not None
+    assert _FakeService.last_request.mode == "developer_override"
+    assert _FakeService.last_request.developer_overrides is not None
+    assert _FakeService.last_request.developer_overrides.evidence_confirm_policy == "off"
+
+
 def test_analyze_annual_period_cli_calls_multi_year_service(monkeypatch) -> None:  # type: ignore[no-untyped-def]
     """验证多年年报 CLI 投影显式 Service 请求。
 
@@ -2848,10 +2918,10 @@ def test_analyze_cli_prints_quality_gate_info_for_missing_golden_coverage(
     ) in result.output
 
 
-def test_analyze_cli_default_output_has_no_evidence_confirm_lines(
+def test_analyze_cli_default_product_prints_evidence_confirm_warn_summary(
     monkeypatch,
 ) -> None:  # type: ignore[no-untyped-def]
-    """验证默认 analyze 不输出 Evidence Confirm 摘要。
+    """验证默认 product analyze 输出 Evidence Confirm warn 安全摘要。
 
     Args:
         monkeypatch: pytest monkeypatch fixture。
@@ -2860,25 +2930,35 @@ def test_analyze_cli_default_output_has_no_evidence_confirm_lines(
         无返回值。
 
     Raises:
-        AssertionError: 默认输出被 Evidence Confirm 行污染时抛出。
+        AssertionError: 默认 product 摘要缺失或泄漏非安全字段时抛出。
     """
 
-    _FakeService.last_request = None
-    monkeypatch.setattr(cli, "FundAnalysisService", _FakeService)
+    _FakeProductEvidenceConfirmWarnService.last_request = None
+    monkeypatch.setattr(cli, "FundAnalysisService", _FakeProductEvidenceConfirmWarnService)
     runner = CliRunner()
 
     result = runner.invoke(cli.app, ["analyze", "110011"])
 
     assert result.exit_code == 0
-    assert "evidence_confirm_" not in result.output
-    assert _FakeService.last_request is not None
-    assert _FakeService.last_request.developer_overrides is None
+    assert result.output.endswith("# report body\n")
+    assert "evidence_confirm_status: warn" in result.output
+    assert "evidence_confirm_policy: warn" in result.output
+    assert "evidence_confirm_checked_facts: 8" in result.output
+    assert "evidence_confirm_failed_facts: 1" in result.output
+    assert "evidence_confirm_auditability_score: 87" in result.output
+    assert "secret excerpt" not in result.output
+    assert "source.pdf" not in result.output
+    assert "parser json" not in result.output
+    assert "provider body" not in result.output
+    assert _FakeProductEvidenceConfirmWarnService.last_request is not None
+    assert _FakeProductEvidenceConfirmWarnService.last_request.mode == "product"
+    assert _FakeProductEvidenceConfirmWarnService.last_request.developer_overrides is None
 
 
-def test_analyze_cli_evidence_confirm_warn_passes_policy_and_prints_summary(
+def test_analyze_cli_dev_override_evidence_confirm_warn_passes_policy_and_prints_summary(
     monkeypatch,
 ) -> None:  # type: ignore[no-untyped-def]
-    """验证 analyze opt-in Evidence Confirm warn 策略透传并输出 safe summary。
+    """验证 analyze 开发覆盖 Evidence Confirm warn 策略透传并输出 safe summary。
 
     Args:
         monkeypatch: pytest monkeypatch fixture。
@@ -3364,6 +3444,19 @@ def test_analyze_cli_help_documents_auto_valuation_and_opt_out() -> None:
     }
     assert "--thermometer-cache-dir" in option_names
     assert "--use-llm" in option_names
+    assert "--evidence-confirm-policy" in option_names
+    assert "--no-evidence-confirm" not in option_names
+    assert "--evidence-confirm" not in option_names
+
+    evidence_confirm_help = next(
+        parameter.help
+        for parameter in analyze_command.params
+        if "--evidence-confirm-policy" in getattr(parameter, "opts", ())
+    )
+    assert evidence_confirm_help == (
+        "开发覆盖：Evidence Confirm 策略 off/warn/block；仅在 --dev-override 下生效"
+    )
+    assert "Evidence Confirm 策略 off/warn/block；opt-in" not in result.output
 
 
 def test_thermometer_cli_help_documents_all_a_and_self_owned_history() -> None:
@@ -3497,7 +3590,7 @@ def test_checklist_cli_rejects_use_llm_option(monkeypatch) -> None:  # type: ign
 
 
 def test_checklist_cli_help_does_not_expose_evidence_confirm_policy() -> None:
-    """验证 checklist help 不暴露 Evidence Confirm CLI opt-in。
+    """验证 checklist help 不暴露 Evidence Confirm CLI 参数。
 
     Args:
         无。
@@ -3515,6 +3608,8 @@ def test_checklist_cli_help_does_not_expose_evidence_confirm_policy() -> None:
 
     assert result.exit_code == 0
     assert "--evidence-confirm-policy" not in result.output
+    assert "--no-evidence-confirm" not in result.output
+    assert "--evidence-confirm" not in result.output
 
 
 def test_thermometer_cli_prints_plain_summary(monkeypatch, tmp_path) -> None:  # type: ignore[no-untyped-def]
