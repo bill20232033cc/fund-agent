@@ -234,6 +234,77 @@ def test_available_fact_with_anchor_but_empty_references_fails_e3() -> None:
     assert {issue.rule_code for issue in result.issues} == {"E3"}
 
 
+def test_partial_dangling_anchor_fails_closed_even_with_valid_v1_proof() -> None:
+    """验证 V1 有效 proof 不能掩盖同 fact 的悬挂 anchor。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 悬挂 anchor 被有效 proof 掩盖时抛出。
+    """
+
+    chapter, fact = _chapter_and_fact("structured.turnover_rate")
+    valid_anchor_id = fact.evidence_anchor_ids[0]
+    dangling_anchor_id = "missing-anchor"
+    mixed_fact = replace(fact, evidence_anchor_ids=(valid_anchor_id, dangling_anchor_id))
+    chapter = replace(chapter, facts=(mixed_fact,))
+
+    result = confirm_chapter_evidence(
+        chapter,
+        (_reference(valid_anchor_id, excerpt_text="年报披露换手率为 120%。"),),
+    )
+    fact_result = result.fact_results[0]
+
+    assert result.overall_status == "fail"
+    assert result.auditability_score == 0
+    assert fact_result.status == "fail"
+    assert fact_result.auditability_score == 0
+    assert fact_result.matched_anchor_ids == ()
+    assert {issue.rule_code for issue in result.issues} == {"E3"}
+    assert tuple(issue.anchor_id for issue in result.issues) == (dangling_anchor_id,)
+
+
+def test_projection_partial_dangling_anchor_fails_closed_with_v1_issue_anchor() -> None:
+    """验证 V1 projection 级复核保留悬挂 anchor issue 定位。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: projection 级悬挂 anchor 未 fail-closed 时抛出。
+    """
+
+    projection = project_chapter_facts(_bundle(), chapter_ids=(3,))
+    chapter = projection.chapters[0]
+    fact = next(item for item in chapter.facts if item.source_field_id == "structured.turnover_rate")
+    valid_anchor_id = fact.evidence_anchor_ids[0]
+    dangling_anchor_id = "missing-anchor"
+    mixed_fact = replace(fact, evidence_anchor_ids=(valid_anchor_id, dangling_anchor_id))
+    anchor_ids = set(fact.evidence_anchor_ids)
+    anchors = tuple(anchor for anchor in chapter.evidence_anchors if anchor.anchor_id in anchor_ids)
+    projection = replace(
+        projection,
+        chapters=(replace(chapter, facts=(mixed_fact,), evidence_anchors=anchors),),
+    )
+
+    result = confirm_projection_evidence(
+        projection,
+        (_reference(valid_anchor_id, excerpt_text="年报披露换手率为 120%。"),),
+    )
+
+    assert result.overall_status == "fail"
+    assert result.auditability_score == 0
+    assert result.fact_results[0].auditability_score == 0
+    assert tuple(issue.anchor_id for issue in result.issues) == (dangling_anchor_id,)
+
+
 def test_candidate_or_not_proven_reference_cannot_satisfy_source_support() -> None:
     """验证 candidate-only / not_proven reference 不能满足 E2/E3。
 
@@ -758,6 +829,27 @@ def test_v2_dangling_anchor_fails_missing_evidence_even_with_valid_proof() -> No
     assert any(issue.anchor_id == "missing-anchor" for issue in result.issues)
 
 
+def test_v2_all_dangling_anchor_reports_concrete_anchor_ids() -> None:
+    """验证 V2 全悬挂 anchor 路径也报告具体 anchor ids。"""
+
+    chapter, fact = _chapter_and_fact("structured.turnover_rate")
+    dangling_anchor_ids = ("missing-anchor-a", "missing-anchor-b")
+    dangling_fact = replace(fact, evidence_anchor_ids=dangling_anchor_ids)
+    chapter = replace(chapter, facts=(dangling_fact,), evidence_anchors=())
+
+    result = confirm_chapter_evidence_v2(chapter, ())
+    fact_result = result.fact_results[0]
+    missing_dim = next(d for d in fact_result.dimension_results if d.dimension == "missing_evidence")
+
+    assert result.overall_status == "fail"
+    assert result.auditability_score == 0
+    assert fact_result.status == "fail"
+    assert fact_result.auditability_score == 0
+    assert missing_dim.status == "fail"
+    assert missing_dim.score == 0
+    assert {issue.anchor_id for issue in result.issues} == set(dangling_anchor_ids)
+
+
 def test_v2_derived_not_applicable_produces_hard_gate_not_applicable() -> None:
     """验证 derived/not_applicable fact 产生 hard gate not_applicable。"""
 
@@ -1123,7 +1215,33 @@ def test_v2_aggregate_score_one_blocking_fact_cannot_report_pass_like_score() ->
 
     assert result.overall_status == "fail"
     assert result.auditability_score is not None
-    assert result.auditability_score < 70
+    assert result.auditability_score == 40
+
+
+def test_v2_aggregate_score_e3_blocking_fact_caps_score_at_zero() -> None:
+    """验证 E3 blocking fact 将聚合分数 cap 到 0。"""
+
+    chapter, fact = _chapter_and_fact("structured.turnover_rate")
+    passing_fact = replace(
+        fact,
+        fact_id=f"{fact.fact_id}:pass",
+        source_field_id="structured.aaa_pass_rate",
+    )
+    failing_fact = replace(
+        fact,
+        fact_id=f"{fact.fact_id}:fail",
+        source_field_id="structured.bbb_fail_rate",
+        evidence_anchor_ids=("missing-anchor",),
+    )
+    chapter = replace(chapter, facts=(passing_fact, failing_fact))
+    references = (
+        _reference(fact.evidence_anchor_ids[0], excerpt_text="年报披露换手率为 120%。"),
+    )
+
+    result = confirm_chapter_evidence_v2(chapter, references)
+
+    assert result.overall_status == "fail"
+    assert result.auditability_score == 0
 
 
 def test_v2_aggregate_score_all_passing_uses_uncapped_average() -> None:

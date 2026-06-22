@@ -498,10 +498,11 @@ def _confirm_fact_v2(
         issue = _issue("E3", "blocking", fact, None, "可用 fact 缺少 evidence anchor。")
         return _fact_result_v2_e3_blocking(fact, (issue,)), (issue,)
 
+    dangling_anchor_ids = _dangling_anchor_ids_for_fact(fact, anchors_by_id)
     known_anchors = _known_anchors_for_fact(fact, anchors_by_id)
     if not known_anchors:
-        issue = _issue("E3", "blocking", fact, None, "fact anchor 不存在于当前章节 evidence anchors。")
-        return _fact_result_v2_e3_blocking(fact, (issue,)), (issue,)
+        issues = _dangling_anchor_issues_for_fact(fact, dangling_anchor_ids)
+        return _fact_result_v2_e3_blocking(fact, issues), issues
 
     if not any(anchor.source_kind in _PROOF_SOURCE_KINDS for anchor in known_anchors):
         return _fact_result_v2_not_applicable(fact), ()
@@ -528,7 +529,6 @@ def _confirm_fact_v2(
     dimension_results.append(dim_source)
 
     # 维度 3: missing_evidence
-    dangling_anchor_ids = _dangling_anchor_ids_for_fact(fact, anchors_by_id)
     dim_missing, dim_missing_issues = _dimension_missing_evidence(
         fact, proof_references, dangling_anchor_ids
     )
@@ -1378,10 +1378,26 @@ def _confirm_fact(
         issue = _issue("E3", "blocking", fact, None, "可用 fact 缺少 evidence anchor。")
         return _fact_result(fact, "fail", (), (issue.issue_id,), 0), (issue,)
 
+    dangling_anchor_ids = _dangling_anchor_ids_for_fact(fact, anchors_by_id)
     known_anchors = _known_anchors_for_fact(fact, anchors_by_id)
     if not known_anchors:
-        issue = _issue("E3", "blocking", fact, None, "fact anchor 不存在于当前章节 evidence anchors。")
-        return _fact_result(fact, "fail", (), (issue.issue_id,), 0), (issue,)
+        dangling_issues = _dangling_anchor_issues_for_fact(fact, dangling_anchor_ids)
+        return _fact_result(
+            fact,
+            "fail",
+            (),
+            tuple(issue.issue_id for issue in dangling_issues),
+            0,
+        ), dangling_issues
+    if dangling_anchor_ids:
+        dangling_issues = _dangling_anchor_issues_for_fact(fact, dangling_anchor_ids)
+        return _fact_result(
+            fact,
+            "fail",
+            (),
+            tuple(issue.issue_id for issue in dangling_issues),
+            0,
+        ), dangling_issues
 
     if not any(anchor.source_kind in _PROOF_SOURCE_KINDS for anchor in known_anchors):
         return _fact_result(fact, "not_applicable", (), (), None), ()
@@ -1535,6 +1551,35 @@ def _dangling_anchor_ids_for_fact(
     """
 
     return tuple(anchor_id for anchor_id in fact.evidence_anchor_ids if anchor_id not in anchors_by_id)
+
+
+def _dangling_anchor_issues_for_fact(
+    fact: ChapterFactEntry,
+    dangling_anchor_ids: tuple[str, ...],
+) -> tuple[EvidenceConfirmIssue, ...]:
+    """构造 fact 悬挂 anchor 的 E3 blocking issues。
+
+    Args:
+        fact: 章节事实。
+        dangling_anchor_ids: fact 声明但当前章节不存在的 anchor ids。
+
+    Returns:
+        每个悬挂 anchor 对应一个 E3 blocking issue。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return tuple(
+        _issue(
+            "E3",
+            "blocking",
+            fact,
+            anchor_id,
+            "missing_evidence fact anchor 不存在于当前章节 evidence anchors。",
+        )
+        for anchor_id in dangling_anchor_ids
+    )
 
 
 def _reference_is_proof(
