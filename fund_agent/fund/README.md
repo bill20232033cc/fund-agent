@@ -230,7 +230,7 @@ Source-truth direct extraction 在该 Processor/Extractor 边界内增加了 `Fu
 - per-claim `status` 使用 `entailed / contradicted / insufficient / not_applicable` 表示语义支持；aggregate `overall_status` 使用 `pass / warn / fail / not_applicable` 表示 gate 状态
 - deterministic V2 是前置硬门控：`source_support`、`missing_evidence`、`proof_boundary` 不通过或 `value_match` 失败时不调用 semantic client；semantic output 不能覆盖缺证、candidate-only、not_proven、定位不匹配或数值不匹配
 - `anchor_precision` warning 下可以运行 semantic client，但 entailed 结果仍保持 aggregate `warn`
-- malformed client result 和 client exception 都 fail-closed；异常详情不写入结果
+- malformed client result、client status/reason 不兼容和 client exception 都 fail-closed；异常详情不写入结果
 - 该能力不构造真实 provider/LLM client，不读取文档仓库、PDF/cache/source helper、Service、Host、renderer、quality gate、文件系统、环境变量或 dayu；provider/live semantic evidence、Service/UI/renderer/quality-gate 集成、default-on 策略和 release/readiness 仍需后续 gate
 
 `fund_agent/fund/evidence_confirm_sources.py` 当前提供 no-live `ParsedAnnualReport` 年报引用 materializer：

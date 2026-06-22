@@ -42,6 +42,12 @@ EvidenceSemanticReasonCode: TypeAlias = Literal[
 
 _SEMANTIC_STATUSES: Final[frozenset[str]] = frozenset(get_args(EvidenceSemanticStatus))
 _SEMANTIC_REASON_CODES: Final[frozenset[str]] = frozenset(get_args(EvidenceSemanticReasonCode))
+_CLIENT_REASON_CODES_BY_STATUS: Final[dict[str, frozenset[str]]] = {
+    "entailed": frozenset(("entailed_by_excerpt",)),
+    "contradicted": frozenset(("contradicted_by_excerpt",)),
+    "insufficient": frozenset(("insufficient_excerpt_support",)),
+    "not_applicable": frozenset(("not_applicable",)),
+}
 _DETERMINISTIC_PREREQUISITE_DIMENSIONS: Final[tuple[str, ...]] = (
     "source_support",
     "missing_evidence",
@@ -412,23 +418,25 @@ def _bounded_excerpts_for_claim(
 
 
 def _judgment_is_valid(judgment: object) -> bool:
-    """校验 semantic client 判断结果是否落入闭集。
+    """校验 semantic client 判断结果是否落入闭集且语义兼容。
 
     Args:
         judgment: client 返回对象。
 
     Returns:
-        判断结果满足闭集契约时返回 ``True``。
+        判断结果满足闭集和 status/reason 兼容契约时返回 ``True``。
 
     Raises:
         无显式抛出。
     """
 
-    return (
+    if not (
         isinstance(judgment, EvidenceEntailmentJudgment)
         and judgment.status in _SEMANTIC_STATUSES
         and judgment.reason_code in _SEMANTIC_REASON_CODES
-    )
+    ):
+        return False
+    return judgment.reason_code in _CLIENT_REASON_CODES_BY_STATUS[judgment.status]
 
 
 def _severity_for_judgment(

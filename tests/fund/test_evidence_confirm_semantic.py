@@ -303,6 +303,68 @@ def test_semantic_malformed_client_result_fails_closed() -> None:
     assert len(client.requests) == 1
 
 
+def test_semantic_incompatible_client_status_reason_pair_fails_closed() -> None:
+    """验证 client 返回自相矛盾 status/reason 时 fail-closed。"""
+
+    chapter, fact = _chapter_and_fact("structured.turnover_rate")
+    references = (_reference(fact.evidence_anchor_ids[0], excerpt_text="年报披露换手率为 120%。"),)
+    evidence_result = confirm_chapter_evidence_v2(chapter, references)
+    client = _FakeEntailmentClient(
+        EvidenceEntailmentJudgment(
+            status="entailed",
+            reason_code="contradicted_by_excerpt",
+        )
+    )
+
+    result = confirm_semantic_entailment(
+        evidence_result=evidence_result,
+        references=references,
+        claims=(_claim(fact, "换手率披露为 120%。"),),
+        client=client,
+    )
+
+    assert result.overall_status == "fail"
+    assert result.claim_results[0].status == "insufficient"
+    assert result.claim_results[0].severity == "block"
+    assert result.claim_results[0].reason_code == "malformed_client_result"
+    assert len(client.requests) == 1
+
+
+def test_semantic_valid_client_status_reason_pairs_remain_accepted() -> None:
+    """验证合法 client status/reason pair 不被兼容性校验误杀。"""
+
+    chapter, fact = _chapter_and_fact("structured.turnover_rate")
+    references = (_reference(fact.evidence_anchor_ids[0], excerpt_text="年报披露换手率为 120%。"),)
+    evidence_result = confirm_chapter_evidence_v2(chapter, references)
+    scenarios = (
+        ("entailed", "entailed_by_excerpt", "pass", "info"),
+        ("contradicted", "contradicted_by_excerpt", "fail", "block"),
+        ("insufficient", "insufficient_excerpt_support", "warn", "warn"),
+        ("not_applicable", "not_applicable", "not_applicable", "info"),
+    )
+
+    for status, reason_code, overall_status, severity in scenarios:
+        client = _FakeEntailmentClient(
+            EvidenceEntailmentJudgment(
+                status=status,  # type: ignore[arg-type]
+                reason_code=reason_code,  # type: ignore[arg-type]
+            )
+        )
+
+        result = confirm_semantic_entailment(
+            evidence_result=evidence_result,
+            references=references,
+            claims=(_claim(fact, "换手率披露为 120%。"),),
+            client=client,
+        )
+
+        assert result.overall_status == overall_status
+        assert result.claim_results[0].status == status
+        assert result.claim_results[0].severity == severity
+        assert result.claim_results[0].reason_code == reason_code
+        assert len(client.requests) == 1
+
+
 def test_semantic_client_exception_fails_closed_without_exception_message() -> None:
     """验证 client 异常 fail-closed 且不泄漏异常详情。"""
 
