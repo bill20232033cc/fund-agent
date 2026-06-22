@@ -73,6 +73,7 @@ class QualityGateIssue:
         total_records: strict golden answer 有效记录数。
         missing_fund_codes: 缺少 correctness 覆盖的基金代码。
         covered_fund_codes: 已有可比 correctness 覆盖的基金代码。
+        issue_id: 稳定 issue id；ECQ 等外部投影 issue 使用。
     """
 
     rule_code: str
@@ -100,6 +101,7 @@ class QualityGateIssue:
     total_records: int | None = None
     missing_fund_codes: tuple[str, ...] = ()
     covered_fund_codes: tuple[str, ...] = ()
+    issue_id: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -205,6 +207,47 @@ def run_quality_gate(
     )
     result.gate_markdown_path.write_text(_markdown_payload(result), encoding="utf-8")
     return result
+
+
+def merge_quality_gate_issues(
+    result: QualityGateResult,
+    additional_issues: tuple[QualityGateIssue, ...],
+) -> QualityGateResult:
+    """合并额外 quality gate issues 并重写输出产物。
+
+    该 helper 用于 Evidence Confirm ECQ 投影等非 score.json 来源的质量 issue。
+    它不修改 score.json，也不重新运行 extraction score，只复用现有 gate JSON/Markdown
+    路径并按既有 `_aggregate_gate_status()` 语义重算状态。
+
+    Args:
+        result: 已由 `run_quality_gate()` 生成的基础结果。
+        additional_issues: 需要追加的 issue 列表。
+
+    Returns:
+        已合并并写回 JSON/Markdown 的 gate 结果。
+
+    Raises:
+        OSError: 输出文件写入失败时抛出。
+    """
+
+    if not additional_issues:
+        return result
+    issues = result.issues + additional_issues
+    merged = QualityGateResult(
+        score_path=result.score_path,
+        output_dir=result.output_dir,
+        gate_json_path=result.gate_json_path,
+        gate_markdown_path=result.gate_markdown_path,
+        status=_aggregate_gate_status(issues),
+        issues=issues,
+        rule_results=result.rule_results,
+    )
+    merged.gate_json_path.write_text(
+        json.dumps(_json_payload(merged), ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    merged.gate_markdown_path.write_text(_markdown_payload(merged), encoding="utf-8")
+    return merged
 
 
 def _load_score_payload(score_path: Path) -> dict[str, object]:

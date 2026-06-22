@@ -21,7 +21,16 @@ from fund_agent.fund.extraction_snapshot import (
     load_selected_funds,
     validate_selected_fund_pool,
 )
-from fund_agent.fund.quality_gate import QualityGateResult, run_quality_gate
+from fund_agent.fund.evidence_confirm_production import EvidenceConfirmProductionSummary
+from fund_agent.fund.quality_gate import (
+    SEVERITY_BLOCK,
+    SEVERITY_INFO,
+    SEVERITY_WARN,
+    QualityGateIssue,
+    QualityGateResult,
+    merge_quality_gate_issues,
+    run_quality_gate,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -52,6 +61,7 @@ def run_quality_gate_for_bundle(
     output_dir: Path | None,
     run_id: str,
     golden_answer_path: Path | None,
+    evidence_confirm_summary: EvidenceConfirmProductionSummary | None = None,
 ) -> BundleQualityGateResult:
     """对已抽取的单基金结构化数据运行质量 gate。
 
@@ -61,6 +71,8 @@ def run_quality_gate_for_bundle(
         output_dir: 显式输出目录；为空时使用 `reports/quality-gate-runs/<run_id>`。
         run_id: 本次运行 ID，必须由调用方显式传入。
         golden_answer_path: strict golden answer JSON 路径；为空时 correctness 标记为 unavailable。
+        evidence_confirm_summary: 可选 Evidence Confirm 生产摘要；为空时保持既有行为，
+            不向 quality gate 追加 ECQ issue。
 
     Returns:
         单基金 quality gate 集成结果。当前基金不在精选池或 CSV 不可用时，返回
@@ -113,6 +125,13 @@ def run_quality_gate_for_bundle(
         score_path=score_result.score_json_path,
         output_dir=resolved_output_dir,
     )
+    if evidence_confirm_summary is not None:
+        ecq_issues = _evidence_confirm_quality_gate_issues(
+            evidence_confirm_summary,
+            fund_code=bundle.fund_code,
+            report_year=bundle.report_year,
+        )
+        gate_result = merge_quality_gate_issues(gate_result, ecq_issues)
     return BundleQualityGateResult(
         run_id=run_id,
         output_dir=resolved_output_dir,
@@ -149,6 +168,156 @@ def check_quality_gate_fund_membership(
         fund_code=fund_code,
     )
     return not_run_reason
+
+
+def _evidence_confirm_quality_gate_issues(
+    summary: EvidenceConfirmProductionSummary | None,
+    *,
+    fund_code: str,
+    report_year: int,
+) -> tuple[QualityGateIssue, ...]:
+    """把 Evidence Confirm 摘要投影为 ECQ quality gate issue。
+
+    该函数只消费调用方传入的 compact summary，不读取 repository、PDF/cache、
+    source adapter、parser、Docling、provider 或 LLM。见模板第 0-7 章 Evidence
+    Confirm 证据复核路径。
+
+    Args:
+        summary: Evidence Confirm 生产摘要；显式传入 `None` 时生成 ECQ0/info。
+        fund_code: 基金代码，用于 summary absent 时生成稳定 issue id。
+        report_year: 年报年份，用于 summary absent 时生成稳定 issue id。
+
+    Returns:
+        ECQ issue 列表。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if summary is None:
+        return (
+            _ecq_issue(
+                rule_code="ECQ0",
+                severity=SEVERITY_INFO,
+                fund_code=fund_code,
+                report_year=report_year,
+                reason="not_requested",
+                message="Evidence Confirm 未请求；quality gate 仅记录显式可见性信息。",
+            ),
+        )
+    if summary.status == "not_run":
+        return (
+            _ecq_issue(
+                rule_code="ECQ0",
+                severity=SEVERITY_INFO,
+                fund_code=summary.fund_code,
+                report_year=summary.report_year,
+                reason=summary.not_run_reason or "not_requested",
+                message="Evidence Confirm 未运行。",
+            ),
+        )
+    if summary.pathway_status == "fail":
+        reason = summary.not_run_reason or "repository_failure:unknown"
+        return (
+            _ecq_issue(
+                rule_code="ECQ1",
+                severity=_ecq_policy_severity(summary),
+                fund_code=summary.fund_code,
+                report_year=summary.report_year,
+                reason=reason,
+                message="Evidence Confirm repository/source/reference 通路失败。",
+            ),
+        )
+    if summary.deterministic_status == "fail":
+        reason = f"deterministic_fail_{len(summary.blocking_issue_ids)}"
+        return (
+            _ecq_issue(
+                rule_code="ECQ2",
+                severity=_ecq_policy_severity(summary),
+                fund_code=summary.fund_code,
+                report_year=summary.report_year,
+                reason=reason,
+                message=(
+                    "Evidence Confirm V2 hard-gate fail；"
+                    f"blocking_issue_count={len(summary.blocking_issue_ids)}。"
+                ),
+            ),
+        )
+    if summary.deterministic_status == "warn":
+        reason = f"deterministic_warn_{len(summary.warning_issue_ids)}"
+        return (
+            _ecq_issue(
+                rule_code="ECQ3",
+                severity=SEVERITY_WARN,
+                fund_code=summary.fund_code,
+                report_year=summary.report_year,
+                reason=reason,
+                message=(
+                    "Evidence Confirm V2 存在可复核 warning；"
+                    f"warning_issue_count={len(summary.warning_issue_ids)}。"
+                ),
+            ),
+        )
+    return ()
+
+
+def _ecq_policy_severity(summary: EvidenceConfirmProductionSummary) -> str:
+    """按 Evidence Confirm policy 决定 ECQ fail severity。
+
+    Args:
+        summary: Evidence Confirm 生产摘要。
+
+    Returns:
+        `block` 或 `warn`。
+
+    Raises:
+        ValueError: `policy="off"` 的 fail/warn 摘要进入 ECQ fail 映射时抛出。
+    """
+
+    if summary.policy == "block":
+        return SEVERITY_BLOCK
+    if summary.policy == "off":
+        raise ValueError("policy='off' 的 Evidence Confirm fail/warn 摘要不能投影为 ECQ warn")
+    return SEVERITY_WARN
+
+
+def _ecq_issue(
+    *,
+    rule_code: str,
+    severity: str,
+    fund_code: str,
+    report_year: int,
+    reason: str,
+    message: str,
+) -> QualityGateIssue:
+    """构造稳定 ECQ issue。
+
+    Args:
+        rule_code: ECQ 规则码。
+        severity: issue 严重级别。
+        fund_code: 基金代码。
+        report_year: 年报年份。
+        reason: 稳定原因码。
+        message: 人类可读说明。
+
+    Returns:
+        QualityGateIssue。
+
+    Raises:
+        无显式抛出。
+    """
+
+    issue_id = f"evidence-confirm:{fund_code}:{report_year}:{rule_code}:{reason}"
+    return QualityGateIssue(
+        rule_code=rule_code,
+        severity=severity,
+        fund_code=fund_code,
+        field_name=None,
+        priority=None,
+        message=message,
+        reason=reason,
+        issue_id=issue_id,
+    )
 
 
 def _selected_fund_for_bundle(
