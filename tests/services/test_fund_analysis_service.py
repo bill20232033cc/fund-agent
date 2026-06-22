@@ -6,10 +6,12 @@ from dataclasses import replace
 from decimal import Decimal
 from pathlib import Path
 from time import perf_counter
+from types import SimpleNamespace
 from typing import Literal
 
 import pytest
 
+import fund_agent.services.fund_analysis_service as fund_analysis_service_module
 from fund_agent.fund.analysis.thermometer_calculator import ThermometerCalculationError
 from fund_agent.fund.data.nav_data import NavDataResult
 from fund_agent.fund.data.thermometer import ThermometerSnapshot
@@ -37,6 +39,7 @@ from fund_agent.fund.extractors.models import (
     IndexProfileValue,
     TrackingErrorValue,
 )
+from fund_agent.fund.quality_gate import QualityGateResult
 from fund_agent.services import (
     FundAnalysisDeveloperOverrides,
     FundAnalysisRequest,
@@ -414,6 +417,80 @@ class _FakeAnnualEvidenceLoader:
         )
 
 
+class _FakeQualityGateForBundle:
+    """Service product-mode 测试用 fake quality gate runner。"""
+
+    def __init__(self) -> None:
+        """初始化 fake quality gate runner。
+
+        Args:
+            无。
+
+        Returns:
+            无返回值。
+
+        Raises:
+            无显式抛出。
+        """
+
+        self.calls: list[dict[str, object]] = []
+
+    def __call__(
+        self,
+        *,
+        bundle: StructuredFundDataBundle,
+        source_csv: Path,
+        output_dir: Path | None,
+        run_id: str,
+        golden_answer_path: Path | None,
+        evidence_confirm_summary: object | None = None,
+    ) -> SimpleNamespace:
+        """记录 Service 传入的 quality gate 参数并返回内存结果。
+
+        Args:
+            bundle: 已抽取的结构化基金数据包。
+            source_csv: 精选基金池 CSV 路径。
+            output_dir: 显式输出目录。
+            run_id: quality gate 运行 ID。
+            golden_answer_path: strict golden answer 路径。
+            evidence_confirm_summary: Service 传入的 EC 安全摘要。
+
+        Returns:
+            兼容 `BundleQualityGateResult` 的内存对象。
+
+        Raises:
+            无显式抛出。
+        """
+
+        self.calls.append(
+            {
+                "bundle": bundle,
+                "source_csv": source_csv,
+                "output_dir": output_dir,
+                "run_id": run_id,
+                "golden_answer_path": golden_answer_path,
+                "evidence_confirm_summary": evidence_confirm_summary,
+            }
+        )
+        status = (
+            "warn"
+            if getattr(evidence_confirm_summary, "status", None) == "fail"
+            else "pass"
+        )
+        resolved_output_dir = output_dir or Path("fake-quality-gate") / run_id
+        return SimpleNamespace(
+            quality_gate_result=QualityGateResult(
+                score_path=resolved_output_dir / "score.json",
+                output_dir=resolved_output_dir,
+                gate_json_path=resolved_output_dir / "quality_gate.json",
+                gate_markdown_path=resolved_output_dir / "quality_gate.md",
+                status=status,
+                issues=(),
+            ),
+            not_run_reason=None,
+        )
+
+
 class _FakeThermometerService:
     """Service 测试用 fake 自建温度计。"""
 
@@ -622,6 +699,221 @@ async def test_fund_analysis_service_checklist_returns_shared_core_without_rende
     }
     assert result.quality_gate_result is None
     assert result.quality_gate_not_run_reason == "policy=off"
+
+
+@pytest.mark.asyncio
+async def test_fund_analysis_service_product_analyze_default_warn_calls_evidence_confirm(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """验证 product analyze 默认以 warn 策略运行 Evidence Confirm。
+
+    Args:
+        monkeypatch: pytest monkeypatch fixture，用于阻断真实 quality gate 文件写入。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: runner 未调用或默认策略不是 warn 时抛出。
+    """
+
+    quality_gate_runner = _FakeQualityGateForBundle()
+    monkeypatch.setattr(
+        fund_analysis_service_module,
+        "run_quality_gate_for_bundle",
+        quality_gate_runner,
+    )
+    extractor = _FakeExtractor(_bundle())
+    evidence_runner = _FakeEvidenceConfirmRunner(
+        _repository_run_result("pass", fund_code="004393")
+    )
+    service = FundAnalysisService(
+        extractor=extractor,
+        evidence_confirm_runner=evidence_runner,
+    )
+
+    result = await service.analyze(
+        FundAnalysisRequest(
+            fund_code=" 004393 ",
+            valuation_state="low",
+            force_refresh=True,
+        )
+    )
+
+    assert extractor.calls == [("004393", 2024, True)]
+    assert len(evidence_runner.calls) == 1
+    runner_request = evidence_runner.calls[0]
+    assert runner_request.fund_code == "004393"
+    assert runner_request.report_year == 2024
+    assert runner_request.projection is not None
+    assert runner_request.force_refresh is True
+    assert result.evidence_confirm_summary is not None
+    assert result.evidence_confirm_summary.policy == "warn"
+    assert result.evidence_confirm_summary.status == "pass"
+    assert quality_gate_runner.calls[0]["evidence_confirm_summary"] is result.evidence_confirm_summary
+    assert result.report_markdown
+
+
+@pytest.mark.asyncio
+async def test_fund_analysis_service_product_analyze_default_warn_fail_is_non_blocking(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """验证 product 默认 warn 下 EC fail 不抛 EvidenceConfirmBlockedError。
+
+    Args:
+        monkeypatch: pytest monkeypatch fixture，用于阻断真实 quality gate 文件写入。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: fail 摘要丢失或 warn 策略被误阻断时抛出。
+    """
+
+    quality_gate_runner = _FakeQualityGateForBundle()
+    monkeypatch.setattr(
+        fund_analysis_service_module,
+        "run_quality_gate_for_bundle",
+        quality_gate_runner,
+    )
+    evidence_runner = _FakeEvidenceConfirmRunner(
+        _repository_run_result("fail", fund_code="004393")
+    )
+    service = FundAnalysisService(
+        extractor=_FakeExtractor(_bundle()),
+        evidence_confirm_runner=evidence_runner,
+    )
+
+    result = await service.analyze(
+        FundAnalysisRequest(fund_code="004393", valuation_state="low")
+    )
+
+    assert len(evidence_runner.calls) == 1
+    assert result.evidence_confirm_summary is not None
+    assert result.evidence_confirm_summary.policy == "warn"
+    assert result.evidence_confirm_summary.status == "fail"
+    assert result.quality_gate_result is not None
+    assert result.quality_gate_result.status == "warn"
+    assert result.report_markdown
+
+
+@pytest.mark.asyncio
+async def test_fund_analysis_service_product_analyze_runner_exception_is_safe_summary(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """验证 product 默认 warn 下 runner 异常转换为安全摘要。
+
+    Args:
+        monkeypatch: pytest monkeypatch fixture，用于阻断真实 quality gate 文件写入。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 异常传播、策略错误或摘要泄漏底层细节时抛出。
+    """
+
+    quality_gate_runner = _FakeQualityGateForBundle()
+    monkeypatch.setattr(
+        fund_analysis_service_module,
+        "run_quality_gate_for_bundle",
+        quality_gate_runner,
+    )
+    evidence_runner = _FakeEvidenceConfirmRunner(
+        RuntimeError("boom /tmp/raw.pdf parser_payload provider_secret excerpt")
+    )
+    service = FundAnalysisService(
+        extractor=_FakeExtractor(_bundle()),
+        evidence_confirm_runner=evidence_runner,
+    )
+
+    result = await service.analyze(
+        FundAnalysisRequest(fund_code="004393", valuation_state="low")
+    )
+
+    assert len(evidence_runner.calls) == 1
+    assert result.evidence_confirm_summary is not None
+    assert result.evidence_confirm_summary.policy == "warn"
+    assert result.evidence_confirm_summary.status == "fail"
+    assert result.evidence_confirm_summary.not_run_reason == (
+        "runner_exception:RuntimeError"
+    )
+    summary_text = repr(result.evidence_confirm_summary)
+    assert "boom" not in summary_text
+    assert "/tmp/raw.pdf" not in summary_text
+    assert "parser_payload" not in summary_text
+    assert "provider_secret" not in summary_text
+    assert "excerpt" not in summary_text
+    assert result.report_markdown
+
+
+@pytest.mark.asyncio
+async def test_fund_analysis_service_product_checklist_default_keeps_evidence_confirm_off(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """验证 product checklist 默认仍不运行 Evidence Confirm。
+
+    Args:
+        monkeypatch: pytest monkeypatch fixture，用于阻断真实 quality gate 文件写入。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: checklist 默认调用 EC runner 或返回 EC 摘要时抛出。
+    """
+
+    quality_gate_runner = _FakeQualityGateForBundle()
+    monkeypatch.setattr(
+        fund_analysis_service_module,
+        "run_quality_gate_for_bundle",
+        quality_gate_runner,
+    )
+    evidence_runner = _FakeEvidenceConfirmRunner(
+        _repository_run_result("pass", fund_code="004393")
+    )
+    service = FundAnalysisService(
+        extractor=_FakeExtractor(_bundle()),
+        evidence_confirm_runner=evidence_runner,
+    )
+
+    result = await service.checklist(
+        FundAnalysisRequest(fund_code="004393", valuation_state="low")
+    )
+
+    assert evidence_runner.calls == []
+    assert result.evidence_confirm_summary is None
+    assert quality_gate_runner.calls[0]["evidence_confirm_summary"] is None
+
+
+@pytest.mark.asyncio
+async def test_fund_analysis_service_developer_default_and_explicit_off_do_not_inherit_warn() -> None:
+    """验证 developer mode 省略或显式 off 时不会继承 product warn。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: developer off/default 调用了 EC runner 时抛出。
+    """
+
+    evidence_runner = _FakeEvidenceConfirmRunner(_repository_run_result("pass"))
+    service = FundAnalysisService(
+        extractor=_FakeExtractor(_bundle()),
+        evidence_confirm_runner=evidence_runner,
+    )
+
+    default_result = await service.analyze(_developer_request(quality_gate_policy="off"))
+    explicit_off_result = await service.analyze(
+        _developer_request(quality_gate_policy="off", evidence_confirm_policy="off")
+    )
+
+    assert evidence_runner.calls == []
+    assert default_result.evidence_confirm_summary is None
+    assert explicit_off_result.evidence_confirm_summary is None
 
 
 @pytest.mark.asyncio
@@ -1836,6 +2128,60 @@ async def test_multi_year_annual_analysis_maps_service_request_to_fund_scope() -
     assert "# 多年年报分析（2021-2025）" in result.annual_period_report.report_markdown
     assert "quality_gate_status=not_available" in result.annual_period_report.report_markdown
     assert "impact_status=insufficient_evidence" in result.annual_period_report.report_markdown
+
+
+@pytest.mark.asyncio
+async def test_multi_year_annual_analysis_product_default_inherits_evidence_confirm_warn(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """验证 product analyze-annual-period 经 analyze 路径继承 EC warn 默认值。
+
+    Args:
+        monkeypatch: pytest monkeypatch fixture，用于阻断真实 quality gate 文件写入。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 多年年报产品路径未调用 EC runner 或策略不是 warn 时抛出。
+    """
+
+    quality_gate_runner = _FakeQualityGateForBundle()
+    monkeypatch.setattr(
+        fund_analysis_service_module,
+        "run_quality_gate_for_bundle",
+        quality_gate_runner,
+    )
+    annual_loader = _FakeAnnualEvidenceLoader()
+    evidence_runner = _FakeEvidenceConfirmRunner(
+        _repository_run_result("pass", fund_code="004393", report_year=2025)
+    )
+    service = FundAnalysisService(
+        extractor=_FakeExtractor(_bundle()),
+        annual_evidence_loader=annual_loader,
+        evidence_confirm_runner=evidence_runner,
+    )
+
+    result = await service.analyze_multi_year_annual(
+        MultiYearAnnualAnalysisRequest(
+            fund_code="004393",
+            target_year=2025,
+            start_year=2023,
+            valuation_state="unavailable",
+        )
+    )
+
+    assert len(evidence_runner.calls) == 1
+    runner_request = evidence_runner.calls[0]
+    assert runner_request.fund_code == "004393"
+    assert runner_request.report_year == 2025
+    assert result.current_year_result.evidence_confirm_summary is not None
+    assert result.current_year_result.evidence_confirm_summary.policy == "warn"
+    assert result.current_year_result.evidence_confirm_summary.status == "pass"
+    assert len(annual_loader.calls) == 1
+    assert quality_gate_runner.calls[0]["evidence_confirm_summary"] is (
+        result.current_year_result.evidence_confirm_summary
+    )
 
 
 def _repository_run_result(

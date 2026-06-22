@@ -224,6 +224,7 @@ class FundAnalysisDeveloperOverrides:
         quality_gate_run_id: quality gate 运行 ID；为空时 Service 生成唯一 ID。
         quality_gate_golden_answer_path: strict golden answer JSON 路径。
         evidence_confirm_policy: Evidence Confirm 生产集成策略；只在 developer override mode 生效。
+            省略时 developer mode 固定为 `off`，不会继承 product 默认 `warn`。
     """
 
     equity_position: Decimal | str | int | float | None = None
@@ -1310,10 +1311,12 @@ class FundAnalysisService:
         policy: EvidenceConfirmProductionPolicy,
         force_refresh: bool,
     ) -> EvidenceConfirmProductionSummary | None:
-        """按 developer override 策略运行 Evidence Confirm。
+        """按有效解析策略运行 Evidence Confirm。
 
         该方法只从已抽取的结构化数据投影章节事实，然后调用注入的 Fund 层 runner；
-        Service 不读取原文引用、不解析 parser 产物，也不管理底层来源。
+        Service 不读取原文引用、不解析 parser 产物，也不管理底层来源。product
+        `analyze` 和继承该路径的 `analyze-annual-period` 可默认使用 `warn`；
+        `checklist` 的有效策略仍固定为 `off`。
 
         Args:
             structured_data: 已抽取的结构化基金数据包。
@@ -1584,7 +1587,7 @@ def _resolve_analyze_contract(request: FundAnalysisRequest) -> ResolvedAnalyzeCo
             quality_gate_output_dir=None,
             quality_gate_run_id=None,
             quality_gate_golden_answer_path=DEFAULT_GOLDEN_ANSWER_PATH,
-            evidence_confirm_policy="off",
+            evidence_confirm_policy="warn",
         )
     overrides = request.developer_overrides or FundAnalysisDeveloperOverrides()
     return ResolvedAnalyzeContract(
@@ -1662,8 +1665,9 @@ def _effective_evidence_confirm_policy(
 ) -> EvidenceConfirmProductionPolicy:
     """解析当前入口实际生效的 Evidence Confirm 策略。
 
-    Slice 2 只开放 `analyze()` developer override opt-in；`checklist()` 在本 slice
-    固定为 `off`，避免在没有 CLI/UX gate 的情况下暗中运行 Evidence Confirm。
+    `checklist()` 在本 slice 固定为 `off`，避免在没有 CLI/UX gate 的情况下暗中
+    运行 Evidence Confirm；`analyze` 使用解析后的契约策略，包含 product 默认
+    `warn` 和 developer override 显式策略。
 
     Args:
         resolved_contract: 已解析的 Service 契约。
