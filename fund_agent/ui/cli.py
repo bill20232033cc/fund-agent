@@ -60,6 +60,7 @@ from fund_agent.services import (
     FundLLMAnalysisResult,
     FundLLMHostedRunResult,
 )
+from fund_agent.services.fund_analysis_service import EvidenceConfirmBlockedError
 from fund_agent.services.llm_run_artifacts import (
     LLMRunArtifactWriteResult,
     write_llm_incomplete_run_artifacts,
@@ -743,6 +744,13 @@ def analyze(
             "--quality-gate-golden-answer-path", help="开发覆盖：strict golden answer JSON 路径"
         ),
     ] = None,
+    evidence_confirm_policy: Annotated[
+        str,
+        typer.Option(
+            "--evidence-confirm-policy",
+            help="开发覆盖：Evidence Confirm 策略 off/warn/block；opt-in，不代表 readiness",
+        ),
+    ] = "off",
     use_llm: Annotated[
         bool,
         typer.Option("--use-llm", help="显式启用 Route C LLM 分章写作路径"),
@@ -781,6 +789,7 @@ def analyze(
         quality_gate_output_dir: 质量 gate 输出目录。
         quality_gate_run_id: 质量 gate 运行 ID。
         quality_gate_golden_answer_path: strict golden answer JSON 路径。
+        evidence_confirm_policy: Evidence Confirm 开发覆盖策略。
         use_llm: 是否显式启用 Route C LLM 分章写作路径。
         llm_progress: 是否为 `--use-llm` 启用安全 stderr progress；`None` 表示自动。
 
@@ -808,6 +817,7 @@ def analyze(
             quality_gate_output_dir=quality_gate_output_dir,
             quality_gate_run_id=quality_gate_run_id,
             quality_gate_golden_answer_path=quality_gate_golden_answer_path,
+            evidence_confirm_policy=evidence_confirm_policy,
         )
     except typer.BadParameter as exc:
         typer.echo(str(exc), err=True)
@@ -876,6 +886,9 @@ def analyze(
     except QualityGateBlockedError as exc:
         _echo_quality_gate_blocked(exc)
         raise typer.Exit(code=2) from exc
+    except EvidenceConfirmBlockedError as exc:
+        _echo_evidence_confirm_blocked(exc)
+        raise typer.Exit(code=2) from exc
     except typer.Exit:
         raise
     except Exception as exc:
@@ -886,6 +899,7 @@ def analyze(
         typer.echo(_llm_incomplete_message(result), err=True)
         raise typer.Exit(code=1)
     _echo_quality_gate_summary(result)
+    _echo_evidence_confirm_summary(result)
     typer.echo(result.report_markdown, nl=False)
 
 
@@ -2096,6 +2110,27 @@ def _quality_gate_policy(value: str):
     return value
 
 
+def _evidence_confirm_policy(value: str):
+    """校验 Evidence Confirm 策略。
+
+    Args:
+        value: CLI 输入的策略。
+
+    Returns:
+        合法 Evidence Confirm 策略。
+
+    Raises:
+        typer.BadParameter: 当取值不在允许集合内时抛出。
+    """
+
+    allowed = {"off", "warn", "block"}
+    if value not in allowed:
+        raise typer.BadParameter(
+            f"evidence_confirm_policy 必须是 {', '.join(sorted(allowed))}"
+        )
+    return value
+
+
 def _has_developer_override_options(
     *,
     equity_position: str | None,
@@ -2112,6 +2147,7 @@ def _has_developer_override_options(
     quality_gate_output_dir: Path | None,
     quality_gate_run_id: str | None,
     quality_gate_golden_answer_path: Path | None,
+    evidence_confirm_policy: str,
 ) -> tuple[str, ...]:
     """识别 CLI 中出现的开发覆盖参数。
 
@@ -2130,6 +2166,7 @@ def _has_developer_override_options(
         quality_gate_output_dir: quality gate 输出目录。
         quality_gate_run_id: quality gate 运行 ID。
         quality_gate_golden_answer_path: strict golden answer JSON 路径。
+        evidence_confirm_policy: Evidence Confirm 策略。
 
     Returns:
         已传入的开发覆盖参数名。
@@ -2167,6 +2204,8 @@ def _has_developer_override_options(
         provided.append("--quality-gate-run-id")
     if quality_gate_golden_answer_path is not None:
         provided.append("--quality-gate-golden-answer-path")
+    if evidence_confirm_policy != "off":
+        provided.append("--evidence-confirm-policy")
     return tuple(provided)
 
 
@@ -2187,6 +2226,7 @@ def _build_developer_overrides(
     quality_gate_output_dir: Path | None,
     quality_gate_run_id: str | None,
     quality_gate_golden_answer_path: Path | None,
+    evidence_confirm_policy: str,
 ) -> FundAnalysisDeveloperOverrides | None:
     """构造 nested developer override 契约。
 
@@ -2206,6 +2246,7 @@ def _build_developer_overrides(
         quality_gate_output_dir: quality gate 输出目录。
         quality_gate_run_id: quality gate 运行 ID。
         quality_gate_golden_answer_path: strict golden answer JSON 路径。
+        evidence_confirm_policy: Evidence Confirm 策略。
 
     Returns:
         开发覆盖对象；product mode 返回 `None`。
@@ -2229,6 +2270,7 @@ def _build_developer_overrides(
         quality_gate_output_dir=quality_gate_output_dir,
         quality_gate_run_id=quality_gate_run_id,
         quality_gate_golden_answer_path=quality_gate_golden_answer_path,
+        evidence_confirm_policy=evidence_confirm_policy,
     )
     if provided_options and not dev_override:
         raise typer.BadParameter(
@@ -2255,6 +2297,7 @@ def _build_developer_overrides(
         quality_gate_output_dir=quality_gate_output_dir,
         quality_gate_run_id=quality_gate_run_id,
         quality_gate_golden_answer_path=quality_gate_golden_answer_path,
+        evidence_confirm_policy=_evidence_confirm_policy(evidence_confirm_policy),
     )
 
 
@@ -2552,6 +2595,23 @@ def _echo_quality_gate_not_run_blocked(error: QualityGateNotRunBlockedError) -> 
     typer.echo(f"quality_gate_not_run_reason: {error.reason}", err=True)
 
 
+def _echo_evidence_confirm_blocked(error: EvidenceConfirmBlockedError) -> None:
+    """输出 Evidence Confirm 阻断信息。
+
+    Args:
+        error: Service 抛出的 Evidence Confirm 阻断异常。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        无显式抛出。
+    """
+
+    typer.echo("Evidence Confirm 阻断报告输出", err=True)
+    _echo_evidence_confirm_summary(error, summary_attr="evidence_confirm_summary")
+
+
 def _echo_quality_gate_summary(result) -> None:  # type: ignore[no-untyped-def]
     """把 quality gate 摘要写入 stderr。
 
@@ -2576,6 +2636,36 @@ def _echo_quality_gate_summary(result) -> None:  # type: ignore[no-untyped-def]
         return
     if result.quality_gate_not_run_reason:
         typer.echo(f"quality gate not run: {result.quality_gate_not_run_reason}", err=True)
+
+
+def _echo_evidence_confirm_summary(
+    result,
+    *,
+    summary_attr: str = "evidence_confirm_summary",
+) -> None:  # type: ignore[no-untyped-def]
+    """把 Evidence Confirm 安全摘要写入 stderr。
+
+    Args:
+        result: Service 返回值或结构化异常。
+        summary_attr: 摘要字段名。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        无显式抛出。
+    """
+
+    summary = getattr(result, summary_attr, None)
+    if summary is None:
+        return
+    auditability_score = getattr(summary, "auditability_score", None)
+    auditability_text = "none" if auditability_score is None else str(auditability_score)
+    typer.echo(f"evidence_confirm_status: {summary.status}", err=True)
+    typer.echo(f"evidence_confirm_policy: {summary.policy}", err=True)
+    typer.echo(f"evidence_confirm_checked_facts: {summary.checked_fact_count}", err=True)
+    typer.echo(f"evidence_confirm_failed_facts: {summary.failed_fact_count}", err=True)
+    typer.echo(f"evidence_confirm_auditability_score: {auditability_text}", err=True)
 
 
 def _quality_gate_info_lines(gate) -> tuple[str, ...]:  # type: ignore[no-untyped-def]

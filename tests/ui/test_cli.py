@@ -21,6 +21,7 @@ from fund_agent.services import (
     ThermometerBatchResult,
     ThermometerReading,
 )
+from fund_agent.services.fund_analysis_service import EvidenceConfirmBlockedError
 from fund_agent.ui import cli
 
 
@@ -181,6 +182,19 @@ class _FakeResult:
     report_markdown: str
     quality_gate_result: object | None = None
     quality_gate_not_run_reason: str | None = None
+    evidence_confirm_summary: object | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class _FakeEvidenceConfirmSummary:
+    """CLI 测试用 Evidence Confirm 安全摘要。"""
+
+    policy: str
+    status: str
+    checked_fact_count: int = 8
+    failed_fact_count: int = 0
+    auditability_score: int | None = 92
+    not_run_reason: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -529,6 +543,37 @@ class _FakeWarnService:
         )
 
 
+class _FakeEvidenceConfirmWarnService:
+    """CLI 测试用带 Evidence Confirm 摘要的 Service。"""
+
+    last_request = None
+
+    async def analyze(self, request):  # type: ignore[no-untyped-def]
+        """记录请求并返回 Evidence Confirm safe summary。
+
+        Args:
+            request: CLI 构造的 Service 请求。
+
+        Returns:
+            fake Service 返回值。
+
+        Raises:
+            无显式抛出。
+        """
+
+        type(self).last_request = request
+        return _FakeResult(
+            report_markdown="# report body\n",
+            evidence_confirm_summary=_FakeEvidenceConfirmSummary(
+                policy="warn",
+                status="warn",
+                checked_fact_count=8,
+                failed_fact_count=1,
+                auditability_score=None,
+            ),
+        )
+
+
 class _FakeInfoService:
     """CLI 测试用带 quality gate informational issue 的 Service。"""
 
@@ -601,6 +646,37 @@ class _FakeNotRunBlockedAnalysisService:
         """
 
         raise QualityGateNotRunBlockedError("fund_code `110011` not found")
+
+
+class _FakeEvidenceConfirmBlockedAnalysisService:
+    """CLI 测试用 Evidence Confirm 阻断 Service。"""
+
+    last_request = None
+
+    async def analyze(self, request):  # type: ignore[no-untyped-def]
+        """抛出 Evidence Confirm 阻断异常。
+
+        Args:
+            request: CLI 构造的 Service 请求。
+
+        Returns:
+            无返回值。
+
+        Raises:
+            EvidenceConfirmBlockedError: 始终抛出。
+        """
+
+        type(self).last_request = request
+        raise EvidenceConfirmBlockedError(
+            _FakeEvidenceConfirmSummary(
+                policy="block",
+                status="fail",
+                checked_fact_count=8,
+                failed_fact_count=2,
+                auditability_score=41,
+                not_run_reason="deterministic_fail",
+            )
+        )
 
 
 class _FakeLLMBlockedAnalysisService:
@@ -1683,6 +1759,7 @@ def test_analyze_cli_calls_service_and_prints_report(monkeypatch) -> None:  # ty
     assert _FakeService.last_request.developer_overrides.quality_gate_golden_answer_path == Path(
         "reports/golden-answers/golden-answer.json"
     )
+    assert _FakeService.last_request.developer_overrides.evidence_confirm_policy == "off"
 
 
 def test_analyze_annual_period_cli_calls_multi_year_service(monkeypatch) -> None:  # type: ignore[no-untyped-def]
@@ -2650,6 +2727,41 @@ def test_cli_module_imports_service_but_not_agent_internals() -> None:
     assert forbidden_application_import not in cli_source
 
 
+def test_cli_module_has_no_evidence_confirm_runner_imports() -> None:
+    """验证 CLI 未导入 Evidence Confirm runner 或 Fund 文档内部实现。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 CLI import 越过 UI/Service 边界时抛出。
+    """
+
+    cli_source = Path(cli.__file__).read_text(encoding="utf-8")
+    import_lines = "\n".join(
+        line
+        for line in cli_source.splitlines()
+        if line.startswith("import ") or line.startswith("from ")
+    )
+    forbidden_import_terms = (
+        "FundDocumentRepository",
+        "download_annual_report",
+        "annual_report_source",
+        "evidence_confirm_sources",
+        "evidence_confirm_production",
+        "run_repository_bounded_evidence_confirm",
+        "Docling",
+        "docling",
+        "pdfplumber",
+    )
+
+    for term in forbidden_import_terms:
+        assert term not in import_lines
+
+
 def test_cli_module_llm_boundary_has_no_forbidden_runtime_imports() -> None:
     """验证 CLI `--use-llm` 入口未引入 provider SDK、dayu 或间接业务参数。
 
@@ -2734,6 +2846,74 @@ def test_analyze_cli_prints_quality_gate_info_for_missing_golden_coverage(
         "quality_gate_info: strict golden answer not covered for fund_code 000216 "
         "reason=fund_not_covered"
     ) in result.output
+
+
+def test_analyze_cli_default_output_has_no_evidence_confirm_lines(
+    monkeypatch,
+) -> None:  # type: ignore[no-untyped-def]
+    """验证默认 analyze 不输出 Evidence Confirm 摘要。
+
+    Args:
+        monkeypatch: pytest monkeypatch fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 默认输出被 Evidence Confirm 行污染时抛出。
+    """
+
+    _FakeService.last_request = None
+    monkeypatch.setattr(cli, "FundAnalysisService", _FakeService)
+    runner = CliRunner()
+
+    result = runner.invoke(cli.app, ["analyze", "110011"])
+
+    assert result.exit_code == 0
+    assert "evidence_confirm_" not in result.output
+    assert _FakeService.last_request is not None
+    assert _FakeService.last_request.developer_overrides is None
+
+
+def test_analyze_cli_evidence_confirm_warn_passes_policy_and_prints_summary(
+    monkeypatch,
+) -> None:  # type: ignore[no-untyped-def]
+    """验证 analyze opt-in Evidence Confirm warn 策略透传并输出 safe summary。
+
+    Args:
+        monkeypatch: pytest monkeypatch fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 策略未透传或摘要输出不符合契约时抛出。
+    """
+
+    _FakeEvidenceConfirmWarnService.last_request = None
+    monkeypatch.setattr(cli, "FundAnalysisService", _FakeEvidenceConfirmWarnService)
+    runner = CliRunner()
+
+    result = runner.invoke(
+        cli.app,
+        ["analyze", "110011", "--dev-override", "--evidence-confirm-policy", "warn"],
+    )
+
+    assert result.exit_code == 0
+    assert result.output.endswith("# report body\n")
+    assert "evidence_confirm_status: warn" in result.output
+    assert "evidence_confirm_policy: warn" in result.output
+    assert "evidence_confirm_checked_facts: 8" in result.output
+    assert "evidence_confirm_failed_facts: 1" in result.output
+    assert "evidence_confirm_auditability_score: none" in result.output
+    assert "excerpt" not in result.output.lower()
+    assert "pdf" not in result.output.lower()
+    assert _FakeEvidenceConfirmWarnService.last_request is not None
+    assert _FakeEvidenceConfirmWarnService.last_request.mode == "developer_override"
+    assert (
+        _FakeEvidenceConfirmWarnService.last_request.developer_overrides.evidence_confirm_policy
+        == "warn"
+    )
 
 
 def test_analyze_cli_default_product_request(monkeypatch) -> None:  # type: ignore[no-untyped-def]
@@ -2854,6 +3034,36 @@ def test_analyze_cli_rejects_quality_gate_policy_without_dev_override(monkeypatc
     assert _FakeService.last_request is None
 
 
+def test_analyze_cli_rejects_evidence_confirm_policy_without_dev_override(
+    monkeypatch,
+) -> None:  # type: ignore[no-untyped-def]
+    """验证 Evidence Confirm warn/block 只允许开发覆盖模式。
+
+    Args:
+        monkeypatch: pytest monkeypatch fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 product mode 可启用 Evidence Confirm 时抛出。
+    """
+
+    _FakeService.last_request = None
+    monkeypatch.setattr(cli, "FundAnalysisService", _FakeService)
+    runner = CliRunner()
+
+    result = runner.invoke(
+        cli.app,
+        ["analyze", "110011", "--evidence-confirm-policy", "warn"],
+    )
+
+    assert result.exit_code != 0
+    assert "--dev-override" in result.output
+    assert "--evidence-confirm-policy" in result.output
+    assert _FakeService.last_request is None
+
+
 def test_analyze_cli_structured_quality_gate_block(monkeypatch) -> None:  # type: ignore[no-untyped-def]
     """验证 analyze 被 quality gate 阻断时输出结构化 stderr 且 stdout 为空。
 
@@ -2878,6 +3088,45 @@ def test_analyze_cli_structured_quality_gate_block(monkeypatch) -> None:  # type
     assert "quality_gate_status: block" in result.output
     assert "quality_gate_issues: 2" in result.output
     assert "quality_gate_json: quality-output/quality_gate.json" in result.output
+
+
+def test_analyze_cli_evidence_confirm_block_exits_2_without_report_body(
+    monkeypatch,
+) -> None:  # type: ignore[no-untyped-def]
+    """验证 Evidence Confirm block 阻断时退出 2 且不输出报告正文。
+
+    Args:
+        monkeypatch: pytest monkeypatch fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 阻断输出或退出码不符合契约时抛出。
+    """
+
+    _FakeEvidenceConfirmBlockedAnalysisService.last_request = None
+    monkeypatch.setattr(cli, "FundAnalysisService", _FakeEvidenceConfirmBlockedAnalysisService)
+    runner = CliRunner()
+
+    result = runner.invoke(
+        cli.app,
+        ["analyze", "110011", "--dev-override", "--evidence-confirm-policy", "block"],
+    )
+
+    assert result.exit_code == 2
+    assert "# report body" not in result.output
+    assert "Evidence Confirm 阻断报告输出" in result.output
+    assert "evidence_confirm_status: fail" in result.output
+    assert "evidence_confirm_policy: block" in result.output
+    assert "evidence_confirm_checked_facts: 8" in result.output
+    assert "evidence_confirm_failed_facts: 2" in result.output
+    assert "evidence_confirm_auditability_score: 41" in result.output
+    assert _FakeEvidenceConfirmBlockedAnalysisService.last_request is not None
+    assert (
+        _FakeEvidenceConfirmBlockedAnalysisService.last_request.developer_overrides.evidence_confirm_policy
+        == "block"
+    )
 
 
 def test_analyze_cli_use_llm_structured_quality_gate_block(
@@ -3244,6 +3493,28 @@ def test_checklist_cli_rejects_use_llm_option(monkeypatch) -> None:  # type: ign
         for option_name in getattr(parameter, "opts", ())
     }
     assert "--use-llm" not in option_names
+    assert "--evidence-confirm-policy" not in option_names
+
+
+def test_checklist_cli_help_does_not_expose_evidence_confirm_policy() -> None:
+    """验证 checklist help 不暴露 Evidence Confirm CLI opt-in。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: checklist help 暴露 analyze-only flag 时抛出。
+    """
+
+    runner = CliRunner()
+
+    result = runner.invoke(cli.app, ["checklist", "--help"], env={"COLUMNS": "120"})
+
+    assert result.exit_code == 0
+    assert "--evidence-confirm-policy" not in result.output
 
 
 def test_thermometer_cli_prints_plain_summary(monkeypatch, tmp_path) -> None:  # type: ignore[no-untyped-def]
