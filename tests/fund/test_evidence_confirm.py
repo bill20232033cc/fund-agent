@@ -732,6 +732,32 @@ def test_v2_all_applicable_pass_produces_hard_gate_pass() -> None:
     assert result.auditability_score == 100
 
 
+def test_v2_dangling_anchor_fails_missing_evidence_even_with_valid_proof() -> None:
+    """验证有效 proof 不能掩盖同 fact 的 dangling anchor。"""
+
+    chapter, fact = _chapter_and_fact("structured.turnover_rate")
+    valid_anchor_id = fact.evidence_anchor_ids[0]
+    mixed_fact = replace(fact, evidence_anchor_ids=(valid_anchor_id, "missing-anchor"))
+    chapter = replace(chapter, facts=(mixed_fact,))
+
+    result = confirm_chapter_evidence_v2(
+        chapter,
+        (_reference(valid_anchor_id, excerpt_text="年报披露换手率为 120%。"),),
+    )
+    fact_result = result.fact_results[0]
+    missing_dim = next(d for d in fact_result.dimension_results if d.dimension == "missing_evidence")
+    source_dim = next(d for d in fact_result.dimension_results if d.dimension == "source_support")
+
+    assert result.overall_status == "fail"
+    assert result.auditability_score == 0
+    assert fact_result.status == "fail"
+    assert fact_result.auditability_score == 0
+    assert missing_dim.status == "fail"
+    assert missing_dim.score == 0
+    assert source_dim.status == "pass"
+    assert any(issue.anchor_id == "missing-anchor" for issue in result.issues)
+
+
 def test_v2_derived_not_applicable_produces_hard_gate_not_applicable() -> None:
     """验证 derived/not_applicable fact 产生 hard gate not_applicable。"""
 

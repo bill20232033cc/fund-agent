@@ -528,7 +528,10 @@ def _confirm_fact_v2(
     dimension_results.append(dim_source)
 
     # 维度 3: missing_evidence
-    dim_missing, dim_missing_issues = _dimension_missing_evidence(fact, proof_references)
+    dangling_anchor_ids = _dangling_anchor_ids_for_fact(fact, anchors_by_id)
+    dim_missing, dim_missing_issues = _dimension_missing_evidence(
+        fact, proof_references, dangling_anchor_ids
+    )
     issues.extend(dim_missing_issues)
     dimension_results.append(dim_missing)
 
@@ -798,12 +801,14 @@ def _dimension_source_support(
 def _dimension_missing_evidence(
     fact: ChapterFactEntry,
     proof_references: tuple[EvidenceConfirmReference, ...],
+    dangling_anchor_ids: tuple[str, ...],
 ) -> tuple[EvidenceConfirmDimensionResult, tuple[EvidenceConfirmIssue, ...]]:
     """计算 missing_evidence 维度。
 
     Args:
         fact: 章节事实。
         proof_references: proven references。
+        dangling_anchor_ids: fact 声明但当前章节不存在的 anchor ids。
 
     Returns:
         维度结果与 issue 列表。
@@ -823,6 +828,29 @@ def _dimension_missing_evidence(
                 next_gate_recommendation="not_applicable",
             ),
             (),
+        )
+
+    if dangling_anchor_ids:
+        issues = tuple(
+            _issue(
+                "E3",
+                "blocking",
+                fact,
+                anchor_id,
+                "missing_evidence fact anchor 不存在于当前章节 evidence anchors。",
+            )
+            for anchor_id in dangling_anchor_ids
+        )
+        return (
+            EvidenceConfirmDimensionResult(
+                dimension="missing_evidence",
+                status="fail",
+                score=0,
+                issue_ids=tuple(issue.issue_id for issue in issues),
+                matched_anchor_ids=(),
+                next_gate_recommendation="evidence_anchor",
+            ),
+            issues,
         )
 
     if proof_references:
@@ -1487,6 +1515,26 @@ def _known_anchors_for_fact(
         for anchor_id in fact.evidence_anchor_ids
         if (anchor := anchors_by_id.get(anchor_id)) is not None
     )
+
+
+def _dangling_anchor_ids_for_fact(
+    fact: ChapterFactEntry,
+    anchors_by_id: dict[str, ChapterEvidenceAnchor],
+) -> tuple[str, ...]:
+    """读取 fact 声明但当前章节不存在的 anchor ids。
+
+    Args:
+        fact: 章节事实。
+        anchors_by_id: anchor id 到章节证据锚点的映射。
+
+    Returns:
+        当前章节内不存在的 anchor ids。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return tuple(anchor_id for anchor_id in fact.evidence_anchor_ids if anchor_id not in anchors_by_id)
 
 
 def _reference_is_proof(
