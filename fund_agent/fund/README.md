@@ -223,6 +223,16 @@ Source-truth direct extraction 在该 Processor/Extractor 边界内增加了 `Fu
 - V2 与 V1 共存：V1 公共函数 `confirm_chapter_evidence()` / `confirm_projection_evidence()` 不变，返回类型、分数和状态语义保持原样
 - 该能力不读取文档仓库、PDF/cache/source helper、Service、Host、provider、retained report、文件系统、环境变量或 dayu，不接入 `ProgrammaticAuditResult`、FQ0-FQ6 quality gate、renderer、CLI 或 readiness 判定；调用方自行提供 reference
 
+`fund_agent/fund/evidence_confirm_semantic.py` 当前提供 no-live `evidence_confirm_semantic.v1` 语义蕴含 companion contract：
+
+- `confirm_semantic_entailment()` 只消费调用方显式传入的 `EvidenceConfirmResultV2`、`EvidenceConfirmReference`、`EvidenceSemanticClaim` 和注入的 `EvidenceEntailmentClient`
+- `EvidenceSemanticClaim` 是显式自然语言 claim 输入，包含 `claim_id`、`fact_id`、`source_field_id`、`claim_text` 和 `anchor_ids`；当前不从 `ChapterFactEntry.value`、renderer output 或报告正文推断 claim
+- per-claim `status` 使用 `entailed / contradicted / insufficient / not_applicable` 表示语义支持；aggregate `overall_status` 使用 `pass / warn / fail / not_applicable` 表示 gate 状态
+- deterministic V2 是前置硬门控：`source_support`、`missing_evidence`、`proof_boundary` 不通过或 `value_match` 失败时不调用 semantic client；semantic output 不能覆盖缺证、candidate-only、not_proven、定位不匹配或数值不匹配
+- `anchor_precision` warning 下可以运行 semantic client，但 entailed 结果仍保持 aggregate `warn`
+- malformed client result 和 client exception 都 fail-closed；异常详情不写入结果
+- 该能力不构造真实 provider/LLM client，不读取文档仓库、PDF/cache/source helper、Service、Host、renderer、quality gate、文件系统、环境变量或 dayu；provider/live semantic evidence、Service/UI/renderer/quality-gate 集成、default-on 策略和 release/readiness 仍需后续 gate
+
 `fund_agent/fund/evidence_confirm_sources.py` 当前提供 no-live `ParsedAnnualReport` 年报引用 materializer：
 
 - `build_annual_report_evidence_confirm_references()` 只消费调用方已经传入的 `ChapterFactProjection` 与 `ParsedAnnualReport`
@@ -605,6 +615,7 @@ C2 当前只做确定性 marker / 元数据检查，不调用 LLM，不判断语
   - `parser.py`：PDF 全文、表格与章节定位原型
 - EID 年报来源对同一基金代码/年份的 PDF 下载使用实例级锁；同 key 并发请求会复用首个请求落地的 PDF 缓存。该保护不等同于跨进程锁或完整仓库事务。
 - `evidence_confirm.py`：no-live Evidence Confirm（V1 phase 1 + V2 五维评分与硬门控），只消费显式 `EvidenceConfirmReference`，执行 E1/E2/E3 的保守同 anchor excerpt 复核与五维确定性评分，不接 `ProgrammaticAuditResult` 或 quality gate。
+- `evidence_confirm_semantic.py`：no-live Evidence Confirm 语义蕴含 companion contract，只消费 V2 结果、显式 references、显式 semantic claims 和注入的 `EvidenceEntailmentClient`；semantic output 不能覆盖 deterministic V2 failures，不构造 provider/live/Service/renderer/quality-gate 路径。
 - `audit/`：程序审计规则。当前包含 `audit_programmatic.py` 和 `contract_rules.py`，执行 P1/P2/P3/C2/L1/R1/R2；C1/L2 属于后续 LLM 审计或语义复核层，E1/E2/E3 的 report-level/full source 接入仍需后续 gate。
 
 ## 当前边界
