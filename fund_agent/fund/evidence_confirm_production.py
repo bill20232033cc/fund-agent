@@ -10,6 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal, TypeAlias
 
+from fund_agent.fund.evidence_confirm_semantic import EvidenceSemanticResult
 from fund_agent.fund.evidence_confirm_sources import EvidenceConfirmRepositoryRunResult
 
 EvidenceConfirmProductionPolicy: TypeAlias = Literal["off", "warn", "block"]
@@ -41,7 +42,8 @@ class EvidenceConfirmProductionSummary:
         report_year: 年报年份。
         pathway_status: repository/source/reference materialization 通路状态。
         deterministic_status: strict V2 确定性复核状态。
-        semantic_status: semantic companion 状态；Slice 1 固定为 `not_run`。
+        semantic_status: semantic companion 状态；缺省为 `not_run`，仅由 injected
+            no-live semantic result 改写。
         checked_fact_count: 已复核 fact 数。
         failed_fact_count: 失败 fact 数。
         warning_fact_count: warning fact 数。
@@ -75,15 +77,21 @@ class EvidenceConfirmProductionSummary:
 def summary_from_repository_result(
     result: EvidenceConfirmRepositoryRunResult,
     policy: EvidenceConfirmProductionPolicy,
+    *,
+    semantic_result: EvidenceSemanticResult | None = None,
 ) -> EvidenceConfirmProductionSummary:
     """从 repository-bounded Evidence Confirm 结果构造生产摘要。
 
     该函数不读取文档、不访问 repository，也不因 runner 失败结果抛出异常。失败
     repository 结果会转换为 `status="fail"` 和稳定 `repository_failure:<reason>`。
+    可选 semantic result 只接受调用方已生成的 no-live typed 结果；本函数不构造
+    provider client。
 
     Args:
         result: repository-bounded Evidence Confirm 运行结果。
         policy: 调用方选择的生产策略。
+        semantic_result: 调用方注入的 no-live semantic companion 结果；缺省保持
+            `semantic_status="not_run"`。
 
     Returns:
         安全生产摘要。
@@ -93,15 +101,17 @@ def summary_from_repository_result(
     """
 
     _validate_policy(policy)
+    _validate_semantic_result_identity(result, semantic_result)
     deterministic_status = _deterministic_status(result)
     pathway_status = _pathway_status(result)
+    semantic_status = _semantic_status(semantic_result)
     not_run_reason = _repository_failure_reason(result) if pathway_status == "fail" else None
     blocking_issue_ids = _blocking_issue_ids(result)
     warning_issue_ids = _warning_issue_ids(result)
     status = _aggregate_summary_status(
         pathway_status=pathway_status,
         deterministic_status=deterministic_status,
-        semantic_status="not_run",
+        semantic_status=semantic_status,
     )
     return EvidenceConfirmProductionSummary(
         schema_version=SUMMARY_SCHEMA_VERSION,
@@ -111,12 +121,12 @@ def summary_from_repository_result(
         report_year=result.report_year,
         pathway_status=pathway_status,
         deterministic_status=deterministic_status,
-        semantic_status="not_run",
+        semantic_status=semantic_status,
         checked_fact_count=_checked_fact_count(result),
         failed_fact_count=_fact_status_count(result, "fail"),
         warning_fact_count=_fact_status_count(result, "warn"),
         not_applicable_fact_count=_fact_status_count(result, "not_applicable"),
-        issue_count=_issue_count(result),
+        issue_count=_issue_count(result) + _semantic_issue_count(semantic_result),
         auditability_score=(
             result.evidence_confirm_result.auditability_score
             if result.evidence_confirm_result is not None
@@ -224,6 +234,73 @@ def _deterministic_status(
     if result.evidence_confirm_result is None:
         return "not_run"
     return result.evidence_confirm_result.overall_status
+
+
+def _semantic_status(
+    semantic_result: EvidenceSemanticResult | None,
+) -> EvidenceConfirmProductionCheckStatus:
+    """从 injected semantic result 提取生产摘要状态。
+
+    Args:
+        semantic_result: 调用方已生成的 no-live semantic 结果。
+
+    Returns:
+        semantic companion 状态；缺省为 `not_run`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if semantic_result is None:
+        return "not_run"
+    if semantic_result.overall_status == "not_applicable":
+        return "not_applicable"
+    return semantic_result.overall_status
+
+
+def _semantic_issue_count(semantic_result: EvidenceSemanticResult | None) -> int:
+    """统计 semantic companion 生产可见 issue 数。
+
+    Args:
+        semantic_result: 调用方已生成的 no-live semantic 结果。
+
+    Returns:
+        block/warn semantic claim 数。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if semantic_result is None:
+        return 0
+    return sum(
+        1
+        for claim_result in semantic_result.claim_results
+        if claim_result.severity in {"block", "warn"}
+    )
+
+
+def _validate_semantic_result_identity(
+    result: EvidenceConfirmRepositoryRunResult,
+    semantic_result: EvidenceSemanticResult | None,
+) -> None:
+    """校验 injected semantic result 与 deterministic 结果身份一致。
+
+    Args:
+        result: repository-bounded Evidence Confirm 运行结果。
+        semantic_result: 调用方已生成的 no-live semantic 结果。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        ValueError: semantic result 的基金代码或年份与 deterministic 结果不一致。
+    """
+
+    if semantic_result is None:
+        return
+    if semantic_result.fund_code != result.fund_code or semantic_result.report_year != result.report_year:
+        raise ValueError("semantic result 与 Evidence Confirm repository result 身份不一致")
 
 
 def _pathway_status(

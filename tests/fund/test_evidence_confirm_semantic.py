@@ -5,6 +5,9 @@ from __future__ import annotations
 import ast
 import inspect
 from dataclasses import replace
+from pathlib import Path
+
+import pytest
 
 import fund_agent.fund.evidence_confirm_semantic as semantic_module
 from fund_agent.fund.chapter_facts import (
@@ -16,13 +19,17 @@ from fund_agent.fund.evidence_confirm import (
     EvidenceConfirmReference,
     confirm_chapter_evidence_v2,
 )
+from fund_agent.fund.evidence_confirm_production import summary_from_repository_result
 from fund_agent.fund.evidence_confirm_semantic import (
     EVIDENCE_CONFIRM_SEMANTIC_SCHEMA_VERSION,
+    EvidenceSemanticClaimResult,
+    EvidenceSemanticResult,
     EvidenceEntailmentJudgment,
     EvidenceEntailmentRequest,
     EvidenceSemanticClaim,
     confirm_semantic_entailment,
 )
+from tests.services.test_fund_analysis_service import _repository_run_result
 from tests.fund.test_chapter_facts import _bundle
 
 
@@ -473,6 +480,81 @@ def test_semantic_aggregate_warns_when_claim_insufficient() -> None:
     assert result.claim_results[0].severity == "warn"
 
 
+def test_semantic_result_can_be_injected_into_production_summary_without_client() -> None:
+    """验证已生成 semantic result 可注入 production summary 且不构造 client。"""
+
+    semantic_result = EvidenceSemanticResult(
+        schema_version=EVIDENCE_CONFIRM_SEMANTIC_SCHEMA_VERSION,
+        fund_code="110011",
+        report_year=2024,
+        claim_results=(
+            EvidenceSemanticClaimResult(
+                claim_id="claim-1",
+                fact_id="fact-1",
+                source_field_id="field-1",
+                status="contradicted",
+                severity="block",
+                reason_code="contradicted_by_excerpt",
+                matched_anchor_ids=("anchor-1",),
+                message=None,
+            ),
+        ),
+        overall_status="fail",
+    )
+
+    summary = summary_from_repository_result(
+        _repository_run_result("pass"),
+        "block",
+        semantic_result=semantic_result,
+    )
+
+    assert summary.deterministic_status == "pass"
+    assert summary.semantic_status == "fail"
+    assert summary.status == "fail"
+    assert summary.issue_count == 1
+
+
+@pytest.mark.parametrize(
+    ("field_name", "field_value"),
+    (
+        ("fund_code", "999999"),
+        ("report_year", 2023),
+    ),
+)
+def test_semantic_result_identity_mismatch_fails_closed_before_propagation(
+    field_name: str,
+    field_value: object,
+) -> None:
+    """验证 semantic result 身份不一致时在传播前 fail-closed。"""
+
+    semantic_result = EvidenceSemanticResult(
+        schema_version=EVIDENCE_CONFIRM_SEMANTIC_SCHEMA_VERSION,
+        fund_code="110011",
+        report_year=2024,
+        claim_results=(
+            EvidenceSemanticClaimResult(
+                claim_id="claim-1",
+                fact_id="fact-1",
+                source_field_id="field-1",
+                status="contradicted",
+                severity="block",
+                reason_code="contradicted_by_excerpt",
+                matched_anchor_ids=("anchor-1",),
+                message=None,
+            ),
+        ),
+        overall_status="fail",
+    )
+    mismatched_result = replace(semantic_result, **{field_name: field_value})
+
+    with pytest.raises(ValueError, match="身份不一致"):
+        summary_from_repository_result(
+            _repository_run_result("pass"),
+            "block",
+            semantic_result=mismatched_result,
+        )
+
+
 def test_semantic_module_import_isolated_from_service_provider_host_renderer_quality_gate() -> None:
     """验证 semantic 模块没有导入跨层依赖。"""
 
@@ -500,6 +582,60 @@ def test_semantic_module_import_isolated_from_service_provider_host_renderer_qua
         for module in imported_modules
         for prefix in forbidden_prefixes
     )
+
+
+def test_semantic_production_paths_do_not_construct_provider_or_llm_clients() -> None:
+    """验证 Slice 5 变更路径没有 provider/LLM client 构造或配置导入。"""
+
+    module_paths = (
+        "fund_agent/fund/evidence_confirm_production.py",
+        "fund_agent/fund/quality_gate_integration.py",
+    )
+    forbidden_import_terms = (
+        "openai",
+        "fund_agent.config.llm",
+        "fund_agent.services.llm_provider",
+    )
+    forbidden_call_names = (
+        "OpenAI",
+        "AsyncOpenAI",
+        "load_llm_provider_config_from_env",
+        "build_chapter_llm_clients",
+    )
+    for module_path in module_paths:
+        tree = ast.parse(Path(module_path).read_text(encoding="utf-8"))
+        imports: list[str] = []
+        call_names: list[str] = []
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                imports.extend(alias.name for alias in node.names)
+            elif isinstance(node, ast.ImportFrom) and node.module is not None:
+                imports.append(node.module)
+            elif isinstance(node, ast.Call):
+                call_names.append(_call_name(node.func))
+
+        assert not any(term in module for module in imports for term in forbidden_import_terms)
+        assert not any(name in forbidden_call_names for name in call_names)
+
+
+def _call_name(node: ast.AST) -> str:
+    """读取静态 AST call name。
+
+    Args:
+        node: AST call func 节点。
+
+    Returns:
+        调用名；无法识别时返回空字符串。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if isinstance(node, ast.Name):
+        return node.id
+    if isinstance(node, ast.Attribute):
+        return node.attr
+    return ""
 
 
 def _chapter_and_fact(source_field_id: str) -> tuple[ChapterFactInput, ChapterFactEntry]:

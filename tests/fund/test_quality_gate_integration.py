@@ -355,6 +355,113 @@ def test_quality_gate_integration_maps_evidence_confirm_warn_to_ecq3_warn(
     assert ecq3.reason == "deterministic_warn_1"
 
 
+def test_quality_gate_integration_maps_semantic_fail_to_ecq4_block(
+    tmp_path: Path,
+) -> None:
+    """验证 injected semantic fail + block policy 投影为 ECQ4/block。
+
+    Args:
+        tmp_path: pytest 临时目录 fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 semantic fail 未生成 ECQ4/block 时抛出。
+    """
+
+    result = run_quality_gate_for_bundle(
+        bundle=_bundle(),
+        source_csv=_source_csv(tmp_path, "110011"),
+        output_dir=tmp_path / "gate-run",
+        run_id="fixture-run",
+        golden_answer_path=None,
+        evidence_confirm_summary=_summary(
+            status="fail",
+            deterministic_status="pass",
+            semantic_status="fail",
+        ),
+    )
+
+    ecq4 = next(issue for issue in result.quality_gate_result.issues if issue.rule_code == "ECQ4")
+
+    assert result.quality_gate_result.status == "block"
+    assert ecq4.severity == "block"
+    assert ecq4.reason == "semantic_fail"
+    assert ecq4.issue_id == "evidence-confirm:110011:2024:ECQ4:semantic_fail"
+
+
+def test_quality_gate_integration_maps_semantic_fail_warn_policy_to_ecq4_warn(
+    tmp_path: Path,
+) -> None:
+    """验证 injected semantic fail + warn policy 投影为 ECQ4/warn。
+
+    Args:
+        tmp_path: pytest 临时目录 fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 warn policy semantic fail 被误投影时抛出。
+    """
+
+    result = run_quality_gate_for_bundle(
+        bundle=_bundle(),
+        source_csv=_source_csv(tmp_path, "110011"),
+        output_dir=tmp_path / "gate-run",
+        run_id="fixture-run",
+        golden_answer_path=None,
+        evidence_confirm_summary=_summary(
+            policy="warn",
+            status="fail",
+            deterministic_status="pass",
+            semantic_status="fail",
+        ),
+    )
+
+    ecq4 = next(issue for issue in result.quality_gate_result.issues if issue.rule_code == "ECQ4")
+
+    assert result.quality_gate_result.status == "warn"
+    assert ecq4.severity == "warn"
+    assert ecq4.reason == "semantic_fail"
+
+
+def test_quality_gate_integration_deterministic_fail_blocks_even_when_semantic_passes(
+    tmp_path: Path,
+) -> None:
+    """验证 deterministic V2 fail 不会被 semantic pass 覆盖。
+
+    Args:
+        tmp_path: pytest 临时目录 fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 semantic pass 掩盖 deterministic fail 时抛出。
+    """
+
+    result = run_quality_gate_for_bundle(
+        bundle=_bundle(),
+        source_csv=_source_csv(tmp_path, "110011"),
+        output_dir=tmp_path / "gate-run",
+        run_id="fixture-run",
+        golden_answer_path=None,
+        evidence_confirm_summary=_summary(
+            status="fail",
+            deterministic_status="fail",
+            semantic_status="pass",
+        ),
+    )
+
+    ecq2 = next(issue for issue in result.quality_gate_result.issues if issue.rule_code == "ECQ2")
+
+    assert result.quality_gate_result.status == "block"
+    assert ecq2.severity == "block"
+    assert not any(issue.rule_code == "ECQ4" for issue in result.quality_gate_result.issues)
+
+
 def test_quality_gate_integration_maps_pathway_fail_to_ecq1_block(
     tmp_path: Path,
 ) -> None:
@@ -627,6 +734,7 @@ def _summary(
     policy: str = "block",
     status: str,
     deterministic_status: str,
+    semantic_status: str = "not_run",
     pathway_status: str = "pass",
     not_run_reason: str | None = None,
 ) -> EvidenceConfirmProductionSummary:
@@ -636,6 +744,7 @@ def _summary(
         policy: Evidence Confirm 生产策略。
         status: 摘要聚合状态。
         deterministic_status: deterministic V2 状态。
+        semantic_status: semantic companion 状态。
         pathway_status: repository/source/reference materialization 通路状态。
         not_run_reason: 未运行或失败原因。
 
@@ -654,7 +763,7 @@ def _summary(
         report_year=2024,
         pathway_status=pathway_status,
         deterministic_status=deterministic_status,
-        semantic_status="not_run",
+        semantic_status=semantic_status,
         checked_fact_count=1,
         failed_fact_count=1 if deterministic_status == "fail" else 0,
         warning_fact_count=1 if deterministic_status == "warn" else 0,

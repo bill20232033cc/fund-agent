@@ -662,6 +662,7 @@ async def test_fund_analysis_service_evidence_confirm_warn_calls_runner_without_
     assert result.evidence_confirm_summary is not None
     assert result.evidence_confirm_summary.policy == "warn"
     assert result.evidence_confirm_summary.status == "fail"
+    assert result.evidence_confirm_summary.semantic_status == "not_run"
     assert result.report_markdown
 
 

@@ -228,9 +228,10 @@ def _evidence_confirm_quality_gate_issues(
                 message="Evidence Confirm repository/source/reference 通路失败。",
             ),
         )
+    issues: list[QualityGateIssue] = []
     if summary.deterministic_status == "fail":
         reason = f"deterministic_fail_{len(summary.blocking_issue_ids)}"
-        return (
+        issues.append(
             _ecq_issue(
                 rule_code="ECQ2",
                 severity=_ecq_policy_severity(summary),
@@ -243,9 +244,9 @@ def _evidence_confirm_quality_gate_issues(
                 ),
             ),
         )
-    if summary.deterministic_status == "warn":
+    elif summary.deterministic_status == "warn":
         reason = f"deterministic_warn_{len(summary.warning_issue_ids)}"
-        return (
+        issues.append(
             _ecq_issue(
                 rule_code="ECQ3",
                 severity=SEVERITY_WARN,
@@ -258,7 +259,33 @@ def _evidence_confirm_quality_gate_issues(
                 ),
             ),
         )
-    return ()
+    if summary.semantic_status in {"fail", "warn"}:
+        issues.append(_semantic_ecq_issue(summary))
+    return tuple(issues)
+
+
+def _semantic_ecq_issue(summary: EvidenceConfirmProductionSummary) -> QualityGateIssue:
+    """把 injected semantic companion fail/warn 投影为 ECQ4。
+
+    Args:
+        summary: 已包含 semantic_status 的 Evidence Confirm 生产摘要。
+
+    Returns:
+        ECQ4 issue。
+
+    Raises:
+        ValueError: `policy="off"` 的 semantic fail/warn 摘要进入投影时抛出。
+    """
+
+    reason = f"semantic_{summary.semantic_status}"
+    return _ecq_issue(
+        rule_code="ECQ4",
+        severity=_ecq_policy_severity(summary),
+        fund_code=summary.fund_code,
+        report_year=summary.report_year,
+        reason=reason,
+        message=f"Evidence Confirm semantic companion {summary.semantic_status}。",
+    )
 
 
 def _ecq_policy_severity(summary: EvidenceConfirmProductionSummary) -> str:
