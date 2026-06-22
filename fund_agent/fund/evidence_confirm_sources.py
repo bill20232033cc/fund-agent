@@ -513,6 +513,9 @@ def _classify_repository_failure(exc: Exception) -> EvidenceConfirmRepositoryFai
     if aggregate_category is not None:
         return aggregate_category
 
+    if isinstance(exc, FileNotFoundError):
+        return "not_found"
+
     class_name = exc.__class__.__name__
     if class_name == "AnnualReportSourceNotFoundError":
         return "not_found"

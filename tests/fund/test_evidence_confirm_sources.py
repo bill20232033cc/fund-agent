@@ -600,6 +600,7 @@ def _exception_named(class_name: str) -> Exception:
         (_exception_named("AnnualReportSourceSchemaError"), "schema_drift"),
         (_exception_named("AnnualReportSourceMismatchError"), "identity_mismatch"),
         (_exception_named("AnnualReportSourceIntegrityError"), "integrity_error"),
+        (FileNotFoundError("missing"), "not_found"),
         (_CategorizedRepositoryError("not_found"), "not_found"),
         (_AggregateRepositoryError((SimpleNamespace(category="unavailable"),)), "unavailable"),
         (RuntimeError("boom"), "ambiguous_repository_failure"),
