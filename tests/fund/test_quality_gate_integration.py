@@ -499,6 +499,44 @@ def test_quality_gate_integration_maps_pathway_fail_to_ecq1_block(
     assert ecq1.issue_id == "evidence-confirm:110011:2024:ECQ1:repository_failure:source_unavailable"
 
 
+def test_quality_gate_integration_maps_pathway_fail_warn_policy_to_ecq1_warn(
+    tmp_path: Path,
+) -> None:
+    """验证 pathway fail + warn policy 投影为 ECQ1/warn 而非 block。
+
+    Args:
+        tmp_path: pytest 临时目录 fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 product warn policy 被误投影成 block 时抛出。
+    """
+
+    result = run_quality_gate_for_bundle(
+        bundle=_bundle(),
+        source_csv=_source_csv(tmp_path, "110011"),
+        output_dir=tmp_path / "gate-run",
+        run_id="fixture-run",
+        golden_answer_path=None,
+        evidence_confirm_summary=_summary(
+            policy="warn",
+            status="fail",
+            deterministic_status="not_run",
+            pathway_status="fail",
+            not_run_reason="repository_failure:source_unavailable",
+        ),
+    )
+
+    ecq1 = next(issue for issue in result.quality_gate_result.issues if issue.rule_code == "ECQ1")
+
+    assert result.quality_gate_result.status == "warn"
+    assert ecq1.severity == "warn"
+    assert ecq1.reason == "repository_failure:source_unavailable"
+    assert ecq1.issue_id == "evidence-confirm:110011:2024:ECQ1:repository_failure:source_unavailable"
+
+
 def test_quality_gate_integration_rejects_off_policy_fail_summary(tmp_path: Path) -> None:
     """验证 policy=off 的 fail 摘要不会被静默降级成 ECQ warn。
 
@@ -614,7 +652,7 @@ def test_quality_gate_integration_boundary_no_repository_or_source_imports() -> 
         elif isinstance(node, ast.ImportFrom) and node.module is not None:
             imports.append(node.module)
 
-    forbidden = ("repository", "source_adapter", "parser", "docling", "provider")
+    forbidden = ("repository", "source", "parser", "docling", "provider")
 
     assert not any(any(token in module for token in forbidden) for module in imports)
 
