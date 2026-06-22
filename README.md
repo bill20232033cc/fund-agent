@@ -107,9 +107,12 @@ fund-analysis checklist 004393 --report-year 2024
 | `--force-refresh` | 强制刷新底层数据 |
 | `--use-llm` | 仅 `analyze` 支持；显式启用 Route C LLM 分章写作路径。该路径必须先配置 LLM provider 环境变量；缺失、非法或运行不完整都会失败关闭，不回退默认确定性报告 |
 | `--llm-progress` / `--no-llm-progress` | 仅 `analyze --use-llm` 生效；progress 只写 stderr，默认仅交互式 TTY 启用，非 TTY 可用 `--llm-progress` 强制开启 |
+| `--evidence-confirm-policy off|warn|block` | 仅 `analyze --dev-override` 支持；开发者显式 opt-in Evidence Confirm，默认 `off` |
 | `--target-year` / `--start-year` | 仅 `analyze-annual-period` 使用；`target_year` 是当前必需年报，`start_year` 是最早 optional prior 年报 |
 
-`analyze` 默认是 product mode：最终判断由 Agent 层基金能力根据检查清单、否决项、压力测试和 quality gate 派生；R=A+B-C 股票仓位、言行一致性实际风格、经理任期、同类费率、跟踪误差、当前阶段、最终判断覆盖和 quality gate `warn/off` 等夹具参数仅供开发验证使用，必须显式传 `--dev-override`。
+`analyze` 默认是 product mode：最终判断由 Agent 层基金能力根据检查清单、否决项、压力测试和 quality gate 派生；R=A+B-C 股票仓位、言行一致性实际风格、经理任期、同类费率、跟踪误差、当前阶段、最终判断覆盖、quality gate `warn/off` 和 Evidence Confirm `warn/block` 等夹具参数仅供开发验证使用，必须显式传 `--dev-override`。默认 `analyze` 和 `checklist` 都不会调用 Evidence Confirm。
+
+`fund-analysis analyze --dev-override --evidence-confirm-policy warn|block` 会通过 Service 调用 Fund 层 repository-bounded Evidence Confirm，并在 stderr 输出安全摘要行：`evidence_confirm_status`、`evidence_confirm_policy`、`evidence_confirm_checked_facts`、`evidence_confirm_failed_facts` 和 `evidence_confirm_auditability_score`。该摘要不包含年报原文 excerpt、PDF/cache 路径、parser JSON 或 source adapter 对象；报告 Markdown 正文不渲染 Evidence Confirm 段落。`fund-analysis checklist` 当前没有 Evidence Confirm CLI 参数，checklist CLI 支持属于后续单独 gate。
 
 `fund-analysis analyze-annual-period FUND_CODE --target-year 2025 --start-year 2021` 是当前确定性多年年报分析入口。Service 先运行目标年份单年 `analyze`，再请求 Fund 层 `AnnualEvidenceLoader` 通过 `FundDocumentRepository` 加载 prior 年报；目标年份必需，prior 年份遇到 `not_found` / `unavailable` 会记录为可降级缺口，`schema_drift` / `identity_mismatch` / `integrity_error` 会记录为 fail-closed 年度。CLI 会先在 stdout 输出可解析的多年证据 metadata header，再输出正式多年年报 Markdown 报告；报告正文包含年度覆盖与来源、跨年关键变化、对当前判断的影响、缺口与降级，并在末尾保留目标年份 8 章报告。当前 `analyze-annual-period` 不接受 `--use-llm`，也不调用 Route C LLM 分章写作路径；基于 5 年年报的 LLM 分章报告仍属于后续 annual-period LLM route design gate。
 
@@ -293,6 +296,8 @@ fund-analysis quality-gate \
 默认输出到 `score.json` 所在目录，包含 `quality_gate.json` 和 `quality_gate.md`。当前 gate 消费 coverage / traceability / `fund_quality` / `failed_funds` / correctness：字段级或单基金 P0 fail 会阻断，单基金 issue 会保留 `fund_code`；P1 fail 会警告；App 类别与基金类型明确冲突或 strict golden answer mismatch 会触发 `FQ1/block`；字段缺失率达到阈值会触发 FQ4；基金类型无法解析 preferred_lens 会触发 FQ5；完全失败基金会触发 FQ6；strict golden answer 未配置、当前基金未覆盖或当前基金无可比字段时记录带 `reason` / `coverage_scope` / `fund_code` 的 `FQ0/info`，不等同于 gate 未运行。
 
 `fund-analysis analyze` 默认也会运行 quality gate，product mode 使用 `docs/code_20260519.csv` 作为精选池 membership source，并使用默认 strict golden answer 路径。若 gate 状态为 `block` 或 gate 未运行，默认策略会非零退出并在 stderr 输出结构化原因，不输出完整报告；精选池成员缺 strict golden 覆盖时仍会输出报告，并在 stderr 增加 `quality_gate_info: ...`。`--quality-gate-policy warn/off` 仅可在 `--dev-override` 模式下用于开发验证。
+
+开发 opt-in 的 Evidence Confirm 摘要可被 quality gate 投影为 `ECQ0`-`ECQ4` issue family。该投影只消费 Service/Fund 传入的 compact summary，不读取年报、PDF/cache、文档仓库或 provider；默认未请求 Evidence Confirm 时不改变 product `analyze/checklist` 行为。
 
 生成 baseline/golden promotion 只读 preflight：
 

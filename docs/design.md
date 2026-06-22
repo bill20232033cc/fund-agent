@@ -882,6 +882,15 @@ P4-S1: extraction_snapshot  —— 精选基金池字段级抽取快照
 - `quality_gate_policy=warn` 允许继续输出，但 `derive_final_judgment()` 仍会消费 gate 状态；`quality_gate_policy=off` 显式标记为 `not_run`，仅允许开发覆盖模式使用。
 - `fund-analysis checklist` 复用同一 gate 和最终判断路径，只省略 8 章模板渲染与程序审计，不省略质量判断。
 
+**当前已实现：Evidence Confirm developer opt-in 与 ECQ 投影**：
+- 默认 product `analyze` 和 `checklist` 不调用 Evidence Confirm；`fund-analysis checklist` 当前没有 Evidence Confirm CLI 参数，checklist CLI 支持仍是后续 gate。
+- `fund-analysis analyze --dev-override --evidence-confirm-policy off|warn|block` 是显式开发者策略入口：`off` 是显式 no-run/off policy，不调用 Evidence Confirm runner；`warn|block` 才通过 Service 调用 Fund 层 repository-bounded runner，并返回 compact `EvidenceConfirmProductionSummary`。summary 不包含原文 excerpt、PDF/cache 路径、parser JSON、source adapter 对象或 provider payload。
+- CLI/UI 只展示 summary 行；renderer 报告 Markdown 仍不渲染 Evidence Confirm，也不把 Evidence Confirm 写入报告正文或证据附录。
+- `quality_gate_integration.run_quality_gate_for_bundle()` 可把显式传入的 summary 合并为 `ECQ0`-`ECQ4` issue family：`ECQ0/info` 表示显式 not-run，`ECQ1` 表示 repository/source/reference 通路失败，`ECQ2` 表示 deterministic V2 hard-gate fail，`ECQ3/warn` 表示 deterministic V2 warn，`ECQ4` 表示已注入 no-live semantic companion fail/warn。ECQ 投影不读取文档仓库、PDF/cache、source helper、parser artifact、renderer、provider 或 LLM，也不修改 `score.json`。
+- semantic companion 当前只通过已经生成的 no-live injected result 进入 summary 和 ECQ4；Service/UI/renderer/quality gate 不构造 provider-backed semantic client。
+
+**未来/候选边界**：default-on Evidence Confirm、checklist Evidence Confirm CLI support、provider-backed semantic quality、报告正文渲染 Evidence Confirm、release/readiness transition、PR mark-ready 或 merge 都未由当前实现授权。Release/readiness remains `NOT_READY`。
+
 **Service policy / gate 状态机**：
 
 | policy | gate 执行结果 | Service 行为 | `derive_final_judgment()` 输入 | 用户可见结果 |
@@ -976,8 +985,8 @@ strict golden answer 的可比身份键同样使用 `fund_code + report_year + f
 
 | 命令 | 功能 | 当前状态 |
 |------|------|----------|
-| `fund-analysis analyze` | 主分析入口 | 已实现；默认运行 quality gate，低质量以结构化错误阻断 |
-| `fund-analysis checklist` | 独立检查清单入口 | 已实现；复用 `FundAnalysisService` 的分析核心，输出 7 问清单、估值来源、最终判断和下一步最小验证问题 |
+| `fund-analysis analyze` | 主分析入口 | 已实现；默认运行 quality gate，低质量以结构化错误阻断；Evidence Confirm 仅支持 `--dev-override --evidence-confirm-policy off|warn|block` 显式开发 opt-in |
+| `fund-analysis checklist` | 独立检查清单入口 | 已实现；复用 `FundAnalysisService` 的分析核心，输出 7 问清单、估值来源、最终判断和下一步最小验证问题；当前无 Evidence Confirm CLI opt-in |
 | `fund-analysis thermometer` | 温度计查询 | 当前已实现项目内自建温度计；默认输出全 A `wind_all_a`，支持 `000300` / `000905` 与批量 JSON 输出；公开页适配器只作过渡/对比输入 |
 | `fund-analysis extraction-snapshot` | 精选基金池字段级抽取快照 | 已实现 |
 | `fund-analysis extraction-score` | 字段级 coverage / traceability / correctness 评分 | 已实现 |
