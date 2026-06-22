@@ -17,6 +17,10 @@ from fund_agent.fund.extractors import (
 from fund_agent.fund.data_extractor import FundDataExtractor
 from fund_agent.fund.chapter_facts import ChapterFactProvider, project_chapter_facts
 from fund_agent.fund.evidence_confirm import EvidenceConfirmReference, confirm_projection_evidence
+from fund_agent.fund.evidence_confirm_sources import (
+    EvidenceConfirmReferenceBuildRequest,
+    build_annual_report_evidence_confirm_references,
+)
 from fund_agent.fund.evidence_availability import derive_evidence_availability
 from fund_agent.fund.chapter_writer import build_chapter_writer_input, write_chapter
 from fund_agent.fund.chapter_auditor import ChapterAuditInput, audit_chapter
@@ -65,6 +69,15 @@ evidence_confirm_result = confirm_projection_evidence(
             excerpt_text="年报摘录文本",
         ),
     ),
+)
+reference_build_result = build_annual_report_evidence_confirm_references(
+    EvidenceConfirmReferenceBuildRequest(
+        fund_code="110011",
+        report_year=2024,
+        projection=chapter_projection,
+        parsed_report=report,
+        source_truth_status="not_proven",
+    )
 )
 writer_input = build_chapter_writer_input(chapter_projection, chapter_id=1, mode="prompt_only")
 write_result = write_chapter(writer_input, llm_client=None)
@@ -209,6 +222,15 @@ Source-truth direct extraction 在该 Processor/Extractor 边界内增加了 `Fu
 - 分数语义：阻断性失败产生分数上限（score cap），防止稀释；通过 fact 使用无上限均值聚合
 - V2 与 V1 共存：V1 公共函数 `confirm_chapter_evidence()` / `confirm_projection_evidence()` 不变，返回类型、分数和状态语义保持原样
 - 该能力不读取文档仓库、PDF/cache/source helper、Service、Host、provider、retained report、文件系统、环境变量或 dayu，不接入 `ProgrammaticAuditResult`、FQ0-FQ6 quality gate、renderer、CLI 或 readiness 判定；调用方自行提供 reference
+
+`fund_agent/fund/evidence_confirm_sources.py` 当前提供 no-live `ParsedAnnualReport` 年报引用 materializer：
+
+- `build_annual_report_evidence_confirm_references()` 只消费调用方已经传入的 `ChapterFactProjection` 与 `ParsedAnnualReport`
+- 只 materialize `source_kind="annual_report"` 的 anchor，输出既有 `annual_report_excerpt / annual_report` reference/source kind，不扩展 `EvidenceSourceKind` 或公共 `EvidenceAnchor`
+- 表格定位只接受 `page-{page_number}-table-{table_index}` 并精确匹配 `ParsedTable.page_number/table_index`；行定位只接受零基 `row-N`
+- 无 table/row locator 时只用 `ParsedAnnualReport.get_section_text(section_id)` 构造 bounded section excerpt，不按 page_number 切 `raw_text`
+- `source_truth_status` 默认 `not_proven`；只有请求为 `proven` 且当前 EID single-source metadata admission 满足时才输出 proven reference
+- 不实例化 `FundDocumentRepository`，不读取 PDF/cache/source helper，不触发网络、provider、Service、Host、renderer、quality gate 或 readiness 判定
 
 template truth-source replacement、typed projection 和 `EvidenceAvailability` 的当前非目标是：不改变 deterministic `analyze/checklist`、renderer、FQ0-FQ6 quality gate、final judgment、provider/runtime defaults、score/golden/readiness，不实现 Ch2 公开拆章、多年证据 runtime、Agent runner/tool-loop、Host 业务理解或 dayu runtime。
 
