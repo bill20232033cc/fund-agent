@@ -230,7 +230,9 @@ Source-truth direct extraction 在该 Processor/Extractor 边界内增加了 `Fu
 - 表格定位只接受 `page-{page_number}-table-{table_index}` 并精确匹配 `ParsedTable.page_number/table_index`；行定位只接受零基 `row-N`
 - 无 table/row locator 时只用 `ParsedAnnualReport.get_section_text(section_id)` 构造 bounded section excerpt，不按 page_number 切 `raw_text`
 - `source_truth_status` 默认 `not_proven`；只有请求为 `proven` 且当前 EID single-source metadata admission 满足时才输出 proven reference
-- 不实例化 `FundDocumentRepository`，不读取 PDF/cache/source helper，不触发网络、provider、Service、Host、renderer、quality gate 或 readiness 判定
+- import 与 materializer 不实例化 `FundDocumentRepository`，不读取 PDF/cache/source helper，不触发网络、provider、Service、Host、renderer、quality gate 或 readiness 判定
+- `run_repository_bounded_evidence_confirm()` 是 EC-P2 repository-bounded runner：只通过注入或默认 repository 的 async `load_annual_report(fund_code, report_year, force_refresh=...)` 取得 `ParsedAnnualReport`，可在 repository load 成功后用受控 `projection_factory` 构造 live smoke projection，再复用 materializer 与 V2 Evidence Confirm；来源异常按 `not_found / unavailable / schema_drift / identity_mismatch / integrity_error / ambiguous_repository_failure` fail-closed 分类
+- `scripts/evidence_confirm_ec_p2_live_sample.py` 只允许 `004393/2025`，构造 `projection_kind="ec_p2_live_section_smoke"` 的 section-smoke projection，输出安全标量 JSON；它只证明 repository -> parsed report -> reference materializer -> V2 通路，不证明字段正确性、source truth family、golden、readiness 或 release
 
 template truth-source replacement、typed projection 和 `EvidenceAvailability` 的当前非目标是：不改变 deterministic `analyze/checklist`、renderer、FQ0-FQ6 quality gate、final judgment、provider/runtime defaults、score/golden/readiness，不实现 Ch2 公开拆章、多年证据 runtime、Agent runner/tool-loop、Host 业务理解或 dayu runtime。
 

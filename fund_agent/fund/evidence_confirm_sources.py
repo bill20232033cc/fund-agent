@@ -10,7 +10,8 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from typing import Final, Literal
+from inspect import iscoroutinefunction
+from typing import Callable, Final, Literal
 
 from fund_agent.fund.chapter_facts import (
     ChapterEvidenceAnchor,
@@ -18,8 +19,10 @@ from fund_agent.fund.chapter_facts import (
 )
 from fund_agent.fund.documents.models import ParsedAnnualReport, ParsedTable
 from fund_agent.fund.evidence_confirm import (
+    EvidenceConfirmResultV2,
     EvidenceConfirmReference,
     EvidenceConfirmSourceTruthStatus,
+    confirm_projection_evidence_v2,
 )
 
 DEFAULT_MAX_SECTION_EXCERPT_CHARS: Final[int] = 1200
@@ -32,6 +35,20 @@ SUPPORTED_ROW_LOCATOR_RE: Final[re.Pattern[str]] = re.compile(
 
 EvidenceConfirmReferenceBuildStatus = Literal["pass", "fail", "not_applicable"]
 EvidenceConfirmReferenceBuildIssueSeverity = Literal["blocking", "informational"]
+EvidenceConfirmRepositoryRunStatus = Literal["pass", "fail"]
+EvidenceConfirmRepositoryFailureCategory = Literal[
+    "not_found",
+    "unavailable",
+    "schema_drift",
+    "identity_mismatch",
+    "integrity_error",
+    "ambiguous_repository_failure",
+]
+EvidenceConfirmRepositoryRunIssueSeverity = Literal["blocking", "informational"]
+
+_SOURCE_FAILURE_CATEGORIES: Final[frozenset[str]] = frozenset(
+    ("not_found", "unavailable", "schema_drift", "identity_mismatch", "integrity_error")
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -89,6 +106,108 @@ class EvidenceConfirmReferenceBuildResult:
     status: EvidenceConfirmReferenceBuildStatus
 
 
+@dataclass(frozen=True, slots=True)
+class EvidenceConfirmRepositoryRunRequest:
+    """Repository-bounded Evidence Confirm 执行请求。
+
+    Args:
+        无。
+
+    Attributes:
+        fund_code: 基金代码。
+        report_year: 年报年份。
+        projection: 显式传入的章节事实投影；为空时必须提供 projection_factory。
+        projection_factory: repository load 成功后按 ParsedAnnualReport 构造投影的受控 hook。
+        repository: 可注入的文档仓库；为空时由 runner 内部创建默认仓库。
+        force_refresh: 是否强制刷新底层年报来源。
+        max_section_excerpt_chars: section excerpt 最大字符数。
+        run_v2_confirm: 是否将 materialized references 继续送入 V2。
+    """
+
+    fund_code: str
+    report_year: int
+    projection: ChapterFactProjection | None = None
+    projection_factory: Callable[[ParsedAnnualReport], ChapterFactProjection] | None = None
+    repository: object | None = None
+    force_refresh: bool = False
+    max_section_excerpt_chars: int = DEFAULT_MAX_SECTION_EXCERPT_CHARS
+    run_v2_confirm: bool = True
+
+
+@dataclass(frozen=True, slots=True)
+class EvidenceConfirmRepositorySourceProvenance:
+    """Repository runner 的安全来源 provenance 摘要。
+
+    Args:
+        无。
+
+    Attributes:
+        source: 来源名称。
+        selected_source: 当前策略选中的来源。
+        source_mode: 当前来源策略模式。
+        fallback_enabled: 当前来源策略是否启用 fallback。
+        fallback_used: 当前加载结果是否使用 fallback。
+        primary_failure_category: 主来源失败类别。
+        metadata_admitted: 是否满足当前 EID single-source/no-fallback admission。
+    """
+
+    source: str | None
+    selected_source: str | None
+    source_mode: str | None
+    fallback_enabled: bool | None
+    fallback_used: bool | None
+    primary_failure_category: str | None
+    metadata_admitted: bool
+
+
+@dataclass(frozen=True, slots=True)
+class EvidenceConfirmRepositoryRunIssue:
+    """Repository runner issue。
+
+    Args:
+        无。
+
+    Attributes:
+        issue_id: 稳定 issue id。
+        severity: 严重程度。
+        reason: 稳定原因码。
+        message: 中文问题说明。
+        failure_category: 来源失败分类。
+    """
+
+    issue_id: str
+    severity: EvidenceConfirmRepositoryRunIssueSeverity
+    reason: str
+    message: str
+    failure_category: EvidenceConfirmRepositoryFailureCategory | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class EvidenceConfirmRepositoryRunResult:
+    """Repository-bounded Evidence Confirm 执行结果。
+
+    Args:
+        无。
+
+    Attributes:
+        status: 聚合执行状态。
+        fund_code: 基金代码。
+        report_year: 年报年份。
+        source_provenance: 安全来源 provenance 摘要。
+        reference_build_result: 年报引用 materializer 结果。
+        evidence_confirm_result: V2 复核结果。
+        issues: runner 层 issue。
+    """
+
+    status: EvidenceConfirmRepositoryRunStatus
+    fund_code: str
+    report_year: int
+    source_provenance: EvidenceConfirmRepositorySourceProvenance | None
+    reference_build_result: EvidenceConfirmReferenceBuildResult | None
+    evidence_confirm_result: EvidenceConfirmResultV2 | None
+    issues: tuple[EvidenceConfirmRepositoryRunIssue, ...]
+
+
 def build_annual_report_evidence_confirm_references(
     request: EvidenceConfirmReferenceBuildRequest,
 ) -> EvidenceConfirmReferenceBuildResult:
@@ -123,6 +242,440 @@ def build_annual_report_evidence_confirm_references(
         issues=sorted_issues,
         status=_result_status(sorted_references, sorted_issues),
     )
+
+
+async def run_repository_bounded_evidence_confirm(
+    request: EvidenceConfirmRepositoryRunRequest,
+) -> EvidenceConfirmRepositoryRunResult:
+    """通过 `FundDocumentRepository.load_annual_report()` 驱动 Evidence Confirm。
+
+    本函数是 EC-P2 repository-bounded runner。它只调用仓库公开年报加载入口，
+    不读取 PDF/cache/source helper，不调用 Service、Host、renderer、quality gate、
+    provider 或 LLM。见模板第 0-7 章 Evidence Confirm 路径。
+
+    Args:
+        request: Repository-bounded 执行请求。
+
+    Returns:
+        执行结果；任何来源或 materializer 问题均 fail-closed。
+
+    Raises:
+        无显式抛出；仓库异常被分类并写入 issue。
+    """
+
+    fund_code = request.fund_code.strip()
+    if not fund_code:
+        return _repository_failure_result(
+            request,
+            reason="invalid_fund_code",
+            message="fund_code 不能为空。",
+        )
+    if request.report_year <= 0:
+        return _repository_failure_result(
+            request,
+            reason="invalid_report_year",
+            message="report_year 必须为正整数。",
+        )
+    if request.projection is None and request.projection_factory is None:
+        return _repository_failure_result(
+            request,
+            reason="missing_projection",
+            message="projection 与 projection_factory 不能同时为空。",
+        )
+
+    try:
+        repository = request.repository if request.repository is not None else _default_repository()
+    except Exception as exc:  # noqa: BLE001 - EC-P2 must return safe fail-closed result.
+        return _repository_failure_result(
+            request,
+            reason="repository_initialization_failed",
+            message=f"FundDocumentRepository 初始化失败: {exc.__class__.__name__}",
+            failure_category="ambiguous_repository_failure",
+        )
+    load_annual_report = getattr(repository, "load_annual_report", None)
+    if not iscoroutinefunction(load_annual_report):
+        return _repository_failure_result(
+            request,
+            reason="invalid_repository",
+            message="repository 必须暴露 async load_annual_report()。",
+        )
+
+    try:
+        parsed_report = await load_annual_report(
+            fund_code,
+            request.report_year,
+            force_refresh=request.force_refresh,
+        )
+    except Exception as exc:  # noqa: BLE001 - EC-P2 must classify repository boundary failures.
+        category = _classify_repository_failure(exc)
+        return _repository_failure_result(
+            request,
+            reason="repository_load_failed",
+            message=f"repository.load_annual_report 失败: {exc.__class__.__name__}",
+            failure_category=category,
+        )
+
+    source_provenance = _repository_source_provenance(parsed_report, fund_code, request.report_year)
+    if not source_provenance.metadata_admitted:
+        return EvidenceConfirmRepositoryRunResult(
+            status="fail",
+            fund_code=fund_code,
+            report_year=request.report_year,
+            source_provenance=source_provenance,
+            reference_build_result=None,
+            evidence_confirm_result=None,
+            issues=(
+                _repository_issue(
+                    "source_truth_metadata_negative",
+                    "ParsedAnnualReport 来源 metadata 未满足当前 EID single-source/no-fallback admission。",
+                ),
+            ),
+        )
+
+    projection = request.projection
+    if projection is None and request.projection_factory is not None:
+        try:
+            projection = request.projection_factory(parsed_report)
+        except Exception as exc:  # noqa: BLE001 - EC-P2 must fail closed and keep CLI output safe.
+            return EvidenceConfirmRepositoryRunResult(
+                status="fail",
+                fund_code=fund_code,
+                report_year=request.report_year,
+                source_provenance=source_provenance,
+                reference_build_result=None,
+                evidence_confirm_result=None,
+                issues=(
+                    _repository_issue(
+                        "projection_factory_failed",
+                        f"projection_factory 失败: {exc.__class__.__name__}",
+                    ),
+                ),
+            )
+
+    build_result = build_annual_report_evidence_confirm_references(
+        EvidenceConfirmReferenceBuildRequest(
+            fund_code=fund_code,
+            report_year=request.report_year,
+            projection=projection,
+            parsed_report=parsed_report,
+            source_truth_status="proven",
+            max_section_excerpt_chars=request.max_section_excerpt_chars,
+        )
+    )
+    evidence_result = (
+        confirm_projection_evidence_v2(projection, build_result.references)
+        if request.run_v2_confirm
+        else None
+    )
+    issues = _issues_from_reference_build(build_result)
+    status = _repository_result_status(build_result, evidence_result, issues)
+    return EvidenceConfirmRepositoryRunResult(
+        status=status,
+        fund_code=fund_code,
+        report_year=request.report_year,
+        source_provenance=source_provenance,
+        reference_build_result=build_result,
+        evidence_confirm_result=evidence_result,
+        issues=issues,
+    )
+
+
+def _repository_failure_result(
+    request: EvidenceConfirmRepositoryRunRequest,
+    *,
+    reason: str,
+    message: str,
+    failure_category: EvidenceConfirmRepositoryFailureCategory | None = None,
+) -> EvidenceConfirmRepositoryRunResult:
+    """构造 repository runner fail-closed 结果。
+
+    Args:
+        request: Repository-bounded 执行请求。
+        reason: 稳定原因码。
+        message: 中文问题说明。
+        failure_category: 来源失败分类。
+
+    Returns:
+        fail-closed 执行结果。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return EvidenceConfirmRepositoryRunResult(
+        status="fail",
+        fund_code=request.fund_code.strip(),
+        report_year=request.report_year,
+        source_provenance=None,
+        reference_build_result=None,
+        evidence_confirm_result=None,
+        issues=(
+            _repository_issue(
+                reason,
+                message,
+                failure_category=failure_category,
+            ),
+        ),
+    )
+
+
+def _repository_issue(
+    reason: str,
+    message: str,
+    *,
+    severity: EvidenceConfirmRepositoryRunIssueSeverity = "blocking",
+    failure_category: EvidenceConfirmRepositoryFailureCategory | None = None,
+) -> EvidenceConfirmRepositoryRunIssue:
+    """构造稳定 repository runner issue。
+
+    Args:
+        reason: 稳定原因码。
+        message: 中文问题说明。
+        severity: 严重程度。
+        failure_category: 来源失败分类。
+
+    Returns:
+        runner issue。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return EvidenceConfirmRepositoryRunIssue(
+        issue_id=f"evidence-confirm-repository:{reason}",
+        severity=severity,
+        reason=reason,
+        message=message,
+        failure_category=failure_category,
+    )
+
+
+def _default_repository() -> object:
+    """按需创建默认 FundDocumentRepository。
+
+    Args:
+        无。
+
+    Returns:
+        默认文档仓库实例。
+
+    Raises:
+        底层 repository 初始化异常原样抛出给调用方。
+    """
+
+    from fund_agent.fund.documents.repository import FundDocumentRepository
+
+    return FundDocumentRepository()
+
+
+def _classify_repository_failure(exc: Exception) -> EvidenceConfirmRepositoryFailureCategory:
+    """把 repository 边界异常归类为稳定来源失败类别。
+
+    Args:
+        exc: repository.load_annual_report 抛出的异常。
+
+    Returns:
+        来源失败类别；不能证明具体来源类别时返回 ambiguous。
+
+    Raises:
+        无显式抛出。
+    """
+
+    explicit_category = _failure_category_from_value(getattr(exc, "category", None))
+    if explicit_category is not None:
+        return explicit_category
+
+    blocking_failure = getattr(exc, "blocking_failure", None)
+    blocking_category = _failure_category_from_value(getattr(blocking_failure, "category", None))
+    if blocking_category is not None:
+        return blocking_category
+
+    aggregate_category = _single_failure_category(getattr(exc, "failures", None))
+    if aggregate_category is not None:
+        return aggregate_category
+
+    class_name = exc.__class__.__name__
+    if class_name == "AnnualReportSourceNotFoundError":
+        return "not_found"
+    if class_name == "AnnualReportSourceUnavailableError":
+        return "unavailable"
+    if class_name == "AnnualReportSourceSchemaError":
+        return "schema_drift"
+    if class_name == "AnnualReportSourceMismatchError":
+        return "identity_mismatch"
+    if class_name == "AnnualReportSourceIntegrityError":
+        return "integrity_error"
+    return "ambiguous_repository_failure"
+
+
+def _single_failure_category(
+    failures: object,
+) -> EvidenceConfirmRepositoryFailureCategory | None:
+    """从聚合 failures 中提取唯一稳定类别。
+
+    Args:
+        failures: 可能的 failures iterable。
+
+    Returns:
+        唯一来源失败类别；没有或不唯一时返回 ``None``。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if not isinstance(failures, tuple):
+        return None
+    categories = frozenset(
+        category
+        for failure in failures
+        if (category := _failure_category_from_value(getattr(failure, "category", None))) is not None
+    )
+    if len(categories) == 1:
+        return next(iter(categories))
+    return None
+
+
+def _failure_category_from_value(
+    value: object,
+) -> EvidenceConfirmRepositoryFailureCategory | None:
+    """规范化来源失败类别值。
+
+    Args:
+        value: 原始类别值。
+
+    Returns:
+        已知来源失败类别；未知时返回 ``None``。
+
+    Raises:
+        无显式抛出。
+    """
+
+    normalized = str(value).strip() if value is not None else ""
+    if normalized in _SOURCE_FAILURE_CATEGORIES:
+        return normalized  # type: ignore[return-value]
+    return None
+
+
+def _repository_source_provenance(
+    parsed_report: ParsedAnnualReport,
+    fund_code: str,
+    report_year: int,
+) -> EvidenceConfirmRepositorySourceProvenance:
+    """从 ParsedAnnualReport 构造安全 provenance 摘要。
+
+    Args:
+        parsed_report: repository 返回的解析年报。
+        fund_code: 请求基金代码。
+        report_year: 请求年报年份。
+
+    Returns:
+        不包含 PDF 路径、URL 或原文的来源 provenance。
+
+    Raises:
+        无显式抛出。
+    """
+
+    source = parsed_report.metadata.source
+    return EvidenceConfirmRepositorySourceProvenance(
+        source=getattr(source, "source", None),
+        selected_source=getattr(source, "selected_source", None),
+        source_mode=getattr(source, "source_mode", None),
+        fallback_enabled=getattr(source, "fallback_enabled", None),
+        fallback_used=getattr(source, "fallback_used", None),
+        primary_failure_category=getattr(source, "primary_failure_category", None),
+        metadata_admitted=_repository_metadata_admitted(parsed_report, fund_code, report_year),
+    )
+
+
+def _repository_metadata_admitted(
+    parsed_report: ParsedAnnualReport,
+    fund_code: str,
+    report_year: int,
+) -> bool:
+    """判断 repository 返回报告是否满足当前 proof-positive admission。
+
+    Args:
+        parsed_report: repository 返回的解析年报。
+        fund_code: 请求基金代码。
+        report_year: 请求年报年份。
+
+    Returns:
+        满足 EID single-source/no-fallback 且身份匹配时返回 ``True``。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if parsed_report.key.fund_code != fund_code or parsed_report.key.year != report_year:
+        return False
+    source = parsed_report.metadata.source
+    if source is None:
+        return False
+    return (
+        getattr(source, "source", None) == "eid"
+        and getattr(source, "selected_source", None) == "eid"
+        and getattr(source, "source_mode", None) == "single_source_only"
+        and getattr(source, "fallback_enabled", None) is False
+        and getattr(source, "fallback_used", None) is False
+        and getattr(source, "primary_failure_category", None) is None
+        and getattr(source, "fund_code", None) == fund_code
+        and getattr(source, "report_year", None) == report_year
+    )
+
+
+def _issues_from_reference_build(
+    build_result: EvidenceConfirmReferenceBuildResult,
+) -> tuple[EvidenceConfirmRepositoryRunIssue, ...]:
+    """把 reference build issue 投影到 runner issue。
+
+    Args:
+        build_result: materializer 结果。
+
+    Returns:
+        runner issue 列表。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return tuple(
+        EvidenceConfirmRepositoryRunIssue(
+            issue_id=f"evidence-confirm-repository:reference-build:{issue.anchor_id}:{issue.reason}",
+            severity=issue.severity,
+            reason=issue.reason,
+            message=issue.message,
+            failure_category=None,
+        )
+        for issue in build_result.issues
+    )
+
+
+def _repository_result_status(
+    build_result: EvidenceConfirmReferenceBuildResult,
+    evidence_result: EvidenceConfirmResultV2 | None,
+    issues: tuple[EvidenceConfirmRepositoryRunIssue, ...],
+) -> EvidenceConfirmRepositoryRunStatus:
+    """计算 repository runner 聚合状态。
+
+    Args:
+        build_result: materializer 结果。
+        evidence_result: V2 复核结果。
+        issues: runner issue。
+
+    Returns:
+        pass 或 fail。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if build_result.status != "pass":
+        return "fail"
+    if any(issue.severity == "blocking" for issue in issues):
+        return "fail"
+    if evidence_result is not None and evidence_result.overall_status != "pass":
+        return "fail"
+    return "pass"
 
 
 def _projection_annual_anchors(projection: ChapterFactProjection) -> tuple[ChapterEvidenceAnchor, ...]:
@@ -684,5 +1237,10 @@ __all__ = [
     "EvidenceConfirmReferenceBuildIssue",
     "EvidenceConfirmReferenceBuildRequest",
     "EvidenceConfirmReferenceBuildResult",
+    "EvidenceConfirmRepositoryRunIssue",
+    "EvidenceConfirmRepositoryRunRequest",
+    "EvidenceConfirmRepositoryRunResult",
+    "EvidenceConfirmRepositorySourceProvenance",
     "build_annual_report_evidence_confirm_references",
+    "run_repository_bounded_evidence_confirm",
 ]

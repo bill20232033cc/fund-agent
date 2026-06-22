@@ -5,7 +5,7 @@ from __future__ import annotations
 import subprocess
 import sys
 from dataclasses import replace
-from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -24,7 +24,15 @@ from fund_agent.fund.evidence_confirm_sources import (
     SUPPORTED_ROW_LOCATOR_RE,
     SUPPORTED_TABLE_ID_RE,
     EvidenceConfirmReferenceBuildRequest,
+    EvidenceConfirmRepositoryRunRequest,
     build_annual_report_evidence_confirm_references,
+    run_repository_bounded_evidence_confirm,
+)
+from scripts.evidence_confirm_ec_p2_live_sample import (
+    PROJECTION_KIND,
+    LiveProjectionUnavailableError,
+    build_live_section_smoke_projection,
+    run_authorized_sample,
 )
 from tests.fund.test_chapter_facts import _bundle
 
@@ -308,6 +316,320 @@ def test_produced_references_pipe_into_v2_pass_and_value_mismatch_fail() -> None
     assert value_dim.status == "fail"
 
 
+@pytest.mark.asyncio
+async def test_repository_runner_uses_only_load_annual_report_and_passes_v2() -> None:
+    """验证 repository runner 只调用 load_annual_report 并输出 proof-positive V2 pass。"""
+
+    projection, _, _ = _projection_with_anchor(
+        table_id="page-3-table-0",
+        row_locator="row-0",
+        page_number=3,
+    )
+    report = _parsed_report(
+        tables=(ParsedTable(page_number=3, table_index=0, headers=("项目", "数值"), rows=(("换手率", "120%"),)),)
+    )
+    repository = _PoisonRepository(report)
+
+    result = await run_repository_bounded_evidence_confirm(
+        EvidenceConfirmRepositoryRunRequest(
+            fund_code="110011",
+            report_year=2024,
+            projection=projection,  # type: ignore[arg-type]
+            repository=repository,
+            force_refresh=True,
+        )
+    )
+
+    assert repository.calls == (("110011", 2024, True),)
+    assert result.status == "pass"
+    assert result.source_provenance is not None
+    assert result.source_provenance.metadata_admitted is True
+    assert result.reference_build_result is not None
+    assert result.reference_build_result.status == "pass"
+    assert result.evidence_confirm_result is not None
+    assert result.evidence_confirm_result.overall_status == "pass"
+    assert result.issues == ()
+
+
+@pytest.mark.asyncio
+async def test_repository_runner_can_build_projection_after_repository_load() -> None:
+    """验证 projection_factory 在 runner 内 repository load 成功后执行。"""
+
+    projection, _, _ = _projection_with_anchor(
+        table_id="page-3-table-0",
+        row_locator="row-0",
+        page_number=3,
+    )
+    report = _parsed_report(
+        tables=(ParsedTable(page_number=3, table_index=0, headers=("项目", "数值"), rows=(("换手率", "120%"),)),)
+    )
+    repository = _PoisonRepository(report)
+    calls: list[DocumentKey] = []
+
+    def projection_factory(parsed_report: ParsedAnnualReport) -> object:
+        """记录 runner 传入的 parsed report 并返回 projection。"""
+
+        calls.append(parsed_report.key)
+        return projection
+
+    result = await run_repository_bounded_evidence_confirm(
+        EvidenceConfirmRepositoryRunRequest(
+            fund_code="110011",
+            report_year=2024,
+            projection_factory=projection_factory,  # type: ignore[arg-type]
+            repository=repository,
+            force_refresh=True,
+        )
+    )
+
+    assert repository.calls == (("110011", 2024, True),)
+    assert calls == [DocumentKey(fund_code="110011", year=2024)]
+    assert result.status == "pass"
+
+
+@pytest.mark.asyncio
+async def test_repository_runner_rejects_invalid_repository_shape() -> None:
+    """验证非 async load_annual_report 仓库不能进入来源或 PDF 路径。"""
+
+    class InvalidRepository:
+        """缺少 async 边界的 fake repository。"""
+
+        def load_annual_report(self, fund_code: str, report_year: int, *, force_refresh: bool = False) -> None:
+            """同步方法应被拒绝。"""
+
+    projection, _, _ = _projection_with_anchor()
+
+    result = await run_repository_bounded_evidence_confirm(
+        EvidenceConfirmRepositoryRunRequest(
+            fund_code="110011",
+            report_year=2024,
+            projection=projection,  # type: ignore[arg-type]
+            repository=InvalidRepository(),
+        )
+    )
+
+    assert result.status == "fail"
+    assert result.reference_build_result is None
+    assert {issue.reason for issue in result.issues} == {"invalid_repository"}
+
+
+@pytest.mark.asyncio
+async def test_repository_runner_rejects_negative_source_provenance_before_v2() -> None:
+    """验证负向来源 metadata 不能进入 proof-positive reference 或 V2。"""
+
+    projection, _, _ = _projection_with_anchor()
+    repository = _PoisonRepository(_parsed_report(metadata=_negative_metadata(fallback_used=True)))
+
+    result = await run_repository_bounded_evidence_confirm(
+        EvidenceConfirmRepositoryRunRequest(
+            fund_code="110011",
+            report_year=2024,
+            projection=projection,  # type: ignore[arg-type]
+            repository=repository,
+        )
+    )
+
+    assert result.status == "fail"
+    assert result.source_provenance is not None
+    assert result.source_provenance.metadata_admitted is False
+    assert result.reference_build_result is None
+    assert result.evidence_confirm_result is None
+    assert {issue.reason for issue in result.issues} == {"source_truth_metadata_negative"}
+
+
+@pytest.mark.asyncio
+async def test_repository_runner_propagates_materializer_failure() -> None:
+    """验证 materializer fail-closed issue 会提升为 runner fail。"""
+
+    projection, _, _ = _projection_with_anchor(section_id="§missing")
+    repository = _PoisonRepository(_parsed_report())
+
+    result = await run_repository_bounded_evidence_confirm(
+        EvidenceConfirmRepositoryRunRequest(
+            fund_code="110011",
+            report_year=2024,
+            projection=projection,  # type: ignore[arg-type]
+            repository=repository,
+        )
+    )
+
+    assert result.status == "fail"
+    assert result.reference_build_result is not None
+    assert result.reference_build_result.status == "fail"
+    assert {issue.reason for issue in result.issues} == {"missing_section"}
+
+
+@pytest.mark.asyncio
+async def test_repository_runner_fails_when_v2_value_mismatches() -> None:
+    """验证 reference materialized 成功但 V2 值不匹配时 runner 失败。"""
+
+    projection, chapter, fact = _projection_with_anchor(
+        table_id="page-3-table-0",
+        row_locator="row-0",
+        page_number=3,
+    )
+    mismatch_projection = replace(
+        projection,
+        chapters=(replace(chapter, facts=(replace(fact, value={"turnover_rate": "999%"}),)),),
+    )
+    repository = _PoisonRepository(
+        _parsed_report(
+            tables=(ParsedTable(page_number=3, table_index=0, headers=("项目", "数值"), rows=(("换手率", "120%"),)),)
+        )
+    )
+
+    result = await run_repository_bounded_evidence_confirm(
+        EvidenceConfirmRepositoryRunRequest(
+            fund_code="110011",
+            report_year=2024,
+            projection=mismatch_projection,  # type: ignore[arg-type]
+            repository=repository,
+        )
+    )
+
+    assert result.status == "fail"
+    assert result.reference_build_result is not None
+    assert result.reference_build_result.status == "pass"
+    assert result.evidence_confirm_result is not None
+    assert result.evidence_confirm_result.overall_status == "fail"
+
+
+class _FailingRepository:
+    """抛出指定异常的 fake repository。"""
+
+    def __init__(self, exception: Exception) -> None:
+        """记录待抛异常。"""
+
+        self._exception = exception
+
+    async def load_annual_report(
+        self,
+        fund_code: str,
+        report_year: int,
+        *,
+        force_refresh: bool = False,
+    ) -> ParsedAnnualReport:
+        """模拟 repository.load_annual_report 失败。"""
+
+        raise self._exception
+
+
+class _CategorizedRepositoryError(Exception):
+    """带 category 属性的 fake repository 异常。"""
+
+    def __init__(self, category: str) -> None:
+        """记录来源失败类别。"""
+
+        self.category = category
+        super().__init__(category)
+
+
+class _AggregateRepositoryError(Exception):
+    """带 failures 属性的 fake repository 聚合异常。"""
+
+    def __init__(self, failures: tuple[object, ...]) -> None:
+        """记录逐来源失败。"""
+
+        self.failures = failures
+        super().__init__("aggregate")
+
+
+def _exception_named(class_name: str) -> Exception:
+    """构造指定类名的 fake 异常。
+
+    Args:
+        class_name: 需要模拟的异常类名。
+
+    Returns:
+        fake 异常实例。
+
+    Raises:
+        无显式抛出。
+    """
+
+    exception_cls = type(class_name, (Exception,), {})
+    return exception_cls(class_name)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("exception", "expected_category"),
+    (
+        (_exception_named("AnnualReportSourceNotFoundError"), "not_found"),
+        (_exception_named("AnnualReportSourceUnavailableError"), "unavailable"),
+        (_exception_named("AnnualReportSourceSchemaError"), "schema_drift"),
+        (_exception_named("AnnualReportSourceMismatchError"), "identity_mismatch"),
+        (_exception_named("AnnualReportSourceIntegrityError"), "integrity_error"),
+        (_CategorizedRepositoryError("not_found"), "not_found"),
+        (_AggregateRepositoryError((SimpleNamespace(category="unavailable"),)), "unavailable"),
+        (RuntimeError("boom"), "ambiguous_repository_failure"),
+    ),
+)
+async def test_repository_runner_classifies_repository_failures(
+    exception: Exception,
+    expected_category: str,
+) -> None:
+    """验证 repository 边界异常被归类为稳定失败类别。"""
+
+    projection, _, _ = _projection_with_anchor()
+    result = await run_repository_bounded_evidence_confirm(
+        EvidenceConfirmRepositoryRunRequest(
+            fund_code="110011",
+            report_year=2024,
+            projection=projection,  # type: ignore[arg-type]
+            repository=_FailingRepository(exception),
+        )
+    )
+
+    assert result.status == "fail"
+    assert {issue.reason for issue in result.issues} == {"repository_load_failed"}
+    assert {issue.failure_category for issue in result.issues} == {expected_category}
+
+
+@pytest.mark.asyncio
+async def test_live_sample_returns_safe_payload_when_repository_fails() -> None:
+    """验证 sample path 的 repository 失败不 traceback，返回安全分类 payload。"""
+
+    payload = await run_authorized_sample(
+        force_refresh=True,
+        repository=_FailingRepository(_exception_named("AnnualReportSourceUnavailableError")),
+    )
+
+    assert payload["sample"] == "004393/2025"
+    assert payload["status"] == "fail"
+    assert payload["projection_kind"] == PROJECTION_KIND
+    assert payload["field_correctness_proven"] is False
+    assert payload["issue_reasons"] == ("repository_load_failed",)
+    assert payload["failure_categories"] == ("unavailable",)
+
+
+def test_live_section_smoke_projection_uses_first_non_empty_section() -> None:
+    """验证 sample helper 从 fake parsed report 稳定构造 section smoke projection。"""
+
+    report = _multi_section_report()
+
+    projection = build_live_section_smoke_projection(report)
+
+    assert projection.fund_code == "110011"
+    assert projection.report_year == 2024
+    assert projection.classification_basis == (PROJECTION_KIND,)
+    chapter = projection.chapters[0]
+    assert chapter.fund_type == "unknown"
+    assert chapter.evidence_anchors[0].section_id == "§2"
+    assert chapter.evidence_anchors[0].source_kind == "annual_report"
+    assert chapter.facts[0].source_field_id == "ec_p2.live_section_smoke"
+    assert chapter.facts[0].value == {"section_smoke_token": "目标 section token 120%"}
+
+
+def test_live_section_smoke_projection_fails_when_all_sections_empty() -> None:
+    """验证 sample helper 在无非空 section 时显式失败。"""
+
+    report = _parsed_report(section_body="   ")
+
+    with pytest.raises(LiveProjectionUnavailableError, match="live_projection_section_unavailable"):
+        build_live_section_smoke_projection(report)
+
+
 def test_import_isolation_does_not_import_repository() -> None:
     """验证模块导入不实例化 repository、不触发 PDF/cache/network 入口。"""
 
@@ -317,22 +639,57 @@ def test_import_isolation_does_not_import_repository() -> None:
             "-c",
                 (
                     "from fund_agent.fund.documents.repository import FundDocumentRepository; "
+                    "called = {'load': False}; "
                     "fail_init = lambda self, *args, **kwargs: (_ for _ in ()).throw(RuntimeError('repository instantiated')); "
                     "FundDocumentRepository.__init__ = fail_init; "
+                    "FundDocumentRepository.load_annual_report = lambda *args, **kwargs: called.update(load=True); "
                     "import fund_agent.fund.evidence_confirm_sources; "
-                    "print('import-ok')"
+                    "print('import-ok', called['load'])"
             ),
         ],
         check=True,
         capture_output=True,
         text=True,
     )
-    source = Path("fund_agent/fund/evidence_confirm_sources.py").read_text(encoding="utf-8")
 
-    assert completed.stdout.strip() == "import-ok"
-    assert "FundDocumentRepository(" not in source
-    assert "load_annual_report" not in source
-    assert "fetch_pdf" not in source
+    assert completed.stdout.strip() == "import-ok False"
+
+
+class _PoisonRepository:
+    """只允许 load_annual_report 的 fake repository。"""
+
+    def __init__(self, report: ParsedAnnualReport) -> None:
+        """记录返回报告。"""
+
+        self._report = report
+        self.calls: tuple[tuple[str, int, bool], ...] = ()
+
+    async def load_annual_report(
+        self,
+        fund_code: str,
+        report_year: int,
+        *,
+        force_refresh: bool = False,
+    ) -> ParsedAnnualReport:
+        """记录调用并返回 fake ParsedAnnualReport。"""
+
+        self.calls = (*self.calls, (fund_code, report_year, force_refresh))
+        return self._report
+
+    def fetch_pdf(self, *args: object, **kwargs: object) -> None:
+        """禁止 runner 触碰 PDF helper。"""
+
+        raise AssertionError("fetch_pdf must not be called")
+
+    def fetch_pdf_path(self, *args: object, **kwargs: object) -> None:
+        """禁止 runner 触碰 PDF path helper。"""
+
+        raise AssertionError("fetch_pdf_path must not be called")
+
+    def parse_pdf(self, *args: object, **kwargs: object) -> None:
+        """禁止 runner 触碰 parser helper。"""
+
+        raise AssertionError("parse_pdf must not be called")
 
 
 def _projection_with_anchor(
@@ -440,6 +797,49 @@ def _report_for_case(report_case: str) -> ParsedAnnualReport:
     if report_case == "default":
         return _parsed_report()
     raise AssertionError(f"unknown report_case: {report_case}")
+
+
+def _multi_section_report() -> ParsedAnnualReport:
+    """构造含空 section 和非空 section 的 fake ParsedAnnualReport。
+
+    Args:
+        无。
+
+    Returns:
+        fake ParsedAnnualReport。
+
+    Raises:
+        无显式抛出。
+    """
+
+    raw_text = "目录\n   \n目标 section token 120%\n"
+    first_start = len("目录\n")
+    first_end = first_start + len("   \n")
+    second_end = len(raw_text)
+    return ParsedAnnualReport(
+        key=DocumentKey(fund_code="110011", year=2024),
+        raw_text=raw_text,
+        sections={
+            "§1": ReportSection(
+                section_id="§1",
+                title="§1 空章节",
+                start_offset=first_start,
+                end_offset=first_end,
+                matched_rule="fixture",
+                confidence=1.0,
+            ),
+            "§2": ReportSection(
+                section_id="§2",
+                title="§2 目标章节",
+                start_offset=first_end,
+                end_offset=second_end,
+                matched_rule="fixture",
+                confidence=1.0,
+            ),
+        },
+        tables=(),
+        metadata=_proven_metadata(),
+    )
 
 
 def _parsed_report(
