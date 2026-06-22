@@ -36,6 +36,7 @@ SUPPORTED_ROW_LOCATOR_RE: Final[re.Pattern[str]] = re.compile(
 EvidenceConfirmReferenceBuildStatus = Literal["pass", "fail", "not_applicable"]
 EvidenceConfirmReferenceBuildIssueSeverity = Literal["blocking", "informational"]
 EvidenceConfirmRepositoryRunStatus = Literal["pass", "fail"]
+EvidenceConfirmRepositoryPathwayStatus = Literal["pass", "fail"]
 EvidenceConfirmRepositoryFailureCategory = Literal[
     "not_found",
     "unavailable",
@@ -191,6 +192,8 @@ class EvidenceConfirmRepositoryRunResult:
 
     Attributes:
         status: 聚合执行状态。
+        pathway_status: repository/source/PDF 通路状态，不等同于 strict V2 pass。
+        pathway_warning_reasons: 通路可接受但 strict V2 非 pass 的稳定 warning 原因。
         fund_code: 基金代码。
         report_year: 年报年份。
         source_provenance: 安全来源 provenance 摘要。
@@ -200,6 +203,8 @@ class EvidenceConfirmRepositoryRunResult:
     """
 
     status: EvidenceConfirmRepositoryRunStatus
+    pathway_status: EvidenceConfirmRepositoryPathwayStatus
+    pathway_warning_reasons: tuple[str, ...]
     fund_code: str
     report_year: int
     source_provenance: EvidenceConfirmRepositorySourceProvenance | None
@@ -319,6 +324,8 @@ async def run_repository_bounded_evidence_confirm(
     if not source_provenance.metadata_admitted:
         return EvidenceConfirmRepositoryRunResult(
             status="fail",
+            pathway_status="fail",
+            pathway_warning_reasons=(),
             fund_code=fund_code,
             report_year=request.report_year,
             source_provenance=source_provenance,
@@ -339,6 +346,8 @@ async def run_repository_bounded_evidence_confirm(
         except Exception as exc:  # noqa: BLE001 - EC-P2 must fail closed and keep CLI output safe.
             return EvidenceConfirmRepositoryRunResult(
                 status="fail",
+                pathway_status="fail",
+                pathway_warning_reasons=(),
                 fund_code=fund_code,
                 report_year=request.report_year,
                 source_provenance=source_provenance,
@@ -369,8 +378,16 @@ async def run_repository_bounded_evidence_confirm(
     )
     issues = _issues_from_reference_build(build_result)
     status = _repository_result_status(build_result, evidence_result, issues)
+    pathway_status, pathway_warning_reasons = _repository_pathway_status(
+        source_provenance,
+        build_result,
+        evidence_result,
+        run_v2_confirm=request.run_v2_confirm,
+    )
     return EvidenceConfirmRepositoryRunResult(
         status=status,
+        pathway_status=pathway_status,
+        pathway_warning_reasons=pathway_warning_reasons,
         fund_code=fund_code,
         report_year=request.report_year,
         source_provenance=source_provenance,
@@ -404,6 +421,8 @@ def _repository_failure_result(
 
     return EvidenceConfirmRepositoryRunResult(
         status="fail",
+        pathway_status="fail",
+        pathway_warning_reasons=(),
         fund_code=request.fund_code.strip(),
         report_year=request.report_year,
         source_provenance=None,
@@ -676,6 +695,81 @@ def _repository_result_status(
     if evidence_result is not None and evidence_result.overall_status != "pass":
         return "fail"
     return "pass"
+
+
+def _repository_pathway_status(
+    source_provenance: EvidenceConfirmRepositorySourceProvenance | None,
+    build_result: EvidenceConfirmReferenceBuildResult | None,
+    evidence_result: EvidenceConfirmResultV2 | None,
+    *,
+    run_v2_confirm: bool,
+) -> tuple[EvidenceConfirmRepositoryPathwayStatus, tuple[str, ...]]:
+    """计算 EC-P2 repository/source/PDF 通路状态。
+
+    该状态只用于区分 source/PDF pathway 是否打通，不代表 strict V2 pass、
+    字段正确性、语义 entailment、golden、readiness 或 release。当前唯一可接受的
+    strict V2 非 pass 情况是 section-only smoke 引发的 E1 anchor_precision warning。
+
+    Args:
+        source_provenance: 安全来源 provenance。
+        build_result: reference materializer 结果。
+        evidence_result: V2 复核结果。
+        run_v2_confirm: 当前请求是否要求运行 V2。
+
+    Returns:
+        pathway 状态与可接受 warning 原因。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if source_provenance is None or not source_provenance.metadata_admitted:
+        return "fail", ()
+    if build_result is None or build_result.status != "pass" or not build_result.references:
+        return "fail", ()
+    if not run_v2_confirm:
+        return "pass", ()
+    if evidence_result is None:
+        return "fail", ()
+    if evidence_result.overall_status == "pass":
+        return "pass", ()
+    if evidence_result.overall_status != "warn":
+        return "fail", ()
+    if _v2_warn_is_only_anchor_precision(evidence_result):
+        return "pass", ("v2_anchor_precision_warn_section_only_smoke",)
+    return "fail", ()
+
+
+def _v2_warn_is_only_anchor_precision(evidence_result: EvidenceConfirmResultV2) -> bool:
+    """判断 V2 warn 是否只来自 E1 anchor_precision。
+
+    Args:
+        evidence_result: V2 复核结果。
+
+    Returns:
+        只有 E1 anchor_precision reviewable warning 时返回 ``True``。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if evidence_result.hard_gate.blocking_issue_ids:
+        return False
+    if not evidence_result.issues:
+        return False
+    if any(issue.rule_code != "E1" or issue.severity != "reviewable" for issue in evidence_result.issues):
+        return False
+
+    warned_dimensions: list[str] = []
+    failed_dimensions: list[str] = []
+    for fact_result in evidence_result.fact_results:
+        for dimension_result in fact_result.dimension_results:
+            if dimension_result.status == "warn":
+                warned_dimensions.append(dimension_result.dimension)
+            if dimension_result.status == "fail":
+                failed_dimensions.append(dimension_result.dimension)
+
+    return bool(warned_dimensions) and not failed_dimensions and set(warned_dimensions) == {"anchor_precision"}
 
 
 def _projection_annual_anchors(projection: ChapterFactProjection) -> tuple[ChapterEvidenceAnchor, ...]:
@@ -1237,6 +1331,7 @@ __all__ = [
     "EvidenceConfirmReferenceBuildIssue",
     "EvidenceConfirmReferenceBuildRequest",
     "EvidenceConfirmReferenceBuildResult",
+    "EvidenceConfirmRepositoryPathwayStatus",
     "EvidenceConfirmRepositoryRunIssue",
     "EvidenceConfirmRepositoryRunRequest",
     "EvidenceConfirmRepositoryRunResult",

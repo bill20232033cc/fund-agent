@@ -204,6 +204,8 @@ def _safe_result_payload(
     return {
         "sample": f"{AUTHORIZED_FUND_CODE}/{AUTHORIZED_REPORT_YEAR}",
         "status": result.status,
+        "pathway_status": result.pathway_status,
+        "pathway_warning_reasons": result.pathway_warning_reasons,
         "projection_kind": PROJECTION_KIND,
         "field_correctness_proven": False,
         "source_metadata_admitted": metadata_admitted,

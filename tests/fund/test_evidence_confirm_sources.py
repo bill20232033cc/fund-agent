@@ -342,6 +342,8 @@ async def test_repository_runner_uses_only_load_annual_report_and_passes_v2() ->
 
     assert repository.calls == (("110011", 2024, True),)
     assert result.status == "pass"
+    assert result.pathway_status == "pass"
+    assert result.pathway_warning_reasons == ()
     assert result.source_provenance is not None
     assert result.source_provenance.metadata_admitted is True
     assert result.reference_build_result is not None
@@ -385,6 +387,40 @@ async def test_repository_runner_can_build_projection_after_repository_load() ->
     assert repository.calls == (("110011", 2024, True),)
     assert calls == [DocumentKey(fund_code="110011", year=2024)]
     assert result.status == "pass"
+    assert result.pathway_status == "pass"
+
+
+@pytest.mark.asyncio
+async def test_repository_runner_section_smoke_warn_is_pathway_pass() -> None:
+    """验证 section-only smoke 的 E1 warning 可作为 EC-P2 pathway pass。"""
+
+    report = _parsed_report(section_body="目标 section token 120%")
+    repository = _PoisonRepository(report)
+
+    result = await run_repository_bounded_evidence_confirm(
+        EvidenceConfirmRepositoryRunRequest(
+            fund_code="110011",
+            report_year=2024,
+            projection_factory=build_live_section_smoke_projection,
+            repository=repository,
+        )
+    )
+
+    assert result.status == "fail"
+    assert result.pathway_status == "pass"
+    assert result.pathway_warning_reasons == ("v2_anchor_precision_warn_section_only_smoke",)
+    assert result.reference_build_result is not None
+    assert result.reference_build_result.status == "pass"
+    assert result.evidence_confirm_result is not None
+    assert result.evidence_confirm_result.overall_status == "warn"
+    assert {issue.rule_code for issue in result.evidence_confirm_result.issues} == {"E1"}
+    warned_dimensions = {
+        dimension.dimension
+        for fact_result in result.evidence_confirm_result.fact_results
+        for dimension in fact_result.dimension_results
+        if dimension.status == "warn"
+    }
+    assert warned_dimensions == {"anchor_precision"}
 
 
 @pytest.mark.asyncio
@@ -409,6 +445,7 @@ async def test_repository_runner_rejects_invalid_repository_shape() -> None:
     )
 
     assert result.status == "fail"
+    assert result.pathway_status == "fail"
     assert result.reference_build_result is None
     assert {issue.reason for issue in result.issues} == {"invalid_repository"}
 
@@ -430,6 +467,7 @@ async def test_repository_runner_rejects_negative_source_provenance_before_v2() 
     )
 
     assert result.status == "fail"
+    assert result.pathway_status == "fail"
     assert result.source_provenance is not None
     assert result.source_provenance.metadata_admitted is False
     assert result.reference_build_result is None
@@ -454,6 +492,7 @@ async def test_repository_runner_propagates_materializer_failure() -> None:
     )
 
     assert result.status == "fail"
+    assert result.pathway_status == "fail"
     assert result.reference_build_result is not None
     assert result.reference_build_result.status == "fail"
     assert {issue.reason for issue in result.issues} == {"missing_section"}
@@ -488,6 +527,7 @@ async def test_repository_runner_fails_when_v2_value_mismatches() -> None:
     )
 
     assert result.status == "fail"
+    assert result.pathway_status == "fail"
     assert result.reference_build_result is not None
     assert result.reference_build_result.status == "pass"
     assert result.evidence_confirm_result is not None
@@ -582,6 +622,7 @@ async def test_repository_runner_classifies_repository_failures(
     )
 
     assert result.status == "fail"
+    assert result.pathway_status == "fail"
     assert {issue.reason for issue in result.issues} == {"repository_load_failed"}
     assert {issue.failure_category for issue in result.issues} == {expected_category}
 
@@ -597,6 +638,8 @@ async def test_live_sample_returns_safe_payload_when_repository_fails() -> None:
 
     assert payload["sample"] == "004393/2025"
     assert payload["status"] == "fail"
+    assert payload["pathway_status"] == "fail"
+    assert payload["pathway_warning_reasons"] == ()
     assert payload["projection_kind"] == PROJECTION_KIND
     assert payload["field_correctness_proven"] is False
     assert payload["issue_reasons"] == ("repository_load_failed",)
