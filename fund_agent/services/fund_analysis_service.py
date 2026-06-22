@@ -62,7 +62,7 @@ from fund_agent.fund.evidence_confirm_production import (
     EvidenceConfirmProductionSummary,
     summary_from_repository_result,
 )
-from fund_agent.fund.evidence_confirm_sources import (
+from fund_agent.fund.evidence_confirm_runner import (
     EvidenceConfirmRepositoryRunRequest,
     EvidenceConfirmRepositoryRunResult,
     run_repository_bounded_evidence_confirm,

@@ -21,6 +21,10 @@ from fund_agent.fund.evidence_confirm_sources import (
     EvidenceConfirmReferenceBuildRequest,
     build_annual_report_evidence_confirm_references,
 )
+from fund_agent.fund.evidence_confirm_runner import (
+    EvidenceConfirmRepositoryRunRequest,
+    run_repository_bounded_evidence_confirm,
+)
 from fund_agent.fund.evidence_confirm_production import EvidenceConfirmProductionSummary
 from fund_agent.fund.evidence_availability import derive_evidence_availability
 from fund_agent.fund.chapter_writer import build_chapter_writer_input, write_chapter
@@ -79,6 +83,9 @@ reference_build_result = build_annual_report_evidence_confirm_references(
         parsed_report=report,
         source_truth_status="not_proven",
     )
+)
+repository_run_result = await run_repository_bounded_evidence_confirm(
+    EvidenceConfirmRepositoryRunRequest(fund_code="110011", report_year=2024)
 )
 writer_input = build_chapter_writer_input(chapter_projection, chapter_id=1, mode="prompt_only")
 write_result = write_chapter(writer_input, llm_client=None)
@@ -234,7 +241,7 @@ Source-truth direct extraction 在该 Processor/Extractor 边界内增加了 `Fu
 - malformed client result、client status/reason 不兼容和 client exception 都 fail-closed；异常详情不写入结果
 - 该能力不构造真实 provider/LLM client，不读取文档仓库、PDF/cache/source helper、Service、Host、renderer、quality gate、文件系统、环境变量或 dayu；provider/live semantic evidence、Service/UI/renderer/quality-gate 集成、default-on 策略和 release/readiness 仍需后续 gate
 
-`fund_agent/fund/evidence_confirm_sources.py` 当前提供 no-live `ParsedAnnualReport` 年报引用 materializer：
+`fund_agent/fund/evidence_confirm_sources.py` 当前提供 no-live `ParsedAnnualReport` 年报引用 materializer 和底层 repository-bounded runner 实现：
 
 - `build_annual_report_evidence_confirm_references()` 只消费调用方已经传入的 `ChapterFactProjection` 与 `ParsedAnnualReport`
 - 只 materialize `source_kind="annual_report"` 的 anchor，输出既有 `annual_report_excerpt / annual_report` reference/source kind，不扩展 `EvidenceSourceKind` 或公共 `EvidenceAnchor`
@@ -244,6 +251,12 @@ Source-truth direct extraction 在该 Processor/Extractor 边界内增加了 `Fu
 - import 与 materializer 不实例化 `FundDocumentRepository`，不读取 PDF/cache/source helper，不触发网络、provider、Service、Host、renderer、quality gate 或 readiness 判定
 - `run_repository_bounded_evidence_confirm()` 是 EC-P2 repository-bounded runner：只通过注入或默认 repository 的 async `load_annual_report(fund_code, report_year, force_refresh=...)` 取得 `ParsedAnnualReport`，可在 repository load 成功后用受控 `projection_factory` 构造 live smoke projection，再复用 materializer 与 V2 Evidence Confirm；来源异常按 `not_found / unavailable / schema_drift / identity_mismatch / integrity_error / ambiguous_repository_failure` fail-closed 分类；`status` 保持 strict V2 聚合语义，`pathway_status` 只表示 repository/source/PDF 通路是否打通
 - `scripts/evidence_confirm_ec_p2_live_sample.py` 只允许 `004393/2025`，构造 `projection_kind="ec_p2_live_section_smoke"` 的 section-smoke projection，输出安全标量 JSON；section-only smoke 的 E1 `anchor_precision` warning 可作为 `pathway_status="pass"` 的 warning reason，但不改变 strict `status` / `evidence_confirm_overall_status`；它只证明 repository -> parsed report -> reference materializer -> V2 通路，不证明字段正确性、source truth family、semantic entailment、golden、readiness 或 release
+
+`fund_agent/fund/evidence_confirm_runner.py` 当前是 Service 可导入的 Fund 层 typed facade：
+
+- 只导出 `EvidenceConfirmRepositoryRunRequest`、`EvidenceConfirmRepositoryRunResult` 和 `run_repository_bounded_evidence_confirm()`
+- Service 通过该 facade 调用 repository-bounded Evidence Confirm runner，不直接导入底层 materializer/source 模块名
+- 该 facade 不改变底层实现、不读取 Service/UI/Host/renderer/quality gate 输入，也不放宽 source/PDF 访问边界
 
 `fund_agent/fund/evidence_confirm_production.py` 当前提供 `EvidenceConfirmProductionSummary`，用于 Service/UI/quality gate 的生产集成摘要：
 
@@ -635,6 +648,7 @@ C2 当前只做确定性 marker / 元数据检查，不调用 LLM，不判断语
 - EID 年报来源对同一基金代码/年份的 PDF 下载使用实例级锁；同 key 并发请求会复用首个请求落地的 PDF 缓存。该保护不等同于跨进程锁或完整仓库事务。
 - `evidence_confirm.py`：no-live Evidence Confirm（V1 phase 1 + V2 五维评分与硬门控），只消费显式 `EvidenceConfirmReference`，执行 E1/E2/E3 的保守同 anchor excerpt 复核与五维确定性评分，不接 `ProgrammaticAuditResult` 或 quality gate。
 - `evidence_confirm_semantic.py`：no-live Evidence Confirm 语义蕴含 companion contract，只消费 V2 结果、显式 references、显式 semantic claims 和注入的 `EvidenceEntailmentClient`；semantic output 不能覆盖 deterministic V2 failures，不构造 provider/live/Service/renderer/quality-gate 路径。
+- `evidence_confirm_runner.py`：Service 可导入的 Evidence Confirm typed facade，只暴露 repository-bounded runner request/result/entrypoint；底层 materializer/source 实现仍留在 Fund 内部。
 - `evidence_confirm_production.py`：Evidence Confirm 生产集成安全摘要，把 repository-bounded result 和可选 no-live injected semantic result 压缩为 `EvidenceConfirmProductionSummary`；不携带原文 excerpt、路径或 provider payload。
 - `audit/`：程序审计规则。当前包含 `audit_programmatic.py` 和 `contract_rules.py`，执行 P1/P2/P3/C2/L1/R1/R2；C1/L2 属于后续 LLM 审计或语义复核层，E1/E2/E3 的 report-level/full source 接入仍需后续 gate。
 
