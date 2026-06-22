@@ -666,6 +666,43 @@ async def test_fund_analysis_service_evidence_confirm_warn_calls_runner_without_
 
 
 @pytest.mark.asyncio
+async def test_fund_analysis_service_evidence_confirm_summary_does_not_render_to_report() -> None:
+    """验证 Evidence Confirm 摘要不会写入报告 Markdown。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 EC 摘要影响渲染正文或暴露内部状态字段时抛出。
+    """
+
+    baseline_service = FundAnalysisService(extractor=_FakeExtractor(_bundle()))
+    baseline_result = await baseline_service.analyze(
+        _developer_request(quality_gate_policy="off")
+    )
+    evidence_runner = _FakeEvidenceConfirmRunner(_repository_run_result("fail"))
+    service = FundAnalysisService(
+        extractor=_FakeExtractor(_bundle()),
+        evidence_confirm_runner=evidence_runner,
+    )
+
+    result = await service.analyze(
+        _developer_request(
+            quality_gate_policy="off",
+            evidence_confirm_policy="warn",
+        )
+    )
+
+    assert result.evidence_confirm_summary is not None
+    assert result.report_markdown == baseline_result.report_markdown
+    assert "Evidence Confirm" not in result.report_markdown
+    assert "evidence_confirm_status" not in result.report_markdown
+
+
+@pytest.mark.asyncio
 async def test_fund_analysis_service_evidence_confirm_runner_exception_becomes_safe_summary() -> None:
     """验证 EC runner 异常在 warn 策略下转换为安全 fail 摘要。
 
