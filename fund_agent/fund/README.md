@@ -239,7 +239,7 @@ Source-truth direct extraction 在该 Processor/Extractor 边界内增加了 `Fu
 - deterministic V2 是前置硬门控：`source_support`、`missing_evidence`、`proof_boundary` 不通过或 `value_match` 失败时不调用 semantic client；semantic output 不能覆盖缺证、candidate-only、not_proven、定位不匹配或数值不匹配
 - `anchor_precision` warning 下可以运行 semantic client，但 entailed 结果仍保持 aggregate `warn`
 - malformed client result、client status/reason 不兼容和 client exception 都 fail-closed；异常详情不写入结果
-- 该能力不构造真实 provider/LLM client，不读取文档仓库、PDF/cache/source helper、Service、Host、renderer、quality gate、文件系统、环境变量或 dayu；provider/live semantic evidence、Service/UI/renderer/quality-gate 集成、default-on 策略和 release/readiness 仍需后续 gate
+- 该能力不构造真实 provider/LLM client，不读取文档仓库、PDF/cache/source helper、Service、Host、renderer、quality gate、文件系统、环境变量或 dayu；Service-owned provider adapter、default-on analyze warn 策略、CLI safe summary 和 quality-gate ECQ 投影已经由后续 gate 接入，provider-backed semantic default-on production use、renderer/report-body 集成和 release/readiness 仍需后续 gate
 
 `fund_agent/fund/evidence_confirm_sources.py` 当前提供 no-live `ParsedAnnualReport` 年报引用 materializer 和底层 repository-bounded runner 实现：
 
@@ -261,8 +261,8 @@ Source-truth direct extraction 在该 Processor/Extractor 边界内增加了 `Fu
 `fund_agent/fund/evidence_confirm_production.py` 当前提供 `EvidenceConfirmProductionSummary`，用于 Service/UI/quality gate 的生产集成摘要：
 
 - 摘要字段只包含 `policy`、`status`、`pathway_status`、`deterministic_status`、`semantic_status`、fact 计数、issue id、可审计性分数和稳定 reason code，不包含原文 excerpt、PDF/cache 路径、parser JSON、source adapter 对象或 provider payload
-- 默认 product `analyze/checklist` 不创建 summary，也不调用 Evidence Confirm runner；developer override opt-in 的 `analyze` 才会通过 Service 调用 repository-bounded runner
-- semantic companion 只通过调用方已经产生的 no-live injected result 进入 summary；当前不构造 provider-backed semantic client，不读取 env、HTTP 或 LLM 配置
+- 默认 product `analyze` 会以 `warn` 策略通过 Service 调用 repository-bounded runner 并创建 summary；`analyze-annual-period` 通过 current-year `analyze()` 委托路径继承该 summary；`checklist` 仍固定 Evidence Confirm `off`；developer override `off|warn|block` 仅用于 `analyze --dev-override`
+- semantic companion 可通过调用方已经产生的 no-live injected result 进入 summary；Service-owned provider adapter 已有 release/readiness 证据，但默认 product path 仍不构造 provider-backed semantic client、不读取 env、HTTP 或 LLM 配置
 
 `fund_agent/fund/quality_gate_integration.py` 当前可把显式传入的 Evidence Confirm summary 投影到 `ECQ` issue family：
 

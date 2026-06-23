@@ -1078,6 +1078,7 @@ def analyze_annual_period(
         typer.echo(f"多年年报分析失败：{exc}", err=True)
         raise typer.Exit(code=1) from exc
     _echo_quality_gate_summary(result.current_year_result)
+    _echo_evidence_confirm_summary(result.current_year_result)
     _echo_multi_year_annual_summary(result)
     typer.echo("")
     typer.echo(result.annual_period_report.report_markdown, nl=False)

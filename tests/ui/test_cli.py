@@ -614,6 +614,44 @@ class _FakeProductEvidenceConfirmWarnService:
         )
 
 
+class _FakeAnnualPeriodEvidenceConfirmService:
+    """CLI 多年年报测试用带 current-year Evidence Confirm 摘要的 Service。"""
+
+    async def analyze_multi_year_annual(self, request):  # type: ignore[no-untyped-def]
+        """返回带 current-year Evidence Confirm safe summary 的多年年报结果。
+
+        Args:
+            request: CLI 构造的多年年报 Service 请求。
+
+        Returns:
+            fake 多年年报 Service 返回值。
+
+        Raises:
+            无显式抛出。
+        """
+
+        return _FakeMultiYearResult(
+            current_year_result=_FakeResult(
+                report_markdown="# current year report\n",
+                evidence_confirm_summary=_FakeEvidenceConfirmSummary(
+                    policy="warn",
+                    status="warn",
+                    checked_fact_count=8,
+                    failed_fact_count=1,
+                    auditability_score=87,
+                    source_excerpt="annual secret excerpt",
+                    pdf_path="/tmp/annual-source.pdf",
+                    parser_payload={"raw": "annual parser"},
+                    provider_payload={"raw": "annual provider"},
+                ),
+            ),
+            annual_evidence_bundle=_FakeAnnualEvidenceBundle(),
+            annual_period_report=_FakeAnnualPeriodReport(
+                report_markdown="# annual period report\n"
+            ),
+        )
+
+
 class _FakeInfoService:
     """CLI 测试用带 quality gate informational issue 的 Service。"""
 
@@ -1878,6 +1916,54 @@ def test_analyze_annual_period_cli_calls_multi_year_service(monkeypatch) -> None
     assert _FakeService.last_multi_year_request.start_year == 2021
     assert _FakeService.last_multi_year_request.valuation_state == "unavailable"
     assert _FakeService.last_multi_year_request.quality_gate_policy == "off"
+
+
+def test_analyze_annual_period_cli_prints_current_year_evidence_confirm_summary(
+    monkeypatch,
+) -> None:  # type: ignore[no-untyped-def]
+    """验证 annual-period CLI 输出 current-year Evidence Confirm 安全摘要。
+
+    Args:
+        monkeypatch: pytest monkeypatch fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: annual-period CLI 未输出 safe summary 或泄漏原始证据时抛出。
+    """
+
+    monkeypatch.setattr(cli, "FundAnalysisService", _FakeAnnualPeriodEvidenceConfirmService)
+
+    result = CliRunner().invoke(
+        cli.app,
+        [
+            "analyze-annual-period",
+            "110011",
+            "--target-year",
+            "2025",
+            "--start-year",
+            "2021",
+            "--valuation-state",
+            "unavailable",
+            "--quality-gate-policy",
+            "off",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert "evidence_confirm_status: warn" in result.output
+    assert "evidence_confirm_policy: warn" in result.output
+    assert "evidence_confirm_checked_facts: 8" in result.output
+    assert "evidence_confirm_failed_facts: 1" in result.output
+    assert "evidence_confirm_auditability_score: 87" in result.output
+    assert "canonical_years: 2025,2024,2023,2022,2021" in result.output
+    assert "# annual period report" in result.output
+    assert "# current year report" not in result.output
+    assert "annual secret excerpt" not in result.output
+    assert "/tmp/annual-source.pdf" not in result.output
+    assert "annual parser" not in result.output
+    assert "annual provider" not in result.output
 
 
 def test_analyze_cli_use_llm_missing_config_fails_before_service(
