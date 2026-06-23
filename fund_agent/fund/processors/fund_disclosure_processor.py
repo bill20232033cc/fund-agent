@@ -218,12 +218,21 @@ _MANAGER_PROFILE_ROSTER_END_DATE_LABELS: Final[tuple[str, ...]] = (
 )
 _MANAGER_PROFILE_STRATEGY_HEADINGS: Final[tuple[str, ...]] = (
     "报告期内基金投资策略和运作分析",
+    "报告期内基金的投资策略和业绩表现说明",
+    "基金投资策略和业绩表现说明",
     "投资策略和运作分析",
+    "投资策略和业绩表现说明",
+    "基金投资策略和运作分析",
     "投资策略",
     "运作分析",
+    "运作回顾",
 )
 _MANAGER_PROFILE_OUTLOOK_HEADINGS: Final[tuple[str, ...]] = (
     "管理人对宏观经济、证券市场及行业走势的简要展望",
+    "管理人对宏观经济、证券市场和行业走势的简要展望",
+    "管理人对境外市场走势的简要展望",
+    "宏观经济、证券市场及行业走势展望",
+    "市场及行业走势展望",
     "后市展望",
     "市场展望",
 )
@@ -476,15 +485,7 @@ _MANAGER_PROFILE_MATCH_GROUPS: Final[
     ),
     (
         "manager_strategy_text",
-        (
-            "报告期内基金投资策略和运作分析",
-            "投资策略和运作分析",
-            "投资策略",
-            "运作分析",
-            "管理人对宏观经济、证券市场及行业走势的简要展望",
-            "后市展望",
-            "市场展望",
-        ),
+        (*_MANAGER_PROFILE_STRATEGY_HEADINGS, *_MANAGER_PROFILE_OUTLOOK_HEADINGS),
         (),
         (),
     ),

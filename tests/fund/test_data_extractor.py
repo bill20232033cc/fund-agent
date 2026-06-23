@@ -1626,6 +1626,107 @@ async def test_explicit_disclosure_source_truth_manager_profile_projects_to_bund
 
 
 @pytest.mark.asyncio
+async def test_explicit_disclosure_manager_strategy_text_accepts_qdii_heading_variants() -> None:
+    """验证 QDII/海外报告常见策略与展望标题可抽取 manager_strategy_text。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当标题变体未生成 direct 字段或 anchor 时抛出。
+    """
+
+    paragraphs = (
+        _DisclosureParagraph(
+            block_id="paragraph-qdiistrategy",
+            section_id="section-qdiistrategy",
+            heading_path=("报告期内基金的投资策略和业绩表现说明",),
+            text_raw="报告期内本基金跟踪境外指数并控制跟踪偏离。",
+            text_normalized="报告期内本基金跟踪境外指数并控制跟踪偏离。",
+        ),
+        _DisclosureParagraph(
+            block_id="paragraph-qdiimarket",
+            section_id="section-qdiimarket",
+            heading_path=("管理人对境外市场走势的简要展望",),
+            text_raw="后续将关注海外利率和大型科技公司盈利变化。",
+            text_normalized="后续将关注海外利率和大型科技公司盈利变化。",
+        ),
+    )
+    extractor = FundDataExtractor(
+        repository=_FakeRepository(_typed_non_active_annual_report("qdii_fund", "017641")),
+        nav_provider=_RecordingNavProvider(),
+        processor_registry=FundProcessorRegistry.create_default(),
+    )
+
+    bundle = await extractor.extract(
+        "017641",
+        2024,
+        disclosure_intermediate=_disclosure_intermediate(
+            fund_code="017641",
+            paragraph_blocks=paragraphs,
+            source_truth_admission=_source_truth_admission_proof(fund_code="017641"),
+        ),
+    )
+
+    assert bundle.manager_strategy_text.value == {
+        "strategy_summary": "报告期内本基金跟踪境外指数并控制跟踪偏离。",
+        "market_outlook": "后续将关注海外利率和大型科技公司盈利变化。",
+    }
+    assert bundle.manager_strategy_text.extraction_mode == "direct"
+    assert bundle.manager_strategy_text.anchors
+    assert bundle.manager_strategy_text.anchors[0].section_id == "section-qdiistrategy"
+    assert bundle.manager_strategy_text.anchors[0].row_locator == (
+        "field=manager_strategy_text.strategy_summary; block_id=paragraph-qdiistrategy"
+    )
+
+
+@pytest.mark.asyncio
+async def test_explicit_disclosure_manager_strategy_text_ignores_body_only_keywords() -> None:
+    """验证正文关键词不能绕过 heading_path 生成 manager_strategy_text。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当正文自授权生成字段或 anchor 时抛出。
+    """
+
+    paragraphs = (
+        _DisclosureParagraph(
+            block_id="paragraph-body-only",
+            section_id="section-risk",
+            heading_path=("风险提示",),
+            text_raw="本段提到投资策略和后市展望，但不属于管理人报告策略章节。",
+            text_normalized="本段提到投资策略和后市展望，但不属于管理人报告策略章节。",
+        ),
+    )
+    extractor = FundDataExtractor(
+        repository=_FakeRepository(_annual_report()),
+        nav_provider=_RecordingNavProvider(),
+        processor_registry=FundProcessorRegistry.create_default(),
+    )
+
+    bundle = await extractor.extract(
+        "110011",
+        2024,
+        disclosure_intermediate=_disclosure_intermediate(
+            paragraph_blocks=paragraphs,
+            source_truth_admission=_source_truth_admission_proof(),
+        ),
+    )
+
+    assert bundle.manager_strategy_text.value is None
+    assert bundle.manager_strategy_text.anchors == ()
+    assert bundle.manager_strategy_text.extraction_mode == "missing"
+
+
+@pytest.mark.asyncio
 async def test_explicit_disclosure_source_truth_investor_experience_projects_to_bundle() -> None:
     """验证 proof-positive FDD investor_experience source truth 经 facade 投影。
 
@@ -2933,11 +3034,16 @@ def _manager_profile_holdings_cell(
     )
 
 
-def _source_truth_admission_proof() -> FundDisclosureSourceTruthAdmissionProof:
+def _source_truth_admission_proof(
+    *,
+    fund_code: str = "110011",
+    report_year: int = 2024,
+) -> FundDisclosureSourceTruthAdmissionProof:
     """构造测试用合法 source-truth admission proof。
 
     Args:
-        无。
+        fund_code: proof 中的基金代码。
+        report_year: proof 中的报告年份。
 
     Returns:
         合法的 FDD source-truth 正向证明。
@@ -2949,8 +3055,8 @@ def _source_truth_admission_proof() -> FundDisclosureSourceTruthAdmissionProof:
     return FundDisclosureSourceTruthAdmissionProof(
         proof_kind="repository_loaded_annual_report_identity.v1",
         source_boundary="annual_report",
-        fund_code="110011",
-        report_year=2024,
+        fund_code=fund_code,
+        report_year=report_year,
         document_kind="annual_report",
         intermediate_kind="fund_disclosure_document.v1",
         source_kind="annual_report",
