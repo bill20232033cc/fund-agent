@@ -260,6 +260,14 @@ Source-truth direct extraction 在该 Processor/Extractor 边界内增加了 `Fu
 - 当前 root-cause 分类只用于 RR-09 A0/A1 诊断准备：`missing_evidence`、`source_support`、`proof_boundary` 归为 `projection_attachment_defect`，`anchor_precision` warn 归为 `true_anchor_precision_gap`，`value_match` 保持 `undetermined`
 - 该能力不读取文档仓库、PDF/cache/source helper、Service、Host、provider、renderer、quality gate、文件系统、环境变量或 dayu；不改变 V2 strict truth、ECQ 投影、quality gate 语义、report-body rendering、runtime product evidence、readiness 或 release 状态
 
+`fund_agent/fund/evidence_confirm_value_diagnostics.py` 当前提供 no-live `evidence_confirm_value_diagnostic.v1` 安全诊断聚合：
+
+- `summarize_value_match_diagnostics()` 只消费已经得到的 `ChapterFactProjection`、显式 `EvidenceConfirmReference` 和 `EvidenceConfirmResultV2`，用于解释 V2 `value_match` fail/pass 以及 `bond_risk_evidence` 组级 anchor 未展开造成的 missing-evidence residual
+- token/match 元数据必须来自 deterministic V2 same-source primitives；该 helper 不实现第二套近似 matcher，不改变 `confirm_projection_evidence_v2()` 的 pass/fail 语义
+- 输出只包含基金代码、年份、fact/source field/chapter ID、失败/警告维度、anchor/reference/proof-reference 计数、token 安全类别计数、结构化 value path、reference 粒度、locator downgrade 标记和诊断分类；不包含原始 token、原文 excerpt、PDF/cache 路径、URL、source helper 细节或 provider payload
+- 当前分类只用于 RR-09 A2 诊断：`value_shape_overbroad`、`matcher_normalization_gap`、`coarse_reference_insufficient`、`anchor_attachment_mismatch`、`extractor_value_or_anchor_defect`、`bond_risk_group_anchor_projection_gap`、`undetermined_requires_live_excerpt_review`
+- 该能力不读取文档仓库、PDF/cache/source helper、Service、Host、provider、renderer、quality gate、文件系统、环境变量或 dayu；不改变 V2 strict truth、ECQ 投影、quality gate 语义、report-body rendering、runtime product evidence、readiness 或 release 状态
+
 `fund_agent/fund/evidence_confirm_semantic.py` 当前提供 no-live `evidence_confirm_semantic.v1` 语义蕴含 companion contract：
 
 - `confirm_semantic_entailment()` 只消费调用方显式传入的 `EvidenceConfirmResultV2`、`EvidenceConfirmReference`、`EvidenceSemanticClaim` 和注入的 `EvidenceEntailmentClient`
@@ -678,6 +686,7 @@ C2 当前只做确定性 marker / 元数据检查，不调用 LLM，不判断语
 - EID 年报来源对同一基金代码/年份的 PDF 下载使用实例级锁；同 key 并发请求会复用首个请求落地的 PDF 缓存。该保护不等同于跨进程锁或完整仓库事务。
 - `evidence_confirm.py`：no-live Evidence Confirm（V1 phase 1 + V2 五维评分与硬门控），只消费显式 `EvidenceConfirmReference`，执行 E1/E2/E3 的保守同 anchor excerpt 复核与五维确定性评分，不接 `ProgrammaticAuditResult` 或 quality gate。
 - `evidence_confirm_diagnostics.py`：no-live Evidence Confirm V2 安全诊断聚合，只消费 `EvidenceConfirmResultV2`，输出维度/字段/章节级安全诊断桶和保守 root-cause 分类，不读取 source/PDF 或改变 quality gate。
+- `evidence_confirm_value_diagnostics.py`：no-live Evidence Confirm value-match 安全诊断聚合，只消费 projection、显式 references 和 V2 result，复用 V2 same-source token/matcher primitives，输出安全类别/路径/粒度和 residual 分类，不读取 source/PDF 或改变 V2/quality gate。
 - `evidence_confirm_semantic.py`：no-live Evidence Confirm 语义蕴含 companion contract，只消费 V2 结果、显式 references、显式 semantic claims 和注入的 `EvidenceEntailmentClient`；semantic output 不能覆盖 deterministic V2 failures，不构造 provider/live/Service/renderer/quality-gate 路径。
 - `evidence_confirm_runner.py`：Service 可导入的 Evidence Confirm typed facade，只暴露 repository-bounded runner request/result/entrypoint；底层 materializer/source 实现仍留在 Fund 内部。
 - `evidence_confirm_production.py`：Evidence Confirm 生产集成安全摘要，把 repository-bounded result 和可选 no-live injected semantic result 压缩为 `EvidenceConfirmProductionSummary`；不携带原文 excerpt、路径或 provider payload。
