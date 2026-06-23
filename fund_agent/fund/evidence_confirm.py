@@ -519,7 +519,7 @@ def _confirm_fact_v2(
     dimension_results: list[EvidenceConfirmDimensionResult] = []
 
     # 维度 1: anchor_precision
-    dim_anchor, dim_anchor_issues = _dimension_anchor_precision(fact, proof_references)
+    dim_anchor, dim_anchor_issues = _dimension_anchor_precision(fact, proof_references, anchors_by_id)
     issues.extend(dim_anchor_issues)
     dimension_results.append(dim_anchor)
 
@@ -676,12 +676,14 @@ def _fact_result_v2_e3_blocking(
 def _dimension_anchor_precision(
     fact: ChapterFactEntry,
     proof_references: tuple[EvidenceConfirmReference, ...],
+    anchors_by_id: dict[str, ChapterEvidenceAnchor] | None = None,
 ) -> tuple[EvidenceConfirmDimensionResult, tuple[EvidenceConfirmIssue, ...]]:
     """计算 anchor_precision 维度。
 
     Args:
         fact: 章节事实。
         proof_references: proven references。
+        anchors_by_id: anchor id 到章节证据锚点的映射；用于识别 reference 定位降级。
 
     Returns:
         维度结果与 issue 列表。
@@ -705,7 +707,7 @@ def _dimension_anchor_precision(
 
     issues: list[EvidenceConfirmIssue] = []
     for reference in proof_references:
-        precision_issue = _precision_issue(fact, reference)
+        precision_issue = _precision_issue(fact, reference, anchors_by_id)
         if precision_issue is not None:
             issues.append(precision_issue)
 
@@ -1657,12 +1659,14 @@ def _reference_matches_anchor(
 def _precision_issue(
     fact: ChapterFactEntry,
     reference: EvidenceConfirmReference,
+    anchors_by_id: dict[str, ChapterEvidenceAnchor] | None = None,
 ) -> EvidenceConfirmIssue | None:
     """检查 reference anchor 精度。
 
     Args:
         fact: 章节事实。
         reference: 引用摘录。
+        anchors_by_id: anchor id 到章节证据锚点的映射；为空时仅检查 reference 自身定位。
 
     Returns:
         精度 issue；无问题时返回 ``None``。
@@ -1679,6 +1683,15 @@ def _precision_issue(
         if reference.section_id or reference.row_locator:
             return None
         return _issue("E1", "reviewable", fact, reference.anchor_id, "reviewed note 缺少可复核定位。")
+    anchor = anchors_by_id.get(reference.anchor_id) if anchors_by_id is not None else None
+    if anchor is not None and anchor.row_locator and reference.row_locator is None:
+        return _issue(
+            "E1",
+            "reviewable",
+            fact,
+            reference.anchor_id,
+            "annual_report anchor 声明 row_locator，但 reference 已降级为非行级定位。",
+        )
     if not reference.section_id:
         return _issue("E1", "reviewable", fact, reference.anchor_id, "annual_report excerpt 缺少 section_id。")
     if reference.page_number is None and not reference.table_id and not reference.row_locator:

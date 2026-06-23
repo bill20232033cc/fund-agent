@@ -219,8 +219,10 @@ def build_annual_report_evidence_confirm_references(
     """从当前 ``ParsedAnnualReport`` 字段构建 Evidence Confirm 年报引用。
 
     该函数只 materialize ``source_kind="annual_report"`` 的章节锚点。表格定位仅支持
-    ``page-{page_number}-table-{table_index}``，行定位仅支持零基 ``row-N``。不支持或
-    无法唯一定位时 fail-closed，不按标题、单元格值、页码文本或 parser artifact 推断。
+    ``page-{page_number}-table-{table_index}``。行定位支持零基 ``row-N``；语义化
+    ``row_locator`` 在存在安全 table/section excerpt 时降级为粗粒度引用并产生
+    informational issue。无法唯一定位或身份矛盾时 fail-closed，不按标题、单元格值、
+    页码文本或 parser artifact 推断。
 
     Args:
         request: 年报引用构建请求。
@@ -940,11 +942,7 @@ def _anchor_excerpt(
     """
 
     if anchor.row_locator and not anchor.table_id:
-        return _empty_excerpt_issue(
-            anchor,
-            "row_locator_without_table_id",
-            "row_locator 缺少兼容 table_id，不能进行行级定位。",
-        )
+        return _semantic_row_locator_section_excerpt(request, anchor)
     if anchor.table_id:
         return _table_excerpt(request, anchor)
     return _section_excerpt(request, anchor)
@@ -1035,11 +1033,7 @@ def _table_row_excerpt(
 
     row_match = SUPPORTED_ROW_LOCATOR_RE.fullmatch(anchor.row_locator or "")
     if row_match is None:
-        return _empty_excerpt_issue(
-            anchor,
-            "unsupported_row_locator_format",
-            "row_locator 只支持零基 row-{zero_based_index} 格式。",
-        )
+        return _semantic_row_locator_table_excerpt(anchor, table)
     row_index = int(row_match.group("row_index"))
     if row_index >= len(table.rows):
         return _empty_excerpt_issue(
@@ -1056,6 +1050,79 @@ def _table_row_excerpt(
         table_id=anchor.table_id,
         row_locator=anchor.row_locator,
         issues=(),
+    )
+
+
+def _semantic_row_locator_table_excerpt(
+    anchor: ChapterEvidenceAnchor,
+    table: ParsedTable,
+) -> _AnchorExcerptResult:
+    """把无法 row-N 定位的语义行定位降级为 table excerpt。
+
+    Args:
+        anchor: 当前章节证据锚点。
+        table: 已唯一命中的表格。
+
+    Returns:
+        table 级 excerpt 和 informational 降级 issue。
+
+    Raises:
+        无显式抛出。
+    """
+
+    excerpt = _normalize_whitespace(_format_table_excerpt(table))
+    if not excerpt:
+        return _empty_excerpt_issue(anchor, "empty_table_excerpt", "table excerpt 为空。")
+    return _AnchorExcerptResult(
+        excerpt_text=excerpt,
+        page_number=table.page_number,
+        table_id=anchor.table_id,
+        row_locator=None,
+        issues=(
+            _issue(
+                anchor,
+                "informational",
+                "semantic_row_locator_degraded_to_table_excerpt",
+                "row_locator 不是 row-N，已降级为 table excerpt；V2 会保留定位精度 warning。",
+            ),
+        ),
+    )
+
+
+def _semantic_row_locator_section_excerpt(
+    request: EvidenceConfirmReferenceBuildRequest,
+    anchor: ChapterEvidenceAnchor,
+) -> _AnchorExcerptResult:
+    """把无 table_id 的语义行定位降级为 section excerpt。
+
+    Args:
+        request: 年报引用构建请求。
+        anchor: 当前章节证据锚点。
+
+    Returns:
+        section 级 excerpt 和 informational 降级 issue。
+
+    Raises:
+        无显式抛出。
+    """
+
+    section_result = _section_excerpt(request, anchor)
+    if section_result.excerpt_text is None:
+        return section_result
+    return _AnchorExcerptResult(
+        excerpt_text=section_result.excerpt_text,
+        page_number=section_result.page_number,
+        table_id=None,
+        row_locator=None,
+        issues=(
+            *section_result.issues,
+            _issue(
+                anchor,
+                "informational",
+                "semantic_row_locator_degraded_to_section_excerpt",
+                "row_locator 缺少兼容 table_id，已降级为 section excerpt；V2 会保留定位精度 warning。",
+            ),
+        ),
     )
 
 

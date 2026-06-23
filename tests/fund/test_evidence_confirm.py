@@ -719,9 +719,16 @@ def test_v2_result_uses_v2_schema_version() -> None:
     """验证 V2 结果使用 evidence_confirm.v2 schema version。"""
 
     chapter, fact = _chapter_and_fact("structured.turnover_rate")
+    anchor = chapter.evidence_anchors[0]
     result = confirm_chapter_evidence_v2(
         chapter,
-        (_reference(fact.evidence_anchor_ids[0], excerpt_text="年报披露换手率为 120%。"),),
+        (
+            _reference(
+                fact.evidence_anchor_ids[0],
+                excerpt_text="年报披露换手率为 120%。",
+                row_locator=anchor.row_locator,
+            ),
+        ),
     )
 
     assert result.schema_version == EVIDENCE_CONFIRM_V2_SCHEMA_VERSION
@@ -790,9 +797,16 @@ def test_v2_all_applicable_pass_produces_hard_gate_pass() -> None:
     """验证全部通过产生 hard gate pass。"""
 
     chapter, fact = _chapter_and_fact("structured.turnover_rate")
+    anchor = chapter.evidence_anchors[0]
     result = confirm_chapter_evidence_v2(
         chapter,
-        (_reference(fact.evidence_anchor_ids[0], excerpt_text="年报披露换手率为 120%。"),),
+        (
+            _reference(
+                fact.evidence_anchor_ids[0],
+                excerpt_text="年报披露换手率为 120%。",
+                row_locator=anchor.row_locator,
+            ),
+        ),
     )
 
     assert result.overall_status == "pass"
@@ -1248,6 +1262,7 @@ def test_v2_aggregate_score_all_passing_uses_uncapped_average() -> None:
     """验证全部通过时聚合分数使用 uncapped average。"""
 
     chapter, fact = _chapter_and_fact("structured.turnover_rate")
+    anchor = chapter.evidence_anchors[0]
     fact2 = replace(
         fact,
         fact_id=f"{fact.fact_id}:b",
@@ -1255,7 +1270,11 @@ def test_v2_aggregate_score_all_passing_uses_uncapped_average() -> None:
     )
     chapter = replace(chapter, facts=(fact, fact2))
     references = (
-        _reference(fact.evidence_anchor_ids[0], excerpt_text="年报披露换手率为 120%。"),
+        _reference(
+            fact.evidence_anchor_ids[0],
+            excerpt_text="年报披露换手率为 120%。",
+            row_locator=anchor.row_locator,
+        ),
     )
 
     result = confirm_chapter_evidence_v2(chapter, references)

@@ -274,7 +274,8 @@ Source-truth direct extraction 在该 Processor/Extractor 边界内增加了 `Fu
 
 - `build_annual_report_evidence_confirm_references()` 只消费调用方已经传入的 `ChapterFactProjection` 与 `ParsedAnnualReport`
 - 只 materialize `source_kind="annual_report"` 的 anchor，输出既有 `annual_report_excerpt / annual_report` reference/source kind，不扩展 `EvidenceSourceKind` 或公共 `EvidenceAnchor`
-- 表格定位只接受 `page-{page_number}-table-{table_index}` 并精确匹配 `ParsedTable.page_number/table_index`；行定位只接受零基 `row-N`
+- 表格定位只接受 `page-{page_number}-table-{table_index}` 并精确匹配 `ParsedTable.page_number/table_index`；行定位精确模式只接受零基 `row-N`
+- 语义化 `row_locator` 不做标题/值/页码文本推断：有兼容 table id 时降级为 table excerpt，无 table id 时降级为 bounded section excerpt，并记录 informational issue；V2 会把 row locator 降级保留为 E1 `anchor_precision` warning，避免把粗粒度 excerpt 当作行级精确证据
 - 无 table/row locator 时只用 `ParsedAnnualReport.get_section_text(section_id)` 构造 bounded section excerpt，不按 page_number 切 `raw_text`
 - `source_truth_status` 默认 `not_proven`；只有请求为 `proven` 且当前 EID single-source metadata admission 满足时才输出 proven reference
 - import 与 materializer 不实例化 `FundDocumentRepository`，不读取 PDF/cache/source helper，不触发网络、provider、Service、Host、renderer、quality gate 或 readiness 判定

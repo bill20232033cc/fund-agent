@@ -152,11 +152,6 @@ def test_zero_max_section_excerpt_chars_fails_closed_as_empty_excerpt() -> None:
         ("default", {"table_id": "table-0", "row_locator": "row-0"}, "unsupported_table_id_format"),
         (
             "one_row_table",
-            {"table_id": "page-3-table-0", "row_locator": "row:0"},
-            "unsupported_row_locator_format",
-        ),
-        (
-            "one_row_table",
             {"table_id": "page-3-table-0", "row_locator": "row-1"},
             "row_locator_out_of_range",
         ),
@@ -179,6 +174,88 @@ def test_locator_and_section_failures_are_explicit(
     assert result.references == ()
     assert {issue.reason for issue in result.issues} == {expected_reason}
     assert all(issue.severity == "blocking" for issue in result.issues)
+
+
+def test_semantic_row_locator_with_table_degrades_to_table_reference() -> None:
+    """验证语义 row_locator 有兼容 table_id 时降级为 table excerpt。"""
+
+    projection, _, _ = _projection_with_anchor(
+        table_id="page-3-table-0",
+        row_locator="row:0:换手率",
+        page_number=3,
+    )
+    report = _parsed_report(
+        tables=(
+            ParsedTable(
+                page_number=3,
+                table_index=0,
+                headers=("项目", "数值"),
+                rows=(("换手率", "120%"), ("规模", "10 亿")),
+            ),
+        ),
+    )
+
+    result = build_annual_report_evidence_confirm_references(_request(projection, report))
+
+    assert result.status == "pass"
+    assert len(result.references) == 1
+    assert result.references[0].table_id == "page-3-table-0"
+    assert result.references[0].row_locator is None
+    assert "项目: 换手率" in result.references[0].excerpt_text
+    assert "项目: 规模" in result.references[0].excerpt_text
+    assert {issue.reason for issue in result.issues} == {"semantic_row_locator_degraded_to_table_excerpt"}
+    assert all(issue.severity == "informational" for issue in result.issues)
+
+
+def test_row_locator_without_table_degrades_to_section_reference() -> None:
+    """验证无 table_id 的语义 row_locator 降级为 section excerpt。"""
+
+    projection, _, _ = _projection_with_anchor(row_locator="field=turnover_rate", page_number=7)
+    report = _parsed_report(section_body="本章节披露换手率为 120%。")
+
+    result = build_annual_report_evidence_confirm_references(_request(projection, report))
+
+    assert result.status == "pass"
+    assert len(result.references) == 1
+    assert result.references[0].page_number == 7
+    assert result.references[0].table_id is None
+    assert result.references[0].row_locator is None
+    assert result.references[0].excerpt_text == "本章节披露换手率为 120%。"
+    assert {issue.reason for issue in result.issues} == {"semantic_row_locator_degraded_to_section_excerpt"}
+    assert all(issue.severity == "informational" for issue in result.issues)
+
+
+def test_degraded_row_locator_keeps_v2_anchor_precision_warning() -> None:
+    """验证 row_locator 降级后 V2 不静默通过，而是保留 E1 精度 warning。"""
+
+    projection, _, _ = _projection_with_anchor(
+        table_id="page-3-table-0",
+        row_locator="row:0:换手率",
+        page_number=3,
+    )
+    report = _parsed_report(
+        tables=(
+            ParsedTable(
+                page_number=3,
+                table_index=0,
+                headers=("项目", "数值"),
+                rows=(("换手率", "120%"),),
+            ),
+        ),
+    )
+    build_result = build_annual_report_evidence_confirm_references(_request(projection, report))
+
+    result = confirm_projection_evidence_v2(projection, build_result.references)
+
+    assert build_result.status == "pass"
+    assert result.overall_status == "warn"
+    fact_result = result.fact_results[0]
+    dimensions = {dimension.dimension: dimension for dimension in fact_result.dimension_results}
+    assert dimensions["anchor_precision"].status == "warn"
+    assert dimensions["source_support"].status == "pass"
+    assert dimensions["missing_evidence"].status == "pass"
+    assert dimensions["value_match"].status == "pass"
+    assert {issue.rule_code for issue in result.issues} == {"E1"}
 
 
 def test_header_row_width_mismatch_renders_deterministic_excerpt() -> None:
@@ -421,6 +498,61 @@ async def test_repository_runner_section_smoke_warn_is_pathway_pass() -> None:
         if dimension.status == "warn"
     }
     assert warned_dimensions == {"anchor_precision"}
+
+
+@pytest.mark.asyncio
+async def test_repository_runner_degraded_semantic_row_locator_warn_is_pathway_pass() -> None:
+    """验证语义 row_locator 降级后只产生 E1 warning，EC-P2 pathway 仍可通过。"""
+
+    projection, _, _ = _projection_with_anchor(
+        table_id="page-3-table-0",
+        row_locator="row:0:换手率",
+        page_number=3,
+    )
+    report = _parsed_report(
+        tables=(
+            ParsedTable(
+                page_number=3,
+                table_index=0,
+                headers=("项目", "数值"),
+                rows=(("换手率", "120%"),),
+            ),
+        ),
+    )
+    repository = _PoisonRepository(report)
+
+    result = await run_repository_bounded_evidence_confirm(
+        EvidenceConfirmRepositoryRunRequest(
+            fund_code="110011",
+            report_year=2024,
+            projection=projection,  # type: ignore[arg-type]
+            repository=repository,
+        )
+    )
+
+    assert result.status == "fail"
+    assert result.pathway_status == "pass"
+    assert result.reference_build_result is not None
+    assert result.reference_build_result.status == "pass"
+    assert {issue.reason for issue in result.reference_build_result.issues} == {
+        "semantic_row_locator_degraded_to_table_excerpt"
+    }
+    assert result.evidence_confirm_result is not None
+    assert result.evidence_confirm_result.overall_status == "warn"
+    warned_dimensions = {
+        dimension.dimension
+        for fact_result in result.evidence_confirm_result.fact_results
+        for dimension in fact_result.dimension_results
+        if dimension.status == "warn"
+    }
+    failed_dimensions = {
+        dimension.dimension
+        for fact_result in result.evidence_confirm_result.fact_results
+        for dimension in fact_result.dimension_results
+        if dimension.status == "fail"
+    }
+    assert warned_dimensions == {"anchor_precision"}
+    assert failed_dimensions == set()
 
 
 @pytest.mark.asyncio
