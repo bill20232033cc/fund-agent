@@ -707,6 +707,34 @@ class _FakeBlockedAnalysisService:
         raise QualityGateBlockedError(_fake_quality_gate_result(status="block"))
 
 
+class _FakeBlockedWithEvidenceConfirmAnalysisService:
+    """CLI 测试用携带 EC 摘要的 quality gate 阻断 Service。"""
+
+    async def analyze(self, request):  # type: ignore[no-untyped-def]
+        """抛出携带安全 EC 摘要的 quality gate 阻断异常。
+
+        Args:
+            request: CLI 构造的 Service 请求。
+
+        Returns:
+            无返回值。
+
+        Raises:
+            QualityGateBlockedError: 始终抛出。
+        """
+
+        raise QualityGateBlockedError(
+            _fake_quality_gate_result(status="block"),
+            evidence_confirm_summary=_FakeEvidenceConfirmSummary(
+                policy="warn",
+                status="fail",
+                checked_fact_count=8,
+                failed_fact_count=2,
+                auditability_score=41,
+            ),
+        )
+
+
 class _FakeNotRunBlockedAnalysisService:
     """CLI 测试用 quality gate 未运行阻断 Service。"""
 
@@ -3254,6 +3282,44 @@ def test_analyze_cli_structured_quality_gate_block(monkeypatch) -> None:  # type
     assert "quality_gate_status: block" in result.output
     assert "quality_gate_issues: 2" in result.output
     assert "quality_gate_json: quality-output/quality_gate.json" in result.output
+    assert "evidence_confirm_status:" not in result.output
+
+
+def test_analyze_cli_quality_gate_block_prints_safe_evidence_confirm_summary(
+    monkeypatch,
+) -> None:  # type: ignore[no-untyped-def]
+    """验证 quality gate block 路径会输出已计算的 EC 安全摘要。
+
+    Args:
+        monkeypatch: pytest monkeypatch fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 阻断输出或退出码不符合契约时抛出。
+    """
+
+    monkeypatch.setattr(
+        cli,
+        "FundAnalysisService",
+        _FakeBlockedWithEvidenceConfirmAnalysisService,
+    )
+    runner = CliRunner()
+
+    result = runner.invoke(cli.app, ["analyze", "110011"])
+
+    assert result.exit_code == 2
+    assert "# 0. 投资要点概览" not in result.output
+    assert "质量 gate 阻断报告输出" in result.output
+    assert "quality_gate_status: block" in result.output
+    assert "quality_gate_issues: 2" in result.output
+    assert "evidence_confirm_status: fail" in result.output
+    assert "evidence_confirm_policy: warn" in result.output
+    assert "evidence_confirm_checked_facts: 8" in result.output
+    assert "evidence_confirm_failed_facts: 2" in result.output
+    assert "evidence_confirm_auditability_score: 41" in result.output
+    assert "anchor_excerpt" not in result.output
 
 
 def test_analyze_cli_evidence_confirm_block_exits_2_without_report_body(

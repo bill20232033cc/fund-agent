@@ -1148,6 +1148,9 @@ async def test_fund_analysis_service_quality_block_evidence_confirm_fail_raises_
 
     assert len(evidence_runner.calls) == 1
     assert exc_info.value.quality_gate_result.status == "block"
+    assert exc_info.value.evidence_confirm_summary is not None
+    assert exc_info.value.evidence_confirm_summary.status == "fail"
+    assert exc_info.value.evidence_confirm_summary.policy == "block"
     assert any(
         issue.rule_code == "ECQ2" and issue.severity == "block"
         for issue in exc_info.value.quality_gate_result.issues

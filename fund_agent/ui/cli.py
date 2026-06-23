@@ -2576,6 +2576,7 @@ def _echo_quality_gate_blocked(error: QualityGateBlockedError) -> None:
     typer.echo(f"quality_gate_issues: {len(result.issues)}", err=True)
     typer.echo(f"quality_gate_json: {result.gate_json_path}", err=True)
     typer.echo(f"quality_gate_md: {result.gate_markdown_path}", err=True)
+    _echo_evidence_confirm_summary(error, summary_attr="evidence_confirm_summary")
 
 
 def _echo_quality_gate_not_run_blocked(error: QualityGateNotRunBlockedError) -> None:
