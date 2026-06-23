@@ -17,6 +17,15 @@ from fund_agent.fund.extractors import (
 from fund_agent.fund.data_extractor import FundDataExtractor
 from fund_agent.fund.chapter_facts import ChapterFactProvider, project_chapter_facts
 from fund_agent.fund.evidence_confirm import EvidenceConfirmReference, confirm_projection_evidence
+from fund_agent.fund.evidence_confirm_sources import (
+    EvidenceConfirmReferenceBuildRequest,
+    build_annual_report_evidence_confirm_references,
+)
+from fund_agent.fund.evidence_confirm_runner import (
+    EvidenceConfirmRepositoryRunRequest,
+    run_repository_bounded_evidence_confirm,
+)
+from fund_agent.fund.evidence_confirm_production import EvidenceConfirmProductionSummary
 from fund_agent.fund.evidence_availability import derive_evidence_availability
 from fund_agent.fund.chapter_writer import build_chapter_writer_input, write_chapter
 from fund_agent.fund.chapter_auditor import ChapterAuditInput, audit_chapter
@@ -65,6 +74,18 @@ evidence_confirm_result = confirm_projection_evidence(
             excerpt_text="年报摘录文本",
         ),
     ),
+)
+reference_build_result = build_annual_report_evidence_confirm_references(
+    EvidenceConfirmReferenceBuildRequest(
+        fund_code="110011",
+        report_year=2024,
+        projection=chapter_projection,
+        parsed_report=report,
+        source_truth_status="not_proven",
+    )
+)
+repository_run_result = await run_repository_bounded_evidence_confirm(
+    EvidenceConfirmRepositoryRunRequest(fund_code="110011", report_year=2024)
 )
 writer_input = build_chapter_writer_input(chapter_projection, chapter_id=1, mode="prompt_only")
 write_result = write_chapter(writer_input, llm_client=None)
@@ -209,6 +230,51 @@ Source-truth direct extraction 在该 Processor/Extractor 边界内增加了 `Fu
 - 分数语义：阻断性失败产生分数上限（score cap），防止稀释；通过 fact 使用无上限均值聚合
 - V2 与 V1 共存：V1 公共函数 `confirm_chapter_evidence()` / `confirm_projection_evidence()` 不变，返回类型、分数和状态语义保持原样
 - 该能力不读取文档仓库、PDF/cache/source helper、Service、Host、provider、retained report、文件系统、环境变量或 dayu，不接入 `ProgrammaticAuditResult`、FQ0-FQ6 quality gate、renderer、CLI 或 readiness 判定；调用方自行提供 reference
+
+`fund_agent/fund/evidence_confirm_semantic.py` 当前提供 no-live `evidence_confirm_semantic.v1` 语义蕴含 companion contract：
+
+- `confirm_semantic_entailment()` 只消费调用方显式传入的 `EvidenceConfirmResultV2`、`EvidenceConfirmReference`、`EvidenceSemanticClaim` 和注入的 `EvidenceEntailmentClient`
+- `EvidenceSemanticClaim` 是显式自然语言 claim 输入，包含 `claim_id`、`fact_id`、`source_field_id`、`claim_text` 和 `anchor_ids`；当前不从 `ChapterFactEntry.value`、renderer output 或报告正文推断 claim
+- per-claim `status` 使用 `entailed / contradicted / insufficient / not_applicable` 表示语义支持；aggregate `overall_status` 使用 `pass / warn / fail / not_applicable` 表示 gate 状态
+- deterministic V2 是前置硬门控：`source_support`、`missing_evidence`、`proof_boundary` 不通过或 `value_match` 失败时不调用 semantic client；semantic output 不能覆盖缺证、candidate-only、not_proven、定位不匹配或数值不匹配
+- `anchor_precision` warning 下可以运行 semantic client，但 entailed 结果仍保持 aggregate `warn`
+- malformed client result、client status/reason 不兼容和 client exception 都 fail-closed；异常详情不写入结果
+- 该能力不构造真实 provider/LLM client，不读取文档仓库、PDF/cache/source helper、Service、Host、renderer、quality gate、文件系统、环境变量或 dayu；Service-owned provider adapter、default-on analyze warn 策略、CLI safe summary 和 quality-gate ECQ 投影已经由后续 gate 接入，provider-backed semantic default-on production use、renderer/report-body 集成和 release/readiness 仍需后续 gate
+
+`fund_agent/fund/evidence_confirm_sources.py` 当前提供 no-live `ParsedAnnualReport` 年报引用 materializer 和底层 repository-bounded runner 实现：
+
+- `build_annual_report_evidence_confirm_references()` 只消费调用方已经传入的 `ChapterFactProjection` 与 `ParsedAnnualReport`
+- 只 materialize `source_kind="annual_report"` 的 anchor，输出既有 `annual_report_excerpt / annual_report` reference/source kind，不扩展 `EvidenceSourceKind` 或公共 `EvidenceAnchor`
+- 表格定位只接受 `page-{page_number}-table-{table_index}` 并精确匹配 `ParsedTable.page_number/table_index`；行定位只接受零基 `row-N`
+- 无 table/row locator 时只用 `ParsedAnnualReport.get_section_text(section_id)` 构造 bounded section excerpt，不按 page_number 切 `raw_text`
+- `source_truth_status` 默认 `not_proven`；只有请求为 `proven` 且当前 EID single-source metadata admission 满足时才输出 proven reference
+- import 与 materializer 不实例化 `FundDocumentRepository`，不读取 PDF/cache/source helper，不触发网络、provider、Service、Host、renderer、quality gate 或 readiness 判定
+- `run_repository_bounded_evidence_confirm()` 是 EC-P2 repository-bounded runner：只通过注入或默认 repository 的 async `load_annual_report(fund_code, report_year, force_refresh=...)` 取得 `ParsedAnnualReport`，可在 repository load 成功后用受控 `projection_factory` 构造 live smoke projection，再复用 materializer 与 V2 Evidence Confirm；来源异常按 `not_found / unavailable / schema_drift / identity_mismatch / integrity_error / ambiguous_repository_failure` fail-closed 分类；`status` 保持 strict V2 聚合语义，`pathway_status` 只表示 repository/source/PDF 通路是否打通
+- `scripts/evidence_confirm_ec_p2_live_sample.py` 只允许 `004393/2025`，构造 `projection_kind="ec_p2_live_section_smoke"` 的 section-smoke projection，输出安全标量 JSON；section-only smoke 的 E1 `anchor_precision` warning 可作为 `pathway_status="pass"` 的 warning reason，但不改变 strict `status` / `evidence_confirm_overall_status`；它只证明 repository -> parsed report -> reference materializer -> V2 通路，不证明字段正确性、source truth family、semantic entailment、golden、readiness 或 release
+
+`fund_agent/fund/evidence_confirm_runner.py` 当前是 Service 可导入的 Fund 层 typed facade：
+
+- 只导出 `EvidenceConfirmRepositoryRunRequest`、`EvidenceConfirmRepositoryRunResult` 和 `run_repository_bounded_evidence_confirm()`
+- Service 通过该 facade 调用 repository-bounded Evidence Confirm runner，不直接导入底层 materializer/source 模块名
+- 该 facade 不改变底层实现、不读取 Service/UI/Host/renderer/quality gate 输入，也不放宽 source/PDF 访问边界
+
+`fund_agent/fund/evidence_confirm_production.py` 当前提供 `EvidenceConfirmProductionSummary`，用于 Service/UI/quality gate 的生产集成摘要：
+
+- 摘要字段只包含 `policy`、`status`、`pathway_status`、`deterministic_status`、`semantic_status`、fact 计数、issue id、可审计性分数和稳定 reason code，不包含原文 excerpt、PDF/cache 路径、parser JSON、source adapter 对象或 provider payload
+- 默认 product `analyze` 会以 `warn` 策略通过 Service 调用 repository-bounded runner 并创建 summary；`analyze-annual-period` 通过 current-year `analyze()` 委托路径继承该 summary；`checklist` 仍固定 Evidence Confirm `off`；developer override `off|warn|block` 仅用于 `analyze --dev-override`
+- semantic companion 可通过调用方已经产生的 no-live injected result 进入 summary；Service-owned provider adapter 已有 release/readiness 证据，但默认 product path 仍不构造 provider-backed semantic client、不读取 env、HTTP 或 LLM 配置
+
+`fund_agent/fund/quality_gate_integration.py` 当前可把显式传入的 Evidence Confirm summary 投影到 `ECQ` issue family：
+
+| 规则码 | 含义 | 当前语义 |
+|--------|------|----------|
+| ECQ0 | Evidence Confirm not-run | 显式 not-run summary 的 `info` issue |
+| ECQ1 | repository/source/reference 通路失败 | policy `block` 时阻断，否则警告 |
+| ECQ2 | deterministic V2 hard-gate fail | policy `block` 时阻断，否则警告 |
+| ECQ3 | deterministic V2 warn | 警告 |
+| ECQ4 | injected semantic companion fail/warn | 仅当 summary 已携带 no-live semantic result 时投影；不代表 provider-backed semantic quality |
+
+ECQ 投影只消费 compact summary，不读取文档仓库、PDF/cache、source helper、parser artifact、renderer、provider 或 LLM。`score.json` 仍保持 FQ0-FQ6 评分输出；ECQ 只进入合并后的 `quality_gate.json` / `quality_gate.md`。缺省未请求 Evidence Confirm 时保持既有 quality gate 行为。
 
 template truth-source replacement、typed projection 和 `EvidenceAvailability` 的当前非目标是：不改变 deterministic `analyze/checklist`、renderer、FQ0-FQ6 quality gate、final judgment、provider/runtime defaults、score/golden/readiness，不实现 Ch2 公开拆章、多年证据 runtime、Agent runner/tool-loop、Host 业务理解或 dayu runtime。
 
@@ -581,6 +647,9 @@ C2 当前只做确定性 marker / 元数据检查，不调用 LLM，不判断语
   - `parser.py`：PDF 全文、表格与章节定位原型
 - EID 年报来源对同一基金代码/年份的 PDF 下载使用实例级锁；同 key 并发请求会复用首个请求落地的 PDF 缓存。该保护不等同于跨进程锁或完整仓库事务。
 - `evidence_confirm.py`：no-live Evidence Confirm（V1 phase 1 + V2 五维评分与硬门控），只消费显式 `EvidenceConfirmReference`，执行 E1/E2/E3 的保守同 anchor excerpt 复核与五维确定性评分，不接 `ProgrammaticAuditResult` 或 quality gate。
+- `evidence_confirm_semantic.py`：no-live Evidence Confirm 语义蕴含 companion contract，只消费 V2 结果、显式 references、显式 semantic claims 和注入的 `EvidenceEntailmentClient`；semantic output 不能覆盖 deterministic V2 failures，不构造 provider/live/Service/renderer/quality-gate 路径。
+- `evidence_confirm_runner.py`：Service 可导入的 Evidence Confirm typed facade，只暴露 repository-bounded runner request/result/entrypoint；底层 materializer/source 实现仍留在 Fund 内部。
+- `evidence_confirm_production.py`：Evidence Confirm 生产集成安全摘要，把 repository-bounded result 和可选 no-live injected semantic result 压缩为 `EvidenceConfirmProductionSummary`；不携带原文 excerpt、路径或 provider payload。
 - `audit/`：程序审计规则。当前包含 `audit_programmatic.py` 和 `contract_rules.py`，执行 P1/P2/P3/C2/L1/R1/R2；C1/L2 属于后续 LLM 审计或语义复核层，E1/E2/E3 的 report-level/full source 接入仍需后续 gate。
 
 ## 当前边界
@@ -599,6 +668,7 @@ C2 当前只做确定性 marker / 元数据检查，不调用 LLM，不判断语
 - `extraction_score.py` 当前计算字段级与单基金 coverage / traceability，对 strict golden answer 中 snapshot 可比字段执行 correctness 比对，并可显式消费 `errors.jsonl` 输出 `failed_funds`；旧 snapshot 仅保留 `classified_fund_type.fund_type` 兼容路径。
 - `golden_answer.py` 当前构建、读取和校验人工 golden answer strict JSON，不执行 correctness 比对。
 - `quality_gate.py` 当前只消费 `score.json`，按字段级、单基金、`fund_quality`、`failed_funds` 和 correctness 质量信号阻断，不读取基金文档，不执行 LLM 审计。
+- `quality_gate_integration.py` 当前可在已有单基金 quality gate 结果上合并 ECQ issue；合并只消费可选 `EvidenceConfirmProductionSummary`，不读取基金文档。
 - 当前 `analysis/r_abc.py` 实现 R=A+B-C 单期与多周期归因。
 - 当前 `analysis/alpha_judge.py` 实现结构性/阶段性超额规则判断，不输出持有或替换结论。
 - 当前 `analysis/consistency_check.py` 实现言行一致性 4 维度信号，不猜测基金经理动机或实际风格。
