@@ -16,7 +16,12 @@ from fund_agent.fund.extractors import (
 )
 from fund_agent.fund.data_extractor import FundDataExtractor
 from fund_agent.fund.chapter_facts import ChapterFactProvider, project_chapter_facts
-from fund_agent.fund.evidence_confirm import EvidenceConfirmReference, confirm_projection_evidence
+from fund_agent.fund.evidence_confirm import (
+    EvidenceConfirmReference,
+    confirm_projection_evidence,
+    confirm_projection_evidence_v2,
+)
+from fund_agent.fund.evidence_confirm_diagnostics import summarize_evidence_confirm_diagnostics
 from fund_agent.fund.evidence_confirm_sources import (
     EvidenceConfirmReferenceBuildRequest,
     build_annual_report_evidence_confirm_references,
@@ -75,6 +80,23 @@ evidence_confirm_result = confirm_projection_evidence(
         ),
     ),
 )
+evidence_confirm_result_v2 = confirm_projection_evidence_v2(
+    chapter_projection,
+    (
+        EvidenceConfirmReference(
+            anchor_id="example-anchor",
+            reference_kind="annual_report_excerpt",
+            source_kind="annual_report",
+            document_year=2024,
+            section_id="§3",
+            page_number=12,
+            table_id=None,
+            row_locator="row:1",
+            excerpt_text="年报摘录文本",
+        ),
+    ),
+)
+evidence_confirm_diagnostic = summarize_evidence_confirm_diagnostics(evidence_confirm_result_v2)
 reference_build_result = build_annual_report_evidence_confirm_references(
     EvidenceConfirmReferenceBuildRequest(
         fund_code="110011",
@@ -230,6 +252,13 @@ Source-truth direct extraction 在该 Processor/Extractor 边界内增加了 `Fu
 - 分数语义：阻断性失败产生分数上限（score cap），防止稀释；通过 fact 使用无上限均值聚合
 - V2 与 V1 共存：V1 公共函数 `confirm_chapter_evidence()` / `confirm_projection_evidence()` 不变，返回类型、分数和状态语义保持原样
 - 该能力不读取文档仓库、PDF/cache/source helper、Service、Host、provider、retained report、文件系统、环境变量或 dayu，不接入 `ProgrammaticAuditResult`、FQ0-FQ6 quality gate、renderer、CLI 或 readiness 判定；调用方自行提供 reference
+
+`fund_agent/fund/evidence_confirm_diagnostics.py` 当前提供 no-live `evidence_confirm_fact_diagnostic.v1` 安全诊断聚合：
+
+- `summarize_evidence_confirm_diagnostics()` 只消费已经得到的 `EvidenceConfirmResultV2`，按 fail/warn 维度、`source_field_id` 和章节号聚合诊断桶
+- 输出只包含基金代码、年份、fact/status/issue 计数、维度名、字段 ID、章节号、issue ids、下一 gate 建议和保守 root-cause 分类，不包含原文 excerpt、PDF/cache 路径、source helper 细节或 provider payload
+- 当前 root-cause 分类只用于 RR-09 A0/A1 诊断准备：`missing_evidence`、`source_support`、`proof_boundary` 归为 `projection_attachment_defect`，`anchor_precision` warn 归为 `true_anchor_precision_gap`，`value_match` 保持 `undetermined`
+- 该能力不读取文档仓库、PDF/cache/source helper、Service、Host、provider、renderer、quality gate、文件系统、环境变量或 dayu；不改变 V2 strict truth、ECQ 投影、quality gate 语义、report-body rendering、runtime product evidence、readiness 或 release 状态
 
 `fund_agent/fund/evidence_confirm_semantic.py` 当前提供 no-live `evidence_confirm_semantic.v1` 语义蕴含 companion contract：
 
@@ -647,6 +676,7 @@ C2 当前只做确定性 marker / 元数据检查，不调用 LLM，不判断语
   - `parser.py`：PDF 全文、表格与章节定位原型
 - EID 年报来源对同一基金代码/年份的 PDF 下载使用实例级锁；同 key 并发请求会复用首个请求落地的 PDF 缓存。该保护不等同于跨进程锁或完整仓库事务。
 - `evidence_confirm.py`：no-live Evidence Confirm（V1 phase 1 + V2 五维评分与硬门控），只消费显式 `EvidenceConfirmReference`，执行 E1/E2/E3 的保守同 anchor excerpt 复核与五维确定性评分，不接 `ProgrammaticAuditResult` 或 quality gate。
+- `evidence_confirm_diagnostics.py`：no-live Evidence Confirm V2 安全诊断聚合，只消费 `EvidenceConfirmResultV2`，输出维度/字段/章节级安全诊断桶和保守 root-cause 分类，不读取 source/PDF 或改变 quality gate。
 - `evidence_confirm_semantic.py`：no-live Evidence Confirm 语义蕴含 companion contract，只消费 V2 结果、显式 references、显式 semantic claims 和注入的 `EvidenceEntailmentClient`；semantic output 不能覆盖 deterministic V2 failures，不构造 provider/live/Service/renderer/quality-gate 路径。
 - `evidence_confirm_runner.py`：Service 可导入的 Evidence Confirm typed facade，只暴露 repository-bounded runner request/result/entrypoint；底层 materializer/source 实现仍留在 Fund 内部。
 - `evidence_confirm_production.py`：Evidence Confirm 生产集成安全摘要，把 repository-bounded result 和可选 no-live injected semantic result 压缩为 `EvidenceConfirmProductionSummary`；不携带原文 excerpt、路径或 provider payload。
