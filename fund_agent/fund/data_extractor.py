@@ -21,6 +21,7 @@ from fund_agent.fund.documents import FundDocumentRepository
 from fund_agent.fund.documents.models import ParsedAnnualReport
 from fund_agent.fund.extractors import (
     BondRiskEvidenceValue,
+    EvidenceAnchor,
     ExtractedField,
     IndexProfileValue,
     TrackingErrorValue,
@@ -611,10 +612,84 @@ def _field_from_family(
         )
     return ExtractedField(
         value=value,
-        anchors=family_result.anchors,
+        anchors=_anchors_for_family_field(family_result, field_name),
         extraction_mode=family_result.extraction_mode,
         note=None,
     )
+
+
+def _anchors_for_family_field(
+    family_result: FundFieldFamilyResult,
+    field_name: str,
+) -> tuple[EvidenceAnchor, ...]:
+    """为字段族中的单个顶层字段选择兼容锚点。
+
+    Args:
+        family_result: Processor 字段族结果。
+        field_name: `StructuredFundDataBundle` 顶层字段名。
+
+    Returns:
+        当前字段可用的公共证据锚点；字段族不含 Processor `field=` locator 时保留原始
+        family anchors。
+
+    Raises:
+        无显式抛出。
+    """
+
+    matched_anchors: list[EvidenceAnchor] = []
+    has_processor_field_locator = False
+    for anchor in family_result.anchors:
+        locator_field_path = _processor_locator_field_path(anchor.row_locator)
+        if locator_field_path is None:
+            continue
+        has_processor_field_locator = True
+        if _field_path_matches_top_level(locator_field_path, field_name):
+            matched_anchors.append(anchor)
+    if not has_processor_field_locator:
+        return family_result.anchors
+    return tuple(matched_anchors)
+
+
+def _processor_locator_field_path(row_locator: str | None) -> str | None:
+    """解析 Processor row locator 中的 `field` 路径。
+
+    Args:
+        row_locator: 公共锚点上的行级定位字符串。
+
+    Returns:
+        分号分隔 Processor locator 中的 `field` 值；非 Processor field locator 返回
+        `None`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if not row_locator or ";" not in row_locator:
+        return None
+    for segment in row_locator.split(";"):
+        key, separator, value = segment.strip().partition("=")
+        if separator != "=" or key.strip() != "field":
+            continue
+        field_path = value.strip()
+        return field_path or None
+    return None
+
+
+def _field_path_matches_top_level(field_path: str, field_name: str) -> bool:
+    """判断 Processor field path 是否属于目标顶层字段。
+
+    Args:
+        field_path: Processor locator 的 `field` 路径。
+        field_name: 目标顶层字段名。
+
+    Returns:
+        完全相等或 `field_name.` 子路径时返回 `True`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return field_path == field_name or field_path.startswith(f"{field_name}.")
 
 
 def _validate_processor_result_identity(

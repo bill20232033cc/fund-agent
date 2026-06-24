@@ -19,7 +19,11 @@ from fund_agent.fund.data.nav_models import (
     NavSourceMetadata,
     ShareClassMapping,
 )
-from fund_agent.fund.data_extractor import FundDataExtractor, StructuredFundDataBundle
+from fund_agent.fund.data_extractor import (
+    FundDataExtractor,
+    StructuredFundDataBundle,
+    _field_from_family,
+)
 from fund_agent.fund.documents.models import (
     AnnualReportMetadata,
     AnnualReportSourceMetadata,
@@ -48,6 +52,51 @@ from fund_agent.fund.source_provenance import (
     PublicSourceProvenance,
     default_public_source_provenance,
 )
+
+
+def _anchor_field_paths(field: ExtractedField[object]) -> tuple[str, ...]:
+    """提取测试锚点中的 Processor `field` 路径。
+
+    Args:
+        field: 待检查的结构化抽取字段。
+
+    Returns:
+        当前字段 anchors 中解析到的 `field` 路径，按原顺序返回。
+
+    Raises:
+        AssertionError: 当 anchor 缺少可解析 `field` locator 时抛出。
+    """
+
+    field_paths: list[str] = []
+    for anchor in field.anchors:
+        assert anchor.row_locator is not None
+        parsed = _test_processor_locator_field_path(anchor.row_locator)
+        assert parsed is not None
+        field_paths.append(parsed)
+    return tuple(field_paths)
+
+
+def _test_processor_locator_field_path(row_locator: str) -> str | None:
+    """解析测试用 Processor locator 中的 `field` 路径。
+
+    Args:
+        row_locator: 行定位字符串。
+
+    Returns:
+        分号分隔 `field=` 值；无法解析时返回 `None`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if ";" not in row_locator:
+        return None
+    for segment in row_locator.split(";"):
+        key, separator, value = segment.strip().partition("=")
+        if separator == "=" and key == "field":
+            field_path = value.strip()
+            return field_path or None
+    return None
 
 
 class _FakeRepository:
@@ -1403,6 +1452,16 @@ async def test_active_fund_uses_processor_path_with_marker_values() -> None:
     assert bundle.portfolio_managers.value != {"marker": "current_stage_portfolio_must_not_project"}
     assert bundle.tracking_error.extraction_mode == "missing"
     assert bundle.tracking_error.note == "非指数基金不适用跟踪误差"
+    assert tuple(anchor.row_locator for anchor in bundle.fee_schedule.anchors) == ("marker_row",)
+    assert tuple(anchor.row_locator for anchor in bundle.nav_benchmark_performance.anchors) == (
+        "marker_row",
+    )
+    assert tuple(anchor.row_locator for anchor in bundle.manager_alignment.anchors) == (
+        "marker_row",
+    )
+    assert tuple(anchor.row_locator for anchor in bundle.manager_strategy_text.anchors) == (
+        "marker_row",
+    )
 
 
 @pytest.mark.asyncio
@@ -1532,6 +1591,59 @@ async def test_explicit_disclosure_source_truth_return_attribution_projects_to_b
         anchor.row_locator is not None and anchor.row_locator.startswith("field=")
         for anchor in (*bundle.fee_schedule.anchors, *bundle.nav_benchmark_performance.anchors)
     )
+    assert _anchor_field_paths(bundle.fee_schedule) == (
+        "fee_schedule.management_fee",
+        "fee_schedule.custody_fee",
+    )
+    assert _anchor_field_paths(bundle.nav_benchmark_performance) == (
+        "nav_benchmark_performance.nav_growth_rate",
+        "nav_benchmark_performance.benchmark_return_rate",
+    )
+
+
+def test_field_locator_capable_family_with_no_matching_anchor_projects_empty_anchors() -> None:
+    """验证 field-locator family 不借用不匹配字段的 anchors。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当不匹配 `field=` locator 被错误绑定为证据时抛出。
+    """
+
+    unrelated_anchor = EvidenceAnchor(
+        source_kind="annual_report",
+        document_year=2024,
+        section_id="§3",
+        page_number=None,
+        table_id="page-1-table-0",
+        row_locator=(
+            "field=nav_benchmark_performance.nav_growth_rate; "
+            "table_id=page-1-table-0; row=0; column=1"
+        ),
+        note=None,
+    )
+    family = FundFieldFamilyResult(
+        field_family_id="return_attribution.v1",
+        chapter_ids=(2,),
+        value={
+            "schema_version": "return_attribution.v1",
+            "fee_schedule": {"management_fee": "1.50%"},
+        },
+        status="accepted",
+        extraction_mode="direct",
+        anchors=(unrelated_anchor,),
+        gaps=(),
+        source_provenance=_provenance(),
+    )
+
+    field = _field_from_family(family, "fee_schedule")
+
+    assert field.value == {"management_fee": "1.50%"}
+    assert field.anchors == ()
 
 
 @pytest.mark.asyncio
@@ -1623,6 +1735,10 @@ async def test_explicit_disclosure_source_truth_manager_profile_projects_to_bund
     assert bundle.holder_structure.value is None
     assert bundle.share_change.value is None
     assert bundle.bond_risk_evidence.value is None
+    assert _anchor_field_paths(bundle.manager_alignment) == ("manager_alignment.manager_holding",)
+    assert _anchor_field_paths(bundle.manager_strategy_text) == (
+        "manager_strategy_text.strategy_summary",
+    )
 
 
 @pytest.mark.asyncio
