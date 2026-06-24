@@ -37,7 +37,7 @@ candidate projection、network、provider、LLM、Service/UI/Host、renderer 或
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Final, Iterable
 
 from fund_agent.fund.documents.models import ParsedAnnualReport
@@ -412,7 +412,7 @@ def _build_field_family_result(
         field = extracted_fields.get(mapping.source_path)
         if _field_has_public_value(field):
             value[mapping.output_field_name] = field.value
-            anchors.extend(field.anchors)
+            anchors.extend(_field_scoped_anchors(mapping, field))
             continue
         value[mapping.output_field_name] = None
         missing_fields.append((mapping, field))
@@ -434,6 +434,70 @@ def _build_field_family_result(
         gaps=gaps,
         source_provenance=source_provenance,
     )
+
+
+def _field_scoped_anchors(
+    mapping: FieldFamilyMapping,
+    field: ExtractedField[object],
+) -> tuple[EvidenceAnchor, ...]:
+    """为 parsed annual 字段添加顶层字段范围定位。
+
+    Args:
+        mapping: 当前字段族 mapping 行。
+        field: 窄 extractor 输出字段。
+
+    Returns:
+        带 ``source_field_path`` 顶层字段范围的 anchors。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return tuple(
+        _with_source_field_path(anchor, mapping.output_field_name) for anchor in field.anchors
+    )
+
+
+def _with_source_field_path(anchor: EvidenceAnchor, source_field_path: str) -> EvidenceAnchor:
+    """克隆 anchor 并附加非 Processor 字段范围定位。
+
+    Args:
+        anchor: 原始公共证据锚点。
+        source_field_path: 顶层 public field 名称。
+
+    Returns:
+        附加 ``source_field_path`` 的锚点。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return replace(
+        anchor,
+        row_locator=(
+            f"source_field_path={source_field_path}; "
+            f"locator={_sanitize_legacy_locator(anchor.row_locator)}"
+        ),
+    )
+
+
+def _sanitize_legacy_locator(row_locator: str | None) -> str:
+    """清理 legacy locator，避免污染分号 key=value 协议。
+
+    Args:
+        row_locator: 原始行级或语义定位。
+
+    Returns:
+        不含分号和等号的稳定 locator 文本。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if not row_locator:
+        return "missing"
+    sanitized = " ".join(row_locator.replace(";", " ").replace("=", " ").split())
+    return sanitized or "missing"
 
 
 def _field_has_public_value(field: ExtractedField[object] | None) -> bool:

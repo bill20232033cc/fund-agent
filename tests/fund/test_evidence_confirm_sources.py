@@ -209,6 +209,110 @@ def test_semantic_row_locator_with_table_narrows_to_single_matching_row_referenc
     assert v2_result.overall_status == "pass"
 
 
+def test_source_field_path_top_level_composite_scope_keeps_table_reference() -> None:
+    """验证顶层复合字段 scope 不推断子字段行级 proof。
+
+    parsed annual 默认路径只承诺顶层 ``source_field_path``，不能从 value 形状反推
+    management_fee/custody_fee 的子字段来源。
+    """
+
+    projection, _, _ = _fee_schedule_projection_with_source_scope(
+        row_locators=("source_field_path=fee_schedule; locator=fee_schedule",),
+        evidence_anchor_ids=("fee-anchor",),
+    )
+    report = _parsed_report(
+        tables=(
+            ParsedTable(
+                page_number=3,
+                table_index=0,
+                headers=("项目", "数值"),
+                rows=(("管理费率", "1.50%"), ("托管费率", "0.25%")),
+            ),
+        ),
+    )
+
+    result = build_annual_report_evidence_confirm_references(_request(projection, report))
+
+    assert result.status == "pass"
+    assert len(result.references) == 1
+    assert result.references[0].row_locator is None
+    assert "项目: 管理费率" in result.references[0].excerpt_text
+    assert "项目: 托管费率" in result.references[0].excerpt_text
+    assert {issue.reason for issue in result.issues} == {
+        "semantic_row_locator_degraded_to_table_excerpt"
+    }
+
+
+def test_source_field_path_subfield_scope_narrows_to_matching_rows() -> None:
+    """验证显式子字段 source scope 可分别收窄到唯一行。"""
+
+    management_locator = (
+        "source_field_path=fee_schedule.management_fee; locator=management_fee"
+    )
+    custody_locator = "source_field_path=fee_schedule.custody_fee; locator=custody_fee"
+    projection, _, _ = _fee_schedule_projection_with_source_scope(
+        row_locators=(management_locator, custody_locator),
+        evidence_anchor_ids=("fee-management-anchor", "fee-custody-anchor"),
+    )
+    report = _parsed_report(
+        tables=(
+            ParsedTable(
+                page_number=3,
+                table_index=0,
+                headers=("项目", "数值"),
+                rows=(("管理费率", "1.50%"), ("托管费率", "0.25%")),
+            ),
+        ),
+    )
+
+    result = build_annual_report_evidence_confirm_references(_request(projection, report))
+
+    assert result.status == "pass"
+    assert result.issues == ()
+    references_by_locator = {
+        reference.row_locator: reference for reference in result.references
+    }
+    assert set(references_by_locator) == {management_locator, custody_locator}
+    assert "项目: 管理费率" in references_by_locator[management_locator].excerpt_text
+    assert "项目: 托管费率" not in references_by_locator[management_locator].excerpt_text
+    assert "项目: 托管费率" in references_by_locator[custody_locator].excerpt_text
+    assert "项目: 管理费率" not in references_by_locator[custody_locator].excerpt_text
+
+    v2_result = confirm_projection_evidence_v2(projection, result.references)
+    assert v2_result.overall_status == "pass"
+
+
+def test_source_field_path_subfield_duplicate_token_keeps_table_reference() -> None:
+    """验证子字段 token 命中多行时仍降级为 table excerpt。"""
+
+    projection, _, _ = _fee_schedule_projection_with_source_scope(
+        row_locators=(
+            "source_field_path=fee_schedule.management_fee; locator=management_fee",
+        ),
+        evidence_anchor_ids=("fee-management-anchor",),
+    )
+    report = _parsed_report(
+        tables=(
+            ParsedTable(
+                page_number=3,
+                table_index=0,
+                headers=("项目", "数值"),
+                rows=(("管理费率", "1.50%"), ("另一管理费率", "1.50%")),
+            ),
+        ),
+    )
+
+    result = build_annual_report_evidence_confirm_references(_request(projection, report))
+
+    assert result.status == "pass"
+    assert len(result.references) == 1
+    assert result.references[0].row_locator is None
+    assert result.references[0].excerpt_text.count("1.50%") == 2
+    assert {issue.reason for issue in result.issues} == {
+        "semantic_row_locator_degraded_to_table_excerpt"
+    }
+
+
 def test_processor_row_locator_with_table_builds_row_reference() -> None:
     """验证 Processor row locator 可直接生成行级 excerpt。"""
 
@@ -1140,6 +1244,59 @@ def _projection_with_anchor(
     )
     fact = replace(fact, value={"turnover_rate": "120%"}, evidence_anchor_ids=(anchor_id,))
     chapter = replace(chapter, facts=(fact,), evidence_anchors=(anchor,))
+    projection = replace(base_projection, chapters=(chapter,))
+    return projection, chapter, fact
+
+
+def _fee_schedule_projection_with_source_scope(
+    *,
+    row_locators: tuple[str, ...],
+    evidence_anchor_ids: tuple[str, ...],
+) -> tuple[object, object, object]:
+    """构造 fee_schedule source_field_path scope projection。
+
+    Args:
+        row_locators: 待绑定到 anchors 的语义 locator。
+        evidence_anchor_ids: 与 locator 一一对应的 anchor id。
+
+    Returns:
+        projection、chapter、fact 三元组。
+
+    Raises:
+        AssertionError: 当 locator 与 anchor id 数量不一致时抛出。
+    """
+
+    assert len(row_locators) == len(evidence_anchor_ids)
+    base_projection = project_chapter_facts(_bundle(), chapter_ids=(2,))
+    chapter = base_projection.chapters[0]
+    template_fact = next(
+        item for item in chapter.facts if item.source_field_id == "structured.fee_schedule"
+    )
+    anchors = tuple(
+        ChapterEvidenceAnchor(
+            anchor_id=anchor_id,
+            source_kind="annual_report",
+            document_year=2024,
+            section_id="§8",
+            page_number=3,
+            table_id="page-3-table-0",
+            row_locator=row_locator,
+            note=None,
+        )
+        for anchor_id, row_locator in zip(evidence_anchor_ids, row_locators, strict=True)
+    )
+    fact = replace(
+        template_fact,
+        field_path="structured.fee_schedule",
+        source_field_id="structured.fee_schedule",
+        source_field_name="fee_schedule",
+        value={"management_fee": "1.50%", "custody_fee": "0.25%"},
+        evidence_anchor_ids=evidence_anchor_ids,
+        missing_reason=None,
+        missing_detail=None,
+        status="available",
+    )
+    chapter = replace(chapter, facts=(fact,), evidence_anchors=anchors)
     projection = replace(base_projection, chapters=(chapter,))
     return projection, chapter, fact
 

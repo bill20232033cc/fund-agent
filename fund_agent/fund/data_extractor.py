@@ -637,17 +637,33 @@ def _anchors_for_family_field(
     """
 
     matched_anchors: list[EvidenceAnchor] = []
-    has_processor_field_locator = False
+    has_field_identity_locator = False
     for anchor in family_result.anchors:
-        locator_field_path = _processor_locator_field_path(anchor.row_locator)
+        locator_field_path = _field_identity_locator_path(anchor.row_locator)
         if locator_field_path is None:
             continue
-        has_processor_field_locator = True
+        has_field_identity_locator = True
         if _field_path_matches_top_level(locator_field_path, field_name):
             matched_anchors.append(anchor)
-    if not has_processor_field_locator:
+    if not has_field_identity_locator:
         return family_result.anchors
     return tuple(matched_anchors)
+
+
+def _field_identity_locator_path(row_locator: str | None) -> str | None:
+    """读取可用于字段归属过滤的 locator 路径。
+
+    Args:
+        row_locator: 公共锚点上的行级或语义定位字符串。
+
+    Returns:
+        Processor ``field`` 或 semantic ``source_field_path`` 值。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return _processor_locator_field_path(row_locator) or _source_field_locator_path(row_locator)
 
 
 def _processor_locator_field_path(row_locator: str | None) -> str | None:
@@ -669,6 +685,30 @@ def _processor_locator_field_path(row_locator: str | None) -> str | None:
     for segment in row_locator.split(";"):
         key, separator, value = segment.strip().partition("=")
         if separator != "=" or key.strip() != "field":
+            continue
+        field_path = value.strip()
+        return field_path or None
+    return None
+
+
+def _source_field_locator_path(row_locator: str | None) -> str | None:
+    """解析 semantic locator 中的 ``source_field_path``。
+
+    Args:
+        row_locator: 公共锚点上的行级或语义定位字符串。
+
+    Returns:
+        ``source_field_path`` 值；不存在时返回 ``None``。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if not row_locator or ";" not in row_locator:
+        return None
+    for segment in row_locator.split(";"):
+        key, separator, value = segment.strip().partition("=")
+        if separator != "=" or key.strip() != "source_field_path":
             continue
         field_path = value.strip()
         return field_path or None

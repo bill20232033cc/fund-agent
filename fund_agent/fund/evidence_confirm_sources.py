@@ -9,7 +9,7 @@ Service、Host、renderer 或 quality gate 行为。
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass, is_dataclass
 from inspect import iscoroutinefunction
 from typing import Callable, Final, Literal
 
@@ -1312,7 +1312,7 @@ def _single_fact_semantic_row_excerpt(
     facts = _narrowable_facts(anchor, facts_by_anchor)
     if len(facts) != 1:
         return None
-    tokens = _material_tokens(facts[0].value)
+    tokens = _material_tokens_for_anchor_scope(facts[0], anchor)
     if not tokens:
         return None
 
@@ -1333,6 +1333,84 @@ def _single_fact_semantic_row_excerpt(
         row_locator=anchor.row_locator,
         issues=(),
     )
+
+
+def _material_tokens_for_anchor_scope(
+    fact: ChapterFactEntry,
+    anchor: ChapterEvidenceAnchor,
+) -> tuple[str, ...]:
+    """按 semantic source-field scope 读取 material tokens。
+
+    Args:
+        fact: 当前章节事实。
+        anchor: 当前章节证据锚点。
+
+    Returns:
+        V2 material tokens；scope 不可解析时返回空元组以触发安全降级。
+
+    Raises:
+        无显式抛出。
+    """
+
+    source_field_path = _semantic_source_field_path(anchor.row_locator)
+    if source_field_path is None:
+        return _material_tokens(fact.value)
+    path_parts = tuple(part for part in source_field_path.split(".") if part)
+    if not path_parts or path_parts[0] != fact.source_field_name:
+        return ()
+    if len(path_parts) == 1:
+        return _material_tokens(fact.value)
+    resolved_value = _resolve_fact_value_path(fact.value, path_parts[1:])
+    if resolved_value is _UNRESOLVED_VALUE:
+        return ()
+    return _material_tokens(resolved_value)
+
+
+def _semantic_source_field_path(row_locator: str | None) -> str | None:
+    """解析 semantic locator 中的 ``source_field_path``。
+
+    Args:
+        row_locator: 行级或语义定位字符串。
+
+    Returns:
+        ``source_field_path`` 值；不存在时返回 ``None``。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if not row_locator or ";" not in row_locator:
+        return None
+    parsed_fields = _parse_semicolon_fields(row_locator)
+    source_field_path = parsed_fields.get("source_field_path")
+    return source_field_path or None
+
+
+_UNRESOLVED_VALUE: Final[object] = object()
+
+
+def _resolve_fact_value_path(value: object | None, path_parts: tuple[str, ...]) -> object:
+    """按点分路径读取 fact value 子值。
+
+    Args:
+        value: fact value。
+        path_parts: 不含顶层字段名的路径片段。
+
+    Returns:
+        子值；无法解析时返回 ``_UNRESOLVED_VALUE``。
+
+    Raises:
+        无显式抛出。
+    """
+
+    current: object | None = value
+    for part in path_parts:
+        if is_dataclass(current) and not isinstance(current, type):
+            current = asdict(current)
+        if not isinstance(current, dict) or part not in current:
+            return _UNRESOLVED_VALUE
+        current = current[part]
+    return current
 
 
 def _narrowable_facts(
