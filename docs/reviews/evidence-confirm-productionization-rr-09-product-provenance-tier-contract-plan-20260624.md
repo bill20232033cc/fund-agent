@@ -181,6 +181,8 @@ Allowed files:
 - `fund_agent/fund/evidence_confirm_production.py`
 - `fund_agent/services/fund_analysis_service.py`
 - `tests/fund/test_evidence_confirm_production.py`
+- `tests/services/test_fund_analysis_service.py`
+- `tests/fund/test_evidence_confirm_semantic.py`
 
 Exact changes:
 
@@ -190,6 +192,9 @@ Exact changes:
 - compute provenance status, minimum tier and strict precision residuals from V2 dimensions and reference metadata;
 - update not-run and runner-exception constructors;
 - update tests/factories to construct V2 dimension results and reference build results;
+- update shared Service fake repository result helpers so pass/warn/fail fixtures include a minimal section-level `EvidenceConfirmReferenceBuildResult` and V2 `source_support` / `missing_evidence` / `value_match` dimension results consistent with the requested status;
+- update semantic production-summary tests that import those helpers so injected semantic coverage remains valid under summary v2;
+- keep the contract strict: `reference_build_result=None` plus V2 pass must not be treated as provenance pass;
 - add focused tests:
   - section-only reference produces `provenance_status=pass`, `minimum_provenance_tier=section`;
   - table and row references produce stronger tiers without emitting `cell`;
@@ -201,7 +206,7 @@ Exact changes:
 Validation command:
 
 ```bash
-uv run pytest tests/fund/test_evidence_confirm_production.py
+uv run pytest tests/fund/test_evidence_confirm_production.py tests/services/test_fund_analysis_service.py tests/fund/test_evidence_confirm_semantic.py
 ```
 
 ### Slice S2: ECQ And CLI Safe Visibility
@@ -235,7 +240,7 @@ Validation commands:
 
 ```bash
 uv run pytest tests/fund/test_quality_gate_integration.py tests/ui/test_cli.py
-git diff --check -- fund_agent/fund/evidence_confirm_production.py fund_agent/services/fund_analysis_service.py fund_agent/fund/quality_gate_integration.py fund_agent/ui/cli.py tests/fund/test_evidence_confirm_production.py tests/fund/test_quality_gate_integration.py tests/ui/test_cli.py fund_agent/fund/README.md docs/design.md
+git diff --check -- fund_agent/fund/evidence_confirm_production.py fund_agent/services/fund_analysis_service.py fund_agent/fund/quality_gate_integration.py fund_agent/ui/cli.py tests/fund/test_evidence_confirm_production.py tests/services/test_fund_analysis_service.py tests/fund/test_evidence_confirm_semantic.py tests/fund/test_quality_gate_integration.py tests/ui/test_cli.py fund_agent/fund/README.md docs/design.md
 ```
 
 ## Expected User-visible Semantics After Implementation
