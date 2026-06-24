@@ -15,6 +15,7 @@ from fund_agent.fund.evidence_confirm import (
     EvidenceConfirmDimensionResult,
     EvidenceConfirmFactResultV2,
     EvidenceConfirmReference,
+    EvidenceConfirmResultV2,
 )
 from fund_agent.fund.evidence_confirm_semantic import EvidenceSemanticResult
 from fund_agent.fund.evidence_confirm_sources import EvidenceConfirmRepositoryRunResult
@@ -447,9 +448,10 @@ def _provenance_contract_from_result(
     if (
         result.pathway_status != "pass"
         or result.evidence_confirm_result is None
-        or result.reference_build_result is None
     ):
         return _not_run_provenance_contract()
+    if result.reference_build_result is None:
+        return _missing_reference_build_provenance_contract(result.evidence_confirm_result)
 
     anchor_tiers = _reference_tiers_by_anchor(result.reference_build_result.references)
     fact_tiers: list[EvidenceConfirmProvenanceTier] = []
@@ -490,6 +492,37 @@ def _provenance_contract_from_result(
         provenance_missing_fact_count=missing_count,
         strict_precision_residual_count=strict_precision_count,
         strict_precision_issue_ids=tuple(dict.fromkeys(strict_precision_issue_ids)),
+    )
+
+
+def _missing_reference_build_provenance_contract(
+    evidence_confirm_result: EvidenceConfirmResultV2,
+) -> _ProvenanceContract:
+    """构造 V2 已检查但 reference build 缺失的 provenance missing contract。
+
+    Args:
+        evidence_confirm_result: V2 复核结果。
+
+    Returns:
+        provenance missing contract；无适用 fact 时保留 not-run 语义。
+
+    Raises:
+        无显式抛出。
+    """
+
+    applicable_fact_count = sum(
+        1
+        for fact_result in evidence_confirm_result.fact_results
+        if fact_result.status != "not_applicable"
+    )
+    if applicable_fact_count == 0:
+        return _not_run_provenance_contract()
+    return _ProvenanceContract(
+        provenance_status="fail",
+        minimum_provenance_tier="none",
+        provenance_missing_fact_count=applicable_fact_count,
+        strict_precision_residual_count=0,
+        strict_precision_issue_ids=(),
     )
 
 

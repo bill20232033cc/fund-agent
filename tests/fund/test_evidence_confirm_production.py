@@ -400,8 +400,8 @@ def test_summary_from_repository_value_match_fail_with_provenance_is_strict_resi
     assert summary.strict_precision_issue_ids == ("evidence-confirm:e2:value-mismatch",)
 
 
-def test_summary_from_repository_v2_pass_without_reference_is_not_provenance_pass() -> None:
-    """验证 reference_build_result 缺失时不能把 V2 pass 当作 provenance pass。
+def test_summary_from_repository_v2_pass_without_reference_is_provenance_missing() -> None:
+    """验证 reference_build_result 缺失时按 provenance missing 处理。
 
     Args:
         无。
@@ -410,7 +410,7 @@ def test_summary_from_repository_v2_pass_without_reference_is_not_provenance_pas
         无返回值。
 
     Raises:
-        AssertionError: 缺失 reference 被误判为 provenance pass 时抛出。
+        AssertionError: 缺失 reference 未阻断 provenance floor 时抛出。
     """
 
     result = _repository_result(_v2_result(status="pass"), references=None)
@@ -418,9 +418,9 @@ def test_summary_from_repository_v2_pass_without_reference_is_not_provenance_pas
     summary = summary_from_repository_result(result, "block")
 
     assert summary.deterministic_status == "pass"
-    assert summary.provenance_status == "not_run"
+    assert summary.provenance_status == "fail"
     assert summary.minimum_provenance_tier == "none"
-    assert summary.provenance_missing_fact_count == 0
+    assert summary.provenance_missing_fact_count == 1
     assert summary.strict_precision_residual_count == 0
 
 
