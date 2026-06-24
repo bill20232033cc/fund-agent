@@ -1241,8 +1241,8 @@ def _bond_risk_anchor_contract_prompt(chapter: ChapterFactInput) -> str:
     if not any(fact.source_field_name == "bond_risk_evidence" for fact in chapter.facts):
         return ""
     return (
-        "bond_risk_evidence 内部/组级 anchors 不是 ChapterEvidenceAnchor，"
-        "不得写入 `<!-- anchor:... -->`；只有“允许 anchors”列表中的 anchor_id 可引用。"
+        "bond_risk_evidence 只能引用“允许 anchors”列表中的 anchor_id，"
+        "不得根据 fact value、内部 source_anchor_ids 或 source_field_id 自行合成 anchor id。"
     )
 
 
@@ -2010,7 +2010,7 @@ def _unknown_anchor_issue(anchor_id: str, chapter: ChapterFactInput) -> ChapterW
 
     message = f"anchor marker 引用了未授权锚点：{anchor_id}"
     if _looks_like_bond_risk_internal_anchor(anchor_id, chapter):
-        message = "bond_risk_evidence 组级锚点未展开为 ChapterEvidenceAnchor，需后续 conversion helper 后才能引用"
+        message = "bond_risk_evidence anchor 不在 allowed anchors 中，禁止自行合成或引用内部 source_anchor_ids"
     return _issue(
         f"writer:unknown_anchor:{anchor_id}",
         "unknown_anchor",

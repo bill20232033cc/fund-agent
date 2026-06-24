@@ -15,6 +15,7 @@ from typing import Callable, Final, Literal
 
 from fund_agent.fund.chapter_facts import (
     ChapterEvidenceAnchor,
+    ChapterFactEntry,
     ChapterFactProjection,
 )
 from fund_agent.fund.documents.models import ParsedAnnualReport, ParsedTable
@@ -23,6 +24,9 @@ from fund_agent.fund.evidence_confirm import (
     EvidenceConfirmReference,
     EvidenceConfirmSourceTruthStatus,
     confirm_projection_evidence_v2,
+    _material_tokens,
+    _normalize_text,
+    _token_matches_excerpt,
 )
 
 DEFAULT_MAX_SECTION_EXCERPT_CHARS: Final[int] = 1200
@@ -236,8 +240,9 @@ def build_annual_report_evidence_confirm_references(
 
     issues: list[EvidenceConfirmReferenceBuildIssue] = []
     references: list[EvidenceConfirmReference] = []
+    facts_by_anchor = _facts_by_anchor(request.projection)
     for anchor in _projection_annual_anchors(request.projection):
-        reference, anchor_issues = _build_reference_for_anchor(request, anchor)
+        reference, anchor_issues = _build_reference_for_anchor(request, anchor, facts_by_anchor)
         issues.extend(anchor_issues)
         if reference is not None:
             references.append(reference)
@@ -797,15 +802,41 @@ def _projection_annual_anchors(projection: ChapterFactProjection) -> tuple[Chapt
     return tuple(anchor for _, anchor in sorted(anchors, key=lambda item: (item[0], item[1].anchor_id)))
 
 
+def _facts_by_anchor(projection: ChapterFactProjection) -> dict[str, tuple[ChapterFactEntry, ...]]:
+    """按 anchor id 收集章节事实。
+
+    Args:
+        projection: 章节事实投影。
+
+    Returns:
+        anchor id 到章节事实元组的映射。
+
+    Raises:
+        无显式抛出。
+    """
+
+    collected: dict[str, list[ChapterFactEntry]] = {}
+    for chapter in projection.chapters:
+        for fact in chapter.facts:
+            for anchor_id in fact.evidence_anchor_ids:
+                collected.setdefault(anchor_id, []).append(fact)
+    return {
+        anchor_id: tuple(sorted(facts, key=lambda item: (item.chapter_id, item.source_field_id, item.fact_id)))
+        for anchor_id, facts in collected.items()
+    }
+
+
 def _build_reference_for_anchor(
     request: EvidenceConfirmReferenceBuildRequest,
     anchor: ChapterEvidenceAnchor,
+    facts_by_anchor: dict[str, tuple[ChapterFactEntry, ...]],
 ) -> tuple[EvidenceConfirmReference | None, tuple[EvidenceConfirmReferenceBuildIssue, ...]]:
     """构建单个 anchor 的年报引用。
 
     Args:
         request: 年报引用构建请求。
         anchor: 当前章节证据锚点。
+        facts_by_anchor: anchor id 到章节事实元组的映射。
 
     Returns:
         可选引用与 issue 列表。
@@ -829,7 +860,7 @@ def _build_reference_for_anchor(
     if preflight_issue is not None:
         return None, (preflight_issue,)
 
-    excerpt_result = _anchor_excerpt(request, anchor)
+    excerpt_result = _anchor_excerpt(request, anchor, facts_by_anchor)
     anchor_issues.extend(excerpt_result.issues)
     if excerpt_result.excerpt_text is None:
         return None, tuple(anchor_issues)
@@ -927,12 +958,14 @@ def _anchor_preflight_issue(
 def _anchor_excerpt(
     request: EvidenceConfirmReferenceBuildRequest,
     anchor: ChapterEvidenceAnchor,
+    facts_by_anchor: dict[str, tuple[ChapterFactEntry, ...]],
 ) -> _AnchorExcerptResult:
     """构建 anchor 的 section/table/row excerpt。
 
     Args:
         request: 年报引用构建请求。
         anchor: 当前章节证据锚点。
+        facts_by_anchor: anchor id 到章节事实元组的映射。
 
     Returns:
         excerpt 中间结果。
@@ -944,19 +977,21 @@ def _anchor_excerpt(
     if anchor.row_locator and not anchor.table_id:
         return _semantic_row_locator_section_excerpt(request, anchor)
     if anchor.table_id:
-        return _table_excerpt(request, anchor)
+        return _table_excerpt(request, anchor, facts_by_anchor)
     return _section_excerpt(request, anchor)
 
 
 def _table_excerpt(
     request: EvidenceConfirmReferenceBuildRequest,
     anchor: ChapterEvidenceAnchor,
+    facts_by_anchor: dict[str, tuple[ChapterFactEntry, ...]],
 ) -> _AnchorExcerptResult:
     """构建 table 或 table-row excerpt。
 
     Args:
         request: 年报引用构建请求。
         anchor: 当前章节证据锚点。
+        facts_by_anchor: anchor id 到章节事实元组的映射。
 
     Returns:
         table excerpt 中间结果。
@@ -1001,7 +1036,7 @@ def _table_excerpt(
 
     table = tables[0]
     if anchor.row_locator:
-        return _table_row_excerpt(anchor, table)
+        return _table_row_excerpt(anchor, table, facts_by_anchor)
     excerpt = _normalize_whitespace(_format_table_excerpt(table))
     if not excerpt:
         return _empty_excerpt_issue(anchor, "empty_table_excerpt", "table excerpt 为空。")
@@ -1017,12 +1052,14 @@ def _table_excerpt(
 def _table_row_excerpt(
     anchor: ChapterEvidenceAnchor,
     table: ParsedTable,
+    facts_by_anchor: dict[str, tuple[ChapterFactEntry, ...]],
 ) -> _AnchorExcerptResult:
     """构建零基 row-N table-row excerpt。
 
     Args:
         anchor: 当前章节证据锚点。
         table: 已唯一命中的表格。
+        facts_by_anchor: anchor id 到章节事实元组的映射。
 
     Returns:
         table-row excerpt 中间结果。
@@ -1033,7 +1070,7 @@ def _table_row_excerpt(
 
     row_match = SUPPORTED_ROW_LOCATOR_RE.fullmatch(anchor.row_locator or "")
     if row_match is None:
-        return _semantic_row_locator_table_excerpt(anchor, table)
+        return _semantic_row_locator_table_excerpt(anchor, table, facts_by_anchor)
     row_index = int(row_match.group("row_index"))
     if row_index >= len(table.rows):
         return _empty_excerpt_issue(
@@ -1056,12 +1093,14 @@ def _table_row_excerpt(
 def _semantic_row_locator_table_excerpt(
     anchor: ChapterEvidenceAnchor,
     table: ParsedTable,
+    facts_by_anchor: dict[str, tuple[ChapterFactEntry, ...]],
 ) -> _AnchorExcerptResult:
-    """把无法 row-N 定位的语义行定位降级为 table excerpt。
+    """可证明时收窄语义行定位，否则降级为 table excerpt。
 
     Args:
         anchor: 当前章节证据锚点。
         table: 已唯一命中的表格。
+        facts_by_anchor: anchor id 到章节事实元组的映射。
 
     Returns:
         table 级 excerpt 和 informational 降级 issue。
@@ -1069,6 +1108,10 @@ def _semantic_row_locator_table_excerpt(
     Raises:
         无显式抛出。
     """
+
+    narrowed = _single_fact_semantic_row_excerpt(anchor, table, facts_by_anchor)
+    if narrowed is not None:
+        return narrowed
 
     excerpt = _normalize_whitespace(_format_table_excerpt(table))
     if not excerpt:
@@ -1086,6 +1129,77 @@ def _semantic_row_locator_table_excerpt(
                 "row_locator 不是 row-N，已降级为 table excerpt；V2 会保留定位精度 warning。",
             ),
         ),
+    )
+
+
+def _single_fact_semantic_row_excerpt(
+    anchor: ChapterEvidenceAnchor,
+    table: ParsedTable,
+    facts_by_anchor: dict[str, tuple[ChapterFactEntry, ...]],
+) -> _AnchorExcerptResult | None:
+    """在单 fact / 全 token / 单行命中时生成语义 row locator 的行级摘录。
+
+    Args:
+        anchor: 当前章节证据锚点。
+        table: 已唯一命中的表格。
+        facts_by_anchor: anchor id 到章节事实元组的映射。
+
+    Returns:
+        可安全收窄时返回行级摘录；否则返回 ``None`` 以保持粗粒度降级。
+
+    Raises:
+        无显式抛出。
+    """
+
+    facts = _narrowable_facts(anchor, facts_by_anchor)
+    if len(facts) != 1:
+        return None
+    tokens = _material_tokens(facts[0].value)
+    if not tokens:
+        return None
+
+    matching_rows: list[tuple[int, str]] = []
+    for row_index in range(len(table.rows)):
+        excerpt = _normalize_whitespace(_format_table_row_excerpt(table, row_index))
+        normalized_excerpt = _normalize_text(excerpt)
+        if excerpt and all(_token_matches_excerpt(token, normalized_excerpt) for token in tokens):
+            matching_rows.append((row_index, excerpt))
+
+    if len(matching_rows) != 1:
+        return None
+    _, excerpt = matching_rows[0]
+    return _AnchorExcerptResult(
+        excerpt_text=excerpt,
+        page_number=table.page_number,
+        table_id=anchor.table_id,
+        row_locator=anchor.row_locator,
+        issues=(),
+    )
+
+
+def _narrowable_facts(
+    anchor: ChapterEvidenceAnchor,
+    facts_by_anchor: dict[str, tuple[ChapterFactEntry, ...]],
+) -> tuple[ChapterFactEntry, ...]:
+    """读取允许参与语义 row 收窄的单 anchor facts。
+
+    Args:
+        anchor: 当前章节证据锚点。
+        facts_by_anchor: anchor id 到章节事实元组的映射。
+
+    Returns:
+        可参与收窄的 facts。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return tuple(
+        fact
+        for fact in facts_by_anchor.get(anchor.anchor_id, ())
+        if fact.status == "available"
+        and fact.extraction_mode != "derived"
+        and not fact.source_field_id.startswith("synthetic.")
     )
 
 

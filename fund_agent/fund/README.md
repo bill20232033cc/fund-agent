@@ -187,7 +187,7 @@ Source-truth direct extraction 在该 Processor/Extractor 边界内增加了 `Fu
 - `portfolio_managers` 投影到第 1 章和第 3 章，source field id 为 `structured.portfolio_managers`
 - `risk_characteristic_text` 投影到第 1 章和第 6 章，source field id 为 `structured.risk_characteristic_text`
 - `holdings_snapshot` 继续作为第 3/5/6 章持仓子形态的唯一来源字段
-- `bond_risk_evidence` 的组级 anchors 保留在 value 内部，不展开为普通章节 `ChapterEvidenceAnchor`
+- `bond_risk_evidence` 的组级 anchors 会在结构化值可用时转换为普通年报章节 `ChapterEvidenceAnchor`；缺失或不适用状态不伪造章节锚点
 - 该能力不读取文档仓库、PDF、cache、source helper、下载器或 parser，不调用 LLM、Service、Host 或 dayu；它不是 writer、auditor、orchestrator 或 `FundToolService`
 
 `AnnualEvidenceScopeRequest`、`AnnualEvidenceLoader` 和 `AnnualEvidenceBundle` 位于 `fund_agent/fund/annual_evidence.py`，当前为 `analyze-annual-period` 提供多年年报证据作用域和年度摘要：
@@ -262,7 +262,7 @@ Source-truth direct extraction 在该 Processor/Extractor 边界内增加了 `Fu
 
 `fund_agent/fund/evidence_confirm_value_diagnostics.py` 当前提供 no-live `evidence_confirm_value_diagnostic.v1` 安全诊断聚合：
 
-- `summarize_value_match_diagnostics()` 只消费已经得到的 `ChapterFactProjection`、显式 `EvidenceConfirmReference` 和 `EvidenceConfirmResultV2`，用于解释 V2 `value_match` fail/pass 以及 `bond_risk_evidence` 组级 anchor 未展开造成的 missing-evidence residual
+- `summarize_value_match_diagnostics()` 只消费已经得到的 `ChapterFactProjection`、显式 `EvidenceConfirmReference` 和 `EvidenceConfirmResultV2`，用于解释 V2 `value_match` fail/pass、coarse reference residual 和 bond-risk anchor 投影缺口
 - token/match 元数据必须来自 deterministic V2 same-source primitives；该 helper 不实现第二套近似 matcher，不改变 `confirm_projection_evidence_v2()` 的 pass/fail 语义
 - 输出只包含基金代码、年份、fact/source field/chapter ID、失败/警告维度、anchor/reference/proof-reference 计数、token 安全类别计数、结构化 value path、reference 粒度、locator downgrade 标记和诊断分类；不包含原始 token、原文 excerpt、PDF/cache 路径、URL、source helper 细节或 provider payload
 - 当前分类只用于 RR-09 A2 诊断：`value_shape_overbroad`、`matcher_normalization_gap`、`coarse_reference_insufficient`、`anchor_attachment_mismatch`、`extractor_value_or_anchor_defect`、`bond_risk_group_anchor_projection_gap`、`undetermined_requires_live_excerpt_review`
@@ -283,7 +283,7 @@ Source-truth direct extraction 在该 Processor/Extractor 边界内增加了 `Fu
 - `build_annual_report_evidence_confirm_references()` 只消费调用方已经传入的 `ChapterFactProjection` 与 `ParsedAnnualReport`
 - 只 materialize `source_kind="annual_report"` 的 anchor，输出既有 `annual_report_excerpt / annual_report` reference/source kind，不扩展 `EvidenceSourceKind` 或公共 `EvidenceAnchor`
 - 表格定位只接受 `page-{page_number}-table-{table_index}` 并精确匹配 `ParsedTable.page_number/table_index`；行定位精确模式只接受零基 `row-N`
-- 语义化 `row_locator` 不做标题/值/页码文本推断：有兼容 table id 时降级为 table excerpt，无 table id 时降级为 bounded section excerpt，并记录 informational issue；V2 会把 row locator 降级保留为 E1 `anchor_precision` warning，避免把粗粒度 excerpt 当作行级精确证据
+- 语义化 `row_locator` 不做标题/页码文本推断：有兼容 table id 且同一 anchor 只绑定一个可用非派生 fact、该 fact 的 material tokens 全部唯一命中同一表格行时，materializer 会保留语义 row locator 并输出行级 excerpt；否则降级为 table excerpt。无 table id 时降级为 bounded section excerpt。降级会记录 informational issue，V2 会保留 E1 `anchor_precision` warning，避免把粗粒度 excerpt 当作行级精确证据
 - 无 table/row locator 时只用 `ParsedAnnualReport.get_section_text(section_id)` 构造 bounded section excerpt，不按 page_number 切 `raw_text`
 - `source_truth_status` 默认 `not_proven`；只有请求为 `proven` 且当前 EID single-source metadata admission 满足时才输出 proven reference
 - import 与 materializer 不实例化 `FundDocumentRepository`，不读取 PDF/cache/source helper，不触发网络、provider、Service、Host、renderer、quality gate 或 readiness 判定
@@ -327,7 +327,7 @@ template truth-source replacement、typed projection 和 `EvidenceAvailability` 
 - writer 要求第 1-6 章输出固定顶层段落 `### 结论要点`、`### 详细情况`、`### 证据与出处`；每个 `required_output_items` 必须先输出 exact marker `<!-- required_output:<item> -->`
 - writer 可显式接收 typed `RequiredOutputItem` 与 `EvidenceAvailability` 作为 additive path；该路径使用 stable item id marker `<!-- required_output:<typed item id> -->`，按 `render_evidence_gap / render_minimum_verification_question / delete_if_not_applicable / block` 裁定缺证 required output。`block` 在调用 LLM client 前 fail-closed，`delete_if_not_applicable` 必须有 typed reason，gap/verification 输出必须包含 approved 缺口或最小验证问题措辞。未传 typed 输入时保持当前生产默认 marker 和写作行为
 - writer 只接受精确 marker：`<!-- required_output:<item> -->`、`<!-- anchor:<anchor_id> -->` 和 `<!-- missing:<reason> -->`；未知 anchor、缺固定段落、缺 required output marker、超出 `max_output_chars`、`finish_reason=length/max_tokens/content_filter` 都会 fail-closed 到稳定 stop reason，不截断或部分接受
-- writer prompt 明确禁止根据 `fact_id`、`source_field_id`、`source_field_name` 或 fact value 合成 anchor id；`bond_risk_evidence` 内部/组级 anchors 不属于 `ChapterEvidenceAnchor`，除非未来 conversion helper 显式转换，否则不得写入 `<!-- anchor:... -->`
+- writer prompt 明确禁止根据 `fact_id`、`source_field_id`、`source_field_name`、fact value 或 `bond_risk_evidence` 内部 `source_anchor_ids` 合成 anchor id；只能引用“允许 anchors”列表中的 `ChapterEvidenceAnchor`
 - writer prompt 对模板第 2 章 R=A+B-C 数字闭环有专门约束：R/A/B/C/A-C、Alpha/Beta/Cost 或具体百分比闭合断言必须在同句或上下 2 行内带 allowed anchor marker；来源标签、年报章节名或出处列表不能替代局部 anchor；缺同源事实或无法确认 anchor 支撑精确数值时，只能输出数据不足或下一步最小验证问题，不写具体百分比
 - `ChapterRepairContext` 是当前 regenerate 的显式 typed 输入，携带上一轮 issue ids、脱敏 messages 和 required corrections；禁止通过 extra payload 传递这些参数
 - `audit_chapter_programmatic()` 执行确定性章节审计，覆盖结构、占位符、锚点、ITEM_RULE 删除段落、禁用交易建议、`non_asserted_facets` 误断言、第 5 章跨期缺口措辞，以及第 3 章 `ch3.must_not_cover.item_04` 的 typed evidence-conditional 禁区：当 `EvidenceAvailability` 显示实际行为/风格证据 missing、unavailable 或 unreviewed 时，required label 与显式证据缺口句可通过，正向或准正向 `言行一致` / `风格稳定` 判断触发稳定 clause id C2；如果调用方没有传入 `EvidenceAvailability`，unsafe 正向/准正向判断仍 fail-closed，不会因 typed clause 接管旧 phrase path 而 silent pass

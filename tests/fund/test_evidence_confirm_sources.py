@@ -176,14 +176,56 @@ def test_locator_and_section_failures_are_explicit(
     assert all(issue.severity == "blocking" for issue in result.issues)
 
 
-def test_semantic_row_locator_with_table_degrades_to_table_reference() -> None:
-    """验证语义 row_locator 有兼容 table_id 时降级为 table excerpt。"""
+def test_semantic_row_locator_with_table_narrows_to_single_matching_row_reference() -> None:
+    """验证单 fact 全 token 唯一命中时语义 row_locator 收窄为行级 excerpt。"""
 
     projection, _, _ = _projection_with_anchor(
         table_id="page-3-table-0",
-        row_locator="row:0:换手率",
+        row_locator="row:turnover_rate",
         page_number=3,
     )
+    report = _parsed_report(
+        tables=(
+            ParsedTable(
+                page_number=3,
+                table_index=0,
+                headers=("项目", "数值"),
+                rows=(("换手率", "120%"), ("规模", "10 亿")),
+            ),
+        ),
+    )
+
+    result = build_annual_report_evidence_confirm_references(_request(projection, report))
+
+    assert result.status == "pass"
+    assert result.issues == ()
+    assert len(result.references) == 1
+    assert result.references[0].table_id == "page-3-table-0"
+    assert result.references[0].row_locator == "row:turnover_rate"
+    assert "项目: 换手率" in result.references[0].excerpt_text
+    assert "项目: 规模" not in result.references[0].excerpt_text
+
+    v2_result = confirm_projection_evidence_v2(projection, result.references)
+    assert v2_result.overall_status == "pass"
+
+
+def test_semantic_row_locator_shared_anchor_ambiguity_keeps_table_reference() -> None:
+    """验证多个 fact 共用语义 row anchor 时保持 table 级降级。"""
+
+    projection, chapter, fact = _projection_with_anchor(
+        table_id="page-3-table-0",
+        row_locator="row:turnover_rate",
+        page_number=3,
+    )
+    other_fact = replace(
+        fact,
+        fact_id=f"{fact.fact_id}:scale",
+        field_path="fixture.scale",
+        source_field_id="structured.fixture_scale",
+        source_field_name="fixture_scale",
+        value={"scale": "10 亿"},
+    )
+    projection = replace(projection, chapters=(replace(chapter, facts=(fact, other_fact)),))
     report = _parsed_report(
         tables=(
             ParsedTable(
@@ -207,6 +249,38 @@ def test_semantic_row_locator_with_table_degrades_to_table_reference() -> None:
     assert all(issue.severity == "informational" for issue in result.issues)
 
 
+def test_semantic_row_locator_partial_token_match_keeps_table_reference() -> None:
+    """验证 material token 不能完整命中单行时保持 table 级降级。"""
+
+    projection, chapter, fact = _projection_with_anchor(
+        table_id="page-3-table-0",
+        row_locator="row:turnover_rate",
+        page_number=3,
+    )
+    projection = replace(
+        projection,
+        chapters=(replace(chapter, facts=(replace(fact, value={"turnover_rate": "120%", "missing": "999%"}),)),),
+    )
+    report = _parsed_report(
+        tables=(
+            ParsedTable(
+                page_number=3,
+                table_index=0,
+                headers=("项目", "数值"),
+                rows=(("换手率", "120%"), ("规模", "10 亿")),
+            ),
+        ),
+    )
+
+    result = build_annual_report_evidence_confirm_references(_request(projection, report))
+
+    assert result.status == "pass"
+    assert result.references[0].row_locator is None
+    assert "项目: 换手率" in result.references[0].excerpt_text
+    assert "项目: 规模" in result.references[0].excerpt_text
+    assert {issue.reason for issue in result.issues} == {"semantic_row_locator_degraded_to_table_excerpt"}
+
+
 def test_row_locator_without_table_degrades_to_section_reference() -> None:
     """验证无 table_id 的语义 row_locator 降级为 section excerpt。"""
 
@@ -226,20 +300,29 @@ def test_row_locator_without_table_degrades_to_section_reference() -> None:
 
 
 def test_degraded_row_locator_keeps_v2_anchor_precision_warning() -> None:
-    """验证 row_locator 降级后 V2 不静默通过，而是保留 E1 精度 warning。"""
+    """验证无法唯一收窄的 row_locator 降级后保留 E1 精度 warning。"""
 
-    projection, _, _ = _projection_with_anchor(
+    projection, chapter, fact = _projection_with_anchor(
         table_id="page-3-table-0",
         row_locator="row:0:换手率",
         page_number=3,
     )
+    other_fact = replace(
+        fact,
+        fact_id=f"{fact.fact_id}:scale",
+        field_path="fixture.scale",
+        source_field_id="structured.fixture_scale",
+        source_field_name="fixture_scale",
+        value={"scale": "10 亿"},
+    )
+    projection = replace(projection, chapters=(replace(chapter, facts=(fact, other_fact)),))
     report = _parsed_report(
         tables=(
             ParsedTable(
                 page_number=3,
                 table_index=0,
                 headers=("项目", "数值"),
-                rows=(("换手率", "120%"),),
+                rows=(("换手率", "120%"), ("规模", "10 亿")),
             ),
         ),
     )
@@ -502,20 +585,29 @@ async def test_repository_runner_section_smoke_warn_is_pathway_pass() -> None:
 
 @pytest.mark.asyncio
 async def test_repository_runner_degraded_semantic_row_locator_warn_is_pathway_pass() -> None:
-    """验证语义 row_locator 降级后只产生 E1 warning，EC-P2 pathway 仍可通过。"""
+    """验证语义 row_locator 不能唯一收窄时，EC-P2 pathway 仍可通过。"""
 
-    projection, _, _ = _projection_with_anchor(
+    projection, chapter, fact = _projection_with_anchor(
         table_id="page-3-table-0",
         row_locator="row:0:换手率",
         page_number=3,
     )
+    other_fact = replace(
+        fact,
+        fact_id=f"{fact.fact_id}:scale",
+        field_path="fixture.scale",
+        source_field_id="structured.fixture_scale",
+        source_field_name="fixture_scale",
+        value={"scale": "10 亿"},
+    )
+    projection = replace(projection, chapters=(replace(chapter, facts=(fact, other_fact)),))
     report = _parsed_report(
         tables=(
             ParsedTable(
                 page_number=3,
                 table_index=0,
                 headers=("项目", "数值"),
-                rows=(("换手率", "120%"),),
+                rows=(("换手率", "120%"), ("规模", "10 亿")),
             ),
         ),
     )
