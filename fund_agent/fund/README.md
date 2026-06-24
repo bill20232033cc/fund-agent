@@ -282,8 +282,10 @@ Source-truth direct extraction 在该 Processor/Extractor 边界内增加了 `Fu
 
 - `build_annual_report_evidence_confirm_references()` 只消费调用方已经传入的 `ChapterFactProjection` 与 `ParsedAnnualReport`
 - 只 materialize `source_kind="annual_report"` 的 anchor，输出既有 `annual_report_excerpt / annual_report` reference/source kind，不扩展 `EvidenceSourceKind` 或公共 `EvidenceAnchor`
-- 表格定位只接受 `page-{page_number}-table-{table_index}` 并精确匹配 `ParsedTable.page_number/table_index`；行定位精确模式只接受零基 `row-N`
-- 语义化 `row_locator` 不做标题/页码文本推断：有兼容 table id 且同一 anchor 只绑定一个可用非派生 fact、该 fact 的 material tokens 全部唯一命中同一表格行时，materializer 会保留语义 row locator 并输出行级 excerpt；否则降级为 table excerpt。无 table id 时降级为 bounded section excerpt。降级会记录 informational issue，V2 会保留 E1 `anchor_precision` warning，避免把粗粒度 excerpt 当作行级精确证据
+- 表格定位只接受 `page-{page_number}-table-{table_index}` 并精确匹配 `ParsedTable.page_number/table_index`；行定位精确模式支持零基 `row-N`
+- Processor 语义 `row_locator` 支持 `field=...; table_id=...; row=...` 形式：当 embedded `table_id` 与 anchor table identity 一致且 `row` 是有效零基 `ParsedTable.rows` 行号时，materializer 输出行级 annual-report excerpt 并保留原始 row locator；recognized Processor locator 若缺少 table_id/row、table_id 不一致、row 非整数/负数/越界，则 blocking 且不降级为 proof-bearing table excerpt
+- 其它语义化 `row_locator` 不做标题/页码文本推断：有兼容 table id 且同一 anchor 只绑定一个可用非派生 fact、该 fact 的 material tokens 全部唯一命中同一表格行时，materializer 会保留语义 row locator 并输出行级 excerpt；否则降级为 table excerpt。无 table id 时降级为 bounded section excerpt。降级会记录 informational issue，V2 会保留 E1 `anchor_precision` warning，避免把粗粒度 excerpt 当作行级精确证据
+- `column` 与 `cell_id` 当前只作为 Processor locator 上下文保留，不作为 proof-bearing 字段；当前 `ParsedTable` 不暴露稳定 cell identity
 - 无 table/row locator 时只用 `ParsedAnnualReport.get_section_text(section_id)` 构造 bounded section excerpt，不按 page_number 切 `raw_text`
 - `source_truth_status` 默认 `not_proven`；只有请求为 `proven` 且当前 EID single-source metadata admission 满足时才输出 proven reference
 - import 与 materializer 不实例化 `FundDocumentRepository`，不读取 PDF/cache/source helper，不触发网络、provider、Service、Host、renderer、quality gate 或 readiness 判定

@@ -36,6 +36,9 @@ SUPPORTED_TABLE_ID_RE: Final[re.Pattern[str]] = re.compile(
 SUPPORTED_ROW_LOCATOR_RE: Final[re.Pattern[str]] = re.compile(
     r"^row-(?P<row_index>0|[1-9][0-9]*)$"
 )
+PROCESSOR_ROW_LOCATOR_KEYS: Final[frozenset[str]] = frozenset(
+    ("field", "table_id", "row", "column", "cell_id")
+)
 
 EvidenceConfirmReferenceBuildStatus = Literal["pass", "fail", "not_applicable"]
 EvidenceConfirmReferenceBuildIssueSeverity = Literal["blocking", "informational"]
@@ -907,6 +910,19 @@ class _AnchorExcerptResult:
     issues: tuple[EvidenceConfirmReferenceBuildIssue, ...]
 
 
+@dataclass(frozen=True, slots=True)
+class _ProcessorRowLocator:
+    """Processor row locator 解析结果。
+
+    Attributes:
+        table_id: locator 内声明的表格 ID。
+        row_index: 零基 ParsedTable 行号。
+    """
+
+    table_id: str
+    row_index: int
+
+
 def _anchor_preflight_issue(
     request: EvidenceConfirmReferenceBuildRequest,
     anchor: ChapterEvidenceAnchor,
@@ -1070,6 +1086,9 @@ def _table_row_excerpt(
 
     row_match = SUPPORTED_ROW_LOCATOR_RE.fullmatch(anchor.row_locator or "")
     if row_match is None:
+        processor_row = _processor_row_locator_table_excerpt(anchor, table)
+        if processor_row is not None:
+            return processor_row
         return _semantic_row_locator_table_excerpt(anchor, table, facts_by_anchor)
     row_index = int(row_match.group("row_index"))
     if row_index >= len(table.rows):
@@ -1088,6 +1107,145 @@ def _table_row_excerpt(
         row_locator=anchor.row_locator,
         issues=(),
     )
+
+
+def _processor_row_locator_table_excerpt(
+    anchor: ChapterEvidenceAnchor,
+    table: ParsedTable,
+) -> _AnchorExcerptResult | None:
+    """按 Processor locator 协议构建 table-row excerpt。
+
+    Args:
+        anchor: 当前章节证据锚点。
+        table: 已唯一命中的表格。
+
+    Returns:
+        识别为 Processor 协议时返回行级摘录或 blocking issue；非 Processor
+        协议返回 ``None`` 以保留语义 locator 旧路径。
+
+    Raises:
+        无显式抛出。
+    """
+
+    parsed = _parse_processor_row_locator(anchor)
+    if parsed is None:
+        return None
+    if isinstance(parsed, _AnchorExcerptResult):
+        return parsed
+    if parsed.row_index >= len(table.rows):
+        return _empty_excerpt_issue(
+            anchor,
+            "processor_row_locator_out_of_range",
+            f"Processor row locator row={parsed.row_index} 超出 ParsedTable.rows 范围。",
+        )
+    excerpt = _normalize_whitespace(_format_table_row_excerpt(table, parsed.row_index))
+    if not excerpt:
+        return _empty_excerpt_issue(anchor, "empty_table_row_excerpt", "table row excerpt 为空。")
+    return _AnchorExcerptResult(
+        excerpt_text=excerpt,
+        page_number=table.page_number,
+        table_id=anchor.table_id,
+        row_locator=anchor.row_locator,
+        issues=(),
+    )
+
+
+def _parse_processor_row_locator(
+    anchor: ChapterEvidenceAnchor,
+) -> _ProcessorRowLocator | _AnchorExcerptResult | None:
+    """解析 Processor 语义 row locator。
+
+    Args:
+        anchor: 当前章节证据锚点。
+
+    Returns:
+        成功时返回解析结果；识别为 Processor 协议但失败时返回 blocking
+        excerpt result；非 Processor 协议返回 ``None``。
+
+    Raises:
+        无显式抛出。
+    """
+
+    row_locator = anchor.row_locator or ""
+    if ";" not in row_locator:
+        return None
+    parsed_fields = _parse_semicolon_fields(row_locator)
+    if not any(key in PROCESSOR_ROW_LOCATOR_KEYS for key in parsed_fields):
+        return None
+    if parsed_fields.get("__malformed__"):
+        return _empty_excerpt_issue(
+            anchor,
+            "processor_row_locator_malformed",
+            "Processor row locator 含有无法解析的 key=value 片段。",
+        )
+
+    embedded_table_id = parsed_fields.get("table_id")
+    if not embedded_table_id:
+        return _empty_excerpt_issue(
+            anchor,
+            "processor_row_locator_missing_table_id",
+            "Processor row locator 缺少 table_id。",
+        )
+    if embedded_table_id != anchor.table_id:
+        return _empty_excerpt_issue(
+            anchor,
+            "processor_row_locator_table_mismatch",
+            "Processor row locator table_id 与 anchor.table_id 不一致。",
+        )
+
+    row_value = parsed_fields.get("row")
+    if row_value is None:
+        return _empty_excerpt_issue(
+            anchor,
+            "processor_row_locator_missing_row",
+            "Processor row locator 缺少 row。",
+        )
+    try:
+        row_index = int(row_value)
+    except ValueError:
+        return _empty_excerpt_issue(
+            anchor,
+            "processor_row_locator_invalid_row",
+            "Processor row locator row 不是整数。",
+        )
+    if row_index < 0:
+        return _empty_excerpt_issue(
+            anchor,
+            "processor_row_locator_invalid_row",
+            "Processor row locator row 不能为负数。",
+        )
+    return _ProcessorRowLocator(table_id=embedded_table_id, row_index=row_index)
+
+
+def _parse_semicolon_fields(value: str) -> dict[str, str]:
+    """解析分号分隔的 key=value 字段。
+
+    Args:
+        value: 原始 locator 字符串。
+
+    Returns:
+        解析后的字段字典；无法解析的片段用 ``__malformed__`` 标记。
+
+    Raises:
+        无显式抛出。
+    """
+
+    parsed: dict[str, str] = {}
+    for part in value.split(";"):
+        segment = part.strip()
+        if not segment:
+            continue
+        if "=" not in segment:
+            parsed["__malformed__"] = "1"
+            continue
+        key, raw_field_value = segment.split("=", 1)
+        key = key.strip()
+        field_value = raw_field_value.strip()
+        if not key or key in parsed:
+            parsed["__malformed__"] = "1"
+            continue
+        parsed[key] = field_value
+    return parsed
 
 
 def _semantic_row_locator_table_excerpt(

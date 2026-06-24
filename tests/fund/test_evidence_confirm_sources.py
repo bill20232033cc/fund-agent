@@ -209,6 +209,144 @@ def test_semantic_row_locator_with_table_narrows_to_single_matching_row_referenc
     assert v2_result.overall_status == "pass"
 
 
+def test_processor_row_locator_with_table_builds_row_reference() -> None:
+    """验证 Processor row locator 可直接生成行级 excerpt。"""
+
+    row_locator = (
+        "field=fee_schedule.management_fee; table_id=page-3-table-0; "
+        "row=1; column=2; cell_id=c-1"
+    )
+    projection, _, _ = _projection_with_anchor(
+        table_id="page-3-table-0",
+        row_locator=row_locator,
+        page_number=3,
+    )
+    report = _parsed_report(
+        tables=(
+            ParsedTable(
+                page_number=3,
+                table_index=0,
+                headers=("项目", "数值"),
+                rows=(("规模", "10 亿"), ("换手率", "120%")),
+            ),
+        ),
+    )
+
+    result = build_annual_report_evidence_confirm_references(_request(projection, report))
+
+    assert result.status == "pass"
+    assert result.issues == ()
+    assert len(result.references) == 1
+    assert result.references[0].table_id == "page-3-table-0"
+    assert result.references[0].row_locator == row_locator
+    assert "项目: 换手率" in result.references[0].excerpt_text
+    assert "项目: 规模" not in result.references[0].excerpt_text
+
+    v2_result = confirm_projection_evidence_v2(projection, result.references)
+    assert v2_result.overall_status == "pass"
+
+
+def test_processor_row_locator_shared_anchor_uses_explicit_row_reference() -> None:
+    """验证多 fact 共用显式 Processor row locator 时可用该行级定位。"""
+
+    row_locator = "field=fixture.bundle; table_id=page-3-table-0; row=0; column=1; cell_id=c-0"
+    projection, chapter, fact = _projection_with_anchor(
+        table_id="page-3-table-0",
+        row_locator=row_locator,
+        page_number=3,
+    )
+    other_fact = replace(
+        fact,
+        fact_id=f"{fact.fact_id}:scale",
+        field_path="fixture.scale",
+        source_field_id="structured.fixture_scale",
+        source_field_name="fixture_scale",
+        value={"scale": "10 亿"},
+    )
+    projection = replace(projection, chapters=(replace(chapter, facts=(fact, other_fact)),))
+    report = _parsed_report(
+        tables=(
+            ParsedTable(
+                page_number=3,
+                table_index=0,
+                headers=("项目", "数值", "备注"),
+                rows=(("换手率", "120%", "规模 10 亿"), ("规模", "10 亿", "无")),
+            ),
+        ),
+    )
+
+    result = build_annual_report_evidence_confirm_references(_request(projection, report))
+
+    assert result.status == "pass"
+    assert result.issues == ()
+    assert len(result.references) == 1
+    assert result.references[0].row_locator == row_locator
+    assert "项目: 换手率" in result.references[0].excerpt_text
+    assert "项目: 规模" not in result.references[0].excerpt_text
+
+    v2_result = confirm_projection_evidence_v2(projection, result.references)
+    assert v2_result.overall_status == "pass"
+
+
+@pytest.mark.parametrize(
+    ("row_locator", "expected_reason"),
+    (
+        (
+            "field=fee_schedule.management_fee; table_id=page-9-table-0; row=0; column=2",
+            "processor_row_locator_table_mismatch",
+        ),
+        (
+            "field=fee_schedule.management_fee; row=0; column=2",
+            "processor_row_locator_missing_table_id",
+        ),
+        (
+            "field=fee_schedule.management_fee; table_id=page-3-table-0; column=2",
+            "processor_row_locator_missing_row",
+        ),
+        (
+            "field=fee_schedule.management_fee; table_id=page-3-table-0; row=abc; column=2",
+            "processor_row_locator_invalid_row",
+        ),
+        (
+            "field=fee_schedule.management_fee; table_id=page-3-table-0; row=-1; column=2",
+            "processor_row_locator_invalid_row",
+        ),
+        (
+            "field=fee_schedule.management_fee; table_id=page-3-table-0; row=9; column=2",
+            "processor_row_locator_out_of_range",
+        ),
+    ),
+)
+def test_processor_row_locator_failures_do_not_degrade_to_table_reference(
+    row_locator: str,
+    expected_reason: str,
+) -> None:
+    """验证已识别 Processor locator 错误 fail-closed 且不降级为 table proof。"""
+
+    projection, _, _ = _projection_with_anchor(
+        table_id="page-3-table-0",
+        row_locator=row_locator,
+        page_number=3,
+    )
+    report = _parsed_report(
+        tables=(
+            ParsedTable(
+                page_number=3,
+                table_index=0,
+                headers=("项目", "数值"),
+                rows=(("换手率", "120%"),),
+            ),
+        ),
+    )
+
+    result = build_annual_report_evidence_confirm_references(_request(projection, report))
+
+    assert result.status == "fail"
+    assert result.references == ()
+    assert {issue.reason for issue in result.issues} == {expected_reason}
+    assert all(issue.severity == "blocking" for issue in result.issues)
+
+
 def test_semantic_row_locator_shared_anchor_ambiguity_keeps_table_reference() -> None:
     """验证多个 fact 共用语义 row anchor 时保持 table 级降级。"""
 
