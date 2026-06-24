@@ -199,7 +199,7 @@ To continue with runtime evidence, the next user authorization must choose one o
 
 ## Validation
 
-- Read `docs/current-startup-packet.md` and `docs/implementation-control.md`; both route current entry to exact authorization for B1 runtime product CLI re-evidence and/or a separately reviewed R1-R4 live/PDF re-evidence gate.
+- Read `docs/current-startup-packet.md` and `docs/implementation-control.md`; both route current entry to exact authorization for `RR-09 R1-R4 live/PDF re-evidence after A3 no-live fixes` and/or `RR-09 B1 runtime product CLI re-evidence for 017641 / 2024`.
 - Read A1/A2/A3 evidence artifacts and reused their accepted runner/diagnostic command shape.
 - Read `scripts/evidence_confirm_ec_p2_live_sample.py`, `fund_agent/fund/evidence_confirm_sources.py`, README CLI docs and existing review artifacts for repository-bounded runner and product CLI boundaries.
 - No live/PDF/provider/LLM/product CLI/repository/parser/source-helper command was executed.
