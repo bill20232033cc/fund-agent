@@ -262,7 +262,7 @@ def test_quality_gate_integration_maps_evidence_confirm_fail_to_ecq2_block(
 def test_quality_gate_integration_maps_evidence_confirm_fail_warn_policy_to_ecq2_warn(
     tmp_path: Path,
 ) -> None:
-    """验证 deterministic fail + warn policy 投影为 ECQ2/warn。
+    """验证 strict precision residual + warn policy 投影为 ECQ2/warn。
 
     Args:
         tmp_path: pytest 临时目录 fixture。
@@ -284,6 +284,7 @@ def test_quality_gate_integration_maps_evidence_confirm_fail_warn_policy_to_ecq2
             policy="warn",
             status="fail",
             deterministic_status="fail",
+            strict_precision_residual_count=1,
         ),
     )
 
@@ -291,7 +292,7 @@ def test_quality_gate_integration_maps_evidence_confirm_fail_warn_policy_to_ecq2
 
     assert result.quality_gate_result.status == "warn"
     assert ecq2.severity == "warn"
-    assert ecq2.reason == "deterministic_fail_1"
+    assert ecq2.reason == "strict_precision_residual_1"
 
 
 def test_quality_gate_integration_ecq2_block_changes_gate_status_to_block(
@@ -502,7 +503,7 @@ def test_quality_gate_integration_maps_pathway_fail_to_ecq1_block(
 def test_quality_gate_integration_maps_pathway_fail_warn_policy_to_ecq1_warn(
     tmp_path: Path,
 ) -> None:
-    """验证 pathway fail + warn policy 投影为 ECQ1/warn 而非 block。
+    """验证 pathway fail + warn policy 仍投影为 ECQ1/block。
 
     Args:
         tmp_path: pytest 临时目录 fixture。
@@ -511,7 +512,7 @@ def test_quality_gate_integration_maps_pathway_fail_warn_policy_to_ecq1_warn(
         无返回值。
 
     Raises:
-        AssertionError: 当 product warn policy 被误投影成 block 时抛出。
+        AssertionError: 当 pathway fail 被 product warn policy 降级时抛出。
     """
 
     result = run_quality_gate_for_bundle(
@@ -531,10 +532,84 @@ def test_quality_gate_integration_maps_pathway_fail_warn_policy_to_ecq1_warn(
 
     ecq1 = next(issue for issue in result.quality_gate_result.issues if issue.rule_code == "ECQ1")
 
-    assert result.quality_gate_result.status == "warn"
-    assert ecq1.severity == "warn"
+    assert result.quality_gate_result.status == "block"
+    assert ecq1.severity == "block"
     assert ecq1.reason == "repository_failure:source_unavailable"
     assert ecq1.issue_id == "evidence-confirm:110011:2024:ECQ1:repository_failure:source_unavailable"
+
+
+def test_quality_gate_integration_maps_provenance_missing_to_ecq2_block(
+    tmp_path: Path,
+) -> None:
+    """验证 claim provenance 缺失始终投影为 ECQ2/block。
+
+    Args:
+        tmp_path: pytest 临时目录 fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: provenance missing 未阻断时抛出。
+    """
+
+    result = run_quality_gate_for_bundle(
+        bundle=_bundle(),
+        source_csv=_source_csv(tmp_path, "110011"),
+        output_dir=tmp_path / "gate-run",
+        run_id="fixture-run",
+        golden_answer_path=None,
+        evidence_confirm_summary=_summary(
+            policy="warn",
+            status="fail",
+            deterministic_status="fail",
+            provenance_status="fail",
+            provenance_missing_fact_count=2,
+        ),
+    )
+
+    ecq2 = next(issue for issue in result.quality_gate_result.issues if issue.rule_code == "ECQ2")
+
+    assert result.quality_gate_result.status == "block"
+    assert ecq2.severity == "block"
+    assert ecq2.reason == "provenance_missing_2"
+    assert "provenance_missing_fact_count=2" in ecq2.message
+
+
+def test_quality_gate_integration_strict_precision_block_policy_blocks(
+    tmp_path: Path,
+) -> None:
+    """验证 strict precision residual 在 block policy 下投影为 ECQ2/block。
+
+    Args:
+        tmp_path: pytest 临时目录 fixture。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: strict precision residual 未按 block policy 阻断时抛出。
+    """
+
+    result = run_quality_gate_for_bundle(
+        bundle=_bundle(),
+        source_csv=_source_csv(tmp_path, "110011"),
+        output_dir=tmp_path / "gate-run",
+        run_id="fixture-run",
+        golden_answer_path=None,
+        evidence_confirm_summary=_summary(
+            status="fail",
+            deterministic_status="fail",
+            strict_precision_residual_count=1,
+        ),
+    )
+
+    ecq2 = next(issue for issue in result.quality_gate_result.issues if issue.rule_code == "ECQ2")
+
+    assert result.quality_gate_result.status == "block"
+    assert ecq2.severity == "block"
+    assert ecq2.reason == "strict_precision_residual_1"
+    assert "strict_precision_residual_count=1" in ecq2.message
 
 
 def test_quality_gate_integration_rejects_off_policy_fail_summary(tmp_path: Path) -> None:
@@ -775,6 +850,10 @@ def _summary(
     semantic_status: str = "not_run",
     pathway_status: str = "pass",
     not_run_reason: str | None = None,
+    provenance_status: str = "pass",
+    minimum_provenance_tier: str = "section",
+    provenance_missing_fact_count: int = 0,
+    strict_precision_residual_count: int = 0,
 ) -> EvidenceConfirmProductionSummary:
     """构造测试用 Evidence Confirm 生产摘要。
 
@@ -785,6 +864,10 @@ def _summary(
         semantic_status: semantic companion 状态。
         pathway_status: repository/source/reference materialization 通路状态。
         not_run_reason: 未运行或失败原因。
+        provenance_status: claim provenance 状态。
+        minimum_provenance_tier: 最低 provenance tier。
+        provenance_missing_fact_count: provenance 缺失 fact 数。
+        strict_precision_residual_count: strict precision residual 数。
 
     Returns:
         Evidence Confirm 生产摘要。
@@ -794,7 +877,7 @@ def _summary(
     """
 
     return EvidenceConfirmProductionSummary(
-        schema_version="evidence_confirm_production_summary.v1",
+        schema_version="evidence_confirm_production_summary.v2",
         policy=policy,
         status=status,
         fund_code="110011",
@@ -815,4 +898,13 @@ def _summary(
         if deterministic_status == "warn"
         else (),
         not_run_reason=not_run_reason,
+        provenance_status=provenance_status,
+        minimum_provenance_tier=minimum_provenance_tier,
+        provenance_missing_fact_count=provenance_missing_fact_count,
+        strict_precision_residual_count=strict_precision_residual_count,
+        strict_precision_issue_ids=(
+            ("evidence-confirm:e2:value-match",)
+            if strict_precision_residual_count
+            else ()
+        ),
     )

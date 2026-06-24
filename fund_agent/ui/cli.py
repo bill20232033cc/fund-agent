@@ -2668,6 +2668,22 @@ def _echo_evidence_confirm_summary(
     typer.echo(f"evidence_confirm_checked_facts: {summary.checked_fact_count}", err=True)
     typer.echo(f"evidence_confirm_failed_facts: {summary.failed_fact_count}", err=True)
     typer.echo(f"evidence_confirm_auditability_score: {auditability_text}", err=True)
+    typer.echo(
+        f"evidence_confirm_provenance_status: {summary.provenance_status}",
+        err=True,
+    )
+    typer.echo(
+        f"evidence_confirm_minimum_provenance_tier: {summary.minimum_provenance_tier}",
+        err=True,
+    )
+    typer.echo(
+        f"evidence_confirm_provenance_missing_facts: {summary.provenance_missing_fact_count}",
+        err=True,
+    )
+    typer.echo(
+        f"evidence_confirm_strict_precision_residuals: {summary.strict_precision_residual_count}",
+        err=True,
+    )
 
 
 def _quality_gate_info_lines(gate) -> tuple[str, ...]:  # type: ignore[no-untyped-def]

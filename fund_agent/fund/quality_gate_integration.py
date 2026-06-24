@@ -221,7 +221,7 @@ def _evidence_confirm_quality_gate_issues(
         return (
             _ecq_issue(
                 rule_code="ECQ1",
-                severity=_ecq_policy_severity(summary),
+                severity=SEVERITY_BLOCK,
                 fund_code=summary.fund_code,
                 report_year=summary.report_year,
                 reason=reason,
@@ -229,7 +229,37 @@ def _evidence_confirm_quality_gate_issues(
             ),
         )
     issues: list[QualityGateIssue] = []
-    if summary.deterministic_status == "fail":
+    if summary.provenance_status == "fail" or summary.provenance_missing_fact_count:
+        reason = f"provenance_missing_{summary.provenance_missing_fact_count}"
+        issues.append(
+            _ecq_issue(
+                rule_code="ECQ2",
+                severity=SEVERITY_BLOCK,
+                fund_code=summary.fund_code,
+                report_year=summary.report_year,
+                reason=reason,
+                message=(
+                    "Evidence Confirm claim provenance 缺失；"
+                    f"provenance_missing_fact_count={summary.provenance_missing_fact_count}。"
+                ),
+            ),
+        )
+    elif summary.strict_precision_residual_count:
+        reason = f"strict_precision_residual_{summary.strict_precision_residual_count}"
+        issues.append(
+            _ecq_issue(
+                rule_code="ECQ2",
+                severity=_ecq_policy_severity(summary),
+                fund_code=summary.fund_code,
+                report_year=summary.report_year,
+                reason=reason,
+                message=(
+                    "Evidence Confirm claim provenance 已满足 release floor，但 strict value-match 仍有残差；"
+                    f"strict_precision_residual_count={summary.strict_precision_residual_count}。"
+                ),
+            ),
+        )
+    elif summary.deterministic_status == "fail":
         reason = f"deterministic_fail_{len(summary.blocking_issue_ids)}"
         issues.append(
             _ecq_issue(

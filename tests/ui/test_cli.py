@@ -194,9 +194,15 @@ class _FakeEvidenceConfirmSummary:
     checked_fact_count: int = 8
     failed_fact_count: int = 0
     auditability_score: int | None = 92
+    provenance_status: str = "pass"
+    minimum_provenance_tier: str = "section"
+    provenance_missing_fact_count: int = 0
+    strict_precision_residual_count: int = 0
+    strict_precision_issue_ids: tuple[str, ...] = ()
     not_run_reason: str | None = None
     source_excerpt: str | None = None
     pdf_path: str | None = None
+    source_url: str | None = None
     parser_payload: object | None = None
     provider_payload: object | None = None
 
@@ -603,8 +609,11 @@ class _FakeProductEvidenceConfirmWarnService:
             checked_fact_count=8,
             failed_fact_count=1,
             auditability_score=87,
+            strict_precision_residual_count=1,
+            strict_precision_issue_ids=("evidence-confirm:e2:value-match",),
             source_excerpt="secret excerpt should stay hidden",
             pdf_path="/tmp/source.pdf",
+            source_url="https://example.invalid/source",
             parser_payload={"raw": "parser json"},
             provider_payload={"raw": "provider body"},
         )
@@ -3060,10 +3069,16 @@ def test_analyze_cli_default_product_prints_evidence_confirm_warn_summary(
     assert "evidence_confirm_checked_facts: 8" in result.output
     assert "evidence_confirm_failed_facts: 1" in result.output
     assert "evidence_confirm_auditability_score: 87" in result.output
+    assert "evidence_confirm_provenance_status: pass" in result.output
+    assert "evidence_confirm_minimum_provenance_tier: section" in result.output
+    assert "evidence_confirm_provenance_missing_facts: 0" in result.output
+    assert "evidence_confirm_strict_precision_residuals: 1" in result.output
     assert "secret excerpt" not in result.output
     assert "source.pdf" not in result.output
+    assert "example.invalid" not in result.output
     assert "parser json" not in result.output
     assert "provider body" not in result.output
+    assert "evidence-confirm:e2:value-match" not in result.output
     assert _FakeProductEvidenceConfirmWarnService.last_request is not None
     assert _FakeProductEvidenceConfirmWarnService.last_request.mode == "product"
     assert _FakeProductEvidenceConfirmWarnService.last_request.developer_overrides is None
@@ -3100,6 +3115,10 @@ def test_analyze_cli_dev_override_evidence_confirm_warn_passes_policy_and_prints
     assert "evidence_confirm_checked_facts: 8" in result.output
     assert "evidence_confirm_failed_facts: 1" in result.output
     assert "evidence_confirm_auditability_score: none" in result.output
+    assert "evidence_confirm_provenance_status: pass" in result.output
+    assert "evidence_confirm_minimum_provenance_tier: section" in result.output
+    assert "evidence_confirm_provenance_missing_facts: 0" in result.output
+    assert "evidence_confirm_strict_precision_residuals: 0" in result.output
     assert "excerpt" not in result.output.lower()
     assert "pdf" not in result.output.lower()
     assert _FakeEvidenceConfirmWarnService.last_request is not None
@@ -3319,6 +3338,10 @@ def test_analyze_cli_quality_gate_block_prints_safe_evidence_confirm_summary(
     assert "evidence_confirm_checked_facts: 8" in result.output
     assert "evidence_confirm_failed_facts: 2" in result.output
     assert "evidence_confirm_auditability_score: 41" in result.output
+    assert "evidence_confirm_provenance_status: pass" in result.output
+    assert "evidence_confirm_minimum_provenance_tier: section" in result.output
+    assert "evidence_confirm_provenance_missing_facts: 0" in result.output
+    assert "evidence_confirm_strict_precision_residuals: 0" in result.output
     assert "anchor_excerpt" not in result.output
 
 

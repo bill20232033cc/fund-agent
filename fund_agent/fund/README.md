@@ -300,17 +300,19 @@ Source-truth direct extraction 在该 Processor/Extractor 边界内增加了 `Fu
 
 `fund_agent/fund/evidence_confirm_production.py` 当前提供 `EvidenceConfirmProductionSummary`，用于 Service/UI/quality gate 的生产集成摘要：
 
-- 摘要字段只包含 `policy`、`status`、`pathway_status`、`deterministic_status`、`semantic_status`、fact 计数、issue id、可审计性分数和稳定 reason code，不包含原文 excerpt、PDF/cache 路径、parser JSON、source adapter 对象或 provider payload
+- 摘要字段只包含 `policy`、`status`、`pathway_status`、`deterministic_status`、`semantic_status`、fact 计数、issue id、可审计性分数、稳定 reason code、claim provenance 状态/最低 tier/缺失计数、strict precision residual 计数和对应 compact issue ids；不包含原文 excerpt、PDF/cache 路径、parser JSON、source adapter 对象或 provider payload
+- provenance tier 顺序为 `none < section < table < row < cell`；当前 release floor 是 section-or-better，`cell` 仍是 reserved tier，不由当前实现产生
 - 默认 product `analyze` 会以 `warn` 策略通过 Service 调用 repository-bounded runner 并创建 summary；`analyze-annual-period` 通过 current-year `analyze()` 委托路径继承该 summary；`checklist` 仍固定 Evidence Confirm `off`；developer override `off|warn|block` 仅用于 `analyze --dev-override`
 - semantic companion 可通过调用方已经产生的 no-live injected result 进入 summary；Service-owned provider adapter 已有 release/readiness 证据，但默认 product path 仍不构造 provider-backed semantic client、不读取 env、HTTP 或 LLM 配置
+- CLI 只打印安全 summary 行，包括 Evidence Confirm 状态、策略、fact 计数、可审计性分数、provenance 状态、最低 tier、provenance missing 计数和 strict precision residual 计数；不打印 issue ids、原文、路径、source URL、parser/provider payload
 
 `fund_agent/fund/quality_gate_integration.py` 当前可把显式传入的 Evidence Confirm summary 投影到 `ECQ` issue family：
 
 | 规则码 | 含义 | 当前语义 |
 |--------|------|----------|
 | ECQ0 | Evidence Confirm not-run | 显式 not-run summary 的 `info` issue |
-| ECQ1 | repository/source/reference 通路失败 | policy `block` 时阻断，否则警告 |
-| ECQ2 | deterministic V2 hard-gate fail | policy `block` 时阻断，否则警告 |
+| ECQ1 | repository/source/reference 通路失败 | 始终 `block`，不受 product `warn` 降级 |
+| ECQ2 | claim provenance missing / strict precision residual / legacy deterministic fail | provenance missing 始终 `block`；strict precision residual 在 product `warn` 下为 `warn`、在 `block` 下为 `block`；legacy deterministic fail 保留 policy severity |
 | ECQ3 | deterministic V2 warn | 警告 |
 | ECQ4 | injected semantic companion fail/warn | 仅当 summary 已携带 no-live semantic result 时投影；不代表 provider-backed semantic quality |
 
