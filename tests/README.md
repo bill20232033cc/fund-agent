@@ -81,7 +81,7 @@ CI 当前固定 Python 3.11，使用 `uv sync --extra dev --frozen` 安装锁定
 - `tests/config/test_paths.py`：仓库默认路径迁移守卫测试，覆盖 `fund_agent.config.paths` 默认值、导入隔离、UI 只依赖 Service 且不越过 Service 直连 Agent 层基金能力、旧常量别名、CLI 历史 score fixture 排除和散落 `Path("docs|reports|cache/...")` 默认值扫描
 - `tests/test_repo_hygiene.py`：仓库发布卫生测试，覆盖 MIT License、`pyproject.toml` license、GitHub Actions CI 命令和 `.gitignore` artifact policy
 - `tests/fund/integration/test_p1_sample_matrix.py`：P1 样本矩阵测试，验证 3 只样本基金 12 项结构化数据达到 `36/36`
-- `tests/fund/integration/test_p3_cli_e2e_matrix.py`：P3 CLI 端到端矩阵测试，验证 3 只样本基金经 Typer CLI、Service、Agent 层基金能力、模板渲染和程序审计输出完整 8 章报告，并显式断言 P1/P2/P3/L1/R1/R2 全部审计规则执行通过、每章正文证据行和附录来源锚点完整；P19-S6 追加缺省 `--valuation-state` 的 510300 自动估值样本，断言 exact benchmark 只调用 `000300` 自建温度计
+- `tests/fund/integration/test_p3_cli_e2e_matrix.py`：P3 CLI 端到端矩阵测试，验证 3 只样本基金经 Typer CLI、Service、Agent 层基金能力、模板渲染和程序审计输出完整 8 章报告，并显式断言 P1/P2/P3/L1/R1/R2 全部审计规则执行通过、每章正文证据行和附录来源锚点完整；附录来源锚点断言使用当前 `source_field_path=...; locator=...` row locator 格式；P19-S6 追加缺省 `--valuation-state` 的 510300 自动估值样本，断言 exact benchmark 只调用 `000300` 自建温度计
 - `tests/fixtures/fund/extractors/profile/*.txt`：基础画像最小文本夹具，当前覆盖主动权益、增强指数、债券三类样本
 - `tests/fixtures/fund/extractors/performance/*.txt`：`§3` 最小文本夹具，当前覆盖直接披露、估算披露、未披露三类投资者收益率路径
 - `tests/fixtures/fund/extractors/manager_ownership/*.txt`：`§4/§8/§9` 最小文本夹具，当前覆盖完整披露、部分披露、未披露、换手率口径-only 路径
