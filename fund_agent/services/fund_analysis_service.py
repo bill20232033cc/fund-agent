@@ -606,14 +606,21 @@ class QualityGateBlockedError(ValueError):
 
     Attributes:
         quality_gate_result: 阻断报告的 quality gate 结果。
+        evidence_confirm_summary: 已计算的 Evidence Confirm 安全摘要。
         policy: 触发阻断的策略，固定为 `block`。
     """
 
-    def __init__(self, quality_gate_result: QualityGateResult) -> None:
+    def __init__(
+        self,
+        quality_gate_result: QualityGateResult,
+        *,
+        evidence_confirm_summary: EvidenceConfirmProductionSummary | None = None,
+    ) -> None:
         """初始化 quality gate 阻断异常。
 
         Args:
             quality_gate_result: 阻断报告的 quality gate 结果。
+            evidence_confirm_summary: 可安全展示的生产摘要，不包含原文或路径。
 
         Returns:
             无返回值。
@@ -623,6 +630,7 @@ class QualityGateBlockedError(ValueError):
         """
 
         self.quality_gate_result = quality_gate_result
+        self.evidence_confirm_summary = evidence_confirm_summary
         self.policy: QualityGatePolicy = "block"
         super().__init__(
             f"质量 gate 阻断报告输出：status={quality_gate_result.status}, "
@@ -1214,7 +1222,10 @@ class FundAnalysisService:
                 _raise_evidence_confirm_block_if_required(evidence_confirm_summary)
                 raise QualityGateNotRunBlockedError(quality_gate_not_run_reason or "unknown")
             if quality_gate_result.status == GATE_STATUS_BLOCK:
-                raise QualityGateBlockedError(quality_gate_result)
+                raise QualityGateBlockedError(
+                    quality_gate_result,
+                    evidence_confirm_summary=evidence_confirm_summary,
+                )
         _raise_evidence_confirm_block_if_required(evidence_confirm_summary)
         quality_gate_status = _resolve_final_judgment_quality_gate_status(
             quality_gate_result=quality_gate_result,
@@ -1712,7 +1723,7 @@ def _runner_exception_evidence_confirm_summary(
     reason = f"runner_exception:{exception_type}"
     issue_id = f"evidence-confirm-runner:{reason}"
     return EvidenceConfirmProductionSummary(
-        schema_version="evidence_confirm_production_summary.v1",
+        schema_version="evidence_confirm_production_summary.v2",
         policy=policy,
         status="fail",
         fund_code=fund_code,
@@ -1729,6 +1740,11 @@ def _runner_exception_evidence_confirm_summary(
         blocking_issue_ids=(issue_id,),
         warning_issue_ids=(),
         not_run_reason=reason,
+        provenance_status="not_run",
+        minimum_provenance_tier="none",
+        provenance_missing_fact_count=0,
+        strict_precision_residual_count=0,
+        strict_precision_issue_ids=(),
     )
 
 

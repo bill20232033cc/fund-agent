@@ -2576,6 +2576,7 @@ def _echo_quality_gate_blocked(error: QualityGateBlockedError) -> None:
     typer.echo(f"quality_gate_issues: {len(result.issues)}", err=True)
     typer.echo(f"quality_gate_json: {result.gate_json_path}", err=True)
     typer.echo(f"quality_gate_md: {result.gate_markdown_path}", err=True)
+    _echo_evidence_confirm_summary(error, summary_attr="evidence_confirm_summary")
 
 
 def _echo_quality_gate_not_run_blocked(error: QualityGateNotRunBlockedError) -> None:
@@ -2667,6 +2668,22 @@ def _echo_evidence_confirm_summary(
     typer.echo(f"evidence_confirm_checked_facts: {summary.checked_fact_count}", err=True)
     typer.echo(f"evidence_confirm_failed_facts: {summary.failed_fact_count}", err=True)
     typer.echo(f"evidence_confirm_auditability_score: {auditability_text}", err=True)
+    typer.echo(
+        f"evidence_confirm_provenance_status: {summary.provenance_status}",
+        err=True,
+    )
+    typer.echo(
+        f"evidence_confirm_minimum_provenance_tier: {summary.minimum_provenance_tier}",
+        err=True,
+    )
+    typer.echo(
+        f"evidence_confirm_provenance_missing_facts: {summary.provenance_missing_fact_count}",
+        err=True,
+    )
+    typer.echo(
+        f"evidence_confirm_strict_precision_residuals: {summary.strict_precision_residual_count}",
+        err=True,
+    )
 
 
 def _quality_gate_info_lines(gate) -> tuple[str, ...]:  # type: ignore[no-untyped-def]

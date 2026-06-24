@@ -692,7 +692,7 @@ def _reference(
     page_number: int | None = 12,
     section_id: str | None = "§2",
     table_id: str | None = None,
-    row_locator: str | None = None,
+    row_locator: str | None = "turnover_rate",
     candidate_only: bool = False,
     source_truth_status: str = "proven",
 ) -> EvidenceConfirmReference:

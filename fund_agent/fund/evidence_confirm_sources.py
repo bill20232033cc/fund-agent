@@ -9,12 +9,13 @@ Service、Host、renderer 或 quality gate 行为。
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass, is_dataclass
 from inspect import iscoroutinefunction
 from typing import Callable, Final, Literal
 
 from fund_agent.fund.chapter_facts import (
     ChapterEvidenceAnchor,
+    ChapterFactEntry,
     ChapterFactProjection,
 )
 from fund_agent.fund.documents.models import ParsedAnnualReport, ParsedTable
@@ -23,6 +24,9 @@ from fund_agent.fund.evidence_confirm import (
     EvidenceConfirmReference,
     EvidenceConfirmSourceTruthStatus,
     confirm_projection_evidence_v2,
+    _material_tokens,
+    _normalize_text,
+    _token_matches_excerpt,
 )
 
 DEFAULT_MAX_SECTION_EXCERPT_CHARS: Final[int] = 1200
@@ -31,6 +35,9 @@ SUPPORTED_TABLE_ID_RE: Final[re.Pattern[str]] = re.compile(
 )
 SUPPORTED_ROW_LOCATOR_RE: Final[re.Pattern[str]] = re.compile(
     r"^row-(?P<row_index>0|[1-9][0-9]*)$"
+)
+PROCESSOR_ROW_LOCATOR_KEYS: Final[frozenset[str]] = frozenset(
+    ("field", "table_id", "row", "column", "cell_id")
 )
 
 EvidenceConfirmReferenceBuildStatus = Literal["pass", "fail", "not_applicable"]
@@ -219,8 +226,10 @@ def build_annual_report_evidence_confirm_references(
     """从当前 ``ParsedAnnualReport`` 字段构建 Evidence Confirm 年报引用。
 
     该函数只 materialize ``source_kind="annual_report"`` 的章节锚点。表格定位仅支持
-    ``page-{page_number}-table-{table_index}``，行定位仅支持零基 ``row-N``。不支持或
-    无法唯一定位时 fail-closed，不按标题、单元格值、页码文本或 parser artifact 推断。
+    ``page-{page_number}-table-{table_index}``。行定位支持零基 ``row-N``；语义化
+    ``row_locator`` 在存在安全 table/section excerpt 时降级为粗粒度引用并产生
+    informational issue。无法唯一定位或身份矛盾时 fail-closed，不按标题、单元格值、
+    页码文本或 parser artifact 推断。
 
     Args:
         request: 年报引用构建请求。
@@ -234,8 +243,9 @@ def build_annual_report_evidence_confirm_references(
 
     issues: list[EvidenceConfirmReferenceBuildIssue] = []
     references: list[EvidenceConfirmReference] = []
+    facts_by_anchor = _facts_by_anchor(request.projection)
     for anchor in _projection_annual_anchors(request.projection):
-        reference, anchor_issues = _build_reference_for_anchor(request, anchor)
+        reference, anchor_issues = _build_reference_for_anchor(request, anchor, facts_by_anchor)
         issues.extend(anchor_issues)
         if reference is not None:
             references.append(reference)
@@ -795,15 +805,41 @@ def _projection_annual_anchors(projection: ChapterFactProjection) -> tuple[Chapt
     return tuple(anchor for _, anchor in sorted(anchors, key=lambda item: (item[0], item[1].anchor_id)))
 
 
+def _facts_by_anchor(projection: ChapterFactProjection) -> dict[str, tuple[ChapterFactEntry, ...]]:
+    """按 anchor id 收集章节事实。
+
+    Args:
+        projection: 章节事实投影。
+
+    Returns:
+        anchor id 到章节事实元组的映射。
+
+    Raises:
+        无显式抛出。
+    """
+
+    collected: dict[str, list[ChapterFactEntry]] = {}
+    for chapter in projection.chapters:
+        for fact in chapter.facts:
+            for anchor_id in fact.evidence_anchor_ids:
+                collected.setdefault(anchor_id, []).append(fact)
+    return {
+        anchor_id: tuple(sorted(facts, key=lambda item: (item.chapter_id, item.source_field_id, item.fact_id)))
+        for anchor_id, facts in collected.items()
+    }
+
+
 def _build_reference_for_anchor(
     request: EvidenceConfirmReferenceBuildRequest,
     anchor: ChapterEvidenceAnchor,
+    facts_by_anchor: dict[str, tuple[ChapterFactEntry, ...]],
 ) -> tuple[EvidenceConfirmReference | None, tuple[EvidenceConfirmReferenceBuildIssue, ...]]:
     """构建单个 anchor 的年报引用。
 
     Args:
         request: 年报引用构建请求。
         anchor: 当前章节证据锚点。
+        facts_by_anchor: anchor id 到章节事实元组的映射。
 
     Returns:
         可选引用与 issue 列表。
@@ -827,7 +863,7 @@ def _build_reference_for_anchor(
     if preflight_issue is not None:
         return None, (preflight_issue,)
 
-    excerpt_result = _anchor_excerpt(request, anchor)
+    excerpt_result = _anchor_excerpt(request, anchor, facts_by_anchor)
     anchor_issues.extend(excerpt_result.issues)
     if excerpt_result.excerpt_text is None:
         return None, tuple(anchor_issues)
@@ -872,6 +908,19 @@ class _AnchorExcerptResult:
     table_id: str | None
     row_locator: str | None
     issues: tuple[EvidenceConfirmReferenceBuildIssue, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class _ProcessorRowLocator:
+    """Processor row locator 解析结果。
+
+    Attributes:
+        table_id: locator 内声明的表格 ID。
+        row_index: 零基 ParsedTable 行号。
+    """
+
+    table_id: str
+    row_index: int
 
 
 def _anchor_preflight_issue(
@@ -925,12 +974,14 @@ def _anchor_preflight_issue(
 def _anchor_excerpt(
     request: EvidenceConfirmReferenceBuildRequest,
     anchor: ChapterEvidenceAnchor,
+    facts_by_anchor: dict[str, tuple[ChapterFactEntry, ...]],
 ) -> _AnchorExcerptResult:
     """构建 anchor 的 section/table/row excerpt。
 
     Args:
         request: 年报引用构建请求。
         anchor: 当前章节证据锚点。
+        facts_by_anchor: anchor id 到章节事实元组的映射。
 
     Returns:
         excerpt 中间结果。
@@ -940,25 +991,23 @@ def _anchor_excerpt(
     """
 
     if anchor.row_locator and not anchor.table_id:
-        return _empty_excerpt_issue(
-            anchor,
-            "row_locator_without_table_id",
-            "row_locator 缺少兼容 table_id，不能进行行级定位。",
-        )
+        return _semantic_row_locator_section_excerpt(request, anchor)
     if anchor.table_id:
-        return _table_excerpt(request, anchor)
+        return _table_excerpt(request, anchor, facts_by_anchor)
     return _section_excerpt(request, anchor)
 
 
 def _table_excerpt(
     request: EvidenceConfirmReferenceBuildRequest,
     anchor: ChapterEvidenceAnchor,
+    facts_by_anchor: dict[str, tuple[ChapterFactEntry, ...]],
 ) -> _AnchorExcerptResult:
     """构建 table 或 table-row excerpt。
 
     Args:
         request: 年报引用构建请求。
         anchor: 当前章节证据锚点。
+        facts_by_anchor: anchor id 到章节事实元组的映射。
 
     Returns:
         table excerpt 中间结果。
@@ -1003,7 +1052,7 @@ def _table_excerpt(
 
     table = tables[0]
     if anchor.row_locator:
-        return _table_row_excerpt(anchor, table)
+        return _table_row_excerpt(anchor, table, facts_by_anchor)
     excerpt = _normalize_whitespace(_format_table_excerpt(table))
     if not excerpt:
         return _empty_excerpt_issue(anchor, "empty_table_excerpt", "table excerpt 为空。")
@@ -1019,12 +1068,14 @@ def _table_excerpt(
 def _table_row_excerpt(
     anchor: ChapterEvidenceAnchor,
     table: ParsedTable,
+    facts_by_anchor: dict[str, tuple[ChapterFactEntry, ...]],
 ) -> _AnchorExcerptResult:
     """构建零基 row-N table-row excerpt。
 
     Args:
         anchor: 当前章节证据锚点。
         table: 已唯一命中的表格。
+        facts_by_anchor: anchor id 到章节事实元组的映射。
 
     Returns:
         table-row excerpt 中间结果。
@@ -1035,11 +1086,10 @@ def _table_row_excerpt(
 
     row_match = SUPPORTED_ROW_LOCATOR_RE.fullmatch(anchor.row_locator or "")
     if row_match is None:
-        return _empty_excerpt_issue(
-            anchor,
-            "unsupported_row_locator_format",
-            "row_locator 只支持零基 row-{zero_based_index} 格式。",
-        )
+        processor_row = _processor_row_locator_table_excerpt(anchor, table)
+        if processor_row is not None:
+            return processor_row
+        return _semantic_row_locator_table_excerpt(anchor, table, facts_by_anchor)
     row_index = int(row_match.group("row_index"))
     if row_index >= len(table.rows):
         return _empty_excerpt_issue(
@@ -1056,6 +1106,373 @@ def _table_row_excerpt(
         table_id=anchor.table_id,
         row_locator=anchor.row_locator,
         issues=(),
+    )
+
+
+def _processor_row_locator_table_excerpt(
+    anchor: ChapterEvidenceAnchor,
+    table: ParsedTable,
+) -> _AnchorExcerptResult | None:
+    """按 Processor locator 协议构建 table-row excerpt。
+
+    Args:
+        anchor: 当前章节证据锚点。
+        table: 已唯一命中的表格。
+
+    Returns:
+        识别为 Processor 协议时返回行级摘录或 blocking issue；非 Processor
+        协议返回 ``None`` 以保留语义 locator 旧路径。
+
+    Raises:
+        无显式抛出。
+    """
+
+    parsed = _parse_processor_row_locator(anchor)
+    if parsed is None:
+        return None
+    if isinstance(parsed, _AnchorExcerptResult):
+        return parsed
+    if parsed.row_index >= len(table.rows):
+        return _empty_excerpt_issue(
+            anchor,
+            "processor_row_locator_out_of_range",
+            f"Processor row locator row={parsed.row_index} 超出 ParsedTable.rows 范围。",
+        )
+    excerpt = _normalize_whitespace(_format_table_row_excerpt(table, parsed.row_index))
+    if not excerpt:
+        return _empty_excerpt_issue(anchor, "empty_table_row_excerpt", "table row excerpt 为空。")
+    return _AnchorExcerptResult(
+        excerpt_text=excerpt,
+        page_number=table.page_number,
+        table_id=anchor.table_id,
+        row_locator=anchor.row_locator,
+        issues=(),
+    )
+
+
+def _parse_processor_row_locator(
+    anchor: ChapterEvidenceAnchor,
+) -> _ProcessorRowLocator | _AnchorExcerptResult | None:
+    """解析 Processor 语义 row locator。
+
+    Args:
+        anchor: 当前章节证据锚点。
+
+    Returns:
+        成功时返回解析结果；识别为 Processor 协议但失败时返回 blocking
+        excerpt result；非 Processor 协议返回 ``None``。
+
+    Raises:
+        无显式抛出。
+    """
+
+    row_locator = anchor.row_locator or ""
+    if ";" not in row_locator:
+        return None
+    parsed_fields = _parse_semicolon_fields(row_locator)
+    if not any(key in PROCESSOR_ROW_LOCATOR_KEYS for key in parsed_fields):
+        return None
+    if parsed_fields.get("__malformed__"):
+        return _empty_excerpt_issue(
+            anchor,
+            "processor_row_locator_malformed",
+            "Processor row locator 含有无法解析的 key=value 片段。",
+        )
+
+    embedded_table_id = parsed_fields.get("table_id")
+    if not embedded_table_id:
+        return _empty_excerpt_issue(
+            anchor,
+            "processor_row_locator_missing_table_id",
+            "Processor row locator 缺少 table_id。",
+        )
+    if embedded_table_id != anchor.table_id:
+        return _empty_excerpt_issue(
+            anchor,
+            "processor_row_locator_table_mismatch",
+            "Processor row locator table_id 与 anchor.table_id 不一致。",
+        )
+
+    row_value = parsed_fields.get("row")
+    if row_value is None:
+        return _empty_excerpt_issue(
+            anchor,
+            "processor_row_locator_missing_row",
+            "Processor row locator 缺少 row。",
+        )
+    try:
+        row_index = int(row_value)
+    except ValueError:
+        return _empty_excerpt_issue(
+            anchor,
+            "processor_row_locator_invalid_row",
+            "Processor row locator row 不是整数。",
+        )
+    if row_index < 0:
+        return _empty_excerpt_issue(
+            anchor,
+            "processor_row_locator_invalid_row",
+            "Processor row locator row 不能为负数。",
+        )
+    return _ProcessorRowLocator(table_id=embedded_table_id, row_index=row_index)
+
+
+def _parse_semicolon_fields(value: str) -> dict[str, str]:
+    """解析分号分隔的 key=value 字段。
+
+    Args:
+        value: 原始 locator 字符串。
+
+    Returns:
+        解析后的字段字典；无法解析的片段用 ``__malformed__`` 标记。
+
+    Raises:
+        无显式抛出。
+    """
+
+    parsed: dict[str, str] = {}
+    for part in value.split(";"):
+        segment = part.strip()
+        if not segment:
+            continue
+        if "=" not in segment:
+            parsed["__malformed__"] = "1"
+            continue
+        key, raw_field_value = segment.split("=", 1)
+        key = key.strip()
+        field_value = raw_field_value.strip()
+        if not key or key in parsed:
+            parsed["__malformed__"] = "1"
+            continue
+        parsed[key] = field_value
+    return parsed
+
+
+def _semantic_row_locator_table_excerpt(
+    anchor: ChapterEvidenceAnchor,
+    table: ParsedTable,
+    facts_by_anchor: dict[str, tuple[ChapterFactEntry, ...]],
+) -> _AnchorExcerptResult:
+    """可证明时收窄语义行定位，否则降级为 table excerpt。
+
+    Args:
+        anchor: 当前章节证据锚点。
+        table: 已唯一命中的表格。
+        facts_by_anchor: anchor id 到章节事实元组的映射。
+
+    Returns:
+        table 级 excerpt 和 informational 降级 issue。
+
+    Raises:
+        无显式抛出。
+    """
+
+    narrowed = _single_fact_semantic_row_excerpt(anchor, table, facts_by_anchor)
+    if narrowed is not None:
+        return narrowed
+
+    excerpt = _normalize_whitespace(_format_table_excerpt(table))
+    if not excerpt:
+        return _empty_excerpt_issue(anchor, "empty_table_excerpt", "table excerpt 为空。")
+    return _AnchorExcerptResult(
+        excerpt_text=excerpt,
+        page_number=table.page_number,
+        table_id=anchor.table_id,
+        row_locator=None,
+        issues=(
+            _issue(
+                anchor,
+                "informational",
+                "semantic_row_locator_degraded_to_table_excerpt",
+                "row_locator 不是 row-N，已降级为 table excerpt；V2 会保留定位精度 warning。",
+            ),
+        ),
+    )
+
+
+def _single_fact_semantic_row_excerpt(
+    anchor: ChapterEvidenceAnchor,
+    table: ParsedTable,
+    facts_by_anchor: dict[str, tuple[ChapterFactEntry, ...]],
+) -> _AnchorExcerptResult | None:
+    """在单 fact / 全 token / 单行命中时生成语义 row locator 的行级摘录。
+
+    Args:
+        anchor: 当前章节证据锚点。
+        table: 已唯一命中的表格。
+        facts_by_anchor: anchor id 到章节事实元组的映射。
+
+    Returns:
+        可安全收窄时返回行级摘录；否则返回 ``None`` 以保持粗粒度降级。
+
+    Raises:
+        无显式抛出。
+    """
+
+    facts = _narrowable_facts(anchor, facts_by_anchor)
+    if len(facts) != 1:
+        return None
+    tokens = _material_tokens_for_anchor_scope(facts[0], anchor)
+    if not tokens:
+        return None
+
+    matching_rows: list[tuple[int, str]] = []
+    for row_index in range(len(table.rows)):
+        excerpt = _normalize_whitespace(_format_table_row_excerpt(table, row_index))
+        normalized_excerpt = _normalize_text(excerpt)
+        if excerpt and all(_token_matches_excerpt(token, normalized_excerpt) for token in tokens):
+            matching_rows.append((row_index, excerpt))
+
+    if len(matching_rows) != 1:
+        return None
+    _, excerpt = matching_rows[0]
+    return _AnchorExcerptResult(
+        excerpt_text=excerpt,
+        page_number=table.page_number,
+        table_id=anchor.table_id,
+        row_locator=anchor.row_locator,
+        issues=(),
+    )
+
+
+def _material_tokens_for_anchor_scope(
+    fact: ChapterFactEntry,
+    anchor: ChapterEvidenceAnchor,
+) -> tuple[str, ...]:
+    """按 semantic source-field scope 读取 material tokens。
+
+    Args:
+        fact: 当前章节事实。
+        anchor: 当前章节证据锚点。
+
+    Returns:
+        V2 material tokens；scope 不可解析时返回空元组以触发安全降级。
+
+    Raises:
+        无显式抛出。
+    """
+
+    source_field_path = _semantic_source_field_path(anchor.row_locator)
+    if source_field_path is None:
+        return _material_tokens(fact.value)
+    path_parts = tuple(part for part in source_field_path.split(".") if part)
+    if not path_parts or path_parts[0] != fact.source_field_name:
+        return ()
+    if len(path_parts) == 1:
+        return _material_tokens(fact.value)
+    resolved_value = _resolve_fact_value_path(fact.value, path_parts[1:])
+    if resolved_value is _UNRESOLVED_VALUE:
+        return ()
+    return _material_tokens(resolved_value)
+
+
+def _semantic_source_field_path(row_locator: str | None) -> str | None:
+    """解析 semantic locator 中的 ``source_field_path``。
+
+    Args:
+        row_locator: 行级或语义定位字符串。
+
+    Returns:
+        ``source_field_path`` 值；不存在时返回 ``None``。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if not row_locator or ";" not in row_locator:
+        return None
+    parsed_fields = _parse_semicolon_fields(row_locator)
+    source_field_path = parsed_fields.get("source_field_path")
+    return source_field_path or None
+
+
+_UNRESOLVED_VALUE: Final[object] = object()
+
+
+def _resolve_fact_value_path(value: object | None, path_parts: tuple[str, ...]) -> object:
+    """按点分路径读取 fact value 子值。
+
+    Args:
+        value: fact value。
+        path_parts: 不含顶层字段名的路径片段。
+
+    Returns:
+        子值；无法解析时返回 ``_UNRESOLVED_VALUE``。
+
+    Raises:
+        无显式抛出。
+    """
+
+    current: object | None = value
+    for part in path_parts:
+        if is_dataclass(current) and not isinstance(current, type):
+            current = asdict(current)
+        if not isinstance(current, dict) or part not in current:
+            return _UNRESOLVED_VALUE
+        current = current[part]
+    return current
+
+
+def _narrowable_facts(
+    anchor: ChapterEvidenceAnchor,
+    facts_by_anchor: dict[str, tuple[ChapterFactEntry, ...]],
+) -> tuple[ChapterFactEntry, ...]:
+    """读取允许参与语义 row 收窄的单 anchor facts。
+
+    Args:
+        anchor: 当前章节证据锚点。
+        facts_by_anchor: anchor id 到章节事实元组的映射。
+
+    Returns:
+        可参与收窄的 facts。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return tuple(
+        fact
+        for fact in facts_by_anchor.get(anchor.anchor_id, ())
+        if fact.status == "available"
+        and fact.extraction_mode != "derived"
+        and not fact.source_field_id.startswith("synthetic.")
+    )
+
+
+def _semantic_row_locator_section_excerpt(
+    request: EvidenceConfirmReferenceBuildRequest,
+    anchor: ChapterEvidenceAnchor,
+) -> _AnchorExcerptResult:
+    """把无 table_id 的语义行定位降级为 section excerpt。
+
+    Args:
+        request: 年报引用构建请求。
+        anchor: 当前章节证据锚点。
+
+    Returns:
+        section 级 excerpt 和 informational 降级 issue。
+
+    Raises:
+        无显式抛出。
+    """
+
+    section_result = _section_excerpt(request, anchor)
+    if section_result.excerpt_text is None:
+        return section_result
+    return _AnchorExcerptResult(
+        excerpt_text=section_result.excerpt_text,
+        page_number=section_result.page_number,
+        table_id=None,
+        row_locator=None,
+        issues=(
+            *section_result.issues,
+            _issue(
+                anchor,
+                "informational",
+                "semantic_row_locator_degraded_to_section_excerpt",
+                "row_locator 缺少兼容 table_id，已降级为 section excerpt；V2 会保留定位精度 warning。",
+            ),
+        ),
     )
 
 

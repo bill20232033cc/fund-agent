@@ -16,7 +16,12 @@ from fund_agent.fund.extractors import (
 )
 from fund_agent.fund.data_extractor import FundDataExtractor
 from fund_agent.fund.chapter_facts import ChapterFactProvider, project_chapter_facts
-from fund_agent.fund.evidence_confirm import EvidenceConfirmReference, confirm_projection_evidence
+from fund_agent.fund.evidence_confirm import (
+    EvidenceConfirmReference,
+    confirm_projection_evidence,
+    confirm_projection_evidence_v2,
+)
+from fund_agent.fund.evidence_confirm_diagnostics import summarize_evidence_confirm_diagnostics
 from fund_agent.fund.evidence_confirm_sources import (
     EvidenceConfirmReferenceBuildRequest,
     build_annual_report_evidence_confirm_references,
@@ -75,6 +80,23 @@ evidence_confirm_result = confirm_projection_evidence(
         ),
     ),
 )
+evidence_confirm_result_v2 = confirm_projection_evidence_v2(
+    chapter_projection,
+    (
+        EvidenceConfirmReference(
+            anchor_id="example-anchor",
+            reference_kind="annual_report_excerpt",
+            source_kind="annual_report",
+            document_year=2024,
+            section_id="§3",
+            page_number=12,
+            table_id=None,
+            row_locator="row:1",
+            excerpt_text="年报摘录文本",
+        ),
+    ),
+)
+evidence_confirm_diagnostic = summarize_evidence_confirm_diagnostics(evidence_confirm_result_v2)
 reference_build_result = build_annual_report_evidence_confirm_references(
     EvidenceConfirmReferenceBuildRequest(
         fund_code="110011",
@@ -114,7 +136,7 @@ chapter_lens = resolve_preferred_lens(chapter_id=2, fund_type="active_fund")
 
 Docling 架构重定位后，candidate harness 只保留为转换中间态和研究证据入口；它不是结构化基金事实提取层。当前 `fund_agent/fund/processors/` 已落地 no-live Processor/Extractor 契约、`FundProcessorRegistry` 和按基金类型拆分的 `ParsedAnnualReport` processor：`active_fund`、`index_fund`、`enhanced_index`、`bond_fund`、`qdii_fund` 与 `fof_fund` 均支持 `<fund_type> + annual_report + parsed_annual_report.v1`，消费已加载的 `ParsedAnnualReport`，包装现有窄 extractor，输出模板第 1-6 章字段族、公共 `EvidenceAnchor`、source provenance 和 fail-closed 缺口。默认生产 facade 中，`FundDataExtractor.extract()` 对已分类基金类型通过 `FundProcessorRegistry` 投影 `StructuredFundDataBundle`（product_essence / return_attribution / manager_profile / investor_experience / core_risk fallback）；只有 `classified_fund_type` 缺失或非法时保留 direct legacy residual path。S3 新增的 `FundDisclosureDocumentIntermediate` 协议和 `fund_disclosure_dispatch.py` admission helper 只定义受控文档表示进入 Processor 边界前的 fail-closed 判定。S4/S5 的 `FundDisclosureDocument` route 已按六类 `FundType` 拆分 processor：active 保留 `FundDisclosureDocumentProcessor`（processor_id=`active_fund_disclosure.fund_disclosure_document.v1`），index/enhanced_index/bond/QDII/FOF 分别由对应分类型 FDD processor 处理；facade 仍先通过 `FundDocumentRepository` 加载并校验 `ParsedAnnualReport`，再用 parsed report 分类结果构造 `<fund_type> + annual_report + fund_disclosure_document.v1` dispatch key，`FundDisclosureDocumentIntermediate` 不决定基金类型。`disclosure_intermediate=None` 的默认生产路径仍不解析 `fund_disclosure_document.v1`。S6-A 起，processor contract 增加 `FundDisclosureDocumentContentIntermediate` 与 `FundCandidateEvidenceRecord`：candidate-only locator evidence 可作为内部证据记录挂在 `FundFieldFamilyResult.candidate_evidence`，但不进入 `value`，不替代公共 `EvidenceAnchor`，也不满足 `partial` / `accepted`。S6-B 起，`FundDisclosureDocumentProcessor` 为 `product_essence.v1` 选择 section/paragraph/table/cell 层面的 candidate locator evidence；S6-C 起，`FundDisclosureDocumentProcessor` 为 `return_attribution.v1` 选择净值/基准表现、费率、跟踪误差相关的 candidate locator evidence；S6-D 起，`FundDisclosureDocumentProcessor` 为 `manager_profile.v1` 选择基金经理名册、策略/展望、换手率、经理/从业人员持有与持仓快照相关 candidate locator evidence；S6-E 起，`FundDisclosureDocumentProcessor` 为 `investor_experience.v1` 选择投资者实际收益、基金份额持有人结构、基金份额变动、实际申购赎回流量和收益分配相关 candidate locator evidence；S6-F 起，`FundDisclosureDocumentProcessor` 为 `core_risk.v1` 选择风险收益特征、清盘/规模、跟踪误差/偏离、换手/风格漂移和持仓集中相关 candidate locator evidence；S6-G 起，`FundDisclosureDocumentProcessor` 为 `current_stage.v1` 选择当前阶段、基金经理变更、份额/规模变化和持仓/策略变化相关 candidate locator evidence。proof-missing / proof-invalid / candidate-boundary 路径中的 candidate evidence 仍保持 `status="missing"`、`value={}`、`anchors=()`，并以 `candidate_only_not_source_truth` gap 标明不能消费为事实；proof-positive direct route 会清空对应已实现字段族的 `candidate_evidence`。`FundDisclosureDocument` candidate schema 当前只存在于 `fund_agent/fund/documents/candidates/` 内部：记录 EID HTML render candidate 身份、navigation、section、paragraph、table、cell locator、candidate boundary 和 source-failure mapping，并固定 `intermediate_kind="fund_disclosure_document.v1"`。该 schema 不导出到 `fund_agent.fund.documents` 公共入口，不扩展 `EvidenceSourceKind` / `EvidenceAnchor`，不改变 repository/source 行为；processor reachability、S6-A contract、S6-B product essence selector、S6-C return attribution selector、S6-D manager profile selector、S6-E investor experience selector、S6-F core risk selector、S6-G current stage selector，以及 source-truth direct extraction 的单字段族推进都不证明 real-report correctness、字段正确性、parser replacement、golden/readiness 或 release。不能从候选 JSON 直接外推出 CHAPTER_CONTRACT、renderer、quality gate 或 LLM prompt 输入。
 
-Source-truth direct extraction 在该 Processor/Extractor 边界内增加了 `FundDisclosureSourceTruthAdmissionProof` 正向准入证明。`candidate_boundary is None` 是必要条件但不充分；只有 proof-positive、`source_provenance` 有效且 `failure_class` 为空的 `FundDisclosureDocument` content input 可以产出 FDD source-truth public field value。缺少或无效 proof 不产出公共字段值或 anchors；`source_provenance=None` 与非空 `failure_class` 仍是 base admission-layer failure。当前 `product_essence.v1`、`return_attribution.v1`、`manager_profile.v1`、`investor_experience.v1`、`current_stage.v1` 与 `core_risk.v1` 有 FDD source-truth direct extraction，且 direct result 的 `candidate_evidence` 为空；`return_attribution.v1` 的显式 FDD facade route 可把 proof-positive 费率与净值/基准表现投影到 `StructuredFundDataBundle`；`manager_profile.v1` 的显式 FDD facade route 可把 proof-positive `portfolio_managers`、`turnover_rate`、`manager_alignment`、`manager_strategy_text` 和 `holdings_snapshot` 投影到 `StructuredFundDataBundle`；`investor_experience.v1` 的显式 FDD facade route 可把 proof-positive `investor_return`、`holder_structure` 和 `share_change` 投影到 `StructuredFundDataBundle`。`current_stage.v1` 仅复用既有 public fact shape `basic_identity`、`share_change`、`holdings_snapshot` 与 `portfolio_managers`，不新增 bundle-level `current_stage` 字段，不投影 `StructuredFundDataBundle` 字段，不输出当前阶段语义摘要、市场/估值判断或最终持有/替换判断。`core_risk.v1` 通过 `_CORE_RISK_REQUIRED_TOP_LEVEL` 实现全部五个 required source-truth subvalue：`risk_characteristic_text` 保持既有 `risk_characteristic_text.v1` shape，`liquidation_or_scale_risk`、`tracking_error_or_deviation_risk`、`turnover_or_style_drift_risk` 与 `concentration_risk` 各自通过 direct paragraph/cell 披露抽取为 `core_risk_role_disclosure.v1` subvalue（五键：`schema_version`、`fund_code`、`report_year`、`role`、`risk_disclosure_text`），不内嵌 `source_anchors`。缺失单个 role 时发射 `field_family_partial` gap 并返回 `partial` 状态；冲突披露 emit `ambiguous_table_or_locator`。不再使用 `deferred_role`。显式 FDD facade route 不新增 `StructuredFundDataBundle.core_risk`；只在 product essence 缺少 `risk_characteristic_text` 时复用既有 fallback 投影到 `StructuredFundDataBundle.risk_characteristic_text`。`subscription_redemption` 和 `income_distribution` 仍只作为 `investor_experience.v1` candidate locator roles，不是 public source-truth subvalues。Candidate evidence 继续保持 candidate_only / not_proven / NOT_READY，不扩展 `EvidenceSourceKind` / `EvidenceAnchor`，不改变 repository/source 行为，不授权 Service/UI/Host/renderer/quality-gate consumption、parser replacement、golden/readiness 或 release。
+Source-truth direct extraction 在该 Processor/Extractor 边界内增加了 `FundDisclosureSourceTruthAdmissionProof` 正向准入证明。`candidate_boundary is None` 是必要条件但不充分；只有 proof-positive、`source_provenance` 有效且 `failure_class` 为空的 `FundDisclosureDocument` content input 可以产出 FDD source-truth public field value。缺少或无效 proof 不产出公共字段值或 anchors；`source_provenance=None` 与非空 `failure_class` 仍是 base admission-layer failure。当前 `product_essence.v1`、`return_attribution.v1`、`manager_profile.v1`、`investor_experience.v1`、`current_stage.v1` 与 `core_risk.v1` 有 FDD source-truth direct extraction，且 direct result 的 `candidate_evidence` 为空；`return_attribution.v1` 的显式 FDD facade route 可把 proof-positive 费率与净值/基准表现投影到 `StructuredFundDataBundle`；`manager_profile.v1` 的显式 FDD facade route 可把 proof-positive `portfolio_managers`、`turnover_rate`、`manager_alignment`、`manager_strategy_text` 和 `holdings_snapshot` 投影到 `StructuredFundDataBundle`。其中 `manager_strategy_text` 只从 `heading_path` 命中策略/展望标题的稳定 paragraph 生成，当前覆盖“投资策略和运作分析”“投资策略和业绩表现说明”“管理人对境外市场走势的简要展望”等普通和 QDII/海外报告标题变体；正文关键词不能自授权生成字段。`investor_experience.v1` 的显式 FDD facade route 可把 proof-positive `investor_return`、`holder_structure` 和 `share_change` 投影到 `StructuredFundDataBundle`。`current_stage.v1` 仅复用既有 public fact shape `basic_identity`、`share_change`、`holdings_snapshot` 与 `portfolio_managers`，不新增 bundle-level `current_stage` 字段，不投影 `StructuredFundDataBundle` 字段，不输出当前阶段语义摘要、市场/估值判断或最终持有/替换判断。`core_risk.v1` 通过 `_CORE_RISK_REQUIRED_TOP_LEVEL` 实现全部五个 required source-truth subvalue：`risk_characteristic_text` 保持既有 `risk_characteristic_text.v1` shape，`liquidation_or_scale_risk`、`tracking_error_or_deviation_risk`、`turnover_or_style_drift_risk` 与 `concentration_risk` 各自通过 direct paragraph/cell 披露抽取为 `core_risk_role_disclosure.v1` subvalue（五键：`schema_version`、`fund_code`、`report_year`、`role`、`risk_disclosure_text`），不内嵌 `source_anchors`。缺失单个 role 时发射 `field_family_partial` gap 并返回 `partial` 状态；冲突披露 emit `ambiguous_table_or_locator`。不再使用 `deferred_role`。显式 FDD facade route 不新增 `StructuredFundDataBundle.core_risk`；只在 product essence 缺少 `risk_characteristic_text` 时复用既有 fallback 投影到 `StructuredFundDataBundle.risk_characteristic_text`。`subscription_redemption` 和 `income_distribution` 仍只作为 `investor_experience.v1` candidate locator roles，不是 public source-truth subvalues。Candidate evidence 继续保持 candidate_only / not_proven / NOT_READY，不扩展 `EvidenceSourceKind` / `EvidenceAnchor`，不改变 repository/source 行为，不授权 Service/UI/Host/renderer/quality-gate consumption、parser replacement、golden/readiness 或 release。
 
 `extract_profile()` 返回 `ProfileExtractionResult`，当前只覆盖模板第 1 章“这只基金到底是什么产品”的最小数据底座：
 
@@ -148,7 +170,7 @@ Source-truth direct extraction 在该 Processor/Extractor 边界内增加了 `Fu
 - `holdings_snapshot`：`§8` 表格中的前十大重仓、`bond_top_holding_row.v1` 前五名债券投资明细、`target_fund_holding_row.v1` 期末投资目标基金明细，以及已披露的行业分布；债券持仓输出为独立 `bond_top_holdings` 子形态，目标基金持仓输出为独立 `target_fund_holdings` 子形态，二者都不复用股票 `top_holdings`
 - `share_change`：`§10` 表格中的期初份额、期末份额、净变动；当前支持申购/赎回拆分表，并在缺少净变动行时用期末减期初计算
 
-`FundDataExtractor.extract()` 返回 `StructuredFundDataBundle`。默认 `ParsedAnnualReport` 路径通过 `FundProcessorRegistry` 按 `classified_fund_type` 分派：`active_fund` 走 `ActiveFundAnnualProcessor`，`index_fund`、`enhanced_index`、`bond_fund`、`qdii_fund` 与 `fof_fund` 走对应分类型 processor，并投影 bundle 字段（product_essence / return_attribution / manager_profile / investor_experience / core_risk fallback）；未分类仍保留 direct legacy residual path。S5 起，`extract(..., disclosure_intermediate=...)` 仅提供显式 opt-in 的内部/test facade route：它仍先通过 `FundDocumentRepository` 加载并校验 `ParsedAnnualReport`，从 parsed report 分类基金类型，按 `active_fund`、`index_fund`、`enhanced_index`、`bond_fund`、`qdii_fund` 或 `fof_fund` 进入对应 `fund_disclosure_document.v1` processor，并把 `source_provenance` / `candidate_boundary` 作为 processor input 显式传递；`disclosure_intermediate=None` 的默认生产路径不解析 `fund_disclosure_document.v1`。
+`FundDataExtractor.extract()` 返回 `StructuredFundDataBundle`。默认 `ParsedAnnualReport` 路径通过 `FundProcessorRegistry` 按 `classified_fund_type` 分派：`active_fund` 走 `ActiveFundAnnualProcessor`，`index_fund`、`enhanced_index`、`bond_fund`、`qdii_fund` 与 `fof_fund` 走对应分类型 processor，并投影 bundle 字段（product_essence / return_attribution / manager_profile / investor_experience / core_risk fallback）；未分类仍保留 direct legacy residual path。S5 起，`extract(..., disclosure_intermediate=...)` 仅提供显式 opt-in 的内部/test facade route：它仍先通过 `FundDocumentRepository` 加载并校验 `ParsedAnnualReport`，从 parsed report 分类基金类型，按 `active_fund`、`index_fund`、`enhanced_index`、`bond_fund`、`qdii_fund` 或 `fof_fund` 进入对应 `fund_disclosure_document.v1` processor，并把 `source_provenance` / `candidate_boundary` 作为 processor input 显式传递；`disclosure_intermediate=None` 的默认生产路径不解析 `fund_disclosure_document.v1`。Processor 字段族投影到 top-level bundle 字段时，如果 family anchors 含有分号分隔的 `field=` Processor locator 或 `source_field_path=` semantic locator，则只把 exact field 或 dot-prefix 子路径匹配的 anchors 绑定到该字段；没有匹配 anchor 的 field-locator-capable family 不借用其它字段 anchors。默认 parsed annual processor 只给 legacy extractor anchors 增加顶层 `source_field_path=<bundle_field>` scope，不从复合 value 形状推断 `fee_schedule.management_fee` 等子字段 provenance。完全没有字段身份 locator 的 family 保持原有 family anchors，避免破坏包装 legacy extractor anchors 的 processor 路径。row/table 有效性、section/table identity 和 `row` 边界仍由 Evidence Confirm materializer fail-closed 校验，`column` / `cell_id` 不作为 proof-bearing 字段。
 
 当前 `FundDisclosureDocument` candidate schema 与 proof-missing locator evidence 仍是 candidate-only / `not_proven` / `NOT_READY`；S6-A 只新增内部 candidate evidence contract，S6-B/S6-C/S6-D/S6-E/S6-F/S6-G 只分别为 `product_essence.v1`、`return_attribution.v1`、`manager_profile.v1`、`investor_experience.v1`、`core_risk.v1` 与 `current_stage.v1` 生成 candidate locator evidence，不把 candidate evidence 投影进 `StructuredFundDataBundle`，不声明 parser replacement、full correctness、golden/readiness 或 release。Source-truth direct extraction 的当前例外是 proof-positive `product_essence.v1`、`return_attribution.v1`、`manager_profile.v1`、`investor_experience.v1`、`current_stage.v1` 与 `core_risk.v1`；`investor_experience.v1` 只覆盖既有 public/bundle key `investor_return`、`holder_structure` 与 `share_change`，`current_stage.v1` 只覆盖既有 public fact shape `basic_identity`、`share_change`、`holdings_snapshot` 与 `portfolio_managers` 且不投影 bundle，`core_risk.v1` 覆盖全部五个 required source-truth subvalue（`risk_characteristic_text` + 四个 `core_risk_role_disclosure.v1` role key）且不新增 `StructuredFundDataBundle.core_risk`。`subscription_redemption` 与 `income_distribution` 仍不进入 public value。
 
@@ -165,7 +187,7 @@ Source-truth direct extraction 在该 Processor/Extractor 边界内增加了 `Fu
 - `portfolio_managers` 投影到第 1 章和第 3 章，source field id 为 `structured.portfolio_managers`
 - `risk_characteristic_text` 投影到第 1 章和第 6 章，source field id 为 `structured.risk_characteristic_text`
 - `holdings_snapshot` 继续作为第 3/5/6 章持仓子形态的唯一来源字段
-- `bond_risk_evidence` 的组级 anchors 保留在 value 内部，不展开为普通章节 `ChapterEvidenceAnchor`
+- `bond_risk_evidence` 的组级 anchors 会在结构化值可用时转换为普通年报章节 `ChapterEvidenceAnchor`；缺失或不适用状态不伪造章节锚点
 - 该能力不读取文档仓库、PDF、cache、source helper、下载器或 parser，不调用 LLM、Service、Host 或 dayu；它不是 writer、auditor、orchestrator 或 `FundToolService`
 
 `AnnualEvidenceScopeRequest`、`AnnualEvidenceLoader` 和 `AnnualEvidenceBundle` 位于 `fund_agent/fund/annual_evidence.py`，当前为 `analyze-annual-period` 提供多年年报证据作用域和年度摘要：
@@ -231,6 +253,21 @@ Source-truth direct extraction 在该 Processor/Extractor 边界内增加了 `Fu
 - V2 与 V1 共存：V1 公共函数 `confirm_chapter_evidence()` / `confirm_projection_evidence()` 不变，返回类型、分数和状态语义保持原样
 - 该能力不读取文档仓库、PDF/cache/source helper、Service、Host、provider、retained report、文件系统、环境变量或 dayu，不接入 `ProgrammaticAuditResult`、FQ0-FQ6 quality gate、renderer、CLI 或 readiness 判定；调用方自行提供 reference
 
+`fund_agent/fund/evidence_confirm_diagnostics.py` 当前提供 no-live `evidence_confirm_fact_diagnostic.v1` 安全诊断聚合：
+
+- `summarize_evidence_confirm_diagnostics()` 只消费已经得到的 `EvidenceConfirmResultV2`，按 fail/warn 维度、`source_field_id` 和章节号聚合诊断桶
+- 输出只包含基金代码、年份、fact/status/issue 计数、维度名、字段 ID、章节号、issue ids、下一 gate 建议和保守 root-cause 分类，不包含原文 excerpt、PDF/cache 路径、source helper 细节或 provider payload
+- 当前 root-cause 分类只用于 RR-09 A0/A1 诊断准备：`missing_evidence`、`source_support`、`proof_boundary` 归为 `projection_attachment_defect`，`anchor_precision` warn 归为 `true_anchor_precision_gap`，`value_match` 保持 `undetermined`
+- 该能力不读取文档仓库、PDF/cache/source helper、Service、Host、provider、renderer、quality gate、文件系统、环境变量或 dayu；不改变 V2 strict truth、ECQ 投影、quality gate 语义、report-body rendering、runtime product evidence、readiness 或 release 状态
+
+`fund_agent/fund/evidence_confirm_value_diagnostics.py` 当前提供 no-live `evidence_confirm_value_diagnostic.v1` 安全诊断聚合：
+
+- `summarize_value_match_diagnostics()` 只消费已经得到的 `ChapterFactProjection`、显式 `EvidenceConfirmReference` 和 `EvidenceConfirmResultV2`，用于解释 V2 `value_match` fail/pass、coarse reference residual 和 bond-risk anchor 投影缺口
+- token/match 元数据必须来自 deterministic V2 same-source primitives；该 helper 不实现第二套近似 matcher，不改变 `confirm_projection_evidence_v2()` 的 pass/fail 语义
+- 输出只包含基金代码、年份、fact/source field/chapter ID、失败/警告维度、anchor/reference/proof-reference 计数、token 安全类别计数、结构化 value path、reference 粒度、locator downgrade 标记和诊断分类；不包含原始 token、原文 excerpt、PDF/cache 路径、URL、source helper 细节或 provider payload
+- 当前分类只用于 RR-09 A2 诊断：`value_shape_overbroad`、`matcher_normalization_gap`、`coarse_reference_insufficient`、`anchor_attachment_mismatch`、`extractor_value_or_anchor_defect`、`bond_risk_group_anchor_projection_gap`、`undetermined_requires_live_excerpt_review`
+- 该能力不读取文档仓库、PDF/cache/source helper、Service、Host、provider、renderer、quality gate、文件系统、环境变量或 dayu；不改变 V2 strict truth、ECQ 投影、quality gate 语义、report-body rendering、runtime product evidence、readiness 或 release 状态
+
 `fund_agent/fund/evidence_confirm_semantic.py` 当前提供 no-live `evidence_confirm_semantic.v1` 语义蕴含 companion contract：
 
 - `confirm_semantic_entailment()` 只消费调用方显式传入的 `EvidenceConfirmResultV2`、`EvidenceConfirmReference`、`EvidenceSemanticClaim` 和注入的 `EvidenceEntailmentClient`
@@ -245,7 +282,10 @@ Source-truth direct extraction 在该 Processor/Extractor 边界内增加了 `Fu
 
 - `build_annual_report_evidence_confirm_references()` 只消费调用方已经传入的 `ChapterFactProjection` 与 `ParsedAnnualReport`
 - 只 materialize `source_kind="annual_report"` 的 anchor，输出既有 `annual_report_excerpt / annual_report` reference/source kind，不扩展 `EvidenceSourceKind` 或公共 `EvidenceAnchor`
-- 表格定位只接受 `page-{page_number}-table-{table_index}` 并精确匹配 `ParsedTable.page_number/table_index`；行定位只接受零基 `row-N`
+- 表格定位只接受 `page-{page_number}-table-{table_index}` 并精确匹配 `ParsedTable.page_number/table_index`；行定位精确模式支持零基 `row-N`
+- Processor 语义 `row_locator` 支持 `field=...; table_id=...; row=...` 形式：当 embedded `table_id` 与 anchor table identity 一致且 `row` 是有效零基 `ParsedTable.rows` 行号时，materializer 输出行级 annual-report excerpt 并保留原始 row locator；recognized Processor locator 若缺少 table_id/row、table_id 不一致、row 非整数/负数/越界，则 blocking 且不降级为 proof-bearing table excerpt
+- 其它语义化 `row_locator` 不做标题/页码文本推断：有兼容 table id 且同一 anchor 只绑定一个可用非派生 fact、该 fact 的 material tokens 全部唯一命中同一表格行时，materializer 会保留语义 row locator 并输出行级 excerpt；否则降级为 table excerpt。`source_field_path=<field>` 会按顶层字段取 tokens，显式 `source_field_path=<field>.<subfield>` 才会按子字段值取 tokens；无法解析、字段不匹配或多行命中都会安全降级。无 table id 时降级为 bounded section excerpt。降级会记录 informational issue，V2 会保留 E1 `anchor_precision` warning，避免把粗粒度 excerpt 当作行级精确证据
+- `column` 与 `cell_id` 当前只作为 Processor locator 上下文保留，不作为 proof-bearing 字段；当前 `ParsedTable` 不暴露稳定 cell identity
 - 无 table/row locator 时只用 `ParsedAnnualReport.get_section_text(section_id)` 构造 bounded section excerpt，不按 page_number 切 `raw_text`
 - `source_truth_status` 默认 `not_proven`；只有请求为 `proven` 且当前 EID single-source metadata admission 满足时才输出 proven reference
 - import 与 materializer 不实例化 `FundDocumentRepository`，不读取 PDF/cache/source helper，不触发网络、provider、Service、Host、renderer、quality gate 或 readiness 判定
@@ -260,17 +300,19 @@ Source-truth direct extraction 在该 Processor/Extractor 边界内增加了 `Fu
 
 `fund_agent/fund/evidence_confirm_production.py` 当前提供 `EvidenceConfirmProductionSummary`，用于 Service/UI/quality gate 的生产集成摘要：
 
-- 摘要字段只包含 `policy`、`status`、`pathway_status`、`deterministic_status`、`semantic_status`、fact 计数、issue id、可审计性分数和稳定 reason code，不包含原文 excerpt、PDF/cache 路径、parser JSON、source adapter 对象或 provider payload
+- 摘要字段只包含 `policy`、`status`、`pathway_status`、`deterministic_status`、`semantic_status`、fact 计数、issue id、可审计性分数、稳定 reason code、claim provenance 状态/最低 tier/缺失计数、strict precision residual 计数和对应 compact issue ids；不包含原文 excerpt、PDF/cache 路径、parser JSON、source adapter 对象或 provider payload
+- provenance tier 顺序为 `none < section < table < row < cell`；当前 release floor 是 section-or-better，`cell` 仍是 reserved tier，不由当前实现产生
 - 默认 product `analyze` 会以 `warn` 策略通过 Service 调用 repository-bounded runner 并创建 summary；`analyze-annual-period` 通过 current-year `analyze()` 委托路径继承该 summary；`checklist` 仍固定 Evidence Confirm `off`；developer override `off|warn|block` 仅用于 `analyze --dev-override`
 - semantic companion 可通过调用方已经产生的 no-live injected result 进入 summary；Service-owned provider adapter 已有 release/readiness 证据，但默认 product path 仍不构造 provider-backed semantic client、不读取 env、HTTP 或 LLM 配置
+- CLI 只打印安全 summary 行，包括 Evidence Confirm 状态、策略、fact 计数、可审计性分数、provenance 状态、最低 tier、provenance missing 计数和 strict precision residual 计数；不打印 issue ids、原文、路径、source URL、parser/provider payload
 
 `fund_agent/fund/quality_gate_integration.py` 当前可把显式传入的 Evidence Confirm summary 投影到 `ECQ` issue family：
 
 | 规则码 | 含义 | 当前语义 |
 |--------|------|----------|
 | ECQ0 | Evidence Confirm not-run | 显式 not-run summary 的 `info` issue |
-| ECQ1 | repository/source/reference 通路失败 | policy `block` 时阻断，否则警告 |
-| ECQ2 | deterministic V2 hard-gate fail | policy `block` 时阻断，否则警告 |
+| ECQ1 | repository/source/reference 通路失败 | 始终 `block`，不受 product `warn` 降级 |
+| ECQ2 | claim provenance missing / strict precision residual / legacy deterministic fail | provenance missing 始终 `block`；strict precision residual 在 product `warn` 下为 `warn`、在 `block` 下为 `block`；legacy deterministic fail 保留 policy severity |
 | ECQ3 | deterministic V2 warn | 警告 |
 | ECQ4 | injected semantic companion fail/warn | 仅当 summary 已携带 no-live semantic result 时投影；不代表 provider-backed semantic quality |
 
@@ -289,7 +331,7 @@ template truth-source replacement、typed projection 和 `EvidenceAvailability` 
 - writer 要求第 1-6 章输出固定顶层段落 `### 结论要点`、`### 详细情况`、`### 证据与出处`；每个 `required_output_items` 必须先输出 exact marker `<!-- required_output:<item> -->`
 - writer 可显式接收 typed `RequiredOutputItem` 与 `EvidenceAvailability` 作为 additive path；该路径使用 stable item id marker `<!-- required_output:<typed item id> -->`，按 `render_evidence_gap / render_minimum_verification_question / delete_if_not_applicable / block` 裁定缺证 required output。`block` 在调用 LLM client 前 fail-closed，`delete_if_not_applicable` 必须有 typed reason，gap/verification 输出必须包含 approved 缺口或最小验证问题措辞。未传 typed 输入时保持当前生产默认 marker 和写作行为
 - writer 只接受精确 marker：`<!-- required_output:<item> -->`、`<!-- anchor:<anchor_id> -->` 和 `<!-- missing:<reason> -->`；未知 anchor、缺固定段落、缺 required output marker、超出 `max_output_chars`、`finish_reason=length/max_tokens/content_filter` 都会 fail-closed 到稳定 stop reason，不截断或部分接受
-- writer prompt 明确禁止根据 `fact_id`、`source_field_id`、`source_field_name` 或 fact value 合成 anchor id；`bond_risk_evidence` 内部/组级 anchors 不属于 `ChapterEvidenceAnchor`，除非未来 conversion helper 显式转换，否则不得写入 `<!-- anchor:... -->`
+- writer prompt 明确禁止根据 `fact_id`、`source_field_id`、`source_field_name`、fact value 或 `bond_risk_evidence` 内部 `source_anchor_ids` 合成 anchor id；只能引用“允许 anchors”列表中的 `ChapterEvidenceAnchor`
 - writer prompt 对模板第 2 章 R=A+B-C 数字闭环有专门约束：R/A/B/C/A-C、Alpha/Beta/Cost 或具体百分比闭合断言必须在同句或上下 2 行内带 allowed anchor marker；来源标签、年报章节名或出处列表不能替代局部 anchor；缺同源事实或无法确认 anchor 支撑精确数值时，只能输出数据不足或下一步最小验证问题，不写具体百分比
 - `ChapterRepairContext` 是当前 regenerate 的显式 typed 输入，携带上一轮 issue ids、脱敏 messages 和 required corrections；禁止通过 extra payload 传递这些参数
 - `audit_chapter_programmatic()` 执行确定性章节审计，覆盖结构、占位符、锚点、ITEM_RULE 删除段落、禁用交易建议、`non_asserted_facets` 误断言、第 5 章跨期缺口措辞，以及第 3 章 `ch3.must_not_cover.item_04` 的 typed evidence-conditional 禁区：当 `EvidenceAvailability` 显示实际行为/风格证据 missing、unavailable 或 unreviewed 时，required label 与显式证据缺口句可通过，正向或准正向 `言行一致` / `风格稳定` 判断触发稳定 clause id C2；如果调用方没有传入 `EvidenceAvailability`，unsafe 正向/准正向判断仍 fail-closed，不会因 typed clause 接管旧 phrase path 而 silent pass
@@ -647,6 +689,8 @@ C2 当前只做确定性 marker / 元数据检查，不调用 LLM，不判断语
   - `parser.py`：PDF 全文、表格与章节定位原型
 - EID 年报来源对同一基金代码/年份的 PDF 下载使用实例级锁；同 key 并发请求会复用首个请求落地的 PDF 缓存。该保护不等同于跨进程锁或完整仓库事务。
 - `evidence_confirm.py`：no-live Evidence Confirm（V1 phase 1 + V2 五维评分与硬门控），只消费显式 `EvidenceConfirmReference`，执行 E1/E2/E3 的保守同 anchor excerpt 复核与五维确定性评分，不接 `ProgrammaticAuditResult` 或 quality gate。
+- `evidence_confirm_diagnostics.py`：no-live Evidence Confirm V2 安全诊断聚合，只消费 `EvidenceConfirmResultV2`，输出维度/字段/章节级安全诊断桶和保守 root-cause 分类，不读取 source/PDF 或改变 quality gate。
+- `evidence_confirm_value_diagnostics.py`：no-live Evidence Confirm value-match 安全诊断聚合，只消费 projection、显式 references 和 V2 result，复用 V2 same-source token/matcher primitives，输出安全类别/路径/粒度和 residual 分类，不读取 source/PDF 或改变 V2/quality gate。
 - `evidence_confirm_semantic.py`：no-live Evidence Confirm 语义蕴含 companion contract，只消费 V2 结果、显式 references、显式 semantic claims 和注入的 `EvidenceEntailmentClient`；semantic output 不能覆盖 deterministic V2 failures，不构造 provider/live/Service/renderer/quality-gate 路径。
 - `evidence_confirm_runner.py`：Service 可导入的 Evidence Confirm typed facade，只暴露 repository-bounded runner request/result/entrypoint；底层 materializer/source 实现仍留在 Fund 内部。
 - `evidence_confirm_production.py`：Evidence Confirm 生产集成安全摘要，把 repository-bounded result 和可选 no-live injected semantic result 压缩为 `EvidenceConfirmProductionSummary`；不携带原文 excerpt、路径或 provider payload。
