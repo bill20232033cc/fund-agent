@@ -1186,7 +1186,7 @@ def test_writer_rejects_unknown_missing_reason_marker() -> None:
 
 
 def test_writer_reports_bond_risk_internal_anchor_message() -> None:
-    """验证债券风险内部组级锚点错误消息明确，见模板第 6 章核心风险。
+    """验证债券风险内部锚点错误消息明确，见模板第 6 章核心风险。
 
     Args:
         无。
@@ -1195,7 +1195,7 @@ def test_writer_reports_bond_risk_internal_anchor_message() -> None:
         无返回值。
 
     Raises:
-        AssertionError: 当错误消息未说明组级锚点未展开时抛出。
+        AssertionError: 当错误消息未说明只能引用 allowed anchors 时抛出。
     """
 
     projection = project_chapter_facts(_bundle(fund_type="bond_fund"), chapter_ids=(6,))
@@ -1205,7 +1205,8 @@ def test_writer_reports_bond_risk_internal_anchor_message() -> None:
     result = write_chapter(input_data, llm_client=_FakeChapterLLMClient(text))
 
     assert result.status == "blocked"
-    assert "组级锚点未展开" in result.issues[0].message
+    assert "不在 allowed anchors" in result.issues[0].message
+    assert "禁止自行合成" in result.issues[0].message
 
 
 def test_ch6_prompt_forbids_synthesized_bond_risk_anchor_ids() -> None:
@@ -1227,8 +1228,8 @@ def test_ch6_prompt_forbids_synthesized_bond_risk_anchor_ids() -> None:
     prompt = build_chapter_prompt(input_data)
 
     assert "禁止根据 fact_id、source_field_id、source_field_name 或 fact value 自行合成 anchor id" in prompt.user_prompt
-    assert "bond_risk_evidence 内部/组级 anchors 不是 ChapterEvidenceAnchor" in prompt.user_prompt
-    assert "只有“允许 anchors”列表中的 anchor_id 可引用" in prompt.user_prompt
+    assert "bond_risk_evidence 只能引用“允许 anchors”列表中的 anchor_id" in prompt.user_prompt
+    assert "内部 source_anchor_ids 或 source_field_id 自行合成 anchor id" in prompt.user_prompt
     assert "允许 anchors" in prompt.user_prompt
 
 
@@ -1254,7 +1255,8 @@ def test_writer_rejects_synthesized_bond_risk_source_field_anchor() -> None:
 
     assert result.status == "blocked"
     assert result.stop_reason == "unknown_anchor"
-    assert "组级锚点未展开" in result.issues[0].message
+    assert "不在 allowed anchors" in result.issues[0].message
+    assert "禁止自行合成" in result.issues[0].message
 
 
 def test_repair_context_is_rendered_into_writer_prompt_without_extra_payload() -> None:

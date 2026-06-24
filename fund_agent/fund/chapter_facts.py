@@ -14,7 +14,12 @@ import json
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Final, Literal, TypeGuard, get_args
 
-from fund_agent.fund.extractors.models import EvidenceAnchor, ExtractedField
+from fund_agent.fund.extractors.models import (
+    BondRiskEvidenceAnchorRef,
+    BondRiskEvidenceValue,
+    EvidenceAnchor,
+    ExtractedField,
+)
 from fund_agent.fund.fund_type import FundType
 from fund_agent.fund.template.contracts import (
     ChapterContract,
@@ -1055,14 +1060,61 @@ def _anchors_for_field(
         无显式抛出。
     """
 
-    if spec.field_name == "bond_risk_evidence":
-        return ()
     value = getattr(bundle, spec.field_name)
+    if spec.field_name == "bond_risk_evidence" and isinstance(value, ExtractedField):
+        return _bond_risk_evidence_anchors(value)
     if isinstance(value, ExtractedField):
         return value.anchors
     if spec.field_name == "nav_data":
         return _nav_data_anchors(value)
     return ()
+
+
+def _bond_risk_evidence_anchors(field: ExtractedField[object]) -> tuple[EvidenceAnchor, ...]:
+    """把债券风险组级锚点转换为普通年报锚点，见模板第 6 章核心风险。
+
+    Args:
+        field: `bond_risk_evidence` 抽取字段。
+
+    Returns:
+        可进入章节锚点投影的普通年报锚点。
+
+    Raises:
+        无显式抛出。
+    """
+
+    value = field.value
+    if not isinstance(value, BondRiskEvidenceValue):
+        return ()
+    return tuple(_bond_risk_anchor_ref_to_evidence_anchor(anchor_ref, value) for anchor_ref in value.anchors)
+
+
+def _bond_risk_anchor_ref_to_evidence_anchor(
+    anchor_ref: BondRiskEvidenceAnchorRef,
+    value: BondRiskEvidenceValue,
+) -> EvidenceAnchor:
+    """把债券风险内部锚点引用转换为 extractor 层 EvidenceAnchor。
+
+    Args:
+        anchor_ref: 债券风险组级锚点引用。
+        value: 债券风险证据值。
+
+    Returns:
+        普通年报锚点。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return EvidenceAnchor(
+        source_kind="annual_report",
+        document_year=value.report_year,
+        section_id=anchor_ref.section_id,
+        page_number=anchor_ref.page_number,
+        table_id=anchor_ref.table_id,
+        row_locator=anchor_ref.row_locator,
+        note=f"bond_risk_evidence role={anchor_ref.evidence_role}; source_anchor={anchor_ref.anchor_id}",
+    )
 
 
 def _nav_data_anchors(nav_data: NavDataResult) -> tuple[EvidenceAnchor, ...]:
@@ -1117,7 +1169,12 @@ def _project_field_fact(
     value = getattr(bundle, spec.field_name)
     if isinstance(value, ExtractedField):
         if spec.field_name == "bond_risk_evidence":
-            return _project_bond_risk_evidence_fact(bundle, spec=spec, field=value)
+            return _project_bond_risk_evidence_fact(
+                bundle,
+                spec=spec,
+                field=value,
+                anchor_ids_by_key=anchor_ids_by_key,
+            )
         return _project_extracted_field_fact(
             bundle,
             spec=spec,
@@ -1187,6 +1244,7 @@ def _project_bond_risk_evidence_fact(
     *,
     spec: _ChapterFieldSpec,
     field: ExtractedField[object],
+    anchor_ids_by_key: dict[tuple[object, ...], str],
 ) -> ChapterFactEntry:
     """投影债券风险证据事实，见模板第 6 章“核心风险”。
 
@@ -1194,9 +1252,10 @@ def _project_bond_risk_evidence_fact(
         bundle: 已抽取完成的结构化基金数据包。
         spec: 章节字段映射。
         field: 债券风险证据字段。
+        anchor_ids_by_key: 章节内证据锚点 key 到 ID 的映射。
 
     Returns:
-        单个章节事实条目；组级 anchors 保留在 value 内部，不展开为章节锚点。
+        单个章节事实条目。
 
     Raises:
         无显式抛出。
@@ -1214,15 +1273,28 @@ def _project_bond_risk_evidence_fact(
             missing_reason=missing_reason,
             missing_detail=field.note,
         )
+    anchors = _bond_risk_evidence_anchors(field)
+    collected_anchor_ids: list[str] = []
+    for anchor in anchors:
+        anchor_key = _anchor_key(_chapter_anchor_from_raw(anchor, ""))
+        anchor_id = anchor_ids_by_key.get(anchor_key)
+        if anchor_id is not None:
+            collected_anchor_ids.append(anchor_id)
+    anchor_ids = tuple(collected_anchor_ids)
+    missing_reason: ChapterFactMissingReason | None = None
+    missing_detail: str | None = None
+    if not anchor_ids:
+        missing_reason = "evidence_missing"
+        missing_detail = "bond_risk_evidence 有结构化值但组级锚点未能展开为 ChapterEvidenceAnchor"
     return _fact_entry(
         bundle,
         spec=spec,
         status="available",
         value=field.value,
         extraction_mode=field.extraction_mode,
-        evidence_anchor_ids=(),
-        missing_reason=None,
-        missing_detail="bond_risk_evidence 组级锚点引用保留在 value.anchors 内，未展开为 ChapterEvidenceAnchor",
+        evidence_anchor_ids=anchor_ids,
+        missing_reason=missing_reason,
+        missing_detail=missing_detail,
     )
 
 
