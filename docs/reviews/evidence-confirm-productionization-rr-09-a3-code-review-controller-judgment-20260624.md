@@ -63,7 +63,7 @@ Result: passed with no output.
 
 | Residual | Status | Destination |
 |---|---|---|
-| R1-R4 strict V2 runtime pass after A3 no-live fixes | open | Requires exact authorization for `RR-09 B1 runtime product CLI re-evidence for 017641 / 2024` and/or corresponding R1-R4 live/PDF re-evidence gate. |
+| R1-R4 strict V2 runtime pass after A3 no-live fixes | open | Requires exact authorization for `RR-09 R1-R4 live/PDF re-evidence after A3 no-live fixes`. |
 | Live/PDF source/pathway confirmation | open | Separate repository-bounded live/PDF gate; not authorized by A3. |
 | Checklist Evidence Confirm support | deferred | Separate checklist gate. |
 | Report-body Evidence Confirm rendering | deferred | Separate report-body gate. |
@@ -72,7 +72,7 @@ Result: passed with no output.
 
 ## Next Step
 
-Next entry point is exact authorization for `RR-09 B1 runtime product CLI re-evidence for 017641 / 2024` or a separately reviewed R1-R4 live/PDF re-evidence gate.
+Next entry point is exact authorization for `RR-09 R1-R4 live/PDF re-evidence after A3 no-live fixes` and/or `RR-09 B1 runtime product CLI re-evidence for 017641 / 2024`.
 
 Release/readiness remains `NOT_READY`.
 
