@@ -24,12 +24,15 @@ from fund_agent.fund.annual_evidence import (
 )
 from fund_agent.fund.evidence_confirm import (
     EVIDENCE_CONFIRM_V2_SCHEMA_VERSION,
+    EvidenceConfirmDimensionResult,
     EvidenceConfirmFactResultV2,
     EvidenceConfirmHardGate,
     EvidenceConfirmIssue,
+    EvidenceConfirmReference,
     EvidenceConfirmResultV2,
 )
 from fund_agent.fund.evidence_confirm_sources import (
+    EvidenceConfirmReferenceBuildResult,
     EvidenceConfirmRepositoryRunRequest,
     EvidenceConfirmRepositoryRunResult,
 )
@@ -2214,7 +2217,11 @@ def _repository_run_result(
         fund_code=fund_code,
         report_year=report_year,
         source_provenance=None,
-        reference_build_result=None,
+        reference_build_result=EvidenceConfirmReferenceBuildResult(
+            references=(_evidence_confirm_reference(),),
+            issues=(),
+            status="pass",
+        ),
         evidence_confirm_result=_v2_result(
             status,
             fund_code=fund_code,
@@ -2266,7 +2273,7 @@ def _v2_result(
         source_field_id="field-1",
         status=status,
         hard_gate=hard_gate,
-        dimension_results=(),
+        dimension_results=_evidence_confirm_dimension_results(status),
         matched_anchor_ids=("anchor-1",) if status in {"pass", "warn"} else (),
         issue_ids=issue_ids,
         auditability_score=100 if status == "pass" else None,
@@ -2281,6 +2288,103 @@ def _v2_result(
         hard_gate=hard_gate,
         overall_status=status,
         auditability_score=100 if status == "pass" else None,
+    )
+
+
+def _evidence_confirm_dimension_results(
+    status: Literal["pass", "warn", "fail"],
+) -> tuple[EvidenceConfirmDimensionResult, ...]:
+    """构造 Service 测试用 V2 dimension results。
+
+    Args:
+        status: V2 聚合状态。
+
+    Returns:
+        五维度结果。
+
+    Raises:
+        无显式抛出。
+    """
+
+    source_status: Literal["pass", "fail"] = "pass" if status in {"pass", "warn"} else "fail"
+    missing_status: Literal["pass", "fail"] = source_status
+    value_status: Literal["pass", "fail"] = "pass" if status in {"pass", "warn"} else "fail"
+    return (
+        _evidence_confirm_dimension("anchor_precision", "warn" if status == "warn" else "pass"),
+        _evidence_confirm_dimension(
+            "source_support",
+            source_status,
+            matched_anchor_ids=("anchor-1",),
+        ),
+        _evidence_confirm_dimension(
+            "missing_evidence",
+            missing_status,
+            matched_anchor_ids=("anchor-1",),
+        ),
+        _evidence_confirm_dimension("proof_boundary", "pass"),
+        _evidence_confirm_dimension(
+            "value_match",
+            value_status,
+            issue_ids=("ec-v2:blocking",) if status == "fail" else (),
+        ),
+    )
+
+
+def _evidence_confirm_dimension(
+    dimension: str,
+    status: str,
+    *,
+    issue_ids: tuple[str, ...] = (),
+    matched_anchor_ids: tuple[str, ...] = (),
+) -> EvidenceConfirmDimensionResult:
+    """构造 Service 测试用单个 V2 dimension result。
+
+    Args:
+        dimension: 维度名称。
+        status: 维度状态。
+        issue_ids: issue ids。
+        matched_anchor_ids: matched anchor ids。
+
+    Returns:
+        V2 dimension result。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return EvidenceConfirmDimensionResult(
+        dimension=dimension,  # type: ignore[arg-type]
+        status=status,  # type: ignore[arg-type]
+        score=100 if status == "pass" else 0 if status == "fail" else None,
+        issue_ids=issue_ids,
+        matched_anchor_ids=matched_anchor_ids if status == "pass" else (),
+        next_gate_recommendation="value_matching" if dimension == "value_match" else "evidence_anchor",
+    )
+
+
+def _evidence_confirm_reference() -> EvidenceConfirmReference:
+    """构造 Service 测试用 section-level reference。
+
+    Args:
+        无。
+
+    Returns:
+        Evidence Confirm reference。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return EvidenceConfirmReference(
+        anchor_id="anchor-1",
+        reference_kind="annual_report_excerpt",
+        source_kind="annual_report",
+        document_year=2024,
+        section_id="§2",
+        page_number=12,
+        table_id=None,
+        row_locator=None,
+        excerpt_text="service fixture excerpt",
     )
 
 

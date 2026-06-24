@@ -1723,7 +1723,7 @@ def _runner_exception_evidence_confirm_summary(
     reason = f"runner_exception:{exception_type}"
     issue_id = f"evidence-confirm-runner:{reason}"
     return EvidenceConfirmProductionSummary(
-        schema_version="evidence_confirm_production_summary.v1",
+        schema_version="evidence_confirm_production_summary.v2",
         policy=policy,
         status="fail",
         fund_code=fund_code,
@@ -1740,6 +1740,11 @@ def _runner_exception_evidence_confirm_summary(
         blocking_issue_ids=(issue_id,),
         warning_issue_ids=(),
         not_run_reason=reason,
+        provenance_status="not_run",
+        minimum_provenance_tier="none",
+        provenance_missing_fact_count=0,
+        strict_precision_residual_count=0,
+        strict_precision_issue_ids=(),
     )
 
 
