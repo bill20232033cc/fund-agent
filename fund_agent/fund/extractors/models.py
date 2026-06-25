@@ -509,6 +509,14 @@ class ExtractedField(Generic[ExtractedValueT]):
     note: str | None = None
 
 
+_MISSING_CHILD_EXTRACTOR_OUTPUT: ExtractedField[object] = ExtractedField(
+    value=None,
+    anchors=(),
+    extraction_mode="missing",
+    note="child extractor output not populated",
+)
+
+
 @dataclass(frozen=True, slots=True)
 class ProfileExtractionResult:
     """基础画像抽取结果。
@@ -520,6 +528,8 @@ class ProfileExtractionResult:
         benchmark: 业绩比较基准信息。
         index_profile: 指数画像信息，见模板第 1 章“指数编制规则与成分股”。
         fee_schedule: 费率信息。
+        fee_schedule_management_fee: `fee_schedule.management_fee` 子字段抽取结果。
+        fee_schedule_custody_fee: `fee_schedule.custody_fee` 子字段抽取结果。
     """
 
     basic_identity: ExtractedField[dict[str, object]]
@@ -528,6 +538,8 @@ class ProfileExtractionResult:
     benchmark: ExtractedField[dict[str, object]]
     index_profile: ExtractedField["IndexProfileValue"]
     fee_schedule: ExtractedField[dict[str, object]]
+    fee_schedule_management_fee: ExtractedField[object] = _MISSING_CHILD_EXTRACTOR_OUTPUT
+    fee_schedule_custody_fee: ExtractedField[object] = _MISSING_CHILD_EXTRACTOR_OUTPUT
 
 
 @dataclass(frozen=True, slots=True)
@@ -538,11 +550,21 @@ class PerformanceExtractionResult:
         nav_benchmark_performance: 净值增长率与业绩基准收益率。
         investor_return: 投资者收益率披露或 fallback 状态。
         tracking_error: 年报直接披露的跟踪误差，见模板第 2 章 R=A+B-C。
+        nav_benchmark_performance_nav_growth_rate: `nav_benchmark_performance.nav_growth_rate`
+            子字段抽取结果。
+        nav_benchmark_performance_benchmark_return_rate:
+            `nav_benchmark_performance.benchmark_return_rate` 子字段抽取结果。
     """
 
     nav_benchmark_performance: ExtractedField[dict[str, object]]
     investor_return: ExtractedField[dict[str, object]]
     tracking_error: ExtractedField["TrackingErrorValue"]
+    nav_benchmark_performance_nav_growth_rate: ExtractedField[object] = (
+        _MISSING_CHILD_EXTRACTOR_OUTPUT
+    )
+    nav_benchmark_performance_benchmark_return_rate: ExtractedField[object] = (
+        _MISSING_CHILD_EXTRACTOR_OUTPUT
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -647,6 +669,12 @@ class ManagerOwnershipExtractionResult:
         turnover_rate: 年报 `§8` 披露的换手率。
         manager_alignment: 年报 `§9` 披露的基金经理/从业人员持有原始数据。
         holder_structure: 年报 `§9` 披露的机构/个人持有人结构。
+        manager_strategy_text_strategy_summary: `manager_strategy_text.strategy_summary`
+            子字段抽取结果。
+        manager_strategy_text_market_outlook: `manager_strategy_text.market_outlook`
+            子字段抽取结果。
+        manager_alignment_manager_holding: `manager_alignment.manager_holding` 子字段抽取结果。
+        manager_alignment_employee_holding: `manager_alignment.employee_holding` 子字段抽取结果。
     """
 
     manager_strategy_text: ExtractedField[dict[str, object]]
@@ -654,6 +682,12 @@ class ManagerOwnershipExtractionResult:
     turnover_rate: ExtractedField[dict[str, object]]
     manager_alignment: ExtractedField[dict[str, object]]
     holder_structure: ExtractedField[dict[str, object]]
+    manager_strategy_text_strategy_summary: ExtractedField[object] = (
+        _MISSING_CHILD_EXTRACTOR_OUTPUT
+    )
+    manager_strategy_text_market_outlook: ExtractedField[object] = _MISSING_CHILD_EXTRACTOR_OUTPUT
+    manager_alignment_manager_holding: ExtractedField[object] = _MISSING_CHILD_EXTRACTOR_OUTPUT
+    manager_alignment_employee_holding: ExtractedField[object] = _MISSING_CHILD_EXTRACTOR_OUTPUT
 
 
 @dataclass(frozen=True, slots=True)

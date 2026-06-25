@@ -257,9 +257,11 @@ def test_extract_profile_classifies_before_general_field_builders(
         call_order.append("index_profile")
         return ExtractedField(value=None, anchors=(), extraction_mode="missing", note="fixture")
 
-    def _fake_build_fee_schedule(_report: ParsedAnnualReport) -> ExtractedField[dict[str, object]]:
+    def _fake_build_fee_schedule(
+        _report: ParsedAnnualReport,
+    ) -> tuple[ExtractedField[dict[str, object]], ExtractedField[object], ExtractedField[object]]:
         call_order.append("fee")
-        return _dummy_field()
+        return _dummy_field(), _dummy_field(), _dummy_field()
 
     monkeypatch.setattr(profile_module, "classify_fund_type", _fake_classify)
     monkeypatch.setattr(profile_module, "_build_basic_identity", _fake_build_basic_identity)
@@ -764,6 +766,16 @@ def test_extract_profile_fee_schedule_fallback_reads_74102_text_when_section_sev
     assert anchors["management_fee"].note == "7.4.10.2.1 基金管理费：1.20%"
     assert anchors["custody_fee"].section_id == "§5"
     assert anchors["custody_fee"].note == "7.4.10.2.2 基金托管费：0.20%"
+    assert result.fee_schedule_management_fee.value == "1.20%"
+    assert result.fee_schedule_management_fee.extraction_mode == "direct"
+    assert result.fee_schedule_management_fee.anchors[0].row_locator == (
+        "source_field_path=fee_schedule.management_fee; locator=management_fee"
+    )
+    assert result.fee_schedule_custody_fee.value == "0.20%"
+    assert result.fee_schedule_custody_fee.extraction_mode == "direct"
+    assert result.fee_schedule_custody_fee.anchors[0].row_locator == (
+        "source_field_path=fee_schedule.custody_fee; locator=custody_fee"
+    )
 
 
 def test_extract_profile_fee_schedule_fallback_reads_74102_table_semantics() -> None:
@@ -820,6 +832,69 @@ def test_extract_profile_fee_schedule_fallback_reads_74102_table_semantics() -> 
     assert anchors["management_fee"].section_id == "§7.4.10.2.1"
     assert anchors["custody_fee"].table_id == "page-42-table-3"
     assert anchors["custody_fee"].section_id == "§7.4.10.2.2"
+
+
+def test_extract_profile_fee_schedule_child_missing_has_gap_without_anchor() -> None:
+    """验证费率子字段缺失时只输出 gap，不伪造子字段锚点。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当缺失子字段带有伪造锚点或缺少 canonical path 时抛出。
+    """
+
+    raw_text = "\n".join(
+        (
+            "§1 基金简介",
+            "基金名称：易方达中小盘混合型证券投资基金",
+            "基金代码：110011",
+            "§2 基金简介",
+            "基金类别：混合型基金",
+            "业绩比较基准：沪深300指数",
+            "管理费：1.50%",
+        )
+    )
+    section_two_start = raw_text.index("§2")
+    report = ParsedAnnualReport(
+        key=DocumentKey(fund_code="110011", year=2024),
+        raw_text=raw_text,
+        sections={
+            "§1": ReportSection(
+                section_id="§1",
+                title="§1 基金简介",
+                start_offset=0,
+                end_offset=section_two_start,
+                matched_rule="fixture",
+                confidence=1.0,
+            ),
+            "§2": ReportSection(
+                section_id="§2",
+                title="§2 基金简介",
+                start_offset=section_two_start,
+                end_offset=len(raw_text),
+                matched_rule="fixture",
+                confidence=1.0,
+            ),
+        },
+        tables=(),
+    )
+
+    result = extract_profile(report)
+
+    assert result.fee_schedule.value == {
+        "management_fee": "1.50%",
+        "custody_fee": None,
+    }
+    assert result.fee_schedule_management_fee.extraction_mode == "direct"
+    assert result.fee_schedule_custody_fee.value is None
+    assert result.fee_schedule_custody_fee.extraction_mode == "missing"
+    assert result.fee_schedule_custody_fee.anchors == ()
+    assert result.fee_schedule_custody_fee.note is not None
+    assert "source_field_path=fee_schedule.custody_fee" in result.fee_schedule_custody_fee.note
 
 
 def test_extract_profile_fee_schedule_table_fallback_ignores_unbounded_fee_labels() -> None:

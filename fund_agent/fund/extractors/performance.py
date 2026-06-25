@@ -37,6 +37,10 @@ _FIELD_PATTERNS: Final[dict[str, tuple[str, ...]]] = {
 }
 _NAV_BENCHMARK_TABLE_HEADERS: Final[tuple[str, ...]] = ("阶段", "净值增长率", "业绩比较基准收益率")
 _NAV_BENCHMARK_PREFERRED_PERIODS: Final[tuple[str, ...]] = ("过去一年", "过去一年内")
+_NAV_GROWTH_RATE_PATH: Final[str] = "nav_benchmark_performance.nav_growth_rate"
+_BENCHMARK_RETURN_RATE_PATH: Final[str] = (
+    "nav_benchmark_performance.benchmark_return_rate"
+)
 _TRACKING_ERROR_KEYWORDS: Final[tuple[str, ...]] = ("跟踪误差", "跟踪偏离度")
 _TRACKING_ERROR_NEGATIVE_KEYWORDS: Final[tuple[str, ...]] = (
     "控制在",
@@ -1028,6 +1032,31 @@ def _build_table_anchor(report: ParsedAnnualReport, matched_field: _MatchedTable
     )
 
 
+def _build_child_anchor(anchor: EvidenceAnchor, source_field_path: str) -> EvidenceAnchor:
+    """给净值表现子字段锚点附加 canonical `source_field_path`。
+
+    Args:
+        anchor: 直接命中的原始锚点。
+        source_field_path: 子字段 canonical path。
+
+    Returns:
+        带子字段路径的锚点。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return EvidenceAnchor(
+        source_kind=anchor.source_kind,
+        document_year=anchor.document_year,
+        section_id=anchor.section_id,
+        page_number=anchor.page_number,
+        table_id=anchor.table_id,
+        row_locator=f"source_field_path={source_field_path}; locator={anchor.row_locator}",
+        note=anchor.note,
+    )
+
+
 def _missing_field(note: str) -> ExtractedField[dict[str, object]]:
     """构造缺失状态字段。
 
@@ -1049,14 +1078,92 @@ def _missing_field(note: str) -> ExtractedField[dict[str, object]]:
     )
 
 
-def _build_nav_benchmark_performance(report: ParsedAnnualReport) -> ExtractedField[dict[str, object]]:
-    """构造 `§3` 净值增长率与基准收益率字段。
+def _missing_child_field(source_field_path: str, note: str) -> ExtractedField[object]:
+    """构造缺失子字段，见模板第 2 章 R=A+B-C。
+
+    Args:
+        source_field_path: 子字段 canonical path。
+        note: 缺失说明。
+
+    Returns:
+        不带锚点的 `missing` 子字段。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return ExtractedField(
+        value=None,
+        anchors=(),
+        extraction_mode="missing",
+        note=f"source_field_path={source_field_path}; gap={note}",
+    )
+
+
+def _anchor_for_nav_match(
+    report: ParsedAnnualReport,
+    matched_field: _MatchedField | _MatchedTableField,
+) -> EvidenceAnchor:
+    """为净值表现命中结果构造原始锚点。
+
+    Args:
+        report: 已解析年报对象。
+        matched_field: 文本或表格命中结果。
+
+    Returns:
+        原始证据锚点。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if isinstance(matched_field, _MatchedTableField):
+        return _build_table_anchor(report, matched_field)
+    return _build_anchor(report, matched_field)
+
+
+def _build_child_field(
+    report: ParsedAnnualReport,
+    matched_field: _MatchedField | _MatchedTableField | None,
+    source_field_path: str,
+    missing_note: str,
+) -> ExtractedField[object]:
+    """根据直接命中构造净值表现子字段，见模板第 2 章 R=A+B-C。
+
+    Args:
+        report: 已解析年报对象。
+        matched_field: 子字段直接命中结果。
+        source_field_path: 子字段 canonical path。
+        missing_note: 未命中时的缺口说明。
+
+    Returns:
+        独立子字段抽取结果。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if matched_field is None:
+        return _missing_child_field(source_field_path, missing_note)
+    anchor = _anchor_for_nav_match(report, matched_field)
+    return ExtractedField(
+        value=matched_field.value,
+        anchors=(_build_child_anchor(anchor, source_field_path),),
+        extraction_mode="direct",
+        note=None,
+    )
+
+
+def _build_nav_benchmark_performance(
+    report: ParsedAnnualReport,
+) -> tuple[ExtractedField[dict[str, object]], ExtractedField[object], ExtractedField[object]]:
+    """构造 `§3` 净值增长率与基准收益率复合字段和子字段。
 
     Args:
         report: 已解析年报对象。
 
     Returns:
-        带证据的表现字段；若 `§3` 未披露则返回 `missing`。
+        表现兼容复合字段、净值增长率子字段、基准收益率子字段。
 
     Raises:
         无显式抛出。
@@ -1072,8 +1179,24 @@ def _build_nav_benchmark_performance(report: ParsedAnnualReport) -> ExtractedFie
         table_nav_growth_rate, table_benchmark_return_rate = _extract_nav_benchmark_table_fields(report)
         nav_growth_rate = nav_growth_rate or table_nav_growth_rate
         benchmark_return_rate = benchmark_return_rate or table_benchmark_return_rate
+    nav_growth_rate_field = _build_child_field(
+        report,
+        nav_growth_rate,
+        _NAV_GROWTH_RATE_PATH,
+        "§3 未披露净值增长率",
+    )
+    benchmark_return_rate_field = _build_child_field(
+        report,
+        benchmark_return_rate,
+        _BENCHMARK_RETURN_RATE_PATH,
+        "§3 未披露业绩比较基准收益率",
+    )
     if nav_growth_rate is None and benchmark_return_rate is None:
-        return _missing_field("§3 未披露净值增长率/业绩比较基准收益率")
+        return (
+            _missing_field("§3 未披露净值增长率/业绩比较基准收益率"),
+            nav_growth_rate_field,
+            benchmark_return_rate_field,
+        )
     anchors = []
     for matched_field in (nav_growth_rate, benchmark_return_rate):
         if matched_field is None:
@@ -1086,14 +1209,18 @@ def _build_nav_benchmark_performance(report: ParsedAnnualReport) -> ExtractedFie
     note = None
     if extraction_mode == "missing":
         note = "§3 仅部分披露净值增长率/业绩比较基准收益率；当前显式保留缺失状态。"
-    return ExtractedField(
-        value={
-            "nav_growth_rate": nav_growth_rate.value if nav_growth_rate else None,
-            "benchmark_return_rate": benchmark_return_rate.value if benchmark_return_rate else None,
-        },
-        anchors=tuple(anchors),
-        extraction_mode=extraction_mode,
-        note=note,
+    return (
+        ExtractedField(
+            value={
+                "nav_growth_rate": nav_growth_rate_field.value,
+                "benchmark_return_rate": benchmark_return_rate_field.value,
+            },
+            anchors=tuple(anchors),
+            extraction_mode=extraction_mode,
+            note=note,
+        ),
+        nav_growth_rate_field,
+        benchmark_return_rate_field,
     )
 
 
@@ -1161,8 +1288,13 @@ def extract_performance(report: ParsedAnnualReport) -> PerformanceExtractionResu
         无显式抛出。
     """
 
+    nav_benchmark_performance, nav_growth_rate, benchmark_return_rate = (
+        _build_nav_benchmark_performance(report)
+    )
     return PerformanceExtractionResult(
-        nav_benchmark_performance=_build_nav_benchmark_performance(report),
+        nav_benchmark_performance=nav_benchmark_performance,
         investor_return=_build_investor_return(report),
         tracking_error=_extract_tracking_error(report),
+        nav_benchmark_performance_nav_growth_rate=nav_growth_rate,
+        nav_benchmark_performance_benchmark_return_rate=benchmark_return_rate,
     )
