@@ -1883,6 +1883,8 @@ def _resolved_fact_material_value(
 
     if projection is None:
         return fact.value
+    if fact.source_fact_ids and fact.derived_view_id is not None:
+        return _UNRESOLVED_FACT_MATERIAL
     if fact.source_fact_ids:
         if len(fact.source_fact_ids) != 1:
             return _UNRESOLVED_FACT_MATERIAL
@@ -1975,23 +1977,25 @@ def _derived_view_for_fact(
     projection: ChapterFactProjection,
     fact: ChapterFactEntry,
 ) -> CompositeAnalysisView | None:
-    """按 `derived_view_id` 读取 projection derived view。
+    """按 `derived_view_id` 唯一读取 projection derived view。
 
     Args:
         projection: 章节事实投影。
         fact: 当前章节事实。
 
     Returns:
-        匹配的 derived view；无匹配时返回 ``None``。
+        exactly one 匹配的 derived view；无匹配或重复匹配时返回 ``None``。
 
     Raises:
         无显式抛出。
     """
 
-    return next(
-        (view for view in projection.derived_views if view.view_id == fact.derived_view_id),
-        None,
+    matched_views = tuple(
+        view for view in projection.derived_views if view.view_id == fact.derived_view_id
     )
+    if len(matched_views) != 1:
+        return None
+    return matched_views[0]
 
 
 def _source_fact_has_section_or_better_provenance(source_fact: AtomicSourceFact) -> bool:

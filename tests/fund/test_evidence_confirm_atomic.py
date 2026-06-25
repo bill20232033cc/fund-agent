@@ -95,6 +95,103 @@ def test_atomic_diagnostics_use_source_fact_id_material_tokens() -> None:
     assert record.unmatched_token_category_counts == {"numeric_percent": 1}
 
 
+def test_dual_bridge_identity_returns_unresolved_e3_blocking() -> None:
+    """验证同时携带 atomic id 和 derived view id 的 fact fail closed。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 ambiguous bridge 被静默解析为任意来源时抛出。
+    """
+
+    projection = _projection_with_source_facts(
+        _source_fact("fee_schedule.management_fee", "return_attribution.v1", "1.20%"),
+        _source_fact("fee_schedule.custody_fee", "return_attribution.v1", "0.20%"),
+    )
+    original_fact = _source_fact_entry(projection, "fee_schedule.management_fee")
+    ambiguous_fact = replace(original_fact, derived_view_id="fee_schedule")
+    projection = _replace_fact_entry(projection, ambiguous_fact)
+    references = (_reference(ambiguous_fact.evidence_anchor_ids[0], "年报披露管理费为 1.20%。"),)
+
+    result = confirm_projection_evidence_v2(projection, references)
+    summary = summarize_value_match_diagnostics(
+        projection=projection,
+        references=references,
+        result=result,
+    )
+
+    fact_result = _fact_result(result, ambiguous_fact)
+    record = next(item for item in summary.records if item.fact_id == ambiguous_fact.fact_id)
+    assert fact_result.status == "fail"
+    assert _dimension_status(fact_result, "value_match") == "fail"
+    assert record.token_count == 0
+    assert record.unmatched_token_category_counts == {}
+    assert _has_blocking_issue(result, ambiguous_fact, "bridge fact 无法解析 material value")
+
+
+def test_duplicate_derived_view_id_returns_e3_blocking() -> None:
+    """验证重复 derived view target 不会被任意选取。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 duplicate view_id 被静默解析为第一个 view 时抛出。
+    """
+
+    projection = _projection_with_source_facts(
+        _source_fact("fee_schedule.management_fee", "return_attribution.v1", "1.20%"),
+        _source_fact("fee_schedule.custody_fee", "return_attribution.v1", "0.20%"),
+    )
+    derived_fact = _derived_fact(projection, "fee_schedule")
+    duplicate_view = replace(projection.derived_views[0], value={"management_fee": "9.99%"})
+    projection = replace(projection, derived_views=projection.derived_views + (duplicate_view,))
+
+    result = confirm_projection_evidence_v2(projection, ())
+
+    fact_result = _fact_result(result, derived_fact)
+    assert fact_result.status == "fail"
+    assert _dimension_status(fact_result, "missing_evidence") == "fail"
+    assert _has_blocking_issue(result, derived_fact, "derived_view_id 未在 projection.derived_views 中解析")
+
+
+def test_valid_single_atomic_bridge_still_passes_value_match() -> None:
+    """验证唯一 atomic bridge 继续按 atomic 单值确认。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当合法单一 atomic bridge 被误判为未解析时抛出。
+    """
+
+    projection = _projection_with_source_facts(
+        _source_fact("fee_schedule.management_fee", "return_attribution.v1", "1.20%"),
+        _source_fact("fee_schedule.custody_fee", "return_attribution.v1", "0.20%"),
+    )
+    fact = _source_fact_entry(projection, "fee_schedule.management_fee")
+
+    result = confirm_projection_evidence_v2(
+        projection,
+        (_reference(fact.evidence_anchor_ids[0], "年报披露管理费为 1.20%。"),),
+    )
+
+    fact_result = _fact_result(result, fact)
+    assert fact.source_fact_ids == ("fee_schedule.management_fee",)
+    assert fact.derived_view_id is None
+    assert _dimension_status(fact_result, "value_match") == "pass"
+
+
 def test_derived_fee_schedule_missing_child_provenance_fails_safely() -> None:
     """验证 derived view 依赖 child fact provenance，缺 child provenance 时失败。
 
@@ -385,6 +482,36 @@ def _replace_fact_value(
     return replace(projection, chapters=updated_chapters)
 
 
+def _replace_fact_entry(
+    projection: ChapterFactProjection,
+    replacement: ChapterFactEntry,
+) -> ChapterFactProjection:
+    """替换指定章节 fact 条目。
+
+    Args:
+        projection: 原章节事实投影。
+        replacement: 替换后的 fact 条目。
+
+    Returns:
+        新 projection。
+
+    Raises:
+        无显式抛出。
+    """
+
+    updated_chapters = tuple(
+        replace(
+            chapter,
+            facts=tuple(
+                replacement if fact.fact_id == replacement.fact_id else fact
+                for fact in chapter.facts
+            ),
+        )
+        for chapter in projection.chapters
+    )
+    return replace(projection, chapters=updated_chapters)
+
+
 def _reference(anchor_id: str, excerpt_text: str) -> EvidenceConfirmReference:
     """构造 proven annual_report reference。
 
@@ -452,4 +579,27 @@ def _dimension_status(fact_result: object, dimension_name: str) -> str:
         dimension.status
         for dimension in fact_result.dimension_results  # type: ignore[attr-defined]
         if dimension.dimension == dimension_name
+    )
+
+
+def _has_blocking_issue(result: object, fact: ChapterFactEntry, message_fragment: str) -> bool:
+    """判断 V2 result 是否包含指定 fact 的 blocking issue。
+
+    Args:
+        result: Evidence Confirm V2 result。
+        fact: 章节事实。
+        message_fragment: 需要匹配的 issue message 片段。
+
+    Returns:
+        存在匹配 issue 时返回 ``True``。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return any(
+        issue.fact_id == fact.fact_id
+        and issue.severity == "blocking"
+        and message_fragment in issue.message
+        for issue in result.issues  # type: ignore[attr-defined]
     )
