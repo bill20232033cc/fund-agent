@@ -26,6 +26,8 @@ from fund_agent.fund.evidence_confirm import (
     confirm_projection_evidence_v2,
     _material_tokens,
     _normalize_text,
+    _resolved_fact_material_tokens,
+    _UNRESOLVED_FACT_MATERIAL,
     _token_matches_excerpt,
 )
 
@@ -1052,7 +1054,7 @@ def _table_excerpt(
 
     table = tables[0]
     if anchor.row_locator:
-        return _table_row_excerpt(anchor, table, facts_by_anchor)
+        return _table_row_excerpt(anchor, table, facts_by_anchor, request.projection)
     excerpt = _normalize_whitespace(_format_table_excerpt(table))
     if not excerpt:
         return _empty_excerpt_issue(anchor, "empty_table_excerpt", "table excerpt 为空。")
@@ -1069,6 +1071,7 @@ def _table_row_excerpt(
     anchor: ChapterEvidenceAnchor,
     table: ParsedTable,
     facts_by_anchor: dict[str, tuple[ChapterFactEntry, ...]],
+    projection: ChapterFactProjection,
 ) -> _AnchorExcerptResult:
     """构建零基 row-N table-row excerpt。
 
@@ -1089,7 +1092,7 @@ def _table_row_excerpt(
         processor_row = _processor_row_locator_table_excerpt(anchor, table)
         if processor_row is not None:
             return processor_row
-        return _semantic_row_locator_table_excerpt(anchor, table, facts_by_anchor)
+        return _semantic_row_locator_table_excerpt(anchor, table, facts_by_anchor, projection)
     row_index = int(row_match.group("row_index"))
     if row_index >= len(table.rows):
         return _empty_excerpt_issue(
@@ -1252,6 +1255,7 @@ def _semantic_row_locator_table_excerpt(
     anchor: ChapterEvidenceAnchor,
     table: ParsedTable,
     facts_by_anchor: dict[str, tuple[ChapterFactEntry, ...]],
+    projection: ChapterFactProjection,
 ) -> _AnchorExcerptResult:
     """可证明时收窄语义行定位，否则降级为 table excerpt。
 
@@ -1267,7 +1271,7 @@ def _semantic_row_locator_table_excerpt(
         无显式抛出。
     """
 
-    narrowed = _single_fact_semantic_row_excerpt(anchor, table, facts_by_anchor)
+    narrowed = _single_fact_semantic_row_excerpt(anchor, table, facts_by_anchor, projection)
     if narrowed is not None:
         return narrowed
 
@@ -1294,6 +1298,7 @@ def _single_fact_semantic_row_excerpt(
     anchor: ChapterEvidenceAnchor,
     table: ParsedTable,
     facts_by_anchor: dict[str, tuple[ChapterFactEntry, ...]],
+    projection: ChapterFactProjection,
 ) -> _AnchorExcerptResult | None:
     """在单 fact / 全 token / 单行命中时生成语义 row locator 的行级摘录。
 
@@ -1312,8 +1317,8 @@ def _single_fact_semantic_row_excerpt(
     facts = _narrowable_facts(anchor, facts_by_anchor)
     if len(facts) != 1:
         return None
-    tokens = _material_tokens_for_anchor_scope(facts[0], anchor)
-    if not tokens:
+    tokens = _material_tokens_for_anchor_scope(facts[0], anchor, projection)
+    if tokens is _UNRESOLVED_FACT_MATERIAL or not tokens:
         return None
 
     matching_rows: list[tuple[int, str]] = []
@@ -1338,12 +1343,14 @@ def _single_fact_semantic_row_excerpt(
 def _material_tokens_for_anchor_scope(
     fact: ChapterFactEntry,
     anchor: ChapterEvidenceAnchor,
-) -> tuple[str, ...]:
+    projection: ChapterFactProjection | None = None,
+) -> tuple[str, ...] | object:
     """按 semantic source-field scope 读取 material tokens。
 
     Args:
         fact: 当前章节事实。
         anchor: 当前章节证据锚点。
+        projection: 章节事实投影；存在 bridge id 时只通过 projection 解析 material。
 
     Returns:
         V2 material tokens；scope 不可解析时返回空元组以触发安全降级。
@@ -1351,6 +1358,9 @@ def _material_tokens_for_anchor_scope(
     Raises:
         无显式抛出。
     """
+
+    if fact.source_fact_ids or fact.derived_view_id is not None:
+        return _resolved_fact_material_tokens(projection, fact)
 
     source_field_path = _semantic_source_field_path(anchor.row_locator)
     if source_field_path is None:

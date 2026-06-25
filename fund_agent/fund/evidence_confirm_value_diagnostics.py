@@ -20,10 +20,11 @@ from fund_agent.fund.evidence_confirm import (
     _fact_is_derived,
     _fact_is_not_applicable,
     _IGNORED_VALUE_KEYS,
-    _material_tokens,
     _normalize_text,
     _proof_references_for_fact,
     _references_by_anchor,
+    _resolved_fact_material_tokens,
+    _UNRESOLVED_FACT_MATERIAL,
     _token_matches_excerpt,
 )
 
@@ -174,6 +175,7 @@ def summarize_value_match_diagnostics(
                 references_by_anchor=references_by_anchor,
                 anchors_by_id=anchors_by_id,
                 report_year=projection.report_year,
+                projection=projection,
             )
             if record is not None:
                 records.append(record)
@@ -197,6 +199,7 @@ def _record_for_fact(
     references_by_anchor: dict[str, tuple[EvidenceConfirmReference, ...]],
     anchors_by_id: dict[str, object],
     report_year: int,
+    projection: ChapterFactProjection,
 ) -> EvidenceConfirmValueDiagnosticRecord | None:
     """构造单个 fact 的安全诊断记录。
 
@@ -232,7 +235,9 @@ def _record_for_fact(
     all_references = tuple(
         reference for anchor_id in fact.evidence_anchor_ids for reference in references_by_anchor.get(anchor_id, ())
     )
-    tokens = _material_tokens(fact.value)
+    tokens = _resolved_fact_material_tokens(projection, fact)
+    if tokens is _UNRESOLVED_FACT_MATERIAL:
+        tokens = ()
     matched_tokens, unmatched_tokens = _matched_and_unmatched_tokens(tokens, proof_references)
     failing_dimensions = tuple(
         dimension.dimension for dimension in fact_result.dimension_results if dimension.status == "fail"

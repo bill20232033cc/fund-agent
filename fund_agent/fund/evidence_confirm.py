@@ -21,6 +21,7 @@ from fund_agent.fund.chapter_facts import (
     ChapterFactInput,
     ChapterFactProjection,
 )
+from fund_agent.fund.source_facts import AtomicSourceFact, CompositeAnalysisView
 
 EVIDENCE_CONFIRM_SCHEMA_VERSION: Final[str] = "evidence_confirm.v1"
 EVIDENCE_CONFIRM_V2_SCHEMA_VERSION: Final[str] = "evidence_confirm.v2"
@@ -72,6 +73,23 @@ _WHITESPACE_RE: Final[re.Pattern[str]] = re.compile(r"\s+")
 _PUNCTUATION_RE: Final[re.Pattern[str]] = re.compile(r"[，,。；;：:、（）()\[\]{}]")
 _NUMERIC_TOKEN_RE: Final[re.Pattern[str]] = re.compile(r"^[+-]?\d+(?:\.\d+)?%?$")
 _NUMERIC_CANDIDATE_RE: Final[re.Pattern[str]] = re.compile(r"(?<![\d.])[+-]?\d+(?:\.\d+)?%?(?![\d.])")
+
+
+class _UnresolvedFactMaterial:
+    """bridge material value 无法解析的内部哨兵。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        无显式抛出。
+    """
+
+
+_UNRESOLVED_FACT_MATERIAL: Final[_UnresolvedFactMaterial] = _UnresolvedFactMaterial()
 
 
 @dataclass(frozen=True, slots=True)
@@ -342,6 +360,7 @@ def confirm_projection_evidence(
                 references_by_anchor,
                 anchors_by_id,
                 projection.report_year,
+                projection,
             )
             issues.extend(fact_issues)
             fact_results.append(fact_result)
@@ -435,6 +454,7 @@ def confirm_projection_evidence_v2(
                 references_by_anchor,
                 anchors_by_id,
                 projection.report_year,
+                projection,
             )
             issues.extend(fact_issues)
             fact_results.append((chapter.chapter_id, fact_result))
@@ -465,6 +485,7 @@ def _confirm_fact_v2(
     references_by_anchor: dict[str, tuple[EvidenceConfirmReference, ...]],
     anchors_by_id: dict[str, ChapterEvidenceAnchor],
     report_year: int,
+    projection: ChapterFactProjection | None = None,
 ) -> tuple[EvidenceConfirmFactResultV2, tuple[EvidenceConfirmIssue, ...]]:
     """V2 复核单个 fact，产生五维度结果。
 
@@ -492,6 +513,9 @@ def _confirm_fact_v2(
         return _fact_result_v2_not_applicable(fact), ()
 
     if _fact_is_derived(fact):
+        derived_issues = _derived_dependency_provenance_issues(fact, projection)
+        if derived_issues:
+            return _fact_result_v2_e3_blocking(fact, derived_issues), derived_issues
         return _fact_result_v2_not_applicable(fact), ()
 
     if not fact.evidence_anchor_ids:
@@ -543,7 +567,8 @@ def _confirm_fact_v2(
     dimension_results.append(dim_proof)
 
     # 维度 5: value_match
-    dim_value, dim_value_issues = _dimension_value_match(fact, proof_references)
+    material_value = _resolved_fact_material_value(projection, fact)
+    dim_value, dim_value_issues = _dimension_value_match(fact, proof_references, material_value)
     issues.extend(dim_value_issues)
     dimension_results.append(dim_value)
 
@@ -1037,6 +1062,7 @@ def _proof_failure_reason(
 def _dimension_value_match(
     fact: ChapterFactEntry,
     proof_references: tuple[EvidenceConfirmReference, ...],
+    material_value: object | None | _UnresolvedFactMaterial = _UNRESOLVED_FACT_MATERIAL,
 ) -> tuple[EvidenceConfirmDimensionResult, tuple[EvidenceConfirmIssue, ...]]:
     """计算 value_match 维度。
 
@@ -1077,7 +1103,21 @@ def _dimension_value_match(
             (),
         )
 
-    tokens = _material_tokens(fact.value)
+    if material_value is _UNRESOLVED_FACT_MATERIAL:
+        issue = _issue("E3", "blocking", fact, None, "bridge fact 无法解析 material value。")
+        return (
+            EvidenceConfirmDimensionResult(
+                dimension="value_match",
+                status="fail",
+                score=0,
+                issue_ids=(issue.issue_id,),
+                matched_anchor_ids=(),
+                next_gate_recommendation="manual_review",
+            ),
+            (issue,),
+        )
+
+    tokens = _material_tokens(material_value)
     if not tokens:
         if _fact_is_required(fact):
             issue = _issue("E3", "blocking", fact, None, "required fact 无可复核 material value token。")
@@ -1346,6 +1386,7 @@ def _confirm_fact(
     references_by_anchor: dict[str, tuple[EvidenceConfirmReference, ...]],
     anchors_by_id: dict[str, ChapterEvidenceAnchor],
     report_year: int,
+    projection: ChapterFactProjection | None = None,
 ) -> tuple[EvidenceConfirmFactResult, tuple[EvidenceConfirmIssue, ...]]:
     """复核单个 fact。
 
@@ -1374,6 +1415,15 @@ def _confirm_fact(
         return _fact_result(fact, "not_applicable", (), (), None), ()
 
     if _fact_is_derived(fact):
+        derived_issues = _derived_dependency_provenance_issues(fact, projection)
+        if derived_issues:
+            return _fact_result(
+                fact,
+                "fail",
+                (),
+                tuple(issue.issue_id for issue in derived_issues),
+                0,
+            ), derived_issues
         return _fact_result(fact, "not_applicable", (), (), None), ()
 
     if not fact.evidence_anchor_ids:
@@ -1414,7 +1464,13 @@ def _confirm_fact(
         if precision_issue is not None:
             issues.append(precision_issue)
 
-    tokens = _material_tokens(fact.value)
+    material_value = _resolved_fact_material_value(projection, fact)
+    if material_value is _UNRESOLVED_FACT_MATERIAL:
+        issue = _issue("E3", "blocking", fact, None, "bridge fact 无法解析 material value。")
+        issues.append(issue)
+        return _fact_result(fact, "fail", (), _issue_ids(issues), 0), tuple(issues)
+
+    tokens = _material_tokens(material_value)
     if not tokens:
         if _fact_is_required(fact):
             issue = _issue("E3", "blocking", fact, None, "required fact 无可复核 material value token。")
@@ -1805,6 +1861,160 @@ def _material_tokens(value: object | None) -> tuple[str, ...]:
 
     tokens = tuple(_normalize_text(str(item)) for item in _flatten_material_values(value))
     return tuple(token for token in dict.fromkeys(tokens) if token)
+
+
+def _resolved_fact_material_value(
+    projection: ChapterFactProjection | None,
+    fact: ChapterFactEntry,
+) -> object | None | _UnresolvedFactMaterial:
+    """通过 S4 bridge id 解析 Evidence Confirm material value。
+
+    Args:
+        projection: 章节事实投影；为空时保持 legacy `fact.value` 语义。
+        fact: 当前章节事实。
+
+    Returns:
+        bridge 存在时返回 atomic 单值或 derived view 值；bridge 缺失时返回
+        `_UNRESOLVED_FACT_MATERIAL`；legacy fact 返回 `fact.value`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if projection is None:
+        return fact.value
+    if fact.source_fact_ids:
+        if len(fact.source_fact_ids) != 1:
+            return _UNRESOLVED_FACT_MATERIAL
+        source_fact = projection.source_facts.get_optional(fact.source_fact_ids[0])
+        if source_fact is None:
+            return _UNRESOLVED_FACT_MATERIAL
+        return source_fact.value
+    if fact.derived_view_id is not None:
+        derived_view = _derived_view_for_fact(projection, fact)
+        if derived_view is None:
+            return _UNRESOLVED_FACT_MATERIAL
+        return derived_view.value
+    return fact.value
+
+
+def _resolved_fact_material_tokens(
+    projection: ChapterFactProjection | None,
+    fact: ChapterFactEntry,
+) -> tuple[str, ...] | _UnresolvedFactMaterial:
+    """解析 fact 的 Evidence Confirm material tokens。
+
+    Args:
+        projection: 章节事实投影；为空时保持 legacy `fact.value` 语义。
+        fact: 当前章节事实。
+
+    Returns:
+        material tokens；bridge 缺失时返回 `_UNRESOLVED_FACT_MATERIAL`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    material_value = _resolved_fact_material_value(projection, fact)
+    if material_value is _UNRESOLVED_FACT_MATERIAL:
+        return _UNRESOLVED_FACT_MATERIAL
+    return _material_tokens(material_value)
+
+
+def _derived_dependency_provenance_issues(
+    fact: ChapterFactEntry,
+    projection: ChapterFactProjection | None,
+) -> tuple[EvidenceConfirmIssue, ...]:
+    """校验 derived view 的 child atomic facts 是否具备 section-or-better provenance。
+
+    Args:
+        fact: 当前章节事实。
+        projection: 章节事实投影。
+
+    Returns:
+        provenance 缺失对应的 E3 blocking issues；非 bridge derived fact 返回空。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if projection is None or fact.derived_view_id is None:
+        return ()
+    derived_view = _derived_view_for_fact(projection, fact)
+    if derived_view is None:
+        return (_issue("E3", "blocking", fact, None, "derived_view_id 未在 projection.derived_views 中解析。"),)
+
+    issues: list[EvidenceConfirmIssue] = []
+    for dependency_fact_id in derived_view.dependency_fact_ids:
+        source_fact = projection.source_facts.get_optional(dependency_fact_id)
+        if source_fact is None:
+            issues.append(
+                _issue(
+                    "E3",
+                    "blocking",
+                    fact,
+                    None,
+                    f"derived view 依赖的 atomic fact 缺失: {dependency_fact_id}。",
+                )
+            )
+            continue
+        if not _source_fact_has_section_or_better_provenance(source_fact):
+            issues.append(
+                _issue(
+                    "E3",
+                    "blocking",
+                    fact,
+                    None,
+                    f"derived view 依赖的 atomic fact 缺少 section-or-better provenance: {dependency_fact_id}。",
+                )
+            )
+    return tuple(issues)
+
+
+def _derived_view_for_fact(
+    projection: ChapterFactProjection,
+    fact: ChapterFactEntry,
+) -> CompositeAnalysisView | None:
+    """按 `derived_view_id` 读取 projection derived view。
+
+    Args:
+        projection: 章节事实投影。
+        fact: 当前章节事实。
+
+    Returns:
+        匹配的 derived view；无匹配时返回 ``None``。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return next(
+        (view for view in projection.derived_views if view.view_id == fact.derived_view_id),
+        None,
+    )
+
+
+def _source_fact_has_section_or_better_provenance(source_fact: AtomicSourceFact) -> bool:
+    """判断 atomic child fact 是否具备 section-or-better provenance。
+
+    Args:
+        source_fact: atomic source fact。
+
+    Returns:
+        存在可复核来源锚点时返回 ``True``。annual_report 锚点必须至少有
+        section_id；derived 锚点只要求存在，external_api 不用于当前 annual
+        report proof。
+
+    Raises:
+        无显式抛出。
+    """
+
+    for anchor in source_fact.anchors:
+        if anchor.source_kind == "annual_report" and anchor.section_id:
+            return True
+        if anchor.source_kind == "derived":
+            return True
+    return False
 
 
 def _flatten_material_values(value: object | None) -> tuple[object, ...]:
