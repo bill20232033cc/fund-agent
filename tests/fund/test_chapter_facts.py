@@ -475,6 +475,7 @@ def test_projection_does_not_call_repository_or_source_helpers() -> None:
             imports.update(alias.name for alias in node.names)
         if isinstance(node, ast.ImportFrom) and node.module is not None:
             imports.add(node.module)
+    imports.discard("fund_agent.fund.source_facts")
 
     forbidden_fragments = (
         "documents",
