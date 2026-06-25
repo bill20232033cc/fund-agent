@@ -45,6 +45,8 @@ from fund_agent.fund.source_provenance import (
     default_public_source_provenance,
     project_public_source_provenance,
 )
+from fund_agent.fund.source_facts import AtomicSourceFactStore, empty_atomic_source_fact_store
+from fund_agent.fund.source_facts import CompositeAnalysisView
 
 _TRACKING_ERROR_APPLICABLE_FUND_TYPES: frozenset[FundType] = frozenset(
     ("index_fund", "enhanced_index")
@@ -216,6 +218,7 @@ class StructuredFundDataBundle:
         bond_risk_evidence: 债券基金模板第 6 章“核心风险”七组证据；非债券基金为不适用缺失字段。
         nav_data: 净值数据结果。
         source_provenance: 年报公共来源 provenance，不暴露 `None`。
+        source_facts: Processor 输出的 atomic source facts 镜像；legacy direct path 为空。
     """
 
     fund_code: str
@@ -247,6 +250,7 @@ class StructuredFundDataBundle:
     risk_characteristic_text: ExtractedField[dict[str, object]] = field(
         default_factory=_default_risk_characteristic_text_field
     )
+    source_facts: AtomicSourceFactStore = field(default_factory=empty_atomic_source_fact_store)
 
 
 class FundDataExtractor:
@@ -618,6 +622,33 @@ def _field_from_family(
     )
 
 
+def _legacy_field_from_composite_view(
+    view: CompositeAnalysisView,
+) -> ExtractedField[dict[str, object]]:
+    """把复合分析视图转换为 legacy `ExtractedField`。
+
+    Args:
+        view: 已由 atomic source facts 组装的复合分析视图。
+
+    Returns:
+        保持当前 `StructuredFundDataBundle` public shape 的 legacy 字段。
+
+    Raises:
+        TypeError: 当视图值不是 dict 或 `None` 时抛出，避免把非兼容视图静默投影。
+    """
+
+    if view.value is not None and not isinstance(view.value, dict):
+        raise TypeError("CompositeAnalysisView.value 必须是 dict 或 None 才能投影为 legacy field")
+    extraction_mode = "missing" if view.status == "missing" else "derived"
+    note = None if view.status == "accepted" else ";".join(view.gaps) or view.status
+    return ExtractedField(
+        value=view.value,
+        anchors=view.anchors,
+        extraction_mode=extraction_mode,
+        note=note,
+    )
+
+
 def _anchors_for_family_field(
     family_result: FundFieldFamilyResult,
     field_name: str,
@@ -903,6 +934,7 @@ def _processor_result_to_bundle(
         bond_risk_evidence=bond_risk_evidence,
         portfolio_managers=portfolio_managers,  # type: ignore[arg-type]
         risk_characteristic_text=risk_characteristic_text,  # type: ignore[arg-type]
+        source_facts=result.source_facts,
     )
 
 
