@@ -60,6 +60,7 @@ from fund_agent.fund.processors.contracts import (
     FundProcessorInput,
     FundProcessorResult,
 )
+from fund_agent.fund.source_facts import AtomicSourceFact, AtomicSourceFactStore
 from fund_agent.fund.source_provenance import (
     PublicSourceProvenance,
     project_public_source_provenance,
@@ -197,6 +198,46 @@ _FAMILY_ORDER: Final[tuple[FundFieldFamilyId, ...]] = (
     "current_stage.v1",
     "core_risk.v1",
 )
+_MIGRATED_COMPOSITE_CHILDREN: Final[dict[str, tuple[str, ...]]] = {
+    "fee_schedule": ("management_fee", "custody_fee"),
+    "nav_benchmark_performance": ("nav_growth_rate", "benchmark_return_rate"),
+    "manager_strategy_text": ("strategy_summary", "market_outlook"),
+    "manager_alignment": ("manager_holding", "employee_holding"),
+}
+_CHILD_SOURCE_FACT_MAPPINGS: Final[dict[str, tuple[str, FundFieldFamilyId]]] = {
+    "profile.fee_schedule_management_fee": (
+        "fee_schedule.management_fee",
+        "return_attribution.v1",
+    ),
+    "profile.fee_schedule_custody_fee": (
+        "fee_schedule.custody_fee",
+        "return_attribution.v1",
+    ),
+    "performance.nav_benchmark_performance_nav_growth_rate": (
+        "nav_benchmark_performance.nav_growth_rate",
+        "return_attribution.v1",
+    ),
+    "performance.nav_benchmark_performance_benchmark_return_rate": (
+        "nav_benchmark_performance.benchmark_return_rate",
+        "return_attribution.v1",
+    ),
+    "manager_ownership.manager_strategy_text_strategy_summary": (
+        "manager_strategy_text.strategy_summary",
+        "manager_profile.v1",
+    ),
+    "manager_ownership.manager_strategy_text_market_outlook": (
+        "manager_strategy_text.market_outlook",
+        "manager_profile.v1",
+    ),
+    "manager_ownership.manager_alignment_manager_holding": (
+        "manager_alignment.manager_holding",
+        "manager_profile.v1",
+    ),
+    "manager_ownership.manager_alignment_employee_holding": (
+        "manager_alignment.employee_holding",
+        "manager_profile.v1",
+    ),
+}
 
 
 class _ParsedAnnualReportFundProcessor:
@@ -270,8 +311,9 @@ class _ParsedAnnualReportFundProcessor:
             report.metadata.source
         )
         extracted_fields = _collect_existing_extractor_fields(report)
+        source_facts = _build_source_fact_store(extracted_fields, source_provenance)
         field_families = tuple(
-            _build_field_family_result(family_id, extracted_fields, source_provenance)
+            _build_field_family_result(family_id, extracted_fields, source_provenance, source_facts)
             for family_id in _FAMILY_ORDER
         )
         anchors = _dedupe_anchors(
@@ -289,6 +331,7 @@ class _ParsedAnnualReportFundProcessor:
             gaps=(),
             anchors=anchors,
             source_provenance=source_provenance,
+            source_facts=source_facts,
             candidate_boundary=None,
             contract_status=_derive_contract_status(field_families),
         )
@@ -367,23 +410,170 @@ def _collect_existing_extractor_fields(
         "profile.risk_characteristic_text": profile.risk_characteristic_text,
         "profile.benchmark": profile.benchmark,
         "profile.fee_schedule": profile.fee_schedule,
+        "profile.fee_schedule_management_fee": profile.fee_schedule_management_fee,
+        "profile.fee_schedule_custody_fee": profile.fee_schedule_custody_fee,
         "performance.nav_benchmark_performance": performance.nav_benchmark_performance,
+        "performance.nav_benchmark_performance_nav_growth_rate": (
+            performance.nav_benchmark_performance_nav_growth_rate
+        ),
+        "performance.nav_benchmark_performance_benchmark_return_rate": (
+            performance.nav_benchmark_performance_benchmark_return_rate
+        ),
         "performance.investor_return": performance.investor_return,
         "performance.tracking_error": performance.tracking_error,
         "manager_ownership.manager_strategy_text": manager_ownership.manager_strategy_text,
+        "manager_ownership.manager_strategy_text_strategy_summary": (
+            manager_ownership.manager_strategy_text_strategy_summary
+        ),
+        "manager_ownership.manager_strategy_text_market_outlook": (
+            manager_ownership.manager_strategy_text_market_outlook
+        ),
         "manager_ownership.portfolio_managers": manager_ownership.portfolio_managers,
         "manager_ownership.turnover_rate": manager_ownership.turnover_rate,
         "manager_ownership.manager_alignment": manager_ownership.manager_alignment,
+        "manager_ownership.manager_alignment_manager_holding": (
+            manager_ownership.manager_alignment_manager_holding
+        ),
+        "manager_ownership.manager_alignment_employee_holding": (
+            manager_ownership.manager_alignment_employee_holding
+        ),
         "manager_ownership.holder_structure": manager_ownership.holder_structure,
         "holdings_share_change.holdings_snapshot": holdings_share_change.holdings_snapshot,
         "holdings_share_change.share_change": holdings_share_change.share_change,
     }
 
 
+def _build_source_fact_store(
+    extracted_fields: dict[str, ExtractedField[object]],
+    source_provenance: PublicSourceProvenance,
+) -> AtomicSourceFactStore:
+    """从 S2A 子字段输出构造 parsed annual atomic source fact store。
+
+    Args:
+        extracted_fields: extractor 输出路径到字段的映射。
+        source_provenance: 公共来源 provenance。
+
+    Returns:
+        仅包含直接 child evidence 或显式 child gap 的 atomic source facts。
+
+    Raises:
+        无显式抛出。
+    """
+
+    facts = []
+    for source_path, (fact_id, family_id) in _CHILD_SOURCE_FACT_MAPPINGS.items():
+        field = extracted_fields.get(source_path)
+        fact = _source_fact_from_child_field(
+            fact_id=fact_id,
+            family_id=family_id,
+            field=field,
+            source_provenance=source_provenance,
+        )
+        if fact is not None:
+            facts.append(fact)
+    return AtomicSourceFactStore(tuple(facts))
+
+
+def _source_fact_from_child_field(
+    *,
+    fact_id: str,
+    family_id: FundFieldFamilyId,
+    field: ExtractedField[object] | None,
+    source_provenance: PublicSourceProvenance,
+) -> AtomicSourceFact | None:
+    """将单个 S2A child 字段转换为 atomic fact。
+
+    Args:
+        fact_id: canonical source field path。
+        family_id: 所属字段族。
+        field: S2A child-level extractor 输出。
+        source_provenance: 公共来源 provenance。
+
+    Returns:
+        直接命中或显式缺口的 atomic fact；否则返回 `None`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if _child_field_has_direct_fact(field, fact_id):
+        return AtomicSourceFact(
+            fact_id=fact_id,
+            family_id=family_id,
+            value=field.value,
+            status="accepted",
+            extraction_mode=field.extraction_mode,
+            anchors=field.anchors,
+            provenance=source_provenance,
+            gaps=(),
+            source_field_path=fact_id,
+        )
+    if _child_field_has_explicit_gap(field, fact_id):
+        return AtomicSourceFact(
+            fact_id=fact_id,
+            family_id=family_id,
+            value=None,
+            status="missing",
+            extraction_mode="missing",
+            anchors=(),
+            provenance=source_provenance,
+            gaps=(field.note or f"source_field_path={fact_id}; gap=missing",),
+            source_field_path=fact_id,
+        )
+    return None
+
+
+def _child_field_has_direct_fact(field: ExtractedField[object] | None, fact_id: str) -> bool:
+    """判断 child 字段是否携带 canonical direct evidence。
+
+    Args:
+        field: S2A child-level extractor 输出。
+        fact_id: canonical source field path。
+
+    Returns:
+        字段有值、非 missing 且每个 anchor 均指向当前 fact id 时返回 `True`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return (
+        field is not None
+        and field.value is not None
+        and field.extraction_mode != "missing"
+        and bool(field.anchors)
+        and all(_anchor_has_source_field_path(anchor, fact_id) for anchor in field.anchors)
+    )
+
+
+def _child_field_has_explicit_gap(field: ExtractedField[object] | None, fact_id: str) -> bool:
+    """判断 child 字段是否显式报告当前 canonical path 的缺口。
+
+    Args:
+        field: S2A child-level extractor 输出。
+        fact_id: canonical source field path。
+
+    Returns:
+        `missing` 字段 note 显式携带 `source_field_path=<fact_id>` 时返回 `True`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return (
+        field is not None
+        and field.value is None
+        and not field.anchors
+        and field.extraction_mode == "missing"
+        and _text_has_source_field_path(field.note, fact_id)
+    )
+
+
 def _build_field_family_result(
     field_family_id: FundFieldFamilyId,
     extracted_fields: dict[str, ExtractedField[object]],
     source_provenance: PublicSourceProvenance,
+    source_facts: AtomicSourceFactStore,
 ) -> FundFieldFamilyResult:
     """按 mapping table 构造单个字段族结果。
 
@@ -391,6 +581,7 @@ def _build_field_family_result(
         field_family_id: 目标字段族 ID。
         extracted_fields: extractor 输出路径到字段的映射。
         source_provenance: 公共来源 provenance。
+        source_facts: parsed annual atomic source fact store。
 
     Returns:
         字段族结果。
@@ -408,8 +599,17 @@ def _build_field_family_result(
     value: dict[str, object] = {"schema_version": field_family_id}
     anchors: list[EvidenceAnchor] = []
     missing_fields: list[tuple[FieldFamilyMapping, ExtractedField[object] | None]] = []
+    missing_composite_children: list[tuple[FieldFamilyMapping, str, AtomicSourceFact]] = []
     for mapping in mappings:
         field = extracted_fields.get(mapping.source_path)
+        composite_value = _composite_value_from_source_facts(mapping.output_field_name, source_facts)
+        if composite_value:
+            value[mapping.output_field_name] = composite_value
+            anchors.extend(_composite_anchors_from_source_facts(mapping.output_field_name, source_facts))
+            missing_composite_children.extend(
+                _missing_composite_children(mapping, source_facts)
+            )
+            continue
         if _field_has_public_value(field):
             value[mapping.output_field_name] = field.value
             anchors.extend(_field_scoped_anchors(mapping, field))
@@ -417,12 +617,24 @@ def _build_field_family_result(
         value[mapping.output_field_name] = None
         missing_fields.append((mapping, field))
 
-    partial_gaps = [_field_gap(mapping, field, "field_family_partial") for mapping, field in missing_fields]
+    partial_gaps = [
+        _field_gap(mapping, field, "field_family_partial") for mapping, field in missing_fields
+    ]
+    partial_gaps.extend(
+        _composite_child_gap(mapping, fact_id, fact, "field_family_partial")
+        for mapping, fact_id, fact in missing_composite_children
+    )
     status = _derive_family_status(mappings, partial_gaps)
     gap_code: FundExtractionGapCode = (
         "field_family_missing" if status == "missing" else "field_family_partial"
     )
-    gaps = tuple(_field_gap(mapping, field, gap_code) for mapping, field in missing_fields)
+    gaps = (
+        *(_field_gap(mapping, field, gap_code) for mapping, field in missing_fields),
+        *(
+            _composite_child_gap(mapping, fact_id, fact, gap_code)
+            for mapping, fact_id, fact in missing_composite_children
+        ),
+    )
     extraction_mode = _derive_family_extraction_mode(mappings, extracted_fields, status)
     return FundFieldFamilyResult(
         field_family_id=field_family_id,
@@ -455,6 +667,95 @@ def _field_scoped_anchors(
 
     return tuple(
         _with_source_field_path(anchor, mapping.output_field_name) for anchor in field.anchors
+    )
+
+
+def _composite_value_from_source_facts(
+    output_field_name: str,
+    source_facts: AtomicSourceFactStore,
+) -> dict[str, object] | None:
+    """从 atomic child facts 派生迁移复合字段兼容 value。
+
+    Args:
+        output_field_name: 顶层兼容字段名。
+        source_facts: parsed annual atomic source fact store。
+
+    Returns:
+        至少一个子事实 accepted 时返回包含全部 required child key 的旧 dict shape；
+        accepted child 写入事实值，显式 missing 或缺失 child 写入 `None`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    child_names = _MIGRATED_COMPOSITE_CHILDREN.get(output_field_name)
+    if child_names is None:
+        return None
+    child_facts = {
+        child_name: source_facts.get_optional(f"{output_field_name}.{child_name}")
+        for child_name in child_names
+    }
+    if not any(fact is not None and fact.status == "accepted" for fact in child_facts.values()):
+        return None
+    value = {
+        child_name: fact.value if fact is not None and fact.status == "accepted" else None
+        for child_name, fact in child_facts.items()
+    }
+    if output_field_name == "manager_alignment":
+        value["judgment"] = None
+    return value
+
+
+def _missing_composite_children(
+    mapping: FieldFamilyMapping,
+    source_facts: AtomicSourceFactStore,
+) -> tuple[tuple[FieldFamilyMapping, str, AtomicSourceFact], ...]:
+    """列出迁移复合字段中显式 missing 的 child facts。
+
+    Args:
+        mapping: 当前字段族 mapping 行。
+        source_facts: parsed annual atomic source fact store。
+
+    Returns:
+        每个显式 missing child 对应的 mapping、fact id 和 fact。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return tuple(
+        (mapping, fact_id, fact)
+        for child_name in _MIGRATED_COMPOSITE_CHILDREN.get(mapping.output_field_name, ())
+        if (fact_id := f"{mapping.output_field_name}.{child_name}")
+        and (fact := source_facts.get_optional(fact_id)) is not None
+        and fact.status == "missing"
+    )
+
+
+def _composite_anchors_from_source_facts(
+    output_field_name: str,
+    source_facts: AtomicSourceFactStore,
+) -> tuple[EvidenceAnchor, ...]:
+    """从 accepted atomic facts 聚合迁移复合字段兼容 anchors。
+
+    Args:
+        output_field_name: 顶层兼容字段名。
+        source_facts: parsed annual atomic source fact store。
+
+    Returns:
+        子事实 direct anchors 去重结果。
+
+    Raises:
+        无显式抛出。
+    """
+
+    child_names = _MIGRATED_COMPOSITE_CHILDREN.get(output_field_name, ())
+    return _dedupe_anchors(
+        anchor
+        for child_name in child_names
+        if (fact := source_facts.get_optional(f"{output_field_name}.{child_name}")) is not None
+        and fact.status == "accepted"
+        for anchor in fact.anchors
     )
 
 
@@ -498,6 +799,46 @@ def _sanitize_legacy_locator(row_locator: str | None) -> str:
         return "missing"
     sanitized = " ".join(row_locator.replace(";", " ").replace("=", " ").split())
     return sanitized or "missing"
+
+
+def _anchor_has_source_field_path(anchor: EvidenceAnchor, fact_id: str) -> bool:
+    """判断 anchor row locator 是否携带 canonical source_field_path。
+
+    Args:
+        anchor: 待检查锚点。
+        fact_id: canonical source field path。
+
+    Returns:
+        row locator 中 `source_field_path` 等于 fact id 时返回 `True`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return _text_has_source_field_path(anchor.row_locator, fact_id)
+
+
+def _text_has_source_field_path(text: str | None, fact_id: str) -> bool:
+    """解析分号分隔 locator/note 中的 `source_field_path`。
+
+    Args:
+        text: row locator 或 note 文本。
+        fact_id: canonical source field path。
+
+    Returns:
+        存在完全匹配的 `source_field_path=<fact_id>` segment 时返回 `True`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if text is None:
+        return False
+    for segment in text.split(";"):
+        key, separator, value = segment.strip().partition("=")
+        if separator == "=" and key == "source_field_path" and value.strip() == fact_id:
+            return True
+    return False
 
 
 def _field_has_public_value(field: ExtractedField[object] | None) -> bool:
@@ -546,6 +887,38 @@ def _field_gap(
         message=f"{mapping.source_path} 缺失或不可采信：{note}",
         field_family_id=mapping.field_family_id,
         source_field_path=mapping.source_path,
+        source_boundary="annual_report",
+        required=mapping.required,
+    )
+
+
+def _composite_child_gap(
+    mapping: FieldFamilyMapping,
+    fact_id: str,
+    fact: AtomicSourceFact,
+    gap_code: FundExtractionGapCode,
+) -> FundExtractionGap:
+    """为迁移复合字段的显式 missing child 构造字段族 gap。
+
+    Args:
+        mapping: 当前字段族 mapping 行。
+        fact_id: missing child fact id。
+        fact: missing atomic source fact。
+        gap_code: 字段族局部缺口码。
+
+    Returns:
+        指向 child fact id 的字段族本地缺口。
+
+    Raises:
+        无显式抛出。
+    """
+
+    note = "; ".join(fact.gaps) if fact.gaps else "child source fact 显式缺失"
+    return FundExtractionGap(
+        gap_code=gap_code,
+        message=f"{fact_id} 缺失或不可采信：{note}",
+        field_family_id=mapping.field_family_id,
+        source_field_path=fact_id,
         source_boundary="annual_report",
         required=mapping.required,
     )

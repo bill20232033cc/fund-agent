@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import ast
-from dataclasses import asdict
 from pathlib import Path
 
 from fund_agent.fund.documents.models import (
@@ -132,11 +131,16 @@ def _source_metadata() -> AnnualReportSourceMetadata:
     )
 
 
-def _happy_report(*, include_tracking_error: bool = True) -> ParsedAnnualReport:
+def _happy_report(
+    *,
+    include_tracking_error: bool = True,
+    include_custody_fee: bool = True,
+) -> ParsedAnnualReport:
     """构造覆盖六个字段族的 no-live synthetic ParsedAnnualReport。
 
     Args:
         include_tracking_error: 是否包含跟踪误差披露。
+        include_custody_fee: 是否包含托管费率披露。
 
     Returns:
         只含内存文本和表格的年报 fixture。
@@ -146,6 +150,7 @@ def _happy_report(*, include_tracking_error: bool = True) -> ParsedAnnualReport:
     """
 
     tracking_error_line = "跟踪误差：2.10%" if include_tracking_error else "本节未披露跟踪误差。"
+    custody_fee_lines = ("托管费率：0.20%",) if include_custody_fee else ()
     raw_text = "\n".join(
         (
             "§1 基金简介",
@@ -164,7 +169,7 @@ def _happy_report(*, include_tracking_error: bool = True) -> ParsedAnnualReport:
             "风险收益特征：中高风险中高收益。",
             "业绩比较基准：沪深300指数收益率*80%+中债指数收益率*20%",
             "管理费率：1.20%",
-            "托管费率：0.20%",
+            *custody_fee_lines,
             "§3 主要财务指标、基金净值表现及利润分配情况",
             "基金份额净值增长率：12.34%",
             "业绩比较基准收益率：10.01%",
@@ -233,6 +238,22 @@ def _happy_report(*, include_tracking_error: bool = True) -> ParsedAnnualReport:
         tables=tables,
         metadata=AnnualReportMetadata(source=_source_metadata()),
     )
+
+
+def _report_without_custody_fee() -> ParsedAnnualReport:
+    """构造仅缺少 fee_schedule.custody_fee child evidence 的 no-live 年报 fixture。
+
+    Args:
+        无。
+
+    Returns:
+        管理费率存在、托管费率显式缺失的年报 fixture。
+
+    Raises:
+        ValueError: 当章节标题 offset 构造失败时抛出。
+    """
+
+    return _happy_report(include_custody_fee=False)
 
 
 def _report_without_core_risk_evidence() -> ParsedAnnualReport:
@@ -345,9 +366,155 @@ def test_active_processor_outputs_six_non_missing_field_families() -> None:
         "nav_growth_rate": "12.34%",
         "benchmark_return_rate": "10.01%",
     }
+    assert return_family.value["fee_schedule"] == {
+        "management_fee": "1.20%",
+        "custody_fee": "0.20%",
+    }
     manager_family = _family(result, "manager_profile.v1")
+    assert manager_family.value["manager_strategy_text"] == {
+        "strategy_summary": "坚持高质量成长股选择。",
+        "market_outlook": "关注盈利质量和估值匹配。",
+    }
+    assert manager_family.value["manager_alignment"] == {
+        "manager_holding": "12.34万份",
+        "employee_holding": "45.67万份",
+        "judgment": None,
+    }
     assert "portfolio_managers" in manager_family.value
     assert "holdings_snapshot" in manager_family.value
+
+
+def test_active_processor_emits_child_atomic_source_facts() -> None:
+    """验证默认 parsed annual processor 从 S2A child outputs 发出 atomic facts。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 fact id、value 或 direct anchor source_field_path 不符合契约时抛出。
+    """
+
+    result = _extract(_happy_report())
+
+    expected_fact_ids = {
+        "fee_schedule.management_fee",
+        "fee_schedule.custody_fee",
+        "nav_benchmark_performance.nav_growth_rate",
+        "nav_benchmark_performance.benchmark_return_rate",
+        "manager_strategy_text.strategy_summary",
+        "manager_strategy_text.market_outlook",
+        "manager_alignment.manager_holding",
+        "manager_alignment.employee_holding",
+    }
+    assert set(result.source_facts.facts) == expected_fact_ids
+    for fact_id in expected_fact_ids:
+        fact = result.source_facts.get_required(fact_id)
+        assert fact.fact_id == fact.source_field_path == fact_id
+        assert fact.status == "accepted"
+        assert fact.value is not None
+        assert fact.anchors
+        assert all(
+            anchor.row_locator is not None
+            and f"source_field_path={fact_id};" in anchor.row_locator
+            for anchor in fact.anchors
+        )
+
+
+def test_active_processor_emits_missing_child_fact_without_anchor() -> None:
+    """验证显式 child gap 可成为 missing atomic fact，但不会伪造 anchor。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 missing fact 携带 anchor 或缺少 gap 时抛出。
+    """
+
+    result = _extract(_report_without_core_risk_evidence())
+
+    missing_fact = result.source_facts.get_required("manager_alignment.manager_holding")
+    assert missing_fact.status == "missing"
+    assert missing_fact.value is None
+    assert missing_fact.anchors == ()
+    assert missing_fact.gaps
+    assert "source_field_path=manager_alignment.manager_holding" in missing_fact.gaps[0]
+
+
+def test_active_processor_preserves_partial_migrated_composite_child_gap() -> None:
+    """验证迁移复合字段 sibling partial 不被兼容 dict 投影隐藏。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 missing child 未进入 value/gap/status 或 anchor 被伪造时抛出。
+    """
+
+    result = _extract(_report_without_custody_fee())
+
+    management_fee = result.source_facts.get_required("fee_schedule.management_fee")
+    custody_fee = result.source_facts.get_required("fee_schedule.custody_fee")
+    assert management_fee.status == "accepted"
+    assert management_fee.value == "1.20%"
+    assert custody_fee.status == "missing"
+    assert custody_fee.value is None
+    assert custody_fee.anchors == ()
+
+    return_family = _family(result, "return_attribution.v1")
+    assert return_family.status == "partial"
+    assert return_family.value["fee_schedule"] == {
+        "management_fee": "1.20%",
+        "custody_fee": None,
+    }
+    assert {
+        gap.source_field_path
+        for gap in return_family.gaps
+        if gap.source_field_path == "fee_schedule.custody_fee"
+    } == {"fee_schedule.custody_fee"}
+    assert all(
+        anchor.row_locator is not None
+        and "source_field_path=fee_schedule.management_fee;" in anchor.row_locator
+        for anchor in return_family.anchors
+        if "source_field_path=fee_schedule." in (anchor.row_locator or "")
+    )
+    assert not any(
+        anchor.row_locator is not None
+        and "source_field_path=fee_schedule.custody_fee;" in anchor.row_locator
+        for anchor in return_family.anchors
+    )
+
+
+def test_active_processor_does_not_infer_child_fact_from_composite_dict_shape() -> None:
+    """验证缺少 S2A child evidence 时不从 legacy composite dict 反推 atomic fact。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当旧 dict shape 被错误用来创建 child fact 时抛出。
+    """
+
+    result = _extract(_report_without_core_risk_evidence())
+
+    missing_fact = result.source_facts.get_required("manager_alignment.manager_holding")
+    assert missing_fact.status == "missing"
+    assert missing_fact.value is None
+    assert missing_fact.anchors == ()
+    assert missing_fact.gaps
+    manager_family = _family(result, "manager_profile.v1")
+    assert manager_family.value["manager_alignment"] is None
 
 
 def test_active_processor_mapping_table_covers_emitted_value_fields() -> None:
@@ -471,7 +638,7 @@ def test_active_processor_makes_no_candidate_proof_or_readiness_claims() -> None
     """
 
     result = _extract(_happy_report())
-    payload_text = repr(asdict(result))
+    payload_text = repr(result)
 
     assert result.candidate_boundary is None
     assert "candidate_only" not in payload_text

@@ -1649,8 +1649,8 @@ async def test_explicit_disclosure_source_truth_return_attribution_projects_to_b
 
 
 @pytest.mark.asyncio
-async def test_default_parsed_annual_processor_projects_top_level_source_field_path() -> None:
-    """验证默认 parsed annual processor 输出顶层字段 scope，不推断复合子字段。
+async def test_default_parsed_annual_processor_projects_child_source_facts_to_bundle() -> None:
+    """验证默认 parsed annual processor 输出 child source facts 并保留兼容 bundle。
 
     Args:
         无。
@@ -1659,7 +1659,7 @@ async def test_default_parsed_annual_processor_projects_top_level_source_field_p
         无返回值。
 
     Raises:
-        AssertionError: 当默认 processor 未输出 source_field_path 或输出子路径时抛出。
+        AssertionError: 当 child fact、bundle mirror 或兼容 dict shape 不符合 S2B 契约时抛出。
     """
 
     extractor = FundDataExtractor(
@@ -1670,21 +1670,67 @@ async def test_default_parsed_annual_processor_projects_top_level_source_field_p
 
     bundle = await extractor.extract("110011", 2024)
 
+    assert set(bundle.source_facts.facts) >= {
+        "fee_schedule.management_fee",
+        "fee_schedule.custody_fee",
+        "nav_benchmark_performance.nav_growth_rate",
+        "nav_benchmark_performance.benchmark_return_rate",
+        "manager_strategy_text.strategy_summary",
+        "manager_strategy_text.market_outlook",
+        "manager_alignment.manager_holding",
+        "manager_alignment.employee_holding",
+    }
+    assert bundle.source_facts.get_required("fee_schedule.management_fee").value == "1.20%"
+    assert bundle.source_facts.get_required("fee_schedule.custody_fee").value == "0.20%"
+    assert bundle.fee_schedule.value == {
+        "management_fee": "1.20%",
+        "custody_fee": "0.20%",
+    }
     assert bundle.fee_schedule.anchors
     assert _anchor_source_field_paths(bundle.fee_schedule) == (
-        "fee_schedule",
-        "fee_schedule",
-    )
-    assert all(
-        "." not in source_field_path
-        for source_field_path in _anchor_source_field_paths(bundle.fee_schedule)
+        "fee_schedule.management_fee",
+        "fee_schedule.custody_fee",
     )
     assert all(
         anchor.row_locator is not None and anchor.row_locator.startswith(
-            "source_field_path=fee_schedule; locator="
+            "source_field_path=fee_schedule."
         )
         for anchor in bundle.fee_schedule.anchors
     )
+
+
+@pytest.mark.asyncio
+async def test_default_parsed_annual_processor_projects_partial_composite_child_gap() -> None:
+    """验证默认 parsed annual bundle 保留迁移复合字段 sibling partial。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 missing child 被兼容 bundle value、gap 或 anchor 投影隐藏时抛出。
+    """
+
+    extractor = FundDataExtractor(
+        repository=_FakeRepository(_annual_report(include_custody_fee=False)),
+        nav_provider=_RecordingNavProvider(),
+        processor_registry=FundProcessorRegistry.create_default(),
+    )
+
+    bundle = await extractor.extract("110011", 2024)
+
+    assert bundle.source_facts.get_required("fee_schedule.management_fee").status == "accepted"
+    custody_fee = bundle.source_facts.get_required("fee_schedule.custody_fee")
+    assert custody_fee.status == "missing"
+    assert custody_fee.value is None
+    assert custody_fee.anchors == ()
+    assert bundle.fee_schedule.value == {
+        "management_fee": "1.20%",
+        "custody_fee": None,
+    }
+    assert _anchor_source_field_paths(bundle.fee_schedule) == ("fee_schedule.management_fee",)
 
 
 def test_field_locator_capable_family_with_no_matching_anchor_projects_empty_anchors() -> None:
@@ -3514,11 +3560,13 @@ def _typed_non_active_annual_report(fund_type: str, fund_code: str) -> ParsedAnn
 def _annual_report(
     *,
     source_metadata: AnnualReportSourceMetadata | None = None,
+    include_custody_fee: bool = True,
 ) -> ParsedAnnualReport:
     """构造可被当前 extractor 解析的最小年报。
 
     Args:
         source_metadata: 可选年报来源元数据。
+        include_custody_fee: 是否包含托管费率披露。
 
     Returns:
         最小年报解析结果。
@@ -3527,6 +3575,8 @@ def _annual_report(
         无显式抛出。
     """
 
+    custody_fee_lines = ("托管费率：0.20%",) if include_custody_fee else ()
+    custody_fee_rows = (("托管费率", "0.20%"),) if include_custody_fee else ()
     section_one = "\n".join(
         (
             "§1 基金简介",
@@ -3545,7 +3595,7 @@ def _annual_report(
             "投资范围：主要投资股票和债券",
             "业绩比较基准：沪深300指数收益率",
             "管理费率：1.20%",
-            "托管费率：0.20%",
+            *custody_fee_lines,
         )
     )
     section_four = "\n".join(
@@ -3646,7 +3696,7 @@ def _annual_report(
                     ("风险收益特征", "本基金为混合型基金，风险收益特征高于债券型基金。"),
                     ("业绩比较基准", "沪深300指数收益率"),
                     ("管理费率", "1.20%"),
-                    ("托管费率", "0.20%"),
+                    *custody_fee_rows,
                 ),
             ),
             ParsedTable(
