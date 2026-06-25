@@ -1646,6 +1646,26 @@ async def test_explicit_disclosure_source_truth_return_attribution_projects_to_b
         "nav_benchmark_performance.nav_growth_rate",
         "nav_benchmark_performance.benchmark_return_rate",
     )
+    assert set(bundle.source_facts.facts) >= {
+        "fee_schedule.management_fee",
+        "fee_schedule.custody_fee",
+        "nav_benchmark_performance.nav_growth_rate",
+        "nav_benchmark_performance.benchmark_return_rate",
+    }
+    assert bundle.source_facts.get_required("fee_schedule.management_fee").value == "1.50%"
+    assert bundle.source_facts.get_required("fee_schedule.custody_fee").value == "0.25%"
+    assert (
+        bundle.source_facts.get_required(
+            "nav_benchmark_performance.nav_growth_rate"
+        ).value
+        == "8.00%"
+    )
+    assert (
+        bundle.source_facts.get_required(
+            "nav_benchmark_performance.benchmark_return_rate"
+        ).value
+        == "6.00%"
+    )
 
 
 @pytest.mark.asyncio
@@ -1929,6 +1949,28 @@ async def test_explicit_disclosure_source_truth_manager_profile_projects_to_bund
     assert _anchor_field_paths(bundle.manager_alignment) == ("manager_alignment.manager_holding",)
     assert _anchor_field_paths(bundle.manager_strategy_text) == (
         "manager_strategy_text.strategy_summary",
+    )
+    assert set(bundle.source_facts.facts) >= {
+        "manager_strategy_text.strategy_summary",
+        "manager_strategy_text.market_outlook",
+        "manager_alignment.manager_holding",
+        "manager_alignment.employee_holding",
+    }
+    assert (
+        bundle.source_facts.get_required("manager_strategy_text.strategy_summary").value
+        == "本报告期坚持均衡配置。"
+    )
+    assert (
+        bundle.source_facts.get_required("manager_strategy_text.market_outlook").value
+        == "后续将关注基本面变化。"
+    )
+    assert (
+        bundle.source_facts.get_required("manager_alignment.manager_holding").value
+        == "本基金基金经理持有本开放式基金份额区间为100万份以上。"
+    )
+    assert (
+        bundle.source_facts.get_required("manager_alignment.employee_holding").value
+        == "基金管理人所有从业人员持有本基金份额区间为50万份至100万份。"
     )
 
 
@@ -2314,6 +2356,7 @@ async def test_explicit_disclosure_candidate_only_manager_profile_stays_missing(
     assert bundle.manager_alignment.extraction_mode == "missing"
     assert bundle.manager_strategy_text.extraction_mode == "missing"
     assert bundle.holdings_snapshot.extraction_mode == "missing"
+    assert bundle.source_facts.facts == {}
 
 
 @pytest.mark.asyncio
