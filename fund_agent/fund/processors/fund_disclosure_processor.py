@@ -36,6 +36,7 @@ from fund_agent.fund.processors.contracts import (
 from fund_agent.fund.processors.fund_disclosure_dispatch import (
     admit_disclosure_intermediate,
 )
+from fund_agent.fund.source_facts import AtomicSourceFact, AtomicSourceFactStore
 from fund_agent.fund.source_provenance import PublicSourceProvenance
 
 _OUTPUT_SCHEMA_VERSION: Final[str] = "fund_processor_result.v1"
@@ -159,6 +160,9 @@ _RETURN_ATTRIBUTION_REQUIRED_TOP_LEVEL: Final[tuple[str, ...]] = (
     "fee_schedule",
     "tracking_error",
 )
+_RETURN_ATTRIBUTION_REQUIRED_CHILD_SOURCE_FIELDS: Final[dict[str, tuple[str, ...]]] = {
+    "fee_schedule": ("management_fee", "custody_fee"),
+}
 _RETURN_ATTRIBUTION_NAV_LABELS: Final[tuple[str, ...]] = (
     "基金份额净值增长率",
     "净值增长率",
@@ -197,6 +201,10 @@ _MANAGER_PROFILE_REQUIRED_TOP_LEVEL: Final[tuple[str, ...]] = (
     "manager_alignment",
     "holdings_snapshot",
 )
+_MANAGER_PROFILE_REQUIRED_CHILD_SOURCE_FIELDS: Final[dict[str, tuple[str, ...]]] = {
+    "manager_strategy_text": ("strategy_summary", "market_outlook"),
+    "manager_alignment": ("manager_holding", "employee_holding"),
+}
 _MANAGER_PROFILE_ROSTER_HEADINGS: Final[tuple[str, ...]] = (
     "基金经理简介",
     "基金管理人及基金经理情况",
@@ -218,12 +226,21 @@ _MANAGER_PROFILE_ROSTER_END_DATE_LABELS: Final[tuple[str, ...]] = (
 )
 _MANAGER_PROFILE_STRATEGY_HEADINGS: Final[tuple[str, ...]] = (
     "报告期内基金投资策略和运作分析",
+    "报告期内基金的投资策略和业绩表现说明",
+    "基金投资策略和业绩表现说明",
     "投资策略和运作分析",
+    "投资策略和业绩表现说明",
+    "基金投资策略和运作分析",
     "投资策略",
     "运作分析",
+    "运作回顾",
 )
 _MANAGER_PROFILE_OUTLOOK_HEADINGS: Final[tuple[str, ...]] = (
     "管理人对宏观经济、证券市场及行业走势的简要展望",
+    "管理人对宏观经济、证券市场和行业走势的简要展望",
+    "管理人对境外市场走势的简要展望",
+    "宏观经济、证券市场及行业走势展望",
+    "市场及行业走势展望",
     "后市展望",
     "市场展望",
 )
@@ -433,6 +450,7 @@ class _ManagerProfileValueCandidate:
     value: object
     anchor: EvidenceAnchor
     source_field_path: str
+    child_candidates: tuple["_ManagerProfileValueCandidate", ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -476,15 +494,7 @@ _MANAGER_PROFILE_MATCH_GROUPS: Final[
     ),
     (
         "manager_strategy_text",
-        (
-            "报告期内基金投资策略和运作分析",
-            "投资策略和运作分析",
-            "投资策略",
-            "运作分析",
-            "管理人对宏观经济、证券市场及行业走势的简要展望",
-            "后市展望",
-            "市场展望",
-        ),
+        (*_MANAGER_PROFILE_STRATEGY_HEADINGS, *_MANAGER_PROFILE_OUTLOOK_HEADINGS),
         (),
         (),
     ),
@@ -896,7 +906,7 @@ class _FundDisclosureDocumentFundProcessor:
         if admission.contract_status != "blocked":
             source_truth_gap_code = _validate_source_truth_admission(intermediate, context)
 
-        field_families = _field_families_for_intermediate(
+        field_families, source_facts = _field_families_for_intermediate(
             intermediate,
             source_provenance,
             context=context,
@@ -925,6 +935,7 @@ class _FundDisclosureDocumentFundProcessor:
             gaps=(),
             anchors=result_anchors,
             source_provenance=source_provenance,
+            source_facts=source_facts,
             candidate_boundary=candidate_boundary,
             contract_status=contract_status,
         )
@@ -1060,7 +1071,7 @@ def _field_families_for_intermediate(
     context: FundProcessorDispatchKey,
     source_truth_extraction_allowed: bool = False,
     source_truth_gap_code: FundExtractionGapCode | None = None,
-) -> tuple[FundFieldFamilyResult, ...]:
+) -> tuple[tuple[FundFieldFamilyResult, ...], AtomicSourceFactStore]:
     """构造 FundDisclosureDocument processor 字段族结果。
 
     Args:
@@ -1071,7 +1082,7 @@ def _field_families_for_intermediate(
         source_truth_gap_code: source-truth admission proof 缺失或非法时的本地 gap。
 
     Returns:
-        六个字段族结果；proof-positive source-truth 路径可进入已授权 direct extractor，
+        六个字段族结果与 proof-positive direct route 的 atomic source facts；
         其余已接受字段族仅附加 candidate evidence。
 
     Raises:
@@ -1084,17 +1095,24 @@ def _field_families_for_intermediate(
     investor_experience_source_truth: FundFieldFamilyResult | None = None
     current_stage_source_truth: FundFieldFamilyResult | None = None
     core_risk_source_truth: FundFieldFamilyResult | None = None
+    source_fact_stores: list[AtomicSourceFactStore] = []
     content_intermediate = _content_intermediate_or_none(intermediate)
     if source_truth_extraction_allowed and content_intermediate is not None:
         product_essence_source_truth = _extract_product_essence_source_truth(
             content_intermediate, source_provenance, context
         )
-        return_attribution_source_truth = _extract_return_attribution_source_truth(
-            content_intermediate, source_provenance, context
+        return_attribution_source_truth, return_attribution_source_facts = (
+            _extract_return_attribution_source_truth(
+                content_intermediate, source_provenance, context
+            )
         )
-        manager_profile_source_truth = _extract_manager_profile_source_truth(
-            content_intermediate, source_provenance, context
+        source_fact_stores.append(return_attribution_source_facts)
+        manager_profile_source_truth, manager_profile_source_facts = (
+            _extract_manager_profile_source_truth(
+                content_intermediate, source_provenance, context
+            )
         )
+        source_fact_stores.append(manager_profile_source_facts)
         investor_experience_source_truth = _extract_investor_experience_source_truth(
             content_intermediate, source_provenance, context
         )
@@ -1171,10 +1189,13 @@ def _field_families_for_intermediate(
         for family_id in _FAMILY_ORDER
     )
     if source_truth_gap_code is None:
-        return field_families
-    return tuple(
-        _with_source_truth_admission_gap(family, source_truth_gap_code)
-        for family in field_families
+        return field_families, _merge_atomic_source_fact_stores(tuple(source_fact_stores))
+    return (
+        tuple(
+            _with_source_truth_admission_gap(family, source_truth_gap_code)
+            for family in field_families
+        ),
+        _merge_atomic_source_fact_stores(tuple(source_fact_stores)),
     )
 
 
@@ -1225,6 +1246,133 @@ def _validate_source_truth_admission(
     ):
         return "source_truth_admission_invalid"
     return None
+
+
+def _source_fact_from_candidate(
+    *,
+    fact_id: str,
+    family_id: FundFieldFamilyId,
+    value: object,
+    anchor: EvidenceAnchor,
+    source_provenance: PublicSourceProvenance | None,
+) -> AtomicSourceFact:
+    """从 proof-positive FDD child candidate 构造 atomic source fact。
+
+    Args:
+        fact_id: canonical child output path。
+        family_id: 所属字段族。
+        value: child fact 值。
+        anchor: child candidate 直接锚点。
+        source_provenance: 公共来源 provenance。
+
+    Returns:
+        已采信 atomic source fact。
+
+    Raises:
+        ValueError: 当 `fact_id != source_field_path` 等契约非法时由 dataclass 抛出。
+    """
+
+    return AtomicSourceFact(
+        fact_id=fact_id,
+        family_id=family_id,
+        value=value,
+        status="accepted",
+        extraction_mode="direct",
+        anchors=(anchor,),
+        provenance=source_provenance,
+        gaps=(),
+        source_field_path=fact_id,
+    )
+
+
+def _merge_atomic_source_fact_stores(
+    stores: tuple[AtomicSourceFactStore, ...],
+) -> AtomicSourceFactStore:
+    """严格合并当前 processor direct route 产生的 atomic source fact stores。
+
+    Args:
+        stores: 待合并的 fact stores。
+
+    Returns:
+        合并后的 immutable store。
+
+    Raises:
+        ValueError: 当不同 store 存在冲突 fact id 时由 `merge_strict` 抛出。
+    """
+
+    merged = AtomicSourceFactStore()
+    for store in stores:
+        merged = merged.merge_strict(store)
+    return merged
+
+
+def _composite_value_from_source_facts(
+    source_facts: AtomicSourceFactStore,
+    output_field_name: str,
+    child_names: tuple[str, ...],
+    *,
+    require_all: bool,
+) -> dict[str, object] | None:
+    """从 accepted atomic facts 派生 FDD migrated composite 兼容值。
+
+    Args:
+        source_facts: 当前 FDD direct route atomic source facts。
+        output_field_name: 顶层兼容字段名。
+        child_names: required child key 顺序。
+        require_all: 是否要求全部 child fact 存在才组装。
+
+    Returns:
+        兼容 dict；缺少可接受 child fact 时按策略返回 `None` 或 child key `None`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    child_facts = {
+        child_name: source_facts.get_optional(f"{output_field_name}.{child_name}")
+        for child_name in child_names
+    }
+    if require_all and any(
+        fact is None or fact.status != "accepted" for fact in child_facts.values()
+    ):
+        return None
+    if not any(fact is not None and fact.status == "accepted" for fact in child_facts.values()):
+        return None
+    return {
+        child_name: fact.value if fact is not None and fact.status == "accepted" else None
+        for child_name, fact in child_facts.items()
+    }
+
+
+def _missing_required_child_source_field_paths(
+    value: dict[str, object],
+    source_facts: AtomicSourceFactStore,
+    required_children_by_top_level: dict[str, tuple[str, ...]],
+) -> tuple[str, ...]:
+    """返回已进入兼容 composite 但缺少 accepted atomic fact 的 required child paths。
+
+    Args:
+        value: 已构造的字段族兼容 value。
+        source_facts: 当前 FDD direct route atomic source facts。
+        required_children_by_top_level: 顶层 composite 到 required child key 的映射。
+
+    Returns:
+        缺少 proof-positive atomic fact 的 canonical child source_field_path。
+
+    Raises:
+        无显式抛出。
+    """
+
+    missing: list[str] = []
+    for top_level, child_names in required_children_by_top_level.items():
+        if top_level not in value:
+            continue
+        for child_name in child_names:
+            source_field_path = f"{top_level}.{child_name}"
+            fact = source_facts.get_optional(source_field_path)
+            if fact is None or fact.status != "accepted":
+                missing.append(source_field_path)
+    return tuple(missing)
 
 
 def _extract_product_essence_source_truth(
@@ -1311,7 +1459,7 @@ def _extract_return_attribution_source_truth(
     intermediate: FundDisclosureDocumentContentIntermediate,
     source_provenance: PublicSourceProvenance | None,
     context: FundProcessorDispatchKey,
-) -> FundFieldFamilyResult:
+) -> tuple[FundFieldFamilyResult, AtomicSourceFactStore]:
     """从 proof-positive FDD 正文抽取模板第 2 章收益归因字段族。
 
     Args:
@@ -1320,30 +1468,35 @@ def _extract_return_attribution_source_truth(
         context: Processor dispatch 身份。
 
     Returns:
-        `return_attribution.v1` 字段族；只包含 Slice 2 允许的三个 public top-level key。
+        `return_attribution.v1` 字段族和已采信 child output paths 的 atomic facts；
+        字段族只包含 Slice 2 允许的三个 public top-level key。
 
     Raises:
         无显式抛出。
     """
 
     selected_values, ambiguous_paths = _select_return_attribution_values(intermediate, context)
-    value = _build_return_attribution_value(selected_values)
-    gaps = _return_attribution_source_truth_gaps(value, ambiguous_paths)
-    status = _return_attribution_status(value)
+    source_facts = _return_attribution_source_fact_store(selected_values, source_provenance)
+    value = _build_return_attribution_value_from_source_facts(selected_values, source_facts)
+    gaps = _return_attribution_source_truth_gaps(value, ambiguous_paths, source_facts)
+    status = _return_attribution_status(value, source_facts)
     anchors = _dedupe_anchors(
         selected_values[output_path].anchor
         for output_path in _return_attribution_emitted_output_paths(value, selected_values)
     )
-    return FundFieldFamilyResult(
-        field_family_id="return_attribution.v1",
-        chapter_ids=_CHAPTER_IDS["return_attribution.v1"],
-        value=value,
-        status=status,
-        extraction_mode="missing" if status == "missing" else "direct",
-        anchors=anchors,
-        gaps=gaps,
-        source_provenance=source_provenance,
-        candidate_evidence=(),
+    return (
+        FundFieldFamilyResult(
+            field_family_id="return_attribution.v1",
+            chapter_ids=_CHAPTER_IDS["return_attribution.v1"],
+            value=value,
+            status=status,
+            extraction_mode="missing" if status == "missing" else "direct",
+            anchors=anchors,
+            gaps=gaps,
+            source_provenance=source_provenance,
+            candidate_evidence=(),
+        ),
+        source_facts,
     )
 
 
@@ -1351,7 +1504,7 @@ def _extract_manager_profile_source_truth(
     intermediate: FundDisclosureDocumentContentIntermediate,
     source_provenance: PublicSourceProvenance | None,
     context: FundProcessorDispatchKey,
-) -> FundFieldFamilyResult:
+) -> tuple[FundFieldFamilyResult, AtomicSourceFactStore]:
     """从 proof-positive FDD 正文抽取模板第 3 章基金经理画像字段族。
 
     Args:
@@ -1360,30 +1513,35 @@ def _extract_manager_profile_source_truth(
         context: Processor dispatch 身份。
 
     Returns:
-        `manager_profile.v1` 字段族；Slice 3 包含五个已授权 top-level subvalues。
+        `manager_profile.v1` 字段族和已采信 child output paths 的 atomic facts；
+        Slice 3 包含五个已授权 top-level subvalues。
 
     Raises:
         无显式抛出。
     """
 
     selected_values, ambiguous_paths = _select_manager_profile_values(intermediate, context)
-    value = _build_manager_profile_value(selected_values)
-    gaps = _manager_profile_source_truth_gaps(value, ambiguous_paths)
-    status = _manager_profile_status(value, ambiguous_paths)
+    source_facts = _manager_profile_source_fact_store(selected_values, source_provenance)
+    value = _build_manager_profile_value_from_source_facts(selected_values, source_facts)
+    gaps = _manager_profile_source_truth_gaps(value, ambiguous_paths, source_facts)
+    status = _manager_profile_status(value, ambiguous_paths, source_facts)
     anchors = _dedupe_anchors(
         selected_values[output_path].anchor
         for output_path in _manager_profile_emitted_output_paths(value, selected_values)
     )
-    return FundFieldFamilyResult(
-        field_family_id="manager_profile.v1",
-        chapter_ids=_CHAPTER_IDS["manager_profile.v1"],
-        value=value,
-        status=status,
-        extraction_mode="missing" if status == "missing" else "direct",
-        anchors=anchors,
-        gaps=gaps,
-        source_provenance=source_provenance,
-        candidate_evidence=(),
+    return (
+        FundFieldFamilyResult(
+            field_family_id="manager_profile.v1",
+            chapter_ids=_CHAPTER_IDS["manager_profile.v1"],
+            value=value,
+            status=status,
+            extraction_mode="missing" if status == "missing" else "direct",
+            anchors=anchors,
+            gaps=gaps,
+            source_provenance=source_provenance,
+            candidate_evidence=(),
+        ),
+        source_facts,
     )
 
 
@@ -1766,6 +1924,7 @@ def _select_manager_profile_strategy_text(
         value=value,
         anchor=anchor,
         source_field_path="manager_strategy_text",
+        child_candidates=tuple(selected[output_path] for output_path in sorted(selected)),
     )
 
 
@@ -2068,6 +2227,11 @@ def _select_manager_profile_alignment(
         value=value,
         anchor=anchor,
         source_field_path=source_field_path,
+        child_candidates=tuple(
+            candidate
+            for candidate in (selected_manager, selected_employee)
+            if candidate is not None
+        ),
     )
 
 
@@ -2687,6 +2851,54 @@ def _build_manager_profile_value(
     return {"schema_version": "manager_profile.v1", **value}
 
 
+def _build_manager_profile_value_from_source_facts(
+    selected_values: dict[str, _ManagerProfileValueCandidate],
+    source_facts: AtomicSourceFactStore,
+) -> dict[str, object]:
+    """从 atomic facts 构造 manager_profile.v1 兼容 value。
+
+    Args:
+        selected_values: 已解析的输出路径值。
+        source_facts: 当前 FDD direct route 的 atomic source facts。
+
+    Returns:
+        迁移复合字段来自 atomic facts，非迁移字段沿用既有 selected values。
+
+    Raises:
+        无显式抛出。
+    """
+
+    value: dict[str, object] = {}
+    for top_level in _MANAGER_PROFILE_REQUIRED_TOP_LEVEL:
+        if top_level == "manager_strategy_text":
+            strategy_text = _composite_value_from_source_facts(
+                source_facts,
+                "manager_strategy_text",
+                ("strategy_summary", "market_outlook"),
+                require_all=False,
+            )
+            if strategy_text is not None:
+                value[top_level] = strategy_text
+            continue
+        if top_level == "manager_alignment":
+            manager_alignment = _composite_value_from_source_facts(
+                source_facts,
+                "manager_alignment",
+                ("manager_holding", "employee_holding"),
+                require_all=False,
+            )
+            if manager_alignment is not None:
+                manager_alignment["judgment"] = None
+                value[top_level] = manager_alignment
+            continue
+        selected = selected_values.get(top_level)
+        if selected is not None:
+            value[top_level] = selected.value
+    if not value:
+        return {}
+    return {"schema_version": "manager_profile.v1", **value}
+
+
 def _manager_profile_emitted_output_paths(
     value: dict[str, object],
     selected_values: dict[str, _ManagerProfileValueCandidate],
@@ -2711,15 +2923,52 @@ def _manager_profile_emitted_output_paths(
     )
 
 
+def _manager_profile_source_fact_store(
+    selected_values: dict[str, _ManagerProfileValueCandidate],
+    source_provenance: PublicSourceProvenance | None,
+) -> AtomicSourceFactStore:
+    """从 FDD manager_profile proof-positive child paths 构造 atomic facts。
+
+    Args:
+        selected_values: 已解析的输出路径值。
+        source_provenance: 公共来源 provenance。
+
+    Returns:
+        只包含已采信 migrated child paths 的 atomic source fact store。
+
+    Raises:
+        ValueError: 当 fact id 冲突时由 store 抛出。
+    """
+
+    facts: list[AtomicSourceFact] = []
+    for top_level in ("manager_strategy_text", "manager_alignment"):
+        selected = selected_values.get(top_level)
+        if selected is None:
+            continue
+        facts.extend(
+            _source_fact_from_candidate(
+                fact_id=child.output_path,
+                family_id="manager_profile.v1",
+                value=child.value,
+                anchor=child.anchor,
+                source_provenance=source_provenance,
+            )
+            for child in selected.child_candidates
+        )
+    return AtomicSourceFactStore(tuple(facts))
+
+
 def _manager_profile_source_truth_gaps(
     value: dict[str, object],
     ambiguous_paths: set[str],
+    source_facts: AtomicSourceFactStore,
 ) -> tuple[FundExtractionGap, ...]:
     """构造 manager_profile.v1 source-truth 字段族本地 gaps。
 
     Args:
         value: 已构造的字段族 value。
         ambiguous_paths: 发生 duplicate ambiguity 的输出路径集合。
+        source_facts: 当前 FDD direct route atomic source facts。
 
     Returns:
         missing/partial/ambiguity gaps。
@@ -2742,6 +2991,11 @@ def _manager_profile_source_truth_gaps(
         )
     missing_top_level = tuple(
         top_level for top_level in _MANAGER_PROFILE_REQUIRED_TOP_LEVEL if top_level not in value
+    )
+    missing_child_paths = _missing_required_child_source_field_paths(
+        value,
+        source_facts,
+        _MANAGER_PROFILE_REQUIRED_CHILD_SOURCE_FIELDS,
     )
     if not value:
         gaps.append(
@@ -2766,15 +3020,32 @@ def _manager_profile_source_truth_gaps(
             )
             for top_level in missing_top_level
         )
+    if value and missing_child_paths:
+        gaps.extend(
+            FundExtractionGap(
+                gap_code="field_family_partial",
+                message=f"manager_profile.v1 缺少 required child source fact: {source_field_path}",
+                field_family_id="manager_profile.v1",
+                source_field_path=source_field_path,
+                source_boundary="annual_report",
+                required=True,
+            )
+            for source_field_path in missing_child_paths
+        )
     return tuple(gaps)
 
 
-def _manager_profile_status(value: dict[str, object], ambiguous_paths: set[str]) -> str:
+def _manager_profile_status(
+    value: dict[str, object],
+    ambiguous_paths: set[str],
+    source_facts: AtomicSourceFactStore,
+) -> str:
     """按五个 top-level 完整度派生 manager_profile 字段族状态。
 
     Args:
         value: 已构造的字段族 value。
         ambiguous_paths: 已发现的歧义输出路径集合。
+        source_facts: 当前 FDD direct route atomic source facts。
 
     Returns:
         `accepted`、`partial` 或 `missing`。
@@ -2783,7 +3054,16 @@ def _manager_profile_status(value: dict[str, object], ambiguous_paths: set[str])
         无显式抛出。
     """
 
-    if all(top_level in value for top_level in _MANAGER_PROFILE_REQUIRED_TOP_LEVEL) and not ambiguous_paths:
+    missing_child_paths = _missing_required_child_source_field_paths(
+        value,
+        source_facts,
+        _MANAGER_PROFILE_REQUIRED_CHILD_SOURCE_FIELDS,
+    )
+    if (
+        all(top_level in value for top_level in _MANAGER_PROFILE_REQUIRED_TOP_LEVEL)
+        and not ambiguous_paths
+        and not missing_child_paths
+    ):
         return "accepted"
     if value:
         return "partial"
@@ -3593,6 +3873,48 @@ def _build_return_attribution_value(
     return {"schema_version": "return_attribution.v1", **value}
 
 
+def _build_return_attribution_value_from_source_facts(
+    selected_values: dict[str, _ReturnAttributionValueCandidate],
+    source_facts: AtomicSourceFactStore,
+) -> dict[str, object]:
+    """从 atomic facts 构造 return_attribution.v1 兼容 value。
+
+    Args:
+        selected_values: 已解析的输出路径值。
+        source_facts: 当前 FDD direct route 的 atomic source facts。
+
+    Returns:
+        由 atomic facts 组装迁移复合字段、由既有候选保留非迁移字段的 value。
+
+    Raises:
+        无显式抛出。
+    """
+
+    value: dict[str, object] = {}
+    nav_benchmark = _composite_value_from_source_facts(
+        source_facts,
+        "nav_benchmark_performance",
+        ("nav_growth_rate", "benchmark_return_rate"),
+        require_all=True,
+    )
+    fee_schedule = _composite_value_from_source_facts(
+        source_facts,
+        "fee_schedule",
+        ("management_fee", "custody_fee"),
+        require_all=False,
+    )
+    tracking_error = _build_return_attribution_tracking_error_value(selected_values)
+    if nav_benchmark is not None:
+        value["nav_benchmark_performance"] = nav_benchmark
+    if fee_schedule is not None:
+        value["fee_schedule"] = fee_schedule
+    if tracking_error is not None:
+        value["tracking_error"] = tracking_error
+    if not value:
+        return {}
+    return {"schema_version": "return_attribution.v1", **value}
+
+
 def _build_return_attribution_nav_benchmark_value(
     selected_values: dict[str, _ReturnAttributionValueCandidate],
 ) -> dict[str, object] | None:
@@ -3693,6 +4015,44 @@ def _selected_return_attribution_value(
     return candidate.value
 
 
+def _return_attribution_source_fact_store(
+    selected_values: dict[str, _ReturnAttributionValueCandidate],
+    source_provenance: PublicSourceProvenance | None,
+) -> AtomicSourceFactStore:
+    """从 FDD return_attribution proof-positive child paths 构造 atomic facts。
+
+    Args:
+        selected_values: 已解析的输出路径值。
+        source_provenance: 公共来源 provenance。
+
+    Returns:
+        只包含已采信 migrated child paths 的 atomic source fact store。
+
+    Raises:
+        ValueError: 当 fact id 冲突时由 store 抛出。
+    """
+
+    fact_ids = (
+        "fee_schedule.management_fee",
+        "fee_schedule.custody_fee",
+        "nav_benchmark_performance.nav_growth_rate",
+        "nav_benchmark_performance.benchmark_return_rate",
+    )
+    return AtomicSourceFactStore(
+        tuple(
+            _source_fact_from_candidate(
+                fact_id=fact_id,
+                family_id="return_attribution.v1",
+                value=candidate.value,
+                anchor=candidate.anchor,
+                source_provenance=source_provenance,
+            )
+            for fact_id in fact_ids
+            if (candidate := selected_values.get(fact_id)) is not None
+        )
+    )
+
+
 def _return_attribution_emitted_output_paths(
     value: dict[str, object],
     selected_values: dict[str, _ReturnAttributionValueCandidate],
@@ -3735,12 +4095,14 @@ def _return_attribution_emitted_output_paths(
 def _return_attribution_source_truth_gaps(
     value: dict[str, object],
     ambiguous_paths: set[str],
+    source_facts: AtomicSourceFactStore,
 ) -> tuple[FundExtractionGap, ...]:
     """构造 return_attribution.v1 source-truth 字段族本地 gaps。
 
     Args:
         value: 已构造的字段族 value。
         ambiguous_paths: 发生 duplicate ambiguity 的输出路径集合。
+        source_facts: 当前 FDD direct route atomic source facts。
 
     Returns:
         missing/partial/ambiguity gaps。
@@ -3766,6 +4128,11 @@ def _return_attribution_source_truth_gaps(
         for top_level in _RETURN_ATTRIBUTION_REQUIRED_TOP_LEVEL
         if top_level not in value
     )
+    missing_child_paths = _missing_required_child_source_field_paths(
+        value,
+        source_facts,
+        _RETURN_ATTRIBUTION_REQUIRED_CHILD_SOURCE_FIELDS,
+    )
     if not value:
         gaps.append(
             FundExtractionGap(
@@ -3789,14 +4156,30 @@ def _return_attribution_source_truth_gaps(
             )
             for top_level in missing_top_level
         )
+    if value and missing_child_paths:
+        gaps.extend(
+            FundExtractionGap(
+                gap_code="field_family_partial",
+                message=f"return_attribution.v1 缺少 required child source fact: {source_field_path}",
+                field_family_id="return_attribution.v1",
+                source_field_path=source_field_path,
+                source_boundary="annual_report",
+                required=True,
+            )
+            for source_field_path in missing_child_paths
+        )
     return tuple(gaps)
 
 
-def _return_attribution_status(value: dict[str, object]) -> str:
+def _return_attribution_status(
+    value: dict[str, object],
+    source_facts: AtomicSourceFactStore,
+) -> str:
     """按 Slice 2 top-level 完整度派生字段族状态。
 
     Args:
         value: 已构造的字段族 value。
+        source_facts: 当前 FDD direct route atomic source facts。
 
     Returns:
         `accepted`、`partial` 或 `missing`。
@@ -3805,7 +4188,15 @@ def _return_attribution_status(value: dict[str, object]) -> str:
         无显式抛出。
     """
 
-    if all(top_level in value for top_level in _RETURN_ATTRIBUTION_REQUIRED_TOP_LEVEL):
+    missing_child_paths = _missing_required_child_source_field_paths(
+        value,
+        source_facts,
+        _RETURN_ATTRIBUTION_REQUIRED_CHILD_SOURCE_FIELDS,
+    )
+    if (
+        all(top_level in value for top_level in _RETURN_ATTRIBUTION_REQUIRED_TOP_LEVEL)
+        and not missing_child_paths
+    ):
         return "accepted"
     if value:
         return "partial"

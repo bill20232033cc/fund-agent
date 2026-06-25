@@ -1767,6 +1767,7 @@ def test_return_attribution_source_truth_route_suppresses_candidate_evidence() -
     assert family.value == {}
     assert family.anchors == ()
     assert family.candidate_evidence == ()
+    assert result.source_facts.facts == {}
     assert _gap_codes(family) == {"field_family_missing"}
 
 
@@ -1983,6 +1984,27 @@ def test_return_attribution_source_truth_extracts_exact_value_shape() -> None:
     assert tracking_error.input_period_complete
     assert "直接披露" in tracking_error.provenance_note
     assert family.gaps == ()
+    assert set(result.source_facts.facts) >= {
+        "fee_schedule.management_fee",
+        "fee_schedule.custody_fee",
+        "nav_benchmark_performance.nav_growth_rate",
+        "nav_benchmark_performance.benchmark_return_rate",
+    }
+    for fact_id in (
+        "fee_schedule.management_fee",
+        "fee_schedule.custody_fee",
+        "nav_benchmark_performance.nav_growth_rate",
+        "nav_benchmark_performance.benchmark_return_rate",
+    ):
+        fact = result.source_facts.get_required(fact_id)
+        assert fact.fact_id == fact.source_field_path == fact_id
+        assert fact.family_id == "return_attribution.v1"
+        assert fact.status == "accepted"
+        assert fact.extraction_mode == "direct"
+        assert fact.provenance == _provenance()
+        assert fact.anchors
+        assert fact.anchors[0].row_locator is not None
+        assert f"field={fact_id};" in fact.anchors[0].row_locator
     assert len(family.anchors) == 5
     assert {anchor.source_kind for anchor in family.anchors} == {"annual_report"}
 
@@ -2027,6 +2049,67 @@ def test_return_attribution_source_truth_partial_when_required_groups_missing() 
     assert set(family.value) == {"schema_version", "nav_benchmark_performance"}
     assert _gap_codes(family) == {"field_family_partial"}
     assert {gap.source_field_path for gap in family.gaps} == {"fee_schedule", "tracking_error"}
+
+
+def test_return_attribution_source_truth_partial_when_fee_child_missing() -> None:
+    """top-level 齐全但 fee_schedule child 缺失时不得 accepted。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 missing child 被 top-level dict 掩盖时抛出。
+    """
+
+    cells = (
+        _return_attribution_cell(
+            "基金份额净值增长率",
+            "8.00%",
+            row_index=0,
+            column_index=1,
+            label_axis="column",
+        ),
+        _return_attribution_cell(
+            "业绩比较基准收益率",
+            "6.00%",
+            row_index=0,
+            column_index=2,
+            label_axis="column",
+        ),
+        _return_attribution_cell("管理费率", "1.50%", row_index=1),
+        _return_attribution_cell(
+            "年化跟踪误差",
+            "0.45%",
+            row_index=2,
+            column_index=1,
+            label_axis="column",
+        ),
+    )
+
+    result = _return_attribution_source_truth_result(
+        _source_truth_content_intermediate(cells=cells)
+    )
+    family = _field_family(result, "return_attribution.v1")
+
+    assert family.status == "partial"
+    assert set(family.value) == {
+        "schema_version",
+        "nav_benchmark_performance",
+        "fee_schedule",
+        "tracking_error",
+    }
+    assert family.value["fee_schedule"] == {
+        "management_fee": "1.50%",
+        "custody_fee": None,
+    }
+    assert {gap.source_field_path for gap in family.gaps} == {
+        "fee_schedule.custody_fee",
+    }
+    assert "fee_schedule.management_fee" in result.source_facts.facts
+    assert "fee_schedule.custody_fee" not in result.source_facts.facts
 
 
 def test_return_attribution_source_truth_missing_when_no_allowed_labels() -> None:
@@ -2367,6 +2450,7 @@ def test_return_attribution_selector_adds_candidate_evidence_only() -> None:
     assert family.extraction_mode == "missing"
     assert family.value == {}
     assert family.anchors == ()
+    assert result.source_facts.facts == {}
     assert family.gaps[0].gap_code == "candidate_only_not_source_truth"
     assert "sections[0]" in paths
     assert "paragraph_blocks[0]" in paths
@@ -3017,6 +3101,23 @@ def test_manager_profile_source_truth_extracts_roster_strategy_turnover_shape() 
     assert "turnover_or_style_drift_risk" in core_risk.value
     assert core_risk.value["turnover_or_style_drift_risk"]["risk_disclosure_text"] == "123.45%"
     assert core_risk.anchors
+    assert set(result.source_facts.facts) >= {
+        "manager_strategy_text.strategy_summary",
+        "manager_strategy_text.market_outlook",
+    }
+    for fact_id in (
+        "manager_strategy_text.strategy_summary",
+        "manager_strategy_text.market_outlook",
+    ):
+        fact = result.source_facts.get_required(fact_id)
+        assert fact.fact_id == fact.source_field_path == fact_id
+        assert fact.family_id == "manager_profile.v1"
+        assert fact.status == "accepted"
+        assert fact.extraction_mode == "direct"
+        assert fact.provenance == _provenance()
+        assert fact.anchors
+        assert fact.anchors[0].row_locator is not None
+        assert f"field={fact_id};" in fact.anchors[0].row_locator
 
 
 def test_manager_profile_source_truth_partial_when_required_groups_missing() -> None:
@@ -3066,15 +3167,172 @@ def test_manager_profile_source_truth_partial_when_required_groups_missing() -> 
         "strategy_summary": "本报告期采用自下而上的选股策略。",
         "market_outlook": None,
     }
+    assert set(result.source_facts.facts) == {"manager_strategy_text.strategy_summary"}
+    strategy_fact = result.source_facts.get_required("manager_strategy_text.strategy_summary")
+    assert strategy_fact.value == "本报告期采用自下而上的选股策略。"
+    assert strategy_fact.anchors
+    assert "field=manager_strategy_text.strategy_summary;" in (
+        strategy_fact.anchors[0].row_locator or ""
+    )
     assert "turnover_rate" not in family.value
     assert "portfolio_managers" not in family.value
     assert "turnover_rate" not in family.value
     assert {gap.source_field_path for gap in family.gaps} == {
         "portfolio_managers",
+        "manager_strategy_text.market_outlook",
         "turnover_rate",
         "manager_alignment",
         "holdings_snapshot",
     }
+
+
+def test_manager_profile_source_truth_partial_when_strategy_child_missing() -> None:
+    """top-level 齐全但 manager_strategy_text child 缺失时不得 accepted。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 missing child 被 top-level dict 掩盖时抛出。
+    """
+
+    roster_table = _TableStub(
+        table_id="table-roster",
+        section_id="section-manager",
+        heading_text="基金经理情况",
+        table_caption_or_nearby_heading="基金经理情况",
+        heading_path=("基金管理人及基金经理情况",),
+        cells=(
+            _manager_profile_cell("姓名", "张三", row_index=0, column_index=0),
+            _manager_profile_cell("职务", "基金经理", row_index=0, column_index=1),
+            _manager_profile_cell("任职日期", "2020-01-01", row_index=0, column_index=2),
+        ),
+    )
+    turnover_table = _TableStub(
+        table_id="table-turnover",
+        section_id="section-turnover",
+        heading_text="报告期内股票换手率",
+        table_caption_or_nearby_heading="报告期内股票换手率",
+        heading_path=("交易情况",),
+        cells=(
+            _manager_profile_cell(
+                "报告期内股票换手率",
+                "123.45%",
+                row_index=0,
+                column_index=1,
+                table_id="table-turnover",
+                label_axis="row",
+            ),
+            _manager_profile_cell(
+                "换手率计算口径",
+                "双边成交金额除以平均股票市值",
+                row_index=1,
+                column_index=1,
+                table_id="table-turnover",
+                label_axis="row",
+            ),
+        ),
+    )
+    top_holdings_table = _TableStub(
+        table_id="table-top-holdings",
+        section_id="section-holdings",
+        heading_text="前十名股票投资明细",
+        table_caption_or_nearby_heading="前十名股票投资明细",
+        heading_path=("投资组合", "前十名股票投资明细"),
+        cells=(
+            _manager_profile_holdings_cell(
+                "股票代码",
+                "600000",
+                row_index=0,
+                column_index=0,
+                table_id="table-top-holdings",
+            ),
+            _manager_profile_holdings_cell(
+                "股票名称",
+                "浦发银行",
+                row_index=0,
+                column_index=1,
+                table_id="table-top-holdings",
+            ),
+        ),
+    )
+    industry_table = _TableStub(
+        table_id="table-industry",
+        section_id="section-industry",
+        heading_text="报告期末按行业分类的股票投资组合",
+        table_caption_or_nearby_heading="报告期末按行业分类的股票投资组合",
+        heading_path=("投资组合", "报告期末按行业分类的股票投资组合"),
+        cells=(
+            _manager_profile_holdings_cell(
+                "行业类别",
+                "制造业",
+                row_index=0,
+                column_index=0,
+                table_id="table-industry",
+            ),
+            _manager_profile_holdings_cell(
+                "占基金资产净值比例",
+                "12.34%",
+                row_index=0,
+                column_index=1,
+                table_id="table-industry",
+            ),
+        ),
+    )
+    strategy = _ParagraphStub(
+        block_id="paragraph-strategy",
+        section_id="section-strategy",
+        heading_path=("报告期内基金投资策略和运作分析",),
+        text_raw="本报告期坚持均衡配置。",
+        text_normalized="本报告期坚持均衡配置。",
+    )
+    manager_holding = _ParagraphStub(
+        block_id="paragraph-manager-holding",
+        section_id="section-alignment",
+        heading_path=("基金经理持有本基金情况",),
+        text_raw="本基金基金经理持有本开放式基金份额区间为100万份以上。",
+        text_normalized="本基金基金经理持有本开放式基金份额区间为100万份以上。",
+    )
+    employee_holding = _ParagraphStub(
+        block_id="paragraph-employee-holding",
+        section_id="section-alignment",
+        heading_path=("基金管理人从业人员持有本基金情况",),
+        text_raw="基金管理人所有从业人员持有本基金份额区间为50万份至100万份。",
+        text_normalized="基金管理人所有从业人员持有本基金份额区间为50万份至100万份。",
+    )
+
+    result = _manager_profile_source_truth_result(
+        _ContentIntermediateStub(
+            source_provenance=_provenance(),
+            source_truth_admission=_source_truth_admission_proof(),
+            sections=(),
+            paragraph_blocks=(strategy, manager_holding, employee_holding),
+            table_blocks=(roster_table, turnover_table, top_holdings_table, industry_table),
+        )
+    )
+    family = _field_family(result, "manager_profile.v1")
+
+    assert family.status == "partial"
+    assert set(family.value) == {
+        "schema_version",
+        "portfolio_managers",
+        "manager_strategy_text",
+        "turnover_rate",
+        "manager_alignment",
+        "holdings_snapshot",
+    }
+    assert family.value["manager_strategy_text"] == {
+        "strategy_summary": "本报告期坚持均衡配置。",
+        "market_outlook": None,
+    }
+    assert {gap.source_field_path for gap in family.gaps} == {
+        "manager_strategy_text.market_outlook",
+    }
+    assert "manager_strategy_text.strategy_summary" in result.source_facts.facts
+    assert "manager_strategy_text.market_outlook" not in result.source_facts.facts
 
 
 def test_manager_profile_source_truth_missing_when_no_allowed_labels() -> None:
@@ -3536,6 +3794,18 @@ def test_manager_profile_source_truth_extracts_alignment_without_judgment() -> N
         "employee_holding": "基金管理人所有从业人员持有本基金份额区间为50万份至100万份。",
         "judgment": None,
     }
+    assert set(result.source_facts.facts) >= {
+        "manager_alignment.manager_holding",
+        "manager_alignment.employee_holding",
+    }
+    assert (
+        result.source_facts.get_required("manager_alignment.manager_holding").value
+        == "本基金基金经理持有本开放式基金份额区间为100万份以上。"
+    )
+    assert (
+        result.source_facts.get_required("manager_alignment.employee_holding").value
+        == "基金管理人所有从业人员持有本基金份额区间为50万份至100万份。"
+    )
     assert "利益一致" not in str(alignment)
     assert {gap.source_field_path for gap in family.gaps} == {
         "portfolio_managers",
@@ -3825,9 +4095,27 @@ def test_manager_profile_source_truth_accepted_when_all_allowed_groups_present()
         table_caption_or_nearby_heading="前十名股票投资明细",
         heading_path=("投资组合", "前十名股票投资明细"),
         cells=(
-            _manager_profile_holdings_cell("股票代码", "600000", row_index=0, column_index=0, table_id="table-top-holdings"),
-            _manager_profile_holdings_cell("股票名称", "浦发银行", row_index=0, column_index=1, table_id="table-top-holdings"),
-            _manager_profile_holdings_cell("公允价值", "1,234.56", row_index=0, column_index=2, table_id="table-top-holdings"),
+            _manager_profile_holdings_cell(
+                "股票代码",
+                "600000",
+                row_index=0,
+                column_index=0,
+                table_id="table-top-holdings",
+            ),
+            _manager_profile_holdings_cell(
+                "股票名称",
+                "浦发银行",
+                row_index=0,
+                column_index=1,
+                table_id="table-top-holdings",
+            ),
+            _manager_profile_holdings_cell(
+                "公允价值",
+                "1,234.56",
+                row_index=0,
+                column_index=2,
+                table_id="table-top-holdings",
+            ),
         ),
     )
     strategy = _ParagraphStub(
@@ -3837,12 +4125,26 @@ def test_manager_profile_source_truth_accepted_when_all_allowed_groups_present()
         text_raw="本报告期坚持均衡配置。",
         text_normalized="本报告期坚持均衡配置。",
     )
-    alignment = _ParagraphStub(
-        block_id="paragraph-alignment",
+    outlook = _ParagraphStub(
+        block_id="paragraph-outlook",
+        section_id="section-outlook",
+        heading_path=("后市展望",),
+        text_raw="后续将关注基本面变化。",
+        text_normalized="后续将关注基本面变化。",
+    )
+    manager_holding = _ParagraphStub(
+        block_id="paragraph-manager-holding",
         section_id="section-alignment",
         heading_path=("基金经理持有本基金情况",),
         text_raw="基金经理持有本基金份额区间为100万份以上。",
         text_normalized="基金经理持有本基金份额区间为100万份以上。",
+    )
+    employee_holding = _ParagraphStub(
+        block_id="paragraph-employee-holding",
+        section_id="section-alignment",
+        heading_path=("基金管理人从业人员持有本基金情况",),
+        text_raw="基金管理人所有从业人员持有本基金份额区间为50万份至100万份。",
+        text_normalized="基金管理人所有从业人员持有本基金份额区间为50万份至100万份。",
     )
 
     result = _manager_profile_source_truth_result(
@@ -3850,7 +4152,7 @@ def test_manager_profile_source_truth_accepted_when_all_allowed_groups_present()
             source_provenance=_provenance(),
             source_truth_admission=_source_truth_admission_proof(),
             sections=(),
-            paragraph_blocks=(strategy, alignment),
+            paragraph_blocks=(strategy, outlook, manager_holding, employee_holding),
             table_blocks=(roster_table, turnover_table, top_table),
         )
     )

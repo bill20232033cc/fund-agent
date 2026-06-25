@@ -8,7 +8,7 @@ Service/UI/Host。
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import ClassVar, Literal, Protocol, runtime_checkable
 
 from fund_agent.fund.documents.models import (
@@ -19,6 +19,7 @@ from fund_agent.fund.documents.models import (
 from fund_agent.fund.extractors.models import EvidenceAnchor
 from fund_agent.fund.fund_type import FundType
 from fund_agent.fund.source_provenance import PublicSourceProvenance
+from fund_agent.fund.source_facts import AtomicSourceFactStore, empty_atomic_source_fact_store
 
 FundReportType = Literal["annual_report"]
 FundIntermediateKind = Literal[
@@ -640,6 +641,7 @@ class FundProcessorResult:
         source_provenance: 公共来源 provenance。
         candidate_boundary: 候选边界状态；S1 生产路径为 `None`。
         contract_status: 整体契约状态。
+        source_facts: Processor 输出的 atomic source facts 真源面。
 
     Raises:
         ValueError: 当 result-level gaps 错收字段族本地缺口时抛出。
@@ -658,6 +660,7 @@ class FundProcessorResult:
     source_provenance: PublicSourceProvenance | None
     candidate_boundary: CandidateBoundaryStatus | None
     contract_status: FundProcessorContractStatus
+    source_facts: AtomicSourceFactStore = field(default_factory=empty_atomic_source_fact_store)
 
     def __post_init__(self) -> None:
         """校验 result-level gaps 只承载跨字段族缺口。

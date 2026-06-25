@@ -11,11 +11,23 @@ from __future__ import annotations
 
 import hashlib
 import json
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, Final, Literal, TypeGuard, get_args
 
-from fund_agent.fund.extractors.models import EvidenceAnchor, ExtractedField
+from fund_agent.fund.extractors.models import (
+    BondRiskEvidenceAnchorRef,
+    BondRiskEvidenceValue,
+    EvidenceAnchor,
+    ExtractedField,
+)
 from fund_agent.fund.fund_type import FundType
+from fund_agent.fund.source_facts import (
+    AtomicSourceFact,
+    AtomicSourceFactStore,
+    CompositeAnalysisView,
+    build_composite_analysis_view,
+    empty_atomic_source_fact_store,
+)
 from fund_agent.fund.template.contracts import (
     ChapterContract,
     LensKey,
@@ -92,6 +104,27 @@ _ACCEPTED_CHAPTER_CONCLUSIONS_SOURCE_FIELD_ID: Final[str] = (
     "synthetic.accepted_chapter_conclusions"
 )
 _CROSS_PERIOD_COMPARISON_SOURCE_FIELD_ID: Final[str] = "synthetic.cross_period_comparison"
+_ATOMIC_SOURCE_FIELD_ID_PREFIX: Final[str] = "structured."
+_ATOMIC_FACT_FIELD_PATH_PREFIX: Final[str] = "AtomicSourceFact."
+_DERIVED_VIEW_FIELD_PATH_PREFIX: Final[str] = "CompositeAnalysisView."
+_MIGRATED_FIELD_FACT_IDS: Final[dict[str, tuple[str, ...]]] = {
+    "fee_schedule": (
+        "fee_schedule.management_fee",
+        "fee_schedule.custody_fee",
+    ),
+    "nav_benchmark_performance": (
+        "nav_benchmark_performance.nav_growth_rate",
+        "nav_benchmark_performance.benchmark_return_rate",
+    ),
+    "manager_strategy_text": (
+        "manager_strategy_text.strategy_summary",
+        "manager_strategy_text.market_outlook",
+    ),
+    "manager_alignment": (
+        "manager_alignment.manager_holding",
+        "manager_alignment.employee_holding",
+    ),
+}
 
 
 @dataclass(frozen=True, slots=True)
@@ -136,6 +169,8 @@ class ChapterFactEntry:
         missing_reason: 缺失、不可用、不适用或缺锚点原因。
         missing_detail: 面向审计的原因细节。
         required_by: 当前事实支撑的模板或 ITEM_RULE 约束。
+        source_fact_ids: S4 atomic bridge 引用的原子事实 ID；legacy fact 为空。
+        derived_view_id: S4 atomic bridge 引用的复合分析视图 ID；非派生 fact 为空。
     """
 
     fact_id: str
@@ -150,6 +185,8 @@ class ChapterFactEntry:
     missing_reason: ChapterFactMissingReason | None
     missing_detail: str | None
     required_by: tuple[str, ...]
+    source_fact_ids: tuple[str, ...] = ()
+    derived_view_id: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -258,6 +295,8 @@ class ChapterFactProjection:
         classification_basis: 基金类型分类依据。
         chapters: 章节事实输入列表。
         global_missing_reasons: 全局去重后的缺失原因。
+        source_facts: Processor 输出的 atomic source facts 镜像。
+        derived_views: 由 atomic source facts 派生的复合分析视图。
     """
 
     schema_version: ChapterFactSchemaVersion
@@ -267,6 +306,8 @@ class ChapterFactProjection:
     classification_basis: tuple[str, ...]
     chapters: tuple[ChapterFactInput, ...]
     global_missing_reasons: tuple[ChapterFactMissingReason, ...]
+    source_facts: AtomicSourceFactStore = field(default_factory=empty_atomic_source_fact_store)
+    derived_views: tuple[CompositeAnalysisView, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -549,6 +590,8 @@ def project_chapter_facts(
         classification_basis=classification_basis,
         chapters=chapters,
         global_missing_reasons=global_missing_reasons,
+        source_facts=bundle.source_facts,
+        derived_views=_project_composite_analysis_views(bundle.source_facts),
     )
 
 
@@ -867,12 +910,13 @@ def _project_chapter(
     )
     anchor_ids_by_key = {_anchor_key(anchor): anchor.anchor_id for anchor in evidence_anchors}
     facts = tuple(
-        _project_field_fact(
+        fact
+        for spec in specs
+        for fact in _project_field_facts(
             bundle,
             spec=spec,
             anchor_ids_by_key=anchor_ids_by_key,
         )
-        for spec in specs
     ) + _synthetic_missing_facts(bundle, chapter_id)
     _ensure_fact_anchor_refs_exist(facts, evidence_anchors)
     missing_reasons = _unique_reasons(
@@ -1055,14 +1099,92 @@ def _anchors_for_field(
         无显式抛出。
     """
 
-    if spec.field_name == "bond_risk_evidence":
-        return ()
+    atomic_anchors = _atomic_anchors_for_field(bundle.source_facts, spec.field_name)
+    if atomic_anchors:
+        return atomic_anchors
+
     value = getattr(bundle, spec.field_name)
+    if spec.field_name == "bond_risk_evidence" and isinstance(value, ExtractedField):
+        return _bond_risk_evidence_anchors(value)
     if isinstance(value, ExtractedField):
         return value.anchors
     if spec.field_name == "nav_data":
         return _nav_data_anchors(value)
     return ()
+
+
+def _atomic_anchors_for_field(
+    source_facts: AtomicSourceFactStore,
+    field_name: str,
+) -> tuple[EvidenceAnchor, ...]:
+    """读取 migrated 字段的 atomic source fact 锚点，见模板第 2/3 章。
+
+    Args:
+        source_facts: Processor 输出的 atomic source fact store。
+        field_name: `StructuredFundDataBundle` 字段名。
+
+    Returns:
+        已存在 atomic facts 的直接锚点；没有 S4 映射或 store 为空时返回空元组。
+
+    Raises:
+        无显式抛出。
+    """
+
+    fact_ids = _MIGRATED_FIELD_FACT_IDS.get(field_name, ())
+    return tuple(
+        anchor
+        for fact_id in fact_ids
+        for fact in (source_facts.get_optional(fact_id),)
+        if fact is not None
+        for anchor in fact.anchors
+    )
+
+
+def _bond_risk_evidence_anchors(field: ExtractedField[object]) -> tuple[EvidenceAnchor, ...]:
+    """把债券风险组级锚点转换为普通年报锚点，见模板第 6 章核心风险。
+
+    Args:
+        field: `bond_risk_evidence` 抽取字段。
+
+    Returns:
+        可进入章节锚点投影的普通年报锚点。
+
+    Raises:
+        无显式抛出。
+    """
+
+    value = field.value
+    if not isinstance(value, BondRiskEvidenceValue):
+        return ()
+    return tuple(_bond_risk_anchor_ref_to_evidence_anchor(anchor_ref, value) for anchor_ref in value.anchors)
+
+
+def _bond_risk_anchor_ref_to_evidence_anchor(
+    anchor_ref: BondRiskEvidenceAnchorRef,
+    value: BondRiskEvidenceValue,
+) -> EvidenceAnchor:
+    """把债券风险内部锚点引用转换为 extractor 层 EvidenceAnchor。
+
+    Args:
+        anchor_ref: 债券风险组级锚点引用。
+        value: 债券风险证据值。
+
+    Returns:
+        普通年报锚点。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return EvidenceAnchor(
+        source_kind="annual_report",
+        document_year=value.report_year,
+        section_id=anchor_ref.section_id,
+        page_number=anchor_ref.page_number,
+        table_id=anchor_ref.table_id,
+        row_locator=anchor_ref.row_locator,
+        note=f"bond_risk_evidence role={anchor_ref.evidence_role}; source_anchor={anchor_ref.anchor_id}",
+    )
 
 
 def _nav_data_anchors(nav_data: NavDataResult) -> tuple[EvidenceAnchor, ...]:
@@ -1094,12 +1216,12 @@ def _nav_data_anchors(nav_data: NavDataResult) -> tuple[EvidenceAnchor, ...]:
     )
 
 
-def _project_field_fact(
+def _project_field_facts(
     bundle: StructuredFundDataBundle,
     *,
     spec: _ChapterFieldSpec,
     anchor_ids_by_key: dict[tuple[object, ...], str],
-) -> ChapterFactEntry:
+) -> tuple[ChapterFactEntry, ...]:
     """投影单个字段事实，见模板第 0-7 章。
 
     Args:
@@ -1108,25 +1230,352 @@ def _project_field_fact(
         anchor_ids_by_key: 章节内证据锚点 key 到 ID 的映射。
 
     Returns:
-        单个章节事实条目。
+        一个或多个章节事实条目；migrated composite 字段可展开为 atomic facts
+        和 derived view fact。
 
     Raises:
         ValueError: 当字段类型不受支持时抛出。
     """
 
+    atomic_facts = _project_atomic_field_facts(
+        bundle,
+        spec=spec,
+        anchor_ids_by_key=anchor_ids_by_key,
+    )
+    if atomic_facts:
+        return atomic_facts
+
     value = getattr(bundle, spec.field_name)
     if isinstance(value, ExtractedField):
         if spec.field_name == "bond_risk_evidence":
-            return _project_bond_risk_evidence_fact(bundle, spec=spec, field=value)
-        return _project_extracted_field_fact(
-            bundle,
-            spec=spec,
-            field=value,
-            anchor_ids_by_key=anchor_ids_by_key,
+            return (
+                _project_bond_risk_evidence_fact(
+                    bundle,
+                    spec=spec,
+                    field=value,
+                    anchor_ids_by_key=anchor_ids_by_key,
+                ),
+            )
+        return (
+            _project_extracted_field_fact(
+                bundle,
+                spec=spec,
+                field=value,
+                anchor_ids_by_key=anchor_ids_by_key,
+            ),
         )
     if spec.field_name == "nav_data":
-        return _project_nav_data_fact(bundle, spec=spec, nav_data=value, anchor_ids_by_key=anchor_ids_by_key)
+        return (
+            _project_nav_data_fact(bundle, spec=spec, nav_data=value, anchor_ids_by_key=anchor_ids_by_key),
+        )
     raise ValueError(f"不支持的章节事实字段类型：field_name={spec.field_name}")
+
+
+def _project_atomic_field_facts(
+    bundle: StructuredFundDataBundle,
+    *,
+    spec: _ChapterFieldSpec,
+    anchor_ids_by_key: dict[tuple[object, ...], str],
+) -> tuple[ChapterFactEntry, ...]:
+    """投影 migrated 字段的 atomic bridge facts，见模板第 2/3 章。
+
+    Args:
+        bundle: 已抽取完成的结构化基金数据包。
+        spec: 章节字段映射。
+        anchor_ids_by_key: 章节内证据锚点 key 到 ID 的映射。
+
+    Returns:
+        已存在 atomic source facts 的章节事实；只有完整依赖 bundle 存在时才附加
+        derived view fact。没有 migrated 映射或 store 中无对应事实时返回空元组并
+        交回 legacy 投影。
+
+    Raises:
+        无显式抛出。
+    """
+
+    fact_ids = _MIGRATED_FIELD_FACT_IDS.get(spec.field_name, ())
+    existing_facts = tuple(
+        fact
+        for fact_id in fact_ids
+        for fact in (bundle.source_facts.get_optional(fact_id),)
+        if fact is not None
+    )
+    if not existing_facts:
+        return ()
+
+    atomic_entries = tuple(
+        _atomic_fact_entry(
+            bundle,
+            spec=spec,
+            source_fact=fact,
+            anchor_ids_by_key=anchor_ids_by_key,
+        )
+        for fact in existing_facts
+    )
+    derived_view = _composite_analysis_view_for_field(bundle.source_facts, spec.field_name)
+    if derived_view is None:
+        return atomic_entries
+    return (
+        *atomic_entries,
+        _derived_view_fact_entry(
+            bundle,
+            spec=spec,
+            derived_view=derived_view,
+            anchor_ids_by_key=anchor_ids_by_key,
+        ),
+    )
+
+
+def _atomic_fact_entry(
+    bundle: StructuredFundDataBundle,
+    *,
+    spec: _ChapterFieldSpec,
+    source_fact: AtomicSourceFact,
+    anchor_ids_by_key: dict[tuple[object, ...], str],
+) -> ChapterFactEntry:
+    """把单个 atomic source fact 投影为章节事实，见模板第 2/3 章。
+
+    Args:
+        bundle: 已抽取完成的结构化基金数据包。
+        spec: 章节字段映射。
+        source_fact: Processor 输出的原子事实。
+        anchor_ids_by_key: 章节内证据锚点 key 到 ID 的映射。
+
+    Returns:
+        携带 `source_fact_ids=(fact_id,)` 的章节事实。
+
+    Raises:
+        无显式抛出。
+    """
+
+    anchor_ids = _anchor_ids_for_raw_anchors(source_fact.anchors, anchor_ids_by_key)
+    status, missing_reason = _chapter_status_for_source_fact(source_fact)
+    return ChapterFactEntry(
+        fact_id=_fact_id_for(
+            bundle,
+            spec.chapter_id,
+            _atomic_source_field_id(source_fact.fact_id),
+        ),
+        chapter_id=spec.chapter_id,
+        field_path=f"{_ATOMIC_FACT_FIELD_PATH_PREFIX}{source_fact.fact_id}",
+        source_field_id=_atomic_source_field_id(source_fact.fact_id),
+        source_field_name=source_fact.fact_id,
+        status=status,
+        value=source_fact.value,
+        extraction_mode=source_fact.extraction_mode,
+        evidence_anchor_ids=anchor_ids,
+        missing_reason=missing_reason,
+        missing_detail=_source_fact_missing_detail(source_fact),
+        required_by=spec.required_by + tuple(f"ITEM_RULE.{rule_id}" for rule_id in spec.item_rule_ids),
+        source_fact_ids=(source_fact.fact_id,),
+        derived_view_id=None,
+    )
+
+
+def _derived_view_fact_entry(
+    bundle: StructuredFundDataBundle,
+    *,
+    spec: _ChapterFieldSpec,
+    derived_view: CompositeAnalysisView,
+    anchor_ids_by_key: dict[tuple[object, ...], str],
+) -> ChapterFactEntry:
+    """把 CompositeAnalysisView 投影为章节事实，见模板第 2/3 章。
+
+    Args:
+        bundle: 已抽取完成的结构化基金数据包。
+        spec: 章节字段映射。
+        derived_view: 由 atomic source facts 构造的复合分析视图。
+        anchor_ids_by_key: 章节内证据锚点 key 到 ID 的映射。
+
+    Returns:
+        携带 `derived_view_id` 的章节事实。
+
+    Raises:
+        无显式抛出。
+    """
+
+    anchor_ids = _anchor_ids_for_raw_anchors(derived_view.anchors, anchor_ids_by_key)
+    status, missing_reason = _chapter_status_for_derived_view(derived_view)
+    return ChapterFactEntry(
+        fact_id=_fact_id_for(bundle, spec.chapter_id, spec.source_field_id),
+        chapter_id=spec.chapter_id,
+        field_path=f"{_DERIVED_VIEW_FIELD_PATH_PREFIX}{derived_view.view_id}",
+        source_field_id=spec.source_field_id,
+        source_field_name=spec.field_name,
+        status=status,
+        value=derived_view.value,
+        extraction_mode="derived",
+        evidence_anchor_ids=anchor_ids,
+        missing_reason=missing_reason,
+        missing_detail="; ".join(derived_view.gaps) if derived_view.gaps else None,
+        required_by=spec.required_by + tuple(f"ITEM_RULE.{rule_id}" for rule_id in spec.item_rule_ids),
+        source_fact_ids=(),
+        derived_view_id=derived_view.view_id,
+    )
+
+
+def _project_composite_analysis_views(
+    source_facts: AtomicSourceFactStore,
+) -> tuple[CompositeAnalysisView, ...]:
+    """从 atomic source facts 构造 S4 复合分析视图。
+
+    Args:
+        source_facts: Processor 输出的 atomic source fact store。
+
+    Returns:
+        每个完整 migrated composite 字段一个视图；store 中缺少任一 child fact 时
+        不构造视图，避免把 single atomic fact 场景扩展成 partial composite 缺口。
+
+    Raises:
+        ValueError: 当 source fact helper 发现非法依赖 ID 时抛出。
+    """
+
+    return tuple(
+        view
+        for field_name in _MIGRATED_FIELD_FACT_IDS
+        for view in (_composite_analysis_view_for_field(source_facts, field_name),)
+        if view is not None
+    )
+
+
+def _composite_analysis_view_for_field(
+    source_facts: AtomicSourceFactStore,
+    field_name: str,
+) -> CompositeAnalysisView | None:
+    """构造单个 migrated 字段的复合分析视图，见模板第 2/3 章。
+
+    Args:
+        source_facts: Processor 输出的 atomic source fact store。
+        field_name: `StructuredFundDataBundle` 字段名。
+
+    Returns:
+        对应复合分析视图；没有 migrated 映射或缺少任一 child fact 时返回 `None`。
+
+    Raises:
+        ValueError: 当 source fact helper 发现非法依赖 ID 时抛出。
+    """
+
+    dependency_fact_ids = _MIGRATED_FIELD_FACT_IDS.get(field_name, ())
+    if not dependency_fact_ids:
+        return None
+    if not all(source_facts.get_optional(fact_id) is not None for fact_id in dependency_fact_ids):
+        return None
+    return build_composite_analysis_view(
+        view_id=field_name,
+        source_facts=source_facts,
+        dependency_fact_ids=dependency_fact_ids,
+    )
+
+
+def _anchor_ids_for_raw_anchors(
+    anchors: tuple[EvidenceAnchor, ...],
+    anchor_ids_by_key: dict[tuple[object, ...], str],
+) -> tuple[str, ...]:
+    """把 raw EvidenceAnchor 映射为当前章节锚点 ID。
+
+    Args:
+        anchors: Processor / extractor 输出的原始锚点。
+        anchor_ids_by_key: 章节内证据锚点 key 到 ID 的映射。
+
+    Returns:
+        当前章节内已注册的锚点 ID。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return tuple(
+        anchor_id
+        for anchor in anchors
+        for anchor_id in (anchor_ids_by_key.get(_anchor_key(_chapter_anchor_from_raw(anchor, ""))),)
+        if anchor_id is not None
+    )
+
+
+def _chapter_status_for_source_fact(
+    source_fact: AtomicSourceFact,
+) -> tuple[ChapterFactStatus, ChapterFactMissingReason | None]:
+    """把 atomic source fact 状态映射为章节事实状态。
+
+    Args:
+        source_fact: Processor 输出的原子事实。
+
+    Returns:
+        `(chapter_status, missing_reason)`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if source_fact.status == "accepted":
+        return "available", "evidence_missing" if not source_fact.anchors else None
+    if source_fact.status == "missing":
+        return "missing", "field_missing"
+    if source_fact.status == "not_applicable":
+        return "not_applicable", "field_not_applicable"
+    if source_fact.status == "unavailable":
+        return "unavailable", "field_unavailable"
+    return "unknown", "field_missing" if source_fact.gaps else None
+
+
+def _chapter_status_for_derived_view(
+    derived_view: CompositeAnalysisView,
+) -> tuple[ChapterFactStatus, ChapterFactMissingReason | None]:
+    """把 CompositeAnalysisView 状态映射为章节事实状态。
+
+    Args:
+        derived_view: 复合分析视图。
+
+    Returns:
+        `(chapter_status, missing_reason)`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if derived_view.status == "accepted":
+        return "available", "evidence_missing" if not derived_view.anchors else None
+    if derived_view.status == "missing":
+        return "missing", "field_missing"
+    if derived_view.status == "unavailable":
+        return "unavailable", "field_unavailable"
+    return "unknown", "field_missing" if derived_view.gaps else None
+
+
+def _source_fact_missing_detail(source_fact: AtomicSourceFact) -> str | None:
+    """读取 atomic source fact 缺口说明。
+
+    Args:
+        source_fact: Processor 输出的原子事实。
+
+    Returns:
+        缺口说明；无缺口且无证据缺失时返回 `None`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if source_fact.gaps:
+        return "; ".join(source_fact.gaps)
+    if source_fact.status == "accepted" and not source_fact.anchors:
+        return f"{source_fact.fact_id} 有 atomic value 但缺少证据锚点"
+    return None
+
+
+def _atomic_source_field_id(fact_id: str) -> str:
+    """构造章节投影中的 atomic source field id。
+
+    Args:
+        fact_id: 稳定 atomic source fact ID。
+
+    Returns:
+        `structured.<fact_id>` 格式的章节 source field id。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return f"{_ATOMIC_SOURCE_FIELD_ID_PREFIX}{fact_id}"
 
 
 def _project_extracted_field_fact(
@@ -1187,6 +1636,7 @@ def _project_bond_risk_evidence_fact(
     *,
     spec: _ChapterFieldSpec,
     field: ExtractedField[object],
+    anchor_ids_by_key: dict[tuple[object, ...], str],
 ) -> ChapterFactEntry:
     """投影债券风险证据事实，见模板第 6 章“核心风险”。
 
@@ -1194,9 +1644,10 @@ def _project_bond_risk_evidence_fact(
         bundle: 已抽取完成的结构化基金数据包。
         spec: 章节字段映射。
         field: 债券风险证据字段。
+        anchor_ids_by_key: 章节内证据锚点 key 到 ID 的映射。
 
     Returns:
-        单个章节事实条目；组级 anchors 保留在 value 内部，不展开为章节锚点。
+        单个章节事实条目。
 
     Raises:
         无显式抛出。
@@ -1214,15 +1665,28 @@ def _project_bond_risk_evidence_fact(
             missing_reason=missing_reason,
             missing_detail=field.note,
         )
+    anchors = _bond_risk_evidence_anchors(field)
+    collected_anchor_ids: list[str] = []
+    for anchor in anchors:
+        anchor_key = _anchor_key(_chapter_anchor_from_raw(anchor, ""))
+        anchor_id = anchor_ids_by_key.get(anchor_key)
+        if anchor_id is not None:
+            collected_anchor_ids.append(anchor_id)
+    anchor_ids = tuple(collected_anchor_ids)
+    missing_reason: ChapterFactMissingReason | None = None
+    missing_detail: str | None = None
+    if not anchor_ids:
+        missing_reason = "evidence_missing"
+        missing_detail = "bond_risk_evidence 有结构化值但组级锚点未能展开为 ChapterEvidenceAnchor"
     return _fact_entry(
         bundle,
         spec=spec,
         status="available",
         value=field.value,
         extraction_mode=field.extraction_mode,
-        evidence_anchor_ids=(),
-        missing_reason=None,
-        missing_detail="bond_risk_evidence 组级锚点引用保留在 value.anchors 内，未展开为 ChapterEvidenceAnchor",
+        evidence_anchor_ids=anchor_ids,
+        missing_reason=missing_reason,
+        missing_detail=missing_detail,
     )
 
 

@@ -356,8 +356,8 @@ def test_nav_data_three_states() -> None:
     assert _fact(unavailable, "nav_data").missing_reason == "field_unavailable"
 
 
-def test_bond_risk_evidence_group_anchors_kept_in_value_and_not_expanded() -> None:
-    """验证债券风险组级 anchors 保留在 value 内，见模板第 6 章。
+def test_bond_risk_evidence_group_anchors_expand_to_chapter_anchors() -> None:
+    """验证债券风险组级 anchors 展开为章节锚点，见模板第 6 章。
 
     Args:
         无。
@@ -366,7 +366,7 @@ def test_bond_risk_evidence_group_anchors_kept_in_value_and_not_expanded() -> No
         无返回值。
 
     Raises:
-        AssertionError: 当组级 anchors 被误展开为 ChapterEvidenceAnchor 时抛出。
+        AssertionError: 当组级 anchors 未展开为 ChapterEvidenceAnchor 时抛出。
     """
 
     value = _bond_risk_value()
@@ -376,7 +376,7 @@ def test_bond_risk_evidence_group_anchors_kept_in_value_and_not_expanded() -> No
             bond_risk_evidence=ExtractedField(
                 value=value,
                 anchors=(),
-                extraction_mode="derived",
+                extraction_mode="direct",
                 note=None,
             ),
         ),
@@ -387,9 +387,30 @@ def test_bond_risk_evidence_group_anchors_kept_in_value_and_not_expanded() -> No
 
     assert bond_fact.status == "available"
     assert bond_fact.value == value
-    assert bond_fact.evidence_anchor_ids == ()
+    assert bond_fact.evidence_anchor_ids
     assert value.anchors
-    assert all(not anchor.anchor_id.startswith("bond-risk:") for anchor in chapter.evidence_anchors)
+    assert set(bond_fact.evidence_anchor_ids) <= {anchor.anchor_id for anchor in chapter.evidence_anchors}
+    projected_anchor = next(anchor for anchor in chapter.evidence_anchors if anchor.anchor_id in bond_fact.evidence_anchor_ids)
+    assert projected_anchor.source_kind == "annual_report"
+    assert projected_anchor.document_year == 2024
+    assert projected_anchor.section_id == "§8"
+    assert projected_anchor.row_locator == "duration fixture"
+    assert projected_anchor.note == (
+        "bond_risk_evidence role=fixture; "
+        "source_anchor=bond-risk:110011:2024:duration_rate_risk:1"
+    )
+
+
+def test_missing_bond_risk_evidence_still_has_no_chapter_anchors() -> None:
+    """验证缺失债券风险证据不会伪造章节锚点，见模板第 6 章。"""
+
+    projection = project_chapter_facts(_bundle(fund_type="bond_fund"), chapter_ids=(6,))
+    chapter = projection.chapters[0]
+    bond_fact = _fact(chapter, "bond_risk_evidence")
+
+    assert bond_fact.status == "not_applicable"
+    assert bond_fact.evidence_anchor_ids == ()
+    assert all("bond_risk_evidence" not in (anchor.note or "") for anchor in chapter.evidence_anchors)
 
 
 def test_source_kind_unknown_note() -> None:
@@ -454,6 +475,7 @@ def test_projection_does_not_call_repository_or_source_helpers() -> None:
             imports.update(alias.name for alias in node.names)
         if isinstance(node, ast.ImportFrom) and node.module is not None:
             imports.add(node.module)
+    imports.discard("fund_agent.fund.source_facts")
 
     forbidden_fragments = (
         "documents",
@@ -703,7 +725,7 @@ def _bond_risk_value() -> BondRiskEvidenceValue:
             evidence_role="fixture",
         ),
     )
-    contract_status: BondRiskEvidenceContractStatus = "missing"
+    contract_status: BondRiskEvidenceContractStatus = "satisfied"
     return BondRiskEvidenceValue(
         schema_version=BOND_RISK_EVIDENCE_CONTRACT_ID,
         contract_id=BOND_RISK_EVIDENCE_CONTRACT_ID,
@@ -711,8 +733,8 @@ def _bond_risk_value() -> BondRiskEvidenceValue:
         report_year=2024,
         groups=groups,
         anchors=anchors,
-        satisfied_group_ids=(),
-        missing_group_ids=BOND_RISK_EVIDENCE_GROUP_IDS,
+        satisfied_group_ids=BOND_RISK_EVIDENCE_GROUP_IDS,
+        missing_group_ids=(),
         weak_group_ids=(),
         ambiguous_group_ids=(),
         contract_status=contract_status,
@@ -732,19 +754,19 @@ def _bond_risk_group(group_id: BondRiskEvidenceGroupId) -> BondRiskEvidenceGroup
         无显式抛出。
     """
 
-    status: BondRiskEvidenceStatus = "missing"
+    status: BondRiskEvidenceStatus = "accepted"
     return BondRiskEvidenceGroupRecord(
         group_id=group_id,
         status=status,
-        strength="missing",
-        summary="fixture missing",
-        measurement_kind="not_found",
-        metric_name=None,
-        metric_value=None,
+        strength="qualitative_direct",
+        summary="fixture accepted",
+        measurement_kind="risk_disclosure",
+        metric_name="fixture_metric",
+        metric_value="fixture value",
         metric_unit=None,
         period_label=None,
-        source_anchor_ids=(),
-        na_reason="fixture",
+        source_anchor_ids=("bond-risk:110011:2024:duration_rate_risk:1",),
+        na_reason=None,
         reviewer_note=None,
     )
 

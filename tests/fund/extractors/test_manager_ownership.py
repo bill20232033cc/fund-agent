@@ -150,6 +150,20 @@ def test_extract_manager_ownership_outputs_direct_fields_with_anchors() -> None:
         "strategy_summary": "本基金坚持自下而上选择具备长期竞争力的公司。",
         "market_outlook": "将继续关注企业盈利质量和估值匹配度。",
     }
+    assert result.manager_strategy_text_strategy_summary.value == (
+        "本基金坚持自下而上选择具备长期竞争力的公司。"
+    )
+    assert result.manager_strategy_text_strategy_summary.extraction_mode == "direct"
+    assert result.manager_strategy_text_strategy_summary.anchors[0].row_locator == (
+        "source_field_path=manager_strategy_text.strategy_summary; locator=strategy_summary"
+    )
+    assert result.manager_strategy_text_market_outlook.value == (
+        "将继续关注企业盈利质量和估值匹配度。"
+    )
+    assert result.manager_strategy_text_market_outlook.extraction_mode == "direct"
+    assert result.manager_strategy_text_market_outlook.anchors[0].row_locator == (
+        "source_field_path=manager_strategy_text.market_outlook; locator=market_outlook"
+    )
     assert {anchor.section_id for anchor in result.manager_strategy_text.anchors} == {"§4"}
     assert result.turnover_rate.extraction_mode == "direct"
     assert result.turnover_rate.value == {
@@ -167,6 +181,16 @@ def test_extract_manager_ownership_outputs_direct_fields_with_anchors() -> None:
         "employee_holding": "45.67万份",
         "judgment": None,
     }
+    assert result.manager_alignment_manager_holding.value == "12.34万份"
+    assert result.manager_alignment_manager_holding.extraction_mode == "direct"
+    assert result.manager_alignment_manager_holding.anchors[0].row_locator == (
+        "source_field_path=manager_alignment.manager_holding; locator=manager_holding"
+    )
+    assert result.manager_alignment_employee_holding.value == "45.67万份"
+    assert result.manager_alignment_employee_holding.extraction_mode == "direct"
+    assert result.manager_alignment_employee_holding.anchors[0].row_locator == (
+        "source_field_path=manager_alignment.employee_holding; locator=employee_holding"
+    )
     assert {anchor.section_id for anchor in result.manager_alignment.anchors} == {"§9"}
     assert result.holder_structure.extraction_mode == "direct"
     assert result.holder_structure.value == {
@@ -541,6 +565,15 @@ def test_extract_manager_ownership_keeps_partial_direct_values_without_judgment(
         "market_outlook": None,
     }
     assert result.manager_strategy_text.note == "部分子字段缺失，仅抽取到部分信息"
+    assert result.manager_strategy_text_strategy_summary.extraction_mode == "direct"
+    assert result.manager_strategy_text_market_outlook.value is None
+    assert result.manager_strategy_text_market_outlook.extraction_mode == "missing"
+    assert result.manager_strategy_text_market_outlook.anchors == ()
+    assert result.manager_strategy_text_market_outlook.note is not None
+    assert (
+        "source_field_path=manager_strategy_text.market_outlook"
+        in result.manager_strategy_text_market_outlook.note
+    )
     assert result.turnover_rate.extraction_mode == "direct"
     assert result.turnover_rate.value == {
         "turnover_rate": "88.00%",
@@ -548,6 +581,12 @@ def test_extract_manager_ownership_keeps_partial_direct_values_without_judgment(
     }
     assert result.turnover_rate.note is None
     assert result.manager_alignment.extraction_mode == "missing"
+    assert result.manager_alignment_manager_holding.value is None
+    assert result.manager_alignment_manager_holding.extraction_mode == "missing"
+    assert result.manager_alignment_manager_holding.anchors == ()
+    assert result.manager_alignment_employee_holding.value is None
+    assert result.manager_alignment_employee_holding.extraction_mode == "missing"
+    assert result.manager_alignment_employee_holding.anchors == ()
     assert result.holder_structure.extraction_mode == "direct"
     assert result.holder_structure.value == {
         "institutional_holder": "60.00%",

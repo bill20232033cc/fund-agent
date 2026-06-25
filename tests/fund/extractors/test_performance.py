@@ -208,6 +208,17 @@ def test_extract_performance_outputs_nav_and_benchmark_with_anchors() -> None:
     assert all(anchor.note is not None for anchor in result.nav_benchmark_performance.anchors)
     anchor_labels = {anchor.row_locator for anchor in result.nav_benchmark_performance.anchors}
     assert {"nav_growth_rate", "benchmark_return_rate"} <= anchor_labels
+    assert result.nav_benchmark_performance_nav_growth_rate.value == "12.34%"
+    assert result.nav_benchmark_performance_nav_growth_rate.extraction_mode == "direct"
+    assert result.nav_benchmark_performance_nav_growth_rate.anchors[0].row_locator == (
+        "source_field_path=nav_benchmark_performance.nav_growth_rate; locator=nav_growth_rate"
+    )
+    assert result.nav_benchmark_performance_benchmark_return_rate.value == "10.01%"
+    assert result.nav_benchmark_performance_benchmark_return_rate.extraction_mode == "direct"
+    assert result.nav_benchmark_performance_benchmark_return_rate.anchors[0].row_locator == (
+        "source_field_path=nav_benchmark_performance.benchmark_return_rate; "
+        "locator=benchmark_return_rate"
+    )
 
 
 def test_extract_performance_outputs_direct_tracking_error_when_disclosed() -> None:
@@ -624,6 +635,17 @@ def test_extract_performance_outputs_nav_and_benchmark_from_annual_table() -> No
         "nav_growth_rate": "17.32%",
         "benchmark_return_rate": "14.45%",
     }
+    assert result.nav_benchmark_performance_nav_growth_rate.anchors[0].table_id == "page-8-table-0"
+    assert result.nav_benchmark_performance_nav_growth_rate.anchors[0].row_locator == (
+        "source_field_path=nav_benchmark_performance.nav_growth_rate; locator=nav_growth_rate"
+    )
+    assert result.nav_benchmark_performance_benchmark_return_rate.anchors[0].table_id == (
+        "page-8-table-0"
+    )
+    assert result.nav_benchmark_performance_benchmark_return_rate.anchors[0].row_locator == (
+        "source_field_path=nav_benchmark_performance.benchmark_return_rate; "
+        "locator=benchmark_return_rate"
+    )
     assert {anchor.page_number for anchor in result.nav_benchmark_performance.anchors} == {8}
     assert {anchor.table_id for anchor in result.nav_benchmark_performance.anchors} == {
         "page-8-table-0"
@@ -778,3 +800,12 @@ def test_extract_performance_marks_partial_nav_benchmark_as_missing() -> None:
     assert len(result.nav_benchmark_performance.anchors) == 1
     assert result.nav_benchmark_performance.anchors[0].row_locator == "nav_growth_rate"
     assert result.nav_benchmark_performance.note is not None
+    assert result.nav_benchmark_performance_nav_growth_rate.extraction_mode == "direct"
+    assert result.nav_benchmark_performance_benchmark_return_rate.value is None
+    assert result.nav_benchmark_performance_benchmark_return_rate.extraction_mode == "missing"
+    assert result.nav_benchmark_performance_benchmark_return_rate.anchors == ()
+    assert result.nav_benchmark_performance_benchmark_return_rate.note is not None
+    assert (
+        "source_field_path=nav_benchmark_performance.benchmark_return_rate"
+        in result.nav_benchmark_performance_benchmark_return_rate.note
+    )

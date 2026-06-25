@@ -353,17 +353,17 @@ _SAMPLE_CASES: tuple[_SampleFundCase, ...] = (
 )
 
 _EXPECTED_APPENDIX_EVIDENCE_FRAGMENTS: tuple[str, ...] = (
-    "年报2024§2表page-5-table-0行fund_name",
-    "年报2024§2表page-5-table-1行investment_objective",
-    "年报2024§2表page-5-table-1行investment_scope",
-    "年报2024§2表page-5-table-1行benchmark",
-    "年报2024§3表未定位行nav_growth_rate",
-    "年报2024§3表未定位行investor_return_rate",
-    "年报2024§4表未定位行strategy_summary",
-    "年报2024§8表page-42-table-0行top_ten",
-    "年报2024§8表page-43-table-1行industry_distribution",
-    "年报2024§9表未定位行manager_holding",
-    "年报2024§10表page-58-table-0行share_change",
+    "年报2024§2表page-5-table-0行source_field_path=basic_identity; locator=fund_name",
+    "年报2024§2表page-5-table-1行source_field_path=product_profile; locator=investment_objective",
+    "年报2024§2表page-5-table-1行source_field_path=product_profile; locator=investment_scope",
+    "年报2024§2表page-5-table-1行source_field_path=benchmark; locator=benchmark",
+    "年报2024§3表未定位行source_field_path=nav_benchmark_performance.nav_growth_rate; locator=nav_growth_rate",
+    "年报2024§3表未定位行source_field_path=investor_return; locator=investor_return_rate",
+    "年报2024§4表未定位行source_field_path=manager_strategy_text.strategy_summary; locator=strategy_summary",
+    "年报2024§8表page-42-table-0行source_field_path=holdings_snapshot; locator=top_ten",
+    "年报2024§8表page-43-table-1行source_field_path=holdings_snapshot; locator=industry_distribution",
+    "年报2024§9表未定位行source_field_path=manager_alignment.manager_holding; locator=manager_holding",
+    "年报2024§10表page-58-table-0行source_field_path=share_change; locator=share_change",
 )
 
 

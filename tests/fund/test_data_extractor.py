@@ -19,7 +19,11 @@ from fund_agent.fund.data.nav_models import (
     NavSourceMetadata,
     ShareClassMapping,
 )
-from fund_agent.fund.data_extractor import FundDataExtractor, StructuredFundDataBundle
+from fund_agent.fund.data_extractor import (
+    FundDataExtractor,
+    StructuredFundDataBundle,
+    _field_from_family,
+)
 from fund_agent.fund.documents.models import (
     AnnualReportMetadata,
     AnnualReportSourceMetadata,
@@ -48,6 +52,96 @@ from fund_agent.fund.source_provenance import (
     PublicSourceProvenance,
     default_public_source_provenance,
 )
+
+
+def _anchor_field_paths(field: ExtractedField[object]) -> tuple[str, ...]:
+    """提取测试锚点中的 Processor `field` 路径。
+
+    Args:
+        field: 待检查的结构化抽取字段。
+
+    Returns:
+        当前字段 anchors 中解析到的 `field` 路径，按原顺序返回。
+
+    Raises:
+        AssertionError: 当 anchor 缺少可解析 `field` locator 时抛出。
+    """
+
+    field_paths: list[str] = []
+    for anchor in field.anchors:
+        assert anchor.row_locator is not None
+        parsed = _test_processor_locator_field_path(anchor.row_locator)
+        assert parsed is not None
+        field_paths.append(parsed)
+    return tuple(field_paths)
+
+
+def _anchor_source_field_paths(field: ExtractedField[object]) -> tuple[str, ...]:
+    """提取测试锚点中的 semantic ``source_field_path``。
+
+    Args:
+        field: 待检查的结构化抽取字段。
+
+    Returns:
+        当前字段 anchors 中解析到的 ``source_field_path``，按原顺序返回。
+
+    Raises:
+        AssertionError: 当 anchor 缺少可解析 source field locator 时抛出。
+    """
+
+    field_paths: list[str] = []
+    for anchor in field.anchors:
+        assert anchor.row_locator is not None
+        parsed = _test_source_field_locator_path(anchor.row_locator)
+        assert parsed is not None
+        field_paths.append(parsed)
+    return tuple(field_paths)
+
+
+def _test_processor_locator_field_path(row_locator: str) -> str | None:
+    """解析测试用 Processor locator 中的 `field` 路径。
+
+    Args:
+        row_locator: 行定位字符串。
+
+    Returns:
+        分号分隔 `field=` 值；无法解析时返回 `None`。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if ";" not in row_locator:
+        return None
+    for segment in row_locator.split(";"):
+        key, separator, value = segment.strip().partition("=")
+        if separator == "=" and key == "field":
+            field_path = value.strip()
+            return field_path or None
+    return None
+
+
+def _test_source_field_locator_path(row_locator: str) -> str | None:
+    """解析测试用 semantic locator 中的 ``source_field_path``。
+
+    Args:
+        row_locator: 行定位字符串。
+
+    Returns:
+        分号分隔 ``source_field_path=`` 值；无法解析时返回 ``None``。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if ";" not in row_locator:
+        return None
+    for segment in row_locator.split(";"):
+        key, separator, value = segment.strip().partition("=")
+        if separator == "=" and key == "source_field_path":
+            field_path = value.strip()
+            return field_path or None
+    return None
 
 
 class _FakeRepository:
@@ -375,9 +469,10 @@ async def test_data_extractor_returns_bundle_with_bond_risk_evidence() -> None:
             },
         }
     ]
-    assert "portfolio_manager:张三" in {
-        anchor.row_locator for anchor in bundle.portfolio_managers.anchors
-    }
+    assert (
+        "source_field_path=portfolio_managers; locator=portfolio_manager:张三"
+        in {anchor.row_locator for anchor in bundle.portfolio_managers.anchors}
+    )
     assert bundle.risk_characteristic_text.extraction_mode == "direct"
     assert bundle.risk_characteristic_text.note is None
     assert bundle.risk_characteristic_text.value == {
@@ -394,9 +489,10 @@ async def test_data_extractor_returns_bundle_with_bond_risk_evidence() -> None:
             }
         ],
     }
-    assert "risk_characteristic_text" in {
-        anchor.row_locator for anchor in bundle.risk_characteristic_text.anchors
-    }
+    assert (
+        "source_field_path=risk_characteristic_text; locator=risk_characteristic_text"
+        in {anchor.row_locator for anchor in bundle.risk_characteristic_text.anchors}
+    )
     assert bundle.source_provenance.fallback_used is False
     assert bundle.source_provenance.fallback_eligibility == "not_applicable"
     assert bundle.source_provenance.source_provenance_status == "not_applicable"
@@ -1403,6 +1499,16 @@ async def test_active_fund_uses_processor_path_with_marker_values() -> None:
     assert bundle.portfolio_managers.value != {"marker": "current_stage_portfolio_must_not_project"}
     assert bundle.tracking_error.extraction_mode == "missing"
     assert bundle.tracking_error.note == "非指数基金不适用跟踪误差"
+    assert tuple(anchor.row_locator for anchor in bundle.fee_schedule.anchors) == ("marker_row",)
+    assert tuple(anchor.row_locator for anchor in bundle.nav_benchmark_performance.anchors) == (
+        "marker_row",
+    )
+    assert tuple(anchor.row_locator for anchor in bundle.manager_alignment.anchors) == (
+        "marker_row",
+    )
+    assert tuple(anchor.row_locator for anchor in bundle.manager_strategy_text.anchors) == (
+        "marker_row",
+    )
 
 
 @pytest.mark.asyncio
@@ -1532,6 +1638,223 @@ async def test_explicit_disclosure_source_truth_return_attribution_projects_to_b
         anchor.row_locator is not None and anchor.row_locator.startswith("field=")
         for anchor in (*bundle.fee_schedule.anchors, *bundle.nav_benchmark_performance.anchors)
     )
+    assert _anchor_field_paths(bundle.fee_schedule) == (
+        "fee_schedule.management_fee",
+        "fee_schedule.custody_fee",
+    )
+    assert _anchor_field_paths(bundle.nav_benchmark_performance) == (
+        "nav_benchmark_performance.nav_growth_rate",
+        "nav_benchmark_performance.benchmark_return_rate",
+    )
+    assert set(bundle.source_facts.facts) >= {
+        "fee_schedule.management_fee",
+        "fee_schedule.custody_fee",
+        "nav_benchmark_performance.nav_growth_rate",
+        "nav_benchmark_performance.benchmark_return_rate",
+    }
+    assert bundle.source_facts.get_required("fee_schedule.management_fee").value == "1.50%"
+    assert bundle.source_facts.get_required("fee_schedule.custody_fee").value == "0.25%"
+    assert (
+        bundle.source_facts.get_required(
+            "nav_benchmark_performance.nav_growth_rate"
+        ).value
+        == "8.00%"
+    )
+    assert (
+        bundle.source_facts.get_required(
+            "nav_benchmark_performance.benchmark_return_rate"
+        ).value
+        == "6.00%"
+    )
+
+
+@pytest.mark.asyncio
+async def test_default_parsed_annual_processor_projects_child_source_facts_to_bundle() -> None:
+    """验证默认 parsed annual processor 输出 child source facts 并保留兼容 bundle。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 child fact、bundle mirror 或兼容 dict shape 不符合 S2B 契约时抛出。
+    """
+
+    extractor = FundDataExtractor(
+        repository=_FakeRepository(_annual_report()),
+        nav_provider=_RecordingNavProvider(),
+        processor_registry=FundProcessorRegistry.create_default(),
+    )
+
+    bundle = await extractor.extract("110011", 2024)
+
+    assert set(bundle.source_facts.facts) >= {
+        "fee_schedule.management_fee",
+        "fee_schedule.custody_fee",
+        "nav_benchmark_performance.nav_growth_rate",
+        "nav_benchmark_performance.benchmark_return_rate",
+        "manager_strategy_text.strategy_summary",
+        "manager_strategy_text.market_outlook",
+        "manager_alignment.manager_holding",
+        "manager_alignment.employee_holding",
+    }
+    assert bundle.source_facts.get_required("fee_schedule.management_fee").value == "1.20%"
+    assert bundle.source_facts.get_required("fee_schedule.custody_fee").value == "0.20%"
+    assert bundle.fee_schedule.value == {
+        "management_fee": "1.20%",
+        "custody_fee": "0.20%",
+    }
+    assert bundle.fee_schedule.anchors
+    assert _anchor_source_field_paths(bundle.fee_schedule) == (
+        "fee_schedule.management_fee",
+        "fee_schedule.custody_fee",
+    )
+    assert all(
+        anchor.row_locator is not None and anchor.row_locator.startswith(
+            "source_field_path=fee_schedule."
+        )
+        for anchor in bundle.fee_schedule.anchors
+    )
+
+
+@pytest.mark.asyncio
+async def test_default_parsed_annual_processor_projects_partial_composite_child_gap() -> None:
+    """验证默认 parsed annual bundle 保留迁移复合字段 sibling partial。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当 missing child 被兼容 bundle value、gap 或 anchor 投影隐藏时抛出。
+    """
+
+    extractor = FundDataExtractor(
+        repository=_FakeRepository(_annual_report(include_custody_fee=False)),
+        nav_provider=_RecordingNavProvider(),
+        processor_registry=FundProcessorRegistry.create_default(),
+    )
+
+    bundle = await extractor.extract("110011", 2024)
+
+    assert bundle.source_facts.get_required("fee_schedule.management_fee").status == "accepted"
+    custody_fee = bundle.source_facts.get_required("fee_schedule.custody_fee")
+    assert custody_fee.status == "missing"
+    assert custody_fee.value is None
+    assert custody_fee.anchors == ()
+    assert bundle.fee_schedule.value == {
+        "management_fee": "1.20%",
+        "custody_fee": None,
+    }
+    assert _anchor_source_field_paths(bundle.fee_schedule) == ("fee_schedule.management_fee",)
+
+
+def test_field_locator_capable_family_with_no_matching_anchor_projects_empty_anchors() -> None:
+    """验证 field-locator family 不借用不匹配字段的 anchors。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当不匹配 `field=` locator 被错误绑定为证据时抛出。
+    """
+
+    unrelated_anchor = EvidenceAnchor(
+        source_kind="annual_report",
+        document_year=2024,
+        section_id="§3",
+        page_number=None,
+        table_id="page-1-table-0",
+        row_locator=(
+            "field=nav_benchmark_performance.nav_growth_rate; "
+            "table_id=page-1-table-0; row=0; column=1"
+        ),
+        note=None,
+    )
+    family = FundFieldFamilyResult(
+        field_family_id="return_attribution.v1",
+        chapter_ids=(2,),
+        value={
+            "schema_version": "return_attribution.v1",
+            "fee_schedule": {"management_fee": "1.50%"},
+        },
+        status="accepted",
+        extraction_mode="direct",
+        anchors=(unrelated_anchor,),
+        gaps=(),
+        source_provenance=_provenance(),
+    )
+
+    field = _field_from_family(family, "fee_schedule")
+
+    assert field.value == {"management_fee": "1.50%"}
+    assert field.anchors == ()
+
+
+def test_source_field_locator_capable_family_filters_top_level_anchors() -> None:
+    """验证 source_field_path family 不借用其它顶层字段 anchors。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当不匹配 source_field_path 被错误绑定为证据时抛出。
+    """
+
+    fee_anchor = EvidenceAnchor(
+        source_kind="annual_report",
+        document_year=2024,
+        section_id="§2",
+        page_number=5,
+        table_id="page-5-table-1",
+        row_locator="source_field_path=fee_schedule; locator=management_fee",
+        note=None,
+    )
+    nav_anchor = EvidenceAnchor(
+        source_kind="annual_report",
+        document_year=2024,
+        section_id="§2",
+        page_number=5,
+        table_id="page-5-table-1",
+        row_locator="source_field_path=nav_benchmark_performance; locator=nav_growth_rate",
+        note=None,
+    )
+    family = FundFieldFamilyResult(
+        field_family_id="return_attribution.v1",
+        chapter_ids=(2,),
+        value={
+            "schema_version": "return_attribution.v1",
+            "fee_schedule": {"management_fee": "1.50%"},
+            "nav_benchmark_performance": {"nav_growth_rate": "8.00%"},
+        },
+        status="accepted",
+        extraction_mode="direct",
+        anchors=(fee_anchor, nav_anchor),
+        gaps=(),
+        source_provenance=_provenance(),
+    )
+
+    fee_field = _field_from_family(family, "fee_schedule")
+    nav_field = _field_from_family(family, "nav_benchmark_performance")
+
+    assert fee_field.value == {"management_fee": "1.50%"}
+    assert tuple(anchor.row_locator for anchor in fee_field.anchors) == (
+        "source_field_path=fee_schedule; locator=management_fee",
+    )
+    assert nav_field.value == {"nav_growth_rate": "8.00%"}
+    assert tuple(anchor.row_locator for anchor in nav_field.anchors) == (
+        "source_field_path=nav_benchmark_performance; locator=nav_growth_rate",
+    )
 
 
 @pytest.mark.asyncio
@@ -1623,6 +1946,133 @@ async def test_explicit_disclosure_source_truth_manager_profile_projects_to_bund
     assert bundle.holder_structure.value is None
     assert bundle.share_change.value is None
     assert bundle.bond_risk_evidence.value is None
+    assert _anchor_field_paths(bundle.manager_alignment) == ("manager_alignment.manager_holding",)
+    assert _anchor_field_paths(bundle.manager_strategy_text) == (
+        "manager_strategy_text.strategy_summary",
+    )
+    assert set(bundle.source_facts.facts) >= {
+        "manager_strategy_text.strategy_summary",
+        "manager_strategy_text.market_outlook",
+        "manager_alignment.manager_holding",
+        "manager_alignment.employee_holding",
+    }
+    assert (
+        bundle.source_facts.get_required("manager_strategy_text.strategy_summary").value
+        == "本报告期坚持均衡配置。"
+    )
+    assert (
+        bundle.source_facts.get_required("manager_strategy_text.market_outlook").value
+        == "后续将关注基本面变化。"
+    )
+    assert (
+        bundle.source_facts.get_required("manager_alignment.manager_holding").value
+        == "本基金基金经理持有本开放式基金份额区间为100万份以上。"
+    )
+    assert (
+        bundle.source_facts.get_required("manager_alignment.employee_holding").value
+        == "基金管理人所有从业人员持有本基金份额区间为50万份至100万份。"
+    )
+
+
+@pytest.mark.asyncio
+async def test_explicit_disclosure_manager_strategy_text_accepts_qdii_heading_variants() -> None:
+    """验证 QDII/海外报告常见策略与展望标题可抽取 manager_strategy_text。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当标题变体未生成 direct 字段或 anchor 时抛出。
+    """
+
+    paragraphs = (
+        _DisclosureParagraph(
+            block_id="paragraph-qdiistrategy",
+            section_id="section-qdiistrategy",
+            heading_path=("报告期内基金的投资策略和业绩表现说明",),
+            text_raw="报告期内本基金跟踪境外指数并控制跟踪偏离。",
+            text_normalized="报告期内本基金跟踪境外指数并控制跟踪偏离。",
+        ),
+        _DisclosureParagraph(
+            block_id="paragraph-qdiimarket",
+            section_id="section-qdiimarket",
+            heading_path=("管理人对境外市场走势的简要展望",),
+            text_raw="后续将关注海外利率和大型科技公司盈利变化。",
+            text_normalized="后续将关注海外利率和大型科技公司盈利变化。",
+        ),
+    )
+    extractor = FundDataExtractor(
+        repository=_FakeRepository(_typed_non_active_annual_report("qdii_fund", "017641")),
+        nav_provider=_RecordingNavProvider(),
+        processor_registry=FundProcessorRegistry.create_default(),
+    )
+
+    bundle = await extractor.extract(
+        "017641",
+        2024,
+        disclosure_intermediate=_disclosure_intermediate(
+            fund_code="017641",
+            paragraph_blocks=paragraphs,
+            source_truth_admission=_source_truth_admission_proof(fund_code="017641"),
+        ),
+    )
+
+    assert bundle.manager_strategy_text.value == {
+        "strategy_summary": "报告期内本基金跟踪境外指数并控制跟踪偏离。",
+        "market_outlook": "后续将关注海外利率和大型科技公司盈利变化。",
+    }
+    assert bundle.manager_strategy_text.extraction_mode == "direct"
+    assert bundle.manager_strategy_text.anchors
+    assert bundle.manager_strategy_text.anchors[0].section_id == "section-qdiistrategy"
+    assert bundle.manager_strategy_text.anchors[0].row_locator == (
+        "field=manager_strategy_text.strategy_summary; block_id=paragraph-qdiistrategy"
+    )
+
+
+@pytest.mark.asyncio
+async def test_explicit_disclosure_manager_strategy_text_ignores_body_only_keywords() -> None:
+    """验证正文关键词不能绕过 heading_path 生成 manager_strategy_text。
+
+    Args:
+        无。
+
+    Returns:
+        无返回值。
+
+    Raises:
+        AssertionError: 当正文自授权生成字段或 anchor 时抛出。
+    """
+
+    paragraphs = (
+        _DisclosureParagraph(
+            block_id="paragraph-body-only",
+            section_id="section-risk",
+            heading_path=("风险提示",),
+            text_raw="本段提到投资策略和后市展望，但不属于管理人报告策略章节。",
+            text_normalized="本段提到投资策略和后市展望，但不属于管理人报告策略章节。",
+        ),
+    )
+    extractor = FundDataExtractor(
+        repository=_FakeRepository(_annual_report()),
+        nav_provider=_RecordingNavProvider(),
+        processor_registry=FundProcessorRegistry.create_default(),
+    )
+
+    bundle = await extractor.extract(
+        "110011",
+        2024,
+        disclosure_intermediate=_disclosure_intermediate(
+            paragraph_blocks=paragraphs,
+            source_truth_admission=_source_truth_admission_proof(),
+        ),
+    )
+
+    assert bundle.manager_strategy_text.value is None
+    assert bundle.manager_strategy_text.anchors == ()
+    assert bundle.manager_strategy_text.extraction_mode == "missing"
 
 
 @pytest.mark.asyncio
@@ -1906,6 +2356,7 @@ async def test_explicit_disclosure_candidate_only_manager_profile_stays_missing(
     assert bundle.manager_alignment.extraction_mode == "missing"
     assert bundle.manager_strategy_text.extraction_mode == "missing"
     assert bundle.holdings_snapshot.extraction_mode == "missing"
+    assert bundle.source_facts.facts == {}
 
 
 @pytest.mark.asyncio
@@ -2933,11 +3384,16 @@ def _manager_profile_holdings_cell(
     )
 
 
-def _source_truth_admission_proof() -> FundDisclosureSourceTruthAdmissionProof:
+def _source_truth_admission_proof(
+    *,
+    fund_code: str = "110011",
+    report_year: int = 2024,
+) -> FundDisclosureSourceTruthAdmissionProof:
     """构造测试用合法 source-truth admission proof。
 
     Args:
-        无。
+        fund_code: proof 中的基金代码。
+        report_year: proof 中的报告年份。
 
     Returns:
         合法的 FDD source-truth 正向证明。
@@ -2949,8 +3405,8 @@ def _source_truth_admission_proof() -> FundDisclosureSourceTruthAdmissionProof:
     return FundDisclosureSourceTruthAdmissionProof(
         proof_kind="repository_loaded_annual_report_identity.v1",
         source_boundary="annual_report",
-        fund_code="110011",
-        report_year=2024,
+        fund_code=fund_code,
+        report_year=report_year,
         document_kind="annual_report",
         intermediate_kind="fund_disclosure_document.v1",
         source_kind="annual_report",
@@ -3147,11 +3603,13 @@ def _typed_non_active_annual_report(fund_type: str, fund_code: str) -> ParsedAnn
 def _annual_report(
     *,
     source_metadata: AnnualReportSourceMetadata | None = None,
+    include_custody_fee: bool = True,
 ) -> ParsedAnnualReport:
     """构造可被当前 extractor 解析的最小年报。
 
     Args:
         source_metadata: 可选年报来源元数据。
+        include_custody_fee: 是否包含托管费率披露。
 
     Returns:
         最小年报解析结果。
@@ -3160,6 +3618,8 @@ def _annual_report(
         无显式抛出。
     """
 
+    custody_fee_lines = ("托管费率：0.20%",) if include_custody_fee else ()
+    custody_fee_rows = (("托管费率", "0.20%"),) if include_custody_fee else ()
     section_one = "\n".join(
         (
             "§1 基金简介",
@@ -3178,7 +3638,7 @@ def _annual_report(
             "投资范围：主要投资股票和债券",
             "业绩比较基准：沪深300指数收益率",
             "管理费率：1.20%",
-            "托管费率：0.20%",
+            *custody_fee_lines,
         )
     )
     section_four = "\n".join(
@@ -3279,7 +3739,7 @@ def _annual_report(
                     ("风险收益特征", "本基金为混合型基金，风险收益特征高于债券型基金。"),
                     ("业绩比较基准", "沪深300指数收益率"),
                     ("管理费率", "1.20%"),
-                    ("托管费率", "0.20%"),
+                    *custody_fee_rows,
                 ),
             ),
             ParsedTable(

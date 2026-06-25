@@ -71,6 +71,10 @@ _FIELD_PATTERNS: Final[dict[str, tuple[tuple[str, tuple[str, ...]], ...]]] = {
         (_SECTION_HOLDER, (r"个人投资者持有(?:比例|份额)\s*[：:]\s*(.+)", r"个人投资者\s*[：:]\s*(.+)")),
     ),
 }
+_MANAGER_STRATEGY_SUMMARY_PATH: Final[str] = "manager_strategy_text.strategy_summary"
+_MANAGER_MARKET_OUTLOOK_PATH: Final[str] = "manager_strategy_text.market_outlook"
+_MANAGER_HOLDING_PATH: Final[str] = "manager_alignment.manager_holding"
+_EMPLOYEE_HOLDING_PATH: Final[str] = "manager_alignment.employee_holding"
 
 
 @dataclass(frozen=True, slots=True)
@@ -739,6 +743,31 @@ def _build_anchor(report: ParsedAnnualReport, matched_field: _MatchedField) -> E
     )
 
 
+def _build_child_anchor(anchor: EvidenceAnchor, source_field_path: str) -> EvidenceAnchor:
+    """给管理人子字段锚点附加 canonical `source_field_path`。
+
+    Args:
+        anchor: 直接命中的原始锚点。
+        source_field_path: 子字段 canonical path。
+
+    Returns:
+        带子字段路径的锚点。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return EvidenceAnchor(
+        source_kind=anchor.source_kind,
+        document_year=anchor.document_year,
+        section_id=anchor.section_id,
+        page_number=anchor.page_number,
+        table_id=anchor.table_id,
+        row_locator=f"source_field_path={source_field_path}; locator={anchor.row_locator}",
+        note=anchor.note,
+    )
+
+
 def _missing_field(note: str) -> ExtractedField[dict[str, object]]:
     """构造缺失状态字段。
 
@@ -753,6 +782,60 @@ def _missing_field(note: str) -> ExtractedField[dict[str, object]]:
     """
 
     return ExtractedField(value=None, anchors=(), extraction_mode="missing", note=note)
+
+
+def _missing_child_field(source_field_path: str, note: str) -> ExtractedField[object]:
+    """构造缺失子字段，见模板第 3 章基金经理画像。
+
+    Args:
+        source_field_path: 子字段 canonical path。
+        note: 缺失说明。
+
+    Returns:
+        不带锚点的 `missing` 子字段。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return ExtractedField(
+        value=None,
+        anchors=(),
+        extraction_mode="missing",
+        note=f"source_field_path={source_field_path}; gap={note}",
+    )
+
+
+def _build_child_field(
+    report: ParsedAnnualReport,
+    matched_field: _MatchedField | None,
+    source_field_path: str,
+    missing_note: str,
+) -> ExtractedField[object]:
+    """根据直接命中构造管理人子字段，见模板第 3 章基金经理画像。
+
+    Args:
+        report: 已解析年报对象。
+        matched_field: 子字段直接命中结果。
+        source_field_path: 子字段 canonical path。
+        missing_note: 未命中时的缺口说明。
+
+    Returns:
+        独立子字段抽取结果。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if matched_field is None:
+        return _missing_child_field(source_field_path, missing_note)
+    anchor = _build_anchor(report, matched_field)
+    return ExtractedField(
+        value=matched_field.value,
+        anchors=(_build_child_anchor(anchor, source_field_path),),
+        extraction_mode="direct",
+        note=None,
+    )
 
 
 def _build_field_from_matches(
@@ -792,14 +875,16 @@ def _build_field_from_matches(
     )
 
 
-def _build_manager_strategy_text(report: ParsedAnnualReport) -> ExtractedField[dict[str, object]]:
-    """构造管理人策略文本字段，见模板第 3 章“投资策略与风格”。
+def _build_manager_strategy_text(
+    report: ParsedAnnualReport,
+) -> tuple[ExtractedField[dict[str, object]], ExtractedField[object], ExtractedField[object]]:
+    """构造管理人策略文本复合字段与子字段，见模板第 3 章“投资策略与风格”。
 
     Args:
         report: 已解析年报对象。
 
     Returns:
-        管理人报告中的策略与后市展望原文。
+        策略文本兼容复合字段、策略总结子字段、市场展望子字段。
 
     Raises:
         无显式抛出。
@@ -819,14 +904,30 @@ def _build_manager_strategy_text(report: ParsedAnnualReport) -> ExtractedField[d
             _OUTLOOK_HEADING_PATTERN,
             "market_outlook",
         )
-    return _build_field_from_matches(
-        report=report,
-        matched_fields=(strategy_summary, market_outlook),
-        value={
-            "strategy_summary": strategy_summary.value if strategy_summary else None,
-            "market_outlook": market_outlook.value if market_outlook else None,
-        },
-        missing_note="§4 未披露可规则化抽取的投资策略/后市展望",
+    strategy_summary_field = _build_child_field(
+        report,
+        strategy_summary,
+        _MANAGER_STRATEGY_SUMMARY_PATH,
+        "§4 未披露可规则化抽取的投资策略",
+    )
+    market_outlook_field = _build_child_field(
+        report,
+        market_outlook,
+        _MANAGER_MARKET_OUTLOOK_PATH,
+        "§4 未披露可规则化抽取的后市展望",
+    )
+    return (
+        _build_field_from_matches(
+            report=report,
+            matched_fields=(strategy_summary, market_outlook),
+            value={
+                "strategy_summary": strategy_summary_field.value,
+                "market_outlook": market_outlook_field.value,
+            },
+            missing_note="§4 未披露可规则化抽取的投资策略/后市展望",
+        ),
+        strategy_summary_field,
+        market_outlook_field,
     )
 
 
@@ -875,14 +976,16 @@ def _build_turnover_rate(report: ParsedAnnualReport) -> ExtractedField[dict[str,
     )
 
 
-def _build_manager_alignment(report: ParsedAnnualReport) -> ExtractedField[dict[str, object]]:
-    """构造基金经理/从业人员持有字段，见模板第 3 章利益一致性判断。
+def _build_manager_alignment(
+    report: ParsedAnnualReport,
+) -> tuple[ExtractedField[dict[str, object]], ExtractedField[object], ExtractedField[object]]:
+    """构造基金经理/从业人员持有复合字段与子字段，见模板第 3 章利益一致性判断。
 
     Args:
         report: 已解析年报对象。
 
     Returns:
-        年报 `§9` 披露的基金经理与从业人员持有原始数据。
+        利益一致性兼容复合字段、基金经理持有子字段、从业人员持有子字段。
 
     Raises:
         无显式抛出。
@@ -894,15 +997,31 @@ def _build_manager_alignment(report: ParsedAnnualReport) -> ExtractedField[dict[
         table_manager_holding, table_employee_holding = _extract_manager_alignment_from_tables(report)
         manager_holding = manager_holding or table_manager_holding
         employee_holding = employee_holding or table_employee_holding
-    return _build_field_from_matches(
-        report=report,
-        matched_fields=(manager_holding, employee_holding),
-        value={
-            "manager_holding": manager_holding.value if manager_holding else None,
-            "employee_holding": employee_holding.value if employee_holding else None,
-            "judgment": None,
-        },
-        missing_note="§9 未披露可规则化抽取的基金经理/从业人员持有信息",
+    manager_holding_field = _build_child_field(
+        report,
+        manager_holding,
+        _MANAGER_HOLDING_PATH,
+        "§9 未披露可规则化抽取的基金经理持有信息",
+    )
+    employee_holding_field = _build_child_field(
+        report,
+        employee_holding,
+        _EMPLOYEE_HOLDING_PATH,
+        "§9 未披露可规则化抽取的从业人员持有信息",
+    )
+    return (
+        _build_field_from_matches(
+            report=report,
+            matched_fields=(manager_holding, employee_holding),
+            value={
+                "manager_holding": manager_holding_field.value,
+                "employee_holding": employee_holding_field.value,
+                "judgment": None,
+            },
+            missing_note="§9 未披露可规则化抽取的基金经理/从业人员持有信息",
+        ),
+        manager_holding_field,
+        employee_holding_field,
     )
 
 
@@ -1007,10 +1126,16 @@ def extract_manager_ownership(report: ParsedAnnualReport) -> ManagerOwnershipExt
         无显式抛出。
     """
 
+    manager_strategy_text, strategy_summary, market_outlook = _build_manager_strategy_text(report)
+    manager_alignment, manager_holding, employee_holding = _build_manager_alignment(report)
     return ManagerOwnershipExtractionResult(
-        manager_strategy_text=_build_manager_strategy_text(report),
+        manager_strategy_text=manager_strategy_text,
         portfolio_managers=_build_portfolio_managers(report),
         turnover_rate=_build_turnover_rate(report),
-        manager_alignment=_build_manager_alignment(report),
+        manager_alignment=manager_alignment,
         holder_structure=_build_holder_structure(report),
+        manager_strategy_text_strategy_summary=strategy_summary,
+        manager_strategy_text_market_outlook=market_outlook,
+        manager_alignment_manager_holding=manager_holding,
+        manager_alignment_employee_holding=employee_holding,
     )

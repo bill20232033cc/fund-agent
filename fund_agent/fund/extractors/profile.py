@@ -100,6 +100,8 @@ _FEE_SUBSECTION_BOUNDARY_PATTERN: Final[re.Pattern[str]] = re.compile(
     r"\n\s*7\s*\.\s*4\s*\.\s*10\s*\.\s*(?:2\s*\.\s*\d+|[3-9])"
 )
 _FEE_FALLBACK_WINDOW_CHARS: Final[int] = 2000
+_FEE_SCHEDULE_MANAGEMENT_FEE_PATH: Final[str] = "fee_schedule.management_fee"
+_FEE_SCHEDULE_CUSTODY_FEE_PATH: Final[str] = "fee_schedule.custody_fee"
 
 
 @dataclass(frozen=True, slots=True)
@@ -756,6 +758,31 @@ def _build_anchor(report: ParsedAnnualReport, matched_field: _MatchedField) -> E
     )
 
 
+def _build_child_anchor(anchor: EvidenceAnchor, source_field_path: str) -> EvidenceAnchor:
+    """给子字段锚点附加 canonical `source_field_path`，见模板第 2 章 Cost。
+
+    Args:
+        anchor: 直接命中的原始锚点。
+        source_field_path: 子字段 canonical path。
+
+    Returns:
+        带子字段路径的锚点。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return EvidenceAnchor(
+        source_kind=anchor.source_kind,
+        document_year=anchor.document_year,
+        section_id=anchor.section_id,
+        page_number=anchor.page_number,
+        table_id=anchor.table_id,
+        row_locator=f"source_field_path={source_field_path}; locator={anchor.row_locator}",
+        note=anchor.note,
+    )
+
+
 def _missing_field(note: str) -> ExtractedField[dict[str, object]]:
     """构造缺失状态字段。
 
@@ -774,6 +801,60 @@ def _missing_field(note: str) -> ExtractedField[dict[str, object]]:
         anchors=(),
         extraction_mode="missing",
         note=note,
+    )
+
+
+def _missing_child_field(source_field_path: str, note: str) -> ExtractedField[object]:
+    """构造缺失子字段，见模板第 2 章 R=A+B-C 的 Cost 项。
+
+    Args:
+        source_field_path: 子字段 canonical path。
+        note: 缺失说明。
+
+    Returns:
+        不带锚点的 `missing` 子字段。
+
+    Raises:
+        无显式抛出。
+    """
+
+    return ExtractedField(
+        value=None,
+        anchors=(),
+        extraction_mode="missing",
+        note=f"source_field_path={source_field_path}; gap={note}",
+    )
+
+
+def _build_child_field(
+    report: ParsedAnnualReport,
+    matched_field: _MatchedField | None,
+    source_field_path: str,
+    missing_note: str,
+) -> ExtractedField[object]:
+    """根据直接命中构造费率子字段，见模板第 2 章 R=A+B-C 的 Cost 项。
+
+    Args:
+        report: 已解析年报对象。
+        matched_field: 子字段直接命中结果。
+        source_field_path: 子字段 canonical path。
+        missing_note: 未命中时的缺口说明。
+
+    Returns:
+        独立子字段抽取结果。
+
+    Raises:
+        无显式抛出。
+    """
+
+    if matched_field is None:
+        return _missing_child_field(source_field_path, missing_note)
+    anchor = _build_anchor(report, matched_field)
+    return ExtractedField(
+        value=matched_field.value,
+        anchors=(_build_child_anchor(anchor, source_field_path),),
+        extraction_mode="direct",
+        note=None,
     )
 
 
@@ -979,14 +1060,16 @@ def _build_benchmark(report: ParsedAnnualReport) -> ExtractedField[dict[str, obj
     )
 
 
-def _build_fee_schedule(report: ParsedAnnualReport) -> ExtractedField[dict[str, object]]:
-    """构造费率字段。
+def _build_fee_schedule(
+    report: ParsedAnnualReport,
+) -> tuple[ExtractedField[dict[str, object]], ExtractedField[object], ExtractedField[object]]:
+    """构造费率复合字段与子字段。
 
     Args:
         report: 已解析年报对象。
 
     Returns:
-        带证据的费率字段。
+        费率兼容复合字段、管理费子字段、托管费子字段。
 
     Raises:
         无显式抛出。
@@ -998,21 +1081,41 @@ def _build_fee_schedule(report: ParsedAnnualReport) -> ExtractedField[dict[str, 
         management_fee = _extract_fee_from_fallback_subsection(report, "management_fee")
     if custody_fee is None:
         custody_fee = _extract_fee_from_fallback_subsection(report, "custody_fee")
+    management_fee_field = _build_child_field(
+        report,
+        management_fee,
+        _FEE_SCHEDULE_MANAGEMENT_FEE_PATH,
+        "§2 与 7.4.10.2 均未披露管理费",
+    )
+    custody_fee_field = _build_child_field(
+        report,
+        custody_fee,
+        _FEE_SCHEDULE_CUSTODY_FEE_PATH,
+        "§2 与 7.4.10.2 均未披露托管费",
+    )
     anchors = tuple(
         _build_anchor(report, matched_field)
         for matched_field in (management_fee, custody_fee)
         if matched_field is not None
     )
     if not anchors:
-        return _missing_field("§2 与 7.4.10.2 均未披露管理费/托管费")
-    return ExtractedField(
-        value={
-            "management_fee": management_fee.value if management_fee else None,
-            "custody_fee": custody_fee.value if custody_fee else None,
-        },
-        anchors=anchors,
-        extraction_mode="direct",
-        note=None,
+        return (
+            _missing_field("§2 与 7.4.10.2 均未披露管理费/托管费"),
+            management_fee_field,
+            custody_fee_field,
+        )
+    return (
+        ExtractedField(
+            value={
+                "management_fee": management_fee_field.value,
+                "custody_fee": custody_fee_field.value,
+            },
+            anchors=anchors,
+            extraction_mode="direct",
+            note=None,
+        ),
+        management_fee_field,
+        custody_fee_field,
     )
 
 
@@ -1201,11 +1304,18 @@ def extract_profile(report: ParsedAnnualReport) -> ProfileExtractionResult:
 
     classification = classify_fund_type(report)
     benchmark = _build_benchmark(report)
+    basic_identity = _build_basic_identity(report, classification)
+    product_profile = _build_product_profile(report)
+    risk_characteristic_text = _build_risk_characteristic_text(report)
+    index_profile = _build_index_profile(classification, benchmark)
+    fee_schedule, management_fee, custody_fee = _build_fee_schedule(report)
     return ProfileExtractionResult(
-        basic_identity=_build_basic_identity(report, classification),
-        product_profile=_build_product_profile(report),
-        risk_characteristic_text=_build_risk_characteristic_text(report),
+        basic_identity=basic_identity,
+        product_profile=product_profile,
+        risk_characteristic_text=risk_characteristic_text,
         benchmark=benchmark,
-        index_profile=_build_index_profile(classification, benchmark),
-        fee_schedule=_build_fee_schedule(report),
+        index_profile=index_profile,
+        fee_schedule=fee_schedule,
+        fee_schedule_management_fee=management_fee,
+        fee_schedule_custody_fee=custody_fee,
     )
